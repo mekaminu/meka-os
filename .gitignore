@@ -1,0 +1,31 @@
+# Build
+.gradle/
+build/
+**/build/
+.kotlin/
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+# Apple
+macos/*.xcodeproj/
+macos/build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+# Node
+node_modules/
+infra/cdk.out/
+# Secrets & signing — never commit
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+.env
+.env.*
+secrets/
+# Local-only eval data (ADR-006)
+evals/data/
+.DS_Store

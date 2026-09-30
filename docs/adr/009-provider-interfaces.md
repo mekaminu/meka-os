@@ -1,0 +1,33 @@
+# ADR-009: Provider interfaces for external services
+
+**Status:** Accepted, 2026-10-01. This follows the owner's amendment: nothing hard-coded to Gmail or any one provider.
+
+## Decision
+Each external capability is an interface in `core/providers` (shared types) with adapters in `backend/` (server-side OAuth) or in the platform apps (on-device APIs).
+
+```
+interface EmailProvider    { listChanges(cursor), getMessage(id), send(draft, idemKey), modifyLabels(id, add, remove), archive(id) }
+interface CalendarProvider { listCalendars(), listEvents(range, cursor), upsertEvent(event, idemKey), deleteEvent(id) }
+interface ContactsProvider { listChanges(cursor), get(id) }
+interface FileProvider     { list(folder, cursor), fetch(ref), put(blob, idemKey) }
+interface SportsProvider   { teamFixtures(teamRef, range), fixture(id) }       // poll + diff; changes emit FixtureChanged
+interface NewsProvider     { fetch(topic, since) }                              // clustering is ours, not the provider's
+interface MessagingChannel { capabilities(); ingest(event); reply(threadRef, text, idemKey) }
+```
+
+- Every mutating call takes an idempotency key.
+- Every adapter declares `ProviderCapabilities`: read, write, push-vs-poll, rate limits and quirks. The UI never offers what the adapter can't do.
+
+**First adapters, in the order needed:**
+| Capability | First adapter | Why / notes |
+|---|---|---|
+| Sports | football-data.org | Free tier covers La Liga and the Champions League at 10 calls/min, but scores are delayed. Fixtures are what we need, so we poll daily plus hourly on match day. API-Football is the second adapter if coverage gaps appear. |
+| Calendar | Owner's primary provider; to be confirmed | Google Calendar or Microsoft Graph |
+| Email | Owner's primary provider; to be confirmed | **Gmail:** an OAuth app in "Testing" status has refresh tokens that expire after 7 days (verified). A personal-use Production-unverified app avoids this, but shows an unverified-app warning and has a 100-user cap. Restricted-scope verification isn't needed for personal use. **Microsoft Graph:** supports personal accounts. |
+| Messaging | Android notification listener (WhatsApp, SMS) | See the messaging constraints below |
+
+**Messaging constraints (verified 2026-10-01):**
+- **No unofficial WhatsApp clients.**
+- **Sideload restriction:** on a sideloaded APK, notification access sits behind Android's "restricted settings" gate (Android 13+). The user must allow restricted settings in App info before granting access. Onboarding will guide this honestly.
+- **OTP redaction:** Android 15+ redacts notification content for untrusted listeners when an OTP is detected. We accept that; it is desirable.
+- **Replies:** replying via a notification's `RemoteInput` action is used only while the notification exists. Otherwise we fall back to copy-and-open. Reply sending is capped at autonomy Level 3 (ADR-006).
