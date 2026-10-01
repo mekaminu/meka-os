@@ -15,10 +15,10 @@ kotlin {
         minSdk = libs.versions.android.minSdk.get().toInt()
     }
 
-    val xcf = XCFramework("MekaCore")
+    val xcf = XCFramework("MekaKit")
     macosArm64 {
         binaries.framework {
-            baseName = "MekaCore"
+            baseName = "MekaKit"
             isStatic = true
             export(project(":core:domain"))
             export(project(":core:sync"))

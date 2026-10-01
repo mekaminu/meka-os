@@ -1,4 +1,4 @@
-@preconcurrency import MekaCore
+@preconcurrency import MekaKit
 import SwiftUI
 
 /// TODAY on macOS: Today | detail split, resizable, keyboard-first (brief §45).

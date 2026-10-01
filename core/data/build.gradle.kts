@@ -42,7 +42,7 @@ sqldelight {
     databases {
         create("MekaDatabase") {
             packageName.set("os.meka.core.data")
-            verifyMigrations.set(true)
+            // verifyMigrations is enabled with the first .sqm migration (there are none before the first release).
         }
     }
     // Spike S6 (ADR-002): link SQLCipher instead of system sqlite on Apple. Until proven, linkSqlite stays true.

@@ -1,4 +1,4 @@
-@preconcurrency import MekaCore
+@preconcurrency import MekaKit
 import XCTest
 
 /// Proves the Kotlin facade is usable from Swift: commands are async, flows are AsyncSequences.

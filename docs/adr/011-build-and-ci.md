@@ -7,7 +7,7 @@ Stage 0 found that the AI build workspace and the Cowork VM cannot reach Maven C
 
 ## Decision
 - **Gradle** (wrapper 9.8.0) is the single build for core, Android and backend. Versions are in `gradle/libs.versions.toml`.
-- **Xcode:** the SwiftUI app builds from an Xcode project, which is generated from `macos/project.yml` by XcodeGen so it is diff-friendly. A pre-build step runs `./gradlew :core:facade:assembleMekaCoreXCFramework`.
+- **Xcode:** the SwiftUI app builds from an Xcode project, which is generated from `macos/project.yml` by XcodeGen so it is diff-friendly. A pre-build step runs `./gradlew :core:facade:assembleMekaKitReleaseXCFramework`.
 - **CI is GitHub Actions** (`.github/workflows/`). This is the authoritative verification:
   - `core-and-backend` on `ubuntu-latest`: `./gradlew check`, which covers core JVM tests, Android unit tests, lint, ktlint, backend tests with a Postgres service container, and SQLDelight migration verification.
   - `android` on `ubuntu-latest`: `assembleDebug`, plus instrumented fold/unfold tests on an emulator nightly.

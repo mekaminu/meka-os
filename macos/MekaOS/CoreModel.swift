@@ -1,5 +1,5 @@
 import Foundation
-@preconcurrency import MekaCore
+@preconcurrency import MekaKit
 import Observation
 import SwiftUI
 
