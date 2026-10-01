@@ -56,11 +56,12 @@ targets:
     sources: [MekaOSTests]
     dependencies:
       - target: MekaOS
-      # Visible to `import MekaCore` but not linked twice (the static framework is already in the host app).
+      # Visible to `import MekaKit` but not linked twice (the static framework is already in the host app).
       - framework: ../core/facade/build/XCFrameworks/release/MekaKit.xcframework
         link: false
         embed: false
     settings:
       base:
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated   # XCTestCase initialisers are nonisolated
         BUNDLE_LOADER: $(TEST_HOST)
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/MekaOS.app/Contents/MacOS/MekaOS

@@ -1,7 +1,7 @@
 package os.meka.core.data
 
 import android.content.Context
-import app.cash.sqldelight.android.AndroidSqliteDriver
+import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import app.cash.sqldelight.db.SqlDriver
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
