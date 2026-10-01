@@ -37,6 +37,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - uses: actions/setup-node@v4
         with: { node-version: "22" }
+      - name: OIDC claims (public fields only, for diagnosing trust)
+        run: |
+          TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | python3 -c "import json,sys;print(json.load(sys.stdin)['value'])")
+          CLAIMS=$(echo "$TOKEN" | cut -d. -f2 | python3 -c "import sys,base64,json;p=sys.stdin.read().strip();p+='='*(-len(p)%4);c=json.loads(base64.urlsafe_b64decode(p));print('iss='+c['iss']+' aud='+str(c['aud'])+' sub='+c['sub'])")
+          echo "::notice title=OIDC claims::$CLAIMS"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
