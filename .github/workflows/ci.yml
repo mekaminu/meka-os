@@ -1,0 +1,83 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *" # nightly: macOS build + emulator fold tests
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  core-and-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      MEKA_TEST_DB_URL: jdbc:postgresql://localhost:5432/postgres
+      MEKA_TEST_DB_USER: postgres
+      MEKA_TEST_DB_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Kernel purity (ADR-011)
+        run: ./gradlew checkKernelPurity
+      - name: Core + data + facade + backend tests
+        run: ./gradlew :core:sync:jvmTest :core:domain:jvmTest :core:policy:jvmTest :core:wire:jvmTest :core:data:jvmTest :core:facade:jvmTest :core:data:verifySqlDelightMigration :backend:test
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build, unit test, lint
+        run: ./gradlew :android:app:assembleDebug :android:app:testDebugUnitTest :android:app:lintDebug
+
+  tokens-and-infra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Design tokens up to date + contrast gate (ADR-012)
+        run: node design/generate.mjs --check
+      - name: Infra typecheck, invariant tests, synth (no credentials)
+        working-directory: infra
+        run: npm ci && npx tsc --noEmit && npx jest && npx cdk synth --quiet
+
+  macos:
+    # macOS minutes cost ~10x Linux: run on main merges, nightly and manual only (ADR-011).
+    if: github.event_name != 'pull_request'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Kotlin/Native tests + XCFramework
+        run: ./gradlew :core:sync:macosArm64Test :core:domain:macosArm64Test :core:facade:macosArm64Test :core:facade:assembleMekaCoreReleaseXCFramework
+      - name: Generate Xcode project
+        run: brew install xcodegen && xcodegen generate --spec macos/project.yml
+      - name: Build and test SwiftUI app
+        run: xcodebuild -project macos/MekaOS.xcodeproj -scheme MekaOS -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO test

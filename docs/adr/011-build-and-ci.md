@@ -11,7 +11,9 @@ Stage 0 found that the AI build workspace and the Cowork VM cannot reach Maven C
 - **CI is GitHub Actions** (`.github/workflows/`). This is the authoritative verification:
   - `core-and-backend` on `ubuntu-latest`: `./gradlew check`, which covers core JVM tests, Android unit tests, lint, ktlint, backend tests with a Postgres service container, and SQLDelight migration verification.
   - `android` on `ubuntu-latest`: `assembleDebug`, plus instrumented fold/unfold tests on an emulator nightly.
-  - `macos` on the Xcode 27 image (macOS 27, Xcode 27.0): build the XCFramework, build and test the SwiftUI app. Runs only on `main` merges and nightly, to protect macOS minutes (about 10x the Linux price).
+  - `macos` on `macos-26` (Xcode 26.6; deployment target macOS 26): Kotlin/Native tests, the XCFramework, and building and testing the SwiftUI app.
+    - Runs only on `main` merges, nightly and on manual dispatch, to protect macOS minutes (about 10x the Linux price).
+    - We move to the Xcode 27 image when it leaves public preview.
   - `infra`: `npm ci && npx cdk synth` plus snapshot tests.
 - **Local fast loop in the assistant's workspace:** `tools/core-verify.sh` compiles `core/*/src/commonMain` and `commonTest` with the Kotlin compiler, stdlib, coroutines and serialization runtime bundled in the local Gradle distribution. It runs the tests under JUnit4 through a tiny `kotlin.test` shim.
   - This verifies the correctness-critical logic (sync, merge, policy) without network.

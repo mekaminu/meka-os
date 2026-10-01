@@ -5,10 +5,17 @@ import os.meka.core.sync.EntitySnapshot
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
+import kotlin.experimental.ExperimentalObjCName
+import kotlin.native.ObjCName
 
 data class ChecklistItem(val id: String, val taskId: String, val text: String, val checked: Boolean, val position: Long)
 
-/** Typed read model of a Task. Built from an [EntitySnapshot]; never written directly. */
+/**
+ * Typed read model of a Task. Built from an [EntitySnapshot]; never written directly.
+ * Exported to Swift as `MekaTask` so it never shadows Swift Concurrency's `Task`.
+ */
+@OptIn(ExperimentalObjCName::class)
+@ObjCName("MekaTask", exact = true)
 data class Task(
     val id: String,
     val title: String,

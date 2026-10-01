@@ -31,7 +31,9 @@ The backend exists for sync, ingestion (calendar, email, fixtures, news), heavy 
 - **Trading integration** uses a signed event inbox only. Trading systems POST HMAC-signed events to `/v1/trading/events`. MEKA returns approvals as Ed25519-signed approval tokens, which the trading system verifies itself (ADR-006). MEKA never holds exchange keys.
 
 ## Consequences
-- Estimated steady-state infrastructure is about £20–35/month: Fargate at about £8, RDS micro at about £13, plus small amounts for S3, SQS and KMS. AI costs are separate (ADR-006).
+- Estimated steady-state infrastructure is about **£35–45/month**: Fargate at about £8, RDS micro at about £13, ALB at about £16, plus small amounts for S3, SQS, KMS and logs. AI costs are separate (ADR-006).
+  - **Cost lever, to revisit at V1:** API Gateway HTTP API + VPC Link in front of the service instead of the ALB, saving about £15/month at our request volume.
+  - A dev stack without a certificate synthesises an *internal* ALB, so it is never exposed.
 - M0 deploys only `sync` plus Postgres. Ingestion comes later.
 - An AWS account and credentials are an owner action. CDK synth and the unit-level snapshot tests run in CI without credentials.
 

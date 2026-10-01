@@ -1,0 +1,91 @@
+-- Device replica schema (ADR-002, ADR-003). Encrypted at rest via SQLCipher.
+-- The op log is append-only; field_head / field_superseded are derived and could be rebuilt from it.
+
+CREATE TABLE op_log (
+    op_id TEXT NOT NULL PRIMARY KEY,
+    household_id TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    field_name TEXT NOT NULL,
+    value_type TEXT NOT NULL,            -- 's' | 'i' | 'b' | 'n'
+    value_text TEXT,
+    value_int INTEGER,
+    hlc TEXT NOT NULL,                   -- Hlc.encode(): lexicographic order == causal-total order
+    base_op_ids TEXT NOT NULL,           -- comma-separated op ids (ids are hex; no commas possible)
+    device_id TEXT NOT NULL,
+    schema_version INTEGER NOT NULL,
+    local INTEGER NOT NULL,              -- 1 if authored on this device
+    pushed INTEGER NOT NULL DEFAULT 0    -- 1 once acknowledged by the server
+);
+
+CREATE INDEX op_log_pending ON op_log(local, pushed, hlc);
+
+CREATE TABLE field_head (
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    field_name TEXT NOT NULL,
+    op_id TEXT NOT NULL REFERENCES op_log(op_id),
+    PRIMARY KEY (entity_type, entity_id, field_name, op_id)
+);
+
+CREATE INDEX field_head_entity ON field_head(entity_type, entity_id);
+
+CREATE TABLE field_superseded (
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    field_name TEXT NOT NULL,
+    op_id TEXT NOT NULL,
+    PRIMARY KEY (entity_type, entity_id, field_name, op_id)
+);
+
+CREATE TABLE replica_meta (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+insertOp:
+INSERT INTO op_log(op_id, household_id, entity_type, entity_id, field_name, value_type, value_text, value_int, hlc, base_op_ids, device_id, schema_version, local)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+opById:
+SELECT * FROM op_log WHERE op_id = ?;
+
+headsFor:
+SELECT o.* FROM field_head h JOIN op_log o ON o.op_id = h.op_id
+WHERE h.entity_type = ? AND h.entity_id = ? AND h.field_name = ?
+ORDER BY o.hlc, o.op_id;
+
+headsForEntity:
+SELECT o.* FROM field_head h JOIN op_log o ON o.op_id = h.op_id
+WHERE h.entity_type = ? AND h.entity_id = ?
+ORDER BY o.field_name, o.hlc, o.op_id;
+
+deleteHeads:
+DELETE FROM field_head WHERE entity_type = ? AND entity_id = ? AND field_name = ?;
+
+insertHead:
+INSERT OR IGNORE INTO field_head(entity_type, entity_id, field_name, op_id) VALUES (?, ?, ?, ?);
+
+supersededFor:
+SELECT op_id FROM field_superseded WHERE entity_type = ? AND entity_id = ? AND field_name = ?;
+
+insertSuperseded:
+INSERT OR IGNORE INTO field_superseded(entity_type, entity_id, field_name, op_id) VALUES (?, ?, ?, ?);
+
+entityIds:
+SELECT DISTINCT entity_id FROM field_head WHERE entity_type = ? ORDER BY entity_id;
+
+pendingPush:
+SELECT * FROM op_log WHERE local = 1 AND pushed = 0 ORDER BY hlc LIMIT ?;
+
+markPushed:
+UPDATE op_log SET pushed = 1 WHERE op_id IN ?;
+
+pendingCount:
+SELECT COUNT(*) FROM op_log WHERE local = 1 AND pushed = 0;
+
+metaGet:
+SELECT value FROM replica_meta WHERE key = ?;
+
+metaPut:
+INSERT OR REPLACE INTO replica_meta(key, value) VALUES (?, ?);

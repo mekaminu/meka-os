@@ -24,5 +24,9 @@ There is a single owner today, and the owner's wife may be a user later (ADR-008
 - **Integration secrets:** no provider API keys ship in clients. OAuth for integrations runs server-side (authorisation code + PKCE), and refresh tokens stay in Secrets Manager.
 
 ## Consequences
-- M0 implements the device-key request signing and a development enrolment path. Passkey enrolment lands before the first cloud deployment holding real data.
+- **M0, as built:** each device gets a random 256-bit bearer secret at enrolment.
+  - The server stores only its SHA-256 and binds every request to that device and household.
+  - Revocation is immediate.
+  - This is tested in `SyncApiTest`.
+- **Before any real personal data reaches the cloud:** Ed25519 request signing and passkey enrolment replace the bearer secret. Until then the cloud stack holds test data only.
 - Multi-user later means adding principals to a `Household` with roles. No redesign is needed.

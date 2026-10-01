@@ -25,6 +25,7 @@ TEST_SRC=$(find "$ROOT/core"/{sync,domain,policy,wire}/src/commonTest -name '*.k
 echo "Kotlin $KV — compiling $(echo "$MAIN_SRC" | wc -l) main + $(echo "$TEST_SRC" | wc -l) test files"
 java -cp "$COMPILER_CP" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
   -no-stdlib -no-reflect -Xallow-kotlin-package -Xmulti-platform -opt-in=kotlin.ExperimentalStdlibApi \
+  -Xcommon-sources="$(echo $MAIN_SRC | tr ' ' ',')" \
   -cp "$RUNTIME_CP" -d "$OUT" \
   "$ROOT/tools/kotlin-test-shim/KotlinTestShim.kt" $MAIN_SRC $TEST_SRC 2>&1 | grep -v '^Picked up JAVA_TOOL_OPTIONS' || true
 [ -n "$(find "$OUT" -name '*Test.class' | head -1)" ] || { echo "compilation failed" >&2; exit 1; }
