@@ -43,8 +43,8 @@ sqldelight {
         create("MekaDatabase") {
             packageName.set("os.meka.core.data")
             verifyMigrations.set(true)
-            // Spike S6 (ADR-002): link SQLCipher instead of system sqlite on Apple. Until proven, linkSqlite stays true.
-            linkSqlite.set(true)
         }
     }
+    // Spike S6 (ADR-002): link SQLCipher instead of system sqlite on Apple. Until proven, linkSqlite stays true.
+    linkSqlite.set(true)
 }
