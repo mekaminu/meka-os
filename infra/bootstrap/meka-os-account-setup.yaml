@@ -5,10 +5,12 @@ Description: >-
   AWS keys anywhere), and emails you if monthly spend heads past the budget.
 
 Parameters:
-  GitHubRepo:
+  GitHubRepoSubject:
     Type: String
-    Default: mekaminu/meka-os
-    Description: owner/repo allowed to deploy. Only its main branch can assume the role.
+    Default: mekaminu@333105610/meka-os@1398868143
+    Description: >-
+      Immutable GitHub OIDC subject for the repo (owner@ownerId/repo@repoId). GitHub issues these for repos created
+      after 15 July 2026; IDs cannot be reused if a repo is renamed or deleted. Only the main branch may deploy.
   AlertEmail:
     Type: String
     Description: Where budget alerts go.
@@ -41,7 +43,7 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepo}:ref:refs/heads/main
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepoSubject}:ref:refs/heads/main
       # Administrator inside THIS dedicated account only: CDK bootstrap and deploys create IAM roles, ECS, RDS,
       # KMS etc. The account holds nothing but MEKA OS, so this cannot reach trading systems or their keys.
       ManagedPolicyArns: [arn:aws:iam::aws:policy/AdministratorAccess]
