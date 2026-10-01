@@ -32,31 +32,31 @@ jobs:
       MEKA_TEST_DB_USER: postgres
       MEKA_TEST_DB_PASSWORD: postgres
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: "21" }
       - uses: gradle/actions/setup-gradle@v4
       - name: Kernel purity (ADR-011)
-        run: ./gradlew checkKernelPurity
+        run: tools/ci-run.sh ./gradlew checkKernelPurity
       - name: Core + data + facade + backend tests
-        run: ./gradlew :core:sync:jvmTest :core:domain:jvmTest :core:policy:jvmTest :core:wire:jvmTest :core:data:jvmTest :core:facade:jvmTest :core:data:verifySqlDelightMigration :backend:test
+        run: tools/ci-run.sh ./gradlew :core:sync:jvmTest :core:domain:jvmTest :core:policy:jvmTest :core:wire:jvmTest :core:data:jvmTest :core:facade:jvmTest :core:data:verifySqlDelightMigration :backend:test
 
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: "21" }
       - uses: gradle/actions/setup-gradle@v4
       - name: Build, unit test, lint
-        run: ./gradlew :android:app:assembleDebug :android:app:testDebugUnitTest :android:app:lintDebug
+        run: tools/ci-run.sh ./gradlew :android:app:assembleDebug :android:app:testDebugUnitTest :android:app:lintDebug
 
   tokens-and-infra:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-node@v4
         with: { node-version: "22" }
       - name: Design tokens up to date + contrast gate (ADR-012)
@@ -71,13 +71,13 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: "21" }
       - uses: gradle/actions/setup-gradle@v4
       - name: Kotlin/Native tests + XCFramework
-        run: ./gradlew :core:sync:macosArm64Test :core:domain:macosArm64Test :core:facade:macosArm64Test :core:facade:assembleMekaCoreReleaseXCFramework
+        run: tools/ci-run.sh ./gradlew :core:sync:macosArm64Test :core:domain:macosArm64Test :core:facade:macosArm64Test :core:facade:assembleMekaCoreReleaseXCFramework
       - name: Generate Xcode project
         run: brew install xcodegen && xcodegen generate --spec macos/project.yml
       - name: Build and test SwiftUI app
-        run: xcodebuild -project macos/MekaOS.xcodeproj -scheme MekaOS -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO test
+        run: tools/ci-run.sh xcodebuild -project macos/MekaOS.xcodeproj -scheme MekaOS -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO test
