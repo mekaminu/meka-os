@@ -48,6 +48,18 @@ class MekaCoreTest {
     }
 
     @Test
+    fun connectAttachesSyncAndPushesLocalWorkMadeBeforeEnrolment() = runTest {
+        val c = MekaCore("hh", "android", InMemoryReplicaStore(), null, Random(1), { TimeZone.of("Europe/London") }, { now })
+        c.addTask("Made before enrolment")
+        assertEquals(false, c.isConnected)
+        c.connect(FaultyTransport(service))
+        assertEquals(true, c.syncNow())
+        c.stopSync()
+        val other = core("mac"); other.syncNow()
+        assertEquals("Made before enrolment", other.today.value.upNext?.title)
+    }
+
+    @Test
     fun conflictsAreExposedAsChoicesAndResolve() = runTest {
         val a = core("android"); val m = core("mac")
         val id = a.addTask("Call school"); a.syncNow(); m.syncNow()

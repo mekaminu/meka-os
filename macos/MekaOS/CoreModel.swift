@@ -13,6 +13,9 @@ final class CoreModel {
     var selectedID: String?
     var focusCapture = false
     var lastError: String?
+    private(set) var isConnected = false
+    var showConnect = false
+    private var identity: DeviceIdentity?
 
     private var core: MekaCore?
     private var observers: [Task<Void, Never>] = []
@@ -20,7 +23,8 @@ final class CoreModel {
     func start() async {
         guard core == nil else { return }
         let identity = DeviceIdentity.loadOrCreate()
-        let syncURL = Bundle.main.object(forInfoDictionaryKey: "MekaSyncURL") as? String
+        self.identity = identity
+        let syncURL = identity.serverURL
         let core = MacCoreFactory.shared.create(
             householdId: identity.householdID,
             deviceId: identity.deviceID,
@@ -42,6 +46,35 @@ final class CoreModel {
             for await c in core.conflicts { self?.conflicts = c }
         })
         core.startSync(periodMs: 5 * 60_000)
+        isConnected = core.isConnected
+    }
+
+    /// Default for the Connect sheet: the saved server, else the build-time setting.
+    var defaultServerURL: String {
+        identity?.serverURL ?? (Bundle.main.object(forInfoDictionaryKey: "MekaSyncURL") as? String) ?? ""
+    }
+
+    /// One-time enrolment. Returns a user-facing error, or nil on success.
+    func connect(serverURL: String, code: String) async -> String? {
+        guard let core, let identity else { return "Not ready yet" }
+        do {
+            let result = try await MacCoreFactory.shared.enrol(
+                serverUrl: serverURL, enrolCode: code, householdId: identity.householdID,
+                deviceId: identity.deviceID, deviceName: Host.current().localizedName ?? "Mac"
+            )
+            switch onEnum(of: result) {
+            case .enrolled(let e):
+                let url = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                DeviceIdentity.saveEnrolment(serverURL: url, secret: e.deviceSecret)
+                try await MacCoreFactory.shared.connect(core: core, serverUrl: url, deviceSecret: e.deviceSecret)
+                isConnected = true
+                return nil
+            case .rejected: return "That enrolment code wasn't accepted."
+            case .failed(let f): return f.reason
+            }
+        } catch {
+            return error.localizedDescription
+        }
     }
 
     // MARK: Commands

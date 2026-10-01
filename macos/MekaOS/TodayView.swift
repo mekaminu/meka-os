@@ -18,6 +18,7 @@ struct TodayView: View {
                 .frame(minWidth: 280, idealWidth: 360)
         }
         .background(palette.background)
+        .sheet(isPresented: $model.showConnect) { ConnectSheet(palette: palette) }
     }
 
     private var todayColumn: some View {
@@ -27,6 +28,12 @@ struct TodayView: View {
                     Text(greeting)
                         .font(MekaType.greeting).tracking(MekaType.greetingTracking)
                         .foregroundStyle(palette.textPrimary)
+                    if !model.isConnected {
+                        Button("This Mac isn't syncing yet · Connect") { model.showConnect = true }
+                            .buttonStyle(.plain)
+                            .font(MekaType.caption)
+                            .foregroundStyle(palette.accent)
+                    }
                     if let line = model.syncLine {
                         Text(line).font(MekaType.caption).foregroundStyle(palette.offline)
                             .transition(.opacity)
@@ -259,5 +266,42 @@ struct QuickCaptureMenu: View {
             .onSubmit { model.add(text); text = "" }
             .padding(MekaSpace.m)
             .frame(width: 320)
+    }
+}
+
+/// One-time enrolment: server address + enrolment code. Everything works offline before and after.
+private struct ConnectSheet: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let palette: MekaPalette
+    @State private var url = ""
+    @State private var code = ""
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
+            Text("Connect this Mac").font(MekaType.upNextTitle)
+            TextField("Server address (https://…)", text: $url).textFieldStyle(.roundedBorder)
+            SecureField("Enrolment code", text: $code).textFieldStyle(.roundedBorder)
+            if let error { Text(error).font(MekaType.caption).foregroundStyle(palette.critical) }
+            HStack {
+                Spacer()
+                Button("Not now") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(busy ? "Connecting…" : "Connect") {
+                    busy = true; error = nil
+                    Task {
+                        error = await model.connect(serverURL: url, code: code)
+                        busy = false
+                        if error == nil { dismiss() }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(busy || url.isEmpty || code.isEmpty)
+            }
+        }
+        .padding(MekaSpace.l)
+        .frame(width: 420)
+        .onAppear { url = model.defaultServerURL }
     }
 }

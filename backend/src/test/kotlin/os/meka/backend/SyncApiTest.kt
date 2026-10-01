@@ -55,6 +55,32 @@ class SyncApiTest {
     }
 
     @Test
+    fun enrolmentNeedsTheTokenAndIssuesAWorkingSecret() = testApplication {
+        val token = "t".repeat(48)
+        application { mekaSync(InMemoryServerOpStore(), devices, enrolToken = token) }
+        val body = WireCodec.encodeEnrolRequest(WireCodec.EnrolRequest("hh", "fold8", "Fold 8"))
+        assertEquals(HttpStatusCode.Unauthorized, client.post("/v1/enrol") { setBody(body) }.status)
+        assertEquals(HttpStatusCode.Unauthorized, client.post("/v1/enrol") { header("Authorization", "Enrol wrong"); setBody(body) }.status)
+        val r = client.post("/v1/enrol") { header("Authorization", "Enrol $token"); setBody(body) }
+        assertEquals(HttpStatusCode.OK, r.status)
+        val secret = WireCodec.decodeEnrolResponse(r.bodyAsText())
+        val push = WireCodec.encodePushRequest(PushRequest("hh", "fold8", listOf(op("e1", dev = "fold8"))))
+        assertEquals(HttpStatusCode.OK, client.post("/v1/sync/push") { header("Authorization", "Bearer $secret"); setBody(push) }.status)
+        // Re-enrolling rotates: the old secret stops working.
+        val r2 = client.post("/v1/enrol") { header("Authorization", "Enrol $token"); setBody(body) }
+        assertEquals(HttpStatusCode.Unauthorized, client.post("/v1/sync/push") { header("Authorization", "Bearer $secret"); setBody(push) }.status)
+        val secret2 = WireCodec.decodeEnrolResponse(r2.bodyAsText())
+        assertEquals(HttpStatusCode.OK, client.post("/v1/sync/push") { header("Authorization", "Bearer $secret2"); setBody(push) }.status)
+    }
+
+    @Test
+    fun enrolmentIsDisabledWithoutAConfiguredToken() = testApplication {
+        application { mekaSync(InMemoryServerOpStore(), devices) }
+        val body = WireCodec.encodeEnrolRequest(WireCodec.EnrolRequest("hh", "fold8", "Fold 8"))
+        assertEquals(HttpStatusCode.Unauthorized, client.post("/v1/enrol") { header("Authorization", "Enrol anything"); setBody(body) }.status)
+    }
+
+    @Test
     fun malformedBodiesAreRejectedWithoutEcho() = testApplication {
         application { mekaSync(InMemoryServerOpStore(), devices) }
         val r = client.post("/v1/sync/push") { header("Authorization", "Bearer $androidSecret"); setBody("{\"w\":9}") }

@@ -124,6 +124,22 @@ object WireCodec {
         )
     }
 
+    /** Device enrolment (ADR-005 M0): request carries identity; response carries the device secret, once. */
+    data class EnrolRequest(val householdId: String, val deviceId: String, val name: String)
+
+    private val idPattern = Regex("^[a-z0-9]{1,64}$")
+
+    fun encodeEnrolRequest(r: EnrolRequest): String = doc { put("hh", r.householdId); put("dev", r.deviceId); put("name", r.name) }
+
+    fun decodeEnrolRequest(s: String): EnrolRequest = parse(s) { o ->
+        val r = EnrolRequest(o.str("hh"), o.str("dev"), o.str("name").take(80))
+        if (!idPattern.matches(r.householdId) || !idPattern.matches(r.deviceId)) throw WireFormatException("ids must be [a-z0-9]{1,64}")
+        r
+    }
+
+    fun encodeEnrolResponse(secret: String): String = doc { put("secret", secret) }
+    fun decodeEnrolResponse(s: String): String = parse(s) { o -> o.str("secret") }
+
     private fun doc(body: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit): String =
         buildJsonObject { put("w", VERSION); body() }.toString()
 

@@ -32,7 +32,7 @@ class Unauthorised : RuntimeException()
 class Forbidden : RuntimeException()
 
 /** Wires the sync API. Pure function of its dependencies so tests run it against in-memory stores. */
-fun Application.mekaSync(opStore: ServerOpStore, devices: DeviceRegistry) {
+fun Application.mekaSync(opStore: ServerOpStore, devices: DeviceRegistry, enrolToken: String? = null) {
     val sync = SyncService(opStore)
 
     install(StatusPages) {
@@ -50,6 +50,17 @@ fun Application.mekaSync(opStore: ServerOpStore, devices: DeviceRegistry) {
 
     routing {
         get("/health") { call.respondText("ok") }
+
+        // One-time device enrolment (ADR-005 M0). Disabled unless MEKA_ENROL_TOKEN is configured.
+        post("/v1/enrol") {
+            val token = enrolToken?.takeIf { it.length >= 32 } ?: throw Unauthorised()
+            val auth = call.request.header("Authorization") ?: throw Unauthorised()
+            if (!auth.startsWith("Enrol ") || !Secrets.constantTimeEquals(auth.removePrefix("Enrol ").trim(), token)) throw Unauthorised()
+            val req = WireCodec.decodeEnrolRequest(call.boundedBody())
+            val secret = withContext(Dispatchers.IO) { devices.enrol(req.householdId, req.deviceId, req.name) }
+            call.application.environment.log.info("device enrolled") // no identifiers in logs
+            call.respondText(WireCodec.encodeEnrolResponse(secret), ContentType.Application.Json)
+        }
 
         post("/v1/sync/push") {
             val who = call.device(devices)
@@ -104,7 +115,8 @@ fun main(args: Array<String>) {
         }
         else -> {
             val port = System.getenv("PORT")?.toInt() ?: 8080
-            embeddedServer(Netty, port = port) { mekaSync(PostgresOpStore(ds), PostgresDeviceRegistry(ds)) }.start(wait = true)
+            val enrolToken = System.getenv("MEKA_ENROL_TOKEN")
+            embeddedServer(Netty, port = port) { mekaSync(PostgresOpStore(ds), PostgresDeviceRegistry(ds), enrolToken) }.start(wait = true)
         }
     }
 }

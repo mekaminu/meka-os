@@ -53,7 +53,7 @@ class MekaCore(
     householdId: String,
     deviceId: String,
     store: ReplicaStore,
-    private val transport: SyncTransport?,
+    transport: SyncTransport?,
     secureRandom: Random,
     private val timeZone: () -> TimeZone = { TimeZone.currentSystemDefault() },
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
@@ -65,7 +65,7 @@ class MekaCore(
 
     private val replica = Replica(householdId, deviceId, HlcClock(deviceId, nowMs), store, MekaSchema, ids::next)
     private val tasks = Tasks(replica, ids::next, nowMs)
-    private val syncClient = transport?.let { SyncClient(replica, it) }
+    private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
 
     private val _today = MutableStateFlow(project())
     val today: StateFlow<Today> = _today.asStateFlow()
@@ -113,6 +113,14 @@ class MekaCore(
     }
 
     fun stopSync() { syncLoop?.cancel(); syncLoop = null }
+
+    /** Attaches sync after enrolment (or swaps it), without restarting the app. Local data is kept and pushed. */
+    suspend fun connect(transport: SyncTransport) = withContext(confined) {
+        syncMutex.withLock { syncClient = SyncClient(replica, transport) }
+        startSync()
+    }
+
+    val isConnected: Boolean get() = syncClient != null
 
     /** For platform schedulers (WorkManager, BGTask): one round, returns true on success. */
     suspend fun syncNow(): Boolean = withContext(confined) { syncMutex.withLock { runSyncOnce() } == null }

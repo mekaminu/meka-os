@@ -74,7 +74,7 @@ import java.time.format.DateTimeFormatter
  * State survives fold/unfold because selection is saveable and everything else comes from MekaCore flows.
  */
 @Composable
-fun TodayRoute(core: MekaCore) {
+fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
     val today by core.today.collectAsState()
     val sync by core.syncStatus.collectAsState()
     val conflicts by core.conflicts.collectAsState()
@@ -96,12 +96,12 @@ fun TodayRoute(core: MekaCore) {
         val selected = all.firstOrNull { it.id == selectedId }
         if (twoPane) {
             Row(Modifier.fillMaxSize()) {
-                TodayPane(today, sync, actions, Modifier.weight(0.55f).fillMaxHeight())
+                TodayPane(today, sync, actions, Modifier.weight(0.55f).fillMaxHeight(), connect)
                 Box(Modifier.width(1.dp).fillMaxHeight().background(Meka.colors.hairline))
                 DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, Modifier.weight(0.45f).fillMaxHeight())
             }
         } else {
-            TodayPane(today, sync, actions, Modifier.fillMaxSize())
+            TodayPane(today, sync, actions, Modifier.fillMaxSize(), connect)
             if (selected != null) {
                 // Single-pane: detail slides over Today; back/tap-outside closes.
                 Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
@@ -111,6 +111,9 @@ fun TodayRoute(core: MekaCore) {
         }
     }
 }
+
+/** Present only while the device isn't enrolled for sync. */
+data class ConnectHook(val defaultUrl: String, val connect: suspend (url: String, code: String) -> String?)
 
 data class TodayActions(
     val add: (String) -> Unit,
@@ -122,7 +125,7 @@ data class TodayActions(
 )
 
 @Composable
-private fun TodayPane(today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier) {
+private fun TodayPane(today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?) {
     Column(modifier.imePadding()) {
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -133,6 +136,7 @@ private fun TodayPane(today: Today, sync: SyncStatus, actions: TodayActions, mod
                 Column(Modifier.padding(bottom = MekaSpace.l)) {
                     Text(greeting(), style = MekaType.greeting, color = Meka.colors.textPrimary)
                     SyncLine(sync)
+                    if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs))
                 }
             }
             if (today.isClear) {

@@ -45,6 +45,15 @@ class WireCodecTest {
     }
 
     @Test
+    fun enrolmentRoundTripsAndValidatesIds() {
+        val r = WireCodec.EnrolRequest("hh1", "android3f9a", "Fold 8")
+        assertEquals(r, WireCodec.decodeEnrolRequest(WireCodec.encodeEnrolRequest(r)))
+        assertEquals("s3cr3t", WireCodec.decodeEnrolResponse(WireCodec.encodeEnrolResponse("s3cr3t")))
+        assertFailsWith<WireFormatException> { WireCodec.decodeEnrolRequest(WireCodec.encodeEnrolRequest(r.copy(deviceId = "../etc"))) }
+        assertFailsWith<WireFormatException> { WireCodec.decodeEnrolRequest(WireCodec.encodeEnrolRequest(r.copy(householdId = ""))) }
+    }
+
+    @Test
     fun unknownFieldsAreIgnoredForForwardCompatibility() {
         val s = """{"w":1,"hh":"hh","dev":"mac","after":5,"limit":10,"newFieldFromTheFuture":{"x":1}}"""
         assertEquals(PullRequest("hh", "mac", 5, 10), WireCodec.decodePullRequest(s))

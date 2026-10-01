@@ -1,14 +1,13 @@
 import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
-import { MekaStack } from '../lib/meka-stack';
+import { MekaRegistryStack, MekaStack } from '../lib/meka-stack';
 
-function synth(props: Partial<{ certificateArn: string; envName: string }> = {}) {
+function synth(props: Partial<{ envName: string }> = {}) {
   const app = new cdk.App();
-  const stack = new MekaStack(app, 'Test', {
-    envName: props.envName ?? 'dev',
-    certificateArn: props.certificateArn,
-    env: { account: '111111111111', region: 'eu-west-2' },
-  });
+  const env = { account: '111111111111', region: 'eu-west-2' };
+  const envName = props.envName ?? 'dev';
+  const registry = new MekaRegistryStack(app, 'Reg', { envName, env });
+  const stack = new MekaStack(app, 'Test', { envName, env, repo: registry.repo, imageTag: 'abc123' });
   return Template.fromStack(stack);
 }
 
@@ -72,14 +71,35 @@ describe('MekaStack security and cost invariants (ADR-004)', () => {
     }
   });
 
-  test('dev without a certificate is not internet-facing', () => {
-    t.hasResourceProperties('AWS::ElasticLoadBalancingV2::LoadBalancer', { Scheme: 'internal' });
+  test('public entry is CloudFront HTTPS-only; ALB only accepts CloudFront with the secret header', () => {
+    t.hasResourceProperties('AWS::CloudFront::Distribution', {
+      DistributionConfig: Match.objectLike({
+        DefaultCacheBehavior: Match.objectLike({ ViewerProtocolPolicy: 'https-only' }),
+        Origins: [Match.objectLike({ OriginCustomHeaders: [Match.objectLike({ HeaderName: 'X-Origin-Verify' })] })],
+      }),
+    });
+    // Default action refuses; only the header-matched rule forwards to the service.
+    t.hasResourceProperties('AWS::ElasticLoadBalancingV2::Listener', {
+      DefaultActions: [Match.objectLike({ Type: 'fixed-response', FixedResponseConfig: Match.objectLike({ StatusCode: '403' }) })],
+    });
+    t.hasResourceProperties('AWS::ElasticLoadBalancingV2::ListenerRule', {
+      Conditions: [Match.objectLike({ Field: 'http-header', HttpHeaderConfig: Match.objectLike({ HttpHeaderName: 'X-Origin-Verify' }) })],
+    });
+    // No ingress from the whole internet.
+    const sgs = t.findResources('AWS::EC2::SecurityGroup');
+    for (const [, sg] of Object.entries(sgs)) {
+      for (const rule of ((sg as any).Properties.SecurityGroupIngress ?? [])) expect(rule.CidrIp).not.toBe('0.0.0.0/0');
+    }
   });
 
-  test('with a certificate: HTTPS only, modern TLS policy', () => {
-    const p = synth({ certificateArn: 'arn:aws:acm:eu-west-2:111111111111:certificate/abc', envName: 'prod' });
-    p.hasResourceProperties('AWS::ElasticLoadBalancingV2::Listener', { Port: 443, Protocol: 'HTTPS' });
-    p.resourcePropertiesCountIs('AWS::ElasticLoadBalancingV2::Listener', { Port: 80 }, 0);
-    p.hasResourceProperties('AWS::RDS::DBInstance', { DeletionProtection: true });
+  test('enrolment code is generated in Secrets Manager and injected, never in plain env', () => {
+    t.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'meka-os-dev/enrol-token' });
+    t.hasResourceProperties('AWS::ECS::TaskDefinition', {
+      ContainerDefinitions: [Match.objectLike({ Secrets: Match.arrayWith([Match.objectLike({ Name: 'MEKA_ENROL_TOKEN' })]) })],
+    });
+  });
+
+  test('prod keeps deletion protection', () => {
+    synth({ envName: 'prod' }).hasResourceProperties('AWS::RDS::DBInstance', { DeletionProtection: true });
   });
 });

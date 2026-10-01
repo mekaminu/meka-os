@@ -39,3 +39,19 @@ The backend exists for sync, ingestion (calendar, email, fixtures, news), heavy 
 
 ## Revisit if
 - A second active user (the owner's wife) arrives. The per-household model already supports it (ADR-008).
+
+## Amendment 2026-10-01: account, entry point, deploys
+- **Account.** A dedicated AWS Organizations member account, `meka-os`, sits under the owner's existing account. The existing account holds Kestrel and its Hyperliquid key. MEKA reads untrusted content all day, so it must not share an account with anything that can move money. Member accounts cost nothing and appear on the same bill.
+- **Public entry.** CloudFront (`*.cloudfront.net`, TLS 1.2+, HTTPS only) sits in front of an ALB on HTTP. This gives HTTPS without buying a domain.
+  - The ALB accepts traffic only from CloudFront's origin-facing prefix list, and only when the request carries a secret `X-Origin-Verify` header. Anything else gets a 403.
+  - A custom domain can be added later as a CloudFront alias.
+- **Deploys.**
+  - **Auth:** GitHub OIDC, assuming `meka-os-github-deploy`. Only the `main` branch of `mekaminu/meka-os` can assume it. No AWS keys are stored anywhere.
+  - **Bootstrap:** a one-time CloudFormation template (`infra/bootstrap/meka-os-account-setup.yaml`) creates that role plus a monthly budget alert.
+  - **Workflow:** `deploy.yml` runs after CI passes on main:
+    1. CDK bootstrap
+    2. deploy the registry stack
+    3. push the linux/arm64 image
+    4. deploy the service stack
+    5. smoke-test `/health` through CloudFront
+  - **Scope of the deploy role:** it is administrator *inside the dedicated account only*. That is accepted because the account holds nothing but MEKA OS.

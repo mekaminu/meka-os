@@ -10,6 +10,8 @@ data class DeviceIdentity(val householdId: String, val deviceId: String)
 /** Resolves a bearer secret to a device (ADR-005, M0 scheme). Only SHA-256 hashes are stored. */
 interface DeviceRegistry {
     fun authenticate(bearerSecret: String): DeviceIdentity?
+    /** Enrols (or re-enrols, rotating the secret and clearing revocation) a device; returns its secret exactly once. */
+    fun enrol(householdId: String, deviceId: String, name: String): String
 }
 
 object Secrets {
@@ -41,11 +43,14 @@ class PostgresDeviceRegistry(private val ds: DataSource) : DeviceRegistry {
     }
 
     /** Enrols a device and returns its secret exactly once. Development path until passkey enrolment (ADR-005). */
-    fun enrol(householdId: String, deviceId: String, name: String): String = ds.connection.use { c ->
+    override fun enrol(householdId: String, deviceId: String, name: String): String = ds.connection.use { c ->
         c.autoCommit = false
         val secret = Secrets.newDeviceSecret()
         c.prepareStatement("INSERT INTO household(id) VALUES (?) ON CONFLICT DO NOTHING").use { it.setString(1, householdId); it.executeUpdate() }
-        c.prepareStatement("INSERT INTO device(id, household_id, name, secret_sha256) VALUES (?,?,?,?)").use {
+        c.prepareStatement(
+            """INSERT INTO device(id, household_id, name, secret_sha256) VALUES (?,?,?,?)
+               ON CONFLICT (household_id, id) DO UPDATE SET name = EXCLUDED.name, secret_sha256 = EXCLUDED.secret_sha256, revoked_at = NULL""",
+        ).use {
             it.setString(1, deviceId); it.setString(2, householdId); it.setString(3, name); it.setString(4, Secrets.sha256Hex(secret))
             it.executeUpdate()
         }
@@ -63,7 +68,10 @@ class PostgresDeviceRegistry(private val ds: DataSource) : DeviceRegistry {
 class InMemoryDeviceRegistry : DeviceRegistry {
     private val byHash = HashMap<String, DeviceIdentity>()
 
-    fun enrol(householdId: String, deviceId: String): String {
+    fun enrol(householdId: String, deviceId: String): String = enrol(householdId, deviceId, deviceId)
+
+    override fun enrol(householdId: String, deviceId: String, name: String): String {
+        byHash.entries.removeAll { it.value == DeviceIdentity(householdId, deviceId) } // re-enrol rotates
         val secret = Secrets.newDeviceSecret()
         byHash[Secrets.sha256Hex(secret)] = DeviceIdentity(householdId, deviceId)
         return secret

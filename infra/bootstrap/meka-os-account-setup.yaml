@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  MEKA OS one-time account setup (ADR-004, ADR-011). Run ONCE in the dedicated meka-os AWS account, region eu-west-2.
+  Lets GitHub Actions in mekaminu/meka-os (main branch only) deploy MEKA OS with short-lived credentials (no stored
+  AWS keys anywhere), and emails you if monthly spend heads past the budget.
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Default: mekaminu/meka-os
+    Description: owner/repo allowed to deploy. Only its main branch can assume the role.
+  AlertEmail:
+    Type: String
+    Description: Where budget alerts go.
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 60
+    Description: Monthly budget in USD (AWS budgets are USD). ~60 USD covers the expected ~£35–45.
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+      # AWS no longer relies on thumbprints for this provider; one is supplied for older validators.
+      ThumbprintList: [6938fd4d98bab03faadb97b34396831e3780aea1]
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: meka-os-github-deploy
+      Description: Assumed only by GitHub Actions on the main branch of the MEKA OS repo.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Federated: !Ref GitHubOidcProvider }
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepo}:ref:refs/heads/main
+      # Administrator inside THIS dedicated account only: CDK bootstrap and deploys create IAM roles, ECS, RDS,
+      # KMS etc. The account holds nothing but MEKA OS, so this cannot reach trading systems or their keys.
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/AdministratorAccess]
+      Tags: [{ Key: app, Value: meka-os }]
+
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: meka-os-monthly
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: !Ref MonthlyBudgetUsd, Unit: USD }
+      NotificationsWithSubscribers:
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+        - Notification: { NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+
+Outputs:
+  DeployRoleArn:
+    Value: !GetAtt DeployRole.Arn
+    Description: Paste this back to Claude (it is not a secret).

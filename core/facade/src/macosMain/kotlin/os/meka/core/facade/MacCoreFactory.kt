@@ -49,4 +49,13 @@ object MacCoreFactory {
         }
         return MekaCore(householdId, deviceId, store, transport, AppleSecureRandom)
     }
+
+    private val http by lazy { HttpClient(Darwin) }
+
+    /** One-time enrolment from the Mac's Connect sheet. */
+    suspend fun enrol(serverUrl: String, enrolCode: String, householdId: String, deviceId: String, deviceName: String): EnrolmentResult =
+        Enrolment.enrol(http, serverUrl.trim().trimEnd('/'), enrolCode, householdId, deviceId, deviceName)
+
+    suspend fun connect(core: MekaCore, serverUrl: String, deviceSecret: String) =
+        core.connect(Enrolment.transport(http, serverUrl.trim().trimEnd('/'), deviceSecret))
 }

@@ -6,6 +6,10 @@ struct DeviceIdentity {
     let householdID: String
     let deviceID: String
     let deviceSecret: String?
+    let serverURL: String?
+
+    /// Shared by both of Meka's devices; part of every op, so it never changes once set.
+    static let household = "home"
 
     private static let service = "os.meka.mac.identity"
 
@@ -17,14 +21,13 @@ struct DeviceIdentity {
             write("device_id", id)
             return id
         }()
-        let household = read("household_id") ?? { write("household_id", "local"); return "local" }()
-        return DeviceIdentity(householdID: household, deviceID: device, deviceSecret: read("device_secret"))
+        let household = read("household_id") ?? { write("household_id", Self.household); return Self.household }()
+        return DeviceIdentity(householdID: household, deviceID: device, deviceSecret: read("device_secret"), serverURL: read("server_url"))
     }
 
-    static func enrol(householdID: String, deviceID: String, secret: String) {
+    static func saveEnrolment(serverURL: String, secret: String) {
         precondition(secret.count == 64, "invalid device secret")
-        write("household_id", householdID)
-        write("device_id", deviceID)
+        write("server_url", serverURL)
         write("device_secret", secret)
     }
 

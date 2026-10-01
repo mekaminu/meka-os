@@ -1,0 +1,80 @@
+name: deploy
+
+# Deploys the sync service to the dedicated meka-os AWS account after CI passes on main (ADR-004, ADR-011).
+# Auth is GitHub OIDC → IAM role meka-os-github-deploy (main branch only). No AWS keys are stored anywhere.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-west-2
+  ENV_NAME: dev
+  # Not a secret: the role can only be assumed from this repo's main branch.
+  DEPLOY_ROLE_ARN: ${{ vars.MEKA_DEPLOY_ROLE_ARN }}
+
+jobs:
+  deploy:
+    if: ${{ vars.MEKA_DEPLOY_ROLE_ARN != '' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: "21" }
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: CDK bootstrap (idempotent) + registry
+        working-directory: infra
+        run: |
+          npm ci
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          ../tools/ci-run.sh npx cdk bootstrap "aws://$ACCOUNT/$AWS_REGION" --tags app=meka-os
+          ../tools/ci-run.sh npx cdk deploy "MekaOs-$ENV_NAME-Registry" -c env=$ENV_NAME --require-approval never
+
+      - name: Build and push sync image (linux/arm64)
+        run: |
+          SHA=$(git rev-parse --short=12 HEAD)
+          REPO=$(aws cloudformation describe-stacks --stack-name "MekaOs-$ENV_NAME-Registry" \
+            --query "Stacks[0].Outputs[?OutputKey=='RepositoryUri'].OutputValue" --output text)
+          echo "IMAGE_TAG=$SHA" >> "$GITHUB_ENV"
+          if aws ecr describe-images --repository-name "${REPO##*/}" --image-ids imageTag=$SHA >/dev/null 2>&1; then
+            echo "image $SHA already in ECR"; exit 0
+          fi
+          tools/ci-run.sh ./gradlew :backend:installDist
+          aws ecr get-login-password | docker login --username AWS --password-stdin "${REPO%%/*}"
+          docker buildx create --use >/dev/null
+          tools/ci-run.sh docker buildx build --platform linux/arm64 -t "$REPO:$SHA" --push backend
+
+      - name: Deploy service stack
+        working-directory: infra
+        run: ../tools/ci-run.sh npx cdk deploy "MekaOs-$ENV_NAME" -c env=$ENV_NAME -c imageTag=$IMAGE_TAG --require-approval never --outputs-file ../cdk-outputs.json
+
+      - name: Smoke test through CloudFront
+        run: |
+          URL=$(python3 -c "import json;d=json.load(open('cdk-outputs.json'));print(d['MekaOs-$ENV_NAME']['SyncUrl'])")
+          for i in $(seq 1 30); do
+            if [ "$(curl -s --max-time 10 "$URL/health")" = "ok" ]; then
+              echo "::notice title=MEKA OS sync is live::$URL"; exit 0
+            fi
+            sleep 20
+          done
+          echo "::error title=Smoke test failed::$URL/health did not return ok"; exit 1

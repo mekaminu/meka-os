@@ -8,16 +8,42 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
-import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as cr from 'aws-cdk-lib/custom-resources';
 import { Construct } from 'constructs';
+
+/**
+ * Image registry, deployed first so CI can push the sync image before the service stack references it.
+ * Separate stack, same isolation (dedicated account, dedicated KMS-free AES256 at rest is fine for images).
+ */
+export class MekaRegistryStack extends cdk.Stack {
+  readonly repo: ecr.Repository;
+  constructor(scope: Construct, id: string, props: cdk.StackProps & { envName: string }) {
+    super(scope, id, props);
+    cdk.Tags.of(this).add('app', 'meka-os');
+    cdk.Tags.of(this).add('env', props.envName);
+    this.repo = new ecr.Repository(this, 'Repo', {
+      repositoryName: `meka-os-${props.envName}-sync`,
+      imageScanOnPush: true,
+      imageTagMutability: ecr.TagMutability.IMMUTABLE,
+      lifecycleRules: [{ maxImageCount: 10 }],
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+    new cdk.CfnOutput(this, 'RepositoryUri', { value: this.repo.repositoryUri });
+  }
+}
 
 export interface MekaStackProps extends cdk.StackProps {
   /** e.g. "dev" | "prod". Becomes part of every resource name for isolation (ADR-004). */
   readonly envName: string;
-  /** ACM certificate ARN for the sync endpoint. When absent (dev synth), the listener is HTTP-only and not internet-facing. */
+  /** Reserved for a custom domain later (CloudFront alias + us-east-1 certificate). Unused today. */
   readonly certificateArn?: string;
-  /** Container image tag in the stack's ECR repository. */
+  /** Container image tag in the registry stack's ECR repository (CI passes the git SHA). */
   readonly imageTag?: string;
+  /** From MekaRegistryStack. */
+  readonly repo: ecr.IRepository;
 }
 
 /**
@@ -55,7 +81,7 @@ export class MekaStack extends cdk.Stack {
 
     const dbSg = new ec2.SecurityGroup(this, 'DbSg', { vpc, allowAllOutbound: false, description: 'Postgres: sync service only' });
     const appSg = new ec2.SecurityGroup(this, 'AppSg', { vpc, allowAllOutbound: true, description: 'Sync service tasks' });
-    const albSg = new ec2.SecurityGroup(this, 'AlbSg', { vpc, allowAllOutbound: false, description: 'Public HTTPS' });
+    const albSg = new ec2.SecurityGroup(this, 'AlbSg', { vpc, allowAllOutbound: false, description: 'CloudFront origin only' });
     dbSg.addIngressRule(appSg, ec2.Port.tcp(5432), 'sync service');
     albSg.addEgressRule(appSg, ec2.Port.tcp(8080), 'to tasks');
     appSg.addIngressRule(albSg, ec2.Port.tcp(8080), 'from ALB');
@@ -102,12 +128,20 @@ export class MekaStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
-    const repo = new ecr.Repository(this, 'Repo', {
-      repositoryName: `${prefix}-sync`,
-      imageScanOnPush: true,
-      encryption: ecr.RepositoryEncryption.KMS,
+    const repo = props.repo;
+
+    // One-time device enrolment code (ADR-005 M0). Read it in the Secrets Manager console; rotate to revoke.
+    const enrolToken = new secretsmanager.Secret(this, 'EnrolToken', {
+      secretName: `${prefix}/enrol-token`,
       encryptionKey: this.key,
-      lifecycleRules: [{ maxImageCount: 10 }],
+      generateSecretString: { passwordLength: 48, excludePunctuation: true, includeSpace: false },
+      description: 'MEKA OS device enrolment code',
+    });
+    // Shared secret proving a request came through CloudFront (the ALB rejects anything without it).
+    const originVerify = new secretsmanager.Secret(this, 'OriginVerify', {
+      secretName: `${prefix}/origin-verify`,
+      encryptionKey: this.key,
+      generateSecretString: { passwordLength: 48, excludePunctuation: true, includeSpace: false },
     });
 
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc, clusterName: prefix, containerInsightsV2: ecs.ContainerInsights.DISABLED });
@@ -117,7 +151,9 @@ export class MekaStack extends cdk.Stack {
       runtimePlatform: { cpuArchitecture: ecs.CpuArchitecture.ARM64, operatingSystemFamily: ecs.OperatingSystemFamily.LINUX },
     });
     const dbSecret = this.db.secret!;
-    task.addContainer('sync', {
+    // Read-only root filesystem, plus a scratch /tmp for the JVM and Netty's native libraries.
+    task.addVolume({ name: 'tmp' });
+    const container = task.addContainer('sync', {
       image: ecs.ContainerImage.fromEcrRepository(repo, props.imageTag ?? 'latest'),
       portMappings: [{ containerPort: 8080 }],
       environment: {
@@ -129,14 +165,16 @@ export class MekaStack extends cdk.Stack {
       secrets: {
         MEKA_DB_USER: ecs.Secret.fromSecretsManager(dbSecret, 'username'),
         MEKA_DB_PASSWORD: ecs.Secret.fromSecretsManager(dbSecret, 'password'),
+        MEKA_ENROL_TOKEN: ecs.Secret.fromSecretsManager(enrolToken),
       },
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: 'sync',
         logGroup: new logs.LogGroup(this, 'Logs', { retention: logs.RetentionDays.ONE_MONTH, encryptionKey: this.key }),
       }),
-      healthCheck: { command: ['CMD-SHELL', 'wget -qO- http://localhost:8080/health || exit 1'] },
+      // Health is judged by the load balancer's /health check, so the image needs no shell tools.
       readonlyRootFilesystem: true,
     });
+    container.addMountPoints({ containerPath: '/tmp', sourceVolume: 'tmp', readOnly: false });
     jobs.grantSendMessages(task.taskRole);
     jobs.grantConsumeMessages(task.taskRole);
     blobs.grantReadWrite(task.taskRole);
@@ -154,21 +192,40 @@ export class MekaStack extends cdk.Stack {
       minHealthyPercent: 100,
     });
 
+    // Public HTTPS without owning a domain: CloudFront (*.cloudfront.net, TLS) → ALB over HTTP inside AWS.
+    // The ALB accepts traffic only from CloudFront's origin-facing IP ranges AND only with the secret header.
+    // Resolved at deploy time (ID differs per region), so synth needs no AWS credentials.
+    const cfPrefixList = new cr.AwsCustomResource(this, 'CloudFrontOriginPrefixList', {
+      onUpdate: {
+        service: 'EC2',
+        action: 'describeManagedPrefixLists',
+        parameters: { Filters: [{ Name: 'prefix-list-name', Values: ['com.amazonaws.global.cloudfront.origin-facing'] }] },
+        physicalResourceId: cr.PhysicalResourceId.of('cloudfront-origin-facing'),
+        outputPaths: ['PrefixLists.0.PrefixListId'],
+      },
+      policy: cr.AwsCustomResourcePolicy.fromSdkCalls({ resources: cr.AwsCustomResourcePolicy.ANY_RESOURCE }),
+      installLatestAwsSdk: false,
+    });
+    albSg.addIngressRule(
+      ec2.Peer.prefixList(cfPrefixList.getResponseField('PrefixLists.0.PrefixListId')),
+      ec2.Port.tcp(80),
+      'CloudFront origin-facing only',
+    );
+
     const alb = new elbv2.ApplicationLoadBalancer(this, 'Alb', {
       vpc,
-      internetFacing: props.certificateArn !== undefined,
+      internetFacing: true,
       securityGroup: albSg,
       dropInvalidHeaderFields: true,
     });
-    const listener = props.certificateArn
-      ? alb.addListener('Https', {
-          port: 443,
-          certificates: [acm.Certificate.fromCertificateArn(this, 'Cert', props.certificateArn)],
-          sslPolicy: elbv2.SslPolicy.RECOMMENDED_TLS,
-          open: true,
-        })
-      : alb.addListener('Http', { port: 80, open: false });
+    const listener = alb.addListener('Http', {
+      port: 80,
+      open: false,
+      defaultAction: elbv2.ListenerAction.fixedResponse(403, { contentType: 'text/plain', messageBody: 'forbidden' }),
+    });
     listener.addTargets('Sync', {
+      priority: 10,
+      conditions: [elbv2.ListenerCondition.httpHeader('X-Origin-Verify', [originVerify.secretValue.unsafeUnwrap()])],
       port: 8080,
       protocol: elbv2.ApplicationProtocol.HTTP,
       targets: [this.service],
@@ -176,7 +233,23 @@ export class MekaStack extends cdk.Stack {
       deregistrationDelay: cdk.Duration.seconds(10),
     });
 
-    new cdk.CfnOutput(this, 'SyncEndpoint', { value: alb.loadBalancerDnsName });
-    new cdk.CfnOutput(this, 'EcrRepository', { value: repo.repositoryUri });
+    const distribution = new cloudfront.Distribution(this, 'Cdn', {
+      comment: `${prefix} sync API`,
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
+      defaultBehavior: {
+        origin: new origins.LoadBalancerV2Origin(alb, {
+          protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
+          customHeaders: { 'X-Origin-Verify': originVerify.secretValue.unsafeUnwrap() },
+        }),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+        originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+      },
+    });
+
+    new cdk.CfnOutput(this, 'SyncUrl', { value: `https://${distribution.distributionDomainName}` });
+    new cdk.CfnOutput(this, 'EnrolTokenSecret', { value: enrolToken.secretName });
   }
 }

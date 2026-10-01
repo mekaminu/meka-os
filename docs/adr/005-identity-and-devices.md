@@ -30,3 +30,10 @@ There is a single owner today, and the owner's wife may be a user later (ADR-008
   - This is tested in `SyncApiTest`.
 - **Before any real personal data reaches the cloud:** Ed25519 request signing and passkey enrolment replace the bearer secret. Until then the cloud stack holds test data only.
 - Multi-user later means adding principals to a `Household` with roles. No redesign is needed.
+
+## Amendment 2026-10-01: enrolment
+- **Enrolment code.** `POST /v1/enrol`, authorised by a 48-character enrolment code that CDK generates in Secrets Manager (`meka-os-<env>/enrol-token`). The endpoint is disabled when no code is configured.
+- **What a device gets.** Each device receives its own 256-bit secret, shown once, stored on the device and kept server-side only as a SHA-256 hash.
+- **Re-enrolling** a device id rotates its secret and clears any revocation.
+- **Revoking everything.** To revoke all future enrolments, rotate the enrolment code. To revoke one device, revoke that device.
+- **Household.** Both devices use the household id `home`.
