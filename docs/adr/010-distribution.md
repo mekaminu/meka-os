@@ -17,7 +17,7 @@ The owner chose personal distribution: a sideloaded Android APK, and a Developer
   - Primary install path is `adb install` / Android Studio Run over USB or Wi-Fi from the owner's Mac.
   - Release APKs are signed with a MEKA release key. The keystore is stored outside the repo, with its password in the macOS Keychain. The same key is used forever, since changing keys breaks updates.
   - We register a free Limited Distribution account before the regional enforcement reaches the UK, so that over-the-air installs keep working.
-  - `targetSdk` is 36, which matches Play's current requirement, keeping store distribution open. API 37 is adopted deliberately, because API 37 removes the large-screen orientation/resizability opt-out. We comply with that anyway (ADR-001, Fold-first).
+  - `compileSdk` is 37, because current Compose, OkHttp and SQLCipher AARs require it. `targetSdk` is 36, which matches Play's current requirement, keeping store distribution open. API 37 is adopted deliberately, because API 37 removes the large-screen orientation/resizability opt-out. We comply with that anyway (ADR-001, Fold-first).
 - **macOS:**
   - Developer ID Application certificate, hardened runtime, notarisation via `notarytool`, stapled.
   - **Not sandboxed initially**, because Developer ID doesn't require it. However, the code uses only sandbox-compatible APIs: security-scoped bookmarks, no private APIs and no Apple Events to arbitrary apps. That keeps a Mac App Store build a matter of entitlements, not rewrites.

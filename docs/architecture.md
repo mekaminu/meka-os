@@ -69,15 +69,18 @@ meka-os/
 
 ## Verification status
 
-| Area | How it is verified | Where it has run |
+CI is `mekaminu/meka-os`, GitHub Actions. All four jobs went green on 2026-10-01.
+
+| Area | Verified by | Status |
 |---|---|---|
-| Kernel: sync, merge, domain, policy, wire, store contract (47 tests) | `tools/core-verify.sh` | ✅ Assistant workspace |
-| Postgres schema, sequencing, uniqueness | Executed against a real Postgres instance | ✅ Assistant workspace |
-| SQLite schema and queries | Executed against SQLite | ✅ Assistant workspace |
-| Infra invariants (10 tests) and `cdk synth` | jest + CDK | ✅ Assistant workspace |
-| Design tokens and the contrast gate | `node design/generate.mjs --check` | ✅ Assistant workspace |
-| Gradle build: Android app, facade, backend API tests, SqlReplicaStore contract on real SQLite | `./gradlew …` in CI | ⏳ Blocked: Maven unreachable from the assistant's workspace (ADR-011) |
-| SwiftUI app and Swift↔Kotlin bridge test | Xcode in CI (macOS runner) | ⏳ Same |
+| Kernel: sync, merge, domain, policy, wire | 47 tests under real `kotlin.test` (CI) and offline (`tools/core-verify.sh`) | ✅ |
+| Store contract on real SQLite (`SqlReplicaStore`) | `:core:data:jvmTest` | ✅ |
+| Facade: Today flows, offline→online, conflict choices | `:core:facade:jvmTest` and `macosArm64Test` | ✅ |
+| Sync API: auth, idempotent push, household isolation; concurrent pushes on Postgres 17 | `:backend:test` with a Postgres service container | ✅ |
+| Android app: assemble, unit tests, lint | `android` job | ✅ |
+| Kotlin/Native, XCFramework, SwiftUI app, Swift↔Kotlin bridge test | `macos` job (macOS 26, Xcode 26.6) | ✅ |
+| Infra invariants and synth; design tokens and contrast gate | `tokens-and-infra` job | ✅ |
+| On real devices: Fold fold/unfold, two-device sync against a deployed backend | — | ⏳ Needs the Fold over USB and an AWS account |
 
 ## M0 → M1
 
