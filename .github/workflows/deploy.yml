@@ -21,11 +21,11 @@ env:
   AWS_REGION: eu-west-2
   ENV_NAME: dev
   # Not a secret: the role can only be assumed from this repo's main branch.
-  DEPLOY_ROLE_ARN: ${{ vars.MEKA_DEPLOY_ROLE_ARN }}
+  DEPLOY_ROLE_ARN: arn:aws:iam::869093594106:role/meka-os-github-deploy
 
 jobs:
   deploy:
-    if: ${{ vars.MEKA_DEPLOY_ROLE_ARN != '' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
