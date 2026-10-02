@@ -69,6 +69,12 @@ fun Application.mekaSync(
     routing {
         get("/health") { call.respondText("ok") }
 
+        // Public pages the OAuth consent screens link to (Google requires a home page and privacy policy to publish).
+        get("/") {
+            call.respondText(resultPage("MEKA OS", "A private, single-household personal operating system. It is not a public service and has no sign-ups."), ContentType.Text.Html)
+        }
+        get("/privacy") { call.respondText(resultPage("MEKA OS privacy policy", PRIVACY_TEXT), ContentType.Text.Html) }
+
         // One-time device enrolment (ADR-005 M0). Disabled unless MEKA_ENROL_TOKEN is configured.
         post("/v1/enrol") {
             val token = enrolToken?.takeIf { it.length >= 32 } ?: throw Unauthorised()
@@ -149,6 +155,15 @@ fun Application.mekaSync(
         }
     }
 }
+
+private const val PRIVACY_TEXT =
+    "MEKA OS is a private app used only by its owner's household. When you connect a Google or Microsoft account, " +
+        "MEKA OS reads your calendar events (read-only) so they can appear in your own MEKA OS apps. Event details are " +
+        "stored encrypted in the owner's own cloud account and on the owner's devices, are never sold or shared with " +
+        "anyone, and are not used for advertising or to train AI models. Sign-in tokens are encrypted with a key only " +
+        "this service can use. You can disconnect at any time from your Google or Microsoft account settings, after " +
+        "which no further data is read. Use of information received from Google APIs adheres to the Google API Services " +
+        "User Data Policy, including the Limited Use requirements."
 
 private fun providerName(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Microsoft"; else -> p }
 
