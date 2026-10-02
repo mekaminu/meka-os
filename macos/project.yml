@@ -17,6 +17,7 @@ settings:
     ENABLE_HARDENED_RUNTIME: YES       # required for notarisation (ADR-010)
     CODE_SIGN_STYLE: Automatic
     DEAD_CODE_STRIPPING: YES
+    MEKA_SYNC_URL: https://d2o7ogpu114nmw.cloudfront.net   # dev sync server; pre-fills Connect
 targets:
   MekaOS:
     type: application
