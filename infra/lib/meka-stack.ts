@@ -67,6 +67,16 @@ export class MekaStack extends cdk.Stack {
       description: 'MEKA OS data encryption key. Never shared with trading systems.',
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
+    // CloudWatch Logs encrypts with this key itself, so it needs an explicit key-policy grant, scoped to this
+    // account and region's log groups via the encryption context.
+    this.key.addToResourcePolicy(new cdk.aws_iam.PolicyStatement({
+      principals: [new cdk.aws_iam.ServicePrincipal(`logs.${this.region}.amazonaws.com`)],
+      actions: ['kms:Encrypt', 'kms:Decrypt', 'kms:ReEncrypt*', 'kms:GenerateDataKey*', 'kms:Describe*'],
+      resources: ['*'],
+      conditions: {
+        ArnLike: { 'kms:EncryptionContext:aws:logs:arn': `arn:aws:logs:${this.region}:${this.account}:log-group:*` },
+      },
+    }));
 
     // Public subnets for the ALB and tasks (public IP, SG-restricted), isolated subnets for the database.
     // natGateways: 0 avoids ~£30/month of idle NAT cost (ADR-004).

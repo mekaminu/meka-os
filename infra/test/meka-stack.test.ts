@@ -36,6 +36,15 @@ describe('MekaStack security and cost invariants (ADR-004)', () => {
     t.allResourcesProperties('AWS::SQS::Queue', { KmsMasterKeyId: Match.anyValue() });
   });
 
+  test('CloudWatch Logs may use the key, but only for this account and region log groups', () => {
+    t.hasResourceProperties('AWS::KMS::Key', {
+      KeyPolicy: { Statement: Match.arrayWith([Match.objectLike({
+        Principal: { Service: 'logs.eu-west-2.amazonaws.com' },
+        Condition: { ArnLike: { 'kms:EncryptionContext:aws:logs:arn': 'arn:aws:logs:eu-west-2:111111111111:log-group:*' } },
+      })]) },
+    });
+  });
+
   test('bucket policy denies non-TLS access', () => {
     t.hasResourceProperties('AWS::S3::BucketPolicy', {
       PolicyDocument: { Statement: Match.arrayWith([Match.objectLike({ Effect: 'Deny', Condition: { Bool: { 'aws:SecureTransport': 'false' } } })]) },
