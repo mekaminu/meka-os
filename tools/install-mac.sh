@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the MEKA OS Mac app locally (ad-hoc signed, for this Mac only) and opens it.
+# Builds the MEKA OS Mac app locally (signed with a stable local dev identity, for this Mac only) and opens it.
 # Developer ID signing + notarisation is the release path (ADR-010); this is the dev path.
 # Run from anywhere on the Mac:  ./tools/install-mac.sh
 set -euo pipefail
