@@ -154,6 +154,17 @@ export class MekaStack extends cdk.Stack {
       generateSecretString: { passwordLength: 48, excludePunctuation: true, includeSpace: false },
     });
 
+    // OAuth app credentials for calendar/email providers (ADR-008). Created with a placeholder; the owner pastes the
+    // real client id and secret in the Secrets Manager console. The service reads them at use time, so no redeploy.
+    const oauthSecret = (provider: string, label: string) => new secretsmanager.Secret(this, `OAuth${label}`, {
+      secretName: `${prefix}/oauth/${provider}`,
+      encryptionKey: this.key,
+      description: `MEKA OS ${label} OAuth client: {"client_id": "...", "client_secret": "..."}`,
+      generateSecretString: { secretStringTemplate: JSON.stringify({ client_id: '' }), generateStringKey: 'client_secret', excludePunctuation: true },
+    });
+    const oauthGoogle = oauthSecret('google', 'Google');
+    const oauthMicrosoft = oauthSecret('microsoft', 'Microsoft');
+
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc, clusterName: prefix, containerInsightsV2: ecs.ContainerInsights.DISABLED });
     const task = new ecs.FargateTaskDefinition(this, 'Task', {
       cpu: 256,
@@ -171,6 +182,9 @@ export class MekaStack extends cdk.Stack {
         MEKA_DB_URL: `jdbc:postgresql://${this.db.dbInstanceEndpointAddress}:${this.db.dbInstanceEndpointPort}/meka?sslmode=require`,
         MEKA_JOBS_QUEUE_URL: jobs.queueUrl,
         MEKA_BLOB_BUCKET: blobs.bucketName,
+        MEKA_KMS_KEY_ID: this.key.keyArn,
+        MEKA_OAUTH_GOOGLE_SECRET: oauthGoogle.secretArn,
+        MEKA_OAUTH_MICROSOFT_SECRET: oauthMicrosoft.secretArn,
       },
       secrets: {
         MEKA_DB_USER: ecs.Secret.fromSecretsManager(dbSecret, 'username'),
@@ -190,6 +204,9 @@ export class MekaStack extends cdk.Stack {
     blobs.grantReadWrite(task.taskRole);
     // The KMS key policy lets the service use the key for exactly these resources; no wildcard grants elsewhere.
     this.key.grantEncryptDecrypt(task.taskRole);
+    // Read-only: the service never writes OAuth app credentials. Integration refresh tokens are KMS-encrypted in Postgres.
+    oauthGoogle.grantRead(task.taskRole);
+    oauthMicrosoft.grantRead(task.taskRole);
 
     this.service = new ecs.FargateService(this, 'Service', {
       cluster,
@@ -259,6 +276,8 @@ export class MekaStack extends cdk.Stack {
       },
     });
 
+    // The OAuth redirect URIs registered with Google/Microsoft are derived from this public URL.
+    container.addEnvironment('MEKA_PUBLIC_URL', `https://${distribution.distributionDomainName}`);
     new cdk.CfnOutput(this, 'SyncUrl', { value: `https://${distribution.distributionDomainName}` });
     new cdk.CfnOutput(this, 'EnrolTokenSecret', { value: enrolToken.secretName });
   }
