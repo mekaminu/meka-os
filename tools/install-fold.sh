@@ -3,6 +3,8 @@
 # Android developer verification). Run from the repo root on the Mac:  ./tools/install-fold.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Keep a full log so problems can be diagnosed without scrolling the terminal.
+mkdir -p build && exec > >(tee "build/install-fold.log") 2>&1
 
 # Use Android Studio's bundled JDK and SDK unless already configured.
 if [ -z "${JAVA_HOME:-}" ] && [ -d "/Applications/Android Studio.app/Contents/jbr/Contents/Home" ]; then

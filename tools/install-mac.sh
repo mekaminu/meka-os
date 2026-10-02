@@ -4,6 +4,8 @@
 # Run from anywhere on the Mac:  ./tools/install-mac.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Keep a full log so problems can be diagnosed without scrolling the terminal.
+mkdir -p build && exec > >(tee "build/install-mac.log") 2>&1
 
 if ! xcodebuild -version >/dev/null 2>&1; then
   echo "Xcode is needed for the Mac app. Install Xcode from the App Store, open it once, then run this again."
