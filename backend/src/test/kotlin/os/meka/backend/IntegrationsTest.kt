@@ -156,7 +156,12 @@ class IntegrationsTest {
         val secret = devices.enrol("home", "fold")
         application { mekaSync(ops, devices, integrations = integrations, background = { it() }) }
         assertEquals(HttpStatusCode.Unauthorized, client.post("/v1/integrations/google/connect").status)
-        val r = client.post("/v1/integrations/google/connect") { header("Authorization", "Bearer $secret") }
+        // Personal-data routes need a device with a registered hardware key, not just its bearer secret.
+        assertEquals(HttpStatusCode.Forbidden, client.post("/v1/integrations/google/connect") { header("Authorization", "Bearer $secret") }.status)
+        val key = TestDeviceKey()
+        val reg = WireCodec.encodeDeviceKey(key.publicB64)
+        assertEquals(HttpStatusCode.OK, client.post("/v1/devices/key") { with(key) { signed(secret, "/v1/devices/key", reg) } }.status)
+        val r = client.post("/v1/integrations/google/connect") { with(key) { signed(secret, "/v1/integrations/google/connect", "") } }
         assertEquals(HttpStatusCode.OK, r.status)
         val url = WireCodec.decodeConnectUrl(r.bodyAsText())
         provider.events = listOf(ev("a", "Dentist", 9))
@@ -165,7 +170,7 @@ class IntegrationsTest {
         assertEquals(listOf("Dentist"), deviceEvents()) // first sync ran right after connecting
         val bad = client.get("/v1/oauth/google/callback?state=nope&code=abc").bodyAsText()
         assertTrue(bad.contains("Not connected"))
-        val list = client.post("/v1/integrations/list") { header("Authorization", "Bearer $secret") }.bodyAsText()
+        val list = client.post("/v1/integrations/list") { with(key) { signed(secret, "/v1/integrations/list", "") } }.bodyAsText()
         assertEquals(listOf("meka@gmail.com"), WireCodec.decodeAccounts(list).map { it.email })
     }
 }

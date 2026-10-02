@@ -11,6 +11,8 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.header
+import io.ktor.server.request.httpMethod
+import io.ktor.server.request.path
 import io.ktor.server.request.receiveChannel
 import io.ktor.utils.io.readRemaining
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +52,7 @@ fun Application.mekaSync(
     integrations: Integrations? = null,
     /** Runs work off the request (the first calendar sync right after connecting). */
     background: (() -> Unit) -> Unit = { Thread.ofVirtual().start(it) },
+    verifier: RequestVerifier = RequestVerifier(),
 ) {
     val sync = SyncService(opStore)
 
@@ -86,17 +89,34 @@ fun Application.mekaSync(
             call.respondText(WireCodec.encodeEnrolResponse(secret), ContentType.Application.Json)
         }
 
+        // Registers the device's hardware-bound signing key (ADR-005). The request must be signed with that very key
+        // (proof of possession). After this, the device's unsigned requests are refused. Re-enrolment clears it.
+        post("/v1/devices/key") {
+            val body = call.boundedBody()
+            val who = call.bearer(devices)
+            val pub = WireCodec.decodeDeviceKey(body)
+            if (!verifier.isP256(pub)) throw WireFormatException("not a P-256 key")
+            val h = call.request.headers
+            if (!verifier.verify(pub, "POST", call.request.path(), body, h["X-Meka-Time"], h["X-Meka-Nonce"], h["X-Meka-Signature"])) throw Unauthorised()
+            val stored = withContext(Dispatchers.IO) { devices.registerKey(who, pub) }
+            if (!stored) throw Forbidden()
+            call.application.environment.log.info("device key registered")
+            call.respondText(WireCodec.encodeDeviceKey(pub), ContentType.Application.Json)
+        }
+
         post("/v1/sync/push") {
-            val who = call.device(devices)
-            val req = WireCodec.decodePushRequest(call.boundedBody())
+            val body = call.boundedBody()
+            val who = call.device(devices, verifier, body)
+            val req = WireCodec.decodePushRequest(body)
             if (req.householdId != who.householdId || req.deviceId != who.deviceId) throw Forbidden()
             val resp = withContext(Dispatchers.IO) { sync.push(req) } // blocking JDBC off the request threads
             call.respondText(WireCodec.encodePushResponse(resp), ContentType.Application.Json)
         }
 
         post("/v1/sync/pull") {
-            val who = call.device(devices)
-            val req = WireCodec.decodePullRequest(call.boundedBody())
+            val body = call.boundedBody()
+            val who = call.device(devices, verifier, body)
+            val req = WireCodec.decodePullRequest(body)
             if (req.householdId != who.householdId || req.deviceId != who.deviceId) throw Forbidden()
             val resp = withContext(Dispatchers.IO) { sync.pull(req) }
             call.respondText(WireCodec.encodePullResponse(resp), ContentType.Application.Json)
@@ -105,7 +125,7 @@ fun Application.mekaSync(
         if (integrations != null) {
             // Starts connecting an account: returns the provider's sign-in URL for the app to open in a browser.
             post("/v1/integrations/{provider}/connect") {
-                val who = call.device(devices)
+                val who = call.device(devices, verifier, call.boundedBody(), requireKey = true)
                 val provider = call.parameters["provider"].orEmpty()
                 when (val r = withContext(Dispatchers.IO) { integrations.start(who.householdId, provider) }) {
                     is Integrations.StartResult.Url -> call.respondText(WireCodec.encodeConnectUrl(r.url), ContentType.Application.Json)
@@ -115,7 +135,7 @@ fun Application.mekaSync(
             }
 
             post("/v1/integrations/list") {
-                val who = call.device(devices)
+                val who = call.device(devices, verifier, call.boundedBody(), requireKey = true)
                 val list = withContext(Dispatchers.IO) { integrations.accounts(who.householdId) }
                 call.respondText(WireCodec.encodeAccounts(list), ContentType.Application.Json)
             }
@@ -142,8 +162,9 @@ fun Application.mekaSync(
         // Long-poll for an open app: answers as soon as the household has ops after the cursor, else empty after
         // [waitMs]. Checks the database each [waitCheckMs] (an indexed query), so it stays correct with several tasks.
         post("/v1/sync/wait") {
-            val who = call.device(devices)
-            val req = WireCodec.decodePullRequest(call.boundedBody()).copy(limit = 1)
+            val body = call.boundedBody()
+            val who = call.device(devices, verifier, body)
+            val req = WireCodec.decodePullRequest(body).copy(limit = 1)
             if (req.householdId != who.householdId || req.deviceId != who.deviceId) throw Forbidden()
             val deadline = System.currentTimeMillis() + waitMs
             var page = withContext(Dispatchers.IO) { sync.pull(req) }
@@ -176,10 +197,28 @@ private fun resultPage(title: String, message: String) = """<!doctype html><html
 main{max-width:30rem}h1{font-size:1.5rem;margin:0 0 .5rem}p{margin:0;opacity:.8}</style></head>
 <body><main><h1>${html(title)}</h1><p>${html(message)}</p></main></body></html>"""
 
-private fun ApplicationCall.device(devices: DeviceRegistry): DeviceIdentity {
+private fun ApplicationCall.bearer(devices: DeviceRegistry): DeviceIdentity {
     val auth = request.header("Authorization") ?: throw Unauthorised()
     if (!auth.startsWith("Bearer ")) throw Unauthorised()
     return devices.authenticate(auth.removePrefix("Bearer ").trim()) ?: throw Unauthorised()
+}
+
+/**
+ * Authenticates a device: its bearer secret, plus — once it has registered a hardware key — a valid signature over
+ * this exact request. [requireKey] refuses devices that have no key yet (routes that expose personal data).
+ */
+private suspend fun ApplicationCall.device(devices: DeviceRegistry, verifier: RequestVerifier, body: String, requireKey: Boolean = false): DeviceIdentity {
+    val who = bearer(devices)
+    val key = withContext(Dispatchers.IO) { devices.publicKey(who) }
+    if (key == null) {
+        if (requireKey) throw Forbidden()
+        return who
+    }
+    val h = request.headers
+    if (!verifier.verify(key, request.httpMethod.value, request.path(), body, h["X-Meka-Time"], h["X-Meka-Nonce"], h["X-Meka-Signature"])) {
+        throw Unauthorised()
+    }
+    return who
 }
 
 /** Reads at most MAX_BODY_BYTES + 1 bytes, so chunked bodies cannot exhaust memory. */
@@ -249,7 +288,7 @@ fun startCalendarSync(integrations: Integrations, periodMs: Long = 5 * 60_000L) 
 }
 
 object Migrations {
-    private val all = listOf(1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql")
+    private val all = listOf(1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql")
 
     fun apply(ds: DataSource) = ds.connection.use { c ->
         c.autoCommit = false

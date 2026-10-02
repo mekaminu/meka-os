@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Build
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import os.meka.android.security.AndroidDeviceKey
 import os.meka.android.security.DatabaseKeyStore
 import os.meka.android.sync.SyncWorker
 import os.meka.core.data.AndroidDatabase
@@ -20,6 +21,8 @@ class MekaApplication : Application() {
         private set
     lateinit var identity: DeviceIdentityStore
         private set
+    /** Hardware-held signing key; created on first use (ADR-005). */
+    private val deviceKey by lazy { AndroidDeviceKey() }
     // Read timeout above the server's 20 s long-poll window (OkHttp's default is 10 s).
     private val http by lazy { HttpClient(OkHttp) { engine { config { readTimeout(45, TimeUnit.SECONDS) } } } }
 
@@ -32,7 +35,7 @@ class MekaApplication : Application() {
 
         val url = identity.serverUrl()
         val secret = identity.deviceSecret()
-        val transport = if (url != null && secret != null) Enrolment.transport(http, url, secret) else null
+        val transport = if (url != null && secret != null) Enrolment.transport(http, url, secret, deviceKey) else null
         core = MekaCore(
             householdId = identity.householdId(),
             deviceId = identity.deviceId(),
@@ -51,7 +54,7 @@ class MekaApplication : Application() {
         return when (val r = Enrolment.enrol(http, url, enrolCode, identity.householdId(), identity.deviceId(), Build.MODEL ?: "Android")) {
             is EnrolmentResult.Enrolled -> {
                 identity.saveEnrolment(url, r.deviceSecret)
-                core.connect(Enrolment.transport(http, url, r.deviceSecret))
+                core.connect(Enrolment.transport(http, url, r.deviceSecret, deviceKey))
                 SyncWorker.schedulePeriodic(this)
                 null
             }

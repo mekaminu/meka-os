@@ -58,6 +58,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.NeedsYouReason
 import os.meka.core.domain.Task
 import os.meka.core.domain.Today
@@ -79,7 +80,9 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
     val sync by core.syncStatus.collectAsState()
     val conflicts by core.conflicts.collectAsState()
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showCalendars by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val openCalendars: (() -> Unit)? = if (connect == null) ({ showCalendars = true }) else null
 
     val actions = TodayActions(
         add = { title -> scope.launch { runCatching { core.addTask(title) } } },
@@ -96,17 +99,22 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
         val selected = all.firstOrNull { it.id == selectedId }
         if (twoPane) {
             Row(Modifier.fillMaxSize()) {
-                TodayPane(today, sync, actions, Modifier.weight(0.55f).fillMaxHeight(), connect)
+                TodayPane(today, sync, actions, Modifier.weight(0.55f).fillMaxHeight(), connect, openCalendars)
                 Box(Modifier.width(1.dp).fillMaxHeight().background(Meka.colors.hairline))
                 DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, Modifier.weight(0.45f).fillMaxHeight())
             }
         } else {
-            TodayPane(today, sync, actions, Modifier.fillMaxSize(), connect)
+            TodayPane(today, sync, actions, Modifier.fillMaxSize(), connect, openCalendars)
             if (selected != null) {
                 // Single-pane: detail slides over Today; back/tap-outside closes.
                 Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
                     DetailPane(selected, conflicts.filter { it.taskId == selected.id }, actions, Modifier.fillMaxSize(), onClose = { selectedId = null })
                 }
+            }
+        }
+        if (showCalendars) {
+            Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
+                CalendarsPane(core, onClose = { showCalendars = false })
             }
         }
     }
@@ -125,7 +133,9 @@ data class TodayActions(
 )
 
 @Composable
-private fun TodayPane(today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?) {
+private fun TodayPane(
+    today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?, openCalendars: (() -> Unit)?,
+) {
     Column(modifier.imePadding()) {
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -137,6 +147,13 @@ private fun TodayPane(today: Today, sync: SyncStatus, actions: TodayActions, mod
                     Text(greeting(), style = MekaType.greeting, color = Meka.colors.textPrimary)
                     SyncLine(sync)
                     if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs))
+                    if (openCalendars != null) {
+                        Text(
+                            "Calendars", style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { openCalendars() }.padding(vertical = MekaSpace.xxs),
+                        )
+                    }
                 }
             }
             if (today.isClear) {
@@ -156,6 +173,11 @@ private fun TodayPane(today: Today, sync: SyncStatus, actions: TodayActions, mod
                 item(key = "h-next") { SectionLabel("Up next", Modifier.animateItem()) }
                 item(key = "u-" + t.id) { UpNextCard(t, actions, Modifier.animateItem()) }
                 item(key = "s-next") { Spacer(Modifier.height(MekaSpace.l)) }
+            }
+            if (today.events.isNotEmpty()) {
+                item(key = "h-cal") { SectionLabel("Calendar", Modifier.animateItem()) }
+                items(today.events, key = { "e-" + it.id }) { e -> EventRow(e, Modifier.animateItem()) }
+                item(key = "s-cal") { Spacer(Modifier.height(MekaSpace.l)) }
             }
             if (today.yourDay.isNotEmpty()) {
                 item(key = "h-day") { SectionLabel("Your day", Modifier.animateItem()) }
@@ -339,6 +361,31 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
         Text("Delete", style = MekaType.itemTitle, color = Meka.colors.critical, modifier = Modifier.clickable { actions.delete(task.id) })
     }
 }
+
+/** One calendar event: time on the left, title and source on the right. Finished events step back. */
+@Composable
+private fun EventRow(e: CalendarEvent, modifier: Modifier = Modifier) {
+    val past = !e.allDay && e.endAtMs < System.currentTimeMillis()
+    Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
+        Text(
+            eventTime(e), style = MekaType.itemMeta,
+            color = if (past) Meka.colors.textTertiary else Meka.colors.textSecondary,
+            modifier = Modifier.width(92.dp),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(e.title, style = MekaType.itemTitle, color = if (past) Meka.colors.textTertiary else Meka.colors.textPrimary)
+            val source = listOfNotNull(e.location, providerLabel(e.provider)).joinToString(" · ")
+            Text(source, style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
+    }
+}
+
+private fun eventTime(e: CalendarEvent): String =
+    if (e.allDay) "All day"
+    else timeFmt.format(Instant.ofEpochMilli(e.startAtMs).atZone(ZoneId.systemDefault())) + "–" +
+        timeFmt.format(Instant.ofEpochMilli(e.endAtMs).atZone(ZoneId.systemDefault()))
+
+internal fun providerLabel(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Outlook"; else -> p }
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 

@@ -19,6 +19,9 @@ data class PullResponse(val ops: List<SequencedOp>, val hasMore: Boolean) {
 
 /** Transport between a device and the sync service. Implementations: Ktor HTTP client, in-memory for tests. */
 interface SyncTransport {
+    /** Called before each sync round; e.g. registers the device's signing key once. Default: nothing. */
+    suspend fun prepare() {}
+
     suspend fun push(request: PushRequest): PushResponse
     suspend fun pull(request: PullRequest): PullResponse
 

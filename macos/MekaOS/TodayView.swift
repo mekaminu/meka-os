@@ -19,6 +19,7 @@ struct TodayView: View {
         }
         .background(palette.background)
         .sheet(isPresented: $model.showConnect) { ConnectSheet(palette: palette) }
+        .sheet(isPresented: $model.showCalendars) { CalendarsSheet(palette: palette) }
     }
 
     private var todayColumn: some View {
@@ -30,6 +31,12 @@ struct TodayView: View {
                         .foregroundStyle(palette.textPrimary)
                     if !model.isConnected {
                         Button("This Mac isn't syncing yet · Connect") { model.showConnect = true }
+                            .buttonStyle(.plain)
+                            .font(MekaType.caption)
+                            .foregroundStyle(palette.accent)
+                    }
+                    if model.isConnected {
+                        Button("Calendars") { model.showCalendars = true }
                             .buttonStyle(.plain)
                             .font(MekaType.caption)
                             .foregroundStyle(palette.accent)
@@ -55,6 +62,11 @@ struct TodayView: View {
                         if let next = today.upNext {
                             SectionLabel("Up next", palette)
                             UpNextCard(task: next, palette: palette)
+                            Spacer().frame(height: MekaSpace.l)
+                        }
+                        if !today.events.isEmpty {
+                            SectionLabel("Calendar", palette)
+                            ForEach(today.events, id: \.id) { e in EventRow(event: e, palette: palette) }
                             Spacer().frame(height: MekaSpace.l)
                         }
                         if !today.yourDay.isEmpty {
@@ -136,6 +148,101 @@ private struct TaskRow: View {
         case .dueTodayUnscheduled: "Due today · not scheduled"
         default: nil
         }
+    }
+}
+
+/// One calendar event: time on the left, title and source on the right. Finished events step back.
+private struct EventRow: View {
+    let event: CalendarEvent
+    let palette: MekaPalette
+
+    var body: some View {
+        let past = !event.allDay && Double(event.endAtMs) / 1000 < Date.now.timeIntervalSince1970
+        HStack(alignment: .firstTextBaseline, spacing: MekaSpace.m) {
+            Text(time).font(MekaType.itemMeta).monospacedDigit()
+                .foregroundStyle(past ? palette.textTertiary : palette.textSecondary)
+                .frame(width: 96, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.title).font(MekaType.itemTitle).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
+                Text([event.location, CoreModel.providerName(event.provider)].compactMap { $0 }.joined(separator: " · "))
+                    .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+            Spacer()
+        }
+        .padding(.vertical, MekaSpace.xs)
+        .padding(.horizontal, MekaSpace.xs)
+    }
+
+    private var time: String {
+        if event.allDay { return "All day" }
+        let f = Date.FormatStyle.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)
+        let start = Date(timeIntervalSince1970: Double(event.startAtMs) / 1000)
+        let end = Date(timeIntervalSince1970: Double(event.endAtMs) / 1000)
+        return "\(start.formatted(f))–\(end.formatted(f))"
+    }
+}
+
+/// Connected calendars. Connecting opens the provider's own sign-in page in the browser; MEKA OS never sees the
+/// password. The list refreshes whenever the app becomes active again (i.e. when the owner returns from the browser).
+private struct CalendarsSheet: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let palette: MekaPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
+            Text("Calendars").font(MekaType.upNextTitle)
+            Text("Read-only. Events appear in Today on all your devices.")
+                .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+            if let accounts = model.accounts {
+                if accounts.isEmpty {
+                    Text("No calendars connected yet.").font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                }
+                ForEach(accounts, id: \.email) { a in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(a.email).font(MekaType.itemTitle)
+                            Text(status(a)).font(MekaType.caption)
+                                .foregroundStyle(a.needsReconnect ? palette.critical : palette.textTertiary)
+                        }
+                        Spacer()
+                        if a.needsReconnect {
+                            Button("Reconnect") { Task { await model.connectCalendar(a.provider) } }
+                        }
+                    }
+                    .padding(MekaSpace.m)
+                    .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+                }
+            } else {
+                ProgressView().controlSize(.small)
+            }
+            HStack {
+                Button("Connect Google Calendar") { Task { await model.connectCalendar("google") } }
+                Button("Connect Outlook Calendar") { Task { await model.connectCalendar("microsoft") } }
+            }
+            if let message = model.calendarsMessage {
+                Text(message).font(MekaType.caption).foregroundStyle(palette.critical)
+            }
+            HStack {
+                Button("Refresh") { Task { await model.loadAccounts() } }
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(MekaSpace.l)
+        .frame(width: 460)
+        .task { await model.loadAccounts() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await model.loadAccounts() }
+        }
+    }
+
+    private func status(_ a: ConnectedAccount) -> String {
+        if a.needsReconnect { return "Access expired · Reconnect" }
+        if a.status == "error" { return "Couldn't sync last time · retrying" }
+        guard let ms = a.lastSyncAtMs?.int64Value else { return "\(CoreModel.providerName(a.provider)) · first sync in progress" }
+        let d = Date(timeIntervalSince1970: Double(ms) / 1000)
+        return "\(CoreModel.providerName(a.provider)) · synced \(d.formatted(date: .omitted, time: .shortened))"
     }
 }
 

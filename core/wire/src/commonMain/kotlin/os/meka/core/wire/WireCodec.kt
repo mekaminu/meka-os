@@ -143,6 +143,12 @@ object WireCodec {
     /** Connected calendar/email accounts (ADR-008). Tokens never cross the wire; this is display state only. */
     data class IntegrationAccount(val provider: String, val email: String, val status: String, val lastSyncAtMs: Long?)
 
+    /** A device's public signing key (ADR-005): X.509 SPKI DER, base64. */
+    fun encodeDeviceKey(publicKeyDerBase64: String): String = doc { put("pub", publicKeyDerBase64) }
+    fun decodeDeviceKey(s: String): String = parse(s) { o ->
+        o.str("pub").also { if (it.length !in 80..400) throw WireFormatException("unexpected public key size") }
+    }
+
     fun encodeConnectUrl(url: String): String = doc { put("url", url) }
     fun decodeConnectUrl(s: String): String = parse(s) { o -> o.str("url") }
 

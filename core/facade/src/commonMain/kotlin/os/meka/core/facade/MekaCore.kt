@@ -69,6 +69,7 @@ class MekaCore(
     private val tasks = Tasks(replica, ids::next, nowMs)
     private val events = CalendarEvents(replica)
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
+    private var accountsApi: AccountsApi? = transport as? AccountsApi
 
     private val _today = MutableStateFlow(project())
     val today: StateFlow<Today> = _today.asStateFlow()
@@ -137,11 +138,19 @@ class MekaCore(
 
     /** Attaches sync after enrolment (or swaps it), without restarting the app. Local data is kept and pushed. */
     suspend fun connect(transport: SyncTransport) = withContext(confined) {
-        syncMutex.withLock { syncClient = SyncClient(replica, transport) }
+        syncMutex.withLock { syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi }
         startSync()
     }
 
     val isConnected: Boolean get() = syncClient != null
+
+    /** Begins connecting a calendar account ("google" | "microsoft"); the app opens the returned URL in a browser. */
+    suspend fun startConnect(provider: String): ConnectStart =
+        accountsApi?.startConnect(provider) ?: ConnectStart.Failed("Connect this device to your server first.")
+
+    /** Accounts connected for this household, for the Calendars screen. Empty when offline or not connected. */
+    suspend fun connectedAccounts(): List<ConnectedAccount> =
+        try { accountsApi?.accounts() ?: emptyList() } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
 
     /** For platform schedulers (WorkManager, BGTask): one round, returns true on success. */
     suspend fun syncNow(): Boolean = withContext(confined) { syncMutex.withLock { runSyncOnce() } == null }

@@ -2,6 +2,7 @@ import Foundation
 @preconcurrency import MekaKit
 import Observation
 import SwiftUI
+import AppKit
 
 /// Bridges the Kotlin `MekaCore` facade into SwiftUI. Kotlin owns all state and rules; this only mirrors flows.
 @MainActor
@@ -15,7 +16,12 @@ final class CoreModel {
     var lastError: String?
     private(set) var isConnected = false
     var showConnect = false
+    var showCalendars = false
+    private(set) var accounts: [ConnectedAccount]? = nil
+    var calendarsMessage: String?
     private var identity: DeviceIdentity?
+    /// Created lazily so a Mac that never connects never touches the Secure Enclave.
+    @ObservationIgnored private lazy var deviceKey = MacDeviceKey()
 
     private var core: MekaCore?
     private var observers: [Task<Void, Never>] = []
@@ -33,7 +39,8 @@ final class CoreModel {
             databaseKeyHex: nil,     // spike S6: SQLCipher linkage pending (ADR-002)
             encrypted: false,
             databaseDirectory: Self.databaseDirectory(),
-            databaseName: "meka.db"
+            databaseName: "meka.db",
+            deviceKey: syncURL == nil ? nil : deviceKey
         )
         self.core = core
         observers.append(Task { [weak self] in
@@ -66,7 +73,7 @@ final class CoreModel {
             case .enrolled(let e):
                 let url = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
                 DeviceIdentity.saveEnrolment(serverURL: url, secret: e.deviceSecret)
-                try await MacCoreFactory.shared.connect(core: core, serverUrl: url, deviceSecret: e.deviceSecret)
+                try await MacCoreFactory.shared.connect(core: core, serverUrl: url, deviceSecret: e.deviceSecret, deviceKey: deviceKey)
                 isConnected = true
                 return nil
             case .rejected: return "That enrolment code wasn't accepted."
@@ -75,6 +82,35 @@ final class CoreModel {
         } catch {
             return error.localizedDescription
         }
+    }
+
+    // MARK: Calendars
+
+    func loadAccounts() async {
+        guard let core else { return }
+        accounts = (try? await core.connectedAccounts()) ?? []
+    }
+
+    /// Opens the provider's sign-in page in the default browser; the server finishes the connection.
+    func connectCalendar(_ provider: String) async {
+        guard let core else { return }
+        calendarsMessage = nil
+        do {
+            switch onEnum(of: try await core.startConnect(provider: provider)) {
+            case .openBrowser(let o):
+                if let url = URL(string: o.url) { NSWorkspace.shared.open(url) }
+            case .notSetUp:
+                calendarsMessage = "\(Self.providerName(provider)) isn't set up on your server yet. Finish the registration steps, then try again."
+            case .failed(let f):
+                calendarsMessage = f.reason
+            }
+        } catch {
+            calendarsMessage = error.localizedDescription
+        }
+    }
+
+    static func providerName(_ p: String) -> String {
+        switch p { case "google": "Google"; case "microsoft": "Outlook"; default: p }
     }
 
     // MARK: Commands

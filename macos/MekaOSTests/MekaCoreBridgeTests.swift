@@ -7,7 +7,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
             databaseKeyHex: nil, encrypted: false,
-            databaseDirectory: NSTemporaryDirectory(), databaseName: "bridge-\(UUID().uuidString).db"
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "bridge-\(UUID().uuidString).db", deviceKey: nil
         )
         let id = try await core.addTask(title: "Bridge works")
         var iterator = core.today.makeAsyncIterator()

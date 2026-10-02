@@ -33,6 +33,7 @@ class SyncClient(
         transport.awaitChanges(PullRequest(replica.householdId, replica.deviceId, replica.pullCursor(), limit = 1))
 
     suspend fun syncOnce(): SyncReport {
+        transport.prepare()
         var pushed = 0
         val rejected = linkedMapOf<String, String>()
         while (true) {

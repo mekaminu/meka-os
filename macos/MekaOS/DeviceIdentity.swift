@@ -13,7 +13,7 @@ struct DeviceIdentity {
 
     // v2: items created by builds signed with the stable local dev identity (tools/install-mac.sh), so rebuilds keep
     // access without a keychain password prompt. v1 items from ad-hoc builds are left untouched.
-    private static let service = "os.meka.mac.identity.v2"
+    nonisolated private static let service = "os.meka.mac.identity.v2"
 
     static func loadOrCreate() -> DeviceIdentity {
         let device = read("device_id") ?? {
@@ -33,7 +33,11 @@ struct DeviceIdentity {
         write("device_secret", secret)
     }
 
-    private static func read(_ account: String) -> String? {
+    /// The device signing key's stored form (an enclave handle or a software key), see MacDeviceKey.
+    nonisolated static func signingKey() -> String? { read("device_signing_key") }
+    nonisolated static func saveSigningKey(_ value: String) { write("device_signing_key", value) }
+
+    nonisolated private static func read(_ account: String) -> String? {
         let q: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -45,7 +49,7 @@ struct DeviceIdentity {
         return String(data: data, encoding: .utf8)
     }
 
-    private static func write(_ account: String, _ value: String) {
+    nonisolated private static func write(_ account: String, _ value: String) {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

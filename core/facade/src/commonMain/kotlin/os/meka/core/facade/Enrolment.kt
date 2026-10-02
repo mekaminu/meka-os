@@ -51,6 +51,6 @@ object Enrolment {
         }
     }
 
-    fun transport(client: HttpClient, baseUrl: String, deviceSecret: String): HttpSyncTransport =
-        HttpSyncTransport(client, baseUrl) { deviceSecret }
+    fun transport(client: HttpClient, baseUrl: String, deviceSecret: String, deviceKey: DeviceKey? = null): HttpSyncTransport =
+        HttpSyncTransport(client, baseUrl, deviceKey) { deviceSecret }
 }

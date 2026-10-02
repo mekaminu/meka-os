@@ -4,6 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
@@ -16,17 +17,50 @@ import os.meka.core.sync.SyncTransport
 import os.meka.core.sync.TransportException
 import os.meka.core.wire.WireCodec
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.random.Random
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+
+/** Connected calendar/email accounts as the apps show them. Tokens never leave the server. */
+data class ConnectedAccount(val provider: String, val email: String, val status: String, val lastSyncAtMs: Long?) {
+    val needsReconnect: Boolean get() = status == "needs_reconnect"
+}
+
+sealed class ConnectStart {
+    /** Open this in the system browser; the provider sends the owner back to the server, not the app. */
+    data class OpenBrowser(val url: String) : ConnectStart()
+    /** The provider's credentials have not been set up on the server yet. */
+    object NotSetUp : ConnectStart()
+    data class Failed(val reason: String) : ConnectStart()
+}
+
+/** Account management calls, available once the device is connected. */
+interface AccountsApi {
+    suspend fun startConnect(provider: String): ConnectStart
+    suspend fun accounts(): List<ConnectedAccount>
+}
 
 /**
- * HTTPS transport to the sync service. M0 authenticates with a per-device bearer secret issued at enrolment
- * (stored in Keystore/Keychain; the server keeps only its SHA-256). Ed25519 request signing replaces it before any
- * real personal data is synced (ADR-005).
+ * HTTPS transport to the sync service (ADR-005). Every request carries the device's bearer secret and, when the
+ * device has a hardware key, an ECDSA signature over method, path, time, nonce and body hash. Once the server has
+ * the device's public key it refuses unsigned requests from that device, so a copied secret alone is useless.
  */
+@OptIn(ExperimentalTime::class)
 class HttpSyncTransport(
     private val client: HttpClient,
     private val baseUrl: String,
+    private val deviceKey: DeviceKey? = null,
+    private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport {
+) : SyncTransport, AccountsApi {
+    private var keyRegistered = false
+
+    override suspend fun prepare() {
+        if (keyRegistered || deviceKey == null) return
+        // Best effort: if registration fails (offline, older server) sync still runs and this retries next round.
+        val resp = runCatching { send("/v1/devices/key", WireCodec.encodeDeviceKey(deviceKey.publicKeyDerBase64)) }.getOrNull()
+        if (resp?.status?.isSuccess() == true) keyRegistered = true
+    }
 
     override suspend fun push(request: PushRequest): PushResponse =
         WireCodec.decodePushResponse(post("/v1/sync/push", WireCodec.encodePushRequest(request)))
@@ -37,19 +71,46 @@ class HttpSyncTransport(
     override suspend fun awaitChanges(request: PullRequest): Boolean =
         WireCodec.decodePullResponse(post("/v1/sync/wait", WireCodec.encodePullRequest(request))).ops.isNotEmpty()
 
-    private suspend fun post(path: String, body: String): String {
+    override suspend fun startConnect(provider: String): ConnectStart {
+        prepare() // connecting accounts requires the device's signing key on the server
         val resp = try {
-            client.post(baseUrl.trimEnd('/') + path) {
-                contentType(ContentType.Application.Json)
-                header("Authorization", "Bearer ${deviceSecret()}")
-                setBody(body)
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            throw TransportException("network error: ${e.message}", e)
+            send("/v1/integrations/$provider/connect", "")
+        } catch (e: TransportException) {
+            return ConnectStart.Failed("Couldn't reach the server")
         }
+        return when {
+            resp.status.value == 409 -> ConnectStart.NotSetUp
+            !resp.status.isSuccess() -> ConnectStart.Failed("Server returned ${resp.status.value}")
+            else -> ConnectStart.OpenBrowser(WireCodec.decodeConnectUrl(resp.bodyAsText()))
+        }
+    }
+
+    override suspend fun accounts(): List<ConnectedAccount> =
+        WireCodec.decodeAccounts(post("/v1/integrations/list", "")).map { ConnectedAccount(it.provider, it.email, it.status, it.lastSyncAtMs) }
+
+    private suspend fun post(path: String, body: String): String {
+        val resp = send(path, body)
         if (!resp.status.isSuccess()) throw TransportException("HTTP ${resp.status.value} from $path")
         return resp.bodyAsText()
+    }
+
+    private suspend fun send(path: String, body: String): HttpResponse = try {
+        val time = nowMs()
+        val nonce = Random.nextBytes(16).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+        val signature = deviceKey?.signBase64(RequestSigning.canonical("POST", path, time, nonce, body))
+        client.post(baseUrl.trimEnd('/') + path) {
+            contentType(ContentType.Application.Json)
+            header("Authorization", "Bearer ${deviceSecret()}")
+            if (signature != null) {
+                header(RequestSigning.HEADER_TIME, time.toString())
+                header(RequestSigning.HEADER_NONCE, nonce)
+                header(RequestSigning.HEADER_SIGNATURE, signature)
+            }
+            setBody(body)
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        throw TransportException("network error: ${e.message}", e)
     }
 }

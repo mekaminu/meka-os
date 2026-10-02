@@ -40,10 +40,11 @@ object MacCoreFactory {
         encrypted: Boolean,
         databaseDirectory: String,
         databaseName: String = "meka.db",
+        deviceKey: DeviceKey? = null,
     ): MekaCore {
         val store = SqlReplicaStore(MacDatabase.open(databaseKeyHex, encrypted, databaseDirectory, databaseName))
         val transport = if (!syncUrl.isNullOrBlank() && deviceSecret != null) {
-            HttpSyncTransport(HttpClient(Darwin), syncUrl) { deviceSecret }
+            HttpSyncTransport(http, syncUrl, deviceKey) { deviceSecret }
         } else {
             null
         }
@@ -56,6 +57,6 @@ object MacCoreFactory {
     suspend fun enrol(serverUrl: String, enrolCode: String, householdId: String, deviceId: String, deviceName: String): EnrolmentResult =
         Enrolment.enrol(http, serverUrl.trim().trimEnd('/'), enrolCode, householdId, deviceId, deviceName)
 
-    suspend fun connect(core: MekaCore, serverUrl: String, deviceSecret: String) =
-        core.connect(Enrolment.transport(http, serverUrl.trim().trimEnd('/'), deviceSecret))
+    suspend fun connect(core: MekaCore, serverUrl: String, deviceSecret: String, deviceKey: DeviceKey? = null) =
+        core.connect(Enrolment.transport(http, serverUrl.trim().trimEnd('/'), deviceSecret, deviceKey))
 }
