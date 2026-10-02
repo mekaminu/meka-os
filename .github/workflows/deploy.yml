@@ -21,7 +21,7 @@ env:
   AWS_REGION: eu-west-2
   ENV_NAME: dev
   # Not a secret: the role can only be assumed from this repo's main branch.
-  DEPLOY_ROLE_ARN: arn:aws:iam::869093594106:role/meka-os-github-deploy
+  DEPLOY_ROLE_ARN: arn:aws:iam::494166749332:role/meka-os-github-deploy
 
 jobs:
   deploy:
@@ -42,26 +42,6 @@ jobs:
           TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | python3 -c "import json,sys;print(json.load(sys.stdin)['value'])")
           CLAIMS=$(echo "$TOKEN" | cut -d. -f2 | python3 -c "import sys,base64,json;p=sys.stdin.read().strip();p+='='*(-len(p)%4);c=json.loads(base64.urlsafe_b64decode(p));print('iss='+c['iss']+' aud='+str(c['aud'])+' sub='+c['sub'])")
           echo "::notice title=OIDC claims::$CLAIMS"
-          # Temporary diagnostics for InvalidIdentityToken: signing key, clock, and STS's raw answer per endpoint.
-          echo "$TOKEN" > /tmp/oidc.jwt
-          python3 - <<'PY'
-          import base64, json, time, urllib.request
-          t = open('/tmp/oidc.jwt').read().strip().split('.')
-          d = lambda s: json.loads(base64.urlsafe_b64decode(s + '=' * (-len(s) % 4)))
-          h, c = d(t[0]), d(t[1])
-          cfg = json.load(urllib.request.urlopen('https://token.actions.githubusercontent.com/.well-known/openid-configuration'))
-          kids = [k['kid'] for k in json.load(urllib.request.urlopen(cfg['jwks_uri']))['keys']]
-          now = int(time.time())
-          print(f"::notice title=OIDC header::alg={h.get('alg')} kid={h.get('kid')} kid_in_jwks={h.get('kid') in kids} "
-                f"cfg_issuer={cfg['issuer']} jwks_uri={cfg['jwks_uri']} iat-now={c['iat']-now} nbf-now={c.get('nbf',0)-now} exp-now={c['exp']-now} "
-                f"claim_keys={','.join(sorted(c))}")
-          PY
-          for EP in https://sts.eu-west-2.amazonaws.com https://sts.amazonaws.com; do
-            OUT=$(aws sts assume-role-with-web-identity --endpoint-url "$EP" --region "$AWS_REGION" --role-arn "$DEPLOY_ROLE_ARN" \
-              --role-session-name diag --web-identity-token "file:///tmp/oidc.jwt" --query AssumedRoleUser.Arn --output text 2>&1 | tr '\n' ' ')
-            echo "::notice title=STS $EP::$OUT"
-          done
-          rm -f /tmp/oidc.jwt
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
