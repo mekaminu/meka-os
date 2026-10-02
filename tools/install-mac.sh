@@ -26,9 +26,48 @@ fi
 xcodegen generate --spec macos/project.yml --quiet
 xcodebuild -project macos/MekaOS.xcodeproj -scheme MekaOS -configuration Debug \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath build/mac \
-  CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= -quiet build
+  CODE_SIGNING_ALLOWED=NO -quiet build
 
+# Sign with a stable local identity so the app's keychain items survive rebuilds (an ad-hoc signature changes on
+# every build, and macOS then asks for the keychain password). The identity lives in its own keychain with a
+# script-known password, so nothing here ever needs the login keychain password. Developer ID replaces this for
+# release builds (ADR-010).
 APP="build/mac/Build/Products/Debug/MekaOS.app"
+DEV_KC="$HOME/Library/Keychains/meka-os-dev.keychain-db"
+DEV_KC_PW="meka-os-local-dev"   # protects only a local, self-signed dev signing key
+IDENTITY="MEKA OS Local Dev"
+if [ ! -f "$DEV_KC" ]; then
+  security create-keychain -p "$DEV_KC_PW" "$DEV_KC"
+  security set-keychain-settings "$DEV_KC"   # no auto-lock
+fi
+security unlock-keychain -p "$DEV_KC_PW" "$DEV_KC"
+if ! security find-certificate -c "$IDENTITY" "$DEV_KC" >/dev/null 2>&1; then
+  TMP=$(mktemp -d)
+  cat > "$TMP/req.cnf" <<CNF
+[req]
+distinguished_name = dn
+x509_extensions = ext
+prompt = no
+[dn]
+CN = $IDENTITY
+[ext]
+basicConstraints = critical,CA:false
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,codeSigning
+CNF
+  /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -config "$TMP/req.cnf" -keyout "$TMP/k.pem" -out "$TMP/c.pem"
+  /usr/bin/openssl pkcs12 -export -inkey "$TMP/k.pem" -in "$TMP/c.pem" -name "$IDENTITY" -out "$TMP/id.p12" -passout pass:tmp
+  security import "$TMP/id.p12" -k "$DEV_KC" -P tmp -T /usr/bin/codesign
+  security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$DEV_KC_PW" "$DEV_KC" >/dev/null
+  rm -rf "$TMP"
+fi
+if codesign --force --deep --keychain "$DEV_KC" --sign "$IDENTITY" "$APP"; then
+  echo "Signed with the stable local identity."
+else
+  echo "WARNING: stable signing failed; falling back to ad-hoc (macOS may ask for the keychain password)."
+  codesign --force --deep --sign - "$APP"
+fi
+
 mkdir -p "$HOME/Applications"
 rm -rf "$HOME/Applications/MekaOS.app"
 cp -R "$APP" "$HOME/Applications/"

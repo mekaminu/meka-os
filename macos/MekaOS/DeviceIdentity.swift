@@ -11,7 +11,9 @@ struct DeviceIdentity {
     /// Shared by both of Meka's devices; part of every op, so it never changes once set.
     static let household = "home"
 
-    private static let service = "os.meka.mac.identity"
+    // v2: items created by builds signed with the stable local dev identity (tools/install-mac.sh), so rebuilds keep
+    // access without a keychain password prompt. v1 items from ad-hoc builds are left untouched.
+    private static let service = "os.meka.mac.identity.v2"
 
     static func loadOrCreate() -> DeviceIdentity {
         let device = read("device_id") ?? {
