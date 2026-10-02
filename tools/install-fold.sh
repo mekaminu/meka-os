@@ -27,7 +27,9 @@ MSG
   "$ADB" devices
   exit 1
 fi
-echo "Phone: $("$ADB" shell getprop ro.product.model | tr -d '\r') (Android $("$ADB" shell getprop ro.build.version.release | tr -d '\r'))"
+# The same phone can show up twice (USB plus Wi-Fi, or Wi-Fi by name and by address): target one connection.
+export ANDROID_SERIAL="$(echo "$DEVICES" | head -1)"
+echo "Phone: $("$ADB" shell getprop ro.product.model | tr -d '\r') (Android $("$ADB" shell getprop ro.build.version.release | tr -d '\r')) via $ANDROID_SERIAL"
 
 ./gradlew :android:app:installDebug
 "$ADB" shell am start -n os.meka.android/.MainActivity >/dev/null
