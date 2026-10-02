@@ -33,8 +33,23 @@ struct DeviceIdentity {
         write("device_secret", secret)
     }
 
-    /// The device signing key's stored form (an enclave handle or a software key), see MacDeviceKey.
-    nonisolated static func signingKey() -> String? { read("device_signing_key") }
+    enum Lookup { case found(String), missing, unreadable(OSStatus) }
+
+    /// The device signing key's stored form (an enclave handle or a software key), see MacDeviceKey. Distinguishes
+    /// "never created" from "exists but unreadable", so a keychain hiccup never silently replaces the key.
+    nonisolated static func signingKey() -> Lookup {
+        let q: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: "device_signing_key",
+            kSecReturnData as String: true,
+        ]
+        var out: CFTypeRef?
+        let status = SecItemCopyMatching(q as CFDictionary, &out)
+        if status == errSecItemNotFound { return .missing }
+        guard status == errSecSuccess, let data = out as? Data, let s = String(data: data, encoding: .utf8) else { return .unreadable(status) }
+        return .found(s)
+    }
     nonisolated static func saveSigningKey(_ value: String) { write("device_signing_key", value) }
 
     nonisolated private static func read(_ account: String) -> String? {

@@ -9,6 +9,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import os.meka.core.sync.AuthRejectedException
 import os.meka.core.sync.PullRequest
 import os.meka.core.sync.PullResponse
 import os.meka.core.sync.PushRequest
@@ -60,7 +61,13 @@ class HttpSyncTransport(
         if (keyRegistered) return
         // Best effort: if registration fails (offline, older server) sync still runs and this retries next round.
         val resp = runCatching { send("/v1/devices/key", WireCodec.encodeDeviceKey(key.publicKeyDerBase64)) }.getOrNull()
-        if (resp?.status?.isSuccess() == true) keyRegistered = true
+        when {
+            resp == null -> Unit
+            resp.status.isSuccess() -> keyRegistered = true
+            // Another key is registered for this device id (or the device was revoked): only re-enrolling fixes it.
+            resp.status.value == 401 || resp.status.value == 403 ->
+                throw AuthRejectedException("The server no longer recognises this device's key")
+        }
     }
 
     override suspend fun push(request: PushRequest): PushResponse =
@@ -91,6 +98,7 @@ class HttpSyncTransport(
 
     private suspend fun post(path: String, body: String): String {
         val resp = send(path, body)
+        if (resp.status.value == 401) throw AuthRejectedException("HTTP 401 from $path")
         if (!resp.status.isSuccess()) throw TransportException("HTTP ${resp.status.value} from $path")
         return resp.bodyAsText()
     }

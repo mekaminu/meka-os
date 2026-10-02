@@ -84,6 +84,9 @@ final class CoreModel {
         }
     }
 
+    /// The server refused this device (revoked or key mismatch); re-enrolling with the code fixes it.
+    var signedOut: Bool { syncLine?.hasPrefix("This device was signed out") == true }
+
     // MARK: Calendars
 
     func loadAccounts() async {

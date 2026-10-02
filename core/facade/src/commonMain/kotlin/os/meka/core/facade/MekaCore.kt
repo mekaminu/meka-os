@@ -28,6 +28,7 @@ import os.meka.core.domain.TaskEdit
 import os.meka.core.domain.Tasks
 import os.meka.core.domain.Today
 import os.meka.core.domain.TodayProjection
+import os.meka.core.sync.AuthRejectedException
 import os.meka.core.sync.Backoff
 import os.meka.core.sync.Conflict
 import os.meka.core.sync.FieldValue
@@ -132,7 +133,10 @@ class MekaCore(
         }
     }
 
-    companion object { const val FOREGROUND_SYNC_MS: Long = 30_000L }
+    companion object {
+        const val FOREGROUND_SYNC_MS: Long = 30_000L
+        const val SIGNED_OUT_MESSAGE = "This device was signed out of your server. Reconnect it with the enrolment code; nothing is lost."
+    }
 
     fun stopSync() { syncLoop?.cancel(); syncLoop = null }
 
@@ -182,6 +186,10 @@ class MekaCore(
             null
         } catch (e: CancellationException) {
             throw e
+        } catch (e: AuthRejectedException) {
+            // Retrying cannot fix this; say so instead of looking "offline" forever. Check again in a while.
+            _sync.value = SyncStatus.Failing(SIGNED_OUT_MESSAGE, replica.pendingPushCount())
+            15 * 60_000L
         } catch (e: Exception) {
             failures++
             val wait = Backoff.delayMs(failures) { bound -> jitter.nextLong(bound) }

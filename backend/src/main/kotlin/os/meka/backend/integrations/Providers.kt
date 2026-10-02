@@ -25,7 +25,7 @@ import java.time.format.DateTimeFormatter
 /** OAuth app credentials for one provider, pasted by the owner into Secrets Manager. */
 data class OAuthClient(val clientId: String, val clientSecret: String)
 
-data class TokenSet(val accessToken: String, val refreshToken: String?, val expiresInSec: Long)
+data class TokenSet(val accessToken: String, val refreshToken: String?, val expiresInSec: Long, val scope: String? = null)
 
 /** One event occurrence as the provider reports it. [id] is unique within the account. */
 data class RemoteEvent(
@@ -44,6 +44,8 @@ class ReconnectRequired(message: String) : RuntimeException(message)
 /** A calendar provider (ADR-008). Read-only in M1: no scope that can change the owner's calendars is requested. */
 interface CalendarProvider {
     val id: String
+    /** The scope without which the account is useless (checked against what the owner actually granted). */
+    val requiredScope: String
     fun authorizeUrl(client: OAuthClient, redirectUri: String, state: String, codeChallenge: String): String
     fun exchangeCode(client: OAuthClient, redirectUri: String, code: String, verifier: String): TokenSet
     fun refresh(client: OAuthClient, refreshToken: String): TokenSet
@@ -58,7 +60,7 @@ internal class Http(private val client: HttpClient = HttpClient.newBuilder().con
     fun getJson(url: String, bearer: String, headers: Map<String, String> = emptyMap()): JsonObject {
         val b = HttpRequest.newBuilder(URI(url)).timeout(Duration.ofSeconds(30)).header("Authorization", "Bearer $bearer").GET()
         headers.forEach { (k, v) -> b.header(k, v) }
-        return send(b.build())
+        return send(b.build(), apiCall = true)
     }
 
     fun postForm(url: String, form: Map<String, String>): JsonObject {
@@ -70,8 +72,10 @@ internal class Http(private val client: HttpClient = HttpClient.newBuilder().con
         )
     }
 
-    private fun send(req: HttpRequest): JsonObject {
+    private fun send(req: HttpRequest, apiCall: Boolean = false): JsonObject {
         val resp = client.send(req, HttpResponse.BodyHandlers.ofString())
+        // A freshly refreshed token refused by the API means access was withdrawn or never granted.
+        if (apiCall && (resp.statusCode() == 401 || resp.statusCode() == 403)) throw ReconnectRequired("provider API refused access")
         val parsed = runCatching { json.parseToJsonElement(resp.body()).jsonObject }.getOrNull()
         if (resp.statusCode() in 200..299 && parsed != null) return parsed
         val err = when (val e = parsed?.get("error")) {
@@ -94,13 +98,16 @@ private fun JsonObject.tokens(previousRefresh: String? = null) = TokenSet(
     accessToken = this["access_token"].str() ?: error("no access_token"),
     refreshToken = this["refresh_token"].str() ?: previousRefresh,
     expiresInSec = this["expires_in"]?.jsonPrimitive?.longOrNull ?: 3600,
+    scope = this["scope"].str(),
 )
 private fun rfc3339(ms: Long): String = DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(ms))
+private const val DAY_MS = 86_400_000L
 private fun utcMidnight(date: String): Long = LocalDate.parse(date).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
 
 class GoogleCalendar internal constructor(private val http: Http) : CalendarProvider {
     constructor() : this(Http())
     override val id = "google"
+    override val requiredScope = "https://www.googleapis.com/auth/calendar.readonly"
     private val scopes = "openid email https://www.googleapis.com/auth/calendar.readonly"
 
     override fun authorizeUrl(client: OAuthClient, redirectUri: String, state: String, codeChallenge: String) =
@@ -163,6 +170,7 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
 class MicrosoftCalendar internal constructor(private val http: Http) : CalendarProvider {
     constructor() : this(Http())
     override val id = "microsoft"
+    override val requiredScope = "Calendars.Read"
     // "consumers": personal Microsoft accounts (outlook.com/hotmail/live), which is what the owner uses.
     private val authority = "https://login.microsoftonline.com/consumers/oauth2/v2.0"
     private val scopes = "offline_access openid email User.Read Calendars.Read"
@@ -212,8 +220,12 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
                         val start = e["start"]?.jsonObject?.get("dateTime").str() ?: return@forEach
                         val end = e["end"]?.jsonObject?.get("dateTime").str() ?: start
                         // With the UTC preference, timed values are UTC wall times; all-day values are calendar dates.
-                        fun parse(s: String) = if (allDay) utcMidnight(s.take(10))
-                        else LocalDateTime.parse(s.substringBefore('.')).toInstant(ZoneOffset.UTC).toEpochMilli()
+                        fun parse(s: String): Long {
+                            val utc = LocalDateTime.parse(s.substringBefore('.')).toInstant(ZoneOffset.UTC).toEpochMilli()
+                            // All-day boundaries may arrive shifted by the organiser's offset (e.g. 23:00 the day
+                            // before): round to the nearest UTC midnight so the calendar date is right either way.
+                            return if (allDay) Math.floorDiv(utc + DAY_MS / 2, DAY_MS) * DAY_MS else utc
+                        }
                         val location = e["location"]?.jsonObject?.get("displayName").str()?.takeIf { it.isNotBlank() }
                         add(RemoteEvent("$calId/${e["id"].str()}", e["subject"].str() ?: "", parse(start), parse(end), allDay, location, calName))
                     }

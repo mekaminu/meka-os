@@ -64,6 +64,9 @@ class Integrations(
         val client = clients.get(provider) ?: return CallbackResult.Failed("This provider is not set up on the server yet.")
         val tokens = p.exchangeCode(client, redirectUri(provider), code, pending.codeVerifier)
         val refresh = tokens.refreshToken ?: return CallbackResult.Failed("The provider did not grant offline access. Try connecting again.")
+        if (tokens.scope != null && !tokens.scope.contains(p.requiredScope, ignoreCase = true)) {
+            return CallbackResult.Failed("Calendar access wasn't allowed. Connect again and keep the calendar permission ticked.")
+        }
         val email = p.accountEmail(tokens.accessToken).lowercase()
         val enc = cipher.encrypt(refresh.toByteArray(), context(pending.householdId, provider))
         val id = store.transaction { store.upsertAccount(pending.householdId, provider, email, enc) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
@@ -78,7 +81,12 @@ class Integrations(
         for (a in store.syncableAccounts()) runCatching { syncAccount(a.id) }
     }
 
-    fun syncAccount(accountId: String) {
+    private val accountLocks = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    /** One sync per account at a time in this process; [IntegrationStore.lockAccount] covers other processes. */
+    fun syncAccount(accountId: String) = synchronized(accountLocks.computeIfAbsent(accountId) { Any() }) { syncLocked(accountId) }
+
+    private fun syncLocked(accountId: String) {
         val a = store.account(accountId) ?: return
         val p = providers[a.provider] ?: return
         val client = clients.get(a.provider) ?: return
@@ -105,6 +113,7 @@ class Integrations(
     /** Writes ops only for real changes, chaining each field on the server's previous op so nothing conflicts. */
     internal fun apply(a: AccountRow, events: List<RemoteEvent>, fromMs: Long, toMs: Long) = store.transaction {
         ops.transaction {
+            store.lockAccount(a.id)
             val mirror = store.mirror(a.householdId, a.id)
             val seen = HashSet<String>()
             for (e in events) {
@@ -121,19 +130,24 @@ class Integrations(
                     EventFields.CALENDAR to (e.calendarName?.take(MAX_TEXT)?.let { FieldValue.Text(it) } ?: FieldValue.Null),
                     EventFields.REMOVED to FieldValue.Bool(false),
                 )
-                write(a, entityId, e.startMs, false, mirror[entityId], desired)
+                write(a, entityId, e.startMs, e.endMs, false, mirror[entityId], desired)
             }
             // Anything we mirrored inside this window that the provider no longer reports was cancelled or deleted.
+            // Providers return events that overlap the window, so judge removals by overlap too. All-day events near
+            // the far edge are skipped: providers apply the window in the calendar's own time zone.
             for (m in mirror.values) {
-                if (m.entityId in seen || m.removed || m.startMs < fromMs || m.startMs >= toMs) continue
-                write(a, m.entityId, m.startMs, true, m, mapOf(EventFields.REMOVED to FieldValue.Bool(true)))
+                if (m.entityId in seen || m.removed) continue
+                val overlaps = m.endMs > fromMs && m.startMs < toMs
+                val nearFarEdge = m.allDay && m.startMs > toMs - 14 * 3_600_000L
+                if (!overlaps || nearFarEdge) continue
+                write(a, m.entityId, m.startMs, m.endMs, true, m, mapOf(EventFields.REMOVED to FieldValue.Bool(true)))
             }
         }
     }
 
-    private fun write(a: AccountRow, entityId: String, startMs: Long, removed: Boolean, prev: MirrorRow?, desired: Map<String, FieldValue>) {
+    private fun write(a: AccountRow, entityId: String, startMs: Long, endMs: Long, removed: Boolean, prev: MirrorRow?, desired: Map<String, FieldValue>) {
         val fieldOps = HashMap(prev?.fieldOps ?: emptyMap())
-        var changed = prev == null || prev.removed != removed || prev.startMs != startMs
+        var changed = prev == null || prev.removed != removed || prev.startMs != startMs || prev.endMs != endMs
         for ((field, value) in desired) {
             val key = valueKey(value)
             val last = fieldOps[field]
@@ -147,7 +161,8 @@ class Integrations(
             fieldOps[field] = op.opId to key
             changed = true
         }
-        if (changed) store.putMirror(a.householdId, MirrorRow(entityId, a.id, startMs, removed, fieldOps))
+        val allDay = (desired[EventFields.ALL_DAY] as? FieldValue.Bool)?.value ?: prev?.allDay ?: false
+        if (changed) store.putMirror(a.householdId, MirrorRow(entityId, a.id, startMs, removed, fieldOps, endMs, allDay))
     }
 
     private fun token(bytes: Int): String =

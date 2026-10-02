@@ -30,6 +30,8 @@ data class MirrorRow(
     val startMs: Long,
     val removed: Boolean,
     val fieldOps: Map<String, Pair<String, String>>,
+    val endMs: Long = startMs,
+    val allDay: Boolean = false,
 )
 
 /** Persistence for connected accounts and the event mirror. Runs inside the op store's transaction. */
@@ -46,6 +48,8 @@ interface IntegrationStore {
     fun updateRefreshToken(id: String, enc: ByteArray)
     fun markSynced(id: String, atMs: Long)
     fun markError(id: String, status: String, error: String)
+    /** Serialises syncs of one account across processes for the rest of the current transaction. */
+    fun lockAccount(id: String)
     fun mirror(householdId: String, accountId: String): Map<String, MirrorRow>
     fun putMirror(householdId: String, row: MirrorRow)
 }
@@ -80,6 +84,7 @@ class InMemoryIntegrationStore : IntegrationStore {
     @Synchronized override fun updateRefreshToken(id: String, enc: ByteArray) { accounts[id]?.let { accounts[id] = it.copy(refreshTokenEnc = enc) } }
     @Synchronized override fun markSynced(id: String, atMs: Long) { accounts[id]?.let { accounts[id] = it.copy(status = "ok", lastSyncAtMs = atMs) } }
     @Synchronized override fun markError(id: String, status: String, error: String) { accounts[id]?.let { accounts[id] = it.copy(status = status) } }
+    override fun lockAccount(id: String) = Unit
     @Synchronized override fun mirror(householdId: String, accountId: String) =
         mirrors.filter { (k, v) -> k.first == householdId && v.accountId == accountId }.values.associateBy { it.entityId }
     @Synchronized override fun putMirror(householdId: String, row: MirrorRow) { mirrors[householdId to row.entityId] = row }
@@ -156,14 +161,20 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
             it.setString(1, status); it.setString(2, error.take(300)); it.setString(3, id)
         }
 
+    override fun lockAccount(id: String) = c { c ->
+        c.prepareStatement("SELECT 1 FROM integration_account WHERE id = ? FOR UPDATE").use { it.setString(1, id); it.executeQuery().close() }
+    }
+
     override fun mirror(householdId: String, accountId: String): Map<String, MirrorRow> = c { c ->
-        c.prepareStatement("SELECT entity_id, start_ms, removed, field_ops FROM event_mirror WHERE household_id = ? AND account_id = ?").use { st ->
+        c.prepareStatement("SELECT entity_id, start_ms, removed, field_ops, end_ms, all_day FROM event_mirror WHERE household_id = ? AND account_id = ?").use { st ->
             st.setString(1, householdId); st.setString(2, accountId)
             st.executeQuery().use { rs ->
                 buildMap {
                     while (rs.next()) {
                         val id = rs.getString(1)
-                        put(id, MirrorRow(id, accountId, rs.getLong(2), rs.getBoolean(3), FieldOpsJson.decode(rs.getString(4))))
+                        val start = rs.getLong(2)
+                        val end = rs.getLong(5).takeIf { !rs.wasNull() } ?: start
+                        put(id, MirrorRow(id, accountId, start, rs.getBoolean(3), FieldOpsJson.decode(rs.getString(4)), end, rs.getBoolean(6)))
                     }
                 }
             }
@@ -171,11 +182,12 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
     }
 
     override fun putMirror(householdId: String, row: MirrorRow) = update(
-        """INSERT INTO event_mirror(household_id, entity_id, account_id, start_ms, removed, field_ops) VALUES (?,?,?,?,?,?)
+        """INSERT INTO event_mirror(household_id, entity_id, account_id, start_ms, removed, field_ops, end_ms, all_day) VALUES (?,?,?,?,?,?,?,?)
            ON CONFLICT (household_id, entity_id) DO UPDATE SET start_ms = EXCLUDED.start_ms, removed = EXCLUDED.removed,
-             field_ops = EXCLUDED.field_ops""",
+             field_ops = EXCLUDED.field_ops, end_ms = EXCLUDED.end_ms, all_day = EXCLUDED.all_day""",
     ) {
         it.setString(1, householdId); it.setString(2, row.entityId); it.setString(3, row.accountId)
         it.setLong(4, row.startMs); it.setBoolean(5, row.removed); it.setString(6, FieldOpsJson.encode(row.fieldOps))
+        it.setLong(7, row.endMs); it.setBoolean(8, row.allDay)
     }
 }

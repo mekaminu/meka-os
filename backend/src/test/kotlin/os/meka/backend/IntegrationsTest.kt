@@ -33,13 +33,15 @@ class IntegrationsTest {
     /** Records what it was asked and serves whatever events the test sets. */
     private class FakeProvider : CalendarProvider {
         override val id = "google"
+        override val requiredScope = "calendar.readonly"
+        var grantedScope: String? = null
         var events = listOf<RemoteEvent>()
         var lastVerifier: String? = null
         var refreshed = 0
         override fun authorizeUrl(client: OAuthClient, redirectUri: String, state: String, codeChallenge: String) =
             "https://accounts.example/auth?state=$state&challenge=$codeChallenge&redirect=$redirectUri"
         override fun exchangeCode(client: OAuthClient, redirectUri: String, code: String, verifier: String): TokenSet {
-            lastVerifier = verifier; return TokenSet("access-1", "refresh-1", 3600)
+            lastVerifier = verifier; return TokenSet("access-1", "refresh-1", 3600, grantedScope)
         }
         override fun refresh(client: OAuthClient, refreshToken: String): TokenSet {
             check(refreshToken == "refresh-1") { "decrypted the wrong token" }
@@ -111,6 +113,26 @@ class IntegrationsTest {
         val url2 = assertIs<Integrations.StartResult.Url>(integrations.start("home", "google")).url
         assertIs<Integrations.CallbackResult.Failed>(integrations.callback("google", stateOf(url2), null, "access_denied"))
         assertTrue(store.accounts("home").isEmpty())
+    }
+
+    @Test
+    fun aConsentWithoutCalendarAccessIsRefusedRatherThanConnectedAndBroken() {
+        provider.grantedScope = "openid email"
+        val url = assertIs<Integrations.StartResult.Url>(integrations.start("home", "google")).url
+        assertIs<Integrations.CallbackResult.Failed>(integrations.callback("google", stateOf(url), "code-1", null))
+        assertTrue(store.accounts("home").isEmpty())
+    }
+
+    @Test
+    fun longEventsThatStartedBeforeTheWindowAreStillRemovedWhenCancelled() {
+        val acc = connect()
+        val trip = RemoteEvent("trip", "Lisbon trip", now - 72 * hour, now + 48 * hour, true, null, "Personal")
+        provider.events = listOf(trip)
+        integrations.syncAccount(acc)
+        assertEquals(listOf("Lisbon trip"), deviceEvents())
+        provider.events = emptyList()
+        integrations.syncAccount(acc)
+        assertEquals(emptyList(), deviceEvents())
     }
 
     @Test

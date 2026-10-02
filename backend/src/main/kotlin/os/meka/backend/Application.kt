@@ -288,7 +288,7 @@ fun startCalendarSync(integrations: Integrations, periodMs: Long = 5 * 60_000L) 
 }
 
 object Migrations {
-    private val all = listOf(1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql")
+    private val all = listOf(1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql", 4 to "/db/V4__event_mirror_end.sql")
 
     fun apply(ds: DataSource) = ds.connection.use { c ->
         c.autoCommit = false

@@ -33,7 +33,10 @@ interface SyncTransport {
     suspend fun awaitChanges(request: PullRequest): Boolean? = null
 }
 
-class TransportException(message: String, cause: Throwable? = null) : Exception(message, cause)
+open class TransportException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+/** The server no longer accepts this device's credentials (revoked, re-enrolled elsewhere, or key mismatch). */
+class AuthRejectedException(message: String) : TransportException(message)
 
 /** Server-side durable op store. The backend implements this on Postgres with `op_id` UNIQUE. */
 interface ServerOpStore {

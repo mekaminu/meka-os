@@ -29,13 +29,13 @@ struct TodayView: View {
                     Text(greeting)
                         .font(MekaType.greeting).tracking(MekaType.greetingTracking)
                         .foregroundStyle(palette.textPrimary)
-                    if !model.isConnected {
-                        Button("This Mac isn't syncing yet · Connect") { model.showConnect = true }
+                    if !model.isConnected || model.signedOut {
+                        Button(model.signedOut ? "Reconnect this Mac" : "This Mac isn't syncing yet · Connect") { model.showConnect = true }
                             .buttonStyle(.plain)
                             .font(MekaType.caption)
                             .foregroundStyle(palette.accent)
                     }
-                    if model.isConnected {
+                    if model.isConnected && !model.signedOut {
                         Button("Calendars") { model.showCalendars = true }
                             .buttonStyle(.plain)
                             .font(MekaType.caption)
@@ -198,7 +198,7 @@ private struct CalendarsSheet: View {
                 if accounts.isEmpty {
                     Text("No calendars connected yet.").font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                 }
-                ForEach(accounts, id: \.email) { a in
+                ForEach(accounts, id: \.self) { a in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(a.email).font(MekaType.itemTitle)

@@ -8,7 +8,7 @@ import Foundation
 ///
 /// Called from Kotlin on background threads, so it is not main-actor isolated; its state never changes after init.
 nonisolated final class MacDeviceKey: NSObject, DeviceKey, @unchecked Sendable {
-    private enum Backing {
+    nonisolated private enum Backing {
         case enclave(SecureEnclave.P256.Signing.PrivateKey)
         case software(P256.Signing.PrivateKey)
     }
@@ -34,10 +34,21 @@ nonisolated final class MacDeviceKey: NSObject, DeviceKey, @unchecked Sendable {
         }
     }
 
+    /// Creates a key only when none was ever stored. If a stored key can't be read or decoded, an ephemeral key is
+    /// used and NOT saved: the server will refuse it and the app shows "signed out — reconnect", which re-enrols
+    /// cleanly, instead of silently replacing the registered key.
     private static func loadOrCreate() -> Backing {
-        if let stored = DeviceIdentity.signingKey(), let blob = Data(base64Encoded: String(stored.dropFirst(3))) {
-            if stored.hasPrefix("se:"), let k = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: blob) { return .enclave(k) }
-            if stored.hasPrefix("sw:"), let k = try? P256.Signing.PrivateKey(rawRepresentation: blob) { return .software(k) }
+        switch DeviceIdentity.signingKey() {
+        case .found(let stored):
+            if let blob = Data(base64Encoded: String(stored.dropFirst(3))) {
+                if stored.hasPrefix("se:"), let k = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: blob) { return .enclave(k) }
+                if stored.hasPrefix("sw:"), let k = try? P256.Signing.PrivateKey(rawRepresentation: blob) { return .software(k) }
+            }
+            return .software(P256.Signing.PrivateKey())
+        case .unreadable:
+            return .software(P256.Signing.PrivateKey())
+        case .missing:
+            break
         }
         if SecureEnclave.isAvailable, let k = try? SecureEnclave.P256.Signing.PrivateKey() {
             DeviceIdentity.saveSigningKey("se:" + k.dataRepresentation.base64EncodedString())
