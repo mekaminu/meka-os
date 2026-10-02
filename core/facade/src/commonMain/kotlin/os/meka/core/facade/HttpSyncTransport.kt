@@ -56,9 +56,10 @@ class HttpSyncTransport(
     private var keyRegistered = false
 
     override suspend fun prepare() {
-        if (keyRegistered || deviceKey == null) return
+        val key = deviceKey ?: return
+        if (keyRegistered) return
         // Best effort: if registration fails (offline, older server) sync still runs and this retries next round.
-        val resp = runCatching { send("/v1/devices/key", WireCodec.encodeDeviceKey(deviceKey.publicKeyDerBase64)) }.getOrNull()
+        val resp = runCatching { send("/v1/devices/key", WireCodec.encodeDeviceKey(key.publicKeyDerBase64)) }.getOrNull()
         if (resp?.status?.isSuccess() == true) keyRegistered = true
     }
 
