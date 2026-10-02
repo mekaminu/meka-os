@@ -15,6 +15,10 @@ import os.meka.core.sync.PushRequest
 import os.meka.core.wire.WireCodec
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 
 class SyncApiTest {
     private val devices = InMemoryDeviceRegistry()
@@ -78,6 +82,35 @@ class SyncApiTest {
         application { mekaSync(InMemoryServerOpStore(), devices) }
         val body = WireCodec.encodeEnrolRequest(WireCodec.EnrolRequest("hh", "fold8", "Fold 8"))
         assertEquals(HttpStatusCode.Unauthorized, client.post("/v1/enrol") { header("Authorization", "Enrol anything"); setBody(body) }.status)
+    }
+
+    @Test
+    fun waitAnswersWhenAnotherDevicePushesAndTimesOutEmptyOtherwise() = testApplication {
+        application { mekaSync(InMemoryServerOpStore(), devices, waitMs = 3_000, waitCheckMs = 50) }
+        val waitBody = WireCodec.encodePullRequest(PullRequest("hh", "mac", 0))
+        // Nothing new: an empty answer after the window, not an error.
+        val t0 = System.currentTimeMillis()
+        val idle = client.post("/v1/sync/wait") { header("Authorization", "Bearer $macSecret"); setBody(waitBody) }
+        assertEquals(HttpStatusCode.OK, idle.status)
+        assertTrue(WireCodec.decodePullResponse(idle.bodyAsText()).ops.isEmpty())
+        assertTrue(System.currentTimeMillis() - t0 >= 2_900)
+        // The phone pushes while the Mac is waiting: the Mac's wait returns promptly with the change.
+        coroutineScope {
+            val waiting = async {
+                val start = System.currentTimeMillis()
+                val r = client.post("/v1/sync/wait") { header("Authorization", "Bearer $macSecret"); setBody(waitBody) }
+                Triple(r.status, WireCodec.decodePullResponse(r.bodyAsText()), System.currentTimeMillis() - start)
+            }
+            delay(300)
+            val push = WireCodec.encodePushRequest(PushRequest("hh", "android", listOf(op("w1"))))
+            assertEquals(HttpStatusCode.OK, client.post("/v1/sync/push") { header("Authorization", "Bearer $androidSecret"); setBody(push) }.status)
+            val (status, page, tookMs) = waiting.await()
+            assertEquals(HttpStatusCode.OK, status)
+            assertEquals(listOf("w1"), page.ops.map { it.op.opId })
+            assertTrue(tookMs < 2_000, "wait took $tookMs ms")
+        }
+        // Bound to the caller's household and device like pull.
+        assertEquals(HttpStatusCode.Forbidden, client.post("/v1/sync/wait") { header("Authorization", "Bearer $strangerSecret"); setBody(waitBody) }.status)
     }
 
     @Test

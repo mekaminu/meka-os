@@ -34,6 +34,9 @@ class HttpSyncTransport(
     override suspend fun pull(request: PullRequest): PullResponse =
         WireCodec.decodePullResponse(post("/v1/sync/pull", WireCodec.encodePullRequest(request)))
 
+    override suspend fun awaitChanges(request: PullRequest): Boolean =
+        WireCodec.decodePullResponse(post("/v1/sync/wait", WireCodec.encodePullRequest(request))).ops.isNotEmpty()
+
     private suspend fun post(path: String, body: String): String {
         val resp = try {
             client.post(baseUrl.trimEnd('/') + path) {

@@ -1,6 +1,16 @@
 package os.meka.core.facade
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import os.meka.core.sync.PullRequest
+import os.meka.core.sync.PushRequest
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import os.meka.core.sync.SyncTransport
 import kotlinx.datetime.TimeZone
 import os.meka.core.sync.InMemoryReplicaStore
 import os.meka.core.sync.InMemoryServerOpStore
@@ -17,7 +27,7 @@ class MekaCoreTest {
     private val service = SyncService(InMemoryServerOpStore())
     private var now = 1_790_000_000_000L
 
-    private fun core(name: String, transport: FaultyTransport = FaultyTransport(service)) = MekaCore(
+    private fun core(name: String, transport: SyncTransport = FaultyTransport(service)) = MekaCore(
         householdId = "hh", deviceId = name, store = InMemoryReplicaStore(), transport = transport,
         secureRandom = Random(name.hashCode()), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
@@ -71,5 +81,36 @@ class MekaCoreTest {
         a.syncNow(); m.syncNow()
         assertTrue(m.conflicts.value.isEmpty())
         assertEquals("Email school re trip", m.today.value.upNext?.title)
+    }
+
+    /** One lock for the (non-thread-safe) in-memory server, since devices run on their own dispatchers here. */
+    private val serverLock = Mutex()
+
+    /** Server-side long-poll stand-in: answers once the household has ops after the cursor, else empty after 2 s. */
+    private inner class LongPollTransport(private val inner: FaultyTransport = FaultyTransport(service)) : SyncTransport {
+        override suspend fun push(request: PushRequest) = serverLock.withLock { inner.push(request) }
+        override suspend fun pull(request: PullRequest) = serverLock.withLock { inner.pull(request) }
+        override suspend fun awaitChanges(request: PullRequest): Boolean {
+            repeat(200) {
+                if (serverLock.withLock { service.pull(request).ops.isNotEmpty() }) return true
+                delay(10)
+            }
+            return false
+        }
+    }
+
+    @Test
+    fun anOpenAppSeesTheOtherDevicesEditWithinASecondViaLongPoll() = runTest {
+        val mac = core("mac", LongPollTransport())
+        // Fallback period far beyond the test: only the long-poll can deliver the change.
+        mac.startSync(periodMs = 10 * 60_000)
+        val phone = core("android", LongPollTransport())
+        phone.addTask("From phone")
+        assertTrue(phone.syncNow())
+        val seen = withContext(Dispatchers.Default) {
+            withTimeoutOrNull(5_000) { mac.today.first { it.upNext?.title == "From phone" } }
+        }
+        mac.stopSync()
+        assertTrue(seen != null, "the Mac did not pick up the phone's edit via long-poll")
     }
 }

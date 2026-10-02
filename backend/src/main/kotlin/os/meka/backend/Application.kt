@@ -14,6 +14,7 @@ import io.ktor.server.request.header
 import io.ktor.server.request.receiveChannel
 import io.ktor.utils.io.readRemaining
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.io.readByteArray
 import io.ktor.server.response.respondText
@@ -32,7 +33,14 @@ class Unauthorised : RuntimeException()
 class Forbidden : RuntimeException()
 
 /** Wires the sync API. Pure function of its dependencies so tests run it against in-memory stores. */
-fun Application.mekaSync(opStore: ServerOpStore, devices: DeviceRegistry, enrolToken: String? = null) {
+fun Application.mekaSync(
+    opStore: ServerOpStore,
+    devices: DeviceRegistry,
+    enrolToken: String? = null,
+    /** Long-poll window. Under CloudFront's 30 s origin timeout and the ALB's 60 s idle timeout. */
+    waitMs: Long = 20_000,
+    waitCheckMs: Long = 1_000,
+) {
     val sync = SyncService(opStore)
 
     install(StatusPages) {
@@ -76,6 +84,21 @@ fun Application.mekaSync(opStore: ServerOpStore, devices: DeviceRegistry, enrolT
             if (req.householdId != who.householdId || req.deviceId != who.deviceId) throw Forbidden()
             val resp = withContext(Dispatchers.IO) { sync.pull(req) }
             call.respondText(WireCodec.encodePullResponse(resp), ContentType.Application.Json)
+        }
+
+        // Long-poll for an open app: answers as soon as the household has ops after the cursor, else empty after
+        // [waitMs]. Checks the database each [waitCheckMs] (an indexed query), so it stays correct with several tasks.
+        post("/v1/sync/wait") {
+            val who = call.device(devices)
+            val req = WireCodec.decodePullRequest(call.boundedBody()).copy(limit = 1)
+            if (req.householdId != who.householdId || req.deviceId != who.deviceId) throw Forbidden()
+            val deadline = System.currentTimeMillis() + waitMs
+            var page = withContext(Dispatchers.IO) { sync.pull(req) }
+            while (page.ops.isEmpty() && System.currentTimeMillis() < deadline) {
+                delay(waitCheckMs)
+                page = withContext(Dispatchers.IO) { sync.pull(req) }
+            }
+            call.respondText(WireCodec.encodePullResponse(page), ContentType.Application.Json)
         }
     }
 }

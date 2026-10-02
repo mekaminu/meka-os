@@ -102,16 +102,28 @@ class MekaCore(
     }
 
     /**
-     * Starts sync while the app is in use: immediately, after local edits, then every [periodMs] to pick up the
-     * other device's changes, with backoff on failure. 30 s keeps two open devices feeling live at negligible cost
-     * (a few thousand tiny requests a day); background catch-up is the platform scheduler's job.
+     * Starts sync while the app is in use: immediately, after local edits, and whenever the server's long-poll
+     * reports another device's changes (about a second). [periodMs] is the fallback cadence when long-polling is
+     * unavailable, with backoff on failure. Background catch-up is the platform scheduler's job.
      */
     fun startSync(periodMs: Long = FOREGROUND_SYNC_MS) {
         if (syncClient == null || syncLoop?.isActive == true) return
         syncLoop = scope.launch {
             while (true) {
-                val wait = syncMutex.withLock { runSyncOnce() }
-                delay(wait ?: periodMs)
+                val backoff = syncMutex.withLock { runSyncOnce() }
+                if (backoff != null) { delay(backoff); continue }
+                // Live: hold a long-poll open so the other device's edits arrive within about a second. The mutex
+                // is not held while waiting, so local edits still push immediately.
+                val started = nowMs()
+                val changed = try {
+                    syncClient?.awaitRemoteChanges()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null // the next round reports offline and backs off
+                }
+                // Unsupported or failed, or an empty answer that came back implausibly fast: fall back to polling.
+                if (changed == null || (!changed && nowMs() - started < 1_000)) delay(periodMs)
             }
         }
     }

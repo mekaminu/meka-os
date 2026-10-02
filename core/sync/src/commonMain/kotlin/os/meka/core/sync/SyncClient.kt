@@ -28,6 +28,10 @@ class SyncClient(
     /** Called with ops the server permanently rejected; they are removed from the push queue. */
     private val onRejected: (Map<String, String>) -> Unit = {},
 ) {
+    /** Long-polls for other devices' changes from the current pull cursor (see [SyncTransport.awaitChanges]). */
+    suspend fun awaitRemoteChanges(): Boolean? =
+        transport.awaitChanges(PullRequest(replica.householdId, replica.deviceId, replica.pullCursor(), limit = 1))
+
     suspend fun syncOnce(): SyncReport {
         var pushed = 0
         val rejected = linkedMapOf<String, String>()

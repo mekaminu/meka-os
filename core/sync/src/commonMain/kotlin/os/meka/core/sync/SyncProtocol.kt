@@ -21,6 +21,13 @@ data class PullResponse(val ops: List<SequencedOp>, val hasMore: Boolean) {
 interface SyncTransport {
     suspend fun push(request: PushRequest): PushResponse
     suspend fun pull(request: PullRequest): PullResponse
+
+    /**
+     * Long-poll: returns as soon as the server has ops after [PullRequest.afterSeq] (true), or false when the server's
+     * wait window ends with nothing new. Lets an open app see the other device's edits within about a second.
+     * Returns null when the transport cannot wait; callers then fall back to periodic sync.
+     */
+    suspend fun awaitChanges(request: PullRequest): Boolean? = null
 }
 
 class TransportException(message: String, cause: Throwable? = null) : Exception(message, cause)

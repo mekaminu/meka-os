@@ -12,6 +12,7 @@ import os.meka.core.facade.Enrolment
 import os.meka.core.facade.EnrolmentResult
 import os.meka.core.facade.MekaCore
 import java.security.SecureRandom
+import java.util.concurrent.TimeUnit
 import kotlin.random.asKotlinRandom
 
 class MekaApplication : Application() {
@@ -19,7 +20,8 @@ class MekaApplication : Application() {
         private set
     lateinit var identity: DeviceIdentityStore
         private set
-    private val http by lazy { HttpClient(OkHttp) }
+    // Read timeout above the server's 20 s long-poll window (OkHttp's default is 10 s).
+    private val http by lazy { HttpClient(OkHttp) { engine { config { readTimeout(45, TimeUnit.SECONDS) } } } }
 
     override fun onCreate() {
         super.onCreate()
