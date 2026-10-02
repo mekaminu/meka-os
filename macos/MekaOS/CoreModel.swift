@@ -45,7 +45,7 @@ final class CoreModel {
         observers.append(Task { [weak self] in
             for await c in core.conflicts { self?.conflicts = c }
         })
-        core.startSync(periodMs: 5 * 60_000)
+        core.startSync(periodMs: 30_000)   // MekaCore.FOREGROUND_SYNC_MS
         isConnected = core.isConnected
     }
 

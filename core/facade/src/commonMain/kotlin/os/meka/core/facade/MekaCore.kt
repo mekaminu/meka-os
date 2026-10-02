@@ -101,8 +101,12 @@ class MekaCore(
         tasks.resolveConflict(choice.conflict, FieldValue.Text(chosenOption))
     }
 
-    /** Starts background sync: immediately, after local edits, every [periodMs], with backoff on failure. */
-    fun startSync(periodMs: Long = 5 * 60_000L) {
+    /**
+     * Starts sync while the app is in use: immediately, after local edits, then every [periodMs] to pick up the
+     * other device's changes, with backoff on failure. 30 s keeps two open devices feeling live at negligible cost
+     * (a few thousand tiny requests a day); background catch-up is the platform scheduler's job.
+     */
+    fun startSync(periodMs: Long = FOREGROUND_SYNC_MS) {
         if (syncClient == null || syncLoop?.isActive == true) return
         syncLoop = scope.launch {
             while (true) {
@@ -111,6 +115,8 @@ class MekaCore(
             }
         }
     }
+
+    companion object { const val FOREGROUND_SYNC_MS: Long = 30_000L }
 
     fun stopSync() { syncLoop?.cancel(); syncLoop = null }
 
