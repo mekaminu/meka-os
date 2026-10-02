@@ -140,6 +140,28 @@ object WireCodec {
     fun encodeEnrolResponse(secret: String): String = doc { put("secret", secret) }
     fun decodeEnrolResponse(s: String): String = parse(s) { o -> o.str("secret") }
 
+    /** Connected calendar/email accounts (ADR-008). Tokens never cross the wire; this is display state only. */
+    data class IntegrationAccount(val provider: String, val email: String, val status: String, val lastSyncAtMs: Long?)
+
+    fun encodeConnectUrl(url: String): String = doc { put("url", url) }
+    fun decodeConnectUrl(s: String): String = parse(s) { o -> o.str("url") }
+
+    fun encodeAccounts(accounts: List<IntegrationAccount>): String = doc {
+        put("accounts", JsonArray(accounts.map { a ->
+            buildJsonObject {
+                put("provider", a.provider); put("email", a.email); put("status", a.status)
+                a.lastSyncAtMs?.let { put("lastSync", it) }
+            }
+        }))
+    }
+
+    fun decodeAccounts(s: String): List<IntegrationAccount> = parse(s) { o ->
+        o.getValue("accounts").jsonArray.map { e ->
+            val a = e.jsonObject
+            IntegrationAccount(a.str("provider"), a.str("email"), a.str("status"), a["lastSync"]?.jsonPrimitive?.long)
+        }
+    }
+
     private fun doc(body: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit): String =
         buildJsonObject { put("w", VERSION); body() }.toString()
 

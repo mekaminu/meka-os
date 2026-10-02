@@ -10,7 +10,12 @@ data class Today(
     val upNext: Task?,
     val yourDay: List<Task>,
     val doneToday: List<Task>,
+    /** Today's calendar events from all connected accounts: all-day first, then by start time. */
+    val events: List<CalendarEvent> = emptyList(),
 ) {
+    /** Timed events that have not ended yet: what's still ahead of you today. */
+    fun upcomingEvents(nowMs: Long): List<CalendarEvent> = events.filter { !it.allDay && it.endAtMs > nowMs }
+
     /** "You're clear." — nothing needs attention and nothing is left today. */
     val isClear: Boolean get() = needsYou.isEmpty() && upNext == null && yourDay.isEmpty()
 
@@ -20,7 +25,12 @@ data class Today(
 }
 
 /** Local-day boundaries in epoch ms for the user's current timezone. Supplied by the platform. */
-data class DayWindow(val startMs: Long, val endMs: Long) {
+data class DayWindow(
+    val startMs: Long,
+    val endMs: Long,
+    /** The timezone's UTC offset at [startMs]; lets all-day events (stored as UTC dates) land on the right day. */
+    val utcOffsetMs: Long = 0,
+) {
     operator fun contains(t: Long) = t in startMs until endMs
 }
 
@@ -29,7 +39,7 @@ data class DayWindow(val startMs: Long, val endMs: Long) {
  * Ranking inside Needs You: conflicts, then overdue (oldest first), then due-today-unscheduled.
  */
 object TodayProjection {
-    fun project(tasks: List<Task>, nowMs: Long, today: DayWindow): Today {
+    fun project(tasks: List<Task>, nowMs: Long, today: DayWindow, events: List<CalendarEvent> = emptyList()): Today {
         val open = tasks.filter { it.lifecycle == Lifecycle.ACTIVE || it.lifecycle == Lifecycle.INBOX }
 
         val needs = buildList {
@@ -53,6 +63,9 @@ object TodayProjection {
         val doneToday = tasks.filter { it.lifecycle == Lifecycle.DONE && it.completedAtMs != null && it.completedAtMs in today }
             .sortedByDescending { it.completedAtMs }
 
-        return Today(needs, upNext, yourDay, doneToday)
+        val todaysEvents = events.filter { it.overlaps(today) }
+            .sortedWith(compareByDescending<CalendarEvent> { it.allDay }.thenBy { it.startAtMs }.thenBy { it.title })
+
+        return Today(needs, upNext, yourDay, doneToday, todaysEvents)
     }
 }

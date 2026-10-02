@@ -134,6 +134,8 @@ object MekaSchema : SchemaRegistry {
     )
 
     override fun policyFor(entityType: String, field: String): MergePolicy = when {
+        // Calendar events are a mirror of the provider, written by one author (the server): plain LWW, never conflicts.
+        entityType == EntityTypes.EVENT -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

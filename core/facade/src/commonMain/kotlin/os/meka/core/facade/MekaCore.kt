@@ -16,8 +16,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.offsetAt
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
+import os.meka.core.domain.CalendarEvents
 import os.meka.core.domain.DayWindow
 import os.meka.core.domain.IdGenerator
 import os.meka.core.domain.MekaSchema
@@ -65,6 +67,7 @@ class MekaCore(
 
     private val replica = Replica(householdId, deviceId, HlcClock(deviceId, nowMs), store, MekaSchema, ids::next)
     private val tasks = Tasks(replica, ids::next, nowMs)
+    private val events = CalendarEvents(replica)
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
 
     private val _today = MutableStateFlow(project())
@@ -194,7 +197,7 @@ class MekaCore(
 
     private fun project(): Today {
         val now = nowMs()
-        return TodayProjection.project(tasks.all(), now, dayWindow(now))
+        return TodayProjection.project(tasks.all(), now, dayWindow(now), events.all())
     }
 
     private fun dayWindow(now: Long): DayWindow {
@@ -202,6 +205,7 @@ class MekaCore(
         val date = Instant.fromEpochMilliseconds(now).toLocalDateTime(tz).date
         val start = date.atStartOfDayIn(tz).toEpochMilliseconds()
         val end = date.plus(DatePeriod(days = 1)).atStartOfDayIn(tz).toEpochMilliseconds() // DST-safe day length
-        return DayWindow(start, end)
+        val offsetMs = tz.offsetAt(Instant.fromEpochMilliseconds(start)).totalSeconds * 1000L
+        return DayWindow(start, end, offsetMs)
     }
 }

@@ -23,6 +23,7 @@ hikari = "6.3.0"                       # unverified
 logback = "1.5.18"                     # unverified
 testcontainers = "1.21.0"              # unverified
 junit5 = "5.12.2"                      # unverified
+awssdk = "2.29.0"                      # unverified; KMS + Secrets Manager only, URL-connection HTTP client
 
 android-compileSdk = "37"   # required by Compose 1.12 / OkHttp 5.5 / SQLCipher 4.19 AARs; targetSdk stays 36
 android-targetSdk = "36"
@@ -52,6 +53,11 @@ ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor"
 ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor" }
 ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging", version.ref = "ktor" }
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
+
+awssdk-bom = { module = "software.amazon.awssdk:bom", version.ref = "awssdk" }
+awssdk-kms = { module = "software.amazon.awssdk:kms" }
+awssdk-secretsmanager = { module = "software.amazon.awssdk:secretsmanager" }
+awssdk-urlconnection = { module = "software.amazon.awssdk:url-connection-client" }
 
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
 compose-ui = { module = "androidx.compose.ui:ui" }

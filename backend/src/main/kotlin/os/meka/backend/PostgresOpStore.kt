@@ -39,6 +39,9 @@ class PostgresOpStore(private val ds: DataSource) : ServerOpStore {
     private fun <T> conn(block: (Connection) -> T): T =
         current.get()?.let(block) ?: ds.connection.use(block)
 
+    /** Runs [block] on the current transaction's connection, or a fresh one. For stores that share our transaction. */
+    fun <T> withConnection(block: (Connection) -> T): T = conn(block)
+
     override fun find(householdId: String, opId: String): Op? = conn { c ->
         c.prepareStatement("SELECT * FROM op_log WHERE household_id = ? AND op_id = ?").use { st ->
             st.setString(1, householdId); st.setString(2, opId)

@@ -68,4 +68,14 @@ class WireCodecTest {
             WireCodec.decodePushRequest("""{"w":1,"hh":"h","dev":"d","ops":[{"id":"x"}]}""")
         }
     }
+
+    @Test
+    fun integrationDocumentsRoundTrip() {
+        val accounts = listOf(
+            WireCodec.IntegrationAccount("google", "me@gmail.com", "ok", 1_790_000_000_000L),
+            WireCodec.IntegrationAccount("microsoft", "me@outlook.com", "needs_reconnect", null),
+        )
+        assertEquals(accounts, WireCodec.decodeAccounts(WireCodec.encodeAccounts(accounts)))
+        assertEquals("https://accounts.example/x?y=1", WireCodec.decodeConnectUrl(WireCodec.encodeConnectUrl("https://accounts.example/x?y=1")))
+    }
 }

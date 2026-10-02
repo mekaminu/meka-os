@@ -20,6 +20,12 @@ ktor {
 dependencies {
     implementation(project(":core:sync"))
     implementation(project(":core:wire"))
+    implementation(project(":core:domain"))
+    implementation(libs.kotlinx.serialization.json)
+    implementation(platform(libs.awssdk.bom))
+    implementation(libs.awssdk.kms)
+    implementation(libs.awssdk.secretsmanager)
+    implementation(libs.awssdk.urlconnection)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.status.pages)
