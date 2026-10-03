@@ -20,6 +20,7 @@ import kotlinx.datetime.offsetAt
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import os.meka.core.domain.CalendarEvents
+import os.meka.core.domain.DayPlanner
 import os.meka.core.domain.DayWindow
 import os.meka.core.domain.IdGenerator
 import os.meka.core.domain.MekaSchema
@@ -100,6 +101,17 @@ class MekaCore(
     suspend fun schedule(taskId: String, atMs: Long?) =
         onCore { tasks.edit(taskId, if (atMs == null) TaskEdit(clearScheduledAt = true) else TaskEdit(scheduledAtMs = atMs)) }
     suspend fun delete(taskId: String) = onCore { tasks.delete(taskId) }
+
+    /** A suggested plan for the rest of today (DayPlanner v1). Changes nothing until [applyPlan]. */
+    suspend fun planDay(): DayPlanner.Plan = onCore {
+        val now = nowMs()
+        DayPlanner.plan(tasks.all(), events.all(), now, dayWindow(now))
+    }
+
+    /** Schedules each planned task at its suggested time; everything syncs like a manual edit. */
+    suspend fun applyPlan(plan: DayPlanner.Plan) = onCore {
+        plan.placements.forEach { tasks.edit(it.task.id, TaskEdit(scheduledAtMs = it.startMs)) }
+    }
     suspend fun restore(taskId: String) = onCore { tasks.restore(taskId) }
 
     suspend fun resolve(choice: ConflictChoice, chosenOption: String) = onCore {

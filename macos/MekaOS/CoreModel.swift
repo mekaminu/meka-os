@@ -17,6 +17,8 @@ final class CoreModel {
     private(set) var isConnected = false
     var showConnect = false
     var showCalendars = false
+    var showPlan = false
+    private(set) var plan: DayPlanner.Plan?
     private(set) var accounts: [ConnectedAccount]? = nil
     var calendarsMessage: String?
     private var identity: DeviceIdentity?
@@ -86,6 +88,19 @@ final class CoreModel {
 
     /// The server refused this device (revoked or key mismatch); re-enrolling with the code fixes it.
     var signedOut: Bool { syncLine?.hasPrefix("This device was signed out") == true }
+
+    // MARK: Day plan
+
+    func loadPlan() async {
+        guard let core else { return }
+        plan = try? await core.planDay()
+    }
+
+    func applyPlan() async {
+        guard let core, let plan else { return }
+        try? await core.applyPlan(plan: plan)
+        showPlan = false
+    }
 
     // MARK: Calendars
 

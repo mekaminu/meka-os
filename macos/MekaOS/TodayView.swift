@@ -20,6 +20,7 @@ struct TodayView: View {
         .background(palette.background)
         .sheet(isPresented: $model.showConnect) { ConnectSheet(palette: palette) }
         .sheet(isPresented: $model.showCalendars) { CalendarsSheet(palette: palette) }
+        .sheet(isPresented: $model.showPlan) { PlanSheet(palette: palette) }
     }
 
     private var todayColumn: some View {
@@ -35,12 +36,15 @@ struct TodayView: View {
                             .font(MekaType.caption)
                             .foregroundStyle(palette.accent)
                     }
-                    if model.isConnected && !model.signedOut {
-                        Button("Calendars") { model.showCalendars = true }
-                            .buttonStyle(.plain)
-                            .font(MekaType.caption)
-                            .foregroundStyle(palette.accent)
+                    HStack(spacing: MekaSpace.l) {
+                        Button("Plan my day") { model.showPlan = true }
+                        if model.isConnected && !model.signedOut {
+                            Button("Calendars") { model.showCalendars = true }
+                        }
                     }
+                    .buttonStyle(.plain)
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.accent)
                     if let line = model.syncLine {
                         Text(line).font(MekaType.caption).foregroundStyle(palette.offline)
                             .transition(.opacity)
@@ -243,6 +247,67 @@ private struct CalendarsSheet: View {
         guard let ms = a.lastSyncAtMs?.int64Value else { return "\(CoreModel.providerName(a.provider)) · first sync in progress" }
         let d = Date(timeIntervalSince1970: Double(ms) / 1000)
         return "\(CoreModel.providerName(a.provider)) · synced \(d.formatted(date: .omitted, time: .shortened))"
+    }
+}
+
+/// "Plan my day": tasks fitted around events and fixtures, as a suggestion applied only on request.
+private struct PlanSheet: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let palette: MekaPalette
+
+    private struct Row: Identifiable { let id: String; let start: Int64; let time: String; let title: String; let suggested: Bool }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.s) {
+            Text("Your day").font(MekaType.upNextTitle)
+            if let plan = model.plan {
+                if plan.isEmpty && plan.unplaced.isEmpty {
+                    Text("Nothing to plan: every open task is already scheduled.")
+                        .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                } else {
+                    Text("A suggestion. Nothing changes until you apply it.")
+                        .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    ForEach(rows(plan)) { r in
+                        HStack {
+                            Text(r.time).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textSecondary)
+                                .frame(width: 110, alignment: .leading)
+                            Text(r.title).font(MekaType.itemTitle)
+                                .foregroundStyle(r.suggested ? palette.textPrimary : palette.textTertiary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(r.suggested ? palette.surfaceRaised : .clear))
+                    }
+                    if !plan.unplaced.isEmpty {
+                        Text("Won't fit today: " + plan.unplaced.map(\.title).joined(separator: ", "))
+                            .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    }
+                    Text("\(plan.freeMinutesLeft / 60) h \(plan.freeMinutesLeft % 60) min still free.")
+                        .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+            } else {
+                ProgressView().controlSize(.small)
+            }
+            HStack {
+                Spacer()
+                Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
+                if let plan = model.plan, !plan.isEmpty {
+                    Button("Apply plan") { Task { await model.applyPlan() } }.keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .padding(MekaSpace.l)
+        .frame(width: 460)
+        .task { await model.loadPlan() }
+    }
+
+    private func rows(_ plan: DayPlanner.Plan) -> [Row] {
+        let f = Date.FormatStyle.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)
+        func t(_ ms: Int64) -> String { Date(timeIntervalSince1970: Double(ms) / 1000).formatted(f) }
+        let busy = plan.busy.map { Row(id: "e" + $0.id, start: $0.startAtMs, time: "\(t($0.startAtMs))–\(t($0.endAtMs))", title: $0.title, suggested: false) }
+        let tasks = plan.placements.map { Row(id: "t" + $0.task.id, start: $0.startMs, time: "\(t($0.startMs))–\(t($0.endMs))", title: $0.task.title, suggested: true) }
+        return (busy + tasks).sorted { $0.start < $1.start }
     }
 }
 

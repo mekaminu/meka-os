@@ -81,8 +81,10 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
     val conflicts by core.conflicts.collectAsState()
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var showCalendars by rememberSaveable { mutableStateOf(false) }
+    var showPlan by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val openCalendars: (() -> Unit)? = if (connect == null) ({ showCalendars = true }) else null
+    val openPlan: () -> Unit = { showPlan = true }
 
     val actions = TodayActions(
         add = { title -> scope.launch { runCatching { core.addTask(title) } } },
@@ -99,17 +101,22 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
         val selected = all.firstOrNull { it.id == selectedId }
         if (twoPane) {
             Row(Modifier.fillMaxSize()) {
-                TodayPane(today, sync, actions, Modifier.weight(0.55f).fillMaxHeight(), connect, openCalendars)
+                TodayPane(today, sync, actions, Modifier.weight(0.55f).fillMaxHeight(), connect, openCalendars, openPlan)
                 Box(Modifier.width(1.dp).fillMaxHeight().background(Meka.colors.hairline))
                 DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, Modifier.weight(0.45f).fillMaxHeight())
             }
         } else {
-            TodayPane(today, sync, actions, Modifier.fillMaxSize(), connect, openCalendars)
+            TodayPane(today, sync, actions, Modifier.fillMaxSize(), connect, openCalendars, openPlan)
             if (selected != null) {
                 // Single-pane: detail slides over Today; back/tap-outside closes.
                 Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
                     DetailPane(selected, conflicts.filter { it.taskId == selected.id }, actions, Modifier.fillMaxSize(), onClose = { selectedId = null })
                 }
+            }
+        }
+        if (showPlan) {
+            Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
+                PlanPane(core, onClose = { showPlan = false })
             }
         }
         if (showCalendars) {
@@ -135,6 +142,7 @@ data class TodayActions(
 @Composable
 private fun TodayPane(
     today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?, openCalendars: (() -> Unit)?,
+    openPlan: () -> Unit,
 ) {
     Column(modifier.imePadding()) {
         LazyColumn(
@@ -147,12 +155,19 @@ private fun TodayPane(
                     Text(greeting(), style = MekaType.greeting, color = Meka.colors.textPrimary)
                     SyncLine(sync)
                     if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs))
-                    if (openCalendars != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l), modifier = Modifier.padding(top = MekaSpace.xs)) {
                         Text(
-                            "Calendars", style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
-                                .clickable(role = Role.Button) { openCalendars() }.padding(vertical = MekaSpace.xxs),
+                            "Plan my day", style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { openPlan() }.padding(vertical = MekaSpace.xxs),
                         )
+                        if (openCalendars != null) {
+                            Text(
+                                "Calendars", style = MekaType.caption, color = Meka.colors.accent,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                    .clickable(role = Role.Button) { openCalendars() }.padding(vertical = MekaSpace.xxs),
+                            )
+                        }
                     }
                 }
             }
