@@ -33,7 +33,16 @@ xcodebuild -project macos/MekaOS.xcodeproj -scheme MekaOS -configuration Debug \
 # build, so every rebuild asks for the login keychain password. So: use the free "Apple Development" certificate
 # Xcode creates once an Apple ID is added (Xcode > Settings > Accounts). Developer ID replaces this for releases.
 APP="build/mac/Build/Products/Debug/MekaOS.app"
-DEV_ID=$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development:/ {print $2; exit}')
+dev_id() { security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development:/ {print $2; exit}'; }
+DEV_ID=$(dev_id)
+# The certificate exists but isn't trusted yet: usually Apple's current intermediate (WWDR G3) is missing.
+if [ -z "$DEV_ID" ] && security find-identity -p codesigning 2>/dev/null | grep -q "Apple Development:"; then
+  echo "Installing Apple's developer intermediate certificate (public, from apple.com)…"
+  TMPCER=$(mktemp -d)/AppleWWDRCAG3.cer
+  curl -fsSL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o "$TMPCER" &&
+    security import "$TMPCER" -k "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 || true
+  DEV_ID=$(dev_id)
+fi
 if [ -n "$DEV_ID" ]; then
   codesign --force --deep --options runtime --entitlements macos/MekaOS/MekaOS.entitlements --sign "$DEV_ID" "$APP"
   echo "Signed with $DEV_ID."
