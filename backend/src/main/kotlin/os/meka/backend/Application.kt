@@ -21,6 +21,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.io.readByteArray
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
+import os.meka.backend.integrations.EspnTeamFixtures
 import os.meka.backend.integrations.GoogleCalendar
 import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.KmsTokenCipher
@@ -273,6 +274,7 @@ fun integrationsFromEnv(opStore: PostgresOpStore): Integrations? {
         store = PostgresIntegrationStore(opStore), ops = opStore,
         providers = listOf(GoogleCalendar(), MicrosoftCalendar()).associateBy { it.id },
         clients = SecretsManagerOAuthClients(secrets), cipher = KmsTokenCipher(key), publicUrl = publicUrl,
+        feeds = listOf(EspnTeamFixtures()).associateBy { it.id },
     )
 }
 

@@ -113,7 +113,7 @@ final class CoreModel {
     }
 
     static func providerName(_ p: String) -> String {
-        switch p { case "google": "Google"; case "microsoft": "Outlook"; default: p }
+        switch p { case "google": "Google"; case "microsoft": "Outlook"; case "fixtures": "Fixtures"; default: p }
     }
 
     // MARK: Commands

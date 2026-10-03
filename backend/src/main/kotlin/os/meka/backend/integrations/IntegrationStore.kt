@@ -45,6 +45,8 @@ interface IntegrationStore {
     fun account(id: String): AccountRow?
     fun accounts(householdId: String): List<AccountRow>
     fun syncableAccounts(): List<AccountRow>
+    /** Households with at least one enrolled device. */
+    fun households(): List<String>
     fun updateRefreshToken(id: String, enc: ByteArray)
     fun markSynced(id: String, atMs: Long)
     fun markError(id: String, status: String, error: String)
@@ -64,7 +66,7 @@ internal object FieldOpsJson {
         }
 }
 
-class InMemoryIntegrationStore : IntegrationStore {
+class InMemoryIntegrationStore(private val knownHouseholds: List<String> = emptyList()) : IntegrationStore {
     private val states = HashMap<String, PendingConnect>()
     private val accounts = LinkedHashMap<String, AccountRow>()
     private val mirrors = HashMap<Pair<String, String>, MirrorRow>()
@@ -81,6 +83,7 @@ class InMemoryIntegrationStore : IntegrationStore {
     @Synchronized override fun account(id: String) = accounts[id]
     @Synchronized override fun accounts(householdId: String) = accounts.values.filter { it.householdId == householdId }
     @Synchronized override fun syncableAccounts() = accounts.values.filter { it.status != "needs_reconnect" }
+    override fun households() = knownHouseholds
     @Synchronized override fun updateRefreshToken(id: String, enc: ByteArray) { accounts[id]?.let { accounts[id] = it.copy(refreshTokenEnc = enc) } }
     @Synchronized override fun markSynced(id: String, atMs: Long) { accounts[id]?.let { accounts[id] = it.copy(status = "ok", lastSyncAtMs = atMs) } }
     @Synchronized override fun markError(id: String, status: String, error: String) { accounts[id]?.let { accounts[id] = it.copy(status = status) } }
@@ -142,6 +145,12 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
     override fun account(id: String) = query("WHERE id = ?", id).firstOrNull()
     override fun accounts(householdId: String) = query("WHERE household_id = ? ORDER BY created_at", householdId)
     override fun syncableAccounts() = query("WHERE status <> 'needs_reconnect'")
+
+    override fun households(): List<String> = c { c ->
+        c.prepareStatement("SELECT DISTINCT household_id FROM device WHERE revoked_at IS NULL").use { st ->
+            st.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
+        }
+    }
 
     private fun update(sql: String, bind: (java.sql.PreparedStatement) -> Unit) = c { c ->
         c.prepareStatement(sql).use { bind(it); it.executeUpdate() }

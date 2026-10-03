@@ -24,6 +24,8 @@ class Integrations(
     private val cipher: TokenCipher,
     private val publicUrl: String,
     private val now: () -> Long = System::currentTimeMillis,
+    /** Public feeds every household follows by default (e.g. FC Barcelona fixtures). No sign-in involved. */
+    private val feeds: Map<String, FeedProvider> = emptyMap(),
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -78,7 +80,17 @@ class Integrations(
 
     /** Syncs every connected account; one account's failure never stops the others. */
     fun syncAll() {
+        runCatching { ensureFeeds() }
         for (a in store.syncableAccounts()) runCatching { syncAccount(a.id) }
+    }
+
+    /** Every household follows the default feeds (owner's stated MVP need). Idempotent. */
+    fun ensureFeeds() {
+        for (hh in store.households()) for (f in feeds.values) {
+            if (store.accounts(hh).none { it.provider == f.id }) {
+                store.transaction { store.upsertAccount(hh, f.id, f.label, ByteArray(0)) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
+            }
+        }
     }
 
     private val accountLocks = java.util.concurrent.ConcurrentHashMap<String, Any>()
@@ -88,6 +100,7 @@ class Integrations(
 
     private fun syncLocked(accountId: String) {
         val a = store.account(accountId) ?: return
+        feeds[a.provider]?.let { feed -> return syncFeed(a, feed) }
         val p = providers[a.provider] ?: return
         val client = clients.get(a.provider) ?: return
         val ctx = context(a.householdId, a.provider)
@@ -104,6 +117,18 @@ class Integrations(
             store.transaction { store.markSynced(a.id, now()) }
         } catch (e: ReconnectRequired) {
             store.transaction { store.markError(a.id, "needs_reconnect", e.message ?: "reconnect") }
+        } catch (e: Exception) {
+            store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
+            throw e
+        }
+    }
+
+    private fun syncFeed(a: AccountRow, feed: FeedProvider) {
+        try {
+            val from = now() - WINDOW_BACK_MS
+            val to = now() + WINDOW_AHEAD_MS
+            apply(a, feed.events(from, to), from, to)
+            store.transaction { store.markSynced(a.id, now()) }
         } catch (e: Exception) {
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
             throw e
