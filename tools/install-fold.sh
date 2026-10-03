@@ -16,9 +16,20 @@ ADB="$ANDROID_HOME/platform-tools/adb"
 [ -f local.properties ] || echo "sdk.dir=$ANDROID_HOME" > local.properties
 
 DEVICES=$("$ADB" devices | awk 'NR>1 && $2=="device"{print $1}')
+# No cable? Look for an already-paired phone on Wi-Fi (Wireless debugging on, same network).
+if [ -z "$DEVICES" ]; then
+  for _ in 1 2 3 4 5 6; do
+    SVC=$("$ADB" mdns services 2>/dev/null | awk '/_adb-tls-connect/ {print $NF}' | head -1)
+    [ -n "$SVC" ] && "$ADB" connect "$SVC" >/dev/null 2>&1 || true
+    DEVICES=$("$ADB" devices | awk 'NR>1 && $2=="device"{print $1}')
+    [ -n "$DEVICES" ] && break
+    sleep 2
+  done
+fi
 if [ -z "$DEVICES" ]; then
   cat <<'MSG'
-No phone found. On the Fold:
+No phone found. For a Wi-Fi install: on the Fold turn on Settings → Developer options → Wireless debugging
+(same Wi-Fi as this Mac) and run this again. For a cable install, on the Fold:
   1. Settings → About phone → Software information → tap "Build number" 7 times (enables Developer options).
   2. Settings → Developer options → turn on "USB debugging".
   3. Plug it into the Mac with a data cable and tap "Allow" on the "Allow USB debugging?" prompt.
