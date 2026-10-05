@@ -127,5 +127,5 @@ Things only the owner can do. Build runs skip these and carry on with the rest.
 5. **Kestrel change:** OK to add an "approval request" event to Kestrel and let MEKA send back approve/decline.
 6. **Apple Developer Program** (paid yearly) for a notarised Mac app. Optional: dev builds keep working without it.
 7. **Install updates** on the Fold until the self-updating app lands (double-click Install on Fold).
-8. **Actions allowance for October is used up** (confirmed 2026-10-05: ~$16.66 gross against the ~$16 free allowance, $0 billed). Decided: stay free — the macOS job is now weekly/manual and runs land at most 3 code pushes a day (rule 10). Builds that need CI pause until the allowance resets on 1 November. *Optional, to resume sooner:* Billing and licensing → Budgets and alerts → add an Actions budget (e.g. $10/month) with "stop usage when budget is reached" ticked, then tell Claude.
+8. **Actions allowance** — resolved 2026-10-06: Meka added a $10/month Actions budget (stops at the limit). CI runs again; keep rules on macOS weekly/manual and max 3 code pushes a day so the budget lasts.
 9. **Call assistant:** OK to use a paid cloud phone service (a phone number plus per-minute charges and voice AI, likely a few pounds a month at light use) and to switch on your network's "forward when busy" to that number. Also the greeting wording.
