@@ -115,8 +115,3 @@ Things only the owner can do. Build runs skip these and carry on with the rest.
 5. **Kestrel change:** OK to add an "approval request" event to Kestrel and let MEKA send back approve/decline.
 6. **Apple Developer Program** (paid yearly) for a notarised Mac app. Optional: dev builds keep working without it.
 7. **Install updates** on the Fold until the self-updating app lands (double-click Install on Fold).
-8. **Build-run lock can't be released.** The scheduled build runs can create the `build-lock` branch but GitHub
-   refuses to delete it from the run environment (HTTP 403 on branch delete). Until branch deletion is allowed for
-   these runs, each lock blocks the next runs for 2 hours. Either allow it, or say yes to switching the lock to a
-   fast-forward-only scheme (runs append "locked"/"free" commits to `build-lock`; no deletes needed). Meanwhile you
-   can delete `build-lock` on GitHub by hand to unblock the next run straight away.
