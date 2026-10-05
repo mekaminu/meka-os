@@ -24,7 +24,13 @@ Status marks: `[x]` done · `[~]` in progress (partly landed) · `[ ]` not start
 7. **Both apps.** A feature is done when it works on the Fold and the Mac (Mac may use a simpler layout).
 8. **Dark is the default theme**; every screen must look right in Dark and Light.
 9. **Commit messages** start with the milestone (`M1:`, `V1:`, `V2:`). Update this file in the same commit.
-10. **Stop rule.** If something can't be undone and could reasonably go either way, don't do it: write it under
+10. **Actions minutes are free and finite** (2,000 standard minutes a month on the free plan, no spending budget). The
+    `macos` job runs weekly and on manual dispatch only; docs-only commits don't trigger CI. Land at most **3 code
+    pushes to `main` per UTC day** (check the day's `ci` runs first; if 3 already ran, stop with "Daily CI allowance
+    used."), and don't chain the next run with fire_trigger. A run that touched Mac code dispatches `ci` manually once
+    (workflow_dispatch) when it lands. If CI jobs sit queued with no runner, the monthly allowance is used up: stop
+    without pushing code; the allowance resets on the 1st.
+11. **Stop rule.** If something can't be undone and could reasonably go either way, don't do it: write it under
     "Needs Meka" and move on.
 
 ## Motion catalogue (applies to every screen)
@@ -64,7 +70,7 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
 - [x] Motion foundation: stagger, count-up, skeleton shimmer, pane spring, haptics helpers (`MekaMotionKit` on both apps, `choreography` tokens); applied to Today (intro stagger, up-next cross-slide, complete haptic), Plan (cascade, count-up, skeleton) and Calendars (skeleton, stagger). *Landed 2026-10-05. Shared-element transitions (Plan → Today, list → detail) moved to the App shell item, where navigation lands.*
 - [~] App shell: Fold bottom bar + two-pane when unfolded; Mac sidebar (Today · Needs you · Lists · Goals · Review · Vault). Includes shared-element transitions (Plan Apply → Today, list → detail) with `SharedTransitionLayout` / `matchedGeometryEffect`
   - *Landed 2026-10-05:* `ShellNav` rules (unit-tested on both apps, rule for rule); Fold: bottom bar with five destinations when closed, rail with all six when open (Today and Needs you keep their two panes), bar steps aside for the keyboard, each destination keeps its state; Mac: `NavigationSplitView` sidebar with ⌘1–⌘6 in a Go menu; real Needs you screen on both apps with a calm count badge; Lists, Goals, Review and Vault show what lands there. Motion: content slides the way you moved, lit pill springs, tick haptic; reduced motion cross-fades.
-  - *CI not yet run:* GitHub Actions assigned no runner to any job on 843615c (twice, 2026-10-05 19:00 and 19:16 UTC); see Needs Meka #8. The next run with working CI must confirm it green or fix it before taking a new item.
+  - *CI not yet run:* the October Actions allowance ran out before 843615c could be checked (Needs Meka #8). The first run with CI available must dispatch `ci` manually (so the macOS job runs too) and confirm it green or fix it before taking a new item.
   - *Remains:* shared-element transitions (Plan Apply → Today blocks, list row → detail pane) and the Fold unfold morph from list to two panes.
 - [ ] Repeating tasks and routines (daily/weekly/monthly/yearly; "every 2nd Tuesday"; skip/snooze one occurrence)
 - [ ] Capture from anywhere: Android share sheet, home-screen widget, quick-settings tile, voice (on-device speech); Mac menu bar (exists) + Services
@@ -119,4 +125,4 @@ Things only the owner can do. Build runs skip these and carry on with the rest.
 5. **Kestrel change:** OK to add an "approval request" event to Kestrel and let MEKA send back approve/decline.
 6. **Apple Developer Program** (paid yearly) for a notarised Mac app. Optional: dev builds keep working without it.
 7. **Install updates** on the Fold until the self-updating app lands (double-click Install on Fold).
-8. **GitHub Actions isn't starting jobs** (since 2026-10-05 19:00 UTC every CI job sits queued with no runner, then cancels). Usually the account's free Actions minutes or spending limit is used up — macOS minutes count 10×. Check github.com → Settings → Billing → Actions; either raise the limit (paid) or say so and runs will move the macOS job to manual-only. Builds pause until CI runs again.
+8. **Actions allowance for October is used up** (confirmed 2026-10-05: ~$16.66 gross against the ~$16 free allowance, $0 billed). Decided: stay free — the macOS job is now weekly/manual and runs land at most 3 code pushes a day (rule 10). Builds that need CI pause until the allowance resets on 1 November. *Optional, to resume sooner:* Billing and licensing → Budgets and alerts → add an Actions budget (e.g. $10/month) with "stop usage when budget is reached" ticked, then tell Claude.

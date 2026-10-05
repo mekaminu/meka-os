@@ -3,9 +3,11 @@ name: ci
 on:
   push:
     branches: [main]
+    paths-ignore: ["docs/**", "**/*.md"]   # docs-only commits don't spend Actions minutes
   pull_request:
   schedule:
-    - cron: "17 3 * * *" # nightly: macOS build + emulator fold tests
+    - cron: "17 3 * * 0" # weekly (Sunday): the macOS job runs here and on manual dispatch only
+
   workflow_dispatch:
 
 concurrency:
@@ -66,8 +68,9 @@ jobs:
         run: npm ci && npx tsc --noEmit && npx jest && npx cdk synth --quiet
 
   macos:
-    # macOS minutes cost ~10x Linux: run on main merges, nightly and manual only (ADR-011).
-    if: github.event_name != 'pull_request'
+    # macOS minutes cost ~10x Linux and used up the free allowance in five days (2026-10-05): weekly and manual only
+    # (ADR-011). Mac-touching changes are proven by a manual run (workflow_dispatch) before the item is marked done.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: macos-26
     timeout-minutes: 45
     steps:
