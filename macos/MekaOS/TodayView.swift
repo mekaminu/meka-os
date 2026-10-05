@@ -8,6 +8,10 @@ struct TodayView: View {
     @AppStorage(MekaAppearance.key) private var appearance = MekaAppearance.dark.rawValue
     private var currentAppearance: MekaAppearance { MekaAppearance(rawValue: appearance) ?? .dark }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// App open: greeting fades up, then each section 40 ms apart. Plays once; later arrivals use row transitions.
+    @State private var introPlayed = false
+    private var play: Bool { !introPlayed }
+    private static let sections = 6 // greeting, needs you, up next, calendar, your day, done
 
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
 
@@ -32,6 +36,7 @@ struct TodayView: View {
                     Text(greeting)
                         .font(MekaType.greeting).tracking(MekaType.greetingTracking)
                         .foregroundStyle(palette.textPrimary)
+                        .staggeredAppear(0, play: play)
                     if !model.isConnected || model.signedOut {
                         Button(model.signedOut ? "Reconnect this Mac" : "This Mac isn't syncing yet · Connect") { model.showConnect = true }
                             .buttonStyle(.plain)
@@ -49,6 +54,7 @@ struct TodayView: View {
                     .buttonStyle(.plain)
                     .font(MekaType.caption)
                     .foregroundStyle(palette.accent)
+                    .staggeredAppear(0, play: play)
                     if let line = model.syncLine {
                         Text(line).font(MekaType.caption).foregroundStyle(palette.offline)
                             .transition(.opacity)
@@ -59,32 +65,38 @@ struct TodayView: View {
                         if today.isClear {
                             Text("You're clear.")
                                 .font(MekaType.upNextTitle).foregroundStyle(palette.textSecondary)
+                                .staggeredAppear(1, play: play)
                         }
                         if !today.needsYou.isEmpty {
-                            SectionLabel("Needs you", palette)
+                            SectionLabel("Needs you", palette).staggeredAppear(1, play: play)
                             ForEach(today.needsYou, id: \.task.id) { item in
-                                TaskRow(task: item.task, reason: item.reason, palette: palette)
+                                TaskRow(task: item.task, reason: item.reason, palette: palette).staggeredAppear(1, play: play)
                             }
                             Spacer().frame(height: MekaSpace.l)
                         }
                         if let next = today.upNext {
-                            SectionLabel("Up next", palette)
+                            SectionLabel("Up next", palette).staggeredAppear(2, play: play)
+                            // Up next changes: the new card pushes in from the right (cross-fade with Reduce Motion).
                             UpNextCard(task: next, palette: palette)
+                                .id(next.id)
+                                .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.push(from: .trailing))
+                                .staggeredAppear(2, play: play)
                             Spacer().frame(height: MekaSpace.l)
                         }
                         if !today.events.isEmpty {
-                            SectionLabel("Calendar", palette)
-                            ForEach(today.events, id: \.id) { e in EventRow(event: e, palette: palette) }
+                            SectionLabel("Calendar", palette).staggeredAppear(3, play: play)
+                            ForEach(today.events, id: \.id) { e in EventRow(event: e, palette: palette).staggeredAppear(3, play: play) }
                             Spacer().frame(height: MekaSpace.l)
                         }
                         if !today.yourDay.isEmpty {
-                            SectionLabel("Your day", palette)
-                            ForEach(today.yourDay, id: \.id) { t in TaskRow(task: t, reason: nil, palette: palette) }
+                            SectionLabel("Your day", palette).staggeredAppear(4, play: play)
+                            ForEach(today.yourDay, id: \.id) { t in TaskRow(task: t, reason: nil, palette: palette).staggeredAppear(4, play: play) }
                         }
                         if !today.doneToday.isEmpty {
                             Text("\(today.doneToday.count) done today")
                                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                                 .padding(.top, MekaSpace.l)
+                                .staggeredAppear(5, play: play)
                         }
                     }
                 }
@@ -92,6 +104,12 @@ struct TodayView: View {
                 .padding(.vertical, MekaSpace.xl)
                 // Replan / complete motion: rows glide to new positions instead of redrawing.
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.allTasks.map(\.id))
+                .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.upNext?.id)
+            }
+            .task {
+                guard !introPlayed else { return }
+                try? await Task.sleep(for: .seconds(MotionMath.staggerSpan(count: Self.sections, reduced: false) + 0.3))
+                introPlayed = true
             }
             CaptureField(palette: palette)
                 .padding(MekaSpace.m)
@@ -206,7 +224,7 @@ private struct CalendarsSheet: View {
                 if accounts.isEmpty {
                     Text("No calendars connected yet.").font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                 }
-                ForEach(accounts, id: \.self) { a in
+                ForEach(Array(accounts.enumerated()), id: \.element) { i, a in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(a.email).font(MekaType.itemTitle)
@@ -220,9 +238,10 @@ private struct CalendarsSheet: View {
                     }
                     .padding(MekaSpace.m)
                     .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+                    .staggeredAppear(i)
                 }
             } else {
-                ProgressView().controlSize(.small)
+                SkeletonRows(count: 2, rowHeight: 48, palette: palette)
             }
             HStack {
                 Button("Connect Google Calendar") { Task { await model.connectCalendar("google") } }
@@ -272,7 +291,8 @@ private struct PlanSheet: View {
                 } else {
                     Text("A suggestion. Nothing changes until you apply it.")
                         .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-                    ForEach(rows(plan)) { r in
+                    // Timeline blocks cascade in, 40 ms apart.
+                    ForEach(Array(rows(plan).enumerated()), id: \.element.id) { i, r in
                         HStack {
                             Text(r.time).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textSecondary)
                                 .frame(width: 110, alignment: .leading)
@@ -282,22 +302,23 @@ private struct PlanSheet: View {
                         }
                         .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(r.suggested ? palette.surfaceRaised : .clear))
+                        .staggeredAppear(i)
                     }
                     if !plan.unplaced.isEmpty {
                         Text("Won't fit today: " + plan.unplaced.map(\.title).joined(separator: ", "))
                             .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     }
-                    Text("\(plan.freeMinutesLeft / 60) h \(plan.freeMinutesLeft % 60) min still free.")
+                    CountUpText(Int(plan.freeMinutesLeft)) { "\($0 / 60) h \($0 % 60) min still free." }
                         .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
             } else {
-                ProgressView().controlSize(.small)
+                SkeletonRows(count: 4, palette: palette)
             }
             HStack {
                 Spacer()
                 Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
                 if let plan = model.plan, !plan.isEmpty {
-                    Button("Apply plan") { Task { await model.applyPlan() } }.keyboardShortcut(.defaultAction)
+                    Button("Apply plan") { MekaHaptics.light(); Task { await model.applyPlan() } }.keyboardShortcut(.defaultAction)
                 }
             }
         }
@@ -344,7 +365,7 @@ private struct CompleteButton: View {
         Button {
             guard !pressed else { return }
             withAnimation(MekaMotion.complete(reduced: reduceMotion)) { pressed = true }
-            NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+            MekaHaptics.light()
             let id = task.id
             let delay: Duration = reduceMotion ? .milliseconds(50) : .milliseconds(280)
             Task { @MainActor in

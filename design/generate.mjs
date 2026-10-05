@@ -74,6 +74,9 @@ function kotlin() {
     s += `    const val ${k}DurationMs = ${v.duration}\n`;
   }
   s += '}\n';
+  s += '\n/** Sequencing for motion (stagger, rise, count-up, shimmer). Values in ms unless the name says otherwise. */\nobject MekaChoreography {\n';
+  for (const [k, v] of entries(t.choreography)) s += `    const val ${k}${k === 'staggerMaxSteps' ? '' : k === 'riseDistance' ? 'Dp' : 'Ms'} = ${v.$value}\n`;
+  s += '}\n';
   return s;
 }
 
@@ -98,6 +101,13 @@ function swift() {
     // SwiftUI spring(response:dampingFraction:): response ≈ 2π/sqrt(stiffness) for unit mass.
     const response = (2 * Math.PI / Math.sqrt(v.spring.stiffness)).toFixed(3);
     s += `    static func ${k}(reduced: Bool) -> Animation { reduced ? .easeOut(duration: ${(v.reducedDuration / 1000).toFixed(3)}) : .spring(response: ${response}, dampingFraction: ${v.spring.damping}) }\n`;
+  }
+  s += '}\n';
+  s += '\n/// Sequencing for motion (stagger, rise, count-up, shimmer). Durations in seconds; distances in points.\nenum MekaChoreography {\n';
+  for (const [k, v] of entries(t.choreography)) {
+    if (k === 'staggerMaxSteps') s += `    static let ${k} = ${v.$value}\n`;
+    else if (k === 'riseDistance') s += `    static let ${k}: CGFloat = ${v.$value}\n`;
+    else s += `    static let ${k}: Double = ${(v.$value / 1000).toFixed(3)}\n`;
   }
   s += '}\n';
   return s;

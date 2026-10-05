@@ -59,9 +59,9 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
 
 ### M1 · Run my day
 - [x] Google Calendar (read-only), FC Barcelona fixtures, day planner v1
-- [~] Theme: Dark default, Light, Auto, animated blend (both apps). *Landed 2026-10-05; screens added later must be checked in both themes.*
-- [ ] Motion foundation: stagger, count-up, shared transitions, haptics helpers; apply to Today, Plan, Calendars
-- [ ] App shell: Fold bottom bar + two-pane when unfolded; Mac sidebar (Today · Needs you · Lists · Goals · Review · Vault)
+- [x] Theme: Dark default, Light, Auto, animated blend (both apps). *Landed 2026-10-05; rule 8 keeps every later screen checked in both themes.*
+- [x] Motion foundation: stagger, count-up, skeleton shimmer, pane spring, haptics helpers (`MekaMotionKit` on both apps, `choreography` tokens); applied to Today (intro stagger, up-next cross-slide, complete haptic), Plan (cascade, count-up, skeleton) and Calendars (skeleton, stagger). *Landed 2026-10-05. Shared-element transitions (Plan → Today, list → detail) moved to the App shell item, where navigation lands.*
+- [ ] App shell: Fold bottom bar + two-pane when unfolded; Mac sidebar (Today · Needs you · Lists · Goals · Review · Vault). Includes shared-element transitions (Plan Apply → Today, list → detail) with `SharedTransitionLayout` / `matchedGeometryEffect`
 - [ ] Repeating tasks and routines (daily/weekly/monthly/yearly; "every 2nd Tuesday"; skip/snooze one occurrence)
 - [ ] Capture from anywhere: Android share sheet, home-screen widget, quick-settings tile, voice (on-device speech); Mac menu bar (exists) + Services
 - [ ] Lists: Waiting for (with chase dates), Someday (with kinds), Decisions (with review dates)

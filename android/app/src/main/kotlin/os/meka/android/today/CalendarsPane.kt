@@ -24,11 +24,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.SkeletonRows
+import os.meka.android.designsystem.appear
+import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
@@ -74,10 +78,10 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
         Spacer(Modifier.height(MekaSpace.m))
 
         when (val list = accounts) {
-            null -> Text("Loading…", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+            null -> SkeletonRows(count = 2, rowHeight = 56.dp)
             else -> {
                 if (list.isEmpty()) Text("No calendars connected yet.", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
-                list.forEach { AccountRow(it, onReconnect = { connect(it.provider) }) }
+                list.forEachIndexed { i, a -> AccountRow(a, Modifier.appear(rememberAppearance(i)), onReconnect = { connect(a.provider) }) }
             }
         }
         Spacer(Modifier.height(MekaSpace.l))
@@ -92,8 +96,8 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
 private val syncedFmt = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
-private fun AccountRow(a: ConnectedAccount, onReconnect: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)) {
+private fun AccountRow(a: ConnectedAccount, modifier: Modifier = Modifier, onReconnect: () -> Unit) {
+    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)) {
         Column(Modifier.weight(1f)) {
             Text(a.email, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
             val status = when {

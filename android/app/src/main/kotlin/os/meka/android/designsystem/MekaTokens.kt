@@ -112,3 +112,12 @@ object MekaMotion {
         if (reducedMotion) tween(0) else spring(dampingRatio = 1f, stiffness = 200f)
     const val themeBlendDurationMs = 450
 }
+
+/** Sequencing for motion (stagger, rise, count-up, shimmer). Values in ms unless the name says otherwise. */
+object MekaChoreography {
+    const val staggerStepMs = 40
+    const val staggerMaxSteps = 8
+    const val riseDistanceDp = 12
+    const val countUpMs = 700
+    const val shimmerPeriodMs = 1200
+}

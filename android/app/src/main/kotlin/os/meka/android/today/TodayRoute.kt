@@ -1,10 +1,14 @@
 package os.meka.android.today
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +36,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,16 +49,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaPane
+import os.meka.android.designsystem.MotionMath
+import os.meka.android.designsystem.appear
+import os.meka.android.designsystem.rememberAppearance
+import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
@@ -85,6 +94,15 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
     val scope = rememberCoroutineScope()
     val openCalendars: (() -> Unit)? = if (connect == null) ({ showCalendars = true }) else null
     val openPlan: () -> Unit = { showPlan = true }
+    // App open: greeting fades up, then each section 40 ms apart. Plays once per launch (not again on fold/unfold);
+    // anything arriving later uses animateItem.
+    var introPlayed by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!introPlayed) {
+            delay((MotionMath.staggerSpanMs(TODAY_SECTIONS, false) + MekaMotion.appearDurationMs).toLong())
+            introPlayed = true
+        }
+    }
 
     val actions = TodayActions(
         add = { title -> scope.launch { runCatching { core.addTask(title) } } },
@@ -101,31 +119,28 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
         val selected = all.firstOrNull { it.id == selectedId }
         if (twoPane) {
             Row(Modifier.fillMaxSize()) {
-                TodayPane(today, sync, actions, Modifier.weight(0.55f).fillMaxHeight(), connect, openCalendars, openPlan)
+                TodayPane(today, sync, actions, Modifier.weight(0.55f).fillMaxHeight(), connect, openCalendars, openPlan, !introPlayed)
                 Box(Modifier.width(1.dp).fillMaxHeight().background(Meka.colors.hairline))
                 DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, Modifier.weight(0.45f).fillMaxHeight())
             }
         } else {
-            TodayPane(today, sync, actions, Modifier.fillMaxSize(), connect, openCalendars, openPlan)
-            if (selected != null) {
-                // Single-pane: detail slides over Today; back/tap-outside closes.
-                Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
-                    DetailPane(selected, conflicts.filter { it.taskId == selected.id }, actions, Modifier.fillMaxSize(), onClose = { selectedId = null })
+            TodayPane(today, sync, actions, Modifier.fillMaxSize(), connect, openCalendars, openPlan, !introPlayed)
+            // Single-pane: detail springs up over Today. The last task is kept so it stays visible while leaving.
+            var shown by remember { mutableStateOf<Task?>(null) }
+            if (selected != null) shown = selected
+            MekaPane(visible = selected != null) {
+                shown?.let { s ->
+                    DetailPane(s, conflicts.filter { it.taskId == s.id }, actions, Modifier.fillMaxSize(), onClose = { selectedId = null })
                 }
             }
         }
-        if (showPlan) {
-            Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
-                PlanPane(core, onClose = { showPlan = false })
-            }
-        }
-        if (showCalendars) {
-            Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
-                CalendarsPane(core, onClose = { showCalendars = false })
-            }
-        }
+        MekaPane(visible = showPlan) { PlanPane(core, onClose = { showPlan = false }) }
+        MekaPane(visible = showCalendars) { CalendarsPane(core, onClose = { showCalendars = false }) }
     }
 }
+
+/** Stagger groups on Today: greeting, needs you, up next, calendar, your day, done. */
+private const val TODAY_SECTIONS = 6
 
 /** Present only while the device isn't enrolled for sync. */
 data class ConnectHook(val defaultUrl: String, val connect: suspend (url: String, code: String) -> String?)
@@ -142,7 +157,7 @@ data class TodayActions(
 @Composable
 private fun TodayPane(
     today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?, openCalendars: (() -> Unit)?,
-    openPlan: () -> Unit,
+    openPlan: () -> Unit, play: Boolean,
 ) {
     Column(modifier.imePadding()) {
         LazyColumn(
@@ -151,7 +166,7 @@ private fun TodayPane(
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             item(key = "greeting") {
-                Column(Modifier.padding(bottom = MekaSpace.l)) {
+                Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play))) {
                     Text(greeting(), style = MekaType.greeting, color = Meka.colors.textPrimary)
                     SyncLine(sync)
                     if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs))
@@ -180,34 +195,35 @@ private fun TodayPane(
             if (today.isClear) {
                 item(key = "clear") {
                     Text("You're clear.", style = MekaType.upNextTitle, color = Meka.colors.textSecondary,
-                        modifier = Modifier.animateItem())
+                        modifier = Modifier.animateItem().appear(rememberAppearance(1, play)))
                 }
             }
             if (today.needsYou.isNotEmpty()) {
-                item(key = "h-needs") { SectionLabel("Needs you", Modifier.animateItem()) }
+                item(key = "h-needs") { SectionLabel("Needs you", Modifier.animateItem().appear(rememberAppearance(1, play))) }
                 items(today.needsYou, key = { "n-" + it.task.id }) { n ->
-                    TaskRow(n.task, actions, reason = n.reason, modifier = Modifier.animateItem())
+                    TaskRow(n.task, actions, reason = n.reason, modifier = Modifier.animateItem().appear(rememberAppearance(1, play)))
                 }
                 item(key = "s-needs") { Spacer(Modifier.height(MekaSpace.l)) }
             }
             today.upNext?.let { t ->
-                item(key = "h-next") { SectionLabel("Up next", Modifier.animateItem()) }
-                item(key = "u-" + t.id) { UpNextCard(t, actions, Modifier.animateItem()) }
+                item(key = "h-next") { SectionLabel("Up next", Modifier.animateItem().appear(rememberAppearance(2, play))) }
+                // One stable slot: when up next changes, the card's content cross-slides instead of the row swapping.
+                item(key = "upnext") { UpNextCard(t, actions, Modifier.animateItem().appear(rememberAppearance(2, play))) }
                 item(key = "s-next") { Spacer(Modifier.height(MekaSpace.l)) }
             }
             if (today.events.isNotEmpty()) {
-                item(key = "h-cal") { SectionLabel("Calendar", Modifier.animateItem()) }
-                items(today.events, key = { "e-" + it.id }) { e -> EventRow(e, Modifier.animateItem()) }
+                item(key = "h-cal") { SectionLabel("Calendar", Modifier.animateItem().appear(rememberAppearance(3, play))) }
+                items(today.events, key = { "e-" + it.id }) { e -> EventRow(e, Modifier.animateItem().appear(rememberAppearance(3, play))) }
                 item(key = "s-cal") { Spacer(Modifier.height(MekaSpace.l)) }
             }
             if (today.yourDay.isNotEmpty()) {
-                item(key = "h-day") { SectionLabel("Your day", Modifier.animateItem()) }
-                items(today.yourDay, key = { "d-" + it.id }) { t -> TaskRow(t, actions, modifier = Modifier.animateItem()) }
+                item(key = "h-day") { SectionLabel("Your day", Modifier.animateItem().appear(rememberAppearance(4, play))) }
+                items(today.yourDay, key = { "d-" + it.id }) { t -> TaskRow(t, actions, modifier = Modifier.animateItem().appear(rememberAppearance(4, play))) }
             }
             if (today.doneToday.isNotEmpty()) {
                 item(key = "done") {
                     Text("${today.doneToday.size} done today", style = MekaType.caption, color = Meka.colors.textTertiary,
-                        modifier = Modifier.padding(top = MekaSpace.l).animateItem())
+                        modifier = Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(5, play)))
                 }
             }
         }
@@ -235,20 +251,32 @@ private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun UpNextCard(t: Task, actions: TodayActions, modifier: Modifier) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(MekaRadius.l))
-            .background(Meka.colors.surfaceRaised)
-            .clickable { actions.select(t.id) }
-            .padding(MekaSpace.l),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(t.title, style = MekaType.upNextTitle, color = Meka.colors.textPrimary)
-            meta(t)?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
+    val reduced = Meka.reducedMotion
+    // Up next changes: the new item slides in from the right as the old one slides out left (cross-fade when reduced).
+    AnimatedContent(
+        targetState = t,
+        contentKey = { it.id },
+        transitionSpec = {
+            if (reduced) fadeIn(MekaMotion.replan(true)) togetherWith fadeOut(MekaMotion.replan(true))
+            else (slideInHorizontally(MekaMotion.replan(false)) { it / 4 } + fadeIn(MekaMotion.appear(false))) togetherWith
+                (slideOutHorizontally(MekaMotion.replan(false)) { -it / 4 } + fadeOut(MekaMotion.appear(false)))
+        },
+        label = "upnext",
+        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised),
+    ) { task ->
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable { actions.select(task.id) }
+                .padding(MekaSpace.l),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(task.title, style = MekaType.upNextTitle, color = Meka.colors.textPrimary)
+                meta(task)?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
+            }
+            CompleteButton(task, actions.complete)
         }
-        CompleteButton(t, actions.complete)
     }
 }
 
@@ -280,7 +308,7 @@ private fun TaskRow(t: Task, actions: TodayActions, reason: NeedsYouReason? = nu
 @Composable
 private fun CompleteButton(t: Task, onComplete: (String) -> Unit) {
     var pressed by remember(t.id) { mutableStateOf(false) }
-    val haptics = LocalHapticFeedback.current
+    val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val fill by animateColorAsState(if (pressed) Meka.colors.accent else Meka.colors.background, MekaMotion.complete(reduced), label = "fill")
     val scale by animateFloatAsState(if (pressed && !reduced) 0.86f else 1f, MekaMotion.complete(reduced), label = "scale",
@@ -296,7 +324,7 @@ private fun CompleteButton(t: Task, onComplete: (String) -> Unit) {
             .clickable(role = Role.Checkbox) {
                 if (!pressed) {
                     pressed = true
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptics.light()
                     if (reduced) onComplete(t.id)
                 }
             },

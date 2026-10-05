@@ -65,7 +65,7 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
     debugImplementation(libs.compose.ui.tooling)
 
-    testImplementation(kotlin("test"))
+    testImplementation(kotlin("test-junit")) // JUnit4 binding for kotlin.test under AGP unit tests
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)

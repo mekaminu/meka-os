@@ -27,7 +27,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import os.meka.android.designsystem.CountUpText
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.SkeletonRows
+import os.meka.android.designsystem.appear
+import os.meka.android.designsystem.rememberAppearance
+import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
@@ -48,6 +53,7 @@ private fun t(ms: Long) = hm.format(Instant.ofEpochMilli(ms).atZone(ZoneId.syste
 fun PlanPane(core: MekaCore, onClose: () -> Unit) {
     var plan by remember { mutableStateOf<DayPlanner.Plan?>(null) }
     val scope = rememberCoroutineScope()
+    val haptics = rememberMekaHaptics()
     LaunchedEffect(Unit) { plan = core.planDay() }
 
     Column(Modifier.fillMaxSize().padding(MekaSpace.gutter).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
@@ -56,7 +62,7 @@ fun PlanPane(core: MekaCore, onClose: () -> Unit) {
         Text("Your day", style = MekaType.greeting, color = Meka.colors.textPrimary)
         val p = plan
         if (p == null) {
-            Text("Planning…", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+            SkeletonRows(count = 4)
             return@Column
         }
         if (p.isEmpty && p.unplaced.isEmpty()) {
@@ -69,10 +75,11 @@ fun PlanPane(core: MekaCore, onClose: () -> Unit) {
         // One timeline: fixed events and suggested tasks, in time order.
         val rows = p.busy.map { Triple(it.startAtMs, "${t(it.startAtMs)}–${t(it.endAtMs)}", it.title to false) } +
             p.placements.map { Triple(it.startMs, "${t(it.startMs)}–${t(it.endMs)}", it.task.title to true) }
-        rows.sortedBy { it.first }.forEach { (_, time, item) ->
+        // Timeline blocks cascade in, 40 ms apart.
+        rows.sortedBy { it.first }.forEachIndexed { i, (_, time, item) ->
             val (title, suggested) = item
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                Modifier.appear(rememberAppearance(i)).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
                     .background(if (suggested) Meka.colors.surfaceRaised else Meka.colors.background)
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
             ) {
@@ -84,13 +91,13 @@ fun PlanPane(core: MekaCore, onClose: () -> Unit) {
             Spacer(Modifier.height(MekaSpace.s))
             Text("Won't fit today: " + p.unplaced.joinToString(", ") { it.title }, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
-        Text("${p.freeMinutesLeft / 60} h ${p.freeMinutesLeft % 60} min still free.", style = MekaType.caption, color = Meka.colors.textTertiary)
+        CountUpText(p.freeMinutesLeft, style = MekaType.caption, color = Meka.colors.textTertiary) { "${it / 60} h ${it % 60} min still free." }
         Spacer(Modifier.height(MekaSpace.m))
         if (!p.isEmpty) {
             Text(
                 "Apply plan", style = MekaType.itemTitle, color = Meka.colors.onAccent,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
-                    .clickable(role = Role.Button) { scope.launch { core.applyPlan(p); onClose() } }
+                    .clickable(role = Role.Button) { haptics.light(); scope.launch { core.applyPlan(p); onClose() } }
                     .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
             )
         }

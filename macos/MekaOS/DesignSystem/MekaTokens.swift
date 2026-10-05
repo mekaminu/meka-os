@@ -98,3 +98,12 @@ enum MekaMotion {
     static func appear(reduced: Bool) -> Animation { reduced ? .easeOut(duration: 0.120) : .spring(response: 0.336, dampingFraction: 0.9) }
     static func themeBlend(reduced: Bool) -> Animation { reduced ? .easeOut(duration: 0.000) : .spring(response: 0.444, dampingFraction: 1) }
 }
+
+/// Sequencing for motion (stagger, rise, count-up, shimmer). Durations in seconds; distances in points.
+enum MekaChoreography {
+    static let staggerStep: Double = 0.040
+    static let staggerMaxSteps = 8
+    static let riseDistance: CGFloat = 12
+    static let countUp: Double = 0.700
+    static let shimmerPeriod: Double = 1.200
+}
