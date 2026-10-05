@@ -16,8 +16,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import os.meka.android.designsystem.MekaTheme
+import os.meka.android.shell.AppShell
 import os.meka.android.today.ConnectHook
-import os.meka.android.today.TodayRoute
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
                 val hook = if (connected && !signedOut) null else ConnectHook(app.defaultServerUrl) { url, code ->
                     app.connect(url, code).also { if (it == null) connected = true }
                 }
-                TodayRoute(app.core, hook)
+                AppShell(app.core, hook)
             }
         }
     }

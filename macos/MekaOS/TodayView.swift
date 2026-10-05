@@ -125,7 +125,7 @@ struct TodayView: View {
     }
 }
 
-private struct SectionLabel: View {
+struct SectionLabel: View {
     let text: String
     let palette: MekaPalette
     init(_ text: String, _ palette: MekaPalette) { self.text = text; self.palette = palette }
@@ -137,11 +137,17 @@ private struct SectionLabel: View {
     }
 }
 
-private struct TaskRow: View {
+struct TaskRow: View {
     @Environment(CoreModel.self) private var model
     let task: MekaTask
     let reason: NeedsYouReason?
     let palette: MekaPalette
+
+    init(task: MekaTask, reason: NeedsYouReason?, palette: MekaPalette) {
+        self.task = task
+        self.reason = reason
+        self.palette = palette
+    }
 
     var body: some View {
         HStack(spacing: MekaSpace.m) {
@@ -405,11 +411,16 @@ private struct CaptureField: View {
     }
 }
 
-private struct DetailView: View {
+struct DetailView: View {
     @Environment(CoreModel.self) private var model
     let task: MekaTask?
     let palette: MekaPalette
     @State private var title = ""
+
+    init(task: MekaTask?, palette: MekaPalette) {
+        self.task = task
+        self.palette = palette
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {

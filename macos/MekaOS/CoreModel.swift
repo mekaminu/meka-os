@@ -12,6 +12,9 @@ final class CoreModel {
     private(set) var syncLine: String?
     private(set) var conflicts: [ConflictChoice] = []
     var selectedID: String?
+    /// The shell's current destination and which way the last switch moved (for the push transition).
+    private(set) var destination: ShellDestination = .today
+    private(set) var lastDirection = 0
     var focusCapture = false
     var lastError: String?
     private(set) var isConnected = false
@@ -88,6 +91,15 @@ final class CoreModel {
 
     /// The server refused this device (revoked or key mismatch); re-enrolling with the code fixes it.
     var signedOut: Bool { syncLine?.hasPrefix("This device was signed out") == true }
+
+    // MARK: Shell
+
+    func go(to d: ShellDestination, reduced: Bool) {
+        guard d != destination else { return }
+        lastDirection = ShellNav.direction(from: destination, to: d)
+        MekaHaptics.tick()
+        withAnimation(MekaMotion.replan(reduced: reduced)) { destination = d }
+    }
 
     // MARK: Day plan
 

@@ -39,6 +39,7 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
 | Up next changes | Card content cross-slides; old item settles into the list |
 | Plan my day | Timeline blocks cascade in; Apply sends blocks into Today with a shared transition |
 | Sync | Status dot breathes while syncing; brass pull-to-sync ring |
+| Switch section (shell) | Content slides an eighth of the width the way you moved (Mac: pushes along the sidebar); lit pill springs across; tick haptic |
 | Sheets and panes | Spring up from the bottom (phone) / scale-fade (Mac); Fold unfold morphs list→two-pane |
 | Habit tick | Circle pops with spring, streak number rolls |
 | Fasting | Ring sweeps continuously; soft glow at goal |
@@ -61,7 +62,9 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
 - [x] Google Calendar (read-only), FC Barcelona fixtures, day planner v1
 - [x] Theme: Dark default, Light, Auto, animated blend (both apps). *Landed 2026-10-05; rule 8 keeps every later screen checked in both themes.*
 - [x] Motion foundation: stagger, count-up, skeleton shimmer, pane spring, haptics helpers (`MekaMotionKit` on both apps, `choreography` tokens); applied to Today (intro stagger, up-next cross-slide, complete haptic), Plan (cascade, count-up, skeleton) and Calendars (skeleton, stagger). *Landed 2026-10-05. Shared-element transitions (Plan → Today, list → detail) moved to the App shell item, where navigation lands.*
-- [ ] App shell: Fold bottom bar + two-pane when unfolded; Mac sidebar (Today · Needs you · Lists · Goals · Review · Vault). Includes shared-element transitions (Plan Apply → Today, list → detail) with `SharedTransitionLayout` / `matchedGeometryEffect`
+- [~] App shell: Fold bottom bar + two-pane when unfolded; Mac sidebar (Today · Needs you · Lists · Goals · Review · Vault). Includes shared-element transitions (Plan Apply → Today, list → detail) with `SharedTransitionLayout` / `matchedGeometryEffect`
+  - *Landed 2026-10-05:* `ShellNav` rules (unit-tested on both apps, rule for rule); Fold: bottom bar with five destinations when closed, rail with all six when open (Today and Needs you keep their two panes), bar steps aside for the keyboard, each destination keeps its state; Mac: `NavigationSplitView` sidebar with ⌘1–⌘6 in a Go menu; real Needs you screen on both apps with a calm count badge; Lists, Goals, Review and Vault show what lands there. Motion: content slides the way you moved, lit pill springs, tick haptic; reduced motion cross-fades.
+  - *Remains:* shared-element transitions (Plan Apply → Today blocks, list row → detail pane) and the Fold unfold morph from list to two panes.
 - [ ] Repeating tasks and routines (daily/weekly/monthly/yearly; "every 2nd Tuesday"; skip/snooze one occurrence)
 - [ ] Capture from anywhere: Android share sheet, home-screen widget, quick-settings tile, voice (on-device speech); Mac menu bar (exists) + Services
 - [ ] Lists: Waiting for (with chase dates), Someday (with kinds), Decisions (with review dates)

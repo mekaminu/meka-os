@@ -8,9 +8,9 @@ struct MekaOSApp: App {
 
     var body: some Scene {
         WindowGroup("Meka", id: "today") {
-            TodayView()
+            ShellView()
                 .environment(model)
-                .frame(minWidth: 520, minHeight: 560)
+                .frame(minWidth: 760, minHeight: 560)
                 .task { await model.start() }
                 .preferredColorScheme((MekaAppearance(rawValue: appearance) ?? .dark).scheme)
                 .animation(MekaMotion.themeBlend(reduced: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion), value: appearance)
@@ -24,6 +24,12 @@ struct MekaOSApp: App {
             CommandGroup(after: .toolbar) {
                 Picker("Appearance", selection: $appearance) {
                     ForEach(MekaAppearance.allCases) { Text($0.label).tag($0.rawValue) }
+                }
+            }
+            CommandMenu("Go") {
+                ForEach(ShellDestination.allCases) { d in
+                    Button(d.label) { model.go(to: d, reduced: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) }
+                        .keyboardShortcut(KeyEquivalent(Character("\(d.rawValue + 1)")), modifiers: .command)
                 }
             }
             CommandMenu("Today") {

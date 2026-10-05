@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,6 +54,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
@@ -104,16 +104,10 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
         }
     }
 
-    val actions = TodayActions(
-        add = { title -> scope.launch { runCatching { core.addTask(title) } } },
-        complete = { id -> scope.launch { core.complete(id); if (selectedId == id) selectedId = null } },
-        select = { id -> selectedId = id },
-        rename = { id, t -> scope.launch { runCatching { core.rename(id, t) } } },
-        delete = { id -> scope.launch { core.delete(id); selectedId = null } },
-        resolve = { c, v -> scope.launch { core.resolve(c, v) } },
-    )
+    val actions = todayActions(core, scope, { selectedId }) { selectedId = it }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background).safeDrawingPadding()) {
+    // Insets are applied once, by the app shell.
+    BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
         val twoPane = maxWidth >= 600.dp
         val all = (today.needsYou.map { it.task } + listOfNotNull(today.upNext) + today.yourDay)
         val selected = all.firstOrNull { it.id == selectedId }
@@ -144,6 +138,16 @@ private const val TODAY_SECTIONS = 6
 
 /** Present only while the device isn't enrolled for sync. */
 data class ConnectHook(val defaultUrl: String, val connect: suspend (url: String, code: String) -> String?)
+
+/** The commands every task list (Today, Needs you) offers, wired to [core]. Selection is owned by the caller. */
+internal fun todayActions(core: MekaCore, scope: CoroutineScope, selected: () -> String?, setSelected: (String?) -> Unit) = TodayActions(
+    add = { title -> scope.launch { runCatching { core.addTask(title) } } },
+    complete = { id -> scope.launch { core.complete(id); if (selected() == id) setSelected(null) } },
+    select = { id -> setSelected(id) },
+    rename = { id, t -> scope.launch { runCatching { core.rename(id, t) } } },
+    delete = { id -> scope.launch { core.delete(id); setSelected(null) } },
+    resolve = { c, v -> scope.launch { core.resolve(c, v) } },
+)
 
 data class TodayActions(
     val add: (String) -> Unit,
@@ -245,7 +249,7 @@ private fun SyncLine(sync: SyncStatus) {
 }
 
 @Composable
-private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(text.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = modifier.padding(bottom = MekaSpace.xxs))
 }
 
@@ -281,7 +285,7 @@ private fun UpNextCard(t: Task, actions: TodayActions, modifier: Modifier) {
 }
 
 @Composable
-private fun TaskRow(t: Task, actions: TodayActions, reason: NeedsYouReason? = null, modifier: Modifier = Modifier) {
+internal fun TaskRow(t: Task, actions: TodayActions, reason: NeedsYouReason? = null, modifier: Modifier = Modifier) {
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable { actions.select(t.id) }.padding(vertical = MekaSpace.s),
         verticalAlignment = Alignment.CenterVertically,
@@ -360,7 +364,7 @@ private fun QuickCapture(onAdd: (String) -> Unit) {
 }
 
 @Composable
-private fun DetailPane(task: Task?, conflicts: List<ConflictChoice>, actions: TodayActions, modifier: Modifier, onClose: (() -> Unit)? = null) {
+internal fun DetailPane(task: Task?, conflicts: List<ConflictChoice>, actions: TodayActions, modifier: Modifier, onClose: (() -> Unit)? = null) {
     Column(modifier.padding(MekaSpace.gutter)) {
         if (onClose != null) {
             Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
