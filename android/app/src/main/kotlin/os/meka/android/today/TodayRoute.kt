@@ -168,6 +168,12 @@ private fun TodayPane(
                                     .clickable(role = Role.Button) { openCalendars() }.padding(vertical = MekaSpace.xxs),
                             )
                         }
+                        val theme = Meka.theme
+                        Text(
+                            "Theme: ${theme.choice.label}", style = MekaType.caption, color = Meka.colors.textSecondary,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { theme.set(theme.choice.next()) }.padding(vertical = MekaSpace.xxs),
+                        )
                     }
                 }
             }

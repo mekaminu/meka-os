@@ -108,4 +108,7 @@ object MekaMotion {
     fun <T> appear(reducedMotion: Boolean): FiniteAnimationSpec<T> =
         if (reducedMotion) tween(120) else spring(dampingRatio = 0.9f, stiffness = 350f)
     const val appearDurationMs = 220
+    fun <T> themeBlend(reducedMotion: Boolean): FiniteAnimationSpec<T> =
+        if (reducedMotion) tween(0) else spring(dampingRatio = 1f, stiffness = 200f)
+    const val themeBlendDurationMs = 450
 }

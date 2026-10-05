@@ -5,6 +5,8 @@ import SwiftUI
 struct TodayView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
+    @AppStorage(MekaAppearance.key) private var appearance = MekaAppearance.dark.rawValue
+    private var currentAppearance: MekaAppearance { MekaAppearance(rawValue: appearance) ?? .dark }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
@@ -41,6 +43,8 @@ struct TodayView: View {
                         if model.isConnected && !model.signedOut {
                             Button("Calendars") { model.showCalendars = true }
                         }
+                        Button("Theme: \(currentAppearance.label)") { appearance = currentAppearance.next.rawValue }
+                            .foregroundStyle(palette.textSecondary)
                     }
                     .buttonStyle(.plain)
                     .font(MekaType.caption)

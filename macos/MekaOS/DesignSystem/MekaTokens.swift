@@ -96,4 +96,5 @@ enum MekaMotion {
     static func approve(reduced: Bool) -> Animation { reduced ? .easeOut(duration: 0.100) : .spring(response: 0.281, dampingFraction: 0.7) }
     static func syncPulse(reduced: Bool) -> Animation { reduced ? .easeOut(duration: 0.000) : .spring(response: 0.574, dampingFraction: 1) }
     static func appear(reduced: Bool) -> Animation { reduced ? .easeOut(duration: 0.120) : .spring(response: 0.336, dampingFraction: 0.9) }
+    static func themeBlend(reduced: Bool) -> Animation { reduced ? .easeOut(duration: 0.000) : .spring(response: 0.444, dampingFraction: 1) }
 }
