@@ -84,6 +84,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.NeedsYouReason
 import os.meka.core.domain.RepeatChoice
+import os.meka.core.domain.MorningBriefView
 import os.meka.core.domain.ShutdownView
 import os.meka.core.domain.SomedayKind
 import os.meka.core.domain.Task
@@ -117,9 +118,11 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
     var showPlan by rememberSaveable { mutableStateOf(false) }
     var showWork by rememberSaveable { mutableStateOf(false) }
     var showShutdown by rememberSaveable { mutableStateOf(false) }
+    var showBrief by rememberSaveable { mutableStateOf(false) }
     var showNotifications by rememberSaveable { mutableStateOf(false) }
     val work by core.workMode.collectAsState()
     val shutdown by core.shutdownView.collectAsState()
+    val brief by core.briefView.collectAsState()
     // Tasks Plan Apply is sending into Today: their rows hide while the plan is up, then catch the flying titles.
     var landing by remember { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(landing, showPlan) {
@@ -161,7 +164,8 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
                 list = { m ->
                     TodayPane(today, sync, actions, m, connect, openCalendars, openPlan, !introPlayed, rowMotion,
                         workLabel = if (work.atWork) "At work" else "Off work", openWork = { showWork = true },
-                        shutdown = shutdown, openShutdown = { showShutdown = true }, openNotifications = { showNotifications = true })
+                        shutdown = shutdown, openShutdown = { showShutdown = true }, openNotifications = { showNotifications = true },
+                        brief = brief, openBrief = { showBrief = true })
                 },
                 detail = { m -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, m) },
             )
@@ -179,6 +183,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
             MekaPane(visible = showCalendars) { CalendarsPane(core, onClose = { showCalendars = false }) }
             MekaPane(visible = showWork) { WorkPane(core, onClose = { showWork = false }) }
             MekaPane(visible = showShutdown) { ShutdownPane(core, onClose = { showShutdown = false }) }
+            MekaPane(visible = showBrief) { BriefPane(core, onClose = { showBrief = false }) }
             MekaPane(visible = showNotifications) { NotificationsPane(core, onClose = { showNotifications = false }) }
         }
     }
@@ -264,6 +269,7 @@ private fun TodayPane(
     today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?, openCalendars: (() -> Unit)?,
     openPlan: () -> Unit, play: Boolean, rowMotion: (String) -> RowMotion, workLabel: String, openWork: () -> Unit,
     shutdown: ShutdownView, openShutdown: () -> Unit, openNotifications: () -> Unit,
+    brief: MorningBriefView, openBrief: () -> Unit,
 ) {
     Column(modifier.imePadding()) {
         LazyColumn(
@@ -298,6 +304,11 @@ private fun TodayPane(
                                 .clickable(role = Role.Button) { openWork() }.padding(vertical = MekaSpace.xxs),
                         )
                         Text(
+                            "Brief", style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { openBrief() }.padding(vertical = MekaSpace.xxs),
+                        )
+                        Text(
                             "Shut down", style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                                 .clickable(role = Role.Button) { openShutdown() }.padding(vertical = MekaSpace.xxs),
@@ -314,6 +325,12 @@ private fun TodayPane(
                                 .clickable(role = Role.Button) { theme.set(theme.choice.next()) }.padding(vertical = MekaSpace.xxs),
                         )
                     }
+                }
+            }
+            // Morning brief: the card rises in when the morning starts and goes at noon or once read.
+            if (brief.offered) {
+                item(key = "brief") {
+                    BriefCard(brief, openBrief, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
                 }
             }
             // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.

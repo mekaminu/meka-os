@@ -33,7 +33,7 @@ import os.meka.core.domain.NoticeTier
 /**
  * Posts what the shared notification governor (core `Governor`) says, on one channel per tier, and wakes itself with
  * an inexact alarm for the next thing (ADR-007: `setWindow`, no exact-alarm permission). Runs when what MEKA knows
- * changes (lists, fasting, the shutdown, Today, the settings), on that alarm, and after a reboot or an update.
+ * changes (lists, fasting, the shutdown, the morning brief, Today, the settings), on that alarm, and after a reboot or an update.
  *
  * What has been posted is kept on this phone only, so each notice posts once here.
  */
@@ -140,7 +140,7 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
             val (name, importance, about) = when (tier) {
                 NoticeTier.CRITICAL -> Triple("Critical", NotificationManager.IMPORTANCE_HIGH, "Rare: things that can't wait, even in quiet hours.")
                 NoticeTier.ACTION -> Triple("Needs a decision", NotificationManager.IMPORTANCE_HIGH, "Approvals and choices only you can make; held during quiet hours.")
-                NoticeTier.HEADS_UP -> Triple("Heads-ups", NotificationManager.IMPORTANCE_DEFAULT, "Cancel-by dates, your fasting goal and the evening shutdown.")
+                NoticeTier.HEADS_UP -> Triple("Heads-ups", NotificationManager.IMPORTANCE_DEFAULT, "Cancel-by dates, your fasting goal, the morning brief and the evening shutdown.")
                 else -> Triple("Digests", NotificationManager.IMPORTANCE_LOW, "The midday and evening round-up of what's due.")
             }
             nm.createNotificationChannel(NotificationChannel(id, name, importance).apply { description = about })

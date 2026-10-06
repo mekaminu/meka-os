@@ -134,7 +134,7 @@ private struct LeftRow: View {
 }
 
 /// One line of tomorrow: time on the left (empty for a task with no time), title and detail on the right.
-private struct TomorrowLine: View {
+struct TomorrowLine: View {
     let row: TomorrowRow
     let palette: MekaPalette
 

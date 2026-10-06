@@ -193,7 +193,7 @@ private fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
 }
 
 @Composable
-private fun TomorrowLine(r: TomorrowRow, modifier: Modifier) {
+internal fun TomorrowLine(r: TomorrowRow, modifier: Modifier) {
     Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
         Text(r.time ?: "", style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.width(92.dp))
         Column(Modifier.weight(1f)) {

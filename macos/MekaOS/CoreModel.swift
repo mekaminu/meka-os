@@ -22,6 +22,9 @@ final class CoreModel {
     /// Evening shutdown: done today, left from today, tomorrow at a glance. Synced with the Fold.
     private(set) var shutdown: ShutdownView?
     var showShutdown = false
+    /// Morning brief: today at a glance, waiting on, what needs you on your lists. "Got it" syncs with the Fold.
+    private(set) var brief: MorningBriefView?
+    var showBrief = false
     /// Quiet hours, digest times and tiers (notification governor), synced with the Fold.
     private(set) var notifySettings: NotificationSettings?
     /// "Quiet until 07:00", "Next digest 18:00 · 3 things so far".
@@ -94,6 +97,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await s in core.shutdownView { self?.shutdown = s }
+        })
+        observers.append(Task { [weak self] in
+            for await b in core.briefView { self?.brief = b }
         })
         observers.append(Task { [weak self] in
             for await s in core.notificationSettings { self?.notifySettings = s }
@@ -378,6 +384,14 @@ final class CoreModel {
     func shutDown() async {
         guard let core else { return }
         do { try await core.shutDown() } catch { lastError = error.localizedDescription }
+    }
+
+    // MARK: Morning brief
+
+    /// "Got it": the card is put away on the Fold too, until tomorrow morning.
+    func briefSeen() async {
+        guard let core else { return }
+        do { try await core.briefSeen() } catch { lastError = error.localizedDescription }
     }
 
     // MARK: Goals and habits

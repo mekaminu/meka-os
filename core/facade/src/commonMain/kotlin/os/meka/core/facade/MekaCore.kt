@@ -32,6 +32,8 @@ import os.meka.core.domain.RenewalRepeat
 import os.meka.core.domain.Renewals
 import os.meka.core.domain.DayWindow
 import os.meka.core.domain.EveningShutdown
+import os.meka.core.domain.MorningBrief
+import os.meka.core.domain.MorningBriefView
 import os.meka.core.domain.ShutdownView
 import os.meka.core.domain.Fasting
 import os.meka.core.domain.FastingView
@@ -112,6 +114,7 @@ class MekaCore(
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shutdown = EveningShutdown(replica, tasks, nowMs, ZoneCalendar(timeZone))
+    private val brief = MorningBrief(replica, nowMs, ZoneCalendar(timeZone))
     private val notifyPrefs = NotificationPrefs(replica)
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
@@ -137,6 +140,13 @@ class MekaCore(
     private val _shutdown = MutableStateFlow(ShutdownView.EMPTY)
     /** Evening shutdown: what got done, what's left from today, tomorrow at a glance. Synced; moves with the clock. */
     val shutdownView: StateFlow<ShutdownView> = _shutdown.asStateFlow()
+
+    private val _brief = MutableStateFlow(MorningBriefView.EMPTY)
+    /**
+     * Morning brief: today at a glance, what you're waiting on, what needs you on your lists, habits and a running
+     * fast. Offered from the end of quiet hours until noon; synced "Got it". Moves with the clock.
+     */
+    val briefView: StateFlow<MorningBriefView> = _brief.asStateFlow()
 
     private val _workMode = MutableStateFlow(work.state(localClock()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
@@ -325,6 +335,11 @@ class MekaCore(
     /** Calls it a day: the shutdown card is put away on every device until tomorrow evening. */
     suspend fun shutDown() = onCore { shutdown.shutDown() }
 
+    // ---- Morning brief ----
+
+    /** "Got it": the brief's card is put away on every device until tomorrow morning. */
+    suspend fun briefSeen() = onCore { brief.markSeen() }
+
     // ---- Notification governor ----
 
     /** Quiet hours as local minutes of the day; an end before the start crosses midnight. */
@@ -471,6 +486,7 @@ class MekaCore(
         _shutdown.value = shutdown.view(all, events.all(), workState.schedule, workState.atWork, today, dayWindow(today.endMs))
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
+        _brief.value = brief.view(all, events.all(), workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today)
         _notifyPreview.value = Governor.preview(currentNotices(), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(
@@ -484,7 +500,7 @@ class MekaCore(
 
     /** Notices from the views as they stand (call after [refresh]). */
     private fun currentNotices() =
-        NoticeSources.collect(_lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone))
+        NoticeSources.collect(_lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value)
 
     private fun project(all: List<os.meka.core.domain.Task> = tasks.all()): Today {
         val now = nowMs()

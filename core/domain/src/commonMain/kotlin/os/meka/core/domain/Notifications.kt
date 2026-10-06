@@ -38,6 +38,7 @@ enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS }
 enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     RENEWAL_CANCEL_BY("Cancel-by dates", NoticeTier.HEADS_UP),
     FAST_GOAL("Fasting goal reached", NoticeTier.HEADS_UP),
+    BRIEF("Morning brief", NoticeTier.HEADS_UP),
     SHUTDOWN("Time to shut down the day", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
@@ -356,6 +357,7 @@ object Governor {
     private fun countLine(s: NoticeSource, n: Int): String = when (s) {
         NoticeSource.RENEWAL_CANCEL_BY -> "$n to cancel or keep"
         NoticeSource.FAST_GOAL -> "fasting goal reached"
+        NoticeSource.BRIEF -> "your morning brief"
         NoticeSource.SHUTDOWN -> "time to shut down"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
@@ -381,6 +383,7 @@ object NoticeSources {
         today: Today,
         nowMs: Long,
         cal: LocalCalendar,
+        brief: MorningBriefView = MorningBriefView.EMPTY,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -435,6 +438,15 @@ object NoticeSources {
                 key = "shutdown:$day", source = NoticeSource.SHUTDOWN, tier = NoticeTier.HEADS_UP,
                 title = "Shut down the day", text = shutdown.cardLine,
                 atMs = shutdownAt, target = NoticeTarget.TODAY, expiresAtMs = cal.toEpochMs(day + 1, 0),
+            )
+        }
+        // The morning brief: a heads-up when it starts (the end of quiet hours), until noon or until it's read.
+        if (brief.dateLabel.isNotEmpty() && !brief.seenToday && cal.minuteOfDay(nowMs) < BriefRules.END_MIN) {
+            out += Notice(
+                key = "brief:$day", source = NoticeSource.BRIEF, tier = NoticeTier.HEADS_UP,
+                title = "Morning brief", text = brief.cardLine,
+                atMs = cal.toEpochMs(day, brief.startMinute), target = NoticeTarget.TODAY,
+                expiresAtMs = cal.toEpochMs(day, BriefRules.END_MIN),
             )
         }
         return out

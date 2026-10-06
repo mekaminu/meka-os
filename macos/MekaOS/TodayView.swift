@@ -33,6 +33,7 @@ struct TodayView: View {
         .sheet(isPresented: $model.showPlan) { PlanSheet(palette: palette) }
         .sheet(isPresented: $model.showWork) { WorkSheet(palette: palette) }
         .sheet(isPresented: $model.showShutdown) { ShutdownSheet(palette: palette) }
+        .sheet(isPresented: $model.showBrief) { BriefSheet(palette: palette) }
         .sheet(isPresented: $model.showNotifications) { NotificationsSheet(palette: palette) }
     }
 
@@ -56,6 +57,7 @@ struct TodayView: View {
                             Button("Calendars") { model.showCalendars = true }
                         }
                         Button(model.work?.atWork == true ? "At work" : "Off work") { model.showWork = true }
+                        Button("Brief") { model.showBrief = true }
                         Button("Shut down") { model.showShutdown = true }
                         Button("Notifications") { model.showNotifications = true }
                         Button("Theme: \(currentAppearance.label)") { appearance = currentAppearance.next.rawValue }
@@ -70,6 +72,14 @@ struct TodayView: View {
                             .transition(.opacity)
                     }
                     Spacer().frame(height: MekaSpace.l)
+
+                    // Morning brief: the card rises in when the morning starts and goes at noon or once read.
+                    if let b = model.brief, b.offered {
+                        BriefCard(brief: b, palette: palette)
+                            .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
+                            .padding(.bottom, MekaSpace.l)
+                            .staggeredAppear(1, play: play)
+                    }
 
                     // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.
                     if let s = model.shutdown {
@@ -132,6 +142,7 @@ struct TodayView: View {
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.allTasks.map(\.id))
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.upNext?.id)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.shutdown?.offered)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: model.brief?.offered)
             }
             .task {
                 guard !introPlayed else { return }

@@ -133,6 +133,25 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(core.shutdownView.value.offered)
     }
 
+    func testMorningBriefThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "brief-\(UUID().uuidString).db", deviceKey: nil
+        )
+        _ = try await core.addTask(title: "Post the letter")
+        _ = try await core.addWaiting(title: "Deposit back", who: "Landlord", chaseInDays: KotlinInt(int: 0))
+        try await core.tick()
+        let v = core.briefView.value
+        XCTAssertEqual(v.day.map(\.title), ["Post the letter"])
+        XCTAssertEqual(v.waitingLine, "Waiting on 1 thing · 1 to chase today")
+        XCTAssertEqual(v.waiting.first?.state, .due)
+        XCTAssertFalse(v.seenToday)
+        try await core.briefSeen()
+        XCTAssertTrue(core.briefView.value.seenToday)
+        XCTAssertFalse(core.briefView.value.offered)
+    }
+
     func testNotificationGovernorThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

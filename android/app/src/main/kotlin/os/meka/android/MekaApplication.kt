@@ -78,7 +78,7 @@ class MekaApplication : Application() {
         // sync is one evaluation), and once at process start, which re-arms its alarm. Time is its own alarm.
         appScope.launch {
             merge(
-                core.listsView.map { }, core.fastingView.map { }, core.shutdownView.map { }, core.today.map { },
+                core.listsView.map { }, core.fastingView.map { }, core.shutdownView.map { }, core.briefView.map { }, core.today.map { },
                 core.notificationSettings.map { }, governor.device.map { },
             ).debounce(GOVERNOR_SETTLE_MS).collect { runCatching { governor.run() } }
         }

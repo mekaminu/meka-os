@@ -277,6 +277,33 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theMorningBriefShowsTheDayAndGotItPutsItAwayOnTheOtherDevice() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 7, 45).toInstant(london).toEpochMilliseconds() // a Tuesday
+        val a = core("android"); val m = core("mac")
+        a.addTask("Post the letter")
+        a.addWaiting("Deposit back", "Landlord", 0)
+        a.tick()
+        val v = a.briefView.value
+        assertTrue(v.offered)
+        assertEquals("Good morning", v.greeting)
+        assertEquals("Tue 22 Sep", v.dateLabel)
+        assertEquals("Work 09:00–17:30", v.workLine)
+        assertEquals(listOf("Post the letter"), v.day.map { it.title })
+        assertEquals("Waiting on 1 thing · 1 to chase today", v.waitingLine)
+        assertEquals("1 task · 1 to chase", v.cardLine)
+        val posted = a.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        assertEquals(listOf("Morning brief"), posted.post.map { it.title })
+
+        a.briefSeen()
+        assertTrue(a.briefView.value.seenToday)
+        assertTrue(!a.briefView.value.offered)
+        a.syncNow(); m.syncNow()
+        assertTrue(m.briefView.value.seenToday)
+        assertTrue(!m.briefView.value.offered)
+    }
+
+    @Test
     fun theMiddayDigestSumsUpWhatsDueOnceAndSettingsSync() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 11, 0).toInstant(london).toEpochMilliseconds()
