@@ -32,6 +32,7 @@ struct TodayView: View {
         .sheet(isPresented: $model.showCalendars) { CalendarsSheet(palette: palette) }
         .sheet(isPresented: $model.showPlan) { PlanSheet(palette: palette) }
         .sheet(isPresented: $model.showWork) { WorkSheet(palette: palette) }
+        .sheet(isPresented: $model.showShutdown) { ShutdownSheet(palette: palette) }
     }
 
     private var todayColumn: some View {
@@ -54,6 +55,7 @@ struct TodayView: View {
                             Button("Calendars") { model.showCalendars = true }
                         }
                         Button(model.work?.atWork == true ? "At work" : "Off work") { model.showWork = true }
+                        Button("Shut down") { model.showShutdown = true }
                         Button("Theme: \(currentAppearance.label)") { appearance = currentAppearance.next.rawValue }
                             .foregroundStyle(palette.textSecondary)
                     }
@@ -66,6 +68,22 @@ struct TodayView: View {
                             .transition(.opacity)
                     }
                     Spacer().frame(height: MekaSpace.l)
+
+                    // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.
+                    if let s = model.shutdown {
+                        if s.offered {
+                            ShutdownCard(shutdown: s, palette: palette)
+                                .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
+                                .padding(.bottom, MekaSpace.l)
+                                .staggeredAppear(1, play: play)
+                        } else if let done = s.doneLine {
+                            Button("\(done) · Tomorrow: \(s.tomorrow.summary)") { model.showShutdown = true }
+                                .buttonStyle(.plain)
+                                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                .padding(.bottom, MekaSpace.l)
+                                .transition(.opacity)
+                        }
+                    }
 
                     if let today = model.today {
                         if today.isClear {
@@ -111,6 +129,7 @@ struct TodayView: View {
                 // Replan / complete motion: rows glide to new positions instead of redrawing.
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.allTasks.map(\.id))
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.upNext?.id)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: model.shutdown?.offered)
             }
             .task {
                 guard !introPlayed else { return }
@@ -393,8 +412,8 @@ private struct UpNextCard: View {
     }
 }
 
-/// Completion motion: ring fills → check → row leaves (brief §3).
-private struct CompleteButton: View {
+/// Completion motion: ring fills → check → row leaves (brief §3). Also used by the evening shutdown.
+struct CompleteButton: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let task: MekaTask

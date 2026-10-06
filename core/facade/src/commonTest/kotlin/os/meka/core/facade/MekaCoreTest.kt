@@ -230,4 +230,28 @@ class MekaCoreTest {
         assertTrue(a.fastingView.value.last != null)
         assertTrue(a.fastingView.value.weekLine != null)
     }
+
+    @Test
+    fun theShutdownCarriesWhatsLeftToTomorrowAndIsPutAwayOnTheOtherDevice() = runTest {
+        val a = core("android"); val m = core("mac")
+        a.addTask("Post the letter")
+        val done = a.addTask("Call the garage")
+        a.complete(done)
+        val v = a.shutdownView.value
+        assertEquals(listOf("Post the letter"), v.left.map { it.task.title })
+        assertEquals(1, v.doneCount)
+        assertTrue(v.tomorrow.label.startsWith("Tomorrow · "))
+
+        a.carryAllToTomorrow()
+        assertTrue(a.shutdownView.value.left.isEmpty())
+        assertEquals(listOf("Post the letter"), a.shutdownView.value.tomorrow.rows.map { it.title })
+        assertTrue(a.today.value.isClear)
+
+        a.shutDown()
+        assertTrue(a.shutdownView.value.doneToday)
+        assertTrue(!a.shutdownView.value.offered)
+        a.syncNow(); m.syncNow()
+        assertTrue(m.shutdownView.value.doneToday)
+        assertEquals(listOf("Post the letter"), m.shutdownView.value.tomorrow.rows.map { it.title })
+    }
 }

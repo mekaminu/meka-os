@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,6 +83,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.NeedsYouReason
 import os.meka.core.domain.RepeatChoice
+import os.meka.core.domain.ShutdownView
 import os.meka.core.domain.SomedayKind
 import os.meka.core.domain.Task
 import os.meka.core.domain.Today
@@ -113,7 +115,9 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
     var showCalendars by rememberSaveable { mutableStateOf(false) }
     var showPlan by rememberSaveable { mutableStateOf(false) }
     var showWork by rememberSaveable { mutableStateOf(false) }
+    var showShutdown by rememberSaveable { mutableStateOf(false) }
     val work by core.workMode.collectAsState()
+    val shutdown by core.shutdownView.collectAsState()
     // Tasks Plan Apply is sending into Today: their rows hide while the plan is up, then catch the flying titles.
     var landing by remember { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(landing, showPlan) {
@@ -154,7 +158,8 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
                 twoPane,
                 list = { m ->
                     TodayPane(today, sync, actions, m, connect, openCalendars, openPlan, !introPlayed, rowMotion,
-                        workLabel = if (work.atWork) "At work" else "Off work", openWork = { showWork = true })
+                        workLabel = if (work.atWork) "At work" else "Off work", openWork = { showWork = true },
+                        shutdown = shutdown, openShutdown = { showShutdown = true })
                 },
                 detail = { m -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, m) },
             )
@@ -171,6 +176,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
             }
             MekaPane(visible = showCalendars) { CalendarsPane(core, onClose = { showCalendars = false }) }
             MekaPane(visible = showWork) { WorkPane(core, onClose = { showWork = false }) }
+            MekaPane(visible = showShutdown) { ShutdownPane(core, onClose = { showShutdown = false }) }
         }
     }
 }
@@ -254,6 +260,7 @@ data class TodayActions(
 private fun TodayPane(
     today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?, openCalendars: (() -> Unit)?,
     openPlan: () -> Unit, play: Boolean, rowMotion: (String) -> RowMotion, workLabel: String, openWork: () -> Unit,
+    shutdown: ShutdownView, openShutdown: () -> Unit,
 ) {
     Column(modifier.imePadding()) {
         LazyColumn(
@@ -266,7 +273,10 @@ private fun TodayPane(
                     Text(greeting(), style = MekaType.greeting, color = Meka.colors.textPrimary)
                     SyncLine(sync)
                     if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs))
-                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), modifier = Modifier.padding(top = MekaSpace.xs)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+                        modifier = Modifier.padding(top = MekaSpace.xs).horizontalScroll(rememberScrollState()),
+                    ) {
                         Text(
                             "Plan my day", style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
@@ -284,6 +294,11 @@ private fun TodayPane(
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                                 .clickable(role = Role.Button) { openWork() }.padding(vertical = MekaSpace.xxs),
                         )
+                        Text(
+                            "Shut down", style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { openShutdown() }.padding(vertical = MekaSpace.xxs),
+                        )
                         val theme = Meka.theme
                         Text(
                             "Theme: ${theme.choice.label}", style = MekaType.caption, color = Meka.colors.textSecondary,
@@ -291,6 +306,21 @@ private fun TodayPane(
                                 .clickable(role = Role.Button) { theme.set(theme.choice.next()) }.padding(vertical = MekaSpace.xxs),
                         )
                     }
+                }
+            }
+            // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.
+            if (shutdown.offered) {
+                item(key = "shutdown") {
+                    ShutdownCard(shutdown, openShutdown, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
+                }
+            } else if (shutdown.doneLine != null) {
+                item(key = "shutdown-done") {
+                    Text(
+                        "${shutdown.doneLine} · Tomorrow: ${shutdown.tomorrow.summary}",
+                        style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play))
+                            .clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { openShutdown() },
+                    )
                 }
             }
             if (today.isClear) {
@@ -418,7 +448,7 @@ internal fun TaskRow(t: Task, actions: TodayActions, reason: NeedsYouReason? = n
 
 /** Completion motion (brief §3): ring fills → check → row compresses and leaves via animateItem. */
 @Composable
-private fun CompleteButton(t: Task, onComplete: (String) -> Unit) {
+internal fun CompleteButton(t: Task, onComplete: (String) -> Unit) {
     var pressed by remember(t.id) { mutableStateOf(false) }
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion

@@ -19,6 +19,9 @@ final class CoreModel {
     private(set) var goals: GoalsView?
     /// The running fast, the eating window and the last seven days. Synced with the Fold.
     private(set) var fasting: FastingView?
+    /// Evening shutdown: done today, left from today, tomorrow at a glance. Synced with the Fold.
+    private(set) var shutdown: ShutdownView?
+    var showShutdown = false
     var showWork = false
     var selectedID: String?
     /// The shell's current destination and which way the last switch moved (for the push transition).
@@ -79,6 +82,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await f in core.fastingView { self?.fasting = f }
+        })
+        observers.append(Task { [weak self] in
+            for await s in core.shutdownView { self?.shutdown = s }
         })
         // Work mode and Today move with the clock: re-evaluate every half minute.
         observers.append(Task {
@@ -255,6 +261,24 @@ final class CoreModel {
     func moveFastStart(_ minutes: Int32) { run { try await $0.moveFastStart(deltaMinutes: minutes) } }
     func discardFast() { run { try await $0.discardFast() } }
     func chooseFastingPlan(_ index: Int) { run { try await $0.chooseFastingPlan(index: Int32(index)) } }
+
+    // MARK: Evening shutdown
+
+    /// Carries one item over to tomorrow (the same "Tomorrow" as in the task detail).
+    func carryOver(_ id: String) {
+        if selectedID == id { selectedID = nil }
+        MekaHaptics.tick()
+        run { try await $0.carryOver(taskId: id) }
+    }
+
+    /// "Move the rest to tomorrow".
+    func carryAllToTomorrow() { MekaHaptics.tick(); run { try await $0.carryAllToTomorrow() } }
+
+    /// Calls it a day; the card is put away on the Fold too.
+    func shutDown() async {
+        guard let core else { return }
+        do { try await core.shutDown() } catch { lastError = error.localizedDescription }
+    }
 
     // MARK: Goals and habits
 

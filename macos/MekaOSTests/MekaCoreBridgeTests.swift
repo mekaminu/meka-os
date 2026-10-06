@@ -89,4 +89,26 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(core.fastingView.value.last?.canResume, true)
         XCTAssertEqual(core.fastingView.value.week.count, 7)
     }
+
+    func testShutdownThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "shutdown-\(UUID().uuidString).db", deviceKey: nil
+        )
+        _ = try await core.addTask(title: "Post the letter")
+        let id = try await core.addTask(title: "Call the garage")
+        try await core.complete(taskId: id)
+        var v = core.shutdownView.value
+        XCTAssertEqual(v.left.map { $0.task.title }, ["Post the letter"])
+        XCTAssertEqual(v.doneCount, 1)
+        XCTAssertTrue(v.left.first?.canSomeday == true)
+        try await core.carryAllToTomorrow()
+        v = core.shutdownView.value
+        XCTAssertTrue(v.left.isEmpty)
+        XCTAssertEqual(v.tomorrow.rows.map(\.title), ["Post the letter"])
+        try await core.shutDown()
+        XCTAssertTrue(core.shutdownView.value.doneToday)
+        XCTAssertFalse(core.shutdownView.value.offered)
+    }
 }

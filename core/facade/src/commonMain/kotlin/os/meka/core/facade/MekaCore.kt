@@ -28,6 +28,8 @@ import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DayPlanner
 import os.meka.core.domain.QuickCapture
 import os.meka.core.domain.DayWindow
+import os.meka.core.domain.EveningShutdown
+import os.meka.core.domain.ShutdownView
 import os.meka.core.domain.Fasting
 import os.meka.core.domain.FastingView
 import os.meka.core.domain.IdGenerator
@@ -94,6 +96,7 @@ class MekaCore(
     private val lists = os.meka.core.domain.Lists(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val shutdown = EveningShutdown(replica, tasks, nowMs, ZoneCalendar(timeZone))
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
 
@@ -111,6 +114,10 @@ class MekaCore(
     private val _fasting = MutableStateFlow(FastingView.EMPTY)
     /** The running fast, the eating window and the last seven days. Synced; moves with the clock. */
     val fastingView: StateFlow<FastingView> = _fasting.asStateFlow()
+
+    private val _shutdown = MutableStateFlow(ShutdownView.EMPTY)
+    /** Evening shutdown: what got done, what's left from today, tomorrow at a glance. Synced; moves with the clock. */
+    val shutdownView: StateFlow<ShutdownView> = _shutdown.asStateFlow()
 
     private val _workMode = MutableStateFlow(work.state(localClock()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
@@ -257,6 +264,15 @@ class MekaCore(
     /** Picks a plan from [os.meka.core.domain.FastingRules.PLAN_CHOICES] (goal and eating window). */
     suspend fun chooseFastingPlan(index: Int) = onCore { fasting.choosePlan(index) }
 
+    // ---- Evening shutdown ----
+
+    /** Carries one item over to tomorrow (the same "Tomorrow" as in the task detail). */
+    suspend fun carryOver(taskId: String) = onCore { tasks.snoozeOccurrence(taskId, 1) }
+    /** "Move the rest to tomorrow": everything still left from today waits for tomorrow. */
+    suspend fun carryAllToTomorrow() = onCore { shutdown.carryAllToTomorrow(dayWindow(nowMs())); Unit }
+    /** Calls it a day: the shutdown card is put away on every device until tomorrow evening. */
+    suspend fun shutDown() = onCore { shutdown.shutDown() }
+
     // ---- Work mode ----
 
     /** The Work switch. Choosing what the schedule already says returns to the schedule. */
@@ -377,7 +393,10 @@ class MekaCore(
         _lists.value = lists.view(all)
         _goals.value = goals.view(all)
         _fasting.value = fasting.view()
-        _workMode.value = work.state(localClock())
+        val workState = work.state(localClock())
+        _workMode.value = workState
+        val today = dayWindow(nowMs())
+        _shutdown.value = shutdown.view(all, events.all(), workState.schedule, workState.atWork, today, dayWindow(today.endMs))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(
                 taskId = c.key.entityId,
