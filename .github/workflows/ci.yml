@@ -69,7 +69,7 @@ jobs:
 
   macos:
     # macOS minutes cost ~10x Linux and used up the free allowance in five days (2026-10-05): weekly and manual only
-    # (ADR-011). Mac-touching changes are proven by a manual run (workflow_dispatch) before the item is marked done.
+    # (ADR-011). Build runs dispatch it once a night when the day's commits touched Mac or core code (build plan rule 10).
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: macos-26
     timeout-minutes: 45

@@ -24,12 +24,14 @@ Status marks: `[x]` done · `[~]` in progress (partly landed) · `[ ]` not start
 7. **Both apps.** A feature is done when it works on the Fold and the Mac (Mac may use a simpler layout).
 8. **Dark is the default theme**; every screen must look right in Dark and Light.
 9. **Commit messages** start with the milestone (`M1:`, `V1:`, `V2:`). Update this file in the same commit.
-10. **Actions minutes are free and finite** (2,000 standard minutes a month on the free plan, no spending budget). The
-    `macos` job runs weekly and on manual dispatch only; docs-only commits don't trigger CI. Land at most **3 code
-    pushes to `main` per UTC day** (check the day's `ci` runs first; if 3 already ran, stop with "Daily CI allowance
-    used."), and don't chain the next run with fire_trigger. A run that touched Mac code dispatches `ci` manually once
-    (workflow_dispatch) when it lands. If CI jobs sit queued with no runner, the monthly allowance is used up: stop
-    without pushing code; the allowance resets on the 1st.
+10. **Actions minutes are finite** (2,000 free standard minutes a month, then Meka's $10/month budget, which stops at
+    the limit). Docs-only commits don't trigger CI. Land at most **8 code pushes to `main` per UTC day** (count the day's
+    `ci` runs with event `push` first; if 8 already ran, stop with "Daily CI allowance used."), and don't chain the next
+    run with fire_trigger. The `macos` job (about 10x the cost of Linux) runs weekly and on manual dispatch only, and
+    build runs dispatch it **at most once a day, at night**: the first run at or after 21:00 UTC dispatches `ci` once if any
+    commit since the last green dispatched/scheduled `ci` run touched `macos/`, `core/` or the build files. A Mac-touching
+    item can be marked done before then ("Mac checked nightly"); if the nightly run is red, the next run fixes it first.
+    If CI jobs sit queued with no runner, the allowance is used up: stop without pushing code; it resets on the 1st.
 11. **Stop rule.** If something can't be undone and could reasonably go either way, don't do it: write it under
     "Needs Meka" and move on.
 
@@ -127,5 +129,5 @@ Things only the owner can do. Build runs skip these and carry on with the rest.
 5. **Kestrel change:** OK to add an "approval request" event to Kestrel and let MEKA send back approve/decline.
 6. **Apple Developer Program** (paid yearly) for a notarised Mac app. Optional: dev builds keep working without it.
 7. **Install updates** on the Fold until the self-updating app lands (double-click Install on Fold).
-8. **Actions allowance** — resolved 2026-10-06: Meka added a $10/month Actions budget (stops at the limit). CI runs again; keep rules on macOS weekly/manual and max 3 code pushes a day so the budget lasts.
+8. **Actions allowance** — resolved 2026-10-06: Meka added a $10/month Actions budget (stops at the limit). Same day he raised the cap to 8 code pushes a day with the macOS check batched nightly (rule 10).
 9. **Call assistant:** OK to use a paid cloud phone service (a phone number plus per-minute charges and voice AI, likely a few pounds a month at light use) and to switch on your network's "forward when busy" to that number. Also the greeting wording.
