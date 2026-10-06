@@ -227,7 +227,8 @@ private fun AgendaList(entries: List<Entry>, list: LazyListState) {
         items(entries, key = { it.key }) { e ->
             // Sections stagger in 40 ms apart on first show; later rows just glide.
             val stagger = (e as? Entry.Header)?.index ?: -1
-            val m = Modifier.animateItem().let { if (stagger in 0..7) it.appear(rememberAppearance(3 + stagger)) else it }
+            val appearance = rememberAppearance(3 + stagger.coerceIn(0, 7), play = stagger in 0..7)
+            val m = Modifier.animateItem().appear(appearance)
             when (e) {
                 is Entry.Header -> SectionHeader(e.section, m)
                 is Entry.Chips -> AllDayChips(e.section.allDay, m.padding(start = os.meka.android.today.TIME_COLUMN))
