@@ -129,6 +129,7 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
 - [ ] Mac database encryption (spike S6); fix the Mac keychain prompts (no Apple-signed cert: use Secure Enclave-wrapped key files)
 - [!] Outlook calendar (code done; needs Microsoft registration — Needs Meka #1)
 - [ ] Clean-ups: orphan KMS key, restrict enrolment token after enrolment, ADR-004/005 updates
+  - *Seen 2026-10-06 (run 55):* `PostgresOpStoreTest.concurrentPushesGetGapFreeSequencesAndNoDuplicates` failed once with a Hikari connection timeout (`SQLTransientConnectionException` at the retry loop; Postgres logged "unexpected EOF on client connection with an open transaction") and passed on re-run; the commit didn't touch the backend. If it recurs, look for a connection held across the concurrent duplicate pushes in `PostgresOpStore` (pool of 8, 400 concurrent pushes).
 
 ### V1 · The assistant layer
 - [ ] "What MEKA did and why" activity log with undo (lands before any automatic action)
