@@ -75,6 +75,16 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
 | Calendar | Day pills slide between weeks (swipe on the Fold; ‹ › push on the Mac); the lit pill's colour blends across with a tick haptic; tapping a day scrolls the agenda to it; agenda sections stagger in 40 ms apart and rows glide as the day moves on; the now line's dot breathes. Reduced motion: jumps and week changes at once, cross-fades, steady dot |
 | Loading | Skeleton shimmer, never a spinner on its own |
 
+## Fix first (next run)
+
+- **Nightly Mac build red (run 65, 2026-10-06 23:17 UTC, commit 5a2f774).** Android, core/backend and infra green; only
+  `macos` fails to compile: `macos/MekaOS/CoreModel.swift:266:25: error: sending 'posted' risks causing data races` —
+  `posted` (`[Notice]`, a non-Sendable Kotlin type) comes back on the main actor from `MacNotifier.post` and is sent to
+  the `@concurrent` `core.notificationsPosted(posted:)`. The 5a2f774 fix moved MacNotifier to the main actor but didn't
+  cover this hop. Likely fix: `nonisolated(unsafe) let posted = await MacNotifier.post(result)` (or pass only what the
+  core needs, built in a nonisolated helper). The daily push cap was used, so it wasn't fixed tonight; push the fix,
+  then dispatch `ci` once to confirm the Mac (counts as that day's nightly dispatch).
+
 ## Milestones
 
 ### M0 · Foundation — done
