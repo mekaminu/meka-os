@@ -24,8 +24,30 @@ env:
   DEPLOY_ROLE_ARN: arn:aws:iam::494166749332:role/meka-os-github-deploy
 
 jobs:
-  deploy:
+  # App-only commits (android/, macos/, design/) don't change the server, so skip the 6-minute deploy for them.
+  changes:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      server: ${{ steps.diff.outputs.server }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+      - id: diff
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "server=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if git diff --name-only HEAD~1 HEAD | grep -qE '^(backend/|infra/|core/|gradle/|build\.gradle\.kts|settings\.gradle\.kts|gradle\.properties|\.github/workflows/deploy\.yml)'; then
+            echo "server=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "server=false" >> "$GITHUB_OUTPUT"; echo "::notice title=Deploy skipped::no server changes in this commit"
+          fi
+
+  deploy:
+    needs: changes
+    if: ${{ needs.changes.outputs.server == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -37,11 +59,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - uses: actions/setup-node@v4
         with: { node-version: "22" }
-      - name: OIDC claims (public fields only, for diagnosing trust)
-        run: |
-          TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | python3 -c "import json,sys;print(json.load(sys.stdin)['value'])")
-          CLAIMS=$(echo "$TOKEN" | cut -d. -f2 | python3 -c "import sys,base64,json;p=sys.stdin.read().strip();p+='='*(-len(p)%4);c=json.loads(base64.urlsafe_b64decode(p));print('iss='+c['iss']+' aud='+str(c['aud'])+' sub='+c['sub'])")
-          echo "::notice title=OIDC claims::$CLAIMS"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}

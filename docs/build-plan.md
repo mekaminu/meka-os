@@ -24,14 +24,16 @@ Status marks: `[x]` done · `[~]` in progress (partly landed) · `[ ]` not start
 7. **Both apps.** A feature is done when it works on the Fold and the Mac (Mac may use a simpler layout).
 8. **Dark is the default theme**; every screen must look right in Dark and Light.
 9. **Commit messages** start with the milestone (`M1:`, `V1:`, `V2:`). Update this file in the same commit.
-10. **Actions minutes are finite** (2,000 free standard minutes a month, then Meka's $10/month budget, which stops at
-    the limit). Docs-only commits don't trigger CI. Land at most **8 code pushes to `main` per UTC day** (count the day's
-    `ci` runs with event `push` first; if 8 already ran, stop with "Daily CI allowance used."), and don't chain the next
-    run with fire_trigger. The `macos` job (about 10x the cost of Linux) runs weekly and on manual dispatch only, and
-    build runs dispatch it **at most once a day, at night**: the first run at or after 21:00 UTC dispatches `ci` once if any
-    commit since the last green dispatched/scheduled `ci` run touched `macos/`, `core/` or the build files. A Mac-touching
-    item can be marked done before then ("Mac checked nightly"); if the nightly run is red, the next run fixes it first.
-    If CI jobs sit queued with no runner, the allowance is used up: stop without pushing code; it resets on the 1st.
+10. **Actions minutes are finite** (2,000 free standard minutes a month, then Meka's Actions budget, raised on
+    2026-10-06 to about $40/month so the build can run around the clock; it stops at the limit). Docs-only commits
+    don't trigger CI, and deploy only runs when a commit touches the server (backend/, infra/, core/, build files).
+    Land at most **24 code pushes to `main` per UTC day** (count the day's `ci` runs with event `push` first; if 24
+    already ran, stop with "Daily CI allowance used."), and don't chain the next run with fire_trigger. The `macos` job
+    (about 10x the cost of Linux) runs weekly and on manual dispatch only, and build runs dispatch it **at most once a
+    day, at night**: the first run at or after 21:00 UTC dispatches `ci` once if any commit since the last green
+    dispatched/scheduled `ci` run touched `macos/`, `core/` or the build files. A Mac-touching item can be marked done
+    before then ("Mac checked nightly"); if the nightly run is red, the next run fixes it first. If CI jobs sit queued
+    with no runner, the allowance is used up: stop without pushing code; it resets on the 1st.
 11. **Stop rule.** If something can't be undone and could reasonably go either way, don't do it: write it under
     "Needs Meka" and move on.
 
@@ -111,7 +113,7 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
 - [ ] Export and backup (one-tap export of all data as JSON + documents)
 - [ ] Mac database encryption (spike S6); fix the Mac keychain prompts (no Apple-signed cert: use Secure Enclave-wrapped key files)
 - [!] Outlook calendar (code done; needs Microsoft registration — Needs Meka #1)
-- [ ] Clean-ups: orphan KMS key, restrict enrolment token after enrolment, remove OIDC diagnostic step, ADR-004/005 updates
+- [ ] Clean-ups: orphan KMS key, restrict enrolment token after enrolment, ADR-004/005 updates
 
 ### V1 · The assistant layer
 - [ ] "What MEKA did and why" activity log with undo (lands before any automatic action)
