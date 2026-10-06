@@ -10,6 +10,9 @@ package os.meka.core.domain
  * Habits that are behind or due today (see [Goals.plannerHabits]) get room first, in their preferred part of the day
  * when it has space (else the first gap that fits), so a busy day doesn't quietly crowd them out. Habit blocks are
  * part of the suggestion only: Apply schedules tasks, and a habit is ticked when it's done.
+ *
+ * Meals from the fasting tracker (see [Fasting.plannerMeals]: breaking a fast, the last meal before the eating window
+ * closes) are kept free like events, so nothing is planned over them. They are shown, not applied.
  */
 object DayPlanner {
     data class Prefs(
@@ -30,6 +33,9 @@ object DayPlanner {
     data class Placement(val task: Task, val startMs: Long, val endMs: Long)
 
     /** Room made for a habit today. [behind] is true when the habit is behind this week (not just due today). */
+    /** A meal kept free for fasting ("Break your fast"). Shown, not applied. */
+    data class MealBlock(val title: String, val startMs: Long, val endMs: Long)
+
     data class HabitPlacement(val habitId: String, val title: String, val startMs: Long, val endMs: Long, val behind: Boolean)
 
     data class Plan(
@@ -44,11 +50,13 @@ object DayPlanner {
         val habits: List<HabitPlacement> = emptyList(),
         /** Habits that needed room but found none today. */
         val habitsUnplaced: List<PlannerHabit> = emptyList(),
+        /** Meals kept free for fasting, in time order. */
+        val meals: List<MealBlock> = emptyList(),
     ) {
         /** Nothing to apply (habit blocks are shown, not applied). */
         val isEmpty: Boolean get() = placements.isEmpty()
         /** Nothing to show at all. */
-        val isBlank: Boolean get() = placements.isEmpty() && unplaced.isEmpty() && habits.isEmpty() && habitsUnplaced.isEmpty()
+        val isBlank: Boolean get() = placements.isEmpty() && unplaced.isEmpty() && habits.isEmpty() && habitsUnplaced.isEmpty() && meals.isEmpty()
     }
 
     private const val MIN = 60_000L
@@ -60,6 +68,7 @@ object DayPlanner {
         day: DayWindow,
         prefs: Prefs = Prefs(),
         habits: List<PlannerHabit> = emptyList(),
+        meals: List<MealBlock> = emptyList(),
     ): Plan {
         val g = prefs.granularityMin * MIN
         val windowStart = maxOf(day.startMs + prefs.dayStartMin * MIN, ceilTo(nowMs, day.startMs, g))
@@ -71,7 +80,8 @@ object DayPlanner {
             val lead = if (e.provider == "fixtures") prefs.fixtureLeadMin else prefs.bufferMin
             Slot(e.startAtMs - lead * MIN, e.endAtMs + prefs.bufferMin * MIN)
         }
-        var free = subtract(Slot(windowStart, windowEnd), busy)
+        val todaysMeals = meals.filter { it.endMs > it.startMs && it.endMs > day.startMs && it.startMs < day.endMs }.sortedBy { it.startMs }
+        var free = subtract(Slot(windowStart, windowEnd), busy + todaysMeals.map { Slot(it.startMs, it.endMs) })
 
         // Habits first (behind before due), each in its part of the day if there's room there.
         val habitPlacements = mutableListOf<HabitPlacement>()
@@ -103,7 +113,7 @@ object DayPlanner {
             free = subtract(free, listOf(Slot(p.startMs, ceilTo(p.endMs, day.startMs, g))))
         }
         val left = free.sumOf { (it.endMs - it.startMs) / MIN }.toInt()
-        return Plan(placements, unplaced, left, timed.sortedBy { it.startAtMs }, habitPlacements, habitsUnplaced)
+        return Plan(placements, unplaced, left, timed.sortedBy { it.startAtMs }, habitPlacements, habitsUnplaced, todaysMeals)
     }
 
     /** The first aligned start in [free] with [need] ms of room, or null. */

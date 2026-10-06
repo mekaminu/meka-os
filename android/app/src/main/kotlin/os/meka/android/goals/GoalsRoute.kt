@@ -79,7 +79,7 @@ import os.meka.core.domain.HabitTiming
 import os.meka.core.facade.MekaCore
 
 /**
- * GOALS (build plan M1): habits with this week's pace and streaks, and goals with progress. A habit's circle pops with
+ * GOALS (build plan M1): fasting ([FastingCard]), habits with this week's pace and streaks, and goals with progress. A habit's circle pops with
  * a spring when ticked and its streak number rolls (light haptic); goal progress bars fill on appear. Tapping a row
  * unfolds its settings in place. Nothing is ticked for you. Reduced motion: colour changes and cross-fades only.
  */
@@ -109,6 +109,8 @@ fun GoalsRoute(core: MekaCore) {
                 modifier = Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1)),
             )
         }
+        item(key = "fasting-label") { SectionLabel("Fasting", Modifier.appear(rememberAppearance(2))) }
+        item(key = "fasting") { FastingCard(core, Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(2))) }
         item(key = "habits-label") { SectionLabel("Habits", Modifier.appear(rememberAppearance(2))) }
         items(view.habits, key = { "h-${it.id}" }) { h ->
             HabitRow(
@@ -300,13 +302,13 @@ private fun GoalRow(
 }
 
 @Composable
-private fun unfold() = if (Meka.reducedMotion) fadeIn(MekaMotion.expand(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false))
+internal fun unfold() = if (Meka.reducedMotion) fadeIn(MekaMotion.expand(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false))
 
 @Composable
-private fun fold() = if (Meka.reducedMotion) fadeOut(MekaMotion.expand(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false))
+internal fun fold() = if (Meka.reducedMotion) fadeOut(MekaMotion.expand(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false))
 
 @Composable
-private fun Action(label: String, critical: Boolean = false, onClick: () -> Unit) {
+internal fun Action(label: String, critical: Boolean = false, onClick: () -> Unit) {
     Text(
         label, style = MekaType.itemTitle, color = if (critical) Meka.colors.critical else Meka.colors.accent,
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button) { onClick() }.padding(vertical = MekaSpace.xxs),
@@ -315,7 +317,7 @@ private fun Action(label: String, critical: Boolean = false, onClick: () -> Unit
 
 /** A label and a scrolling row of chips; [lit] marks the current one. */
 @Composable
-private fun Chips(label: String?, options: List<Pair<String, Boolean>>, choose: (Int) -> Unit) {
+internal fun Chips(label: String?, options: List<Pair<String, Boolean>>, choose: (Int) -> Unit) {
     Column {
         label?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = MekaSpace.xxs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {

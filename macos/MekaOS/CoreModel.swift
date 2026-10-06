@@ -17,6 +17,8 @@ final class CoreModel {
     private(set) var lists: ListsView?
     /// Habits (pace, streaks) and goals (progress). Synced with the Fold.
     private(set) var goals: GoalsView?
+    /// The running fast, the eating window and the last seven days. Synced with the Fold.
+    private(set) var fasting: FastingView?
     var showWork = false
     var selectedID: String?
     /// The shell's current destination and which way the last switch moved (for the push transition).
@@ -74,6 +76,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await g in core.goalsView { self?.goals = g }
+        })
+        observers.append(Task { [weak self] in
+            for await f in core.fastingView { self?.fasting = f }
         })
         // Work mode and Today move with the clock: re-evaluate every half minute.
         observers.append(Task {
@@ -239,6 +244,17 @@ final class CoreModel {
     func deleteDecision(_ id: String) { run { try await $0.deleteDecision(id: id) } }
 
     private static func k(_ v: Int?) -> KotlinInt? { v.map { KotlinInt(int: Int32($0)) } }
+
+    // MARK: Fasting
+
+    /// Starts a fast `minutesAgo` minutes ago (0: now) with the plan's goal.
+    func startFast(minutesAgo: Int32) { MekaHaptics.light(); run { _ = try await $0.startFast(startedMinutesAgo: minutesAgo) } }
+    func endFast() { MekaHaptics.light(); run { try await $0.endFast() } }
+    func resumeFast(_ id: String) { run { try await $0.resumeFast(id: id) } }
+    func setFastTarget(_ hours: Int32) { run { try await $0.setFastTarget(hours: hours) } }
+    func moveFastStart(_ minutes: Int32) { run { try await $0.moveFastStart(deltaMinutes: minutes) } }
+    func discardFast() { run { try await $0.discardFast() } }
+    func chooseFastingPlan(_ index: Int) { run { try await $0.chooseFastingPlan(index: Int32(index)) } }
 
     // MARK: Goals and habits
 

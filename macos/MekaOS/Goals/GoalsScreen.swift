@@ -1,7 +1,7 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// GOALS on the Mac (build plan M1): habits with this week's pace and streaks, and goals with progress, synced with
+/// GOALS on the Mac (build plan M1): fasting (`FastingSection`), habits with this week's pace and streaks, and goals with progress, synced with
 /// the Fold. A habit's circle pops with a spring when ticked and its streak number rolls; goal bars fill on appear.
 /// Clicking a row unfolds its settings (menus, as rule 7 allows). Nothing is ticked for you. Reduce Motion: cross-fades.
 struct GoalsScreen: View {
@@ -28,6 +28,8 @@ struct GoalsScreen: View {
                     .padding(.bottom, MekaSpace.m)
                     .staggeredAppear(1)
 
+                SectionLabel("Fasting", palette).staggeredAppear(2)
+                FastingSection(palette: palette).padding(.bottom, MekaSpace.l).staggeredAppear(2)
                 SectionLabel("Habits", palette).staggeredAppear(2)
                 ForEach(model.goals?.habits ?? [], id: \.id) { h in
                     HabitRowView(habit: h, goals: model.goals?.goals ?? [], expanded: open == h.id, palette: palette) { toggle(h.id) }

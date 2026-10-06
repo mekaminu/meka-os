@@ -69,4 +69,24 @@ final class MekaCoreBridgeTests: XCTestCase {
         let plan = try await core.planDay()
         XCTAssertTrue(plan.habits.isEmpty)
     }
+
+    func testFastingThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "fasting-\(UUID().uuidString).db", deviceKey: nil
+        )
+        XCTAssertNil(core.fastingView.value.current)
+        try await core.chooseFastingPlan(index: 1)
+        _ = try await core.startFast(startedMinutesAgo: 60)
+        let cur = try XCTUnwrap(core.fastingView.value.current)
+        XCTAssertEqual(cur.targetHours, 16)
+        XCTAssertFalse(cur.reachedGoal)
+        XCTAssertEqual(FastingRules.shared.clock(elapsedMs: 3_600_000), "1:00:00")
+        XCTAssertEqual(FastingRules.shared.planLabel(p: core.fastingView.value.plan), "16:8")
+        try await core.endFast()
+        XCTAssertNil(core.fastingView.value.current)
+        XCTAssertEqual(core.fastingView.value.last?.canResume, true)
+        XCTAssertEqual(core.fastingView.value.week.count, 7)
+    }
 }

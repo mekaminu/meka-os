@@ -1,0 +1,392 @@
+package os.meka.core.domain
+
+import os.meka.core.sync.EntitySnapshot
+import os.meka.core.sync.FieldValue
+import os.meka.core.sync.Replica
+import os.meka.core.sync.fv
+
+/**
+ * Fasting tracker (build plan M1). No AI and no health claims: a timer, a goal, an eating window and what you did.
+ *
+ * - A fast is a `fast` entity: when it started, its goal in hours and, once broken, when it ended. Nothing about a
+ *   fast is guessed; you start it (now, or "I started an hour ago") and you end it.
+ * - The plan is one `fasting_plan` entity (id [PLAN_ID]): the usual goal and the eating window (local times). Presets
+ *   are the common 14:10 · 16:8 · 18:6 · 20:4; 16:8 with 12:00–20:00 until changed.
+ * - Two devices that start a fast while both are offline end up with two open fasts: the earlier start is the fast
+ *   that counts, ending ends them all, and history merges fasts that overlap, so nothing is counted twice.
+ * - History is the last seven local days, each fast counted on the day it ended.
+ * - The planner keeps a short meal block free when the fast's goal lands today, and before the eating window closes
+ *   ([plannerMeals]); meal blocks are shown, not applied.
+ */
+
+data class FastingPlanChoice(val label: String, val targetHours: Int, val eatingStartMin: Int, val eatingEndMin: Int)
+
+data class FastingPlan(val targetHours: Int, val eatingStartMin: Int, val eatingEndMin: Int) {
+    /** "16:8 · eating 12:00–20:00". */
+    val line: String get() = "${FastingRules.planLabel(this)} · eating ${FastingRules.hm(eatingStartMin)}–${FastingRules.hm(eatingEndMin)}"
+}
+
+/** The fast that is running now. Times are epoch ms; the apps tick the timer themselves from [startedAtMs]. */
+data class FastNow(
+    val id: String,
+    val startedAtMs: Long,
+    val targetHours: Int,
+    val goalAtMs: Long,
+    val reachedGoal: Boolean,
+    /** "Started 20:05 yesterday". */
+    val startedLine: String,
+    /** "Goal 16 h · at 12:05" or "Goal reached at 12:05". */
+    val goalLine: String,
+)
+
+/** The most recent finished fast. */
+data class LastFast(
+    val id: String,
+    val startedAtMs: Long,
+    val endedAtMs: Long,
+    val hours: Double,
+    val reachedGoal: Boolean,
+    /** "Last fast 16 h 20 m · goal reached". */
+    val line: String,
+    /** True for a few minutes after it ended, so a mistaken "End fast" can be undone. */
+    val canResume: Boolean,
+)
+
+/** One of the last seven days. */
+data class FastingDay(
+    val epochDay: Long,
+    /** "Mon". */
+    val label: String,
+    /** The longest fast that ended that day, in hours (0 when none). */
+    val hours: Double,
+    val reachedGoal: Boolean,
+    val isToday: Boolean,
+)
+
+data class FastingView(
+    val plan: FastingPlan,
+    val current: FastNow?,
+    val last: LastFast?,
+    /** "Eating window open until 20:00", "Eating window opens at 12:00", "Eating window closed at 20:00". */
+    val windowLine: String,
+    /** The last seven days, oldest first. */
+    val week: List<FastingDay>,
+    /** "5 fasts in 7 days · average 16 h 12 m · 4 reached the goal"; null with none. */
+    val weekLine: String?,
+) {
+    val isFasting: Boolean get() = current != null
+
+    companion object {
+        val EMPTY = FastingView(FastingRules.DEFAULT_PLAN, null, null, "", emptyList(), null)
+    }
+}
+
+object FastingRules {
+    val PLAN_CHOICES = listOf(
+        FastingPlanChoice("14:10", 14, 10 * 60, 20 * 60),
+        FastingPlanChoice("16:8", 16, 12 * 60, 20 * 60),
+        FastingPlanChoice("18:6", 18, 13 * 60, 19 * 60),
+        FastingPlanChoice("20:4", 20, 14 * 60, 18 * 60),
+    )
+    val DEFAULT_PLAN = FastingPlan(16, 12 * 60, 20 * 60)
+    /** Goals offered for the fast that's running. */
+    val TARGET_CHOICES = listOf(12, 14, 16, 18, 20, 24)
+    /** "When did you start?": minutes ago. */
+    val STARTED_AGO_CHOICES = listOf(0, 30, 60, 120, 180)
+    /** Nudges for a start time that was a little off. */
+    val MOVE_START_CHOICES = listOf(-60, -30, 30)
+    const val MAX_TARGET_HOURS = 72
+    /** A start can be set at most this far back. */
+    const val MAX_BACKDATE_MIN = 48 * 60
+    /** "End fast" can be undone for this long. */
+    const val RESUME_WINDOW_MS = 10 * 60_000L
+    /** The meal block the planner keeps free. */
+    const val MEAL_MIN = 30
+    private const val HOUR_MS = 3_600_000L
+
+    fun planAt(index: Int): FastingPlanChoice = PLAN_CHOICES[index.coerceIn(0, PLAN_CHOICES.size - 1)]
+
+    /** "16:8" for a preset (or any plan whose window matches its goal), else "16 h". */
+    fun planLabel(p: FastingPlan): String {
+        val match = PLAN_CHOICES.firstOrNull { it.targetHours == p.targetHours && it.eatingStartMin == p.eatingStartMin && it.eatingEndMin == p.eatingEndMin }
+        return match?.label ?: "${p.targetHours} h"
+    }
+
+    fun startedAgoLabel(min: Int): String = when {
+        min == 0 -> "Now"
+        min < 60 -> "$min min ago"
+        else -> "${min / 60} h ago"
+    }
+
+    fun moveLabel(min: Int): String = (if (min < 0) "−" else "+") + (if (kotlin.math.abs(min) >= 60) "${kotlin.math.abs(min) / 60} h" else "${kotlin.math.abs(min)} min")
+
+    /** "08:05" for a local minute of the day. */
+    fun hm(minuteOfDay: Int): String {
+        val m = minuteOfDay.mod(24 * 60)
+        return "${(m / 60).toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}"
+    }
+
+    /** The running timer, "14:05:09" (hours can pass 24). */
+    fun clock(elapsedMs: Long): String {
+        val s = (elapsedMs.coerceAtLeast(0) / 1000)
+        return "${s / 3600}:${((s / 60) % 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}"
+    }
+
+    /** "16 h 20 m", "45 m". */
+    fun duration(ms: Long): String {
+        val totalMin = (ms.coerceAtLeast(0) / 60_000L)
+        val h = totalMin / 60; val m = totalMin % 60
+        return if (h == 0L) "$m m" else "$h h ${m.toString().padStart(2, '0')} m"
+    }
+
+    /** Share of the goal done, 0 to 1 (capped). */
+    fun progress(startedAtMs: Long, targetHours: Int, nowMs: Long): Float =
+        ((nowMs - startedAtMs).toDouble() / (targetHours.coerceAtLeast(1) * HOUR_MS)).coerceIn(0.0, 1.0).toFloat()
+
+    fun goalAt(startedAtMs: Long, targetHours: Int): Long = startedAtMs + targetHours * HOUR_MS
+
+    /** True when [minuteOfDay] is inside the eating window (which may cross midnight). */
+    fun inWindow(minuteOfDay: Int, startMin: Int, endMin: Int): Boolean =
+        if (startMin <= endMin) minuteOfDay in startMin until endMin else minuteOfDay >= startMin || minuteOfDay < endMin
+
+    fun windowLine(minuteOfDay: Int, plan: FastingPlan): String {
+        val s = plan.eatingStartMin; val e = plan.eatingEndMin
+        return when {
+            inWindow(minuteOfDay, s, e) -> "Eating window open until ${hm(e)}"
+            s > e || minuteOfDay < s -> "Eating window opens at ${hm(s)}"
+            else -> "Eating window closed at ${hm(e)}"
+        }
+    }
+
+    internal fun dayLabel(epochDay: Long): String =
+        listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")[CivilDate.isoDayOfWeek(epochDay) - 1]
+}
+
+/** Fasting commands and the [view] projection over a [Replica]. Every write is an op: offline-first, synced. */
+class Fasting(
+    private val replica: Replica,
+    private val ids: () -> String,
+    private val nowMs: () -> Long,
+    private val calendar: LocalCalendar = LocalCalendar.UTC,
+) {
+    private data class Fast(val id: String, val start: Long, val end: Long?, val target: Int)
+
+    // ---- Plan ----
+
+    fun plan(): FastingPlan {
+        val s = replica.entity(EntityTypes.FASTING_PLAN, PLAN_ID)?.takeIf { !it.deleted } ?: return FastingRules.DEFAULT_PLAN
+        val d = FastingRules.DEFAULT_PLAN
+        return FastingPlan(
+            targetHours = (s[FastingPlanFields.TARGET_HOURS].longOrNull?.toInt() ?: d.targetHours).coerceIn(1, FastingRules.MAX_TARGET_HOURS),
+            eatingStartMin = (s[FastingPlanFields.EATING_START_MIN].longOrNull?.toInt() ?: d.eatingStartMin).mod(24 * 60),
+            eatingEndMin = (s[FastingPlanFields.EATING_END_MIN].longOrNull?.toInt() ?: d.eatingEndMin).mod(24 * 60),
+        )
+    }
+
+    fun setPlan(targetHours: Int, eatingStartMin: Int, eatingEndMin: Int) {
+        checkTarget(targetHours)
+        if (eatingStartMin !in 0 until 24 * 60 || eatingEndMin !in 0 until 24 * 60) throw ValidationException("Pick a time of day")
+        if (eatingStartMin == eatingEndMin) throw ValidationException("The eating window needs a start and an end")
+        replica.commitLocal(
+            EntityTypes.FASTING_PLAN, PLAN_ID,
+            linkedMapOf(
+                FastingPlanFields.TARGET_HOURS to targetHours.fv(),
+                FastingPlanFields.EATING_START_MIN to eatingStartMin.fv(),
+                FastingPlanFields.EATING_END_MIN to eatingEndMin.fv(),
+            ),
+        )
+    }
+
+    fun choosePlan(index: Int) {
+        val c = FastingRules.planAt(index)
+        setPlan(c.targetHours, c.eatingStartMin, c.eatingEndMin)
+    }
+
+    // ---- Fasts ----
+
+    /** Starts a fast [startedMinutesAgo] minutes ago with the plan's goal unless [targetHours] is given. */
+    fun start(startedMinutesAgo: Int = 0, targetHours: Int? = null): String {
+        if (open().isNotEmpty()) throw ValidationException("You're already fasting")
+        if (startedMinutesAgo !in 0..FastingRules.MAX_BACKDATE_MIN) throw ValidationException("Pick a start in the last two days")
+        val target = targetHours ?: plan().targetHours
+        checkTarget(target)
+        val start = nowMs() - startedMinutesAgo * 60_000L
+        // A fast can't begin inside one you've already finished.
+        if (finished().any { start < it.end!! }) throw ValidationException("That overlaps your last fast")
+        val id = ids()
+        replica.commitLocal(
+            EntityTypes.FAST, id,
+            linkedMapOf(
+                FastFields.STARTED_AT to start.fv(),
+                FastFields.TARGET_HOURS to target.fv(),
+                ActionableFields.CREATED_AT to nowMs().fv(),
+                ActionableFields.PROVENANCE_SOURCE to "user".fv(),
+                ActionableFields.PROVENANCE_TRUST to Trust.TRUSTED_USER.name.fv(),
+            ),
+        )
+        return id
+    }
+
+    /** Ends the running fast now (every open one, see the file comment). */
+    fun end() {
+        val open = open()
+        if (open.isEmpty()) throw ValidationException("You're not fasting")
+        val now = nowMs()
+        open.forEach { replica.commitLocal(EntityTypes.FAST, it.id, mapOf(FastFields.ENDED_AT to maxOf(now, it.start).fv())) }
+    }
+
+    /** Undoes "End fast" for a few minutes after it, when no other fast has started. */
+    fun resume(id: String) {
+        val f = live(id) ?: throw ValidationException("Fast not found")
+        val end = f.end ?: return
+        if (open().isNotEmpty()) throw ValidationException("You're already fasting")
+        if (nowMs() - end > FastingRules.RESUME_WINDOW_MS) throw ValidationException("That fast ended a while ago")
+        replica.commitLocal(EntityTypes.FAST, id, mapOf(FastFields.ENDED_AT to FieldValue.Null))
+    }
+
+    /** Changes the running fast's goal. */
+    fun setTarget(hours: Int) {
+        checkTarget(hours)
+        val f = current() ?: throw ValidationException("You're not fasting")
+        replica.commitLocal(EntityTypes.FAST, f.id, mapOf(FastFields.TARGET_HOURS to hours.fv()))
+    }
+
+    /** Moves the running fast's start by [deltaMinutes] (negative: earlier). */
+    fun moveStart(deltaMinutes: Int) {
+        val f = current() ?: throw ValidationException("You're not fasting")
+        val start = f.start + deltaMinutes * 60_000L
+        val now = nowMs()
+        if (start > now) throw ValidationException("That's in the future")
+        if (now - start > FastingRules.MAX_BACKDATE_MIN * 60_000L) throw ValidationException("Pick a start in the last two days")
+        if (finished().any { start < it.end!! }) throw ValidationException("That overlaps your last fast")
+        replica.commitLocal(EntityTypes.FAST, f.id, mapOf(FastFields.STARTED_AT to start.fv()))
+    }
+
+    /** Throws the running fast away (started by mistake); it leaves no history. */
+    fun discard() {
+        val open = open()
+        if (open.isEmpty()) throw ValidationException("You're not fasting")
+        open.forEach { replica.commitLocal(EntityTypes.FAST, it.id, mapOf(ActionableFields.DELETED to true.fv())) }
+    }
+
+    // ---- Reads ----
+
+    fun view(): FastingView {
+        val now = nowMs()
+        val plan = plan()
+        val today = calendar.epochDayOf(now)
+        val cur = current()?.let { f ->
+            val goal = FastingRules.goalAt(f.start, f.target)
+            val reached = now >= goal
+            FastNow(
+                id = f.id,
+                startedAtMs = f.start,
+                targetHours = f.target,
+                goalAtMs = goal,
+                reachedGoal = reached,
+                startedLine = "Started ${at(f.start, today)}",
+                goalLine = if (reached) "Goal reached at ${at(goal, today)}" else "Goal ${f.target} h · at ${at(goal, today)}",
+            )
+        }
+        val history = merged()
+        val last = history.maxByOrNull { it.end!! }?.let { f ->
+            val ms = f.end!! - f.start
+            val reached = ms >= f.target * 3_600_000L
+            LastFast(
+                id = f.id, startedAtMs = f.start, endedAtMs = f.end, hours = ms / 3_600_000.0, reachedGoal = reached,
+                line = "Last fast ${FastingRules.duration(ms)}" + if (reached) " · goal reached" else " · goal ${f.target} h",
+                canResume = cur == null && now - f.end in 0..FastingRules.RESUME_WINDOW_MS,
+            )
+        }
+        val days = (today - 6..today).map { day ->
+            val ended = history.filter { calendar.epochDayOf(it.end!!) == day }
+            val best = ended.maxByOrNull { it.end!! - it.start }
+            FastingDay(
+                epochDay = day,
+                label = FastingRules.dayLabel(day),
+                hours = best?.let { (it.end!! - it.start) / 3_600_000.0 } ?: 0.0,
+                reachedGoal = ended.any { it.end!! - it.start >= it.target * 3_600_000L },
+                isToday = day == today,
+            )
+        }
+        val inWeek = history.filter { calendar.epochDayOf(it.end!!) in (today - 6)..today }
+        val weekLine = inWeek.takeIf { it.isNotEmpty() }?.let { fs ->
+            val avg = fs.sumOf { it.end!! - it.start } / fs.size
+            val met = fs.count { it.end!! - it.start >= it.target * 3_600_000L }
+            "${fs.size} ${if (fs.size == 1) "fast" else "fasts"} in 7 days · average ${FastingRules.duration(avg)} · $met reached the goal"
+        }
+        return FastingView(plan, cur, last, FastingRules.windowLine(calendar.minuteOfDay(now), plan), days, weekLine)
+    }
+
+    /**
+     * Meals the planner keeps free today: breaking the fast when its goal lands later today, and a last meal before
+     * the eating window closes when that is still ahead and you're not fasting through it.
+     */
+    fun plannerMeals(day: DayWindow): List<DayPlanner.MealBlock> {
+        val now = nowMs()
+        val meal = FastingRules.MEAL_MIN * 60_000L
+        val out = mutableListOf<DayPlanner.MealBlock>()
+        val cur = current()
+        var eatingFrom = now
+        if (cur != null) {
+            val goal = FastingRules.goalAt(cur.start, cur.target)
+            if (goal >= now && goal in day) out += DayPlanner.MealBlock("Break your fast", goal, goal + meal)
+            eatingFrom = maxOf(goal, now) + meal
+        }
+        val plan = plan()
+        val close = calendar.toEpochMs(day.epochDay, plan.eatingEndMin)
+        if (close in day && close - meal >= eatingFrom) out += DayPlanner.MealBlock("Last meal before your fast", close - meal, close)
+        return out
+    }
+
+    // ---- Helpers ----
+
+    private fun all(): List<Fast> = replica.entities(EntityTypes.FAST).mapNotNull { s -> s.toFast() }
+
+    private fun EntitySnapshot.toFast(): Fast? {
+        if (deleted) return null
+        val start = this[FastFields.STARTED_AT].longOrNull ?: return null
+        val end = this[FastFields.ENDED_AT].longOrNull
+        val target = (this[FastFields.TARGET_HOURS].longOrNull?.toInt() ?: FastingRules.DEFAULT_PLAN.targetHours).coerceIn(1, FastingRules.MAX_TARGET_HOURS)
+        return Fast(ref.entityId, start, end?.let { maxOf(it, start) }, target)
+    }
+
+    private fun live(id: String): Fast? = replica.entity(EntityTypes.FAST, id)?.toFast()
+
+    private fun open(): List<Fast> = all().filter { it.end == null }
+
+    private fun finished(): List<Fast> = all().filter { it.end != null }
+
+    /** The fast that counts: the earliest-started open one. */
+    private fun current(): Fast? = open().minWithOrNull(compareBy<Fast> { it.start }.thenBy { it.id })
+
+    /** Finished fasts with overlapping ones merged (the earlier start's goal kept). */
+    private fun merged(): List<Fast> {
+        val out = mutableListOf<Fast>()
+        for (f in finished().sortedWith(compareBy<Fast> { it.start }.thenBy { it.id })) {
+            val prev = out.lastOrNull()
+            if (prev != null && f.start < prev.end!!) out[out.size - 1] = prev.copy(end = maxOf(prev.end, f.end!!))
+            else out += f
+        }
+        return out
+    }
+
+    /** "20:05", "20:05 yesterday", "12:05 tomorrow", "Mon 08:00". */
+    private fun at(ms: Long, today: Long): String {
+        val t = FastingRules.hm(calendar.minuteOfDay(ms))
+        return when (calendar.epochDayOf(ms) - today) {
+            0L -> t
+            -1L -> "$t yesterday"
+            1L -> "$t tomorrow"
+            else -> "${FastingRules.dayLabel(calendar.epochDayOf(ms))} $t"
+        }
+    }
+
+    private fun checkTarget(hours: Int) {
+        if (hours !in 1..FastingRules.MAX_TARGET_HOURS) throw ValidationException("Pick a goal up to 72 hours")
+    }
+
+    companion object {
+        const val PLAN_ID = "default"
+    }
+}

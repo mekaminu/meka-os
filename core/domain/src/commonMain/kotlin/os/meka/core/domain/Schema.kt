@@ -20,10 +20,14 @@ object EntityTypes {
     const val EVENT = "event"
     const val RELATION = "relation"
     const val CONTEXT_MODE = "context_mode"
+    /** One fast (start, goal, end). */
+    const val FAST = "fast"
+    /** The usual goal and eating window; one entity, id `default`. */
+    const val FASTING_PLAN = "fasting_plan"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
-        GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE,
+        GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN,
     )
 }
 
@@ -122,6 +126,20 @@ object HabitCompletionFields {
     const val DAY = "day"
     const val DONE = "done"
     const val AT = "atMs"
+}
+
+/** A fast. `endedAtMs` is Null while it runs. All LWW: a fast has one author at a time. */
+object FastFields {
+    const val STARTED_AT = "startedAtMs"
+    const val ENDED_AT = "endedAtMs"
+    const val TARGET_HOURS = "targetHours"
+}
+
+/** The fasting plan: usual goal and the eating window as local minutes of the day. */
+object FastingPlanFields {
+    const val TARGET_HOURS = "targetHours"
+    const val EATING_START_MIN = "eatingStartMin"
+    const val EATING_END_MIN = "eatingEndMin"
 }
 
 object PersonFields {

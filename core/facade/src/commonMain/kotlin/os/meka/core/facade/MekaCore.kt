@@ -28,6 +28,8 @@ import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DayPlanner
 import os.meka.core.domain.QuickCapture
 import os.meka.core.domain.DayWindow
+import os.meka.core.domain.Fasting
+import os.meka.core.domain.FastingView
 import os.meka.core.domain.IdGenerator
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.ListsView
@@ -91,6 +93,7 @@ class MekaCore(
     private val work = WorkMode(replica, nowMs)
     private val lists = os.meka.core.domain.Lists(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
 
@@ -104,6 +107,10 @@ class MekaCore(
     private val _goals = MutableStateFlow(GoalsView.EMPTY)
     /** Habits (pace, streaks, this week) and goals (progress). Synced; moves with the clock. */
     val goalsView: StateFlow<GoalsView> = _goals.asStateFlow()
+
+    private val _fasting = MutableStateFlow(FastingView.EMPTY)
+    /** The running fast, the eating window and the last seven days. Synced; moves with the clock. */
+    val fastingView: StateFlow<FastingView> = _fasting.asStateFlow()
 
     private val _workMode = MutableStateFlow(work.state(localClock()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
@@ -144,12 +151,13 @@ class MekaCore(
     suspend fun delete(taskId: String) = onCore { tasks.delete(taskId) }
 
     /**
-     * A suggested plan for the rest of today (DayPlanner v1), making room first for habits that are behind or due.
-     * Changes nothing until [applyPlan].
+     * A suggested plan for the rest of today (DayPlanner v1), making room first for habits that are behind or due,
+     * and keeping meals free around a fast. Changes nothing until [applyPlan].
      */
     suspend fun planDay(): DayPlanner.Plan = onCore {
         val now = nowMs()
-        DayPlanner.plan(tasks.all(), events.all(), now, dayWindow(now), habits = goals.plannerHabits())
+        val day = dayWindow(now)
+        DayPlanner.plan(tasks.all(), events.all(), now, day, habits = goals.plannerHabits(), meals = fasting.plannerMeals(day))
     }
 
     /** Schedules each planned task at its suggested time; everything syncs like a manual edit. */
@@ -232,6 +240,22 @@ class MekaCore(
     suspend fun deleteGoal(id: String) = onCore { goals.deleteGoal(id) }
     /** Links a task to a goal (null unlinks); done tasks then count towards the goal. */
     suspend fun setTaskGoal(taskId: String, goalId: String?) = onCore { goals.setTaskGoal(taskId, goalId) }
+
+    // ---- Fasting ----
+
+    /** Starts a fast [startedMinutesAgo] minutes ago (0: now) with the plan's goal. */
+    suspend fun startFast(startedMinutesAgo: Int): String = onCore { fasting.start(startedMinutesAgo) }
+    /** Ends the running fast now. */
+    suspend fun endFast() = onCore { fasting.end() }
+    /** Undoes "End fast" for a few minutes after it ([os.meka.core.domain.LastFast.canResume]). */
+    suspend fun resumeFast(id: String) = onCore { fasting.resume(id) }
+    suspend fun setFastTarget(hours: Int) = onCore { fasting.setTarget(hours) }
+    /** Moves the running fast's start by [deltaMinutes] (negative: earlier). */
+    suspend fun moveFastStart(deltaMinutes: Int) = onCore { fasting.moveStart(deltaMinutes) }
+    /** Throws away a fast started by mistake. */
+    suspend fun discardFast() = onCore { fasting.discard() }
+    /** Picks a plan from [os.meka.core.domain.FastingRules.PLAN_CHOICES] (goal and eating window). */
+    suspend fun chooseFastingPlan(index: Int) = onCore { fasting.choosePlan(index) }
 
     // ---- Work mode ----
 
@@ -352,6 +376,7 @@ class MekaCore(
         _today.value = project(all)
         _lists.value = lists.view(all)
         _goals.value = goals.view(all)
+        _fasting.value = fasting.view()
         _workMode.value = work.state(localClock())
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(

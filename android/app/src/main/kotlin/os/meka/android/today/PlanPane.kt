@@ -47,7 +47,7 @@ import java.time.format.DateTimeFormatter
 private val hm = DateTimeFormatter.ofPattern("HH:mm")
 private fun t(ms: Long) = hm.format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))
 
-/** One line of the plan's timeline: a fixed event, a suggested block for a task, or room made for a habit. */
+/** One line of the plan's timeline: a fixed event, a suggested block for a task, room made for a habit, or a meal kept free. */
 private data class PlanRow(val startMs: Long, val time: String, val title: String, val taskId: String?, val habit: Boolean = false)
 
 /**
@@ -81,7 +81,8 @@ fun PlanPane(core: MekaCore, landing: Set<String> = emptySet(), onApplying: (Set
         // One timeline: fixed events and suggested tasks, in time order.
         val rows = p.busy.map { PlanRow(it.startAtMs, "${t(it.startAtMs)}–${t(it.endAtMs)}", it.title, null) } +
             p.placements.map { PlanRow(it.startMs, "${t(it.startMs)}–${t(it.endMs)}", it.task.title, it.task.id) } +
-            p.habits.map { PlanRow(it.startMs, "${t(it.startMs)}–${t(it.endMs)}", "↻ " + it.title + if (it.behind) " · behind" else "", null, habit = true) }
+            p.habits.map { PlanRow(it.startMs, "${t(it.startMs)}–${t(it.endMs)}", "↻ " + it.title + if (it.behind) " · behind" else "", null, habit = true) } +
+            p.meals.map { PlanRow(it.startMs, "${t(it.startMs)}–${t(it.endMs)}", "◐ " + it.title, null, habit = true) }
         // Timeline blocks cascade in, 40 ms apart.
         rows.sortedBy { it.startMs }.forEachIndexed { i, row ->
             val suggested = row.taskId != null || row.habit
@@ -105,6 +106,9 @@ fun PlanPane(core: MekaCore, landing: Set<String> = emptySet(), onApplying: (Set
         }
         if (p.habits.isNotEmpty()) {
             Text("↻ Room for habits that are due. Tick them in Goals when they're done.", style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
+        if (p.meals.isNotEmpty()) {
+            Text("◐ Kept free for your fast's meals. Nothing is planned over them.", style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         if (p.habitsUnplaced.isNotEmpty()) {
             Text("No room today for: " + p.habitsUnplaced.joinToString(", ") { it.title }, style = MekaType.itemMeta, color = Meka.colors.textSecondary)

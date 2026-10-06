@@ -214,4 +214,20 @@ class MekaCoreTest {
         assertEquals(listOf("Fitter by spring"), mine.goals.map { it.title })
         assertTrue(mine.goals.single().counted)
     }
+
+    @Test
+    fun aFastSyncsAndEndsOnTheOtherDevice() = runTest {
+        val a = core("android"); val m = core("mac")
+        a.chooseFastingPlan(2)
+        a.startFast(60)
+        assertEquals(18, a.fastingView.value.current?.targetHours)
+        a.syncNow(); m.syncNow()
+        assertTrue(m.fastingView.value.isFasting)
+        assertEquals(18, m.fastingView.value.plan.targetHours)
+        m.endFast()
+        m.syncNow(); a.syncNow()
+        assertTrue(!a.fastingView.value.isFasting)
+        assertTrue(a.fastingView.value.last != null)
+        assertTrue(a.fastingView.value.weekLine != null)
+    }
 }

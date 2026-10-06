@@ -310,6 +310,7 @@ private struct PlanSheet: View {
         guard let plan = model.plan else { return nil }
         var parts: [String] = []
         if !plan.habits.isEmpty { parts.append("↻ Room for habits that are due. Tick them in Goals when they're done.") }
+        if !plan.meals.isEmpty { parts.append("◐ Kept free for your fast's meals. Nothing is planned over them.") }
         if !plan.habitsUnplaced.isEmpty { parts.append("No room today for: " + plan.habitsUnplaced.map(\.title).joined(separator: ", ")) }
         return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }
@@ -369,7 +370,8 @@ private struct PlanSheet: View {
         let busy = plan.busy.map { Row(id: "e" + $0.id, start: $0.startAtMs, time: "\(t($0.startAtMs))–\(t($0.endAtMs))", title: $0.title, suggested: false) }
         let tasks = plan.placements.map { Row(id: "t" + $0.task.id, start: $0.startMs, time: "\(t($0.startMs))–\(t($0.endMs))", title: $0.task.title, suggested: true) }
         let habits = plan.habits.map { Row(id: "h" + $0.habitId, start: $0.startMs, time: "\(t($0.startMs))–\(t($0.endMs))", title: "↻ " + $0.title + ($0.behind ? " · behind" : ""), suggested: true) }
-        return (busy + tasks + habits).sorted { $0.start < $1.start }
+        let meals = plan.meals.map { Row(id: "m" + $0.title, start: $0.startMs, time: "\(t($0.startMs))–\(t($0.endMs))", title: "◐ " + $0.title, suggested: true) }
+        return (busy + tasks + habits + meals).sorted { $0.start < $1.start }
     }
 }
 
