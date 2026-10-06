@@ -4,6 +4,7 @@ import UserNotifications
 
 /// Posts what the shared notification governor says, through macOS notifications. The rules (tiers, quiet hours,
 /// digests) live in the Kotlin core; this only delivers. Titles and digests replace earlier ones with the same id.
+@MainActor
 enum MacNotifier {
     /// Asks macOS once; afterwards the choice lives in System Settings → Notifications → Meka.
     static func requestPermission() async -> Bool {
