@@ -262,6 +262,17 @@ object CivilDate {
         val d = fromEpochDay(epochDay)
         return "${LocalClock.DAY_SHORT[isoDayOfWeek(epochDay) - 1]} ${d.day} ${Recurrence.MONTH_SHORT[d.month - 1]}"
     }
+
+    /** "Tuesday 6 October" */
+    fun longLabel(epochDay: Long): String {
+        val d = fromEpochDay(epochDay)
+        return "${DAY_LONG[isoDayOfWeek(epochDay) - 1]} ${d.day} ${MONTH_LONG[d.month - 1]}"
+    }
+
+    val DAY_LONG = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+    val MONTH_LONG = listOf(
+        "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December",
+    )
 }
 
 /**

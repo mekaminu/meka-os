@@ -12,6 +12,11 @@ data class Today(
     val doneToday: List<Task>,
     /** Today's calendar events from all connected accounts: all-day first, then by start time. */
     val events: List<CalendarEvent> = emptyList(),
+    /**
+     * One timeline for the screen: the date, all-day events, events and planned tasks (not Needs you or Up next) in
+     * time order (Up next's planned task included, Needs you not) with a now line and free gaps, finished events folded, and "Anytime today" for tasks with no time.
+     */
+    val timeline: DayTimeline = DayTimeline.EMPTY,
 ) {
     /** Timed events that have not ended yet: what's still ahead of you today. */
     fun upcomingEvents(nowMs: Long): List<CalendarEvent> = events.filter { !it.allDay && it.endAtMs > nowMs }
@@ -42,7 +47,13 @@ data class DayWindow(
  * Ranking inside Needs You: conflicts, then overdue (oldest first), then due-today-unscheduled.
  */
 object TodayProjection {
-    fun project(tasks: List<Task>, nowMs: Long, today: DayWindow, events: List<CalendarEvent> = emptyList()): Today {
+    fun project(
+        tasks: List<Task>,
+        nowMs: Long,
+        today: DayWindow,
+        events: List<CalendarEvent> = emptyList(),
+        calendar: LocalCalendar = LocalCalendar.fixedOffset(today.utcOffsetMs),
+    ): Today {
         val open = tasks.filter { (it.lifecycle == Lifecycle.ACTIVE || it.lifecycle == Lifecycle.INBOX) && !it.waitsForItsDay(today.epochDay) }
 
         val needs = buildList {
@@ -69,6 +80,15 @@ object TodayProjection {
         val todaysEvents = events.filter { it.overlaps(today) }
             .sortedWith(compareByDescending<CalendarEvent> { it.allDay }.thenBy { it.startAtMs }.thenBy { it.title })
 
-        return Today(needs, upNext, yourDay, doneToday, todaysEvents)
+        val timeline = TimelineRules.build(
+            // The planned Up next task stays in the timeline too, so the free time around it is right.
+            planned = (listOfNotNull(upNext) + yourDay).filter { it.scheduledAtMs != null },
+            anytime = yourDay.filter { it.scheduledAtMs == null },
+            events = todaysEvents,
+            nowMs = nowMs,
+            today = today,
+            calendar = calendar,
+        )
+        return Today(needs, upNext, yourDay, doneToday, todaysEvents, timeline)
     }
 }

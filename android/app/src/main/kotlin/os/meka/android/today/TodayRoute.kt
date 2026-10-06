@@ -83,7 +83,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
-import os.meka.core.domain.CalendarEvent
+import os.meka.core.domain.TimelineKind
 import os.meka.core.domain.NeedsYouReason
 import os.meka.core.domain.RepeatChoice
 import os.meka.core.domain.MorningBriefView
@@ -228,7 +228,7 @@ internal fun BoxWithConstraintsScope.TwoPaneMorph(
 /** How a task row takes part in shared transitions: whether its title travels, whether it draws it, a soft light on landing. */
 internal data class RowMotion(val shareTitle: Boolean = false, val titleVisible: Boolean = true, val landed: Boolean = false)
 
-/** Stagger groups on Today: greeting, needs you, up next, calendar, your day, done. */
+/** Stagger groups on Today: greeting, needs you, up next, your day (header), your day (rows), done. */
 private const val TODAY_SECTIONS = 6
 
 /** Present only while the device isn't enrolled for sync. */
@@ -283,6 +283,8 @@ private fun TodayPane(
     brief: MorningBriefView, openBrief: () -> Unit,
     reviewCard: ReviewCard, openReviewCard: () -> Unit,
 ) {
+    // "3 earlier" unfolds the finished events in place.
+    var earlierOpen by rememberSaveable { mutableStateOf(false) }
     Column(modifier.imePadding()) {
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -292,6 +294,10 @@ private fun TodayPane(
             item(key = "greeting") {
                 Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play))) {
                     Text(greeting(), style = MekaType.greeting, color = Meka.colors.textPrimary)
+                    if (today.timeline.dateLabel.isNotEmpty()) {
+                        Text(today.timeline.dateLabel, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                            modifier = Modifier.padding(top = MekaSpace.xxs))
+                    }
                     SyncLine(sync)
                     if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs))
                     Row(
@@ -385,20 +391,55 @@ private fun TodayPane(
                 }
                 item(key = "s-needs") { Spacer(Modifier.height(MekaSpace.l)) }
             }
-            today.upNext?.let { t ->
+            if (today.upNext != null || today.timeline.nextEvent != null) {
                 item(key = "h-next") { SectionLabel("Up next", Modifier.animateItem().appear(rememberAppearance(2, play))) }
+            }
+            // The next event within the hour: "Call with Tunde in 25 min".
+            today.timeline.nextEvent?.let { e ->
+                item(key = "nextevent") {
+                    NextEventCard(e, Modifier.padding(bottom = MekaSpace.xs).animateItem().appear(rememberAppearance(2, play)))
+                }
+                if (today.upNext == null) item(key = "s-nextevent") { Spacer(Modifier.height(MekaSpace.l)) }
+            }
+            today.upNext?.let { t ->
                 // One stable slot: when up next changes, the card's content cross-slides instead of the row swapping.
                 item(key = "upnext") { UpNextCard(t, actions, rowMotion, Modifier.animateItem().appear(rememberAppearance(2, play))) }
                 item(key = "s-next") { Spacer(Modifier.height(MekaSpace.l)) }
             }
-            if (today.events.isNotEmpty()) {
-                item(key = "h-cal") { SectionLabel("Calendar", Modifier.animateItem().appear(rememberAppearance(3, play))) }
-                items(today.events, key = { "e-" + it.id }) { e -> EventRow(e, Modifier.animateItem().appear(rememberAppearance(3, play))) }
-                item(key = "s-cal") { Spacer(Modifier.height(MekaSpace.l)) }
+            // One timeline: all-day chips, finished events folded, events and planned tasks in time order with the
+            // now line and free gaps; then tasks with no time.
+            val tl = today.timeline
+            if (tl.hasTimedOrAllDay) {
+                item(key = "h-day") { SectionLabel("Your day", Modifier.animateItem().appear(rememberAppearance(3, play))) }
+                if (tl.allDay.isNotEmpty()) {
+                    item(key = "allday") { AllDayChips(tl.allDay, Modifier.animateItem().appear(rememberAppearance(3, play))) }
+                }
+                tl.earlierLabel?.let { label ->
+                    item(key = "earlier") {
+                        EarlierToggle(label, earlierOpen, { earlierOpen = !earlierOpen }, Modifier.animateItem().appear(rememberAppearance(3, play)))
+                    }
+                    if (earlierOpen) {
+                        items(tl.earlier, key = { "x-" + it.id }) { r -> TimelineEventRow(r, past = true, modifier = Modifier.animateItem()) }
+                    }
+                }
+                items(tl.rows, key = { "r-" + it.id }) { r ->
+                    val m = Modifier.animateItem().appear(rememberAppearance(4, play))
+                    when (r.kind) {
+                        TimelineKind.EVENT -> TimelineEventRow(r, past = false, modifier = m)
+                        TimelineKind.TASK -> r.task?.let { t ->
+                            // The Up next task's title travels from its card, so its timeline row doesn't share it.
+                            val motion = if (t.id == today.upNext?.id) RowMotion() else rowMotion(t.id)
+                            TaskRow(t, actions, motion = motion, modifier = m, time = r.time, timelineLine = r.detail)
+                        }
+                        TimelineKind.GAP -> GapRow(r, m)
+                        TimelineKind.NOW -> NowLine(r, m)
+                    }
+                }
+                item(key = "s-day") { Spacer(Modifier.height(MekaSpace.l)) }
             }
-            if (today.yourDay.isNotEmpty()) {
-                item(key = "h-day") { SectionLabel("Your day", Modifier.animateItem().appear(rememberAppearance(4, play))) }
-                items(today.yourDay, key = { "d-" + it.id }) { t ->
+            if (tl.anytime.isNotEmpty()) {
+                item(key = "h-any") { SectionLabel("Anytime today", Modifier.animateItem().appear(rememberAppearance(4, play))) }
+                items(tl.anytime, key = { "d-" + it.id }) { t ->
                     TaskRow(t, actions, motion = rowMotion(t.id), modifier = Modifier.animateItem().appear(rememberAppearance(4, play)))
                 }
             }
@@ -465,7 +506,11 @@ private fun UpNextCard(t: Task, actions: TodayActions, rowMotion: (String) -> Ro
 }
 
 @Composable
-internal fun TaskRow(t: Task, actions: TodayActions, reason: NeedsYouReason? = null, motion: RowMotion = RowMotion(), modifier: Modifier = Modifier) {
+internal fun TaskRow(
+    t: Task, actions: TodayActions, reason: NeedsYouReason? = null, motion: RowMotion = RowMotion(), modifier: Modifier = Modifier,
+    /** On the timeline: the time column on the left and the core's line ("30 min · ↻ Every weekday") under the title. */
+    time: String? = null, timelineLine: String? = null,
+) {
     // Just landed from the plan: lit softly, then settles.
     val glow by animateColorAsState(
         if (motion.landed) Meka.colors.surfaceRaised else Color.Transparent, MekaMotion.appear(Meka.reducedMotion), label = "landed",
@@ -475,6 +520,7 @@ internal fun TaskRow(t: Task, actions: TodayActions, reason: NeedsYouReason? = n
             .padding(vertical = MekaSpace.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (time != null) TimeColumn(time, past = false)
         CompleteButton(t, actions.complete)
         Spacer(Modifier.width(MekaSpace.m))
         Column(Modifier.weight(1f)) {
@@ -484,7 +530,7 @@ internal fun TaskRow(t: Task, actions: TodayActions, reason: NeedsYouReason? = n
                 NeedsYouReason.CONFLICT -> "Edited on two devices — choose a version"
                 NeedsYouReason.OVERDUE -> "Overdue"
                 NeedsYouReason.DUE_TODAY_UNSCHEDULED -> "Due today · not scheduled"
-                null -> meta(t)
+                null -> if (time != null) timelineLine else meta(t)
             }
             line?.let {
                 val color = if (reason == NeedsYouReason.CONFLICT || reason == NeedsYouReason.OVERDUE) Meka.colors.critical else Meka.colors.textSecondary
@@ -605,29 +651,6 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
     Spacer(Modifier.height(MekaSpace.m))
     DetailActions(task, actions)
 }
-
-/** One calendar event: time on the left, title and source on the right. Finished events step back. */
-@Composable
-private fun EventRow(e: CalendarEvent, modifier: Modifier = Modifier) {
-    val past = !e.allDay && e.endAtMs < System.currentTimeMillis()
-    Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
-        Text(
-            eventTime(e), style = MekaType.itemMeta,
-            color = if (past) Meka.colors.textTertiary else Meka.colors.textSecondary,
-            modifier = Modifier.width(92.dp),
-        )
-        Column(Modifier.weight(1f)) {
-            Text(e.title, style = MekaType.body, color = if (past) Meka.colors.textTertiary else Meka.colors.textPrimary)
-            val source = listOfNotNull(e.location, providerLabel(e.provider)).joinToString(" · ")
-            Text(source, style = MekaType.caption, color = Meka.colors.textTertiary)
-        }
-    }
-}
-
-private fun eventTime(e: CalendarEvent): String =
-    if (e.allDay) "All day"
-    else timeFmt.format(Instant.ofEpochMilli(e.startAtMs).atZone(ZoneId.systemDefault())) + "–" +
-        timeFmt.format(Instant.ofEpochMilli(e.endAtMs).atZone(ZoneId.systemDefault()))
 
 internal fun providerLabel(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Outlook"; "fixtures" -> "Fixtures"; "news" -> "Headlines"; else -> p }
 

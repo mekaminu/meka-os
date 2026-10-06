@@ -577,7 +577,7 @@ class MekaCore(
 
     private fun project(all: List<os.meka.core.domain.Task> = tasks.all()): Today {
         val now = nowMs()
-        return TodayProjection.project(all, now, dayWindow(now), events.all())
+        return TodayProjection.project(all, now, dayWindow(now), events.all(), ZoneCalendar(timeZone))
     }
 
     private fun localClock(): LocalClock {

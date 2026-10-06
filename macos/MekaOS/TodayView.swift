@@ -12,8 +12,10 @@ struct TodayView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// App open: greeting fades up, then each section 40 ms apart. Plays once; later arrivals use row transitions.
     @State private var introPlayed = false
+    /// "3 earlier" unfolds the finished events in place.
+    @State private var earlierOpen = false
     private var play: Bool { !introPlayed }
-    private static let sections = 6 // greeting, needs you, up next, calendar, your day, done
+    private static let sections = 6 // greeting, needs you, up next, your day (header), your day (rows), done
 
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
     @Namespace private var selection
@@ -45,6 +47,10 @@ struct TodayView: View {
                         .font(MekaType.greeting).tracking(MekaType.greetingTracking)
                         .foregroundStyle(palette.textPrimary)
                         .staggeredAppear(0, play: play)
+                    if let date = model.today?.timeline.dateLabel, !date.isEmpty {
+                        Text(date).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                            .staggeredAppear(0, play: play)
+                    }
                     if !model.isConnected || model.signedOut {
                         Button(model.signedOut ? "Reconnect this Mac" : "This Mac isn't syncing yet · Connect") { model.showConnect = true }
                             .buttonStyle(.plain)
@@ -119,8 +125,17 @@ struct TodayView: View {
                             }
                             Spacer().frame(height: MekaSpace.l)
                         }
-                        if let next = today.upNext {
+                        if today.upNext != nil || today.timeline.nextEvent != nil {
                             SectionLabel("Up next", palette).staggeredAppear(2, play: play)
+                        }
+                        // The next event within the hour: "Call with Tunde in 25 min".
+                        if let e = today.timeline.nextEvent {
+                            NextEventCard(next: e, palette: palette)
+                                .padding(.bottom, today.upNext == nil ? MekaSpace.l : MekaSpace.xs)
+                                .transition(.opacity)
+                                .staggeredAppear(2, play: play)
+                        }
+                        if let next = today.upNext {
                             // Up next changes: the new card pushes in from the right (cross-fade with Reduce Motion).
                             UpNextCard(task: next, palette: palette)
                                 .id(next.id)
@@ -128,14 +143,28 @@ struct TodayView: View {
                                 .staggeredAppear(2, play: play)
                             Spacer().frame(height: MekaSpace.l)
                         }
-                        if !today.events.isEmpty {
-                            SectionLabel("Calendar", palette).staggeredAppear(3, play: play)
-                            ForEach(today.events, id: \.id) { e in EventRow(event: e, palette: palette).staggeredAppear(3, play: play) }
+                        // One timeline: all-day chips, finished events folded, events and planned tasks in time
+                        // order with the now line and free gaps; then tasks with no time.
+                        let tl = today.timeline
+                        if tl.hasTimedOrAllDay {
+                            SectionLabel("Your day", palette).staggeredAppear(3, play: play)
+                            if !tl.allDay.isEmpty {
+                                AllDayChips(events: tl.allDay, palette: palette).staggeredAppear(3, play: play)
+                            }
+                            if let label = tl.earlierLabel {
+                                EarlierToggle(label: label, open: $earlierOpen, palette: palette).staggeredAppear(3, play: play)
+                                if earlierOpen {
+                                    ForEach(tl.earlier, id: \.id) { r in TimelineEventRow(row: r, past: true, palette: palette).transition(.opacity) }
+                                }
+                            }
+                            ForEach(tl.rows, id: \.id) { r in
+                                timelineRow(r).staggeredAppear(4, play: play)
+                            }
                             Spacer().frame(height: MekaSpace.l)
                         }
-                        if !today.yourDay.isEmpty {
-                            SectionLabel("Your day", palette).staggeredAppear(4, play: play)
-                            ForEach(today.yourDay, id: \.id) { t in TaskRow(task: t, reason: nil, palette: palette).staggeredAppear(4, play: play) }
+                        if !tl.anytime.isEmpty {
+                            SectionLabel("Anytime today", palette).staggeredAppear(4, play: play)
+                            ForEach(tl.anytime, id: \.id) { t in TaskRow(task: t, reason: nil, palette: palette).staggeredAppear(4, play: play) }
                         }
                         if !today.doneToday.isEmpty {
                             Text("\(today.doneToday.count) done today")
@@ -153,6 +182,8 @@ struct TodayView: View {
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.shutdown?.offered)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.brief?.offered)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.review?.card.offered)
+                .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.timeline.rows.map(\.id))
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: earlierOpen)
             }
             .task {
                 guard !introPlayed else { return }
@@ -161,6 +192,18 @@ struct TodayView: View {
             }
             CaptureField(palette: palette)
                 .padding(MekaSpace.m)
+        }
+    }
+
+    @ViewBuilder
+    private func timelineRow(_ r: TimelineRow) -> some View {
+        switch r.kind {
+        case .event: TimelineEventRow(row: r, past: false, palette: palette)
+        case .task:
+            if let t = r.task { TaskRow(task: t, reason: nil, palette: palette, time: r.time, timelineLine: r.detail) }
+        case .gap: GapRow(row: r, palette: palette)
+        case .now: NowLine(row: r, palette: palette)
+        default: EmptyView()
         }
     }
 
@@ -193,14 +236,24 @@ struct TaskRow: View {
     let reason: NeedsYouReason?
     let palette: MekaPalette
 
-    init(task: MekaTask, reason: NeedsYouReason?, palette: MekaPalette) {
+    /// On the timeline: the time column on the left and the core's line ("30 min · ↻ Every weekday") under the title.
+    let time: String?
+    let timelineLine: String?
+
+    init(task: MekaTask, reason: NeedsYouReason?, palette: MekaPalette, time: String? = nil, timelineLine: String? = nil) {
         self.task = task
         self.reason = reason
         self.palette = palette
+        self.time = time
+        self.timelineLine = timelineLine
     }
 
     var body: some View {
         HStack(spacing: MekaSpace.m) {
+            if let time {
+                Text(time).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textSecondary)
+                    .frame(width: TimelineMetrics.timeColumn - MekaSpace.m, alignment: .leading)
+            }
             CompleteButton(task: task, palette: palette)
             VStack(alignment: .leading, spacing: 2) {
                 Text(task.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
@@ -240,39 +293,8 @@ struct TaskRow: View {
         case .conflict: "Edited on two devices — choose a version"
         case .overdue: "Overdue"
         case .dueTodayUnscheduled: "Due today · not scheduled"
-        default: model.repeatLine(task)
+        default: time != nil ? timelineLine : model.repeatLine(task)
         }
-    }
-}
-
-/// One calendar event: time on the left, title and source on the right. Finished events step back.
-private struct EventRow: View {
-    let event: CalendarEvent
-    let palette: MekaPalette
-
-    var body: some View {
-        let past = !event.allDay && Double(event.endAtMs) / 1000 < Date.now.timeIntervalSince1970
-        HStack(alignment: .firstTextBaseline, spacing: MekaSpace.m) {
-            Text(time).font(MekaType.itemMeta).monospacedDigit()
-                .foregroundStyle(past ? palette.textTertiary : palette.textSecondary)
-                .frame(width: 96, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(event.title).font(MekaType.body).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
-                Text([event.location, CoreModel.providerName(event.provider)].compactMap { $0 }.joined(separator: " · "))
-                    .font(MekaType.caption).foregroundStyle(palette.textTertiary)
-            }
-            Spacer()
-        }
-        .padding(.vertical, MekaSpace.xs)
-        .padding(.horizontal, MekaSpace.xs)
-    }
-
-    private var time: String {
-        if event.allDay { return "All day" }
-        let f = Date.FormatStyle.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)
-        let start = Date(timeIntervalSince1970: Double(event.startAtMs) / 1000)
-        let end = Date(timeIntervalSince1970: Double(event.endAtMs) / 1000)
-        return "\(start.formatted(f))–\(end.formatted(f))"
     }
 }
 
