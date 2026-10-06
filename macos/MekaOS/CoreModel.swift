@@ -25,6 +25,8 @@ final class CoreModel {
     /// Morning brief: today at a glance, waiting on, what needs you on your lists. "Got it" syncs with the Fold.
     private(set) var brief: MorningBriefView?
     var showBrief = false
+    /// Weekly review: the week looked back on, the week ahead, north-star numbers. "Done reviewing" syncs with the Fold.
+    private(set) var review: WeeklyReviewView?
     /// Quiet hours, digest times and tiers (notification governor), synced with the Fold.
     private(set) var notifySettings: NotificationSettings?
     /// "Quiet until 07:00", "Next digest 18:00 · 3 things so far".
@@ -100,6 +102,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await b in core.briefView { self?.brief = b }
+        })
+        observers.append(Task { [weak self] in
+            for await r in core.reviewView { self?.review = r }
         })
         observers.append(Task { [weak self] in
             for await s in core.notificationSettings { self?.notifySettings = s }
@@ -396,6 +401,14 @@ final class CoreModel {
 
     /// Shows or hides a news topic's headlines in the brief; synced with the Fold.
     func setNewsTopic(_ id: String, on: Bool) { MekaHaptics.tick(); run { try await $0.setNewsTopic(topicId: id, on: on) } }
+
+    // MARK: Weekly review
+
+    /// Shows the week `offset` weeks from this one (0 this week, -1 last week, back to -12); a tick haptic.
+    func showReviewWeek(_ offset: Int) { MekaHaptics.tick(); run { try await $0.showReviewWeek(offset: Int32(offset)) } }
+
+    /// "Done reviewing" for the week on screen; synced with the Fold (light haptic; the check pops).
+    func reviewDone() { MekaHaptics.light(); run { try await $0.reviewDone() } }
 
     // MARK: Goals and habits
 

@@ -305,6 +305,32 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theWeeklyReviewCountsTheWeekStepsBackAndDoneReviewingSyncs() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 1, 18, 30).toInstant(london).toEpochMilliseconds() // a Thursday
+        val a = core("android"); val m = core("mac")
+        val id = a.addTask("Book the MOT")
+        a.complete(id)
+        a.tick()
+        val v = a.reviewView.value
+        assertEquals("This week", v.title)
+        assertEquals("Mon 28 Sep – Sun 4 Oct", v.rangeLabel)
+        assertEquals(listOf("Book the MOT"), v.done.map { it.title })
+        assertEquals("Next week", v.aheadTitle)
+
+        a.showReviewWeek(-1)
+        assertEquals("Last week", a.reviewView.value.title)
+        assertTrue(a.reviewView.value.done.isEmpty())
+        a.showReviewWeek(0)
+
+        a.reviewDone()
+        assertTrue(a.reviewView.value.reviewed)
+        a.syncNow(); m.syncNow()
+        assertTrue(m.reviewView.value.reviewed)
+        assertEquals("Reviewed Thu 1 Oct at 18:30", m.reviewView.value.reviewedLine)
+    }
+
+    @Test
     fun headlinesFromTheServerShowInTheBriefForTheChosenTopicsOnBothDevices() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 7, 45).toInstant(london).toEpochMilliseconds()

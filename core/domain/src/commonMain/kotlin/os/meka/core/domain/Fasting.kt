@@ -53,6 +53,11 @@ data class LastFast(
 )
 
 /** One of the last seven days. */
+/** A finished fast, for the weekly review. */
+data class EndedFast(val startedAtMs: Long, val endedAtMs: Long, val targetHours: Int) {
+    val reachedGoal: Boolean get() = endedAtMs - startedAtMs >= targetHours * 3_600_000L
+}
+
 data class FastingDay(
     val epochDay: Long,
     /** "Mon". */
@@ -354,6 +359,9 @@ class Fasting(
     private fun live(id: String): Fast? = replica.entity(EntityTypes.FAST, id)?.toFast()
 
     private fun open(): List<Fast> = all().filter { it.end == null }
+
+    /** Finished fasts (overlapping ones merged), oldest first: for the weekly review. */
+    fun ended(): List<EndedFast> = merged().map { EndedFast(it.start, it.end!!, it.target) }
 
     private fun finished(): List<Fast> = all().filter { it.end != null }
 

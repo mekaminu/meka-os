@@ -22,3 +22,6 @@ These are computed from the local audit log and graph. They are counted, never i
 - **No free text leaves the device** in telemetry: no titles, no names, no message content.
 - A PII-scrubber test feeds known PII fixtures through every telemetry event constructor and asserts nothing matches.
 - The north-star metrics above stay in the user's own database and are synced like other data. They are not sent to a telemetry vendor.
+
+## Addendum, 2026-10-06: weekly review, slice 1
+The weekly review (Review tab on both apps, `WeeklyReview` in core/domain) shows the six north-star metrics with no values yet, each saying when it starts counting: they measure what MEKA does on its own (acting, reminding, asking, notifying), and the activity log and approvals that would record those arrive in V1. Interruptions come first (next slice): the governor will record what each device posts at Critical, Needs a decision and Heads-up (counts only, no text) in the user's own synced data. The rest of the review counts what was done, never inferred from free text.

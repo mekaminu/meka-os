@@ -34,6 +34,8 @@ import os.meka.core.domain.DayWindow
 import os.meka.core.domain.EveningShutdown
 import os.meka.core.domain.MorningBrief
 import os.meka.core.domain.MorningBriefView
+import os.meka.core.domain.WeeklyReview
+import os.meka.core.domain.WeeklyReviewView
 import os.meka.core.domain.ShutdownView
 import os.meka.core.domain.Fasting
 import os.meka.core.domain.FastingView
@@ -116,6 +118,9 @@ class MekaCore(
     private val shutdown = EveningShutdown(replica, tasks, nowMs, ZoneCalendar(timeZone))
     private val brief = MorningBrief(replica, nowMs, ZoneCalendar(timeZone))
     private val news = os.meka.core.domain.News(replica)
+    private val review = WeeklyReview(replica, nowMs, ZoneCalendar(timeZone))
+    /** The week the review screen shows (null: the default for today); a screen choice, not synced. */
+    private var reviewOffset: Int? = null
     private val notifyPrefs = NotificationPrefs(replica)
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
@@ -148,6 +153,13 @@ class MekaCore(
      * fast. Offered from the end of quiet hours until noon; synced "Got it". Moves with the clock.
      */
     val briefView: StateFlow<MorningBriefView> = _brief.asStateFlow()
+
+    private val _review = MutableStateFlow(WeeklyReviewView.EMPTY)
+    /**
+     * Weekly review: the week looked back on (done, habits, fasts, lists, still open), the week ahead, and the
+     * north-star numbers (ADR-013). Step weeks with [showReviewWeek]. Synced "Done reviewing"; moves with the clock.
+     */
+    val reviewView: StateFlow<WeeklyReviewView> = _review.asStateFlow()
 
     private val _workMode = MutableStateFlow(work.state(localClock()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
@@ -343,6 +355,13 @@ class MekaCore(
     /** Shows or hides a news topic's headlines in the brief ([os.meka.core.domain.NewsTopics]); synced. */
     suspend fun setNewsTopic(topicId: String, on: Boolean) = onCore { news.setTopic(topicId, on) }
 
+    // ---- Weekly review ----
+
+    /** Shows the week [offset] weeks from this one (0 this week, -1 last week, back to -12). */
+    suspend fun showReviewWeek(offset: Int) = onCore { reviewOffset = offset; refresh() }
+    /** "Done reviewing" for the week on screen; synced. */
+    suspend fun reviewDone() = onCore { review.markReviewed(_review.value.weekStart) }
+
     // ---- Notification governor ----
 
     /** Quiet hours as local minutes of the day; an end before the start crosses midnight. */
@@ -491,6 +510,9 @@ class MekaCore(
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, events.all(), workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
             news.all(), news.choices())
+        _review.value = review.view(reviewOffset, all, events.all(), _goals.value, fasting.ended()) { day ->
+            dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
+        }
         _notifyPreview.value = Governor.preview(currentNotices(), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(

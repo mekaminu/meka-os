@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
+import os.meka.android.review.ReviewRoute
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
@@ -146,7 +147,7 @@ private fun Destination(d: ShellDestination, core: MekaCore, connect: ConnectHoo
         ShellDestination.NEEDS_YOU -> NeedsYouRoute(core, openLists = { go(ShellDestination.LISTS) })
         ShellDestination.LISTS -> ListsRoute(core)
         ShellDestination.GOALS -> GoalsRoute(core)
-        ShellDestination.REVIEW -> Upcoming(d, "Your weekly review and north-star numbers land here.")
+        ShellDestination.REVIEW -> ReviewRoute(core)
         ShellDestination.VAULT -> Upcoming(d, "Encrypted documents, with expiry dates sent to your plan, land here.")
     }
 }

@@ -158,6 +158,28 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(core.briefView.value.newsTopics.filter(\.chosen).map(\.id), ["top", "world", "technology"])
     }
 
+    func testWeeklyReviewThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "review-\(UUID().uuidString).db", deviceKey: nil
+        )
+        try await core.showReviewWeek(offset: 0)
+        let id = try await core.addTask(title: "Book the MOT")
+        try await core.complete(taskId: id)
+        let v = core.reviewView.value
+        XCTAssertEqual(v.title, "This week")
+        XCTAssertEqual(v.done.map(\.title), ["Book the MOT"])
+        XCTAssertEqual(v.tiles.first?.value, 1)
+        XCTAssertEqual(v.northStar.count, 6)
+        XCTAssertFalse(v.reviewed)
+        try await core.reviewDone()
+        XCTAssertTrue(core.reviewView.value.reviewed)
+        try await core.showReviewWeek(offset: -1)
+        XCTAssertEqual(core.reviewView.value.title, "Last week")
+        XCTAssertTrue(core.reviewView.value.canGoForward)
+    }
+
     func testNotificationGovernorThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

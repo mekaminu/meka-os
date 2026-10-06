@@ -36,7 +36,7 @@ final class ShellNavTests: XCTestCase {
 
     @MainActor
     func testEveryUpcomingDestinationSaysWhatIsComing() {
-        for d in [ShellDestination.review, .vault] { XCTAssertNotNil(ShellNav.upcomingLine(d)) }
-        for d in [ShellDestination.today, .needsYou, .lists, .goals] { XCTAssertNil(ShellNav.upcomingLine(d)) }
+        XCTAssertNotNil(ShellNav.upcomingLine(.vault))
+        for d in [ShellDestination.today, .needsYou, .lists, .goals, .review] { XCTAssertNil(ShellNav.upcomingLine(d)) }
     }
 }
