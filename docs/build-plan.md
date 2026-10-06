@@ -37,6 +37,10 @@ Status marks: `[x]` done · `[~]` in progress (partly landed) · `[ ]` not start
 11. **Stop rule.** If something can't be undone and could reasonably go either way, don't do it: write it under
     "Needs Meka" and move on.
 
+**Type weight (Meka, 2026-10-06):** calendar events and other context you don't act on use the regular `body` style;
+the heavier `itemTitle` weight is for things you act on (tasks, habits, approvals). Meka found medium-weight event titles
+too heavy on the Fold.
+
 ## Motion catalogue (applies to every screen)
 
 Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cross-fade, no movement.

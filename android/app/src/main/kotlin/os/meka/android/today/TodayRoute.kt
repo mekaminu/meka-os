@@ -617,7 +617,7 @@ private fun EventRow(e: CalendarEvent, modifier: Modifier = Modifier) {
             modifier = Modifier.width(92.dp),
         )
         Column(Modifier.weight(1f)) {
-            Text(e.title, style = MekaType.itemTitle, color = if (past) Meka.colors.textTertiary else Meka.colors.textPrimary)
+            Text(e.title, style = MekaType.body, color = if (past) Meka.colors.textTertiary else Meka.colors.textPrimary)
             val source = listOfNotNull(e.location, providerLabel(e.provider)).joinToString(" · ")
             Text(source, style = MekaType.caption, color = Meka.colors.textTertiary)
         }

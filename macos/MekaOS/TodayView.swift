@@ -257,7 +257,7 @@ private struct EventRow: View {
                 .foregroundStyle(past ? palette.textTertiary : palette.textSecondary)
                 .frame(width: 96, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
-                Text(event.title).font(MekaType.itemTitle).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
+                Text(event.title).font(MekaType.body).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
                 Text([event.location, CoreModel.providerName(event.provider)].compactMap { $0 }.joined(separator: " · "))
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
