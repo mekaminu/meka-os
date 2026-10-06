@@ -30,6 +30,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.semantics.selected
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -175,5 +179,30 @@ internal fun DetailActions(task: Task, actions: TodayActions) {
         }
         Text("Delete", style = MekaType.itemTitle, color = Meka.colors.critical,
             modifier = Modifier.clickable(role = Role.Button) { actions.delete(task.id) })
+    }
+}
+
+/**
+ * Goal: link this task to one of your goals, so finishing it counts towards the goal's progress. Shown only once a
+ * goal exists. The lit chip is the current link; "No goal" unlinks.
+ */
+@Composable
+internal fun GoalSection(task: Task, actions: TodayActions) {
+    val goals by actions.goals.collectAsState()
+    if (goals.goals.isEmpty() && task.goalId == null) return
+    SectionLabel("Goal", Modifier.padding(top = MekaSpace.l))
+    val options = listOf<Pair<String?, String>>(null to "No goal") + goals.goals.map { it.id to it.title }
+    Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        options.forEach { (id, label) ->
+            val lit = id == task.goalId
+            val bg by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(Meka.reducedMotion), label = "goal-chip")
+            Text(
+                label, style = MekaType.caption, color = if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 1,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+                    .semantics { selected = lit }
+                    .clickable(role = Role.Button) { if (!lit) actions.setGoal(task.id, id) }
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            )
+        }
     }
 }

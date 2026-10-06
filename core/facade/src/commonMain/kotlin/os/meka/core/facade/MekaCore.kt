@@ -31,6 +31,10 @@ import os.meka.core.domain.DayWindow
 import os.meka.core.domain.IdGenerator
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.ListsView
+import os.meka.core.domain.GoalHorizon
+import os.meka.core.domain.Goals
+import os.meka.core.domain.GoalsView
+import os.meka.core.domain.HabitTiming
 import os.meka.core.domain.LocalClock
 import os.meka.core.domain.SomedayKind
 import os.meka.core.domain.RepeatChoice
@@ -86,6 +90,7 @@ class MekaCore(
     private val events = CalendarEvents(replica)
     private val work = WorkMode(replica, nowMs)
     private val lists = os.meka.core.domain.Lists(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
 
@@ -95,6 +100,10 @@ class MekaCore(
     private val _lists = MutableStateFlow(ListsView.EMPTY)
     /** Waiting for, Someday and Decisions, with what is due to chase or review today. Synced; moves with the clock. */
     val listsView: StateFlow<ListsView> = _lists.asStateFlow()
+
+    private val _goals = MutableStateFlow(GoalsView.EMPTY)
+    /** Habits (pace, streaks, this week) and goals (progress). Synced; moves with the clock. */
+    val goalsView: StateFlow<GoalsView> = _goals.asStateFlow()
 
     private val _workMode = MutableStateFlow(work.state(localClock()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
@@ -134,10 +143,13 @@ class MekaCore(
         onCore { tasks.edit(taskId, if (atMs == null) TaskEdit(clearScheduledAt = true) else TaskEdit(scheduledAtMs = atMs)) }
     suspend fun delete(taskId: String) = onCore { tasks.delete(taskId) }
 
-    /** A suggested plan for the rest of today (DayPlanner v1). Changes nothing until [applyPlan]. */
+    /**
+     * A suggested plan for the rest of today (DayPlanner v1), making room first for habits that are behind or due.
+     * Changes nothing until [applyPlan].
+     */
     suspend fun planDay(): DayPlanner.Plan = onCore {
         val now = nowMs()
-        DayPlanner.plan(tasks.all(), events.all(), now, dayWindow(now))
+        DayPlanner.plan(tasks.all(), events.all(), now, dayWindow(now), habits = goals.plannerHabits())
     }
 
     /** Schedules each planned task at its suggested time; everything syncs like a manual edit. */
@@ -195,6 +207,31 @@ class MekaCore(
         onCore { lists.replaceDecision(id, statement, rationale, reviewInDays) }
     suspend fun editDecision(id: String, statement: String?, rationale: String?) = onCore { lists.editDecision(id, statement, rationale) }
     suspend fun deleteDecision(id: String) = onCore { lists.deleteDecision(id) }
+
+    // ---- Goals and habits ----
+
+    /** Adds a habit: [perWeek] 1–7, a part of the day the planner prefers, and how long one go takes. */
+    suspend fun addHabit(title: String, perWeek: Int, timing: HabitTiming, minutes: Int, goalId: String?): String =
+        onCore { goals.addHabit(title, perWeek, timing, minutes, goalId) }
+    suspend fun editHabit(id: String, title: String?, perWeek: Int?, timing: HabitTiming?, minutes: Int?) =
+        onCore { goals.editHabit(id, title, perWeek, timing, minutes) }
+    suspend fun setHabitTarget(id: String, perWeek: Int) = onCore { goals.editHabit(id, perWeek = perWeek) }
+    suspend fun setHabitTiming(id: String, timing: HabitTiming) = onCore { goals.editHabit(id, timing = timing) }
+    suspend fun setHabitMinutes(id: String, minutes: Int) = onCore { goals.editHabit(id, minutes = minutes) }
+    /** Ticks or unticks a habit for today. */
+    suspend fun setHabitDone(id: String, done: Boolean) = onCore { goals.setHabitDone(id, done) }
+    suspend fun setHabitGoal(id: String, goalId: String?) = onCore { goals.setHabitGoal(id, goalId) }
+    suspend fun deleteHabit(id: String) = onCore { goals.deleteHabit(id) }
+
+    suspend fun addGoal(title: String, target: String?, horizon: GoalHorizon): String = onCore { goals.addGoal(title, target, horizon) }
+    suspend fun editGoal(id: String, title: String?, target: String?, horizon: GoalHorizon?) = onCore { goals.editGoal(id, title, target, horizon) }
+    suspend fun setGoalHorizon(id: String, horizon: GoalHorizon) = onCore { goals.editGoal(id, horizon = horizon) }
+    /** Hand-set progress (used while nothing is linked to the goal). */
+    suspend fun setGoalProgress(id: String, pct: Int) = onCore { goals.setGoalProgress(id, pct) }
+    suspend fun finishGoal(id: String) = onCore { goals.finishGoal(id) }
+    suspend fun deleteGoal(id: String) = onCore { goals.deleteGoal(id) }
+    /** Links a task to a goal (null unlinks); done tasks then count towards the goal. */
+    suspend fun setTaskGoal(taskId: String, goalId: String?) = onCore { goals.setTaskGoal(taskId, goalId) }
 
     // ---- Work mode ----
 
@@ -314,6 +351,7 @@ class MekaCore(
         val all = tasks.all()
         _today.value = project(all)
         _lists.value = lists.view(all)
+        _goals.value = goals.view(all)
         _workMode.value = work.state(localClock())
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(

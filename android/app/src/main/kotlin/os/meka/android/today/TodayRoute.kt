@@ -87,6 +87,8 @@ import os.meka.core.domain.Task
 import os.meka.core.domain.Today
 import os.meka.core.facade.ConflictChoice
 import os.meka.core.facade.MekaCore
+import os.meka.core.domain.GoalsView
+import kotlinx.coroutines.flow.StateFlow
 import os.meka.core.sync.SyncStatus
 import java.time.Instant
 import java.time.LocalDate
@@ -223,6 +225,8 @@ internal fun todayActions(core: MekaCore, scope: CoroutineScope, selected: () ->
     setStepDone = { stepId, done -> scope.launch { core.setStepDone(stepId, done) } },
     removeStep = { stepId -> scope.launch { core.removeStep(stepId) } },
     someday = { id -> scope.launch { runCatching { core.moveToSomeday(id, SomedayKind.IDEA) }; if (selected() == id) setSelected(null) } },
+    goals = core.goalsView,
+    setGoal = { id, goalId -> scope.launch { runCatching { core.setTaskGoal(id, goalId) } } },
 )
 
 data class TodayActions(
@@ -241,6 +245,9 @@ data class TodayActions(
     val removeStep: (String) -> Unit,
     /** Out of Today and the planner, into Lists → Someday. */
     val someday: (String) -> Unit,
+    /** Open goals, for linking a task to one (its progress then counts the task). */
+    val goals: StateFlow<GoalsView>,
+    val setGoal: (String, String?) -> Unit,
 )
 
 @Composable
@@ -514,6 +521,7 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
         Spacer(Modifier.height(MekaSpace.l))
         RepeatSection(task, actions)
         StepsSection(task, actions)
+        GoalSection(task, actions)
     }
 
     Spacer(Modifier.height(MekaSpace.m))

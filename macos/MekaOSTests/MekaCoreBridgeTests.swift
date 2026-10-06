@@ -50,4 +50,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(lists.decisions.first?.statement, "No new car")
         XCTAssertEqual(ListRules.shared.CHASE_CHOICES.last?.days, nil)
     }
+
+    func testGoalsAndHabitsThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "goals-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let goal = try await core.addGoal(title: "Fitter by spring", target: nil, horizon: GoalRules.shared.horizonAt(index: 1))
+        let habit = try await core.addHabit(title: "Stretch", perWeek: 7, timing: .morning, minutes: 15, goalId: goal)
+        XCTAssertEqual(core.goalsView.value.habits.first?.pace, .due)
+        try await core.setHabitDone(id: habit, done: true)
+        let view = core.goalsView.value
+        XCTAssertEqual(view.habits.first?.doneToday, true)
+        XCTAssertEqual(view.habits.first?.week.filter { $0.boolValue }.count, 1)
+        XCTAssertEqual(view.goals.first?.counted, true)
+        XCTAssertEqual(GoalRules.shared.timingLabel(t: .morning), "Morning")
+        let plan = try await core.planDay()
+        XCTAssertTrue(plan.habits.isEmpty)
+    }
 }

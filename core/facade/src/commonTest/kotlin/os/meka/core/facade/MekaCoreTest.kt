@@ -195,4 +195,23 @@ class MekaCoreTest {
         assertEquals(listOf("Refund"), m.listsView.value.waiting.map { it.title })
         assertEquals(1, m.listsView.value.reviewsDue)
     }
+
+    @Test
+    fun habitsTickSyncAndThePlanMakesRoomForOnesThatAreDue() = runTest {
+        val a = core("android"); val m = core("mac")
+        val goal = a.addGoal("Fitter by spring", null, os.meka.core.domain.GoalHorizon.MEDIUM)
+        val h = a.addHabit("Stretch", 7, os.meka.core.domain.HabitTiming.ANYTIME, 15, goal)
+        assertEquals(os.meka.core.domain.HabitPace.DUE, a.goalsView.value.habits.single().pace)
+        val plan = a.planDay()
+        // Room is made for the habit today unless the day is already over (the test clock's local time decides).
+        assertEquals(plan.habits.map { it.habitId } + plan.habitsUnplaced.map { it.id }, listOf(h))
+        a.setHabitDone(h, true)
+        assertTrue(a.goalsView.value.habits.single().doneToday)
+        assertTrue(a.planDay().habits.isEmpty())
+        a.syncNow(); m.syncNow()
+        val mine = m.goalsView.value
+        assertTrue(mine.habits.single().doneToday)
+        assertEquals(listOf("Fitter by spring"), mine.goals.map { it.title })
+        assertTrue(mine.goals.single().counted)
+    }
 }

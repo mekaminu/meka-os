@@ -59,6 +59,7 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.ListsRoute
+import os.meka.android.goals.GoalsRoute
 import os.meka.android.today.ConnectHook
 import os.meka.android.today.NeedsYouRoute
 import os.meka.android.today.TodayRoute
@@ -139,7 +140,7 @@ private fun Destination(d: ShellDestination, core: MekaCore, connect: ConnectHoo
         ShellDestination.TODAY -> TodayRoute(core, connect)
         ShellDestination.NEEDS_YOU -> NeedsYouRoute(core, openLists = { go(ShellDestination.LISTS) })
         ShellDestination.LISTS -> ListsRoute(core)
-        ShellDestination.GOALS -> Upcoming(d, "Goals and habits, with progress and streaks, land here. The planner will make room for habits that fall behind.")
+        ShellDestination.GOALS -> GoalsRoute(core)
         ShellDestination.REVIEW -> Upcoming(d, "Your weekly review and north-star numbers land here.")
         ShellDestination.VAULT -> Upcoming(d, "Encrypted documents, with expiry dates sent to your plan, land here.")
     }

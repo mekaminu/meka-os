@@ -15,6 +15,8 @@ final class CoreModel {
     private(set) var work: WorkModeState?
     /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
     private(set) var lists: ListsView?
+    /// Habits (pace, streaks) and goals (progress). Synced with the Fold.
+    private(set) var goals: GoalsView?
     var showWork = false
     var selectedID: String?
     /// The shell's current destination and which way the last switch moved (for the push transition).
@@ -69,6 +71,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await l in core.listsView { self?.lists = l }
+        })
+        observers.append(Task { [weak self] in
+            for await g in core.goalsView { self?.goals = g }
         })
         // Work mode and Today move with the clock: re-evaluate every half minute.
         observers.append(Task {
@@ -234,6 +239,40 @@ final class CoreModel {
     func deleteDecision(_ id: String) { run { try await $0.deleteDecision(id: id) } }
 
     private static func k(_ v: Int?) -> KotlinInt? { v.map { KotlinInt(int: Int32($0)) } }
+
+    // MARK: Goals and habits
+
+    func addHabit(_ title: String, perWeek: Int, timing: HabitTiming) {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        run { _ = try await $0.addHabit(title: t, perWeek: Int32(perWeek), timing: timing, minutes: GoalRules.shared.DEFAULT_MINUTES, goalId: nil) }
+    }
+
+    /// Ticks or unticks a habit for today (light haptic; the circle pops).
+    func setHabitDone(_ id: String, _ done: Bool) { MekaHaptics.light(); run { try await $0.setHabitDone(id: id, done: done) } }
+    func setHabitTarget(_ id: String, _ perWeek: Int32) { run { try await $0.setHabitTarget(id: id, perWeek: perWeek) } }
+    func setHabitTiming(_ id: String, _ timing: HabitTiming) { run { try await $0.setHabitTiming(id: id, timing: timing) } }
+    func setHabitMinutes(_ id: String, _ minutes: Int32) { run { try await $0.setHabitMinutes(id: id, minutes: minutes) } }
+    func setHabitGoal(_ id: String, _ goalID: String?) { run { try await $0.setHabitGoal(id: id, goalId: goalID) } }
+    func deleteHabit(_ id: String) { run { try await $0.deleteHabit(id: id) } }
+
+    func addGoal(_ title: String, target: String?, horizonIndex: Int) {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        let tg = target?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let h = GoalRules.shared.horizonAt(index: Int32(horizonIndex))
+        run { _ = try await $0.addGoal(title: t, target: (tg?.isEmpty ?? true) ? nil : tg, horizon: h) }
+    }
+
+    func setGoalHorizon(_ id: String, index: Int) {
+        let h = GoalRules.shared.horizonAt(index: Int32(index))
+        run { try await $0.setGoalHorizon(id: id, horizon: h) }
+    }
+    func stepGoal(_ id: String, from pct: Int32, by delta: Int32) { run { try await $0.setGoalProgress(id: id, pct: pct + delta) } }
+    func finishGoal(_ id: String) { MekaHaptics.light(); run { try await $0.finishGoal(id: id) } }
+    func deleteGoal(_ id: String) { run { try await $0.deleteGoal(id: id) } }
+    /// Links a task to a goal (nil unlinks); finishing it then counts towards the goal.
+    func setTaskGoal(_ taskID: String, _ goalID: String?) { run { try await $0.setTaskGoal(taskId: taskID, goalId: goalID) } }
 
     // MARK: Commands
 

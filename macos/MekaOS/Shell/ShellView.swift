@@ -54,6 +54,7 @@ struct ShellView: View {
         case .today: TodayView()
         case .needsYou: NeedsYouView()
         case .lists: ListsScreen()
+        case .goals: GoalsScreen()
         default: UpcomingView(destination: d, palette: palette)
         }
     }

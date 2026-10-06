@@ -112,6 +112,16 @@ object GoalFields {
 object HabitFields {
     const val TARGET_PER_WEEK = "targetPerWeek"
     const val PREFERRED_TIMING = "preferredTiming"
+    /** How long one go takes, so the planner can make room for it. */
+    const val MINUTES = "minutes"
+}
+
+/** One habit on one local day. Id `<habitId>.d<epochDay>` so two devices ticking the same day write one entity. */
+object HabitCompletionFields {
+    const val HABIT_ID = "habitId"
+    const val DAY = "day"
+    const val DONE = "done"
+    const val AT = "atMs"
 }
 
 object PersonFields {

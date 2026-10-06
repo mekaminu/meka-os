@@ -306,12 +306,19 @@ private struct PlanSheet: View {
     let palette: MekaPalette
 
     private struct Row: Identifiable { let id: String; let start: Int64; let time: String; let title: String; let suggested: Bool }
+    private var habitNote: String? {
+        guard let plan = model.plan else { return nil }
+        var parts: [String] = []
+        if !plan.habits.isEmpty { parts.append("↻ Room for habits that are due. Tick them in Goals when they're done.") }
+        if !plan.habitsUnplaced.isEmpty { parts.append("No room today for: " + plan.habitsUnplaced.map(\.title).joined(separator: ", ")) }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n")
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.s) {
             Text("Your day").font(MekaType.upNextTitle)
             if let plan = model.plan {
-                if plan.isEmpty && plan.unplaced.isEmpty {
+                if plan.isBlank {
                     Text("Nothing to plan: every open task is already scheduled.")
                         .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 } else {
@@ -333,6 +340,9 @@ private struct PlanSheet: View {
                     if !plan.unplaced.isEmpty {
                         Text("Won't fit today: " + plan.unplaced.map(\.title).joined(separator: ", "))
                             .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    }
+                    if let note = habitNote {
+                        Text(note).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
                     CountUpText(Int(plan.freeMinutesLeft)) { "\($0 / 60) h \($0 % 60) min still free." }
                         .font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -358,7 +368,8 @@ private struct PlanSheet: View {
         func t(_ ms: Int64) -> String { Date(timeIntervalSince1970: Double(ms) / 1000).formatted(f) }
         let busy = plan.busy.map { Row(id: "e" + $0.id, start: $0.startAtMs, time: "\(t($0.startAtMs))–\(t($0.endAtMs))", title: $0.title, suggested: false) }
         let tasks = plan.placements.map { Row(id: "t" + $0.task.id, start: $0.startMs, time: "\(t($0.startMs))–\(t($0.endMs))", title: $0.task.title, suggested: true) }
-        return (busy + tasks).sorted { $0.start < $1.start }
+        let habits = plan.habits.map { Row(id: "h" + $0.habitId, start: $0.startMs, time: "\(t($0.startMs))–\(t($0.endMs))", title: "↻ " + $0.title + ($0.behind ? " · behind" : ""), suggested: true) }
+        return (busy + tasks + habits).sorted { $0.start < $1.start }
     }
 }
 
@@ -487,6 +498,7 @@ private struct DetailContent: View {
                     VStack(alignment: .leading, spacing: MekaSpace.s) {
                         RepeatMenu(task: task, palette: palette)
                         StepsList(task: task, palette: palette)
+                        GoalMenu(task: task, palette: palette)
                     }
                 }
                 HStack(spacing: MekaSpace.l) {
