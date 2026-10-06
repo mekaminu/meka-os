@@ -137,4 +137,28 @@ class MekaCoreTest {
         assertTrue(fold.workMode.value.atWork)
         assertEquals("At work until 20:00", fold.workMode.value.line)
     }
+
+    @Test
+    fun repeatingTaskComesBackTomorrowAtTheSameLocalTimeAcrossTheClockChange() = runTest {
+        // Saturday 24 Oct 2026, 10:00 BST; the clocks go back overnight (Sunday 25 Oct).
+        now = 1_792_832_400_000L
+        val c = core("android")
+        val id = c.addTask("Morning run")
+        val seven = 1_792_821_600_000L // Sat 07:00 BST = 06:00 UTC
+        c.schedule(id, seven)
+        val daily = c.repeatChoices(id).first { it.label == "Every day" }
+        c.setRepeat(id, daily.rule)
+        c.addStep(id, "Stretch")
+        c.complete(id)
+        assertTrue(c.today.value.yourDay.none { it.title == "Morning run" } && c.today.value.upNext?.title != "Morning run")
+
+        now += 24 * 3_600_000L
+        c.tick()
+        val next = (listOfNotNull(c.today.value.upNext) + c.today.value.yourDay + c.today.value.needsYou.map { it.task })
+            .single { it.title == "Morning run" }
+        assertEquals(seven + 25 * 3_600_000L, next.scheduledAtMs) // 07:00 GMT: a 25-hour day
+        assertEquals("Every day", next.repeatMeta(c.todayEpochDay()))
+        assertEquals(listOf("Stretch" to false), next.checklist.map { it.text to it.checked })
+    }
 }
+

@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -79,12 +81,14 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.NeedsYouReason
+import os.meka.core.domain.RepeatChoice
 import os.meka.core.domain.Task
 import os.meka.core.domain.Today
 import os.meka.core.facade.ConflictChoice
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.SyncStatus
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -210,6 +214,13 @@ internal fun todayActions(core: MekaCore, scope: CoroutineScope, selected: () ->
     rename = { id, t -> scope.launch { runCatching { core.rename(id, t) } } },
     delete = { id -> scope.launch { core.delete(id); setSelected(null) } },
     resolve = { c, v -> scope.launch { core.resolve(c, v) } },
+    repeatChoices = { id -> core.repeatChoices(id) },
+    setRepeat = { id, rule -> scope.launch { runCatching { core.setRepeat(id, rule) } } },
+    skip = { id -> scope.launch { runCatching { core.skipOccurrence(id) }; if (selected() == id) setSelected(null) } },
+    snooze = { id -> scope.launch { runCatching { core.snooze(id, 1) }; if (selected() == id) setSelected(null) } },
+    addStep = { id, text -> scope.launch { runCatching { core.addStep(id, text) } } },
+    setStepDone = { stepId, done -> scope.launch { core.setStepDone(stepId, done) } },
+    removeStep = { stepId -> scope.launch { core.removeStep(stepId) } },
 )
 
 data class TodayActions(
@@ -219,6 +230,13 @@ data class TodayActions(
     val rename: (String, String) -> Unit,
     val delete: (String) -> Unit,
     val resolve: (ConflictChoice, String) -> Unit,
+    val repeatChoices: suspend (String) -> List<RepeatChoice>,
+    val setRepeat: (String, String?) -> Unit,
+    val skip: (String) -> Unit,
+    val snooze: (String) -> Unit,
+    val addStep: (String, String) -> Unit,
+    val setStepDone: (String, Boolean) -> Unit,
+    val removeStep: (String) -> Unit,
 )
 
 @Composable
@@ -475,24 +493,27 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
     )
     meta(task)?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
 
-    conflicts.forEach { c ->
-        Spacer(Modifier.height(MekaSpace.l))
-        SectionLabel("Edited on two devices")
-        c.options.forEach { option ->
-            Text(
-                option, style = MekaType.itemTitle, color = Meka.colors.textPrimary,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
-                    .background(Meka.colors.surfaceRaised).clickable { actions.resolve(c, option) }.padding(MekaSpace.m),
-            )
-            Spacer(Modifier.height(MekaSpace.xs))
+    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+        conflicts.forEach { c ->
+            Spacer(Modifier.height(MekaSpace.l))
+            SectionLabel("Edited on two devices")
+            c.options.forEach { option ->
+                Text(
+                    option, style = MekaType.itemTitle, color = Meka.colors.textPrimary,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                        .background(Meka.colors.surfaceRaised).clickable { actions.resolve(c, option) }.padding(MekaSpace.m),
+                )
+                Spacer(Modifier.height(MekaSpace.xs))
+            }
         }
+
+        Spacer(Modifier.height(MekaSpace.l))
+        RepeatSection(task, actions)
+        StepsSection(task, actions)
     }
 
-    Spacer(Modifier.weight(1f))
-    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) {
-        Text("Done", style = MekaType.itemTitle, color = Meka.colors.accent, modifier = Modifier.clickable { actions.complete(task.id) })
-        Text("Delete", style = MekaType.itemTitle, color = Meka.colors.critical, modifier = Modifier.clickable { actions.delete(task.id) })
-    }
+    Spacer(Modifier.height(MekaSpace.m))
+    DetailActions(task, actions)
 }
 
 /** One calendar event: time on the left, title and source on the right. Finished events step back. */
@@ -527,6 +548,7 @@ private fun meta(t: Task): String? {
         t.scheduledAtMs?.let { add(timeFmt.format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()))) }
         t.estimateMinutes?.let { add("$it min") }
         t.checklist.takeIf { it.isNotEmpty() }?.let { cl -> add("${cl.count { it.checked }}/${cl.size}") }
+        t.repeatMeta(LocalDate.now().toEpochDay())?.let { add("↻ $it") }
     }
     return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 }

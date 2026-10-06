@@ -63,6 +63,14 @@ object TaskFields {
     const val SCHEDULED_AT = "scheduledAtMs"
     const val ESTIMATE_MINUTES = "estimateMinutes"
     const val CONTEXT_MODE = "contextMode"
+    /** Repeat rule (iCalendar RRULE subset, see [Recurrence]); Null when the task doesn't repeat. */
+    const val RECURRENCE = "recurrence"
+    /** The series this occurrence belongs to (the id of the task the repeat was first set on). */
+    const val SERIES_ID = "seriesId"
+    /** The local day (epoch day) this occurrence belongs to in its series. Never changed by a snooze. */
+    const val OCCURRENCE_DAY = "occurrenceDay"
+    /** A snoozed occurrence waits until this local day (epoch day) before it shows again. */
+    const val DEFERRED_TO_DAY = "deferredToDay"
 }
 
 object ChecklistFields {

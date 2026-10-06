@@ -55,3 +55,7 @@ M0 implements the full generic sync substrate and these entity types for real:
 - `Person`
 
 The other types are defined as field schemas and merge policies, so the planner and UI can adopt them without sync changes.
+
+## Addendum, 2026-10-06: repeating tasks
+A repeating Task is a series of occurrences rather than one task that rolls forward. Each occurrence carries `recurrence` (an iCalendar RRULE subset), `seriesId` and `occurrenceDay` (local epoch day); a snooze sets `deferredToDay` without changing the series day. Completing or skipping an occurrence writes the next one under the deterministic id `<seriesId>.d<epochDay>`, so concurrent completions on two offline devices converge on a single next occurrence and history stays one task per day. Rules this version can't read are kept as text and not acted on. Obligation (`recurrence`) will reuse the same rule type.
+

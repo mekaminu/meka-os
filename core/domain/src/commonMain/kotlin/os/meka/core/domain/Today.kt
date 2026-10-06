@@ -32,6 +32,9 @@ data class DayWindow(
     val utcOffsetMs: Long = 0,
 ) {
     operator fun contains(t: Long) = t in startMs until endMs
+
+    /** The local day as an epoch day (repeating tasks belong to local days). */
+    val epochDay: Long get() = (startMs + utcOffsetMs).floorDiv(CivilDate.DAY_MS)
 }
 
 /**
@@ -40,7 +43,7 @@ data class DayWindow(
  */
 object TodayProjection {
     fun project(tasks: List<Task>, nowMs: Long, today: DayWindow, events: List<CalendarEvent> = emptyList()): Today {
-        val open = tasks.filter { it.lifecycle == Lifecycle.ACTIVE || it.lifecycle == Lifecycle.INBOX }
+        val open = tasks.filter { (it.lifecycle == Lifecycle.ACTIVE || it.lifecycle == Lifecycle.INBOX) && !it.waitsForItsDay(today.epochDay) }
 
         val needs = buildList {
             open.filter { it.hasConflict }.forEach { add(NeedsYouItem(it, NeedsYouReason.CONFLICT)) }

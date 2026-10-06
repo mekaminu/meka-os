@@ -194,6 +194,42 @@ final class CoreModel {
     func rename(_ id: String, to title: String) { run { try await $0.rename(taskId: id, title: title) } }
     func delete(_ id: String) { selectedID = nil; run { try await $0.delete(taskId: id) } }
     func resolve(_ choice: ConflictChoice, with option: String) { run { try await $0.resolve(choice: choice, chosenOption: option) } }
+    // MARK: Repeating tasks and routines
+
+    /// The Repeat menu for a task: "Doesn't repeat" and the presets for its day, the current one selected.
+    func repeatChoices(_ id: String) async -> [RepeatChoice] {
+        guard let core else { return [] }
+        return (try? await core.repeatChoices(taskId: id)) ?? []
+    }
+
+    func setRepeat(_ id: String, rule: String?) { run { try await $0.setRepeat(taskId: id, rule: rule) } }
+
+    /// Skip this occurrence (the next one is queued for its day) or move just this one to tomorrow.
+    func skip(_ id: String) {
+        if selectedID == id { selectedID = nil }
+        run { try await $0.skipOccurrence(taskId: id) }
+    }
+
+    func snooze(_ id: String) {
+        if selectedID == id { selectedID = nil }
+        run { try await $0.snooze(taskId: id, days: 1) }
+    }
+
+    func addStep(_ taskID: String, _ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        run { _ = try await $0.addStep(taskId: taskID, text: trimmed) }
+    }
+
+    func setStepDone(_ stepID: String, _ done: Bool) { MekaHaptics.light(); run { try await $0.setStepDone(stepId: stepID, done: done) } }
+    func removeStep(_ stepID: String) { run { try await $0.removeStep(stepId: stepID) } }
+
+    /// "↻ Every weekday", with "· since Mon 5 Oct" when an earlier day's occurrence is still open.
+    func repeatLine(_ task: MekaTask) -> String? {
+        guard let core, let meta = task.repeatMeta(todayEpochDay: core.todayEpochDay()) else { return nil }
+        return "↻ " + meta
+    }
+
     func completeSelected() { if let id = selectedID { complete(id) } }
     func deleteSelected() { if let id = selectedID { delete(id) } }
     func syncNow() async { _ = try? await core?.syncNow() }

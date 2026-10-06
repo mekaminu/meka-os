@@ -57,6 +57,7 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
 | Email triage | Items sort into their groups with a stagger |
 | Assistant | Thinking shimmer; answer lines fade in; suggestion cards rise |
 | Capture | Field expands from the pill; captured item flies into the list |
+| Repeat and steps | Repeat picker unfolds from its row (Mac: menu); Skip/Tomorrow leave the list like a completion; a step tick pops with a spring and a light haptic |
 | Loading | Skeleton shimmer, never a spinner on its own |
 
 ## Milestones
@@ -80,7 +81,9 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
   - *Remaining (blocked):* the summary on the Mac (Needs Meka #10); one AI line per person when the AI layer lands (#3). Family/always-ring calls belong to the call assistant item.
   - *Check on the Fold:* grant notification access in the Work screen (Android may first need App info → ⋮ → Allow restricted settings, as the app is sideloaded), allow alerts and let the "Urgent while at work" channel through Do Not Disturb. Missed-call and SMS layouts vary by Samsung build: if a sender shows wrongly, the title/text rules are in `NotificationRules.kt`.
 - [!] Call assistant for mobile calls at work (Needs Meka #9): during work mode, MEKA's call screening lets family, the always-ring list and repeat callers (2nd call within 3 min) ring; other calls are declined, and the carrier's "forward when busy" sends them to a cloud phone number where a voice assistant says it is Meka's assistant, that Meka is at work and will call back, takes a message, and asks if it's urgent. Messages land in the after-work summary; urgent ones alert Meka immediately. Fixed greeting written by Meka; the assistant always says it is an automated assistant; one switch turns it off.
-- [ ] Repeating tasks and routines (daily/weekly/monthly/yearly; "every 2nd Tuesday"; skip/snooze one occurrence)
+- [x] Repeating tasks and routines (daily/weekly/monthly/yearly; "every 2nd Tuesday"; skip/snooze one occurrence)
+  - *2026-10-06 (Mac checked nightly):* core `Recurrence` (RRULE subset: every N days, weekly on chosen days incl. every other week, monthly on a date — the 31st falls on a short month's last day — or on the 1st–4th/last weekday, yearly incl. 29 Feb), `CivilDate` and a platform `LocalCalendar` so times of day survive the clock change; unit-tested. A repeating task is a series of occurrences: Done or Skip creates the next one with an id made from the series and day, so two devices finishing the same one offline end up with one next occurrence; missed ones aren't back-filled (an open one from an earlier day stays, marked "since Mon 5 Oct"). "Tomorrow" snoozes just this occurrence (or any one-off task) out of Today and the planner until its day. Steps on a repeating task make it a routine: each new occurrence brings them back unticked. Fold: Repeat row in the task detail unfolds the picker (Every day · Every weekday · Every Tue · Every 2 weeks on Tue · Monthly on the 6th · Monthly on the 1st Tue · Every year on 6 Oct), steps with spring ticks, and Done · Skip · Tomorrow · Delete; rows show "↻ Every weekday". Mac: the same as a Repeat menu, steps list and buttons.
+  - *Later, if wanted:* a custom rule editor (e.g. "every 3 days" can be stored and shown, but the picker offers presets only); "after completion" repeats (next one counted from the day you finish).
 - [ ] Capture from anywhere: Android share sheet, home-screen widget, quick-settings tile, voice (on-device speech); Mac menu bar (exists) + Services
 - [ ] Lists: Waiting for (with chase dates), Someday (with kinds), Decisions (with review dates)
 - [ ] Goals and habits (progress, streaks, planner makes room for habits that are behind)

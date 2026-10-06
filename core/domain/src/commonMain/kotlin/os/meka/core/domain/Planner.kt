@@ -55,6 +55,7 @@ object DayPlanner {
         val candidates = tasks
             .filter { (it.lifecycle == Lifecycle.ACTIVE || it.lifecycle == Lifecycle.INBOX) && it.scheduledAtMs == null && !it.hasConflict }
             .filter { it.dueAtMs == null || it.dueAtMs < day.endMs } // due later than today waits for its day
+            .filter { !it.waitsForItsDay(day.epochDay) } // a later occurrence or a snoozed item waits too
             .sortedWith(compareBy<Task> { it.dueAtMs ?: Long.MAX_VALUE }.thenByDescending { it.priority }.thenBy { it.createdAtMs })
 
         val placements = mutableListOf<Placement>()

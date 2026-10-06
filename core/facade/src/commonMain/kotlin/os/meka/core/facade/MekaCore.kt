@@ -14,6 +14,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.atTime
+import kotlinx.datetime.toInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.isoDayNumber
@@ -21,10 +24,13 @@ import kotlinx.datetime.offsetAt
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import os.meka.core.domain.CalendarEvents
+import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DayPlanner
 import os.meka.core.domain.DayWindow
 import os.meka.core.domain.IdGenerator
+import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.LocalClock
+import os.meka.core.domain.RepeatChoice
 import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.NewTask
 import os.meka.core.domain.TaskEdit
@@ -73,7 +79,7 @@ class MekaCore(
     private val jitter = Random(secureRandom.nextLong())
 
     private val replica = Replica(householdId, deviceId, HlcClock(deviceId, nowMs), store, MekaSchema, ids::next)
-    private val tasks = Tasks(replica, ids::next, nowMs)
+    private val tasks = Tasks(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val events = CalendarEvents(replica)
     private val work = WorkMode(replica, nowMs)
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
@@ -123,6 +129,25 @@ class MekaCore(
         plan.placements.forEach { tasks.edit(it.task.id, TaskEdit(scheduledAtMs = it.startMs)) }
     }
     suspend fun restore(taskId: String) = onCore { tasks.restore(taskId) }
+
+    // ---- Repeating tasks and routines ----
+
+    /** The Repeat picker for a task: "Doesn't repeat" and the presets for its day, the current one selected. */
+    suspend fun repeatChoices(taskId: String): List<RepeatChoice> = onCore { tasks.repeatChoices(taskId) }
+    /** Sets a repeat from [repeatChoices] (its `rule`); null stops the task repeating. */
+    suspend fun setRepeat(taskId: String, rule: String?) = onCore { tasks.setRepeatRule(taskId, rule) }
+    /** Skips this occurrence of a repeating task; the next one is queued for its day. */
+    suspend fun skipOccurrence(taskId: String) = onCore { tasks.skipOccurrence(taskId) }
+    /** Moves just this occurrence (or a one-off task) out of Today for [days] days. */
+    suspend fun snooze(taskId: String, days: Int = 1) = onCore { tasks.snoozeOccurrence(taskId, days) }
+
+    /** Steps: a repeating task with steps is a routine, and each new occurrence brings them back unticked. */
+    suspend fun addStep(taskId: String, text: String): String = onCore { tasks.addChecklistItem(taskId, text) }
+    suspend fun setStepDone(stepId: String, done: Boolean) = onCore { tasks.setChecklistItemChecked(stepId, done) }
+    suspend fun removeStep(stepId: String) = onCore { tasks.deleteChecklistItem(stepId) }
+
+    /** The local day today as an epoch day, for [os.meka.core.domain.Task.repeatMeta]. */
+    fun todayEpochDay(): Long = ZoneCalendar(timeZone).epochDayOf(nowMs())
 
     // ---- Work mode ----
 
@@ -268,5 +293,20 @@ class MekaCore(
         val end = date.plus(DatePeriod(days = 1)).atStartOfDayIn(tz).toEpochMilliseconds() // DST-safe day length
         val offsetMs = tz.offsetAt(Instant.fromEpochMilliseconds(start)).totalSeconds * 1000L
         return DayWindow(start, end, offsetMs)
+    }
+}
+
+/** The user's local calendar for repeating tasks, from the device time zone (DST-aware). */
+@OptIn(ExperimentalTime::class)
+internal class ZoneCalendar(private val timeZone: () -> TimeZone) : LocalCalendar {
+    override fun epochDayOf(epochMs: Long): Long =
+        Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(timeZone()).date.toEpochDays().toLong()
+
+    override fun minuteOfDay(epochMs: Long): Int =
+        Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(timeZone()).let { it.hour * 60 + it.minute }
+
+    override fun toEpochMs(epochDay: Long, minuteOfDay: Int): Long {
+        val d = CivilDate.fromEpochDay(epochDay)
+        return LocalDate(d.year, d.month, d.day).atTime(minuteOfDay / 60, minuteOfDay % 60).toInstant(timeZone()).toEpochMilliseconds()
     }
 }

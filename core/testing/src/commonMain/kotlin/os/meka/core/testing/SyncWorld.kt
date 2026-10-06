@@ -95,7 +95,7 @@ class SyncWorld(seed: Int = 42, val householdId: String = "hh1") {
         val hlc = HlcClock(name, { clock.nowMs + skewMs })
         val replica = Replica(householdId, name, hlc, store, MekaSchema, ids::next)
         val transport = FaultyTransport(service)
-        val tasks = Tasks(replica, ids::next) { clock.nowMs + skewMs }
+        val tasks = Tasks(replica, ids::next, { clock.nowMs + skewMs })
         return Device(name, replica, store, transport, tasks, batchSize)
     }
 }

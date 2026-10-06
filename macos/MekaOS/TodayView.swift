@@ -198,7 +198,7 @@ struct TaskRow: View {
         case .conflict: "Edited on two devices — choose a version"
         case .overdue: "Overdue"
         case .dueTodayUnscheduled: "Due today · not scheduled"
-        default: nil
+        default: model.repeatLine(task)
         }
     }
 }
@@ -483,9 +483,18 @@ private struct DetailContent: View {
                             .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
                     }
                 }
-                Spacer()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MekaSpace.s) {
+                        RepeatMenu(task: task, palette: palette)
+                        StepsList(task: task, palette: palette)
+                    }
+                }
                 HStack(spacing: MekaSpace.l) {
                     Button("Done") { model.complete(task.id) } // ⌘↩ lives in the Today menu
+                    if task.isRepeating {
+                        Button("Skip") { model.skip(task.id) }
+                    }
+                    Button("Tomorrow") { model.snooze(task.id) }
                     Button("Delete", role: .destructive) { model.delete(task.id) }
                 }
                 .buttonStyle(.plain)
