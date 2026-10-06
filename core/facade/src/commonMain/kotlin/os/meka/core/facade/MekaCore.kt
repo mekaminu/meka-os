@@ -426,6 +426,10 @@ class MekaCore(
      */
     suspend fun notificationsPosted(posted: List<Notice>) = onCore { interruptions.record(posted, nowMs()) }
 
+    /** Same as [notificationsPosted], by notice key: lets Swift report what it posted with plain strings (Sendable). */
+    suspend fun notificationsPostedKeys(result: GovernorResult, keys: List<String>) =
+        notificationsPosted(result.post.filter { it.key in keys.toSet() })
+
     // ---- Work mode ----
 
     /** The Work switch. Choosing what the schedule already says returns to the schedule. */

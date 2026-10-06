@@ -20,10 +20,10 @@ enum MacNotifier {
     }
 
     @discardableResult
-    static func post(_ result: GovernorResult) async -> [Notice] {
+    static func post(_ result: GovernorResult) async -> [String] {
         let center = UNUserNotificationCenter.current()
         guard await allowed() else { return [] }
-        var posted: [Notice] = []
+        var posted: [String] = []
         for notice in result.post {
             let content = UNMutableNotificationContent()
             content.title = notice.title
@@ -32,7 +32,7 @@ enum MacNotifier {
             content.interruptionLevel = .active
             content.userInfo = ["target": NotifyRules.shared.targetName(t: notice.target)]
             if (try? await center.add(UNNotificationRequest(identifier: notice.key, content: content, trigger: nil))) != nil {
-                posted.append(notice)
+                posted.append(notice.key)
             }
         }
         if let digest = result.digest {

@@ -261,9 +261,10 @@ final class CoreModel {
         guard let result = try? await core.governNotifications(state: state, device: macAlerts) else { return }
         UserDefaults.standard.set(result.stateEncoded, forKey: Self.governorStateKey)
         guard await MacNotifier.allowed() else { return } // nothing reaches you, so nothing counts
-        let posted = await MacNotifier.post(result)
+        let postedKeys = await MacNotifier.post(result)
         // Counts only (ADR-013): the weekly review's Interruptions. Called even when nothing posted, so counting starts.
-        try? await core.notificationsPosted(posted: posted)
+        // Keys (Strings) cross into the core rather than a Swift array of Kotlin notices, which strict concurrency rejects.
+        try? await core.notificationsPostedKeys(result: result, keys: postedKeys)
     }
 
     /// Everything, digests only, or off on this Mac. Turning it on asks macOS for permission once.
