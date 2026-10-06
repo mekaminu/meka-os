@@ -31,6 +31,7 @@ struct TodayView: View {
         .sheet(isPresented: $model.showConnect) { ConnectSheet(palette: palette) }
         .sheet(isPresented: $model.showCalendars) { CalendarsSheet(palette: palette) }
         .sheet(isPresented: $model.showPlan) { PlanSheet(palette: palette) }
+        .sheet(isPresented: $model.showWork) { WorkSheet(palette: palette) }
     }
 
     private var todayColumn: some View {
@@ -52,6 +53,7 @@ struct TodayView: View {
                         if model.isConnected && !model.signedOut {
                             Button("Calendars") { model.showCalendars = true }
                         }
+                        Button(model.work?.atWork == true ? "At work" : "Off work") { model.showWork = true }
                         Button("Theme: \(currentAppearance.label)") { appearance = currentAppearance.next.rawValue }
                             .foregroundStyle(palette.textSecondary)
                     }

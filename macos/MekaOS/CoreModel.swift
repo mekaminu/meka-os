@@ -11,6 +11,9 @@ final class CoreModel {
     private(set) var today: Today?
     private(set) var syncLine: String?
     private(set) var conflicts: [ConflictChoice] = []
+    /// Work mode (schedule + manual switch), synced with the Fold. The held messages live on the Fold only.
+    private(set) var work: WorkModeState?
+    var showWork = false
     var selectedID: String?
     /// The shell's current destination and which way the last switch moved (for the push transition).
     private(set) var destination: ShellDestination = .today
@@ -58,6 +61,16 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await c in core.conflicts { self?.conflicts = c }
+        })
+        observers.append(Task { [weak self] in
+            for await w in core.workMode { self?.work = w }
+        })
+        // Work mode and Today move with the clock: re-evaluate every half minute.
+        observers.append(Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                try? await core.tick()
+            }
         })
         core.startSync(periodMs: 30_000)   // MekaCore.FOREGROUND_SYNC_MS
         isConnected = core.isConnected
@@ -152,6 +165,17 @@ final class CoreModel {
 
     static func providerName(_ p: String) -> String {
         switch p { case "google": "Google"; case "microsoft": "Outlook"; case "fixtures": "Fixtures"; default: p }
+    }
+
+    // MARK: Work mode
+
+    func setWorkSwitch(_ on: Bool) { MekaHaptics.tick(); run { try await $0.setWorkSwitch(on: on) } }
+    func workBackToSchedule() { run { try await $0.workBackToSchedule() } }
+
+    /// Saves work hours. Days are ISO (1 = Monday); minutes are local minutes of the day.
+    func setWorkSchedule(days: Set<Int>, startMinute: Int, endMinute: Int, enabled: Bool) {
+        let list = days.sorted().map { KotlinInt(int: Int32($0)) }
+        run { try await $0.setWorkSchedule(days: list, startMinute: Int32(startMinute), endMinute: Int32(endMinute), enabled: enabled) }
     }
 
     // MARK: Commands

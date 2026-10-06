@@ -7,6 +7,7 @@ import io.ktor.client.engine.okhttp.OkHttp
 import os.meka.android.security.AndroidDeviceKey
 import os.meka.android.security.DatabaseKeyStore
 import os.meka.android.sync.SyncWorker
+import os.meka.android.work.CaptureStore
 import os.meka.core.data.AndroidDatabase
 import os.meka.core.data.SqlReplicaStore
 import os.meka.core.facade.Enrolment
@@ -21,6 +22,8 @@ class MekaApplication : Application() {
         private set
     lateinit var identity: DeviceIdentityStore
         private set
+    /** Work mode's held messages and people lists; on this phone only, never synced. */
+    val captures: CaptureStore by lazy { CaptureStore(this) }
     /** Hardware-held signing key; created on first use (ADR-005). */
     private val deviceKey by lazy { AndroidDeviceKey() }
     // Read timeout above the server's 20 s long-poll window (OkHttp's default is 10 s).

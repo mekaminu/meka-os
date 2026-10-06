@@ -28,6 +28,8 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
+import os.meka.android.work.AfterWorkCard
+import os.meka.android.work.AfterWorkHost
 import os.meka.core.domain.Task
 import os.meka.core.facade.MekaCore
 
@@ -43,6 +45,7 @@ fun NeedsYouRoute(core: MekaCore) {
     val scope = rememberCoroutineScope()
     val actions = todayActions(core, scope, { selectedId }) { selectedId = it }
     val selected = today.needsYou.map { it.task }.firstOrNull { it.id == selectedId }
+    var showAfterWork by rememberSaveable { mutableStateOf(false) }
 
     MekaSharedLayout(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
@@ -56,6 +59,9 @@ fun NeedsYouRoute(core: MekaCore) {
                     item(key = "title") {
                         Text("Needs you", style = MekaType.greeting, color = Meka.colors.textPrimary,
                             modifier = Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0)))
+                    }
+                    item(key = "after-work") {
+                        AfterWorkCard(core, Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(1))) { showAfterWork = true }
                     }
                     if (today.needsYou.isEmpty()) {
                         item(key = "clear") {
@@ -82,6 +88,7 @@ fun NeedsYouRoute(core: MekaCore) {
                     DetailPane(s, conflicts.filter { it.taskId == s.id }, actions, Modifier.fillMaxSize(), onClose = { selectedId = null })
                 }
             }
+            MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
         }
     }
 }

@@ -4,8 +4,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-    <!-- M1+: POST_NOTIFICATIONS, SCHEDULE_EXACT_ALARM (CLOCK-precision reminders only, ADR-007).
-         Never USE_EXACT_ALARM (ADR-010). Notification listener service arrives with messaging ingestion. -->
+    <!-- Work mode: alerts for urgent messages only (asked for when Meka turns alerts on). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- M1+: SCHEDULE_EXACT_ALARM (CLOCK-precision reminders only, ADR-007). Never USE_EXACT_ALARM (ADR-010). -->
 
     <application
         android:name=".MekaApplication"
@@ -27,5 +28,20 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Work mode (build plan M1): official notification access only; Meka grants it in Settings.
+             Reads WhatsApp, SMS and missed calls during work hours; never replies or marks anything read. -->
+        <service
+            android:name=".work.WorkCaptureService"
+            android:exported="true"
+            android:label="@string/work_capture_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.notification.default_filter_types"
+                android:value="conversations|alerting" />
+        </service>
     </application>
 </manifest>

@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.offsetAt
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
@@ -23,12 +24,16 @@ import os.meka.core.domain.CalendarEvents
 import os.meka.core.domain.DayPlanner
 import os.meka.core.domain.DayWindow
 import os.meka.core.domain.IdGenerator
+import os.meka.core.domain.LocalClock
 import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.NewTask
 import os.meka.core.domain.TaskEdit
 import os.meka.core.domain.Tasks
 import os.meka.core.domain.Today
 import os.meka.core.domain.TodayProjection
+import os.meka.core.domain.WorkMode
+import os.meka.core.domain.WorkModeState
+import os.meka.core.domain.WorkSchedule
 import os.meka.core.sync.AuthRejectedException
 import os.meka.core.sync.Backoff
 import os.meka.core.sync.Conflict
@@ -70,11 +75,16 @@ class MekaCore(
     private val replica = Replica(householdId, deviceId, HlcClock(deviceId, nowMs), store, MekaSchema, ids::next)
     private val tasks = Tasks(replica, ids::next, nowMs)
     private val events = CalendarEvents(replica)
+    private val work = WorkMode(replica, nowMs)
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
 
     private val _today = MutableStateFlow(project())
     val today: StateFlow<Today> = _today.asStateFlow()
+
+    private val _workMode = MutableStateFlow(work.state(localClock()))
+    /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
+    val workMode: StateFlow<WorkModeState> = _workMode.asStateFlow()
 
     private val _sync = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
     val syncStatus: StateFlow<SyncStatus> = _sync.asStateFlow()
@@ -113,6 +123,22 @@ class MekaCore(
         plan.placements.forEach { tasks.edit(it.task.id, TaskEdit(scheduledAtMs = it.startMs)) }
     }
     suspend fun restore(taskId: String) = onCore { tasks.restore(taskId) }
+
+    // ---- Work mode ----
+
+    /** The Work switch. Choosing what the schedule already says returns to the schedule. */
+    suspend fun setWorkSwitch(on: Boolean) = onCore { work.setSwitch(on, localClock()) }
+    suspend fun workBackToSchedule() = onCore { work.backToSchedule() }
+
+    /** Work hours. [days] are ISO (1 = Monday); minutes are local minutes of the day. */
+    suspend fun setWorkSchedule(days: List<Int>, startMinute: Int, endMinute: Int, enabled: Boolean) =
+        onCore { work.setSchedule(WorkSchedule(days.toSet(), startMinute, endMinute, enabled)) }
+
+    /** Fresh work-mode state for background callers (the notification listener), not waiting for a [tick]. */
+    suspend fun currentWorkMode(): WorkModeState = onCore { work.state(localClock()).also { _workMode.value = it } }
+
+    /** Re-evaluates everything that depends on the clock (work mode, Today). Cheap; call it about once a minute. */
+    suspend fun tick() = onCore { refresh() }
 
     suspend fun resolve(choice: ConflictChoice, chosenOption: String) = onCore {
         tasks.resolveConflict(choice.conflict, FieldValue.Text(chosenOption))
@@ -214,6 +240,7 @@ class MekaCore(
 
     private fun refresh() {
         _today.value = project()
+        _workMode.value = work.state(localClock())
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(
                 taskId = c.key.entityId,
@@ -227,6 +254,11 @@ class MekaCore(
     private fun project(): Today {
         val now = nowMs()
         return TodayProjection.project(tasks.all(), now, dayWindow(now), events.all())
+    }
+
+    private fun localClock(): LocalClock {
+        val t = Instant.fromEpochMilliseconds(nowMs()).toLocalDateTime(timeZone())
+        return LocalClock(t.dayOfWeek.isoDayNumber, t.hour * 60 + t.minute)
     }
 
     private fun dayWindow(now: Long): DayWindow {

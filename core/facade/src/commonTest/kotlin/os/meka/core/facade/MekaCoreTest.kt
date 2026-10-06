@@ -113,4 +113,28 @@ class MekaCoreTest {
         mac.stopSync()
         assertTrue(seen != null, "the Mac did not pick up the phone's edit via long-poll")
     }
+
+    @Test
+    fun workModeFollowsTheClockAndTheSwitchSyncs() = runTest {
+        // 1_790_000_000_000 ms is Monday 21 Sept 2026, 15:13 in London (BST): inside default work hours.
+        val fold = core("fold"); val mac = core("mac")
+        assertTrue(fold.workMode.value.atWork)
+        assertEquals("At work until 17:30", fold.workMode.value.line)
+
+        now += 3 * 3_600_000L // 18:13
+        fold.tick()
+        assertEquals(false, fold.workMode.value.atWork)
+
+        mac.setWorkSwitch(true) // evening work on the Mac
+        mac.syncNow(); fold.syncNow()
+        assertTrue(fold.currentWorkMode().atWork)
+        assertTrue(fold.workMode.value.switchedManually)
+
+        fold.workBackToSchedule()
+        assertEquals(false, fold.workMode.value.atWork)
+
+        fold.setWorkSchedule(listOf(1, 2, 3, 4, 5), 9 * 60, 20 * 60, true)
+        assertTrue(fold.workMode.value.atWork)
+        assertEquals("At work until 20:00", fold.workMode.value.line)
+    }
 }

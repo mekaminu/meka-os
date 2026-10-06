@@ -1,0 +1,383 @@
+package os.meka.android.work
+
+import android.Manifest
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.provider.ContactsContract
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
+import os.meka.android.MekaApplication
+import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaMotion
+import os.meka.android.designsystem.MekaRadius
+import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.appear
+import os.meka.android.designsystem.rememberAppearance
+import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.AfterWorkSummaries
+import os.meka.core.domain.AfterWorkSummary
+import os.meka.core.domain.CaptureKind
+import os.meka.core.domain.LocalClock
+import os.meka.core.domain.PeopleLists
+import os.meka.core.domain.PersonSummary
+import os.meka.core.domain.WorkSchedule
+import os.meka.core.facade.MekaCore
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+private const val STEP_MINUTES = 15
+
+/**
+ * Work mode settings (build plan M1): the switch, work hours, notification access, alerts and the two people
+ * lists. The switch and hours sync with the Mac; the lists and everything held stay on this phone.
+ */
+@Composable
+fun WorkPane(core: MekaCore, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val store = (context.applicationContext as MekaApplication).captures
+    val work by core.workMode.collectAsState()
+    val lists by store.lists.collectAsState()
+    val scope = rememberCoroutineScope()
+    val haptics = rememberMekaHaptics()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var listening by remember { mutableStateOf(hasNotificationAccess(context)) }
+    var alertsOk by remember { mutableStateOf(WorkAlerts.canPost(context)) }
+    LaunchedEffect(Unit) {
+        // Re-check when Meka comes back from the system settings screen.
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            listening = hasNotificationAccess(context)
+            alertsOk = WorkAlerts.canPost(context)
+        }
+    }
+    val askAlerts = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        alertsOk = WorkAlerts.canPost(context)
+        if (alertsOk) WorkAlerts.ensureChannel(context)
+    }
+    var adding by remember { mutableStateOf<ListKind?>(null) }
+    val pickContact = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
+        val kind = adding
+        adding = null
+        val name = uri?.let { u ->
+            runCatching {
+                context.contentResolver.query(u, arrayOf(ContactsContract.Contacts.DISPLAY_NAME), null, null, null)
+                    ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+            }.getOrNull()
+        }?.trim()
+        if (kind != null && !name.isNullOrEmpty()) store.setLists(kind.add(lists, name))
+    }
+    val schedule = work.schedule
+    fun save(s: WorkSchedule) = scope.launch { core.setWorkSchedule(s.days.sorted(), s.startMinute, s.endMinute, s.enabled) }
+
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+    ) {
+        Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+        Text("Work mode", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
+        Text(work.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
+
+        Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            PillButton(if (work.atWork) "Stop work now" else "Start work now", filled = true) {
+                haptics.tick(); scope.launch { core.setWorkSwitch(!work.atWork) }
+            }
+            if (work.switchedManually) {
+                Text("Back to my hours", style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clickable(role = Role.Button) { scope.launch { core.workBackToSchedule() } }.padding(vertical = MekaSpace.xs))
+            }
+        }
+
+        Spacer(Modifier.height(MekaSpace.m))
+        Label("Hours", 2)
+        Row(Modifier.appear(rememberAppearance(2)), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            (1..7).forEach { d ->
+                DayChip(d, d in schedule.days) {
+                    val days = if (d in schedule.days) schedule.days - d else schedule.days + d
+                    save(schedule.copy(days = days))
+                }
+            }
+        }
+        TimeStepper("Start", schedule.startMinute, Modifier.appear(rememberAppearance(2))) { save(schedule.copy(startMinute = it)) }
+        TimeStepper("End", schedule.endMinute, Modifier.appear(rememberAppearance(2))) { save(schedule.copy(endMinute = it)) }
+        Text(
+            if (schedule.enabled) "Using these hours · tap to use the switch only" else "Switch only · tap to use these hours",
+            style = MekaType.caption, color = Meka.colors.accent,
+            modifier = Modifier.clickable(role = Role.Button) { save(schedule.copy(enabled = !schedule.enabled)) }.padding(vertical = MekaSpace.xxs),
+        )
+
+        Spacer(Modifier.height(MekaSpace.m))
+        Label("While you're at work", 3)
+        Text(
+            if (listening) "MEKA is holding WhatsApp, texts and missed calls for after work."
+            else "Give MEKA notification access so it can hold WhatsApp, texts and missed calls for after work.",
+            style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(3)),
+        )
+        if (!listening) {
+            PillButton("Allow notification access", filled = false) { openListenerSettings(context) }
+            Text(
+                "If Android says the setting is restricted: App info → ⋮ → Allow restricted settings, then try again.",
+                style = MekaType.caption, color = Meka.colors.textTertiary,
+            )
+        }
+        if (!alertsOk) {
+            PillButton("Allow urgent alerts", filled = false) {
+                if (Build.VERSION.SDK_INT >= 33) askAlerts.launch(Manifest.permission.POST_NOTIFICATIONS) else openAppNotificationSettings(context)
+            }
+        }
+        Text(
+            "\"Urgent\" or \"emergency\" in a message, or anyone on your always-notify list, alerts you straight away. " +
+                "MEKA never replies and never marks anything read. What it holds stays on this phone.",
+            style = MekaType.caption, color = Meka.colors.textTertiary,
+        )
+
+        Spacer(Modifier.height(MekaSpace.m))
+        PeopleSection(ListKind.FAMILY, lists, store::setLists, 4) { adding = ListKind.FAMILY; pickContact.launch(null) }
+        Spacer(Modifier.height(MekaSpace.s))
+        PeopleSection(ListKind.ALWAYS, lists, store::setLists, 5) { adding = ListKind.ALWAYS; pickContact.launch(null) }
+        Spacer(Modifier.height(MekaSpace.xl))
+    }
+}
+
+/**
+ * "While you were at work": one screen, grouped by person, urgent first then family. Tapping a person opens
+ * everything they sent. Done clears MEKA's copy only.
+ */
+@Composable
+fun AfterWorkPane(summary: AfterWorkSummary, onDone: () -> Unit, onClose: () -> Unit) {
+    val haptics = rememberMekaHaptics()
+    var open by rememberSaveable { mutableStateOf<String?>(null) }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+    ) {
+        Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+        Text("While you were at work", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
+        Text(summary.headline, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
+        Spacer(Modifier.height(MekaSpace.xs))
+        // Email-triage style: people sort into place with a stagger.
+        summary.people.forEachIndexed { i, p ->
+            val key = p.items.first().personKey
+            PersonCard(p, expanded = open == key, Modifier.appear(rememberAppearance(i + 1))) { open = if (open == key) null else key }
+        }
+        Spacer(Modifier.height(MekaSpace.m))
+        if (!summary.isEmpty) PillButton("Done", filled = true) { haptics.light(); onDone() }
+        Text("Done clears MEKA's copy only. WhatsApp and Messages are untouched.", style = MekaType.caption, color = Meka.colors.textTertiary)
+        Spacer(Modifier.height(MekaSpace.xl))
+    }
+}
+
+/** A calm card for Needs you: what's waiting after work, or how much is being held during it. */
+@Composable
+fun AfterWorkCard(core: MekaCore, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+    val store = (LocalContext.current.applicationContext as MekaApplication).captures
+    val items by store.items.collectAsState()
+    val lists by store.lists.collectAsState()
+    val work by core.workMode.collectAsState()
+    if (items.isEmpty()) return
+    if (work.atWork) {
+        Text("${work.line} · ${items.size} held for later", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = modifier)
+        return
+    }
+    val summary = remember(items, lists) { AfterWorkSummaries.build(items, lists) }
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .clickable(role = Role.Button) { onOpen() }.padding(MekaSpace.m),
+    ) {
+        Text("While you were at work", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Text(summary.headline, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        if (summary.urgentPeople > 0) {
+            Text("${summary.urgentPeople} urgent", style = MekaType.caption.copy(fontWeight = FontWeight.SemiBold), color = Meka.colors.critical)
+        }
+    }
+}
+
+/** Hosts the after-work summary from the store, so Needs you only passes visibility. */
+@Composable
+fun AfterWorkHost(onClose: () -> Unit) {
+    val store = (LocalContext.current.applicationContext as MekaApplication).captures
+    val items by store.items.collectAsState()
+    val lists by store.lists.collectAsState()
+    val summary = remember(items, lists) { AfterWorkSummaries.build(items, lists) }
+    AfterWorkPane(summary, onDone = { store.clear(); onClose() }, onClose = onClose)
+}
+
+private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
+private fun time(ms: Long) = timeFmt.format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))
+
+@Composable
+private fun PersonCard(p: PersonSummary, expanded: Boolean, modifier: Modifier, onTap: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .clickable(role = Role.Button) { onTap() }.padding(MekaSpace.m),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Text(p.personName, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f, fill = false))
+            if (p.urgent) Text("Urgent", style = MekaType.caption.copy(fontWeight = FontWeight.SemiBold), color = Meka.colors.critical)
+            if (p.isFamily) Text("Family", style = MekaType.caption, color = Meka.colors.accent)
+            Spacer(Modifier.weight(1f))
+            Text(time(p.latestAtMs), style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
+        Text("${p.line} · ${p.apps.joinToString(", ") { it.label }}", style = MekaType.caption, color = Meka.colors.textSecondary)
+        if (!expanded) p.latestText?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 2) }
+        AnimatedVisibility(
+            expanded,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                p.items.forEach { item ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+                        Text(time(item.atMs), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.width(44.dp))
+                        val body = when (item.kind) {
+                            CaptureKind.MISSED_CALL -> "Missed call"
+                            CaptureKind.MESSAGE -> item.text.orEmpty()
+                        }
+                        Column(Modifier.weight(1f)) {
+                            item.conversation?.let { Text("in $it", style = MekaType.caption, color = Meka.colors.textTertiary) }
+                            Text(body, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum class ListKind(val title: String, val hint: String) {
+    FAMILY("Family", "Shown first after work. Calls from family will ring when the call assistant lands."),
+    ALWAYS("Always notify", "Messages and missed calls from these people alert you straight away.");
+
+    fun names(l: PeopleLists) = if (this == FAMILY) l.family else l.alwaysNotify
+    fun add(l: PeopleLists, name: String) = if (this == FAMILY) l.copy(family = l.family + name) else l.copy(alwaysNotify = l.alwaysNotify + name)
+    fun remove(l: PeopleLists, name: String) = if (this == FAMILY) l.copy(family = l.family - name) else l.copy(alwaysNotify = l.alwaysNotify - name)
+}
+
+@Composable
+private fun PeopleSection(kind: ListKind, lists: PeopleLists, set: (PeopleLists) -> Unit, index: Int, onAdd: () -> Unit) {
+    Label(kind.title, index)
+    Text(kind.hint, style = MekaType.caption, color = Meka.colors.textTertiary)
+    kind.names(lists).sortedBy { it.lowercase() }.forEach { name ->
+        Row(Modifier.fillMaxWidth().appear(rememberAppearance(index)), verticalAlignment = Alignment.CenterVertically) {
+            Text(name, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            Text("Remove", style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.clickable(role = Role.Button) { set(kind.remove(lists, name)) }.padding(MekaSpace.xs))
+        }
+    }
+    Text("Add from contacts", style = MekaType.itemMeta, color = Meka.colors.accent,
+        modifier = Modifier.clickable(role = Role.Button) { onAdd() }.padding(vertical = MekaSpace.xs))
+}
+
+@Composable
+private fun Label(text: String, index: Int) {
+    Text(text.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(index)))
+}
+
+@Composable
+private fun DayChip(isoDay: Int, on: Boolean, onToggle: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val bg by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "day-bg")
+    val fg by animateColorAsState(if (on) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "day-fg")
+    val name = LocalClock.DAY_SHORT[isoDay - 1]
+    Box(
+        Modifier.size(40.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+            .clickable(role = Role.Checkbox) { onToggle() }
+            .semantics { contentDescription = name; selected = on },
+        contentAlignment = Alignment.Center,
+    ) { Text(name.take(1), style = MekaType.caption.copy(fontWeight = FontWeight.SemiBold), color = fg) }
+}
+
+@Composable
+private fun TimeStepper(label: String, minute: Int, modifier: Modifier, onChange: (Int) -> Unit) {
+    val day = LocalClock.MINUTES_PER_DAY
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+        Text("−", style = MekaType.itemTitle, color = Meka.colors.accent,
+            modifier = Modifier.clickable(role = Role.Button) { onChange((minute - STEP_MINUTES + day) % day) }
+                .semantics { contentDescription = "$label 15 minutes earlier" }.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+        Text(LocalClock.formatMinute(minute), style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Text("+", style = MekaType.itemTitle, color = Meka.colors.accent,
+            modifier = Modifier.clickable(role = Role.Button) { onChange((minute + STEP_MINUTES) % day) }
+                .semantics { contentDescription = "$label 15 minutes later" }.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+    }
+}
+
+@Composable
+private fun PillButton(label: String, filled: Boolean, onClick: () -> Unit) {
+    Text(
+        label, style = MekaType.itemTitle, color = if (filled) Meka.colors.onAccent else Meka.colors.accent,
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill))
+            .background(if (filled) Meka.colors.accent else Meka.colors.surfaceRaised)
+            .clickable(role = Role.Button) { onClick() }.padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
+    )
+}
+
+private fun hasNotificationAccess(context: Context) =
+    NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+
+private fun openListenerSettings(context: Context) {
+    val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+        .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, ComponentName(context, WorkCaptureService::class.java).flattenToString())
+    runCatching { context.startActivity(detail) }
+        .recoverCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+}
+
+private fun openAppNotificationSettings(context: Context) {
+    runCatching {
+        context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+    }
+}

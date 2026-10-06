@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,6 +62,7 @@ import os.meka.android.today.ConnectHook
 import os.meka.android.today.NeedsYouRoute
 import os.meka.android.today.TodayRoute
 import os.meka.core.facade.MekaCore
+import kotlinx.coroutines.delay
 
 /**
  * The app shell (build plan M1). Closed Fold: content above a bottom bar. Open Fold: a rail on the left and the
@@ -76,6 +78,10 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     val haptics = rememberMekaHaptics()
     val go: (ShellDestination) -> Unit = { d -> if (d != current) { haptics.tick(); current = d } }
     val states = rememberSaveableStateHolder()
+    // Work mode and Today move with the clock: re-evaluate every half minute while the app is on screen.
+    LaunchedEffect(core) {
+        while (true) { delay(30_000); core.tick() }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background).safeDrawingPadding()) {
         val layout = ShellNav.layoutFor(maxWidth.value)

@@ -68,6 +68,7 @@ import os.meka.android.designsystem.rememberPaneMorph
 import os.meka.android.designsystem.sharedTitle
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.SharedMotion
+import os.meka.android.work.WorkPane
 import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -104,6 +105,8 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var showCalendars by rememberSaveable { mutableStateOf(false) }
     var showPlan by rememberSaveable { mutableStateOf(false) }
+    var showWork by rememberSaveable { mutableStateOf(false) }
+    val work by core.workMode.collectAsState()
     // Tasks Plan Apply is sending into Today: their rows hide while the plan is up, then catch the flying titles.
     var landing by remember { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(landing, showPlan) {
@@ -142,7 +145,10 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
             }
             TwoPaneMorph(
                 twoPane,
-                list = { m -> TodayPane(today, sync, actions, m, connect, openCalendars, openPlan, !introPlayed, rowMotion) },
+                list = { m ->
+                    TodayPane(today, sync, actions, m, connect, openCalendars, openPlan, !introPlayed, rowMotion,
+                        workLabel = if (work.atWork) "At work" else "Off work", openWork = { showWork = true })
+                },
                 detail = { m -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, m) },
             )
             // Closed Fold: detail springs up over Today. The last task is kept so it stays visible while leaving.
@@ -157,6 +163,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
                 PlanPane(core, landing = landing, onApplying = { landing = it }, onClose = { showPlan = false })
             }
             MekaPane(visible = showCalendars) { CalendarsPane(core, onClose = { showCalendars = false }) }
+            MekaPane(visible = showWork) { WorkPane(core, onClose = { showWork = false }) }
         }
     }
 }
@@ -217,7 +224,7 @@ data class TodayActions(
 @Composable
 private fun TodayPane(
     today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?, openCalendars: (() -> Unit)?,
-    openPlan: () -> Unit, play: Boolean, rowMotion: (String) -> RowMotion,
+    openPlan: () -> Unit, play: Boolean, rowMotion: (String) -> RowMotion, workLabel: String, openWork: () -> Unit,
 ) {
     Column(modifier.imePadding()) {
         LazyColumn(
@@ -230,7 +237,7 @@ private fun TodayPane(
                     Text(greeting(), style = MekaType.greeting, color = Meka.colors.textPrimary)
                     SyncLine(sync)
                     if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs))
-                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l), modifier = Modifier.padding(top = MekaSpace.xs)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), modifier = Modifier.padding(top = MekaSpace.xs)) {
                         Text(
                             "Plan my day", style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
@@ -243,6 +250,11 @@ private fun TodayPane(
                                     .clickable(role = Role.Button) { openCalendars() }.padding(vertical = MekaSpace.xxs),
                             )
                         }
+                        Text(
+                            workLabel, style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { openWork() }.padding(vertical = MekaSpace.xxs),
+                        )
                         val theme = Meka.theme
                         Text(
                             "Theme: ${theme.choice.label}", style = MekaType.caption, color = Meka.colors.textSecondary,
