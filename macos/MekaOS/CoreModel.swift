@@ -251,6 +251,56 @@ final class CoreModel {
 
     private static func k(_ v: Int?) -> KotlinInt? { v.map { KotlinInt(int: Int32($0)) } }
 
+    // MARK: Renewals and bills radar
+
+    /// Adds a renewal or bill. Returns what's wrong with the cost (shown under the field), or nil when it was added.
+    /// The cost is checked here first: Kotlin exceptions don't cross into Swift.
+    @discardableResult
+    func addRenewal(_ title: String, kind: ObligationKind, dueDay: Int64, repeats: RenewalRepeat, cost: String, cancelByDaysBefore: Int?) -> String? {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        if let problem = RenewalRules.shared.costError(text: cost) { return problem }
+        let c = cost.trimmingCharacters(in: .whitespacesAndNewlines)
+        run {
+            _ = try await $0.addRenewal(title: t, kind: kind, dueDay: dueDay, repeats: repeats,
+                                        cost: c.isEmpty ? nil : c, cancelByDaysBefore: Self.k(cancelByDaysBefore))
+        }
+        return nil
+    }
+
+    /// "Renewed" / "Paid": a repeating one rolls on to its next date; a one-off leaves the list.
+    func renewalDone(_ id: String) { MekaHaptics.light(); run { try await $0.renewalDone(id: id) } }
+    func setRenewalDue(_ id: String, day: Int64) { run { try await $0.setRenewalDue(id: id, dueDay: day) } }
+    func setRenewalRepeat(_ id: String, _ r: RenewalRepeat) { run { try await $0.setRenewalRepeat(id: id, repeats: r) } }
+    /// Returns what's wrong with the cost, or nil when it was saved (blank clears it).
+    @discardableResult
+    func setRenewalCost(_ id: String, _ cost: String) -> String? {
+        if let problem = RenewalRules.shared.costError(text: cost) { return problem }
+        let c = cost.trimmingCharacters(in: .whitespacesAndNewlines)
+        run { try await $0.setRenewalCost(id: id, cost: c.isEmpty ? nil : c) }
+        return nil
+    }
+    func setRenewalLead(_ id: String, days: Int) { run { try await $0.setRenewalLead(id: id, days: Int32(days)) } }
+    func setRenewalCancelBy(_ id: String, daysBefore: Int?) { run { try await $0.setRenewalCancelBy(id: id, daysBefore: Self.k(daysBefore)) } }
+    func setRenewalKind(_ id: String, _ kind: ObligationKind) { run { try await $0.setRenewalKind(id: id, kind: kind) } }
+    func stopRenewal(_ id: String) { MekaHaptics.light(); run { try await $0.stopRenewal(id: id) } }
+    func deleteRenewal(_ id: String) { run { try await $0.deleteRenewal(id: id) } }
+
+    /// Today as a local epoch day (the core's day numbering, for due dates).
+    var todayEpochDay: Int64 { core?.todayEpochDay() ?? Self.epochDay(of: Date()) }
+
+    /// A local calendar date as an epoch day, and back (for the date picker).
+    nonisolated static func epochDay(of date: Date) -> Int64 {
+        let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return CivilDate.shared.toEpochDay(year: Int32(c.year ?? 1970), month: Int32(c.month ?? 1), day: Int32(c.day ?? 1))
+    }
+
+    nonisolated static func date(ofEpochDay day: Int64) -> Date {
+        let ymd = CivilDate.shared.fromEpochDay(epochDay: day)
+        let comps = DateComponents(year: Int(ymd.year), month: Int(ymd.month), day: Int(ymd.day), hour: 12)
+        return Calendar.current.date(from: comps) ?? Date()
+    }
+
     // MARK: Fasting
 
     /// Starts a fast `minutesAgo` minutes ago (0: now) with the plan's goal.

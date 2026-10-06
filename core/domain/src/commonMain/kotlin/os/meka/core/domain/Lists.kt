@@ -63,15 +63,19 @@ data class ListsView(
     val someday: List<SomedayGroup>,
     /** Active and revisiting decisions: due reviews and revisits first, then newest. Superseded ones are kept, not shown. */
     val decisions: List<DecisionItem>,
+    /** Renewals and bills (the radar): what needs doing, what's coming up, and what repeating costs add up to. */
+    val renewals: RenewalsView = RenewalsView.EMPTY,
 ) {
     val chaseDue: Int get() = waiting.count { it.state == DueState.DUE }
     val reviewsDue: Int get() = decisions.count { it.state == DueState.DUE }
-    val dueCount: Int get() = chaseDue + reviewsDue
+    val renewalsDue: Int get() = renewals.dueCount
+    val dueCount: Int get() = chaseDue + reviewsDue + renewalsDue
 
-    /** "2 to chase · 1 decision to review"; null when nothing is due. */
+    /** "2 to chase · 1 decision to review · 1 renewal due"; null when nothing is due. */
     val dueLine: String? get() = listOfNotNull(
         chaseDue.takeIf { it > 0 }?.let { "$it to chase" },
         reviewsDue.takeIf { it > 0 }?.let { "$it ${if (it == 1) "decision" else "decisions"} to review" },
+        renewals.dueLine,
     ).joinToString(" · ").ifEmpty { null }
 
     val somedayCount: Int get() = someday.sumOf { it.items.size }
@@ -410,7 +414,8 @@ class Lists(
     }
 
     /** The whole Lists screen. [tasks] is the already-loaded task list (Someday lives there). */
-    fun view(tasks: List<Task>): ListsView = ListsView(waitingItems(), somedayGroups(tasks), decisionItems())
+    fun view(tasks: List<Task>, renewals: RenewalsView = RenewalsView.EMPTY): ListsView =
+        ListsView(waitingItems(), somedayGroups(tasks), decisionItems(), renewals)
 
     // ---- Helpers ----
 

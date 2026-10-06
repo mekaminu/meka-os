@@ -1,6 +1,11 @@
 package os.meka.android.lists
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.expandVertically
@@ -75,11 +80,11 @@ import os.meka.core.domain.WaitingItem
 import os.meka.core.facade.MekaCore
 
 /** The three lists, in the order of the tabs. */
-enum class ListTab(val label: String) { WAITING("Waiting for"), SOMEDAY("Someday"), DECISIONS("Decisions") }
+enum class ListTab(val label: String) { WAITING("Waiting for"), SOMEDAY("Someday"), DECISIONS("Decisions"), RENEWALS("Renewals") }
 
 /**
- * LISTS (build plan M1): Waiting for (chase dates), Someday (kinds) and Decisions (review dates). One screen with three
- * tabs; the lit tab pill springs across. Tapping a row unfolds its actions in place; "Got it" and "Do it now" make the
+ * LISTS (build plan M1): Waiting for (chase dates), Someday (kinds), Decisions (review dates) and Renewals (the
+ * renewals and bills radar, see RenewalsSection.kt). One screen with four tabs; the lit tab pill springs across. Tapping a row unfolds its actions in place; "Got it" and "Do it now" make the
  * row leave like a completion (light haptic). Due chases and reviews are lit in the accent colour. Nothing is chased,
  * decided or promoted for you. Reduced motion: cross-fades only.
  */
@@ -104,7 +109,7 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
         }
         item(key = "due") {
             Text(
-                view.dueLine ?: "Nothing to chase or review today.",
+                view.dueLine ?: "Nothing to chase, review or renew today.",
                 style = MekaType.itemMeta,
                 color = if (view.dueLine != null) Meka.colors.accent else Meka.colors.textSecondary,
                 modifier = Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1)),
@@ -119,12 +124,14 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
             ListTab.WAITING -> waiting(view, open, toggle, core, act, leave)
             ListTab.SOMEDAY -> someday(view, open, toggle, core, act, leave)
             ListTab.DECISIONS -> decisions(view, open, toggle, core, act, leave)
+            ListTab.RENEWALS -> renewals(view.renewals, core.todayEpochDay(), open, toggle, core, act, leave) { haptics.light() }
         }
         item(key = "add-${tab.name}") {
             when (tab) {
                 ListTab.WAITING -> AddWaiting { title, who, days -> act { core.addWaiting(title, who, days) } }
                 ListTab.SOMEDAY -> AddSomeday { title, kind -> act { core.addSomeday(title, kind) } }
                 ListTab.DECISIONS -> AddDecision { s, why, days -> act { core.recordDecision(s, why, days) } }
+                ListTab.RENEWALS -> AddRenewal(core.todayEpochDay()) { n -> act { core.addRenewal(n.title, n.kind, n.dueDay, n.repeat, n.cost, n.cancelByDaysBefore) } }
             }
         }
     }
@@ -197,16 +204,17 @@ private fun LazyListScope.decisions(
     }
 }
 
-private fun LazyListScope.empty(key: String, line: String) = item(key = "empty-$key") {
+internal fun LazyListScope.empty(key: String, line: String) = item(key = "empty-$key") {
     Text(line, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(vertical = MekaSpace.s))
 }
 
-/** Three tabs on a quiet track; the lit pill springs to the chosen one. Counts sit beside the labels. */
+/** Four tabs on a quiet track; the lit pill springs to the chosen one. Counts sit beside the labels when there's room. */
 @Composable
 private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: (ListTab) -> Unit) {
     val tabs = ListTab.entries
     BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface).padding(MekaSpace.xxs)) {
         val slot = maxWidth / tabs.size
+        val roomForCounts = slot >= 104.dp
         val x by animateDpAsState(slot * tabs.indexOf(current), MekaMotion.replan(Meka.reducedMotion), label = "lists-pill")
         Box(Modifier.offset(x = x).width(slot).height(40.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
         Row(Modifier.fillMaxWidth()) {
@@ -215,8 +223,11 @@ private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: 
                     ListTab.WAITING -> view.waiting.size
                     ListTab.SOMEDAY -> view.somedayCount
                     ListTab.DECISIONS -> view.decisions.size
+                    ListTab.RENEWALS -> view.renewals.count
                 }
-                val due = when (t) { ListTab.WAITING -> view.chaseDue; ListTab.DECISIONS -> view.reviewsDue; else -> 0 }
+                val due = when (t) {
+                    ListTab.WAITING -> view.chaseDue; ListTab.DECISIONS -> view.reviewsDue; ListTab.RENEWALS -> view.renewalsDue; else -> 0
+                }
                 val color by animateColorAsState(
                     if (t == current) Meka.colors.textPrimary else Meka.colors.textTertiary, MekaMotion.appear(Meka.reducedMotion), label = "tab",
                 )
@@ -230,7 +241,7 @@ private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: 
                     contentAlignment = Alignment.Center,
                 ) {
                     BasicText(
-                        if (count > 0) "${t.label} $count" else t.label, maxLines = 1, softWrap = false,
+                        if (count > 0 && roomForCounts) "${t.label} $count" else t.label, maxLines = 1, softWrap = false,
                         style = MekaType.caption.copy(color = if (due > 0) Meka.colors.accent else color),
                     )
                 }
@@ -239,9 +250,12 @@ private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: 
     }
 }
 
-/** A list row: title and meta; tapping unfolds [details] in place (reduced motion: cross-fade). */
+/**
+ * A list row: title and meta; tapping unfolds [details] in place (reduced motion: cross-fade). When the meta changes
+ * (a new chase date, a renewal rolling on) the new line slides up into place.
+ */
 @Composable
-private fun ListRow(
+internal fun ListRow(
     title: String, meta: String?, state: DueState, expanded: Boolean, onToggle: () -> Unit, modifier: Modifier,
     details: @Composable () -> Unit,
 ) {
@@ -252,7 +266,12 @@ private fun ListRow(
                 .padding(horizontal = MekaSpace.s, vertical = MekaSpace.s),
         ) {
             Text(title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-            meta?.let { Text(it, style = MekaType.itemMeta, color = if (state == DueState.DUE) Meka.colors.accent else Meka.colors.textSecondary) }
+            meta?.let { m ->
+                val reduced = Meka.reducedMotion
+                AnimatedContent(m, transitionSpec = { metaRoll(reduced) }, label = "row-meta") { line ->
+                    Text(line, style = MekaType.itemMeta, color = if (state == DueState.DUE) Meka.colors.accent else Meka.colors.textSecondary)
+                }
+            }
         }
         AnimatedVisibility(expanded, enter = unfold(), exit = fold()) {
             Column(
@@ -263,19 +282,24 @@ private fun ListRow(
     }
 }
 
-@Composable
-private fun unfold() = if (Meka.reducedMotion) fadeIn(MekaMotion.expand(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false))
+private fun metaRoll(reduced: Boolean): ContentTransform =
+    if (reduced) fadeIn(MekaMotion.appear(true)) togetherWith fadeOut(MekaMotion.appear(true))
+    else (slideInVertically(MekaMotion.replan(false)) { it / 2 } + fadeIn(MekaMotion.appear(false))) togetherWith
+        (slideOutVertically(MekaMotion.replan(false)) { -it / 2 } + fadeOut(MekaMotion.appear(false)))
 
 @Composable
-private fun fold() = if (Meka.reducedMotion) fadeOut(MekaMotion.expand(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false))
+internal fun unfold() = if (Meka.reducedMotion) fadeIn(MekaMotion.expand(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false))
 
 @Composable
-private fun Actions(content: @Composable () -> Unit) {
+internal fun fold() = if (Meka.reducedMotion) fadeOut(MekaMotion.expand(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false))
+
+@Composable
+internal fun Actions(content: @Composable () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) { content() }
 }
 
 @Composable
-private fun Action(label: String, critical: Boolean = false, onClick: () -> Unit) {
+internal fun Action(label: String, critical: Boolean = false, onClick: () -> Unit) {
     Text(
         label, style = MekaType.itemTitle, color = if (critical) Meka.colors.critical else Meka.colors.accent,
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button) { onClick() }.padding(vertical = MekaSpace.xxs),
@@ -301,7 +325,7 @@ private fun KindChoices(current: SomedayKind, choose: (SomedayKind) -> Unit) {
 }
 
 @Composable
-private fun Chip(label: String, lit: Boolean, onClick: () -> Unit) {
+internal fun Chip(label: String, lit: Boolean, onClick: () -> Unit) {
     val bg by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(Meka.reducedMotion), label = "chip")
     Text(
         label, style = MekaType.caption, color = if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 1,
@@ -313,7 +337,7 @@ private fun Chip(label: String, lit: Boolean, onClick: () -> Unit) {
 
 /** A one-line field in a raised pill; Done submits and clears. */
 @Composable
-private fun Field(hint: String, modifier: Modifier = Modifier, value: String? = null, onValue: ((String) -> Unit)? = null, onDone: (String) -> Unit) {
+internal fun Field(hint: String, modifier: Modifier = Modifier, value: String? = null, onValue: ((String) -> Unit)? = null, onDone: (String) -> Unit) {
     var own by rememberSaveable(hint) { mutableStateOf("") }
     val text = value ?: own
     val set: (String) -> Unit = onValue ?: { own = it }

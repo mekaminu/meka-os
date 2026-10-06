@@ -27,6 +27,9 @@ import os.meka.core.domain.CalendarEvents
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DayPlanner
 import os.meka.core.domain.QuickCapture
+import os.meka.core.domain.ObligationKind
+import os.meka.core.domain.RenewalRepeat
+import os.meka.core.domain.Renewals
 import os.meka.core.domain.DayWindow
 import os.meka.core.domain.EveningShutdown
 import os.meka.core.domain.ShutdownView
@@ -94,6 +97,7 @@ class MekaCore(
     private val events = CalendarEvents(replica)
     private val work = WorkMode(replica, nowMs)
     private val lists = os.meka.core.domain.Lists(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val renewals = Renewals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shutdown = EveningShutdown(replica, tasks, nowMs, ZoneCalendar(timeZone))
@@ -104,7 +108,10 @@ class MekaCore(
     val today: StateFlow<Today> = _today.asStateFlow()
 
     private val _lists = MutableStateFlow(ListsView.EMPTY)
-    /** Waiting for, Someday and Decisions, with what is due to chase or review today. Synced; moves with the clock. */
+    /**
+     * Waiting for, Someday, Decisions and Renewals, with what is due to chase, review, renew or pay today. Synced;
+     * moves with the clock.
+     */
     val listsView: StateFlow<ListsView> = _lists.asStateFlow()
 
     private val _goals = MutableStateFlow(GoalsView.EMPTY)
@@ -222,6 +229,31 @@ class MekaCore(
         onCore { lists.replaceDecision(id, statement, rationale, reviewInDays) }
     suspend fun editDecision(id: String, statement: String?, rationale: String?) = onCore { lists.editDecision(id, statement, rationale) }
     suspend fun deleteDecision(id: String) = onCore { lists.deleteDecision(id) }
+
+    // ---- Renewals and bills radar ----
+
+    /**
+     * Adds a renewal or bill due on [dueDay] (a local epoch day, see [todayEpochDay]). [cost] is typed text ("9.99",
+     * blank for not known); [cancelByDaysBefore] sets a cancel-by day that many days before it. Throws
+     * [os.meka.core.domain.ValidationException] for a cost it can't read: check it first with
+     * [os.meka.core.domain.RenewalRules.costError] (the Mac must, as Kotlin exceptions don't cross into Swift).
+     */
+    suspend fun addRenewal(title: String, kind: ObligationKind, dueDay: Long, repeats: RenewalRepeat, cost: String?, cancelByDaysBefore: Int?): String =
+        onCore { renewals.add(title, kind, dueDay, repeats, cost, cancelByDaysBefore) }
+    /** "Renewed" / "Paid": a repeating one moves to its next due day; a one-off leaves the list. */
+    suspend fun renewalDone(id: String) = onCore { renewals.done(id) }
+    suspend fun setRenewalDue(id: String, dueDay: Long) = onCore { renewals.setDue(id, dueDay) }
+    suspend fun setRenewalRepeat(id: String, repeats: RenewalRepeat) = onCore { renewals.setRepeat(id, repeats) }
+    suspend fun setRenewalCost(id: String, cost: String?) = onCore { renewals.setCost(id, cost) }
+    /** How many days before the due day it starts showing. */
+    suspend fun setRenewalLead(id: String, days: Int) = onCore { renewals.setLead(id, days) }
+    /** The cancel-by day, [daysBefore] the due day (null: none). */
+    suspend fun setRenewalCancelBy(id: String, daysBefore: Int?) = onCore { renewals.setCancelBy(id, daysBefore) }
+    suspend fun setRenewalKind(id: String, kind: ObligationKind) = onCore { renewals.setKind(id, kind) }
+    suspend fun editRenewal(id: String, title: String?, subject: String?, notes: String?) = onCore { renewals.edit(id, title, subject, notes) }
+    /** "Cancelled it" / "Stop tracking": off the radar, kept as cancelled. */
+    suspend fun stopRenewal(id: String) = onCore { renewals.stop(id) }
+    suspend fun deleteRenewal(id: String) = onCore { renewals.delete(id) }
 
     // ---- Goals and habits ----
 
@@ -390,7 +422,7 @@ class MekaCore(
     private fun refresh() {
         val all = tasks.all()
         _today.value = project(all)
-        _lists.value = lists.view(all)
+        _lists.value = lists.view(all, renewals.view())
         _goals.value = goals.view(all)
         _fasting.value = fasting.view()
         val workState = work.state(localClock())

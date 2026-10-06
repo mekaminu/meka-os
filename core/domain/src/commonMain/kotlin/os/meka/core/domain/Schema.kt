@@ -39,6 +39,7 @@ enum class Lifecycle { INBOX, ACTIVE, SOMEDAY, WAITING, DONE, CANCELLED;
 
 enum class SomedayKind { IDEA, PURCHASE, PROJECT, TRIP, BOOK, RESEARCH, APPLICATION, HOME_IMPROVEMENT, OTHER }
 enum class CommitmentDirection { OWED_BY_ME, OWED_TO_ME }
+enum class ObligationKind { MOT, CAR_TAX, INSURANCE, BOILER, SUBSCRIPTION, BILL, LICENCE, WARRANTY, OTHER }
 enum class GoalHorizon { SHORT, MEDIUM, LONG }
 enum class DecisionStatus { ACTIVE, REVISITING, SUPERSEDED }
 enum class Visibility { HOUSEHOLD, PRIVATE }
@@ -107,6 +108,29 @@ object DecisionFields {
     const val SUPERSEDES = "supersedesDecisionId"
 }
 
+/**
+ * An obligation (renewals and bills radar): a dated, often repeating duty. The due date is `dueAtMs` (stored as
+ * 09:00 local on its day, like chase dates). Fields added 2026-10-06; never rename, only add.
+ */
+object ObligationFields {
+    /** [ObligationKind] name. */
+    const val KIND = "kind"
+    /** What it's for ("Golf AB12 CDE", "Home"); free text until People/Vault entities can be referenced. */
+    const val SUBJECT_LABEL = "subjectLabel"
+    /** Repeat rule (the same RRULE subset as tasks, see [Recurrence]); Null for a one-off. */
+    const val RECURRENCE = "recurrence"
+    /** Cost per occurrence in pence; Null when not known. */
+    const val COST_MINOR = "costMinor"
+    /** ISO currency code of [COST_MINOR]; GBP for now. */
+    const val CURRENCY = "currency"
+    /** How many days before the due date MEKA starts showing it. */
+    const val LEAD_DAYS = "leadDays"
+    /** Last day to cancel or switch before it renews (09:00 local on that day); Null when there is none. */
+    const val CANCEL_BY_AT = "cancelByAtMs"
+    /** When it was last renewed, paid or done. */
+    const val LAST_DONE_AT = "lastDoneAtMs"
+}
+
 object GoalFields {
     const val TARGET = "target"
     const val HORIZON = "horizon"
@@ -165,7 +189,7 @@ object MekaSchema : SchemaRegistry {
     private val userVisible = setOf(
         ActionableFields.TITLE, ActionableFields.DUE_AT, TaskFields.SCHEDULED_AT,
         ChecklistFields.TEXT, DecisionFields.STATEMENT, DecisionFields.REVIEW_AT,
-        CommitmentFields.EXPECTED_AT, CommitmentFields.FOLLOW_UP_AT, GoalFields.TARGET,
+        CommitmentFields.EXPECTED_AT, CommitmentFields.FOLLOW_UP_AT, GoalFields.TARGET, ObligationFields.CANCEL_BY_AT,
         PersonFields.DISPLAY_NAME, HouseholdFields.NAME,
     )
 

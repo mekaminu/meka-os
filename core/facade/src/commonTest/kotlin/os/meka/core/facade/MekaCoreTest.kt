@@ -197,6 +197,26 @@ class MekaCoreTest {
     }
 
     @Test
+    fun renewalsComeDueInListsAndRollOnWhenRenewedOnEitherDevice() = runTest {
+        val a = core("android"); val m = core("mac")
+        val today = a.todayEpochDay()
+        val id = a.addRenewal("Netflix", os.meka.core.domain.ObligationKind.SUBSCRIPTION, today + 4,
+            os.meka.core.domain.RenewalRepeat.MONTHLY, "10.99", null)
+        assertEquals(null, a.listsView.value.dueLine)
+        assertEquals("£10.99 a month · £131.88 a year in repeating costs", a.listsView.value.renewals.costLine)
+        now += 86_400_000L
+        a.tick()
+        assertEquals("1 renewal due", a.listsView.value.dueLine)
+        assertEquals(1, a.listsView.value.dueCount)
+        a.syncNow(); m.syncNow()
+        assertEquals(listOf("Netflix"), m.listsView.value.renewals.attention.map { it.title })
+        m.renewalDone(id)
+        m.syncNow(); a.syncNow()
+        assertEquals(null, a.listsView.value.dueLine)
+        assertTrue(a.listsView.value.renewals.all.single().dueDay > today + 27)
+    }
+
+    @Test
     fun habitsTickSyncAndThePlanMakesRoomForOnesThatAreDue() = runTest {
         val a = core("android"); val m = core("mac")
         val goal = a.addGoal("Fitter by spring", null, os.meka.core.domain.GoalHorizon.MEDIUM)

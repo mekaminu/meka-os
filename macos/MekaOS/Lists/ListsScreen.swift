@@ -3,18 +3,20 @@ import SwiftUI
 
 /// The Lists tabs, in order (same as the Fold).
 enum ListTab: Int, CaseIterable, Identifiable {
-    case waiting, someday, decisions
+    case waiting, someday, decisions, renewals
     var id: Int { rawValue }
     var label: String {
         switch self {
         case .waiting: "Waiting for"
         case .someday: "Someday"
         case .decisions: "Decisions"
+        case .renewals: "Renewals"
         }
     }
 }
 
-/// LISTS on the Mac (build plan M1): Waiting for (chase dates), Someday (kinds) and Decisions (review dates), synced
+/// LISTS on the Mac (build plan M1): Waiting for (chase dates), Someday (kinds), Decisions (review dates) and Renewals
+/// (the renewals and bills radar, `RenewalsSection.swift`), synced
 /// with the Fold. A segmented control switches lists; clicking a row unfolds its actions (date presets are menus, as
 /// rule 7 allows). "Got it" and "Do it now" make the row leave like a completion. Due chases and reviews are lit in the
 /// accent colour. Nothing is chased, decided or promoted for you. Reduce Motion: cross-fades only.
@@ -36,7 +38,7 @@ struct ListsScreen: View {
                     .font(MekaType.greeting).tracking(MekaType.greetingTracking)
                     .foregroundStyle(palette.textPrimary)
                     .staggeredAppear(0)
-                Text(model.lists?.dueLine ?? "Nothing to chase or review today.")
+                Text(model.lists?.dueLine ?? "Nothing to chase, review or renew today.")
                     .font(MekaType.itemMeta)
                     .foregroundStyle(model.lists?.dueLine != nil ? palette.accent : palette.textSecondary)
                     .contentTransition(.opacity)
@@ -50,7 +52,7 @@ struct ListsScreen: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(maxWidth: 480)
+                .frame(maxWidth: 560)
                 .padding(.bottom, MekaSpace.m)
                 .staggeredAppear(2)
 
@@ -59,6 +61,7 @@ struct ListsScreen: View {
                     case .waiting: waiting
                     case .someday: someday
                     case .decisions: decisions
+                    case .renewals: RenewalsSection(palette: palette, open: $open)
                     }
                 }
                 .id(tab)
@@ -69,6 +72,7 @@ struct ListsScreen: View {
                     case .waiting: AddWaitingRow(palette: palette)
                     case .someday: AddSomedayRow(palette: palette)
                     case .decisions: AddDecisionRow(palette: palette)
+                    case .renewals: AddRenewalRow(palette: palette)
                     }
                 }
                 .padding(.top, MekaSpace.l)
@@ -86,6 +90,7 @@ struct ListsScreen: View {
     private var rowIDs: [String] {
         guard let l = model.lists else { return [] }
         return l.waiting.map(\.id) + l.someday.flatMap { $0.items.map(\.id) } + l.decisions.map(\.id)
+            + l.renewals.all.map { "\($0.id)|\($0.dueDay)" }
     }
 
     private func tabLabel(_ t: ListTab) -> String {
@@ -94,6 +99,7 @@ struct ListsScreen: View {
         case .waiting: Int32(l.waiting.count)
         case .someday: l.somedayCount
         case .decisions: Int32(l.decisions.count)
+        case .renewals: l.renewals.count
         }
         return n > 0 ? "\(t.label) \(n)" : t.label
     }
@@ -177,7 +183,8 @@ struct ListsScreen: View {
 }
 
 /// A list row: title and meta; clicking unfolds the actions in place.
-private struct ListRowView<Details: View>: View {
+struct ListRowView<Details: View>: View {
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     let title: String
     let meta: String?
     let due: Bool
@@ -192,7 +199,10 @@ private struct ListRowView<Details: View>: View {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                     if let meta {
+                        // A new date (a chase moved, a renewal rolled on) slides up into place.
                         Text(meta).font(MekaType.itemMeta).foregroundStyle(due ? palette.accent : palette.textSecondary)
+                            .id(meta)
+                            .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.push(from: .bottom).combined(with: .opacity))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -211,7 +221,7 @@ private struct ListRowView<Details: View>: View {
     }
 }
 
-private struct EmptyLine: View {
+struct EmptyLine: View {
     let text: String
     let palette: MekaPalette
     var body: some View {
@@ -220,7 +230,7 @@ private struct EmptyLine: View {
 }
 
 /// A menu of date presets ("Tomorrow", "In 3 days", …, "No date").
-private struct DayMenu: View {
+struct DayMenu: View {
     let title: String
     let choices: [DayChoice]
     let choose: (Int?) -> Void
@@ -325,7 +335,7 @@ private struct AddDecisionRow: View {
     }
 }
 
-private extension View {
+extension View {
     func rowActions(_ palette: MekaPalette) -> some View {
         buttonStyle(.plain).font(MekaType.itemTitle).foregroundStyle(palette.accent)
     }

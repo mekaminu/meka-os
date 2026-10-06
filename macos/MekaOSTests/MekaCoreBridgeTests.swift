@@ -51,6 +51,27 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(ListRules.shared.CHASE_CHOICES.last?.days, nil)
     }
 
+    func testRenewalsThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "renewals-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let today = core.todayEpochDay()
+        let monthly = RenewalRules.shared.repeatAt(index: 1)
+        XCTAssertEqual(RenewalRules.shared.repeatLabel(r: monthly), "Every month")
+        XCTAssertNil(RenewalRules.shared.costError(text: "10.99"))
+        XCTAssertNotNil(RenewalRules.shared.costError(text: "ten"))
+        let id = try await core.addRenewal(title: "Netflix", kind: RenewalRules.shared.kindAt(index: 4), dueDay: today + 2, repeats: monthly,
+                                           cost: "10.99", cancelByDaysBefore: nil)
+        let r = core.listsView.value.renewals
+        XCTAssertEqual(r.attention.first?.id, id)
+        XCTAssertEqual(r.attention.first?.repeats, monthly)
+        XCTAssertEqual(core.listsView.value.dueLine, "1 renewal due")
+        try await core.renewalDone(id: id)
+        XCTAssertNil(core.listsView.value.dueLine)
+    }
+
     func testGoalsAndHabitsThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
