@@ -10,6 +10,7 @@ struct BriefSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openURL) private var openURL
     let palette: MekaPalette
     @State private var closing = false
 
@@ -67,9 +68,36 @@ struct BriefSheet: View {
                                 Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(4)
                             }
                         }
+
+                        HStack {
+                            SectionLabel("Headlines", palette)
+                            Spacer()
+                            Menu("Topics") {
+                                ForEach(v.newsTopics, id: \.id) { t in
+                                    Toggle(t.label, isOn: Binding(
+                                        get: { t.chosen },
+                                        set: { model.setNewsTopic(t.id, on: $0) }
+                                    ))
+                                }
+                            }
+                            .menuStyle(.borderlessButton).fixedSize()
+                        }
+                        .padding(.top, MekaSpace.l).staggeredAppear(5)
+                        if !v.newsTopics.contains(where: \.chosen) {
+                            Text("No topics chosen. Pick some from Topics.").font(MekaType.caption)
+                                .foregroundStyle(palette.textTertiary).staggeredAppear(5)
+                        } else if v.headlines.isEmpty {
+                            Text("No headlines yet. They're fetched every hour.").font(MekaType.caption)
+                                .foregroundStyle(palette.textTertiary).staggeredAppear(5)
+                        }
+                        ForEach(v.headlines, id: \.id) { h in
+                            HeadlineRow(headline: h, palette: palette) { url in openURL(url) }
+                                .staggeredAppear(5)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .animation(MekaMotion.replan(reduced: reduceMotion), value: v.day.map(\.id))
+                    .animation(MekaMotion.replan(reduced: reduceMotion), value: v.headlines.map(\.id))
                 }
                 .frame(maxHeight: 460)
 
@@ -108,6 +136,34 @@ struct BriefSheet: View {
             try? await Task.sleep(for: .milliseconds(600))
             dismiss()
         }
+    }
+}
+
+/// A headline: the title, then "BBC News · World · 2 h ago". Clicking opens the article in the browser (https only).
+private struct HeadlineRow: View {
+    let headline: BriefHeadline
+    let palette: MekaPalette
+    let open: (URL) -> Void
+    @State private var hovering = false
+
+    private var url: URL? {
+        guard let s = headline.url, let u = URL(string: s), u.scheme?.lowercased() == "https" else { return nil }
+        return u
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(headline.title).font(MekaType.itemTitle)
+                .foregroundStyle(hovering && url != nil ? palette.accent : palette.textPrimary)
+            Text(headline.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+        }
+        .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .onTapGesture { if let url { open(url) } }
+        .help(url == nil ? "" : "Open in your browser")
+        .accessibilityAddTraits(url == nil ? AccessibilityTraits() : .isLink)
     }
 }
 

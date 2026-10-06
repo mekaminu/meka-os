@@ -115,6 +115,7 @@ class MekaCore(
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shutdown = EveningShutdown(replica, tasks, nowMs, ZoneCalendar(timeZone))
     private val brief = MorningBrief(replica, nowMs, ZoneCalendar(timeZone))
+    private val news = os.meka.core.domain.News(replica)
     private val notifyPrefs = NotificationPrefs(replica)
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
@@ -339,6 +340,8 @@ class MekaCore(
 
     /** "Got it": the brief's card is put away on every device until tomorrow morning. */
     suspend fun briefSeen() = onCore { brief.markSeen() }
+    /** Shows or hides a news topic's headlines in the brief ([os.meka.core.domain.NewsTopics]); synced. */
+    suspend fun setNewsTopic(topicId: String, on: Boolean) = onCore { news.setTopic(topicId, on) }
 
     // ---- Notification governor ----
 
@@ -486,7 +489,8 @@ class MekaCore(
         _shutdown.value = shutdown.view(all, events.all(), workState.schedule, workState.atWork, today, dayWindow(today.endMs))
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
-        _brief.value = brief.view(all, events.all(), workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today)
+        _brief.value = brief.view(all, events.all(), workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
+            news.all(), news.choices())
         _notifyPreview.value = Governor.preview(currentNotices(), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(

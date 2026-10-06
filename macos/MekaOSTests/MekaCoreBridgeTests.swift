@@ -150,6 +150,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         try await core.briefSeen()
         XCTAssertTrue(core.briefView.value.seenToday)
         XCTAssertFalse(core.briefView.value.offered)
+
+        // News topics: Top stories and World by default; a topic toggles and stays chosen.
+        XCTAssertEqual(core.briefView.value.newsTopics.filter(\.chosen).map(\.id), ["top", "world"])
+        XCTAssertTrue(core.briefView.value.headlines.isEmpty)
+        try await core.setNewsTopic(topicId: "technology", on: true)
+        XCTAssertEqual(core.briefView.value.newsTopics.filter(\.chosen).map(\.id), ["top", "world", "technology"])
     }
 
     func testNotificationGovernorThroughTheBridge() async throws {

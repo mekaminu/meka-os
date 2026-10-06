@@ -5,8 +5,8 @@ import os.meka.core.sync.fv
 
 /**
  * Morning brief (build plan M1), non-AI: one look at the day when it starts — work hours, events and what's planned
- * or due, what you're waiting on (and who to chase), anything on the radar that needs you, habits and a running fast.
- * News headlines join it when server-side news ingestion lands (the next slice of this item).
+ * or due, what you're waiting on (and who to chase), anything on the radar that needs you, habits and a running fast,
+ * and a few news headlines from the topics Meka chose (mirrored by the server from public feeds, see [News]).
  *
  * It is offered from the end of quiet hours (07:00 when quiet hours are off or end outside 05:00–10:00) until noon.
  * "Got it" is stored on one `context_mode` entity with the fixed id [ENTITY_ID] (the local day and when), so reading
@@ -54,6 +54,10 @@ data class MorningBriefView(
     val fastingLine: String?,
     /** The card's second line: "2 events · 4 tasks · first at 09:30 · 1 to chase". */
     val cardLine: String,
+    /** Up to [NewsRules.MAX_IN_BRIEF] headlines from the chosen topics, newest first, each with its source named. */
+    val headlines: List<BriefHeadline> = emptyList(),
+    /** Every topic, with the ones the brief shows marked (synced). */
+    val newsTopics: List<NewsTopicChoice> = emptyList(),
 ) {
     companion object {
         val EMPTY = MorningBriefView(
@@ -125,6 +129,8 @@ class MorningBrief(
         goals: GoalsView,
         fasting: FastingView,
         today: DayWindow,
+        headlines: List<Headline> = emptyList(),
+        newsTopics: List<NewsTopicChoice> = NewsTopics.ALL.map { NewsTopicChoice(it.id, it.label, it.id in NewsTopics.DEFAULT) },
     ): MorningBriefView {
         val now = nowMs()
         val minute = calendar.minuteOfDay(now)
@@ -203,6 +209,8 @@ class MorningBrief(
             habitsLine = goals.paceLine,
             fastingLine = fastingLine,
             cardLine = BriefRules.cardLine(daySummary, rows.isNotEmpty(), lists.chaseDue, attention.size),
+            headlines = NewsRules.forBrief(headlines, newsTopics.filter { it.chosen }.map { it.id }, now),
+            newsTopics = newsTopics,
         )
     }
 

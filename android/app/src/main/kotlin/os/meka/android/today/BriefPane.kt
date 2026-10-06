@@ -3,15 +3,18 @@ package os.meka.android.today
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -42,6 +46,8 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.goals.Chips
+import os.meka.core.domain.BriefHeadline
 import os.meka.core.domain.BriefLine
 import os.meka.core.domain.DueState
 import os.meka.core.domain.MorningBriefView
@@ -53,11 +59,13 @@ private const val GOT_IT_HOLD_MS = 600L
 
 /**
  * Morning brief (build plan M1): today at a glance (work hours, events and what's planned or due, in time order),
- * what you're waiting on, what needs you on your lists, habits and a running fast. "Got it" puts the card away here
- * and on the Mac until tomorrow morning. Read-only: nothing in the brief changes anything.
+ * what you're waiting on, what needs you on your lists, habits and a running fast, and headlines from the news topics
+ * chosen under "Topics" (synced; tapping one opens the article in the browser). "Got it" puts the card away here
+ * and on the Mac until tomorrow morning. Nothing in the brief changes anything but the topic choice.
  *
- * Motion: sections stagger in 40 ms apart; chases due today are lit in the accent colour; Got it pops a check (spring)
- * with a light haptic and the pane drops away. Reduced motion: cross-fades only.
+ * Motion: sections stagger in 40 ms apart; chases due today are lit in the accent colour; the topic chips unfold in
+ * place and a chosen chip's colour blends across; Got it pops a check (spring) with a light haptic and the pane drops
+ * away. Reduced motion: cross-fades only.
  */
 @Composable
 fun BriefPane(core: MekaCore, onClose: () -> Unit) {
@@ -65,6 +73,8 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     var closing by remember { mutableStateOf(false) }
+    var topicsOpen by remember { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -125,8 +135,40 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
 
+        item(key = "h-news") {
+            Column(Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(5))) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    SectionLabel("Headlines", Modifier.weight(1f))
+                    Text(if (topicsOpen) "Done" else "Topics", style = MekaType.caption, color = Meka.colors.accent,
+                        modifier = Modifier.clickable(role = Role.Button) { topicsOpen = !topicsOpen }.padding(MekaSpace.xs))
+                }
+                AnimatedVisibility(
+                    visible = topicsOpen,
+                    enter = if (Meka.reducedMotion) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+                    exit = if (Meka.reducedMotion) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+                ) {
+                    Box(Modifier.padding(bottom = MekaSpace.s)) {
+                        Chips(null, v.newsTopics.map { it.label to it.chosen }) { i ->
+                            val t = v.newsTopics[i]
+                            haptics.tick()
+                            scope.launch { runCatching { core.setNewsTopic(t.id, !t.chosen) } }
+                        }
+                    }
+                }
+                when {
+                    v.newsTopics.none { it.chosen } -> NewsNote("No topics chosen. Tap Topics to pick some.")
+                    v.headlines.isEmpty() -> NewsNote("No headlines yet. They're fetched every hour.")
+                }
+            }
+        }
+        items(v.headlines, key = { "n-" + it.id }) { h ->
+            HeadlineLine(h, Modifier.animateItem().appear(rememberAppearance(5))) { url ->
+                runCatching { uriHandler.openUri(url) }
+            }
+        }
+
         item(key = "got-it") {
-            Column(Modifier.padding(top = MekaSpace.xl).animateItem().appear(rememberAppearance(5)), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.padding(top = MekaSpace.xl).animateItem().appear(rememberAppearance(6)), horizontalAlignment = Alignment.CenterHorizontally) {
                 GotItCheck(visible = closing || v.seenToday)
                 Spacer(Modifier.height(MekaSpace.m))
                 if (!v.seenToday && !closing) {
@@ -153,6 +195,25 @@ private fun WaitingLine(w: WaitingItem, modifier: Modifier) {
         Text(w.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         Text(w.meta, style = MekaType.caption, color = if (w.state == DueState.DUE) Meka.colors.accent else Meka.colors.textTertiary)
     }
+}
+
+/** A headline: the title, then "BBC News · World · 2 h ago". Tapping opens the article in the browser (https only). */
+@Composable
+private fun HeadlineLine(h: BriefHeadline, modifier: Modifier, open: (String) -> Unit) {
+    val url = h.url
+    Column(
+        modifier.fillMaxWidth()
+            .then(if (url != null) Modifier.clickable(role = Role.Button, onClickLabel = "Open in browser") { open(url) } else Modifier)
+            .padding(vertical = MekaSpace.xs),
+    ) {
+        Text(h.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Text(h.meta, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+@Composable
+private fun NewsNote(text: String) {
+    Text(text, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(vertical = MekaSpace.xs))
 }
 
 @Composable

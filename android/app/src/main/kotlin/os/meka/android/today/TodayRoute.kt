@@ -606,7 +606,7 @@ private fun eventTime(e: CalendarEvent): String =
     else timeFmt.format(Instant.ofEpochMilli(e.startAtMs).atZone(ZoneId.systemDefault())) + "–" +
         timeFmt.format(Instant.ofEpochMilli(e.endAtMs).atZone(ZoneId.systemDefault()))
 
-internal fun providerLabel(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Outlook"; "fixtures" -> "Fixtures"; else -> p }
+internal fun providerLabel(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Outlook"; "fixtures" -> "Fixtures"; "news" -> "Headlines"; else -> p }
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 

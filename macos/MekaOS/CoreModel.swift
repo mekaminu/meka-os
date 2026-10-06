@@ -209,7 +209,7 @@ final class CoreModel {
     }
 
     static func providerName(_ p: String) -> String {
-        switch p { case "google": "Google"; case "microsoft": "Outlook"; case "fixtures": "Fixtures"; default: p }
+        switch p { case "google": "Google"; case "microsoft": "Outlook"; case "fixtures": "Fixtures"; case "news": "Headlines"; default: p }
     }
 
     // MARK: Notifications
@@ -393,6 +393,9 @@ final class CoreModel {
         guard let core else { return }
         do { try await core.briefSeen() } catch { lastError = error.localizedDescription }
     }
+
+    /// Shows or hides a news topic's headlines in the brief; synced with the Fold.
+    func setNewsTopic(_ id: String, on: Bool) { MekaHaptics.tick(); run { try await $0.setNewsTopic(topicId: id, on: on) } }
 
     // MARK: Goals and habits
 

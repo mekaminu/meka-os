@@ -25,7 +25,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class MekaCoreTest {
-    private val service = SyncService(InMemoryServerOpStore())
+    private val serverOps = InMemoryServerOpStore()
+    private val service = SyncService(serverOps)
     private var now = 1_790_000_000_000L
 
     private fun core(name: String, transport: SyncTransport = FaultyTransport(service)) = MekaCore(
@@ -301,6 +302,36 @@ class MekaCoreTest {
         a.syncNow(); m.syncNow()
         assertTrue(m.briefView.value.seenToday)
         assertTrue(!m.briefView.value.offered)
+    }
+
+    @Test
+    fun headlinesFromTheServerShowInTheBriefForTheChosenTopicsOnBothDevices() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 7, 45).toInstant(london).toEpochMilliseconds()
+        val a = core("android"); val m = core("mac")
+        // The server's news ingestion writes headline entities as ordinary server-authored ops.
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        var n = 0
+        fun headline(id: String, title: String, topic: String, agoMin: Long) = mapOf(
+            "title" to os.meka.core.sync.FieldValue.Text(title),
+            "url" to os.meka.core.sync.FieldValue.Text("https://www.bbc.com/news/articles/$id"),
+            "source" to os.meka.core.sync.FieldValue.Text("BBC News"),
+            "topic" to os.meka.core.sync.FieldValue.Text(topic),
+            "publishedAtMs" to os.meka.core.sync.FieldValue.Int64(now - agoMin * 60_000L),
+            "removed" to os.meka.core.sync.FieldValue.Bool(false),
+        ).forEach { (field, value) ->
+            serverOps.append(os.meka.core.sync.Op("srv${n++}", "hh", os.meka.core.domain.EntityTypes.HEADLINE, id, field, value, clock.now(), emptyList(), "server"))
+        }
+        headline("hl1", "Summit opens", "world", 20)
+        headline("hl2", "New phone launched", "technology", 5)
+        a.syncNow(); m.syncNow()
+        assertEquals(listOf("Summit opens"), a.briefView.value.headlines.map { it.title })
+        assertEquals("BBC News · World · 20 min ago", a.briefView.value.headlines.single().meta)
+        a.setNewsTopic("technology", true)
+        assertEquals(listOf("New phone launched", "Summit opens"), a.briefView.value.headlines.map { it.title })
+        a.syncNow(); m.syncNow()
+        assertEquals(listOf("New phone launched", "Summit opens"), m.briefView.value.headlines.map { it.title })
+        assertTrue(m.briefView.value.newsTopics.single { it.id == "technology" }.chosen)
     }
 
     @Test

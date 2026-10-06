@@ -24,10 +24,12 @@ object EntityTypes {
     const val FAST = "fast"
     /** The usual goal and eating window; one entity, id `default`. */
     const val FASTING_PLAN = "fasting_plan"
+    /** A news headline mirrored by the server (one per topic and slot, see [News]). */
+    const val HEADLINE = "headline"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
-        GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN,
+        GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE,
     )
 }
 
@@ -196,6 +198,8 @@ object MekaSchema : SchemaRegistry {
     override fun policyFor(entityType: String, field: String): MergePolicy = when {
         // Calendar events are a mirror of the provider, written by one author (the server): plain LWW, never conflicts.
         entityType == EntityTypes.EVENT -> MergePolicy.Lww
+        // Headlines likewise: only the server's news ingestion writes them.
+        entityType == EntityTypes.HEADLINE -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

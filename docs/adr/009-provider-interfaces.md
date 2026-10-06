@@ -25,6 +25,7 @@ interface MessagingChannel { capabilities(); ingest(event); reply(threadRef, tex
 | Calendar | Owner's primary provider; to be confirmed | Google Calendar or Microsoft Graph |
 | Email | Owner's primary provider; to be confirmed | **Gmail:** an OAuth app in "Testing" status has refresh tokens that expire after 7 days (verified). A personal-use Production-unverified app avoids this, but shows an unverified-app warning and has a 100-user cap. Restricted-scope verification isn't needed for personal use. **Microsoft Graph:** supports personal accounts. |
 | Messaging | Android notification listener (WhatsApp, SMS) | See the messaging constraints below |
+| News | BBC News public RSS feeds (`BbcNewsRss`, 2026-10-06) | No key or sign-in; one plain GET per topic, at most hourly, from the server. `NewsProvider { topics; headlines(topic) }`: the server mirrors the newest items of every topic and the apps filter by the topics chosen, so no choice of Meka's is ever sent anywhere. |
 
 **Messaging constraints (verified 2026-10-01):**
 - **No unofficial WhatsApp clients.**

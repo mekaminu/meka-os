@@ -3,6 +3,7 @@ package os.meka.backend.integrations
 import os.meka.backend.Secrets
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
+import os.meka.core.domain.HeadlineFields
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.Op
@@ -26,6 +27,8 @@ class Integrations(
     private val now: () -> Long = System::currentTimeMillis,
     /** Public feeds every household follows by default (e.g. FC Barcelona fixtures). No sign-in involved. */
     private val feeds: Map<String, FeedProvider> = emptyMap(),
+    /** Public news sources mirrored for the morning brief (no sign-in; the apps choose which topics to show). */
+    private val news: Map<String, NewsProvider> = emptyMap(),
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -86,9 +89,10 @@ class Integrations(
 
     /** Every household follows the default feeds (owner's stated MVP need). Idempotent. */
     fun ensureFeeds() {
-        for (hh in store.households()) for (f in feeds.values) {
-            if (store.accounts(hh).none { it.provider == f.id }) {
-                store.transaction { store.upsertAccount(hh, f.id, f.label, ByteArray(0)) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
+        val all = feeds.values.map { it.id to it.label } + news.values.map { it.id to it.source }
+        for (hh in store.households()) for ((id, label) in all) {
+            if (store.accounts(hh).none { it.provider == id }) {
+                store.transaction { store.upsertAccount(hh, id, label, ByteArray(0)) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
             }
         }
     }
@@ -101,6 +105,7 @@ class Integrations(
     private fun syncLocked(accountId: String) {
         val a = store.account(accountId) ?: return
         feeds[a.provider]?.let { feed -> return syncFeed(a, feed) }
+        news[a.provider]?.let { source -> return syncNews(a, source) }
         val p = providers[a.provider] ?: return
         val client = clients.get(a.provider) ?: return
         val ctx = context(a.householdId, a.provider)
@@ -132,6 +137,63 @@ class Integrations(
         } catch (e: Exception) {
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
             throw e
+        }
+    }
+
+    /** Headlines change all day, but the brief is read once: refresh at most every [NEWS_PERIOD_MS]. */
+    private fun syncNews(a: AccountRow, source: NewsProvider) {
+        val last = a.lastSyncAtMs
+        if (a.status == "ok" && last != null && now() - last < NEWS_PERIOD_MS) return
+        try {
+            var failures = 0
+            val fetched = source.topics.mapNotNull { t -> runCatching { t to source.headlines(t) }.getOrElse { failures++; null } }.toMap()
+            // One topic's feed failing leaves its headlines as they were; only fail when nothing could be read.
+            if (failures == source.topics.size) error("no news feed could be read")
+            applyNews(a, source, fetched)
+            store.transaction { store.markSynced(a.id, now()) }
+        } catch (e: Exception) {
+            store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
+            throw e
+        }
+    }
+
+    /**
+     * Mirrors the newest [NEWS_SLOTS] headlines of each topic into fixed slots (one `headline` entity per topic and
+     * slot), so the number of entities never grows. A headline still in the feed keeps its slot and is not
+     * rewritten; new ones fill the slots that freed up; slots left over are marked removed.
+     */
+    internal fun applyNews(a: AccountRow, source: NewsProvider, byTopic: Map<String, List<RemoteHeadline>>) = store.transaction {
+        ops.transaction {
+            store.lockAccount(a.id)
+            val mirror = store.mirror(a.householdId, a.id)
+            for ((topic, items) in byTopic) {
+                val desired = items.distinctBy { it.id }.take(NEWS_SLOTS)
+                val slots = (0 until NEWS_SLOTS).map { newsEntityId(a, topic, it) }
+                fun urlIn(slot: String) = mirror[slot]?.takeUnless { it.removed }?.fieldOps?.get(HeadlineFields.URL)?.second?.removePrefix("s:")
+                val assigned = arrayOfNulls<RemoteHeadline>(NEWS_SLOTS)
+                slots.forEachIndexed { i, slot -> assigned[i] = desired.firstOrNull { it.url == urlIn(slot) } }
+                val rest = ArrayDeque(desired.filter { d -> assigned.none { it === d } })
+                for (i in assigned.indices) if (assigned[i] == null) assigned[i] = rest.removeFirstOrNull()
+                slots.forEachIndexed { i, slot ->
+                    val h = assigned[i]
+                    val prev = mirror[slot]
+                    if (h == null) {
+                        if (prev != null && !prev.removed) {
+                            write(a, slot, prev.startMs, prev.endMs, true, prev, mapOf(HeadlineFields.REMOVED to FieldValue.Bool(true)), EntityTypes.HEADLINE)
+                        }
+                    } else {
+                        val desiredFields = linkedMapOf(
+                            HeadlineFields.TITLE to FieldValue.Text(h.title.take(MAX_HEADLINE)),
+                            HeadlineFields.URL to FieldValue.Text(h.url),
+                            HeadlineFields.SOURCE to FieldValue.Text(source.source),
+                            HeadlineFields.TOPIC to FieldValue.Text(topic),
+                            HeadlineFields.PUBLISHED_AT to FieldValue.Int64(h.publishedMs),
+                            HeadlineFields.REMOVED to FieldValue.Bool(false),
+                        )
+                        write(a, slot, h.publishedMs, h.publishedMs, false, prev, desiredFields, EntityTypes.HEADLINE)
+                    }
+                }
+            }
         }
     }
 
@@ -170,7 +232,10 @@ class Integrations(
         }
     }
 
-    private fun write(a: AccountRow, entityId: String, startMs: Long, endMs: Long, removed: Boolean, prev: MirrorRow?, desired: Map<String, FieldValue>) {
+    private fun write(
+        a: AccountRow, entityId: String, startMs: Long, endMs: Long, removed: Boolean, prev: MirrorRow?, desired: Map<String, FieldValue>,
+        entityType: String = EntityTypes.EVENT,
+    ) {
         val fieldOps = HashMap(prev?.fieldOps ?: emptyMap())
         var changed = prev == null || prev.removed != removed || prev.startMs != startMs || prev.endMs != endMs
         for ((field, value) in desired) {
@@ -179,7 +244,7 @@ class Integrations(
             if (last?.second == key) continue
             val op = Op(
                 opId = "srv" + token(18).lowercase().filter(Char::isLetterOrDigit),
-                householdId = a.householdId, entityType = EntityTypes.EVENT, entityId = entityId, field = field,
+                householdId = a.householdId, entityType = entityType, entityId = entityId, field = field,
                 value = value, hlc = synchronized(clock) { clock.now() }, baseOpIds = listOfNotNull(last?.first), deviceId = SERVER_DEVICE,
             )
             ops.append(op)
@@ -199,6 +264,13 @@ class Integrations(
         const val WINDOW_BACK_MS = 24 * 3_600_000L
         const val WINDOW_AHEAD_MS = 30 * 24 * 3_600_000L
         private const val MAX_TEXT = 500
+        private const val MAX_HEADLINE = 300
+        /** Headlines mirrored per topic. */
+        const val NEWS_SLOTS = 4
+        const val NEWS_PERIOD_MS = 60 * 60_000L
+
+        /** Stable per (account, topic, slot): a topic always uses the same few entities. */
+        fun newsEntityId(a: AccountRow, topic: String, slot: Int): String = "hl" + Secrets.sha256Hex("${a.id}|$topic|$slot").take(30)
 
         fun challenge(verifier: String): String =
             Base64.getUrlEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray()))
