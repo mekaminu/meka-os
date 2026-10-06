@@ -30,7 +30,9 @@ import os.meka.core.domain.QuickCapture
 import os.meka.core.domain.DayWindow
 import os.meka.core.domain.IdGenerator
 import os.meka.core.domain.LocalCalendar
+import os.meka.core.domain.ListsView
 import os.meka.core.domain.LocalClock
+import os.meka.core.domain.SomedayKind
 import os.meka.core.domain.RepeatChoice
 import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.NewTask
@@ -83,11 +85,16 @@ class MekaCore(
     private val tasks = Tasks(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val events = CalendarEvents(replica)
     private val work = WorkMode(replica, nowMs)
+    private val lists = os.meka.core.domain.Lists(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
 
     private val _today = MutableStateFlow(project())
     val today: StateFlow<Today> = _today.asStateFlow()
+
+    private val _lists = MutableStateFlow(ListsView.EMPTY)
+    /** Waiting for, Someday and Decisions, with what is due to chase or review today. Synced; moves with the clock. */
+    val listsView: StateFlow<ListsView> = _lists.asStateFlow()
 
     private val _workMode = MutableStateFlow(work.state(localClock()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
@@ -157,6 +164,37 @@ class MekaCore(
 
     /** The local day today as an epoch day, for [os.meka.core.domain.Task.repeatMeta]. */
     fun todayEpochDay(): Long = ZoneCalendar(timeZone).epochDayOf(nowMs())
+
+    // ---- Lists: Waiting for · Someday · Decisions ----
+
+    /** Adds something you're waiting for; [chaseInDays] from today (null: no chase date). */
+    suspend fun addWaiting(title: String, who: String?, chaseInDays: Int?): String = onCore { lists.addWaiting(title, who, chaseInDays) }
+    /** "Chased": records it and sets the next chase [againInDays] from today. */
+    suspend fun chased(id: String, againInDays: Int?) = onCore { lists.chased(id, againInDays) }
+    suspend fun setChase(id: String, days: Int?) = onCore { lists.setChase(id, days) }
+    /** "Got it": it arrived; the item leaves the list. */
+    suspend fun received(id: String) = onCore { lists.received(id) }
+    suspend fun editWaiting(id: String, title: String?, who: String?, notes: String?) = onCore { lists.editWaiting(id, title, who, notes) }
+    suspend fun deleteWaiting(id: String) = onCore { lists.deleteWaiting(id) }
+
+    suspend fun addSomeday(title: String, kind: SomedayKind): String = onCore { lists.addSomeday(title, kind) }
+    /** Moves an open, non-repeating task to Someday (out of Today and the planner). */
+    suspend fun moveToSomeday(taskId: String, kind: SomedayKind) = onCore { lists.moveToSomeday(taskId, kind) }
+    suspend fun setSomedayKind(taskId: String, kind: SomedayKind) = onCore { lists.setSomedayKind(taskId, kind) }
+    /** "Do it now": back into Today. */
+    suspend fun promoteSomeday(taskId: String) = onCore { lists.promote(taskId) }
+
+    suspend fun recordDecision(statement: String, rationale: String?, reviewInDays: Int?): String =
+        onCore { lists.recordDecision(statement, rationale, reviewInDays) }
+    suspend fun setReview(id: String, days: Int?) = onCore { lists.setReview(id, days) }
+    /** "Still right": the decision stands; reviewed again [againInDays] from today (null: no review). */
+    suspend fun keepDecision(id: String, againInDays: Int?) = onCore { lists.keepDecision(id, againInDays) }
+    suspend fun revisitDecision(id: String) = onCore { lists.revisit(id) }
+    /** Replaces a decision with a new one; the old one is kept as superseded and leaves the list. */
+    suspend fun replaceDecision(id: String, statement: String, rationale: String?, reviewInDays: Int?): String =
+        onCore { lists.replaceDecision(id, statement, rationale, reviewInDays) }
+    suspend fun editDecision(id: String, statement: String?, rationale: String?) = onCore { lists.editDecision(id, statement, rationale) }
+    suspend fun deleteDecision(id: String) = onCore { lists.deleteDecision(id) }
 
     // ---- Work mode ----
 
@@ -273,7 +311,9 @@ class MekaCore(
     private suspend fun <T> onCore(block: () -> T): T = withContext(confined) { block() }
 
     private fun refresh() {
-        _today.value = project()
+        val all = tasks.all()
+        _today.value = project(all)
+        _lists.value = lists.view(all)
         _workMode.value = work.state(localClock())
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(
@@ -285,9 +325,9 @@ class MekaCore(
         }
     }
 
-    private fun project(): Today {
+    private fun project(all: List<os.meka.core.domain.Task> = tasks.all()): Today {
         val now = nowMs()
-        return TodayProjection.project(tasks.all(), now, dayWindow(now), events.all())
+        return TodayProjection.project(all, now, dayWindow(now), events.all())
     }
 
     private fun localClock(): LocalClock {

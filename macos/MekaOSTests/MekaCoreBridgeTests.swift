@@ -33,5 +33,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Tomorrow's occurrence waits for its day, so today is clear.
         XCTAssertTrue(core.today.value.isClear)
     }
-}
 
+    func testListsThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "lists-\(UUID().uuidString).db", deviceKey: nil
+        )
+        _ = try await core.addWaiting(title: "Refund", who: "Shop", chaseInDays: KotlinInt(int: 0))
+        _ = try await core.addSomeday(title: "Lisbon", kind: .trip)
+        _ = try await core.recordDecision(statement: "No new car", rationale: nil, reviewInDays: nil)
+        let lists = core.listsView.value
+        XCTAssertEqual(lists.waiting.first?.state, .due)
+        XCTAssertEqual(lists.dueLine, "1 to chase")
+        XCTAssertEqual(lists.someday.first?.label, ListRules.shared.kindLabel(k: .trip))
+        XCTAssertEqual(lists.decisions.first?.statement, "No new car")
+        XCTAssertEqual(ListRules.shared.CHASE_CHOICES.last?.days, nil)
+    }
+}

@@ -1,6 +1,12 @@
 package os.meka.android.today
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import os.meka.android.designsystem.MekaRadius
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
@@ -41,8 +47,9 @@ import androidx.compose.ui.platform.LocalContext
  * list in V1. Same layout rules as Today: two panes when wide, detail springs up over the list when narrow.
  */
 @Composable
-fun NeedsYouRoute(core: MekaCore) {
+fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
     val today by core.today.collectAsState()
+    val lists by core.listsView.collectAsState()
     val conflicts by core.conflicts.collectAsState()
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -71,7 +78,10 @@ fun NeedsYouRoute(core: MekaCore) {
                     item(key = "after-work") {
                         AfterWorkCard(core, Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(1))) { showAfterWork = true }
                     }
-                    if (today.needsYou.isEmpty()) {
+                    lists.dueLine?.let { line ->
+                        item(key = "lists-due") { ListsDueCard(line, Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(1)), openLists) }
+                    }
+                    if (today.needsYou.isEmpty() && lists.dueLine == null) {
                         item(key = "clear") {
                             Text("Nothing is waiting on you.", style = MekaType.upNextTitle, color = Meka.colors.textSecondary,
                                 modifier = Modifier.animateItem().appear(rememberAppearance(1)))
@@ -98,5 +108,17 @@ fun NeedsYouRoute(core: MekaCore) {
             }
             MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
         }
+    }
+}
+
+/** Chases and reviews that are due today, one calm card that opens Lists. */
+@Composable
+private fun ListsDueCard(line: String, modifier: Modifier, open: () -> Unit) {
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .clickable(role = Role.Button, onClickLabel = "Open Lists") { open() }.padding(MekaSpace.m),
+    ) {
+        Text("From your lists", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Text(line, style = MekaType.itemMeta, color = Meka.colors.accent)
     }
 }

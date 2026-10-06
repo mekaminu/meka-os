@@ -157,7 +157,7 @@ private fun StepRow(step: ChecklistItem, actions: TodayActions) {
     }
 }
 
-/** Done · Skip (repeating only) · Tomorrow · Delete. */
+/** Done · Skip (repeating only) · Tomorrow · Someday (one-off only) · Delete. */
 @Composable
 internal fun DetailActions(task: Task, actions: TodayActions) {
     Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) {
@@ -169,6 +169,10 @@ internal fun DetailActions(task: Task, actions: TodayActions) {
         }
         Text("Tomorrow", style = MekaType.itemTitle, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { actions.snooze(task.id) })
+        if (!task.isRepeating) {
+            Text("Someday", style = MekaType.itemTitle, color = Meka.colors.accent,
+                modifier = Modifier.clickable(role = Role.Button) { actions.someday(task.id) })
+        }
         Text("Delete", style = MekaType.itemTitle, color = Meka.colors.critical,
             modifier = Modifier.clickable(role = Role.Button) { actions.delete(task.id) })
     }

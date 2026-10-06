@@ -495,6 +495,9 @@ private struct DetailContent: View {
                         Button("Skip") { model.skip(task.id) }
                     }
                     Button("Tomorrow") { model.snooze(task.id) }
+                    if !task.isRepeating {
+                        Button("Someday") { model.moveToSomeday(task.id) }
+                    }
                     Button("Delete", role: .destructive) { model.delete(task.id) }
                 }
                 .buttonStyle(.plain)

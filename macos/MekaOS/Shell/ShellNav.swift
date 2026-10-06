@@ -69,11 +69,10 @@ enum ShellNav {
     /// Placeholder line for destinations whose feature hasn't landed yet.
     static func upcomingLine(_ d: ShellDestination) -> String? {
         switch d {
-        case .lists: "Waiting for (with chase dates), Someday and Decisions (with review dates) land here next."
         case .goals: "Goals and habits, with progress and streaks, land here. The planner will make room for habits that fall behind."
         case .review: "Your weekly review and north-star numbers land here."
         case .vault: "Encrypted documents, with expiry dates sent to your plan, land here."
-        case .today, .needsYou: nil
+        case .today, .needsYou, .lists: nil
         }
     }
 }

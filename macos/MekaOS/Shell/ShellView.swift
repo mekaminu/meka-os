@@ -31,7 +31,8 @@ struct ShellView: View {
         .background(palette.background)
     }
 
-    private var needsYouCount: Int { model.today?.needsYou.count ?? 0 }
+    /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).
+    private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue }
 
     /// Sidebar selection that animates the switch (the List only ever sets a value; nil is ignored).
     private var selection: Binding<ShellDestination?> {
@@ -52,6 +53,7 @@ struct ShellView: View {
         switch d {
         case .today: TodayView()
         case .needsYou: NeedsYouView()
+        case .lists: ListsScreen()
         default: UpcomingView(destination: d, palette: palette)
         }
     }
@@ -99,7 +101,22 @@ struct NeedsYouView: View {
                         .padding(.bottom, MekaSpace.l)
                         .staggeredAppear(0)
                     let items = model.today?.needsYou ?? []
-                    if items.isEmpty {
+                    if let line = model.lists?.dueLine {
+                        Button { model.go(to: .lists, reduced: reduceMotion) } label: {
+                            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                                Text("From your lists").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                                Text(line).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(MekaSpace.m)
+                            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Opens Lists")
+                        .padding(.bottom, MekaSpace.s)
+                        .staggeredAppear(1)
+                    }
+                    if items.isEmpty && model.lists?.dueLine == nil {
                         Text("Nothing is waiting on you.")
                             .font(MekaType.upNextTitle).foregroundStyle(palette.textSecondary)
                             .staggeredAppear(1)

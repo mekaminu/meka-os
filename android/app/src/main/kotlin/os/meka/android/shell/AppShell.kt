@@ -58,6 +58,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.lists.ListsRoute
 import os.meka.android.today.ConnectHook
 import os.meka.android.today.NeedsYouRoute
 import os.meka.android.today.TodayRoute
@@ -76,7 +77,9 @@ import androidx.compose.ui.platform.LocalContext
 fun AppShell(core: MekaCore, connect: ConnectHook?) {
     var current by rememberSaveable { mutableStateOf(ShellDestination.TODAY) }
     val today by core.today.collectAsState()
-    val needsYou = today.needsYou.size
+    val lists by core.listsView.collectAsState()
+    // Due chases and decision reviews wait on you too, so they count in the badge.
+    val needsYou = today.needsYou.size + lists.dueCount
     val haptics = rememberMekaHaptics()
     val go: (ShellDestination) -> Unit = { d -> if (d != current) { haptics.tick(); current = d } }
     val states = rememberSaveableStateHolder()
@@ -92,7 +95,7 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background).safeDrawingPadding()) {
         val layout = ShellNav.layoutFor(maxWidth.value)
         val content: @Composable (Modifier) -> Unit = { m ->
-            DestinationHost(current, m) { d -> states.SaveableStateProvider(d.name) { Destination(d, core, connect) } }
+            DestinationHost(current, m) { d -> states.SaveableStateProvider(d.name) { Destination(d, core, connect, go) } }
         }
         when (layout) {
             ShellLayout.RAIL -> Row(Modifier.fillMaxSize()) {
@@ -131,11 +134,11 @@ private fun DestinationHost(current: ShellDestination, modifier: Modifier, body:
 }
 
 @Composable
-private fun Destination(d: ShellDestination, core: MekaCore, connect: ConnectHook?) {
+private fun Destination(d: ShellDestination, core: MekaCore, connect: ConnectHook?, go: (ShellDestination) -> Unit) {
     when (d) {
         ShellDestination.TODAY -> TodayRoute(core, connect)
-        ShellDestination.NEEDS_YOU -> NeedsYouRoute(core)
-        ShellDestination.LISTS -> Upcoming(d, "Waiting for (with chase dates), Someday and Decisions (with review dates) land here next.")
+        ShellDestination.NEEDS_YOU -> NeedsYouRoute(core, openLists = { go(ShellDestination.LISTS) })
+        ShellDestination.LISTS -> ListsRoute(core)
         ShellDestination.GOALS -> Upcoming(d, "Goals and habits, with progress and streaks, land here. The planner will make room for habits that fall behind.")
         ShellDestination.REVIEW -> Upcoming(d, "Your weekly review and north-star numbers land here.")
         ShellDestination.VAULT -> Upcoming(d, "Encrypted documents, with expiry dates sent to your plan, land here.")

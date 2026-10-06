@@ -13,6 +13,8 @@ final class CoreModel {
     private(set) var conflicts: [ConflictChoice] = []
     /// Work mode (schedule + manual switch), synced with the Fold. The held messages live on the Fold only.
     private(set) var work: WorkModeState?
+    /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
+    private(set) var lists: ListsView?
     var showWork = false
     var selectedID: String?
     /// The shell's current destination and which way the last switch moved (for the push transition).
@@ -64,6 +66,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await w in core.workMode { self?.work = w }
+        })
+        observers.append(Task { [weak self] in
+            for await l in core.listsView { self?.lists = l }
         })
         // Work mode and Today move with the clock: re-evaluate every half minute.
         observers.append(Task {
@@ -177,6 +182,58 @@ final class CoreModel {
         let list = days.sorted().map { KotlinInt(int: Int32($0)) }
         run { try await $0.setWorkSchedule(days: list, startMinute: Int32(startMinute), endMinute: Int32(endMinute), enabled: enabled) }
     }
+
+    // MARK: Lists
+
+    /// Due chases and decision reviews: they count in the Needs you badge.
+    var listsDue: Int { Int(lists?.dueCount ?? 0) }
+
+    func addWaiting(_ title: String, who: String?, chaseInDays: Int?) {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        let w = who?.trimmingCharacters(in: .whitespacesAndNewlines)
+        run { _ = try await $0.addWaiting(title: t, who: (w?.isEmpty ?? true) ? nil : w, chaseInDays: Self.k(chaseInDays)) }
+    }
+
+    func chased(_ id: String) { run { try await $0.chased(id: id, againInDays: KotlinInt(int: ListRules.shared.DEFAULT_CHASE_DAYS)) } }
+    func setChase(_ id: String, days: Int?) { run { try await $0.setChase(id: id, days: Self.k(days)) } }
+    func received(_ id: String) { MekaHaptics.light(); run { try await $0.received(id: id) } }
+    func deleteWaiting(_ id: String) { run { try await $0.deleteWaiting(id: id) } }
+
+    func addSomeday(_ title: String, kind: SomedayKind) {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        run { _ = try await $0.addSomeday(title: t, kind: kind) }
+    }
+
+    func setSomedayKind(_ id: String, _ kind: SomedayKind) { run { try await $0.setSomedayKind(taskId: id, kind: kind) } }
+    /// "Do it now": back into Today.
+    func promote(_ id: String) { MekaHaptics.light(); run { try await $0.promoteSomeday(taskId: id) } }
+    func deleteSomeday(_ id: String) { run { try await $0.delete(taskId: id) } }
+    /// Moves a one-off task out of Today into Someday (from the task detail).
+    func moveToSomeday(_ id: String) {
+        if selectedID == id { selectedID = nil }
+        run { try await $0.moveToSomeday(taskId: id, kind: .idea) }
+    }
+
+    func recordDecision(_ statement: String, why: String?, reviewInDays: Int?) {
+        let s = statement.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return }
+        let r = why?.trimmingCharacters(in: .whitespacesAndNewlines)
+        run { _ = try await $0.recordDecision(statement: s, rationale: (r?.isEmpty ?? true) ? nil : r, reviewInDays: Self.k(reviewInDays)) }
+    }
+
+    /// "Still right" (and when to review it again), or just a new review date.
+    func keepDecision(_ id: String, againInDays: Int?) { run { try await $0.keepDecision(id: id, againInDays: Self.k(againInDays)) } }
+    func revisit(_ id: String) { run { try await $0.revisitDecision(id: id) } }
+    func replaceDecision(_ id: String, with statement: String) {
+        let s = statement.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return }
+        run { _ = try await $0.replaceDecision(id: id, statement: s, rationale: nil, reviewInDays: nil) }
+    }
+    func deleteDecision(_ id: String) { run { try await $0.deleteDecision(id: id) } }
+
+    private static func k(_ v: Int?) -> KotlinInt? { v.map { KotlinInt(int: Int32($0)) } }
 
     // MARK: Commands
 

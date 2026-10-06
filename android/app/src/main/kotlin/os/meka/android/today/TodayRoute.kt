@@ -82,6 +82,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.NeedsYouReason
 import os.meka.core.domain.RepeatChoice
+import os.meka.core.domain.SomedayKind
 import os.meka.core.domain.Task
 import os.meka.core.domain.Today
 import os.meka.core.facade.ConflictChoice
@@ -221,6 +222,7 @@ internal fun todayActions(core: MekaCore, scope: CoroutineScope, selected: () ->
     addStep = { id, text -> scope.launch { runCatching { core.addStep(id, text) } } },
     setStepDone = { stepId, done -> scope.launch { core.setStepDone(stepId, done) } },
     removeStep = { stepId -> scope.launch { core.removeStep(stepId) } },
+    someday = { id -> scope.launch { runCatching { core.moveToSomeday(id, SomedayKind.IDEA) }; if (selected() == id) setSelected(null) } },
 )
 
 data class TodayActions(
@@ -237,6 +239,8 @@ data class TodayActions(
     val addStep: (String, String) -> Unit,
     val setStepDone: (String, Boolean) -> Unit,
     val removeStep: (String) -> Unit,
+    /** Out of Today and the planner, into Lists → Someday. */
+    val someday: (String) -> Unit,
 )
 
 @Composable

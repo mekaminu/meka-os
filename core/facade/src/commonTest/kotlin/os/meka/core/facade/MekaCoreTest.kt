@@ -175,5 +175,24 @@ class MekaCoreTest {
         assertEquals("Every day", next.repeatMeta(c.todayEpochDay()))
         assertEquals(listOf("Stretch" to false), next.checklist.map { it.text to it.checked })
     }
-}
 
+    @Test
+    fun listsFlowShowsDueChasesAndReviewsAsTheClockMovesAndSyncs() = runTest {
+        val a = core("android"); val m = core("mac")
+        val w = a.addWaiting("Refund", "Sports Direct", 1)
+        a.recordDecision("No new car this year", "Saving for the extension", 0)
+        val idea = a.addSomeday("Lisbon long weekend", os.meka.core.domain.SomedayKind.TRIP)
+        assertEquals("1 decision to review", a.listsView.value.dueLine)
+        assertEquals(listOf("Trips"), a.listsView.value.someday.map { it.label })
+        now += 86_400_000L
+        a.tick()
+        assertEquals("1 to chase · 1 decision to review", a.listsView.value.dueLine)
+        a.chased(w, 7)
+        assertEquals("1 decision to review", a.listsView.value.dueLine)
+        a.promoteSomeday(idea)
+        assertEquals(idea, a.today.value.upNext?.id)
+        a.syncNow(); m.syncNow()
+        assertEquals(listOf("Refund"), m.listsView.value.waiting.map { it.title })
+        assertEquals(1, m.listsView.value.reviewsDue)
+    }
+}
