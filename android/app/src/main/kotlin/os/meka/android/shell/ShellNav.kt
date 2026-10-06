@@ -6,6 +6,7 @@ package os.meka.android.shell
  */
 enum class ShellDestination(val label: String) {
     TODAY("Today"),
+    CALENDAR("Calendar"),
     NEEDS_YOU("Needs you"),
     LISTS("Lists"),
     GOALS("Goals"),
@@ -28,8 +29,8 @@ object ShellNav {
     fun layoutFor(widthDp: Float): ShellLayout = if (widthDp >= WIDE_DP) ShellLayout.RAIL else ShellLayout.BOTTOM_BAR
 
     /**
-     * Destinations shown in the bar or rail. The closed Fold has room for five; the Vault (V2) lives on the rail
-     * and the Mac sidebar until it has something in it.
+     * Destinations shown in the bar or rail. The closed Fold's bar has six (labels shrink a little to fit); the Vault
+     * (V2) lives on the rail and the Mac sidebar until it has something in it.
      */
     fun destinations(layout: ShellLayout): List<ShellDestination> = when (layout) {
         ShellLayout.RAIL -> ShellDestination.entries

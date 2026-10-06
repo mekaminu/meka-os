@@ -34,6 +34,9 @@ data class CalendarEvent(
     val account: String?,
     val calendarName: String?,
 ) {
+    /** From the fixtures feed (FC Barcelona), marked in the Calendar tab. */
+    val isFixture: Boolean get() = provider == "fixtures"
+
     /** Whether the event touches the local day [day]. All-day events are matched by calendar date. */
     fun overlaps(day: DayWindow): Boolean =
         if (allDay) {

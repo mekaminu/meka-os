@@ -23,7 +23,9 @@ import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.offsetAt
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
+import os.meka.core.domain.CalendarAgenda
 import os.meka.core.domain.CalendarEvents
+import os.meka.core.domain.CalendarView
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DayPlanner
 import os.meka.core.domain.QuickCapture
@@ -165,6 +167,13 @@ class MekaCore(
      * north-star numbers (ADR-013). Step weeks with [showReviewWeek]. Synced "Done reviewing"; moves with the clock.
      */
     val reviewView: StateFlow<WeeklyReviewView> = _review.asStateFlow()
+
+    private val _calendar = MutableStateFlow(CalendarView.EMPTY)
+    /**
+     * The Calendar tab: week strips and the next 30 days grouped by day (events, all-day events, fixtures and planned
+     * tasks; free stretches folded). Follows sync and edits; moves with the clock.
+     */
+    val calendarView: StateFlow<CalendarView> = _calendar.asStateFlow()
 
     /** What the search field holds (a screen choice, not synced). */
     private var searchQuery: String = ""
@@ -545,6 +554,7 @@ class MekaCore(
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }
         _search.value = runSearch(all)
+        _calendar.value = CalendarAgenda.build(all, events.all(), nowMs(), ZoneCalendar(timeZone))
         _notifyPreview.value = Governor.preview(currentNotices(), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(

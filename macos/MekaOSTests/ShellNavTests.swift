@@ -11,9 +11,9 @@ final class ShellNavTests: XCTestCase {
     }
 
     @MainActor
-    func testBarHasFiveSidebarHasAllSixInOrder() {
-        XCTAssertEqual(ShellNav.destinations(.bottomBar).map(\.label), ["Today", "Needs you", "Lists", "Goals", "Review"])
-        XCTAssertEqual(ShellNav.destinations(.rail).map(\.label), ["Today", "Needs you", "Lists", "Goals", "Review", "Vault"])
+    func testBarHasSixSidebarHasAllSevenInOrder() {
+        XCTAssertEqual(ShellNav.destinations(.bottomBar).map(\.label), ["Today", "Calendar", "Needs you", "Lists", "Goals", "Review"])
+        XCTAssertEqual(ShellNav.destinations(.rail).map(\.label), ["Today", "Calendar", "Needs you", "Lists", "Goals", "Review", "Vault"])
         XCTAssertNil(ShellNav.barSelection(.vault, .bottomBar))
         XCTAssertEqual(ShellNav.barSelection(.vault, .rail), .vault)
     }
@@ -23,6 +23,8 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(ShellNav.direction(from: .today, to: .review), 1)
         XCTAssertEqual(ShellNav.direction(from: .review, to: .needsYou), -1)
         XCTAssertEqual(ShellNav.direction(from: .lists, to: .lists), 0)
+        XCTAssertEqual(ShellNav.direction(from: .today, to: .calendar), 1)
+        XCTAssertEqual(ShellNav.direction(from: .needsYou, to: .calendar), -1)
     }
 
     @MainActor
@@ -37,6 +39,6 @@ final class ShellNavTests: XCTestCase {
     @MainActor
     func testEveryUpcomingDestinationSaysWhatIsComing() {
         XCTAssertNotNil(ShellNav.upcomingLine(.vault))
-        for d in [ShellDestination.today, .needsYou, .lists, .goals, .review] { XCTAssertNil(ShellNav.upcomingLine(d)) }
+        for d in [ShellDestination.today, .calendar, .needsYou, .lists, .goals, .review] { XCTAssertNil(ShellNav.upcomingLine(d)) }
     }
 }

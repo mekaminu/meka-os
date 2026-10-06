@@ -305,6 +305,24 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theCalendarTabShowsAPlannedTaskOnItsDayOnBothDevices() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 6, 10, 0).toInstant(london).toEpochMilliseconds() // Tue 6 Oct
+        val a = core("android"); val m = core("mac")
+        val id = a.addTask("Pay the plumber")
+        a.schedule(id, kotlinx.datetime.LocalDateTime(2026, 10, 9, 14, 0).toInstant(london).toEpochMilliseconds())
+        val v = a.calendarView.value
+        assertEquals("Tuesday 6 October", v.todayLabel)
+        assertEquals(listOf("Today", "Tomorrow", "Thu 8 Oct", "Fri 9 Oct"), v.sections.take(4).map { it.title })
+        val fri = v.sections[3]
+        assertEquals("1 task", fri.subtitle)
+        assertEquals(listOf("14:00" to "Pay the plumber"), fri.rows.map { it.time to it.title })
+        assertEquals("This week", v.weeks.first().title)
+        a.syncNow(); m.syncNow()
+        assertEquals("Fri 9 Oct", m.calendarView.value.sections[3].title)
+    }
+
+    @Test
     fun theWeeklyReviewCountsTheWeekStepsBackAndDoneReviewingSyncs() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 10, 1, 18, 30).toInstant(london).toEpochMilliseconds() // a Thursday

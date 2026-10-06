@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +51,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import os.meka.android.designsystem.Meka
 import os.meka.android.review.ReviewRoute
 import os.meka.android.designsystem.MekaMotion
@@ -59,6 +61,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.calendar.CalendarRoute
 import os.meka.android.lists.ListsRoute
 import os.meka.android.goals.GoalsRoute
 import os.meka.android.today.ConnectHook
@@ -149,6 +152,7 @@ private fun Destination(d: ShellDestination, core: MekaCore, connect: ConnectHoo
             app.openItem.value = item
             SearchNav.destination(item.target)?.let(go)
         })
+        ShellDestination.CALENDAR -> CalendarRoute(core)
         ShellDestination.NEEDS_YOU -> NeedsYouRoute(core, openLists = { go(ShellDestination.LISTS) })
         ShellDestination.LISTS -> ListsRoute(core)
         ShellDestination.GOALS -> GoalsRoute(core)
@@ -167,7 +171,7 @@ private fun Upcoming(d: ShellDestination, line: String) {
     }
 }
 
-/** Closed Fold: five labels, a pill springs to the lit one. */
+/** Closed Fold: six labels (they shrink a little to fit a narrow screen), a pill springs to the lit one. */
 @Composable
 private fun BottomBar(current: ShellDestination, needsYou: Int, go: (ShellDestination) -> Unit) {
     val items = ShellNav.destinations(ShellLayout.BOTTOM_BAR)
@@ -183,7 +187,7 @@ private fun BottomBar(current: ShellDestination, needsYou: Int, go: (ShellDestin
         }
         Row(Modifier.fillMaxWidth()) {
             items.forEach { d ->
-                NavItem(d, d == current, needsYou, Modifier.weight(1f).height(44.dp), go)
+                NavItem(d, d == current, needsYou, Modifier.weight(1f).height(44.dp), go, fit = true)
             }
         }
     }
@@ -207,7 +211,7 @@ private fun Rail(current: ShellDestination, needsYou: Int, go: (ShellDestination
 }
 
 @Composable
-private fun NavItem(d: ShellDestination, lit: Boolean, needsYou: Int, modifier: Modifier, go: (ShellDestination) -> Unit) {
+private fun NavItem(d: ShellDestination, lit: Boolean, needsYou: Int, modifier: Modifier, go: (ShellDestination) -> Unit, fit: Boolean = false) {
     val color by animateColorAsState(if (lit) Meka.colors.textPrimary else Meka.colors.textTertiary, MekaMotion.appear(Meka.reducedMotion), label = "nav-text")
     // Calm badge: the count in the critical colour beside the label, no filled blob.
     val badge = if (d == ShellDestination.NEEDS_YOU) ShellNav.badge(needsYou) else null
@@ -219,7 +223,12 @@ private fun NavItem(d: ShellDestination, lit: Boolean, needsYou: Int, modifier: 
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BasicText(d.label, style = MekaType.caption.copy(color = color), maxLines = 1, softWrap = false)
+        BasicText(
+            d.label, style = MekaType.caption.copy(color = color), maxLines = 1, softWrap = false,
+            // Six labels share the closed Fold's width: step down to 10 sp rather than clip "Needs you".
+            autoSize = if (fit) TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.caption.fontSize, stepSize = 0.5.sp) else null,
+            modifier = if (fit) Modifier.weight(1f, fill = false) else Modifier,
+        )
         AnimatedVisibility(badge != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
             BasicText(
                 badge.orEmpty(), maxLines = 1, softWrap = false,

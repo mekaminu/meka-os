@@ -15,13 +15,13 @@ class ShellNavTest {
     }
 
     @Test
-    fun barHasFiveRailHasAllSixInOrder() {
+    fun barHasSixRailHasAllSevenInOrder() {
         assertEquals(
-            listOf("Today", "Needs you", "Lists", "Goals", "Review"),
+            listOf("Today", "Calendar", "Needs you", "Lists", "Goals", "Review"),
             ShellNav.destinations(ShellLayout.BOTTOM_BAR).map { it.label },
         )
         assertEquals(
-            listOf("Today", "Needs you", "Lists", "Goals", "Review", "Vault"),
+            listOf("Today", "Calendar", "Needs you", "Lists", "Goals", "Review", "Vault"),
             ShellNav.destinations(ShellLayout.RAIL).map { it.label },
         )
     }
@@ -38,6 +38,9 @@ class ShellNavTest {
         assertEquals(1, ShellNav.direction(ShellDestination.TODAY, ShellDestination.REVIEW))
         assertEquals(-1, ShellNav.direction(ShellDestination.REVIEW, ShellDestination.NEEDS_YOU))
         assertEquals(0, ShellNav.direction(ShellDestination.LISTS, ShellDestination.LISTS))
+        // Calendar sits right after Today.
+        assertEquals(1, ShellNav.direction(ShellDestination.TODAY, ShellDestination.CALENDAR))
+        assertEquals(-1, ShellNav.direction(ShellDestination.NEEDS_YOU, ShellDestination.CALENDAR))
     }
 
     @Test

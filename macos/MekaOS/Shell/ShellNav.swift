@@ -3,12 +3,13 @@ import Foundation
 // The app shell's rules (build plan M1, App shell). Matches android/.../shell/ShellNav.kt rule for rule.
 
 enum ShellDestination: Int, CaseIterable, Identifiable {
-    case today, needsYou, lists, goals, review, vault
+    case today, calendar, needsYou, lists, goals, review, vault
     var id: Int { rawValue }
 
     var label: String {
         switch self {
         case .today: "Today"
+        case .calendar: "Calendar"
         case .needsYou: "Needs you"
         case .lists: "Lists"
         case .goals: "Goals"
@@ -21,6 +22,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .today: "sun.horizon"
+        case .calendar: "calendar"
         case .needsYou: "exclamationmark.circle"
         case .lists: "list.bullet"
         case .goals: "target"
@@ -38,7 +40,7 @@ enum ShellNav {
 
     static func layout(forWidth width: Double) -> ShellLayout { width >= wideWidth ? .rail : .bottomBar }
 
-    /// The closed Fold's bar has five; the rail and the Mac sidebar have all six.
+    /// The closed Fold's bar has six; the rail and the Mac sidebar have all seven.
     static func destinations(_ layout: ShellLayout) -> [ShellDestination] {
         switch layout {
         case .rail: ShellDestination.allCases
@@ -70,7 +72,7 @@ enum ShellNav {
     static func upcomingLine(_ d: ShellDestination) -> String? {
         switch d {
         case .vault: "Encrypted documents, with expiry dates sent to your plan, land here."
-        case .today, .needsYou, .lists, .goals, .review: nil
+        case .today, .calendar, .needsYou, .lists, .goals, .review: nil
         }
     }
 }

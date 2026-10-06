@@ -27,6 +27,8 @@ final class CoreModel {
     var showBrief = false
     /// Weekly review: the week looked back on, the week ahead, north-star numbers. "Done reviewing" syncs with the Fold.
     private(set) var review: WeeklyReviewView?
+    /// The Calendar tab: week strips and the next 30 days grouped by day. Follows sync; moves with the clock.
+    private(set) var calendar: CalendarView?
     /// Quiet hours, digest times and tiers (notification governor), synced with the Fold.
     private(set) var notifySettings: NotificationSettings?
     /// "Quiet until 07:00", "Next digest 18:00 · 3 things so far".
@@ -110,6 +112,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await r in core.reviewView { self?.review = r }
+        })
+        observers.append(Task { [weak self] in
+            for await c in core.calendarView { self?.calendar = c }
         })
         observers.append(Task { [weak self] in
             for await s in core.notificationSettings { self?.notifySettings = s }

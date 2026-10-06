@@ -1,7 +1,7 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// The Mac shell (build plan M1): a sidebar (Today · Needs you · Lists · Goals · Review · Vault) beside the
+/// The Mac shell (build plan M1): a sidebar (Today · Calendar · Needs you · Lists · Goals · Review · Vault) beside the
 /// destination. Switching pushes the content the way you moved down the sidebar; Reduce Motion cross-fades.
 struct ShellView: View {
     @Environment(CoreModel.self) private var model
@@ -54,6 +54,7 @@ struct ShellView: View {
     private func destination(_ d: ShellDestination) -> some View {
         switch d {
         case .today: TodayView()
+        case .calendar: CalendarScreen()
         case .needsYou: NeedsYouView()
         case .lists: ListsScreen()
         case .goals: GoalsScreen()
