@@ -147,3 +147,41 @@ object AfterWorkSummaries {
 }
 
 internal fun plural(n: Int, one: String, many: String = one + "s") = "$n ${if (n == 1) one else many}"
+
+/** The words of the one quiet "summary ready" notification. Names stay off the lock screen ([publicText]). */
+data class AfterWorkNudgeText(val title: String, val text: String, val publicText: String)
+
+/**
+ * "Your after-work summary is ready" (build plan M1): one quiet notification when work mode ends and something is
+ * waiting. Not when Meka switched work off himself on this phone (he is already looking at it), never twice for the
+ * same change, and never when the summary is empty. Urgent items already alerted at the time; this only counts them.
+ */
+object AfterWorkNudge {
+    /**
+     * [wasAtWork] is the work-mode state last recorded on this device (null on the very first check, which only
+     * records). Every check records [atWork], so the change from at work to off work nudges exactly once.
+     */
+    fun shouldNudge(wasAtWork: Boolean?, atWork: Boolean, summary: AfterWorkSummary, appOnScreen: Boolean): Boolean =
+        wasAtWork == true && !atWork && !summary.isEmpty && !appOnScreen
+
+    fun text(summary: AfterWorkSummary): AfterWorkNudgeText? {
+        if (summary.isEmpty) return null
+        val names = summary.people.map { it.personName.trim() }
+        val who = when (names.size) {
+            1 -> names[0]
+            2 -> "${names[0]} and ${names[1]}"
+            3 -> "${names[0]}, ${names[1]} and ${names[2]}"
+            else -> "${names[0]}, ${names[1]} and ${names.size - 2} others"
+        }
+        val counts = listOfNotNull(
+            plural(summary.urgentPeople, "urgent", "urgent").takeIf { summary.urgentPeople > 0 },
+            plural(summary.messages, "message").takeIf { summary.messages > 0 },
+            plural(summary.missedCalls, "missed call").takeIf { summary.missedCalls > 0 },
+        ).joinToString(" · ")
+        return AfterWorkNudgeText(
+            title = "While you were at work",
+            text = "$who · $counts",
+            publicText = "Your after-work summary is ready",
+        )
+    }
+}

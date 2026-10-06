@@ -247,10 +247,12 @@ fun AfterWorkCard(core: MekaCore, modifier: Modifier = Modifier, onOpen: () -> U
 /** Hosts the after-work summary from the store, so Needs you only passes visibility. */
 @Composable
 fun AfterWorkHost(onClose: () -> Unit) {
-    val store = (LocalContext.current.applicationContext as MekaApplication).captures
+    val app = LocalContext.current.applicationContext as MekaApplication
+    val store = app.captures
     val items by store.items.collectAsState()
     val lists by store.lists.collectAsState()
     val summary = remember(items, lists) { AfterWorkSummaries.build(items, lists) }
+    LaunchedEffect(Unit) { app.nudger.dismiss() } // he's reading it: the nudge has done its job
     AfterWorkPane(summary, onDone = { store.clear(); onClose() }, onClose = onClose)
 }
 

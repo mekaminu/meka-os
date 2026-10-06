@@ -63,6 +63,8 @@ import os.meka.android.today.NeedsYouRoute
 import os.meka.android.today.TodayRoute
 import os.meka.core.facade.MekaCore
 import kotlinx.coroutines.delay
+import os.meka.android.MekaApplication
+import androidx.compose.ui.platform.LocalContext
 
 /**
  * The app shell (build plan M1). Closed Fold: content above a bottom bar. Open Fold: a rail on the left and the
@@ -82,6 +84,10 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     LaunchedEffect(core) {
         while (true) { delay(30_000); core.tick() }
     }
+    // Tapping the after-work nudge lands on Needs you, which then opens the summary.
+    val app = LocalContext.current.applicationContext as MekaApplication
+    val openAfterWork by app.openAfterWork.collectAsState()
+    LaunchedEffect(openAfterWork) { if (openAfterWork) current = ShellDestination.NEEDS_YOU }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background).safeDrawingPadding()) {
         val layout = ShellNav.layoutFor(maxWidth.value)

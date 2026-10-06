@@ -1,5 +1,6 @@
 package os.meka.android
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -24,6 +25,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val app = application as MekaApplication
+        handleOpen(intent)
         setContent {
             MekaTheme {
                 // Status-bar icons follow MEKA's own theme, not the phone's.
@@ -45,13 +47,35 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleOpen(intent)
+    }
+
+    /** The after-work nudge opens Needs you with the summary. */
+    private fun handleOpen(intent: Intent?) {
+        if (intent != null && intent.getStringExtra(EXTRA_OPEN) == OPEN_AFTER_WORK) {
+            intent.removeExtra(EXTRA_OPEN) // not again on rotation
+            (application as MekaApplication).openAfterWork.value = true
+        }
+    }
+
     override fun onStart() {
         super.onStart()
-        (application as MekaApplication).core.startSync()
+        val app = application as MekaApplication
+        app.isOnScreen = true
+        app.core.startSync()
     }
 
     override fun onStop() {
-        (application as MekaApplication).core.stopSync()
+        val app = application as MekaApplication
+        app.isOnScreen = false
+        app.core.stopSync()
         super.onStop()
+    }
+
+    companion object {
+        const val EXTRA_OPEN = "os.meka.open"
+        const val OPEN_AFTER_WORK = "after_work"
     }
 }

@@ -32,6 +32,9 @@ import os.meka.android.work.AfterWorkCard
 import os.meka.android.work.AfterWorkHost
 import os.meka.core.domain.Task
 import os.meka.core.facade.MekaCore
+import androidx.compose.runtime.LaunchedEffect
+import os.meka.android.MekaApplication
+import androidx.compose.ui.platform.LocalContext
 
 /**
  * NEEDS YOU: everything waiting on a decision (conflicts, overdue, due today but unscheduled). Approvals join this
@@ -46,6 +49,11 @@ fun NeedsYouRoute(core: MekaCore) {
     val actions = todayActions(core, scope, { selectedId }) { selectedId = it }
     val selected = today.needsYou.map { it.task }.firstOrNull { it.id == selectedId }
     var showAfterWork by rememberSaveable { mutableStateOf(false) }
+    val app = LocalContext.current.applicationContext as MekaApplication
+    val openAfterWork by app.openAfterWork.collectAsState()
+    LaunchedEffect(openAfterWork) {
+        if (openAfterWork) { showAfterWork = true; app.openAfterWork.value = false }
+    }
 
     MekaSharedLayout(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {

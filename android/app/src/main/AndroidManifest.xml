@@ -43,5 +43,10 @@
                 android:name="android.service.notification.default_filter_types"
                 android:value="conversations|alerting" />
         </service>
+
+        <!-- Work mode: an inexact alarm near the end of work (setWindow, ADR-007) for the "summary ready" nudge. -->
+        <receiver
+            android:name=".work.WorkEndReceiver"
+            android:exported="false" />
     </application>
 </manifest>

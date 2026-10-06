@@ -7,7 +7,13 @@ import io.ktor.client.engine.okhttp.OkHttp
 import os.meka.android.security.AndroidDeviceKey
 import os.meka.android.security.DatabaseKeyStore
 import os.meka.android.sync.SyncWorker
+import os.meka.android.work.AfterWorkNudger
 import os.meka.android.work.CaptureStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import os.meka.core.data.AndroidDatabase
 import os.meka.core.data.SqlReplicaStore
 import os.meka.core.facade.Enrolment
@@ -24,6 +30,13 @@ class MekaApplication : Application() {
         private set
     /** Work mode's held messages and people lists; on this phone only, never synced. */
     val captures: CaptureStore by lazy { CaptureStore(this) }
+    /** "Your after-work summary is ready" when work mode ends with something held. */
+    val nudger: AfterWorkNudger by lazy { AfterWorkNudger(this, this) }
+    /** MainActivity is visible (set in onStart/onStop): Meka is looking, so no nudge. */
+    @Volatile var isOnScreen: Boolean = false
+    /** Set by the nudge's tap: the shell opens Needs you with the after-work summary. */
+    val openAfterWork = MutableStateFlow(false)
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     /** Hardware-held signing key; created on first use (ADR-005). */
     private val deviceKey by lazy { AndroidDeviceKey() }
     // Read timeout above the server's 20 s long-poll window (OkHttp's default is 10 s).
@@ -47,6 +60,9 @@ class MekaApplication : Application() {
             secureRandom = SecureRandom().asKotlinRandom(),
         )
         if (transport != null) SyncWorker.schedulePeriodic(this)
+        // Every work-mode change on this phone (clock tick, sync, listener) goes past the nudger. Also runs once at
+        // process start (after a reboot the listener's rebind starts us), which re-registers the end-of-work alarm.
+        appScope.launch { core.workMode.collect { nudger.evaluate(it) } }
     }
 
     val defaultServerUrl: String get() = identity.serverUrl() ?: BuildConfig.SYNC_URL

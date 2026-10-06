@@ -18,8 +18,11 @@ import java.util.concurrent.TimeUnit
  */
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val core = (applicationContext as MekaApplication).core
-        return if (core.syncNow()) Result.success() else Result.retry()
+        val app = applicationContext as MekaApplication
+        val ok = app.core.syncNow()
+        // A Work switch flipped on the Mac arrives here: let the after-work nudge see it before the process sleeps.
+        runCatching { app.nudger.evaluate(app.core.currentWorkMode()) }
+        return if (ok) Result.success() else Result.retry()
     }
 
     companion object {
