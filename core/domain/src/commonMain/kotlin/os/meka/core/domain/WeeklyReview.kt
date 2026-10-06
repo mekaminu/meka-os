@@ -194,14 +194,14 @@ object ReviewRules {
     }
 
     /**
-     * The north-star metrics (ADR-013). None can be counted yet: they measure what MEKA does for you (acting,
-     * reminding, asking, notifying), which starts with the activity log, approvals and the assistant layer (V1).
-     * Interruptions are counted once the governor records what it posts (the next slice of this item).
+     * The north-star metrics (ADR-013) before anything is counted. Interruptions are counted from what the devices
+     * post ([Interruptions]); the rest measure what MEKA does for you (acting, reminding, asking), which starts with
+     * the activity log, approvals and the assistant layer (V1).
      */
     val NORTH_STAR_PENDING: List<NorthStarMetric> = listOf(
         NorthStarMetric("handled", "Handled without you", null, "Counted once MEKA acts for you"),
         NorthStarMetric("prevented", "Prevented misses", null, "Counted once MEKA's reminders are logged"),
-        NorthStarMetric("interruptions", "Interruptions", null, "Notifications that reached you; counting starts soon"),
+        NorthStarMetric("interruptions", "Interruptions", null, "Counted once MEKA can notify you on a device"),
         NorthStarMetric("approval", "Approval rate", null, "Counted once MEKA asks you to approve things"),
         NorthStarMetric("false-positive", "Not relevant", null, "Suggestions you dismissed; counted with the assistant"),
         NorthStarMetric("time", "Time returned", null, "An estimate, once MEKA acts for you"),
@@ -213,6 +213,8 @@ class WeeklyReview(
     private val nowMs: () -> Long,
     private val calendar: LocalCalendar = LocalCalendar.UTC,
 ) {
+    private val interruptions = Interruptions(replica, calendar)
+
     fun reviewedWeek(): Long? = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(ReviewFields.REVIEWED_WEEK)?.longOrNull
 
     /** "Done reviewing" for the week starting [weekStart] (a Monday); synced. */
@@ -375,7 +377,7 @@ class WeeklyReview(
             stillOpenMore = open.size - stillOpen.size,
             aheadTitle = aheadTitle,
             aheadLines = aheadLines,
-            northStar = ReviewRules.NORTH_STAR_PENDING,
+            northStar = ReviewRules.NORTH_STAR_PENDING.map { if (it.key == InterruptionRules.KEY) interruptions.metric(ws) else it },
             reviewed = reviewed,
             reviewedLine = reviewedLine,
         )

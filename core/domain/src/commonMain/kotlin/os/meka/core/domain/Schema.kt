@@ -26,10 +26,12 @@ object EntityTypes {
     const val FASTING_PLAN = "fasting_plan"
     /** A news headline mirrored by the server (one per topic and slot, see [News]). */
     const val HEADLINE = "headline"
+    /** How many notifications one device posted at an interrupting tier on one day (see [Interruptions]). */
+    const val INTERRUPTION_DAY = "interruption_day"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
-        GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE,
+        GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
     )
 }
 
@@ -200,6 +202,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.EVENT -> MergePolicy.Lww
         // Headlines likewise: only the server's news ingestion writes them.
         entityType == EntityTypes.HEADLINE -> MergePolicy.Lww
+        // Interruption counts: each entity is written only by the device named in its id.
+        entityType == EntityTypes.INTERRUPTION_DAY -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

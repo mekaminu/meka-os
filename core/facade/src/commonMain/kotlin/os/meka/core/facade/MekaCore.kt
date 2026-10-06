@@ -62,6 +62,7 @@ import os.meka.core.domain.DeviceAlerts
 import os.meka.core.domain.Governor
 import os.meka.core.domain.GovernorResult
 import os.meka.core.domain.GovernorState
+import os.meka.core.domain.Notice
 import os.meka.core.domain.NoticeSource
 import os.meka.core.domain.NoticeSources
 import os.meka.core.domain.NoticeTier
@@ -122,6 +123,7 @@ class MekaCore(
     /** The week the review screen shows (null: the default for today); a screen choice, not synced. */
     private var reviewOffset: Int? = null
     private val notifyPrefs = NotificationPrefs(replica)
+    private val interruptions = os.meka.core.domain.Interruptions(replica, ZoneCalendar(timeZone))
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
 
@@ -383,6 +385,13 @@ class MekaCore(
         refresh()
         Governor.evaluate(currentNotices(), notifyPrefs.settings(), device, GovernorState.decode(state), nowMs(), ZoneCalendar(timeZone))
     }
+
+    /**
+     * What this device actually posted from the last [governNotifications] (leave out anything the platform couldn't
+     * post). Call it every time the device could post, even with nothing, so the weekly review's Interruptions count
+     * (ADR-013) starts the first time a device can notify you. Counts only, synced; never titles or text.
+     */
+    suspend fun notificationsPosted(posted: List<Notice>) = onCore { interruptions.record(posted, nowMs()) }
 
     // ---- Work mode ----
 

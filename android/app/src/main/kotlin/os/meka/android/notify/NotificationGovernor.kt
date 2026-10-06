@@ -54,9 +54,11 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
     suspend fun run() = mutex.withLock {
         val r = app.core.governNotifications(prefs.getString(KEY_STATE, null), _device.value)
         if (WorkAlerts.canPost(context)) {
-            r.post.forEach { post(it) }
+            val posted = r.post.filter { post(it) }
             r.digest?.let { postDigest(it) }
-        } // else: what would have posted still shows in the app; nothing piles up for later
+            // Counts only, for the weekly review's Interruptions (ADR-013): what actually reached a live channel.
+            app.core.notificationsPosted(posted)
+        } // else: what would have posted still shows in the app; nothing piles up for later (and nothing counts)
         prefs.edit().putString(KEY_STATE, r.stateEncoded).commit()
         schedule(r.nextWakeMs, r.nextWakePrecision)
     }
@@ -72,7 +74,8 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    private fun post(n: Notice) {
+    /** Posts [n]; false when its channel is turned off in the phone's settings or the post was refused. */
+    private fun post(n: Notice): Boolean {
         val channel = ensureChannel(n.tier)
         val public = NotificationCompat.Builder(context, channel)
             .setSmallIcon(android.R.drawable.stat_notify_more)
@@ -88,7 +91,9 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
             .setContentIntent(openIntent(n.target, NotifyRouting.notificationId(n.key)))
             .setAutoCancel(true)
         if (n.text.isNotBlank()) b.setContentText(n.text)
-        notify(NotifyRouting.notificationId(n.key), b.build())
+        val live = context.getSystemService(NotificationManager::class.java)
+            ?.getNotificationChannel(channel)?.importance != NotificationManager.IMPORTANCE_NONE
+        return notify(NotifyRouting.notificationId(n.key), b.build()) && live
     }
 
     private fun postDigest(d: Digest) {
@@ -116,12 +121,12 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
     }
 
     @SuppressLint("MissingPermission") // checked by WorkAlerts.canPost() in run(); a late revoke is caught here
-    private fun notify(id: Int, n: android.app.Notification) {
-        try {
-            NotificationManagerCompat.from(context).notify(id, n)
-        } catch (e: SecurityException) {
-            // Permission withdrawn between the check and the post: the app still shows it.
-        }
+    private fun notify(id: Int, n: android.app.Notification): Boolean = try {
+        NotificationManagerCompat.from(context).notify(id, n)
+        true
+    } catch (e: SecurityException) {
+        // Permission withdrawn between the check and the post: the app still shows it.
+        false
     }
 
     private fun openIntent(target: NoticeTarget, requestCode: Int): PendingIntent = PendingIntent.getActivity(

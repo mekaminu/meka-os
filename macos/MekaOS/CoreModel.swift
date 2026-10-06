@@ -228,7 +228,10 @@ final class CoreModel {
         let state = UserDefaults.standard.string(forKey: Self.governorStateKey)
         guard let result = try? await core.governNotifications(state: state, device: macAlerts) else { return }
         UserDefaults.standard.set(result.stateEncoded, forKey: Self.governorStateKey)
-        await MacNotifier.post(result)
+        guard await MacNotifier.allowed() else { return } // nothing reaches you, so nothing counts
+        let posted = await MacNotifier.post(result)
+        // Counts only (ADR-013): the weekly review's Interruptions. Called even when nothing posted, so counting starts.
+        try? await core.notificationsPosted(posted: posted)
     }
 
     /// Everything, digests only, or off on this Mac. Turning it on asks macOS for permission once.

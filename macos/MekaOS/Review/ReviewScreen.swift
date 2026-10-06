@@ -116,7 +116,11 @@ struct ReviewScreen: View {
                     HStack {
                         Text(m.label).font(MekaType.body).foregroundStyle(palette.textPrimary)
                         Spacer()
-                        Text(m.value ?? "—").font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                        Group {
+                            if let n = m.value.flatMap({ Int($0) }) { CountUpText(n) } // e.g. Interruptions
+                            else { Text(m.value ?? "—") }
+                        }
+                        .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     }
                     Text(m.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }

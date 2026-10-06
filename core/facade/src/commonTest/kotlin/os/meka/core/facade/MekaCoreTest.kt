@@ -356,6 +356,25 @@ class MekaCoreTest {
     }
 
     @Test
+    fun whatTheFoldPostsCountsAsInterruptionsInTheReviewOnBothDevices() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 4, 20, 30).toInstant(london).toEpochMilliseconds() // Sunday evening
+        val a = core("android"); val m = core("mac")
+        a.tick()
+        val pending = a.reviewView.value.northStar.single { it.key == "interruptions" }
+        assertEquals(null, pending.value)
+
+        val result = a.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        assertTrue(result.post.isNotEmpty())
+        a.notificationsPosted(result.post)
+        a.syncNow(); m.syncNow()
+        m.showReviewWeek(0)
+        val metric = m.reviewView.value.northStar.single { it.key == "interruptions" }
+        assertEquals(result.post.count { it.tier.interrupts }.toString(), metric.value)
+        assertTrue(metric.line.contains("heads-up"), metric.line)
+    }
+
+    @Test
     fun headlinesFromTheServerShowInTheBriefForTheChosenTopicsOnBothDevices() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 7, 45).toInstant(london).toEpochMilliseconds()

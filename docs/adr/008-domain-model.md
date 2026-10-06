@@ -86,3 +86,6 @@ One entity type was added (additive): `headline` (`title`, `url`, `source`, `top
 
 ## Addendum, 2026-10-06: weekly review
 No new entity type. "Done reviewing" is one `context_mode` entity with the fixed id `review` and two LWW fields: `reviewedWeek` (the Monday of the reviewed week, as a local epoch day) and `reviewedAtMs`; it counts only for the week it names. The review itself (tasks finished in the week by `completedAtMs`, habit ticks against the week's target, fasts by end time, waiting-for items received, decisions made, obligations done by `lastDoneAtMs`, what was planned or due and is still open, and the week ahead) is computed from stored data, never stored. Which week the screen shows is a per-device screen choice, not synced.
+
+## Addendum, 2026-10-06: interruptions count
+One entity type was added (additive): `interruption_day` (`day`, `device`, `critical`, `action`, `headsUp`), one per device per local day with id `<deviceId>.d<epochDay>`, written only by the device named in its id, so every field is LWW and two devices never conflict. Counts only: no titles, sources or text. When counting began is the `context_mode` entity `interruptions` with one LWW field, `countingSince` (a local epoch day, written once, the first time any device could post). The weekly review adds the counts up across devices for its week.

@@ -218,7 +218,7 @@ class WeeklyReviewTest {
     fun northStarMetricsSayWhenTheyStartCounting() {
         val v = view()
         assertEquals(6, v.northStar.size)
-        assertTrue(v.northStar.all { it.value == null && it.line.isNotBlank() })
+        assertTrue(v.northStar.all { it.value == null && it.line.isNotBlank() }) // nothing could post yet
         assertEquals("Interruptions", v.northStar.single { it.key == "interruptions" }.label)
     }
 

@@ -295,7 +295,9 @@ private fun NorthStarLine(m: NorthStarMetric, modifier: Modifier) {
     Column(modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs).semantics(mergeDescendants = true) {}) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(m.label, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-            Text(m.value ?: "—", style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+            val n = m.value?.toIntOrNull()
+            if (n != null) CountUpText(n, MekaType.itemMeta, Meka.colors.textSecondary) // e.g. Interruptions
+            else Text(m.value ?: "—", style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
         Text(m.line, style = MekaType.caption, color = Meka.colors.textTertiary)
     }

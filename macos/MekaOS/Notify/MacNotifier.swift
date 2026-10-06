@@ -10,8 +10,19 @@ enum MacNotifier {
         (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
     }
 
-    static func post(_ result: GovernorResult) async {
+    /// Posts what the governor says and returns the notices that reached macOS (none when Meka isn't allowed to
+    /// notify), for the weekly review's Interruptions count. A digest is passive, so it never counts.
+    /// Whether macOS lets Meka notify at all (System Settings → Notifications → Meka).
+    static func allowed() async -> Bool {
+        let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        return status == .authorized || status == .provisional
+    }
+
+    @discardableResult
+    static func post(_ result: GovernorResult) async -> [Notice] {
         let center = UNUserNotificationCenter.current()
+        guard await allowed() else { return [] }
+        var posted: [Notice] = []
         for notice in result.post {
             let content = UNMutableNotificationContent()
             content.title = notice.title
@@ -19,7 +30,9 @@ enum MacNotifier {
             content.threadIdentifier = "meka"
             content.interruptionLevel = .active
             content.userInfo = ["target": NotifyRules.shared.targetName(t: notice.target)]
-            try? await center.add(UNNotificationRequest(identifier: notice.key, content: content, trigger: nil))
+            if (try? await center.add(UNNotificationRequest(identifier: notice.key, content: content, trigger: nil))) != nil {
+                posted.append(notice)
+            }
         }
         if let digest = result.digest {
             let content = UNMutableNotificationContent()
@@ -31,5 +44,6 @@ enum MacNotifier {
             content.userInfo = ["target": NotifyRules.shared.targetName(t: digest.target)]
             try? await center.add(UNNotificationRequest(identifier: "meka.digest", content: content, trigger: nil))
         }
+        return posted
     }
 }

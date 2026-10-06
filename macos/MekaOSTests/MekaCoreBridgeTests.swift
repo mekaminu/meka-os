@@ -198,6 +198,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(off.post.isEmpty)
         XCTAssertNil(off.digest)
         XCTAssertNil(off.nextWakeMs)
+        // Reporting what posted (even nothing) starts the review's Interruptions count.
+        try await core.notificationsPosted(posted: off.post)
+        let interruptions = core.reviewView.value.northStar.first { $0.key == "interruptions" }
+        XCTAssertNotEqual(interruptions?.line, "Counted once MEKA can notify you on a device")
         XCTAssertEqual(NotifyRules.shared.deviceFromName(name: "DIGESTS", fallback: .off), .digests)
         XCTAssertEqual(NotifyRules.shared.deviceFromName(name: nil, fallback: .off), .off)
         XCTAssertEqual(Int(NotifyRules.shared.deviceCount), 3)
