@@ -33,6 +33,7 @@ struct TodayView: View {
         .sheet(isPresented: $model.showPlan) { PlanSheet(palette: palette) }
         .sheet(isPresented: $model.showWork) { WorkSheet(palette: palette) }
         .sheet(isPresented: $model.showShutdown) { ShutdownSheet(palette: palette) }
+        .sheet(isPresented: $model.showNotifications) { NotificationsSheet(palette: palette) }
     }
 
     private var todayColumn: some View {
@@ -56,6 +57,7 @@ struct TodayView: View {
                         }
                         Button(model.work?.atWork == true ? "At work" : "Off work") { model.showWork = true }
                         Button("Shut down") { model.showShutdown = true }
+                        Button("Notifications") { model.showNotifications = true }
                         Button("Theme: \(currentAppearance.label)") { appearance = currentAppearance.next.rawValue }
                             .foregroundStyle(palette.textSecondary)
                     }

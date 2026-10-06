@@ -54,6 +54,17 @@ import os.meka.core.domain.TodayProjection
 import os.meka.core.domain.WorkMode
 import os.meka.core.domain.WorkModeState
 import os.meka.core.domain.WorkSchedule
+import os.meka.core.domain.DeviceAlerts
+import os.meka.core.domain.Governor
+import os.meka.core.domain.GovernorResult
+import os.meka.core.domain.GovernorState
+import os.meka.core.domain.NoticeSource
+import os.meka.core.domain.NoticeSources
+import os.meka.core.domain.NoticeTier
+import os.meka.core.domain.NotificationPreview
+import os.meka.core.domain.NotificationPrefs
+import os.meka.core.domain.NotificationSettings
+import os.meka.core.domain.QuietHours
 import os.meka.core.sync.AuthRejectedException
 import os.meka.core.sync.Backoff
 import os.meka.core.sync.Conflict
@@ -101,6 +112,7 @@ class MekaCore(
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shutdown = EveningShutdown(replica, tasks, nowMs, ZoneCalendar(timeZone))
+    private val notifyPrefs = NotificationPrefs(replica)
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
 
@@ -129,6 +141,14 @@ class MekaCore(
     private val _workMode = MutableStateFlow(work.state(localClock()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
     val workMode: StateFlow<WorkModeState> = _workMode.asStateFlow()
+
+    private val _notifySettings = MutableStateFlow(NotificationSettings.DEFAULT)
+    /** Quiet hours, digest times and sources moved to a lower tier (notification governor). Synced. */
+    val notificationSettings: StateFlow<NotificationSettings> = _notifySettings.asStateFlow()
+
+    private val _notifyPreview = MutableStateFlow(NotificationPreview("", ""))
+    /** "Quiet until 07:00", "Next digest 18:00 · 3 things so far", for the settings screens. Moves with the clock. */
+    val notificationPreview: StateFlow<NotificationPreview> = _notifyPreview.asStateFlow()
 
     private val _sync = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
     val syncStatus: StateFlow<SyncStatus> = _sync.asStateFlow()
@@ -305,6 +325,26 @@ class MekaCore(
     /** Calls it a day: the shutdown card is put away on every device until tomorrow evening. */
     suspend fun shutDown() = onCore { shutdown.shutDown() }
 
+    // ---- Notification governor ----
+
+    /** Quiet hours as local minutes of the day; an end before the start crosses midnight. */
+    suspend fun setQuietHours(enabled: Boolean, startMinute: Int, endMinute: Int) =
+        onCore { notifyPrefs.setQuietHours(QuietHours(enabled, startMinute, endMinute)) }
+    /** Turns the digest at [minute] (e.g. [NotificationSettings.MIDDAY]) on or off. */
+    suspend fun setDigest(minute: Int, on: Boolean) = onCore { notifyPrefs.setDigest(minute, on) }
+    /** Moves a source to a lower tier ([NoticeSource.CHOICES]); its default tier clears the choice. */
+    suspend fun setNoticeTier(source: NoticeSource, tier: NoticeTier) = onCore { notifyPrefs.setTier(source, tier) }
+
+    /**
+     * What this device should post now. [state] is what the last call returned ([GovernorResult.stateEncoded]),
+     * kept on the device; [device] is this device's own choice. The platform posts, stores the new state and sets an
+     * inexact alarm for [GovernorResult.nextWakeMs].
+     */
+    suspend fun governNotifications(state: String?, device: DeviceAlerts): GovernorResult = onCore {
+        refresh()
+        Governor.evaluate(currentNotices(), notifyPrefs.settings(), device, GovernorState.decode(state), nowMs(), ZoneCalendar(timeZone))
+    }
+
     // ---- Work mode ----
 
     /** The Work switch. Choosing what the schedule already says returns to the schedule. */
@@ -429,6 +469,9 @@ class MekaCore(
         _workMode.value = workState
         val today = dayWindow(nowMs())
         _shutdown.value = shutdown.view(all, events.all(), workState.schedule, workState.atWork, today, dayWindow(today.endMs))
+        val notifySettings = notifyPrefs.settings()
+        _notifySettings.value = notifySettings
+        _notifyPreview.value = Governor.preview(currentNotices(), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(
                 taskId = c.key.entityId,
@@ -438,6 +481,10 @@ class MekaCore(
             )
         }
     }
+
+    /** Notices from the views as they stand (call after [refresh]). */
+    private fun currentNotices() =
+        NoticeSources.collect(_lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone))
 
     private fun project(all: List<os.meka.core.domain.Task> = tasks.all()): Today {
         val now = nowMs()

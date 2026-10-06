@@ -22,6 +22,15 @@ final class CoreModel {
     /// Evening shutdown: done today, left from today, tomorrow at a glance. Synced with the Fold.
     private(set) var shutdown: ShutdownView?
     var showShutdown = false
+    /// Quiet hours, digest times and tiers (notification governor), synced with the Fold.
+    private(set) var notifySettings: NotificationSettings?
+    /// "Quiet until 07:00", "Next digest 18:00 · 3 things so far".
+    private(set) var notifyPreview: NotificationPreview?
+    /// What this Mac posts. Off until turned on here (turning it on asks macOS for permission); not synced.
+    private(set) var macAlerts: DeviceAlerts = NotifyRules.shared.deviceFromName(
+        name: UserDefaults.standard.string(forKey: CoreModel.alertsKey), fallback: .off
+    )
+    var showNotifications = false
     var showWork = false
     var selectedID: String?
     /// The shell's current destination and which way the last switch moved (for the push transition).
@@ -86,11 +95,20 @@ final class CoreModel {
         observers.append(Task { [weak self] in
             for await s in core.shutdownView { self?.shutdown = s }
         })
-        // Work mode and Today move with the clock: re-evaluate every half minute.
-        observers.append(Task {
+        observers.append(Task { [weak self] in
+            for await s in core.notificationSettings { self?.notifySettings = s }
+        })
+        observers.append(Task { [weak self] in
+            for await p in core.notificationPreview { self?.notifyPreview = p }
+        })
+        // Work mode and Today move with the clock: re-evaluate every half minute, then let the notification governor
+        // post anything that is due on this Mac.
+        observers.append(Task { [weak self] in
+            await self?.governNotifications()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
                 try? await core.tick()
+                await self?.governNotifications()
             }
         })
         core.startSync(periodMs: 30_000)   // MekaCore.FOREGROUND_SYNC_MS
@@ -187,6 +205,38 @@ final class CoreModel {
     static func providerName(_ p: String) -> String {
         switch p { case "google": "Google"; case "microsoft": "Outlook"; case "fixtures": "Fixtures"; default: p }
     }
+
+    // MARK: Notifications
+
+    static let alertsKey = "meka.notify.device"
+    static let governorStateKey = "meka.notify.state"
+
+    /// Runs the shared governor and posts what it says. Each notice posts once on this Mac (state kept here).
+    func governNotifications() async {
+        guard let core, macAlerts != .off else { return }
+        let state = UserDefaults.standard.string(forKey: Self.governorStateKey)
+        guard let result = try? await core.governNotifications(state: state, device: macAlerts) else { return }
+        UserDefaults.standard.set(result.stateEncoded, forKey: Self.governorStateKey)
+        await MacNotifier.post(result)
+    }
+
+    /// Everything, digests only, or off on this Mac. Turning it on asks macOS for permission once.
+    func setMacAlerts(_ d: DeviceAlerts) {
+        MekaHaptics.tick()
+        macAlerts = d
+        UserDefaults.standard.set(NotifyRules.shared.deviceName(d: d), forKey: Self.alertsKey)
+        guard d != .off else { return }
+        Task {
+            _ = await MacNotifier.requestPermission()
+            await governNotifications()
+        }
+    }
+
+    func setQuietHours(enabled: Bool, start: Int, end: Int) {
+        run { try await $0.setQuietHours(enabled: enabled, startMinute: Int32(start), endMinute: Int32(end)) }
+    }
+    func setDigest(_ minute: Int32, on: Bool) { MekaHaptics.tick(); run { try await $0.setDigest(minute: minute, on: on) } }
+    func setNoticeTier(_ source: NoticeSource, _ tier: NoticeTier) { run { try await $0.setNoticeTier(source: source, tier: tier) } }
 
     // MARK: Work mode
 

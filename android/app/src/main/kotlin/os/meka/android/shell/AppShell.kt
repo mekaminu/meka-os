@@ -92,6 +92,11 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     val app = LocalContext.current.applicationContext as MekaApplication
     val openAfterWork by app.openAfterWork.collectAsState()
     LaunchedEffect(openAfterWork) { if (openAfterWork) current = ShellDestination.NEEDS_YOU }
+    // Tapping a MEKA notification lands where it belongs (a digest on Needs you, a cancel-by date on Lists…).
+    val openDestination by app.openDestination.collectAsState()
+    LaunchedEffect(openDestination) {
+        openDestination?.let { current = it; app.openDestination.value = null }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background).safeDrawingPadding()) {
         val layout = ShellNav.layoutFor(maxWidth.value)

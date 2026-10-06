@@ -12,6 +12,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import os.meka.core.sync.SyncTransport
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import os.meka.core.sync.InMemoryReplicaStore
 import os.meka.core.sync.InMemoryServerOpStore
 import os.meka.core.sync.SyncService
@@ -273,5 +274,30 @@ class MekaCoreTest {
         a.syncNow(); m.syncNow()
         assertTrue(m.shutdownView.value.doneToday)
         assertEquals(listOf("Post the letter"), m.shutdownView.value.tomorrow.rows.map { it.title })
+    }
+
+    @Test
+    fun theMiddayDigestSumsUpWhatsDueOnceAndSettingsSync() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 11, 0).toInstant(london).toEpochMilliseconds()
+        val a = core("android"); val m = core("mac")
+        a.addWaiting("Deposit back", "Landlord", 0)
+        val early = a.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        assertEquals(null, early.digest)
+        assertEquals(kotlinx.datetime.LocalDateTime(2026, 9, 22, 12, 30).toInstant(london).toEpochMilliseconds(), early.nextWakeMs)
+        assertEquals("Next digest 12:30 · 1 thing so far", a.notificationPreview.value.digestLine)
+        now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 12, 31).toInstant(london).toEpochMilliseconds()
+        val r = a.governNotifications(early.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)
+        assertEquals("Midday digest · 1 thing", r.digest?.title)
+        assertEquals("1 to chase", r.digest?.summary)
+        assertEquals(null, a.governNotifications(r.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL).digest)
+        a.setQuietHours(true, 23 * 60, 6 * 60)
+        a.setNoticeTier(os.meka.core.domain.NoticeSource.CHASE, os.meka.core.domain.NoticeTier.SILENT)
+        a.setNoticeTier(os.meka.core.domain.NoticeSource.SHUTDOWN, os.meka.core.domain.NoticeTier.SILENT)
+        a.syncNow(); m.syncNow()
+        assertEquals("23:00–06:00", m.notificationSettings.value.quiet.summary)
+        assertEquals(os.meka.core.domain.NoticeTier.SILENT, m.notificationSettings.value.tierFor(os.meka.core.domain.NoticeSource.CHASE))
+        now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 18, 1).toInstant(london).toEpochMilliseconds()
+        assertEquals(null, m.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL).digest, "chases and the shutdown nudge are app-only now")
     }
 }

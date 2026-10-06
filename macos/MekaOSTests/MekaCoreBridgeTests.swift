@@ -132,4 +132,27 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(core.shutdownView.value.doneToday)
         XCTAssertFalse(core.shutdownView.value.offered)
     }
+
+    func testNotificationGovernorThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "notify-\(UUID().uuidString).db", deviceKey: nil
+        )
+        try await core.setQuietHours(enabled: true, startMinute: 23 * 60, endMinute: 6 * 60)
+        XCTAssertEqual(core.notificationSettings.value.quiet.summary, "23:00–06:00")
+        try await core.setDigest(minute: NotifyRules.shared.MIDDAY, on: false)
+        XCTAssertFalse(NotifyRules.shared.hasDigest(settings: core.notificationSettings.value, minute: NotifyRules.shared.MIDDAY))
+        XCTAssertTrue(NotifyRules.shared.hasDigest(settings: core.notificationSettings.value, minute: NotifyRules.shared.EVENING))
+        try await core.setNoticeTier(source: .shutdown, tier: .silent)
+        XCTAssertEqual(NotifyRules.shared.tierOf(settings: core.notificationSettings.value, s: .shutdown), .silent)
+        XCTAssertEqual(NotifyRules.shared.tierChoices(s: .chase).count, 2)
+        let off = try await core.governNotifications(state: nil, device: .off)
+        XCTAssertTrue(off.post.isEmpty)
+        XCTAssertNil(off.digest)
+        XCTAssertNil(off.nextWakeMs)
+        XCTAssertEqual(NotifyRules.shared.deviceFromName(name: "DIGESTS", fallback: .off), .digests)
+        XCTAssertEqual(NotifyRules.shared.deviceFromName(name: nil, fallback: .off), .off)
+        XCTAssertEqual(Int(NotifyRules.shared.deviceCount), 3)
+    }
 }

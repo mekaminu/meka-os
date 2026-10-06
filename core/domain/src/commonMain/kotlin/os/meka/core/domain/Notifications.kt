@@ -1,0 +1,513 @@
+package os.meka.core.domain
+
+import os.meka.core.sync.Replica
+import os.meka.core.sync.fv
+
+/**
+ * Notification governor v1 (build plan M1, ADR-001: shared, testable). Every local notification MEKA posts goes
+ * through these rules, on the Fold and the Mac alike. Non-AI: tiers, quiet hours and two digests a day.
+ *
+ * - [NoticeTier.CRITICAL] posts at once, even in quiet hours.
+ * - [NoticeTier.ACTION] posts at once, or when quiet hours end.
+ * - [NoticeTier.HEADS_UP] posts at once; one that falls in quiet hours rides in the next digest instead (or, with
+ *   digests off, posts when quiet hours end). One that goes stale before it can post is dropped.
+ * - [NoticeTier.DIGEST] is summed up in the midday and evening digests (12:30 and 18:00 until changed).
+ * - [NoticeTier.SILENT] is never posted: it only shows in the app.
+ *
+ * All reminders here are soft milestones (ADR-007): the platforms wake with inexact, windowed alarms. Precision is a
+ * property of each notice, so a CLOCK reminder can ask for more when one exists.
+ */
+enum class NoticeTier(val label: String) {
+    CRITICAL("Critical"),
+    ACTION("Needs a decision"),
+    HEADS_UP("Heads-up"),
+    DIGEST("Digest"),
+    SILENT("App only");
+
+    /** Counts as an interruption in the weekly review (ADR-013). */
+    val interrupts: Boolean get() = this == CRITICAL || this == ACTION || this == HEADS_UP
+}
+
+/** ADR-007: CLOCK reminders may use an exact alarm when allowed; everything else is windowed. */
+enum class NoticePrecision { CLOCK, SOFT }
+
+/** Where tapping a notification takes you. */
+enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS }
+
+/** What a notice is about. Each source has a default tier, which the owner can lower (never raise). */
+enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
+    RENEWAL_CANCEL_BY("Cancel-by dates", NoticeTier.HEADS_UP),
+    FAST_GOAL("Fasting goal reached", NoticeTier.HEADS_UP),
+    SHUTDOWN("Time to shut down the day", NoticeTier.HEADS_UP),
+    RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
+    CHASE("Things to chase", NoticeTier.DIGEST),
+    REVIEW("Decisions to review", NoticeTier.DIGEST),
+    OVERDUE("Overdue tasks", NoticeTier.DIGEST);
+
+    companion object {
+        /** The tiers a source can be set to in the settings screen. */
+        val CHOICES = listOf(NoticeTier.HEADS_UP, NoticeTier.DIGEST, NoticeTier.SILENT)
+    }
+}
+
+data class Notice(
+    /** Stable: a notice posts once per key (a digest sums up what is still due each time). */
+    val key: String,
+    val source: NoticeSource,
+    val tier: NoticeTier,
+    val title: String,
+    val text: String,
+    /** When it becomes due. */
+    val atMs: Long,
+    val target: NoticeTarget,
+    /** After this it is stale and never posts on its own. */
+    val expiresAtMs: Long? = null,
+    val precision: NoticePrecision = NoticePrecision.SOFT,
+)
+
+/** Quiet hours as local minutes of the day; an end at or before the start crosses midnight. */
+data class QuietHours(val enabled: Boolean, val startMinute: Int, val endMinute: Int) {
+    init {
+        require(startMinute in 0 until LocalClock.MINUTES_PER_DAY && endMinute in 0 until LocalClock.MINUTES_PER_DAY) { "minutes must be 0..1439" }
+    }
+
+    fun isQuiet(minuteOfDay: Int): Boolean {
+        if (!enabled || startMinute == endMinute) return false
+        return if (endMinute > startMinute) minuteOfDay in startMinute until endMinute
+        else minuteOfDay >= startMinute || minuteOfDay < endMinute
+    }
+
+    fun isQuietAt(epochMs: Long, cal: LocalCalendar): Boolean = isQuiet(cal.minuteOfDay(epochMs))
+
+    /** When the quiet hours that include [epochMs] end; [epochMs] itself when it isn't quiet. */
+    fun endAfter(epochMs: Long, cal: LocalCalendar): Long {
+        if (!isQuietAt(epochMs, cal)) return epochMs
+        val day = cal.epochDayOf(epochMs)
+        val endDay = if (endMinute > cal.minuteOfDay(epochMs)) day else day + 1
+        return cal.toEpochMs(endDay, endMinute)
+    }
+
+    /** "22:00–07:00" or "Off". */
+    val summary: String get() = if (!enabled) "Off" else "${LocalClock.formatMinute(startMinute)}–${LocalClock.formatMinute(endMinute)}"
+
+    fun encode(): String = "${if (enabled) 1 else 0};$startMinute;$endMinute"
+
+    companion object {
+        val DEFAULT = QuietHours(true, 22 * 60, 7 * 60)
+
+        fun decode(s: String?): QuietHours? {
+            val p = s?.split(';') ?: return null
+            if (p.size != 3) return null
+            return try { QuietHours(p[0] == "1", p[1].toInt(), p[2].toInt()) } catch (e: IllegalArgumentException) { null }
+        }
+    }
+}
+
+/** What this device posts. Kept on the device; the rest of the settings sync. */
+enum class DeviceAlerts(val label: String) {
+    ALL("Everything"),
+    /** Digests (with the heads-ups riding in them) and anything critical. */
+    DIGESTS("Digests only"),
+    OFF("Off"),
+}
+
+/** Synced notification settings: quiet hours, digest times and any source moved to a lower tier. */
+data class NotificationSettings(
+    val quiet: QuietHours = QuietHours.DEFAULT,
+    /** Local minutes of the day, ascending; empty means no digests. */
+    val digestMinutes: List<Int> = DEFAULT_DIGESTS,
+    val tiers: Map<NoticeSource, NoticeTier> = emptyMap(),
+) {
+    val digestsOn: Boolean get() = digestMinutes.isNotEmpty()
+    fun tierFor(source: NoticeSource): NoticeTier = tiers[source] ?: source.defaultTier
+    fun hasDigest(minute: Int): Boolean = minute in digestMinutes
+
+    companion object {
+        const val MIDDAY = 12 * 60 + 30
+        const val EVENING = 18 * 60
+        val DEFAULT_DIGESTS = listOf(MIDDAY, EVENING)
+        val DEFAULT = NotificationSettings()
+
+        /** "Midday digest" for 12:30, "Evening digest" for 18:00, else "Digest". */
+        fun digestName(minute: Int): String = when {
+            minute < 11 * 60 -> "Morning digest"
+            minute < 17 * 60 -> "Midday digest"
+            else -> "Evening digest"
+        }
+
+        fun encodeDigests(minutes: List<Int>): String = minutes.sorted().joinToString(",")
+
+        fun decodeDigests(s: String?): List<Int>? {
+            if (s == null) return null
+            if (s.isBlank()) return emptyList()
+            val m = s.split(',').map { it.trim().toIntOrNull() ?: return null }
+            return m.filter { it in 0 until LocalClock.MINUTES_PER_DAY }.distinct().sorted()
+        }
+
+        /** "SHUTDOWN=DIGEST,FAST_GOAL=SILENT". Unknown names (from a newer version) are ignored. */
+        fun encodeTiers(t: Map<NoticeSource, NoticeTier>): String =
+            t.entries.sortedBy { it.key.ordinal }.joinToString(",") { "${it.key.name}=${it.value.name}" }
+
+        fun decodeTiers(s: String?): Map<NoticeSource, NoticeTier> {
+            if (s.isNullOrBlank()) return emptyMap()
+            return s.split(',').mapNotNull { pair ->
+                val (k, v) = pair.split('=').takeIf { it.size == 2 } ?: return@mapNotNull null
+                val source = NoticeSource.entries.firstOrNull { it.name == k } ?: return@mapNotNull null
+                val tier = NoticeTier.entries.firstOrNull { it.name == v } ?: return@mapNotNull null
+                // Only lowering is allowed; a raised tier from anywhere is ignored.
+                if (tier.ordinal < source.defaultTier.ordinal) null else source to tier
+            }.toMap()
+        }
+    }
+}
+
+/** What this device has already posted. Local only (never synced); old entries are pruned. */
+data class GovernorState(val delivered: Map<String, Long> = emptyMap(), val lastDigestSlotMs: Long = 0L) {
+    fun encode(): String = buildString {
+        append(lastDigestSlotMs)
+        delivered.forEach { (k, v) -> append('\n').append(k.replace('\n', ' ').replace('\t', ' ')).append('\t').append(v) }
+    }
+
+    companion object {
+        fun decode(s: String?): GovernorState {
+            if (s.isNullOrEmpty()) return GovernorState()
+            val lines = s.split('\n')
+            val slot = lines.first().toLongOrNull() ?: 0L
+            val delivered = lines.drop(1).mapNotNull { l ->
+                val i = l.lastIndexOf('\t')
+                if (i <= 0) null else l.substring(i + 1).toLongOrNull()?.let { l.substring(0, i) to it }
+            }.toMap()
+            return GovernorState(delivered, slot)
+        }
+    }
+}
+
+/** One digest notification. */
+data class Digest(
+    /** "Evening digest · 3 things" (or "4 things need you" for a burst of heads-ups). */
+    val title: String,
+    /** "1 renewal due · 2 to chase · 1 overdue task" */
+    val summary: String,
+    /** One line per item, most pressing first, at most [Governor.MAX_DIGEST_LINES] (then "+2 more"). */
+    val lines: List<String>,
+    val count: Int,
+    /** Lock-screen text: no names, no titles. */
+    val publicTitle: String,
+    val target: NoticeTarget,
+)
+
+data class GovernorResult(
+    /** Post each of these now, on its tier's channel. */
+    val post: List<Notice>,
+    /** Post this digest now (it replaces the previous one). */
+    val digest: Digest?,
+    /** Save this and pass it back next time. */
+    val state: GovernorState,
+    /** When to look again (an inexact alarm); null when nothing is coming. */
+    val nextWakeMs: Long?,
+    val nextWakePrecision: NoticePrecision,
+) {
+    /** For Swift: the state to store. */
+    val stateEncoded: String get() = state.encode()
+}
+
+/** For the settings screens: what happens next. */
+data class NotificationPreview(
+    /** "Quiet until 07:00" · "Quiet hours 22:00–07:00" · "No quiet hours" */
+    val quietLine: String,
+    /** "Next digest at 18:00 · 3 things so far" · "No digests" */
+    val digestLine: String,
+)
+
+object Governor {
+    /** A digest whose time was missed (phone off) still goes out within this long; after that it is skipped. */
+    const val MISSED_DIGEST_GRACE_MS = 2 * 60 * 60_000L
+    /** More heads-ups than this at once are folded into one notification. */
+    const val MAX_BURST = 3
+    const val MAX_DIGEST_LINES = 6
+    /** Delivered keys are forgotten after this long (every key includes its day, so nothing comes back). */
+    const val KEEP_MS = 30L * 24 * 60 * 60_000L
+
+    fun evaluate(
+        notices: List<Notice>,
+        settings: NotificationSettings,
+        device: DeviceAlerts,
+        state: GovernorState,
+        nowMs: Long,
+        cal: LocalCalendar,
+    ): GovernorResult {
+        val quietNow = settings.quiet.isQuietAt(nowMs, cal)
+        val tiered = notices.map { it.copy(tier = effectiveTier(it, settings)) }.filter { it.tier != NoticeTier.SILENT }
+        val due = tiered.filter { it.atMs <= nowMs }
+        fun fresh(n: Notice) = n.key !in state.delivered && (n.expiresAtMs == null || nowMs < n.expiresAtMs)
+
+        val slot = dueDigestSlot(settings, state.lastDigestSlotMs, nowMs, cal)
+        val digestNow = slot != null && device != DeviceAlerts.OFF
+
+        val post = mutableListOf<Notice>()
+        val ridesInDigest = mutableListOf<Notice>()
+        for (n in due.filter(::fresh)) {
+            when (n.tier) {
+                NoticeTier.CRITICAL -> post += n
+                NoticeTier.ACTION -> if (!quietNow) post += n
+                NoticeTier.HEADS_UP -> {
+                    val toDigest = settings.digestsOn && (device == DeviceAlerts.DIGESTS || settings.quiet.isQuietAt(n.atMs, cal) || quietNow)
+                    when {
+                        toDigest || digestNow -> if (digestNow) ridesInDigest += n
+                        !quietNow -> post += n
+                    }
+                }
+                else -> Unit
+            }
+        }
+        if (device == DeviceAlerts.DIGESTS) post.retainAll { it.tier == NoticeTier.CRITICAL }
+        if (device == DeviceAlerts.OFF) post.clear()
+
+        // A burst of heads-ups is folded into one notification.
+        var digest: Digest? = null
+        val headsNow = post.filter { it.tier == NoticeTier.HEADS_UP }
+        if (headsNow.size > MAX_BURST) {
+            post.removeAll(headsNow)
+            digest = buildDigest("${headsNow.size} things need you", headsNow, emptyList())
+        }
+        if (digestNow) {
+            val summed = due.filter { it.tier == NoticeTier.DIGEST && (it.expiresAtMs == null || nowMs < it.expiresAtMs) }
+            val all = ridesInDigest + headsNow.takeIf { digest != null }.orEmpty()
+            if (all.isNotEmpty() || summed.isNotEmpty()) {
+                val count = all.size + summed.size
+                digest = buildDigest("${NotificationSettings.digestName(cal.minuteOfDay(slot!!))} · ${plural(count, "thing")}", all, summed)
+            }
+        }
+
+        val postedKeys = post.map { it.key } + ridesInDigest.map { it.key } + (if (digest != null) headsNow.map { it.key } else emptyList())
+        val delivered = (state.delivered + postedKeys.associateWith { nowMs }).filterValues { nowMs - it < KEEP_MS }
+        val newState = GovernorState(delivered, if (slot != null) maxOf(slot, state.lastDigestSlotMs) else state.lastDigestSlotMs)
+
+        // Next look: the next digest, the end of quiet hours, or the next notice that would post on its own.
+        val wakes = mutableListOf<Pair<Long, NoticePrecision>>()
+        if (device != DeviceAlerts.OFF) {
+            nextDigestSlot(settings, nowMs, cal)?.let { wakes += it to NoticePrecision.SOFT }
+            if (quietNow) wakes += settings.quiet.endAfter(nowMs, cal) to NoticePrecision.SOFT
+            tiered.filter { it.atMs > nowMs && it.tier.interrupts && it.key !in delivered && (it.expiresAtMs == null || it.expiresAtMs > it.atMs) }
+                .forEach { wakes += it.atMs to it.precision }
+        }
+        val next = wakes.minByOrNull { it.first }
+        return GovernorResult(post, digest, newState, next?.first, next?.second ?: NoticePrecision.SOFT)
+    }
+
+    /** What the settings screens show. */
+    fun preview(notices: List<Notice>, settings: NotificationSettings, nowMs: Long, cal: LocalCalendar): NotificationPreview {
+        val q = settings.quiet
+        val quietLine = when {
+            !q.enabled -> "No quiet hours"
+            q.isQuietAt(nowMs, cal) -> "Quiet until ${LocalClock.formatMinute(q.endMinute)}"
+            else -> "Quiet hours ${q.summary}"
+        }
+        val next = nextDigestSlot(settings, nowMs, cal)
+        val digestLine = if (next == null) "No digests" else {
+            val pending = notices.count {
+                val t = effectiveTier(it, settings)
+                t == NoticeTier.DIGEST && it.atMs <= next && (it.expiresAtMs == null || it.expiresAtMs > next)
+            }
+            val day = cal.epochDayOf(next) - cal.epochDayOf(nowMs)
+            val whenText = (if (day > 0) "tomorrow " else "") + LocalClock.formatMinute(cal.minuteOfDay(next))
+            "Next digest $whenText" + if (pending > 0) " · ${plural(pending, "thing")} so far" else " · nothing yet"
+        }
+        return NotificationPreview(quietLine, digestLine)
+    }
+
+    fun effectiveTier(n: Notice, settings: NotificationSettings): NoticeTier {
+        val chosen = settings.tiers[n.source] ?: return n.tier
+        // A notice can be lowered by the owner's choice, never raised by it.
+        return if (chosen.ordinal > n.tier.ordinal) chosen else n.tier
+    }
+
+    /** The latest digest time at or before now that hasn't gone out, isn't in quiet hours and isn't too old. */
+    internal fun dueDigestSlot(settings: NotificationSettings, lastSlotMs: Long, nowMs: Long, cal: LocalCalendar): Long? {
+        if (!settings.digestsOn) return null
+        val today = cal.epochDayOf(nowMs)
+        val slot = listOf(today - 1, today).flatMap { d -> settings.digestMinutes.map { cal.toEpochMs(d, it) } }
+            .filter { it <= nowMs }.maxOrNull() ?: return null
+        if (slot <= lastSlotMs || nowMs - slot > MISSED_DIGEST_GRACE_MS) return null
+        if (settings.quiet.isQuietAt(slot, cal)) return null
+        return slot
+    }
+
+    internal fun nextDigestSlot(settings: NotificationSettings, nowMs: Long, cal: LocalCalendar): Long? {
+        if (!settings.digestsOn) return null
+        val today = cal.epochDayOf(nowMs)
+        return (today..today + 2).flatMap { d -> settings.digestMinutes.map { cal.toEpochMs(d, it) } }
+            .filter { it > nowMs && !settings.quiet.isQuietAt(it, cal) }.minOrNull()
+    }
+
+    private fun buildDigest(title: String, heads: List<Notice>, summed: List<Notice>): Digest {
+        val ordered = heads + summed.sortedBy { it.source.ordinal }
+        val lines = ordered.take(MAX_DIGEST_LINES).map { "${it.title} · ${it.text}".trimEnd(' ', '·') } +
+            listOfNotNull((ordered.size - MAX_DIGEST_LINES).takeIf { it > 0 }?.let { "+$it more" })
+        val bySource = ordered.groupingBy { it.source }.eachCount()
+        val summary = bySource.entries.sortedBy { it.key.ordinal }.joinToString(" · ") { (s, n) -> countLine(s, n) }
+        val target = when {
+            ordered.isNotEmpty() && ordered.all { it.target == ordered.first().target } -> ordered.first().target
+            else -> NoticeTarget.NEEDS_YOU
+        }
+        return Digest(title, summary, lines, ordered.size, "MEKA · ${plural(ordered.size, "thing")} for you", target)
+    }
+
+    private fun countLine(s: NoticeSource, n: Int): String = when (s) {
+        NoticeSource.RENEWAL_CANCEL_BY -> "$n to cancel or keep"
+        NoticeSource.FAST_GOAL -> "fasting goal reached"
+        NoticeSource.SHUTDOWN -> "time to shut down"
+        NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
+        NoticeSource.CHASE -> "$n to chase"
+        NoticeSource.REVIEW -> plural(n, "decision") + " to review"
+        NoticeSource.OVERDUE -> plural(n, "overdue task")
+    }
+}
+
+/**
+ * Turns what MEKA already knows (lists, renewals, fasting, the evening shutdown, Today) into notices. Deterministic,
+ * re-run on every evaluation: what is no longer true simply stops producing a notice.
+ */
+object NoticeSources {
+    /** Heads-ups for a cancel-by date go out at 09:00 the day before. */
+    const val CANCEL_BY_NOTICE_MIN = 9 * 60
+    /** A fasting-goal heads-up older than this is stale. */
+    const val FAST_GOAL_STALE_MS = 3 * 60 * 60_000L
+
+    fun collect(
+        lists: ListsView,
+        fasting: FastingView,
+        shutdown: ShutdownView,
+        today: Today,
+        nowMs: Long,
+        cal: LocalCalendar,
+    ): List<Notice> {
+        val day = cal.epochDayOf(nowMs)
+        val todayStart = cal.toEpochMs(day, 0)
+        val out = mutableListOf<Notice>()
+
+        for (r in lists.renewals.attention + lists.renewals.upcoming) {
+            val cancelBy = r.cancelByDay
+            if (cancelBy != null && cancelBy >= day && cancelBy - day <= 7) {
+                val whenText = when (cancelBy - day) { 0L -> "today"; 1L -> "tomorrow"; else -> CivilDate.shortLabel(cancelBy) }
+                out += Notice(
+                    key = "renewal:${r.id}:cancel:$cancelBy", source = NoticeSource.RENEWAL_CANCEL_BY, tier = NoticeTier.HEADS_UP,
+                    title = "Cancel or keep ${r.title}?", text = "Cancel by $whenText",
+                    atMs = cal.toEpochMs(cancelBy - 1, CANCEL_BY_NOTICE_MIN), target = NoticeTarget.LISTS,
+                    expiresAtMs = cal.toEpochMs(cancelBy + 1, 0),
+                )
+            }
+        }
+        for (r in lists.renewals.attention) {
+            out += Notice(
+                key = "renewal:${r.id}:${r.dueDay}", source = NoticeSource.RENEWAL, tier = NoticeTier.DIGEST,
+                title = r.title, text = r.meta, atMs = todayStart, target = NoticeTarget.LISTS,
+            )
+        }
+        for (w in lists.waiting.filter { it.state == DueState.DUE }) {
+            out += Notice(
+                key = "chase:${w.id}:${w.chaseDay}", source = NoticeSource.CHASE, tier = NoticeTier.DIGEST,
+                title = "Chase: ${w.title}", text = w.who.orEmpty(), atMs = todayStart, target = NoticeTarget.LISTS,
+            )
+        }
+        for (d in lists.decisions.filter { it.state == DueState.DUE }) {
+            out += Notice(
+                key = "review:${d.id}:${d.reviewDay}", source = NoticeSource.REVIEW, tier = NoticeTier.DIGEST,
+                title = "Review: ${d.statement}", text = "", atMs = todayStart, target = NoticeTarget.LISTS,
+            )
+        }
+        for (item in today.needsYou.filter { it.reason == NeedsYouReason.OVERDUE }) {
+            out += Notice(
+                key = "overdue:${item.task.id}:$day", source = NoticeSource.OVERDUE, tier = NoticeTier.DIGEST,
+                title = item.task.title, text = "overdue", atMs = todayStart, target = NoticeTarget.NEEDS_YOU,
+            )
+        }
+        fasting.current?.let { f ->
+            out += Notice(
+                key = "fast:${f.id}:goal:${f.targetHours}", source = NoticeSource.FAST_GOAL, tier = NoticeTier.HEADS_UP,
+                title = "Fasting goal reached", text = "${f.targetHours} h · end it whenever you're ready",
+                atMs = f.goalAtMs, target = NoticeTarget.GOALS, expiresAtMs = f.goalAtMs + FAST_GOAL_STALE_MS,
+            )
+        }
+        val shutdownAt = cal.toEpochMs(day, shutdown.startMinute)
+        if (!shutdown.doneToday && (shutdown.offered || nowMs < shutdownAt)) {
+            out += Notice(
+                key = "shutdown:$day", source = NoticeSource.SHUTDOWN, tier = NoticeTier.HEADS_UP,
+                title = "Shut down the day", text = shutdown.cardLine,
+                atMs = shutdownAt, target = NoticeTarget.TODAY, expiresAtMs = cal.toEpochMs(day + 1, 0),
+            )
+        }
+        return out
+    }
+}
+
+/** Synced notification settings on the `context_mode` entity [ENTITY_ID] (ADR-008: Quiet is a context mode). */
+object NotificationFields {
+    /** "on;start;end" in local minutes. */
+    const val QUIET = "quietHours"
+    /** "750,1080"; empty for no digests. */
+    const val DIGESTS = "digestTimes"
+    /** "SHUTDOWN=DIGEST,…": sources moved to a lower tier. */
+    const val TIERS = "noticeTiers"
+}
+
+class NotificationPrefs(private val replica: Replica) {
+    private fun field(name: String) = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(name)?.textOrNull
+
+    fun settings(): NotificationSettings = NotificationSettings(
+        quiet = QuietHours.decode(field(NotificationFields.QUIET)) ?: QuietHours.DEFAULT,
+        digestMinutes = NotificationSettings.decodeDigests(field(NotificationFields.DIGESTS)) ?: NotificationSettings.DEFAULT_DIGESTS,
+        tiers = NotificationSettings.decodeTiers(field(NotificationFields.TIERS)),
+    )
+
+    fun setQuietHours(q: QuietHours) {
+        if (field(NotificationFields.QUIET) == q.encode()) return
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NotificationFields.QUIET to q.encode().fv()))
+    }
+
+    /** Turns the digest at [minute] on or off. */
+    fun setDigest(minute: Int, on: Boolean) {
+        require(minute in 0 until LocalClock.MINUTES_PER_DAY) { "minute must be 0..1439" }
+        val current = settings().digestMinutes
+        val next = if (on) (current + minute).distinct().sorted() else current - minute
+        val encoded = NotificationSettings.encodeDigests(next)
+        if (field(NotificationFields.DIGESTS) == encoded) return
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NotificationFields.DIGESTS to encoded.fv()))
+    }
+
+    /** Moves a source to [tier]; its default tier clears the override. Only lowering is possible. */
+    fun setTier(source: NoticeSource, tier: NoticeTier) {
+        require(tier.ordinal >= source.defaultTier.ordinal) { "a source can only be lowered" }
+        val tiers = settings().tiers.toMutableMap()
+        if (tier == source.defaultTier) tiers.remove(source) else tiers[source] = tier
+        val encoded = NotificationSettings.encodeTiers(tiers)
+        if ((field(NotificationFields.TIERS) ?: "") == encoded) return
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NotificationFields.TIERS to encoded.fv()))
+    }
+
+    companion object {
+        const val ENTITY_ID = "quiet"
+    }
+}
+
+/** Helpers for the Mac (Kotlin enum members and companions are awkward from Swift). */
+object NotifyRules {
+    const val MIDDAY = NotificationSettings.MIDDAY
+    const val EVENING = NotificationSettings.EVENING
+    val sourceCount: Int get() = NoticeSource.entries.size
+    fun sourceAt(index: Int): NoticeSource = NoticeSource.entries[index]
+    fun sourceLabel(s: NoticeSource): String = s.label
+    /** The tiers [s] can be set to: its default and anything lower. */
+    fun tierChoices(s: NoticeSource): List<NoticeTier> = NoticeSource.CHOICES.filter { it.ordinal >= s.defaultTier.ordinal }
+    fun tierLabel(t: NoticeTier): String = t.label
+    fun tierOf(settings: NotificationSettings, s: NoticeSource): NoticeTier = settings.tierFor(s)
+    fun hasDigest(settings: NotificationSettings, minute: Int): Boolean = settings.hasDigest(minute)
+    val deviceCount: Int get() = DeviceAlerts.entries.size
+    fun deviceAt(index: Int): DeviceAlerts = DeviceAlerts.entries[index]
+    fun deviceLabel(d: DeviceAlerts): String = d.label
+    /** For storing this device's choice. */
+    fun deviceName(d: DeviceAlerts): String = d.name
+    /** A stored choice back; [fallback] when there is none or it isn't known. */
+    fun deviceFromName(name: String?, fallback: DeviceAlerts): DeviceAlerts = DeviceAlerts.entries.firstOrNull { it.name == name } ?: fallback
+    fun targetName(t: NoticeTarget): String = t.name
+}

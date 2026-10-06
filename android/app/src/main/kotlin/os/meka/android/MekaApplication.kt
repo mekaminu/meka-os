@@ -7,12 +7,18 @@ import io.ktor.client.engine.okhttp.OkHttp
 import os.meka.android.security.AndroidDeviceKey
 import os.meka.android.security.DatabaseKeyStore
 import os.meka.android.sync.SyncWorker
+import os.meka.android.notify.NotificationGovernor
+import os.meka.android.shell.ShellDestination
 import os.meka.android.work.AfterWorkNudger
 import os.meka.android.work.CaptureStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import os.meka.core.data.AndroidDatabase
 import os.meka.core.data.SqlReplicaStore
@@ -32,6 +38,10 @@ class MekaApplication : Application() {
     val captures: CaptureStore by lazy { CaptureStore(this) }
     /** "Your after-work summary is ready" when work mode ends with something held. */
     val nudger: AfterWorkNudger by lazy { AfterWorkNudger(this, this) }
+    /** Notification governor: tiers, quiet hours and the two digests, posted on this phone. */
+    val governor: NotificationGovernor by lazy { NotificationGovernor(this, this) }
+    /** Set by tapping a MEKA notification: the shell opens this destination. */
+    val openDestination = MutableStateFlow<ShellDestination?>(null)
     /** MainActivity is visible (set in onStart/onStop): Meka is looking, so no nudge. */
     @Volatile var isOnScreen: Boolean = false
     /** Set by the nudge's tap: the shell opens Needs you with the after-work summary. */
@@ -42,6 +52,7 @@ class MekaApplication : Application() {
     // Read timeout above the server's 20 s long-poll window (OkHttp's default is 10 s).
     private val http by lazy { HttpClient(OkHttp) { engine { config { readTimeout(45, TimeUnit.SECONDS) } } } }
 
+    @OptIn(FlowPreview::class)
     override fun onCreate() {
         super.onCreate()
         identity = DeviceIdentityStore(this)
@@ -63,6 +74,18 @@ class MekaApplication : Application() {
         // Every work-mode change on this phone (clock tick, sync, listener) goes past the nudger. Also runs once at
         // process start (after a reboot the listener's rebind starts us), which re-registers the end-of-work alarm.
         appScope.launch { core.workMode.collect { nudger.evaluate(it) } }
+        // The governor looks again whenever what it reads changes (settled for a moment, so a burst of edits or a
+        // sync is one evaluation), and once at process start, which re-arms its alarm. Time is its own alarm.
+        appScope.launch {
+            merge(
+                core.listsView.map { }, core.fastingView.map { }, core.shutdownView.map { }, core.today.map { },
+                core.notificationSettings.map { }, governor.device.map { },
+            ).debounce(GOVERNOR_SETTLE_MS).collect { runCatching { governor.run() } }
+        }
+    }
+
+    companion object {
+        private const val GOVERNOR_SETTLE_MS = 2_000L
     }
 
     val defaultServerUrl: String get() = identity.serverUrl() ?: BuildConfig.SYNC_URL

@@ -71,6 +71,7 @@ import os.meka.android.designsystem.rememberPaneMorph
 import os.meka.android.designsystem.sharedTitle
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.SharedMotion
+import os.meka.android.notify.NotificationsPane
 import os.meka.android.work.WorkPane
 import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.appear
@@ -116,6 +117,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
     var showPlan by rememberSaveable { mutableStateOf(false) }
     var showWork by rememberSaveable { mutableStateOf(false) }
     var showShutdown by rememberSaveable { mutableStateOf(false) }
+    var showNotifications by rememberSaveable { mutableStateOf(false) }
     val work by core.workMode.collectAsState()
     val shutdown by core.shutdownView.collectAsState()
     // Tasks Plan Apply is sending into Today: their rows hide while the plan is up, then catch the flying titles.
@@ -159,7 +161,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
                 list = { m ->
                     TodayPane(today, sync, actions, m, connect, openCalendars, openPlan, !introPlayed, rowMotion,
                         workLabel = if (work.atWork) "At work" else "Off work", openWork = { showWork = true },
-                        shutdown = shutdown, openShutdown = { showShutdown = true })
+                        shutdown = shutdown, openShutdown = { showShutdown = true }, openNotifications = { showNotifications = true })
                 },
                 detail = { m -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, m) },
             )
@@ -177,6 +179,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
             MekaPane(visible = showCalendars) { CalendarsPane(core, onClose = { showCalendars = false }) }
             MekaPane(visible = showWork) { WorkPane(core, onClose = { showWork = false }) }
             MekaPane(visible = showShutdown) { ShutdownPane(core, onClose = { showShutdown = false }) }
+            MekaPane(visible = showNotifications) { NotificationsPane(core, onClose = { showNotifications = false }) }
         }
     }
 }
@@ -260,7 +263,7 @@ data class TodayActions(
 private fun TodayPane(
     today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?, openCalendars: (() -> Unit)?,
     openPlan: () -> Unit, play: Boolean, rowMotion: (String) -> RowMotion, workLabel: String, openWork: () -> Unit,
-    shutdown: ShutdownView, openShutdown: () -> Unit,
+    shutdown: ShutdownView, openShutdown: () -> Unit, openNotifications: () -> Unit,
 ) {
     Column(modifier.imePadding()) {
         LazyColumn(
@@ -298,6 +301,11 @@ private fun TodayPane(
                             "Shut down", style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                                 .clickable(role = Role.Button) { openShutdown() }.padding(vertical = MekaSpace.xxs),
+                        )
+                        Text(
+                            "Notifications", style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { openNotifications() }.padding(vertical = MekaSpace.xxs),
                         )
                         val theme = Meka.theme
                         Text(

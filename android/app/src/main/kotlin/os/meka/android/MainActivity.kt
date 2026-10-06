@@ -18,6 +18,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.shell.AppShell
+import os.meka.android.shell.ShellDestination
 import os.meka.android.today.ConnectHook
 
 class MainActivity : ComponentActivity() {
@@ -52,11 +53,16 @@ class MainActivity : ComponentActivity() {
         handleOpen(intent)
     }
 
-    /** The after-work nudge opens Needs you with the summary. */
+    /** The after-work nudge opens Needs you with the summary; other MEKA notifications open where they belong. */
     private fun handleOpen(intent: Intent?) {
-        if (intent != null && intent.getStringExtra(EXTRA_OPEN) == OPEN_AFTER_WORK) {
-            intent.removeExtra(EXTRA_OPEN) // not again on rotation
-            (application as MekaApplication).openAfterWork.value = true
+        if (intent == null) return
+        val open = intent.getStringExtra(EXTRA_OPEN) ?: return
+        intent.removeExtra(EXTRA_OPEN) // not again on rotation
+        val app = application as MekaApplication
+        when {
+            open == OPEN_AFTER_WORK -> app.openAfterWork.value = true
+            open.startsWith(OPEN_DESTINATION_PREFIX) ->
+                ShellDestination.entries.firstOrNull { it.name == open.removePrefix(OPEN_DESTINATION_PREFIX) }?.let { app.openDestination.value = it }
         }
     }
 
@@ -77,5 +83,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_OPEN = "os.meka.open"
         const val OPEN_AFTER_WORK = "after_work"
+        /** "dest:LISTS" opens Lists. */
+        const val OPEN_DESTINATION_PREFIX = "dest:"
     }
 }
