@@ -172,10 +172,11 @@ private fun sectionDays(v: CalendarView, firstDay: Long): LongRange =
 @Composable
 private fun WeekTitle(v: CalendarView, page: Int, modifier: Modifier) {
     val week = v.weeks.getOrNull(page) ?: return
+    val reduced = Meka.reducedMotion
     AnimatedContent(
         targetState = week,
         contentKey = { it.startEpochDay },
-        transitionSpec = { fadeIn(MekaMotion.appear(Meka.reducedMotion)) togetherWith fadeOut(MekaMotion.appear(Meka.reducedMotion)) },
+        transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
         label = "week-title",
         modifier = modifier,
     ) { w ->
