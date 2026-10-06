@@ -179,13 +179,14 @@ private fun LeftRow(
 @Composable
 private fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
     val p = v.tomorrow
+    val reduced = Meka.reducedMotion
     Column(modifier) {
         SectionLabel(p.label)
         p.workLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         // The summary rolls over to its new value as items are carried in.
         AnimatedContent(
             targetState = p.summary,
-            transitionSpec = { fadeIn(MekaMotion.appear(Meka.reducedMotion)) togetherWith fadeOut(MekaMotion.appear(Meka.reducedMotion)) },
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "tomorrow-summary",
         ) { s -> Text(s, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs)) }
     }
