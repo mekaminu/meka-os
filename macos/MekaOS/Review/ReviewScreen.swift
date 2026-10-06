@@ -248,3 +248,25 @@ private struct GoalWeekRow: View {
         .onChange(of: goal.progressPct) { withAnimation(MekaMotion.replan(reduced: reduceMotion)) { shown = fraction } }
     }
 }
+
+/// The weekly review's card in Today: from 18:00 on Sunday through Monday until that week is reviewed on either
+/// device. It rises in like the other cards; tapping it opens Review on that week.
+struct ReviewCardView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let card: ReviewCard
+    let palette: MekaPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(card.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+            Text(card.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(MekaSpace.l)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surfaceRaised))
+        .contentShape(Rectangle())
+        .onTapGesture { model.openReviewCard(reduced: reduceMotion) }
+        .accessibilityAddTraits(.isButton)
+    }
+}

@@ -91,6 +91,8 @@ import os.meka.core.domain.Task
 import os.meka.core.domain.Today
 import os.meka.core.facade.ConflictChoice
 import os.meka.core.facade.MekaCore
+import os.meka.core.domain.ReviewCard
+import os.meka.android.review.ReviewCardTile
 import os.meka.core.domain.GoalsView
 import kotlinx.coroutines.flow.StateFlow
 import os.meka.core.sync.SyncStatus
@@ -109,7 +111,7 @@ import java.time.format.DateTimeFormatter
  * Today, where it is softly lit for a moment. Reduced motion: cross-fades only.
  */
 @Composable
-fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
+fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> Unit = {}) {
     val today by core.today.collectAsState()
     val sync by core.syncStatus.collectAsState()
     val conflicts by core.conflicts.collectAsState()
@@ -123,6 +125,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
     val work by core.workMode.collectAsState()
     val shutdown by core.shutdownView.collectAsState()
     val brief by core.briefView.collectAsState()
+    val review by core.reviewView.collectAsState()
     // Tasks Plan Apply is sending into Today: their rows hide while the plan is up, then catch the flying titles.
     var landing by remember { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(landing, showPlan) {
@@ -165,7 +168,8 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
                     TodayPane(today, sync, actions, m, connect, openCalendars, openPlan, !introPlayed, rowMotion,
                         workLabel = if (work.atWork) "At work" else "Off work", openWork = { showWork = true },
                         shutdown = shutdown, openShutdown = { showShutdown = true }, openNotifications = { showNotifications = true },
-                        brief = brief, openBrief = { showBrief = true })
+                        brief = brief, openBrief = { showBrief = true },
+                        reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } })
                 },
                 detail = { m -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, m) },
             )
@@ -270,6 +274,7 @@ private fun TodayPane(
     openPlan: () -> Unit, play: Boolean, rowMotion: (String) -> RowMotion, workLabel: String, openWork: () -> Unit,
     shutdown: ShutdownView, openShutdown: () -> Unit, openNotifications: () -> Unit,
     brief: MorningBriefView, openBrief: () -> Unit,
+    reviewCard: ReviewCard, openReviewCard: () -> Unit,
 ) {
     Column(modifier.imePadding()) {
         LazyColumn(
@@ -331,6 +336,12 @@ private fun TodayPane(
             if (brief.offered) {
                 item(key = "brief") {
                     BriefCard(brief, openBrief, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
+                }
+            }
+            // Weekly review: the card rises in on Sunday evening and stays through Monday until reviewed.
+            if (reviewCard.offered) {
+                item(key = "review") {
+                    ReviewCardTile(reviewCard, openReviewCard, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
                 }
             }
             // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.

@@ -361,6 +361,8 @@ class MekaCore(
     suspend fun showReviewWeek(offset: Int) = onCore { reviewOffset = offset; refresh() }
     /** "Done reviewing" for the week on screen; synced. */
     suspend fun reviewDone() = onCore { review.markReviewed(_review.value.weekStart) }
+    /** Opens the review on the week Today's card is about (this week on Sunday, last week on Monday). */
+    suspend fun showReviewCardWeek() = onCore { reviewOffset = _review.value.card.offset; refresh() }
 
     // ---- Notification governor ----
 
@@ -526,7 +528,7 @@ class MekaCore(
 
     /** Notices from the views as they stand (call after [refresh]). */
     private fun currentNotices() =
-        NoticeSources.collect(_lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value)
+        NoticeSources.collect(_lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card)
 
     private fun project(all: List<os.meka.core.domain.Task> = tasks.all()): Today {
         val now = nowMs()

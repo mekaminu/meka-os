@@ -143,7 +143,7 @@ private fun DestinationHost(current: ShellDestination, modifier: Modifier, body:
 @Composable
 private fun Destination(d: ShellDestination, core: MekaCore, connect: ConnectHook?, go: (ShellDestination) -> Unit) {
     when (d) {
-        ShellDestination.TODAY -> TodayRoute(core, connect)
+        ShellDestination.TODAY -> TodayRoute(core, connect, openReview = { go(ShellDestination.REVIEW) })
         ShellDestination.NEEDS_YOU -> NeedsYouRoute(core, openLists = { go(ShellDestination.LISTS) })
         ShellDestination.LISTS -> ListsRoute(core)
         ShellDestination.GOALS -> GoalsRoute(core)

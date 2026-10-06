@@ -24,6 +24,7 @@ class NotifyRoutingTest {
         assertEquals(ShellDestination.NEEDS_YOU, NotifyRouting.destination(NoticeTarget.NEEDS_YOU))
         assertEquals(ShellDestination.GOALS, NotifyRouting.destination(NoticeTarget.GOALS))
         assertEquals(ShellDestination.TODAY, NotifyRouting.destination(NoticeTarget.TODAY))
+        assertEquals(ShellDestination.REVIEW, NotifyRouting.destination(NoticeTarget.REVIEW))
     }
 
     @Test

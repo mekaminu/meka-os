@@ -331,6 +331,31 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theReviewCardRisesOnSundayEveningOpensItsWeekAndPostsOneHeadsUp() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 4, 20, 30).toInstant(london).toEpochMilliseconds() // a Sunday, after the 18:00 digest
+        val a = core("android"); val m = core("mac")
+        a.complete(a.addTask("Book the MOT"))
+        a.tick()
+        val card = a.reviewView.value.card
+        assertTrue(card.offered)
+        assertEquals("Review your week", card.title)
+        assertEquals("1 done", card.line)
+
+        a.showReviewWeek(-3)
+        a.showReviewCardWeek()
+        assertEquals("This week", a.reviewView.value.title)
+
+        val posted = a.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        assertEquals(listOf("Review your week"), posted.post.filter { it.source == os.meka.core.domain.NoticeSource.WEEKLY_REVIEW }.map { it.title })
+
+        a.reviewDone()
+        a.syncNow(); m.syncNow()
+        m.tick()
+        assertTrue(!m.reviewView.value.card.offered)
+    }
+
+    @Test
     fun headlinesFromTheServerShowInTheBriefForTheChosenTopicsOnBothDevices() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 7, 45).toInstant(london).toEpochMilliseconds()

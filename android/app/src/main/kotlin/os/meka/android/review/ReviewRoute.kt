@@ -55,6 +55,7 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.NorthStarMetric
+import os.meka.core.domain.ReviewCard
 import os.meka.core.domain.ReviewGoal
 import os.meka.core.domain.ReviewHabit
 import os.meka.core.domain.ReviewTile
@@ -314,5 +315,20 @@ private fun ReviewedCheck(visible: Boolean) {
         Box(Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent).padding(horizontal = MekaSpace.l, vertical = MekaSpace.s)) {
             Text("✓", style = MekaType.upNextTitle, color = Meka.colors.onAccent)
         }
+    }
+}
+
+/**
+ * The weekly review's card in Today: "Review your week" with the week in one line. It rises in at 18:00 on Sunday
+ * and stays through Monday until that week is reviewed on either device; tapping it opens Review on that week.
+ */
+@Composable
+internal fun ReviewCardTile(card: ReviewCard, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised)
+            .clickable(role = Role.Button) { onOpen() }.padding(MekaSpace.l),
+    ) {
+        Text(card.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Text(card.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
     }
 }

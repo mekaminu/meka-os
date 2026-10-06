@@ -241,4 +241,101 @@ class WeeklyReviewTest {
         assertEquals(-1, monday2.offset)
         assertTrue(monday2.reviewed)
     }
+
+    // ---- Sunday-evening card and heads-up ----
+
+    @Test
+    fun cardRulesOpenOnSundayEveningAndStayThroughMonday() {
+        assertFalse(ReviewRules.cardWindow(monday + 6, 17 * 60 + 59))
+        assertTrue(ReviewRules.cardWindow(monday + 6, 18 * 60))
+        assertTrue(ReviewRules.cardWindow(monday + 7, 0))
+        assertTrue(ReviewRules.cardWindow(monday + 7, 23 * 60))
+        assertFalse(ReviewRules.cardWindow(monday + 8, 10 * 60))
+        assertFalse(ReviewRules.cardWindow(monday + 5, 20 * 60))
+        assertEquals(0, ReviewRules.cardOffset(monday + 6))
+        assertEquals(-1, ReviewRules.cardOffset(monday + 7))
+        assertEquals("Review your week", ReviewRules.cardTitle(0))
+        assertEquals("Review last week", ReviewRules.cardTitle(-1))
+        assertEquals("12 done · 3 of 4 habits met · 2 still open", ReviewRules.cardLine(12, 3, 4, 2))
+        assertEquals("1 done · 0 of 1 habit met", ReviewRules.cardLine(1, 0, 1, 0))
+        assertEquals("A look back, and the week ahead", ReviewRules.cardLine(0, 0, 0, 0))
+    }
+
+    @Test
+    fun theCardShowsOnSundayEveningAndMondayUntilReviewedOnEitherDevice() {
+        doneOn("Ship it", monday + 1)
+        doneOn("Post the form", monday + 4)
+        // Thursday: no card yet, but the week it will be about is this one.
+        val thu = view().card
+        assertFalse(thu.offered)
+        assertEquals(monday, thu.weekStart)
+        assertEquals("", thu.line)
+
+        world.clock.nowMs = at(monday + 6, 17)
+        assertFalse(view().card.offered)
+        world.clock.nowMs = at(monday + 6, 18)
+        val sun = view().card
+        assertTrue(sun.offered)
+        assertEquals(0, sun.offset)
+        assertEquals("Review your week", sun.title)
+        assertEquals("2 done", sun.line)
+
+        // Monday: about last week, whichever week the screen shows.
+        world.clock.nowMs = at(monday + 7, 9)
+        val mon = view(offset = -4).card
+        assertTrue(mon.offered)
+        assertEquals(monday, mon.weekStart)
+        assertEquals(-1, mon.offset)
+        assertEquals("Review last week", mon.title)
+        assertEquals("2 done", mon.line)
+
+        // Reviewed on the Mac: the Fold's card goes too.
+        wm.markReviewed(monday)
+        m.sync(); a.sync()
+        val after = view().card
+        assertFalse(after.offered)
+        assertTrue(after.reviewed)
+
+        // Tuesday: gone, and the next card is about this week.
+        world.clock.nowMs = at(monday + 8, 9)
+        assertFalse(view().card.offered)
+        assertEquals(monday + 7, view().card.weekStart)
+    }
+
+    @Test
+    fun theHeadsUpGoesOutAtSixOnSundayUntilReviewedOrMondayEnds() {
+        val cal = LocalCalendar.UTC
+        val empty = Today(emptyList(), null, emptyList(), emptyList())
+        fun notices() = NoticeSources.collect(ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, empty, now(), cal, review = view().card)
+            .filter { it.source == NoticeSource.WEEKLY_REVIEW }
+
+        // Thursday: the coming Sunday's notice already exists, so the governor can wake for it.
+        val n = notices().single()
+        assertEquals(at(monday + 6, 18), n.atMs)
+        assertEquals(at(monday + 8, 0), n.expiresAtMs)
+        assertEquals(NoticeTier.HEADS_UP, n.tier)
+        assertEquals(NoticeTarget.REVIEW, n.target)
+        assertEquals("weekly-review:$monday", n.key)
+
+        // Monday: the same key (it posts once), with the week in its text.
+        doneOn("Ship it", monday + 2)
+        world.clock.nowMs = at(monday + 7, 8)
+        val mon = notices().single()
+        assertEquals("weekly-review:$monday", mon.key)
+        assertEquals("Review last week", mon.title)
+        assertEquals("1 done", mon.text)
+
+        wa.markReviewed(monday)
+        assertTrue(notices().isEmpty())
+
+        // The governor posts it on Sunday at 18:00 (not in quiet hours), once.
+        world.clock.nowMs = at(monday + 13, 18) + 5 * 60_000L
+        val settings = NotificationSettings(digestMinutes = emptyList())
+        val r = Governor.evaluate(notices(), settings, DeviceAlerts.ALL, GovernorState(), now(), cal)
+        assertEquals(listOf("weekly-review:${monday + 7}"), r.post.map { it.key })
+        assertTrue(Governor.evaluate(notices(), settings, DeviceAlerts.ALL, r.state, now(), cal).post.isEmpty())
+        // Lowered to App only, it never posts.
+        val silent = settings.copy(tiers = mapOf(NoticeSource.WEEKLY_REVIEW to NoticeTier.SILENT))
+        assertTrue(Governor.evaluate(notices(), silent, DeviceAlerts.ALL, GovernorState(), now(), cal).post.isEmpty())
+    }
 }

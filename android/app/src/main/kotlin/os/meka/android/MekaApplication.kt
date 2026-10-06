@@ -17,6 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
@@ -79,6 +80,7 @@ class MekaApplication : Application() {
         appScope.launch {
             merge(
                 core.listsView.map { }, core.fastingView.map { }, core.shutdownView.map { }, core.briefView.map { }, core.today.map { },
+                core.reviewView.map { it.card }.distinctUntilChanged().map { },
                 core.notificationSettings.map { }, governor.device.map { },
             ).debounce(GOVERNOR_SETTLE_MS).collect { runCatching { governor.run() } }
         }

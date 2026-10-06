@@ -84,6 +84,8 @@ data class WeeklyReviewView(
     val reviewed: Boolean,
     /** "Reviewed Sun 11 Oct at 18:42"; null until reviewed. */
     val reviewedLine: String?,
+    /** The Sunday-evening card in Today (and its heads-up), for the week that is ending or just ended. */
+    val card: ReviewCard = ReviewCard.NONE,
 ) {
     companion object {
         val EMPTY = WeeklyReviewView(
@@ -95,8 +97,53 @@ data class WeeklyReviewView(
     }
 }
 
+/**
+ * The weekly review's card in Today: offered from Sunday evening ([ReviewRules.CARD_START_MIN]) through Monday until
+ * that week is reviewed on either device. Its heads-up goes out when the card starts ([NoticeSources]).
+ */
+data class ReviewCard(
+    /** Show the card in Today now. */
+    val offered: Boolean,
+    /** The week it is about: Monday's epoch day (0 for [NONE]). On a Monday that is last week, otherwise this week. */
+    val weekStart: Long,
+    /** The review offset that week has today (0 or -1), for opening the Review tab on it. */
+    val offset: Int,
+    /** That week has been reviewed already. */
+    val reviewed: Boolean,
+    /** "Review your week" (Sunday) or "Review last week" (Monday). */
+    val title: String,
+    /** "12 done · 3 of 4 habits met · 2 still open"; empty while not offered. */
+    val line: String,
+) {
+    companion object {
+        val NONE = ReviewCard(offered = false, weekStart = 0, offset = 0, reviewed = false, title = "", line = "")
+    }
+}
+
 /** Pure rules, unit-tested without a replica. */
 object ReviewRules {
+    /** The card (and its heads-up) starts at 18:00 on Sunday and stays through Monday. */
+    const val CARD_START_MIN = 18 * 60
+
+    /** The week the card is about on [today]: last week on a Monday, otherwise this week (the offset, 0 or -1). */
+    fun cardOffset(today: Long): Int = if (CivilDate.isoDayOfWeek(today) == 1) -1 else 0
+
+    /** Whether the card's window is open: Sunday from [CARD_START_MIN], or any time on Monday. */
+    fun cardWindow(today: Long, minute: Int): Boolean = when (CivilDate.isoDayOfWeek(today)) {
+        7 -> minute >= CARD_START_MIN
+        1 -> true
+        else -> false
+    }
+
+    fun cardTitle(offset: Int): String = if (offset == 0) "Review your week" else "Review last week"
+
+    /** "12 done · 3 of 4 habits met · 2 still open", or "A look back, and the week ahead" with nothing to count. */
+    fun cardLine(done: Int, habitsMet: Int, habits: Int, stillOpen: Int): String = listOfNotNull(
+        "$done done".takeIf { done > 0 },
+        "$habitsMet of ${ShutdownRules.count(habits, "habit")} met".takeIf { habits > 0 },
+        "$stillOpen still open".takeIf { stillOpen > 0 },
+    ).joinToString(" · ").ifEmpty { "A look back, and the week ahead" }
+
     const val MAX_WEEKS_BACK = 12
     const val MAX_DONE = 12
     const val MAX_OPEN = 5
@@ -191,6 +238,28 @@ class WeeklyReview(
         val now = nowMs()
         val today = calendar.epochDayOf(now)
         val off = ReviewRules.clampOffset(offset ?: ReviewRules.defaultOffset(today))
+        val main = build(off, all, events, goals, fasts, window)
+        // The card: the week ending (Sunday) or just ended (Monday), until it is reviewed.
+        val cardOff = ReviewRules.cardOffset(today)
+        val cardWs = GoalRules.weekStart(today) + 7L * cardOff
+        val reviewed = reviewedWeek() == cardWs
+        val offered = !reviewed && ReviewRules.cardWindow(today, calendar.minuteOfDay(now))
+        val line = if (!offered) "" else (if (cardOff == off) main else build(cardOff, all, events, goals, fasts, window)).let { v ->
+            ReviewRules.cardLine(v.done.size + v.doneMore, v.habits.count { it.met }, v.habits.size, v.stillOpen.size + v.stillOpenMore)
+        }
+        return main.copy(card = ReviewCard(offered, cardWs, cardOff, reviewed, ReviewRules.cardTitle(cardOff), line))
+    }
+
+    private fun build(
+        off: Int,
+        all: List<Task>,
+        events: List<CalendarEvent>,
+        goals: GoalsView,
+        fasts: List<EndedFast>,
+        window: (Long) -> DayWindow,
+    ): WeeklyReviewView {
+        val now = nowMs()
+        val today = calendar.epochDayOf(now)
         val ws = GoalRules.weekStart(today) + 7L * off
         val we = ws + 6
         val isCurrent = off == 0

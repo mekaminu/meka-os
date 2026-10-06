@@ -172,6 +172,7 @@ object NotifyRouting {
         NoticeTarget.NEEDS_YOU -> ShellDestination.NEEDS_YOU
         NoticeTarget.LISTS -> ShellDestination.LISTS
         NoticeTarget.GOALS -> ShellDestination.GOALS
+        NoticeTarget.REVIEW -> ShellDestination.REVIEW
     }
 
     /** Stable per key, never the digest's id. */

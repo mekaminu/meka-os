@@ -81,6 +81,14 @@ struct TodayView: View {
                             .staggeredAppear(1, play: play)
                     }
 
+                    // Weekly review: the card rises in on Sunday evening and stays through Monday until reviewed.
+                    if let c = model.review?.card, c.offered {
+                        ReviewCardView(card: c, palette: palette)
+                            .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
+                            .padding(.bottom, MekaSpace.l)
+                            .staggeredAppear(1, play: play)
+                    }
+
                     // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.
                     if let s = model.shutdown {
                         if s.offered {
@@ -143,6 +151,7 @@ struct TodayView: View {
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.upNext?.id)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.shutdown?.offered)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.brief?.offered)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: model.review?.card.offered)
             }
             .task {
                 guard !introPlayed else { return }

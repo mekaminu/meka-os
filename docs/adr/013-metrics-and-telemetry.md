@@ -25,3 +25,6 @@ These are computed from the local audit log and graph. They are counted, never i
 
 ## Addendum, 2026-10-06: weekly review, slice 1
 The weekly review (Review tab on both apps, `WeeklyReview` in core/domain) shows the six north-star metrics with no values yet, each saying when it starts counting: they measure what MEKA does on its own (acting, reminding, asking, notifying), and the activity log and approvals that would record those arrive in V1. Interruptions come first (next slice): the governor will record what each device posts at Critical, Needs a decision and Heads-up (counts only, no text) in the user's own synced data. The rest of the review counts what was done, never inferred from free text.
+
+## Addendum, 2026-10-06: weekly review, slice 2
+A "Weekly review" card in Today and a Heads-up notice (governor source `WEEKLY_REVIEW`, lowerable) prompt the review from 18:00 on Sunday through Monday, until that week is marked reviewed on either device. Nothing new is stored: the card is computed from the existing `context_mode/review` entity. Interruptions are still the next slice.

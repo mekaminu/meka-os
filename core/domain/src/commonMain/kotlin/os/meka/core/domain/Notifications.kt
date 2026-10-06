@@ -32,7 +32,7 @@ enum class NoticeTier(val label: String) {
 enum class NoticePrecision { CLOCK, SOFT }
 
 /** Where tapping a notification takes you. */
-enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS }
+enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW }
 
 /** What a notice is about. Each source has a default tier, which the owner can lower (never raise). */
 enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
@@ -40,6 +40,7 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     FAST_GOAL("Fasting goal reached", NoticeTier.HEADS_UP),
     BRIEF("Morning brief", NoticeTier.HEADS_UP),
     SHUTDOWN("Time to shut down the day", NoticeTier.HEADS_UP),
+    WEEKLY_REVIEW("Weekly review", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -359,6 +360,7 @@ object Governor {
         NoticeSource.FAST_GOAL -> "fasting goal reached"
         NoticeSource.BRIEF -> "your morning brief"
         NoticeSource.SHUTDOWN -> "time to shut down"
+        NoticeSource.WEEKLY_REVIEW -> "your weekly review"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -384,6 +386,7 @@ object NoticeSources {
         nowMs: Long,
         cal: LocalCalendar,
         brief: MorningBriefView = MorningBriefView.EMPTY,
+        review: ReviewCard = ReviewCard.NONE,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -447,6 +450,15 @@ object NoticeSources {
                 title = "Morning brief", text = brief.cardLine,
                 atMs = cal.toEpochMs(day, brief.startMinute), target = NoticeTarget.TODAY,
                 expiresAtMs = cal.toEpochMs(day, BriefRules.END_MIN),
+            )
+        }
+        // The weekly review: a heads-up at 18:00 on the week's Sunday, standing until it's reviewed or Monday ends.
+        if (review.weekStart > 0 && !review.reviewed) {
+            out += Notice(
+                key = "weekly-review:${review.weekStart}", source = NoticeSource.WEEKLY_REVIEW, tier = NoticeTier.HEADS_UP,
+                title = review.title.ifEmpty { "Review your week" }, text = review.line,
+                atMs = cal.toEpochMs(review.weekStart + 6, ReviewRules.CARD_START_MIN), target = NoticeTarget.REVIEW,
+                expiresAtMs = cal.toEpochMs(review.weekStart + 8, 0),
             )
         }
         return out

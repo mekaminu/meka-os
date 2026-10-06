@@ -409,6 +409,11 @@ final class CoreModel {
 
     /// "Done reviewing" for the week on screen; synced with the Fold (light haptic; the check pops).
     func reviewDone() { MekaHaptics.light(); run { try await $0.reviewDone() } }
+    /// Today's Sunday-evening card: opens Review on the week it is about (this week on Sunday, last week on Monday).
+    func openReviewCard(reduced: Bool) {
+        run { try await $0.showReviewCardWeek() }
+        go(to: .review, reduced: reduced)
+    }
 
     // MARK: Goals and habits
 
