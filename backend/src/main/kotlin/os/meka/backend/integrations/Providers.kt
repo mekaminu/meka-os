@@ -1,6 +1,7 @@
 package os.meka.backend.integrations
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
@@ -36,6 +37,10 @@ data class RemoteEvent(
     val allDay: Boolean,
     val location: String?,
     val calendarName: String?,
+    /** The event's notes as plain text (HTML stripped by [plainText]). */
+    val description: String? = null,
+    /** The provider's own video-call link (Google Meet, Teams); https only. */
+    val joinUrl: String? = null,
 )
 
 /** The refresh token was revoked or expired: the owner has to connect the account again. */
@@ -100,6 +105,57 @@ private fun JsonObject.tokens(previousRefresh: String? = null) = TokenSet(
     expiresInSec = this["expires_in"]?.jsonPrimitive?.longOrNull ?: 3600,
     scope = this["scope"].str(),
 )
+/** An https link or null: the only kind of link mirrored as a Join button. */
+internal fun httpsOrNull(url: String?): String? = url?.trim()?.takeIf { it.startsWith("https://") && it.none(Char::isWhitespace) }
+
+private val BREAK = Regex("(?i)<br\\s*/?>")
+private val BLOCK = Regex("(?i)</?(p|div|ul|ol|li|tr|table|h[1-6])\\b[^>]*>")
+private val BLOCK_RUN = Regex("\u0000(\\s*\u0000)*")
+private val LINK = Regex("(?is)<a\\s[^>]*?href\\s*=\\s*[\"']([^\"']*)[\"'][^>]*>(.*?)</a\\s*>")
+private val TAG = Regex("(?s)<[^>]*>")
+private val NUMERIC_ENTITY = Regex("&#(x[0-9a-fA-F]+|[0-9]+);")
+
+/**
+ * Calendar notes as plain text. Google sends HTML ("Hello<br><a href=...>link</a>"), Microsoft a plain preview. Tags go,
+ * line breaks stay, a link keeps its address beside its text, entities are decoded. The apps show the result as text
+ * only (ADR-006): nothing in it is ever rendered or followed.
+ */
+internal fun plainText(raw: String?): String? {
+    if (raw.isNullOrBlank()) return null
+    var s = raw.replace("\r\n", "\n")
+    s = LINK.replace(s) { m ->
+        val href = m.groupValues[1].trim()
+        val text = TAG.replace(m.groupValues[2], "").trim()
+        when {
+            text.isEmpty() -> href
+            href.isEmpty() || href == text || !href.startsWith("http") -> text
+            else -> "$text ($href)"
+        }
+    }
+    // <br> is a line break as written; block tags (paragraphs, list items) start a new line, however many meet.
+    s = BREAK.replace(s, "\n")
+    s = BLOCK.replace(s, "\u0000")
+    s = TAG.replace(s, "")
+    s = BLOCK_RUN.replace(s, "\n")
+    s = NUMERIC_ENTITY.replace(s) { m ->
+        val v = m.groupValues[1]
+        val code = if (v.startsWith("x")) v.substring(1).toIntOrNull(16) else v.toIntOrNull()
+        if (code != null && Character.isValidCodePoint(code) && code >= 32) String(Character.toChars(code)) else ""
+    }
+    s = s.replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+        .replace("&#39;", "'").replace("&apos;", "'").replace("&amp;", "&")
+    val lines = s.lines().map { it.trimEnd() }
+    val out = StringBuilder()
+    var blank = 0
+    for (l in lines) {
+        if (l.isBlank()) { blank++; continue }
+        if (out.isNotEmpty()) out.append(if (blank > 0) "\n\n" else "\n")
+        out.append(l)
+        blank = 0
+    }
+    return out.toString().trim().ifEmpty { null }
+}
+
 private fun rfc3339(ms: Long): String = DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(ms))
 private const val DAY_MS = 86_400_000L
 private fun utcMidnight(date: String): Long = LocalDate.parse(date).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
@@ -158,7 +214,14 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
                         val startMs = if (allDay) utcMidnight(start["date"].str()!!) else OffsetDateTime.parse(start["dateTime"].str()).toInstant().toEpochMilli()
                         val endMs = if (allDay) utcMidnight(end["date"].str() ?: start["date"].str()!!)
                         else end["dateTime"].str()?.let { OffsetDateTime.parse(it).toInstant().toEpochMilli() } ?: startMs
-                        add(RemoteEvent("$calId/${e["id"].str()}", e["summary"].str() ?: "", startMs, endMs, allDay, e["location"].str(), calName))
+                        // Meet links arrive as hangoutLink, other conferencing as a "video" entry point.
+                        val video = ((e["conferenceData"] as? JsonObject)?.get("entryPoints") as? JsonArray).orEmpty()
+                            .filterIsInstance<JsonObject>().firstOrNull { it["entryPointType"].str() == "video" }?.get("uri").str()
+                        add(RemoteEvent(
+                            "$calId/${e["id"].str()}", e["summary"].str() ?: "", startMs, endMs, allDay, e["location"].str(), calName,
+                            description = plainText(e["description"].str()),
+                            joinUrl = httpsOrNull(e["hangoutLink"].str()) ?: httpsOrNull(video),
+                        ))
                     }
                     page = resp["nextPageToken"].str()
                 } while (page != null)
@@ -210,7 +273,7 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
             buildList {
                 var url: String? = "https://graph.microsoft.com/v1.0/me/calendars/${Http.enc(calId)}/calendarView?" + Http.query(mapOf(
                     "startDateTime" to rfc3339(fromMs), "endDateTime" to rfc3339(toMs), "\$top" to "500",
-                    "\$select" to "id,subject,start,end,isAllDay,location,isCancelled",
+                    "\$select" to "id,subject,start,end,isAllDay,location,isCancelled,bodyPreview,onlineMeeting",
                 ))
                 while (url != null) {
                     val resp = http.getJson(url, accessToken, utc)
@@ -227,7 +290,12 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
                             return if (allDay) Math.floorDiv(utc + DAY_MS / 2, DAY_MS) * DAY_MS else utc
                         }
                         val location = e["location"]?.jsonObject?.get("displayName").str()?.takeIf { it.isNotBlank() }
-                        add(RemoteEvent("$calId/${e["id"].str()}", e["subject"].str() ?: "", parse(start), parse(end), allDay, location, calName))
+                        val join = (e["onlineMeeting"] as? JsonObject)?.get("joinUrl").str()
+                        add(RemoteEvent(
+                            "$calId/${e["id"].str()}", e["subject"].str() ?: "", parse(start), parse(end), allDay, location, calName,
+                            description = plainText(e["bodyPreview"].str()),
+                            joinUrl = httpsOrNull(join),
+                        ))
                     }
                     url = resp["@odata.nextLink"].str()
                 }

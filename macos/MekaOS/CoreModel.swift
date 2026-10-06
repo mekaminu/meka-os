@@ -29,6 +29,8 @@ final class CoreModel {
     private(set) var review: WeeklyReviewView?
     /// The Calendar tab: week strips and the next 30 days grouped by day. Follows sync; moves with the clock.
     private(set) var calendar: CalendarView?
+    /// The event whose detail sheet is open (calendar redesign, slice 3), from Today or the Calendar section.
+    var openEvent: CalendarEvent?
     /// Quiet hours, digest times and tiers (notification governor), synced with the Fold.
     private(set) var notifySettings: NotificationSettings?
     /// "Quiet until 07:00", "Next digest 18:00 · 3 things so far".
@@ -534,6 +536,9 @@ final class CoreModel {
         guard let core, let meta = task.repeatMeta(todayEpochDay: core.todayEpochDay()) else { return nil }
         return "↻ " + meta
     }
+
+    /// Event detail: when, how soon, which calendar, place, notes and a Join link (pure, computed in the core).
+    func eventDetail(_ event: CalendarEvent) -> EventDetailView? { core?.eventDetail(event: event) }
 
     func completeSelected() { if let id = selectedID { complete(id) } }
     func deleteSelected() { if let id = selectedID { delete(id) } }

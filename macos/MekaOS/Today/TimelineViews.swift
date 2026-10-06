@@ -9,6 +9,29 @@ enum TimelineMetrics {
     static let timeColumn: CGFloat = 96
 }
 
+/// Clicking an event (a row, an all-day chip, Up next's event line) opens its detail sheet (calendar redesign, slice 3).
+struct OpensEvent: ViewModifier {
+    @Environment(CoreModel.self) private var model
+    let event: CalendarEvent?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let e = event {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture { model.openEvent = e }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Shows the event's details")
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func opensEvent(_ event: CalendarEvent?) -> some View { modifier(OpensEvent(event: event)) }
+}
+
 /// An event: time on the left, title and where/which calendar under it. A running one is marked "Now".
 struct TimelineEventRow: View {
     let row: TimelineRow
@@ -31,6 +54,7 @@ struct TimelineEventRow: View {
         }
         .padding(.vertical, MekaSpace.xs)
         .padding(.horizontal, MekaSpace.xs)
+        .opensEvent(row.event)
     }
 }
 
@@ -89,6 +113,7 @@ struct AllDayChips: View {
                     Text(e.title).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
                         .background(Capsule().fill(palette.surfaceRaised))
+                        .opensEvent(e)
                 }
             }
         }
@@ -134,5 +159,6 @@ struct NextEventCard: View {
         }
         .padding(MekaSpace.l)
         .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surfaceRaised))
+        .opensEvent(next.event)
     }
 }

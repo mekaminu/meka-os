@@ -265,6 +265,10 @@ class MekaCore(
     /** The local day today as an epoch day, for [os.meka.core.domain.Task.repeatMeta]. */
     fun todayEpochDay(): Long = ZoneCalendar(timeZone).epochDayOf(nowMs())
 
+    /** Event detail (calendar redesign, slice 3): when, how soon, which calendar, place, notes and a Join link. Pure. */
+    fun eventDetail(event: os.meka.core.domain.CalendarEvent): os.meka.core.domain.EventDetailView =
+        os.meka.core.domain.EventDetails.build(event, nowMs(), ZoneCalendar(timeZone))
+
     // ---- Lists: Waiting for · Someday · Decisions ----
 
     /** Adds something you're waiting for; [chaseInDays] from today (null: no chase date). */

@@ -103,9 +103,9 @@ internal fun NowLine(r: TimelineRow, modifier: Modifier = Modifier) {
     }
 }
 
-/** All-day events as chips above the timeline. */
+/** All-day events as chips above the timeline; a chip opens the event's detail when [onEvent] is given. */
 @Composable
-internal fun AllDayChips(events: List<CalendarEvent>, modifier: Modifier = Modifier) {
+internal fun AllDayChips(events: List<CalendarEvent>, modifier: Modifier = Modifier, onEvent: ((CalendarEvent) -> Unit)? = null) {
     Row(
         modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = MekaSpace.xs),
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -114,6 +114,7 @@ internal fun AllDayChips(events: List<CalendarEvent>, modifier: Modifier = Modif
             Text(
                 e.title, style = MekaType.caption, color = Meka.colors.textSecondary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                    .then(if (onEvent != null) Modifier.clickable(role = Role.Button) { onEvent(e) } else Modifier)
                     .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs),
             )
         }
@@ -137,9 +138,11 @@ internal fun EarlierToggle(label: String, open: Boolean, onToggle: () -> Unit, m
 
 /** Up next's event line: "Call with Tunde in 25 min" with its time and place. */
 @Composable
-internal fun NextEventCard(e: UpNextEvent, modifier: Modifier = Modifier) {
+internal fun NextEventCard(e: UpNextEvent, modifier: Modifier = Modifier, onEvent: ((CalendarEvent) -> Unit)? = null) {
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised).padding(MekaSpace.l),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised)
+            .then(if (onEvent != null) Modifier.clickable(role = Role.Button) { onEvent(e.event) } else Modifier)
+            .padding(MekaSpace.l),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(Meka.colors.accent))

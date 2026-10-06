@@ -215,6 +215,9 @@ class Integrations(
                     EventFields.PROVIDER to FieldValue.Text(a.provider),
                     EventFields.ACCOUNT to FieldValue.Text(a.email),
                     EventFields.CALENDAR to (e.calendarName?.take(MAX_TEXT)?.let { FieldValue.Text(it) } ?: FieldValue.Null),
+                    // Notes and the call link (calendar redesign, slice 3). Not written at all until an event has them.
+                    EventFields.DESCRIPTION to (e.description?.take(MAX_NOTES)?.let { FieldValue.Text(it) } ?: FieldValue.Null),
+                    EventFields.JOIN_URL to (httpsOrNull(e.joinUrl)?.take(MAX_TEXT)?.let { FieldValue.Text(it) } ?: FieldValue.Null),
                     EventFields.REMOVED to FieldValue.Bool(false),
                 )
                 write(a, entityId, e.startMs, e.endMs, false, mirror[entityId], desired)
@@ -242,6 +245,8 @@ class Integrations(
             val key = valueKey(value)
             val last = fieldOps[field]
             if (last?.second == key) continue
+            // A field that was never written reads as null already: don't write ops just to say so.
+            if (last == null && value == FieldValue.Null) continue
             val op = Op(
                 opId = "srv" + token(18).lowercase().filter(Char::isLetterOrDigit),
                 householdId = a.householdId, entityType = entityType, entityId = entityId, field = field,
@@ -264,6 +269,7 @@ class Integrations(
         const val WINDOW_BACK_MS = 24 * 3_600_000L
         const val WINDOW_AHEAD_MS = 30 * 24 * 3_600_000L
         private const val MAX_TEXT = 500
+        private const val MAX_NOTES = 2_000
         private const val MAX_HEADLINE = 300
         /** Headlines mirrored per topic. */
         const val NEWS_SLOTS = 4

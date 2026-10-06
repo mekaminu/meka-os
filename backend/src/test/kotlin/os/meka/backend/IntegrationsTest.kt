@@ -13,6 +13,8 @@ import os.meka.backend.integrations.OAuthClient
 import os.meka.backend.integrations.RemoteEvent
 import os.meka.backend.integrations.TokenCipher
 import os.meka.backend.integrations.TokenSet
+import os.meka.backend.integrations.httpsOrNull
+import os.meka.backend.integrations.plainText
 import os.meka.core.domain.CalendarEvents
 import os.meka.core.domain.MekaSchema
 import os.meka.core.sync.HlcClock
@@ -170,6 +172,44 @@ class IntegrationsTest {
         integrations.syncAccount(acc)
         assertEquals(listOf("Bank holiday", "Barça v Real Madrid", "Dentist (moved)"), deviceEvents())
         assertEquals("ok", store.account(acc)!!.status)
+    }
+
+    @Test
+    fun notesAndCallLinksAreMirroredOnlyOnceAnEventHasThem() {
+        val acc = connect()
+        provider.events = listOf(ev("a", "Standup", 9))
+        integrations.syncAccount(acc)
+        val before = ops.size
+        // Notes and a Meet link appear: two ops, nothing else rewritten.
+        provider.events = listOf(ev("a", "Standup", 9).copy(description = "Daily sync", joinUrl = "https://meet.google.com/abc"))
+        integrations.syncAccount(acc)
+        assertEquals(before + 2, ops.size)
+        val r = Replica("home", "fold", HlcClock("fold", { now }), InMemoryReplicaStore(), MekaSchema) { "d" + (counter++) }
+        r.applyRemoteBatch(ops.after("home", 0, 10_000).map { it.op })
+        val e = CalendarEvents(r).all().single()
+        assertEquals("Daily sync", e.description)
+        assertEquals("https://meet.google.com/abc", e.joinUrl)
+        // A link that isn't https is never mirrored; removing the notes clears them.
+        provider.events = listOf(ev("a", "Standup", 9).copy(joinUrl = "http://meet.google.com/abc"))
+        integrations.syncAccount(acc)
+        val r2 = Replica("home", "mac", HlcClock("mac", { now }), InMemoryReplicaStore(), MekaSchema) { "m" + (counter++) }
+        r2.applyRemoteBatch(ops.after("home", 0, 10_000).map { it.op })
+        val e2 = CalendarEvents(r2).all().single()
+        assertEquals(null, e2.description)
+        assertEquals(null, e2.joinUrl)
+    }
+
+    @Test
+    fun calendarNotesBecomePlainText() {
+        val html = "Hi all,<br>Agenda:<ul><li>One</li><li>Two &amp; three</li></ul><p>Join <a href=\"https://meet.google.com/x\">here</a></p>" +
+            "<a href=\"https://zoom.us/j/1\">https://zoom.us/j/1</a>&nbsp;&#169;"
+        assertEquals("Hi all,\nAgenda:\nOne\nTwo & three\nJoin here (https://meet.google.com/x)\nhttps://zoom.us/j/1 \u00a9", plainText(html))
+        assertEquals("Line one\n\nLine two", plainText("Line one\r\n\r\n\r\nLine two  "))
+        assertEquals(null, plainText(" <br> "))
+        assertEquals(null, plainText(null))
+        assertEquals(null, httpsOrNull("http://meet.google.com/a"))
+        assertEquals(null, httpsOrNull("https://meet.google.com/a b"))
+        assertEquals("https://meet.google.com/a", httpsOrNull(" https://meet.google.com/a "))
     }
 
     @Test

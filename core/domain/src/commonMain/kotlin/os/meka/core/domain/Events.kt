@@ -18,6 +18,10 @@ object EventFields {
     /** The account the event came from (its email address), so two accounts can be told apart. */
     const val ACCOUNT = "account"
     const val CALENDAR = "calendarName"
+    /** The event's notes as plain text (the server strips any HTML). Untrusted: shown as text only (ADR-006). */
+    const val DESCRIPTION = "description"
+    /** The provider's own video-call link (Google Meet, Teams), https only. */
+    const val JOIN_URL = "joinUrl"
     /** True when the event was cancelled or is no longer in the provider's window. Can flip back to false. */
     const val REMOVED = "removed"
 }
@@ -33,6 +37,10 @@ data class CalendarEvent(
     val provider: String,
     val account: String?,
     val calendarName: String?,
+    /** Notes, plain text (see [EventFields.DESCRIPTION]). */
+    val description: String? = null,
+    /** The provider's video-call link (see [EventFields.JOIN_URL]). */
+    val joinUrl: String? = null,
 ) {
     /** From the fixtures feed (FC Barcelona), marked in the Calendar tab. */
     val isFixture: Boolean get() = provider == "fixtures"
@@ -62,6 +70,8 @@ data class CalendarEvent(
                 provider = s[EventFields.PROVIDER].textOrNull ?: "",
                 account = s[EventFields.ACCOUNT].textOrNull,
                 calendarName = s[EventFields.CALENDAR].textOrNull,
+                description = s[EventFields.DESCRIPTION].textOrNull?.takeIf { it.isNotBlank() },
+                joinUrl = s[EventFields.JOIN_URL].textOrNull?.takeIf { it.isNotBlank() },
             )
         }
     }

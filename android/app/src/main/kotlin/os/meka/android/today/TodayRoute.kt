@@ -1,5 +1,8 @@
 package os.meka.android.today
 
+import os.meka.android.calendar.EventDetailPane
+import os.meka.android.calendar.opensEvent
+import os.meka.core.domain.CalendarEvent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -125,6 +128,10 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
     var showBrief by rememberSaveable { mutableStateOf(false) }
     var showNotifications by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
+    // An event's detail (calendar redesign, slice 3); the last one is kept while the pane leaves.
+    var eventOpen by remember { mutableStateOf<CalendarEvent?>(null) }
+    var eventShown by remember { mutableStateOf<CalendarEvent?>(null) }
+    if (eventOpen != null) eventShown = eventOpen
     val work by core.workMode.collectAsState()
     val shutdown by core.shutdownView.collectAsState()
     val brief by core.briefView.collectAsState()
@@ -173,7 +180,8 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
                         shutdown = shutdown, openShutdown = { showShutdown = true }, openNotifications = { showNotifications = true },
                         openSearch = { showSearch = true },
                         brief = brief, openBrief = { showBrief = true },
-                        reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } })
+                        reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } },
+                        openEvent = { eventOpen = it })
                 },
                 detail = { m -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, m) },
             )
@@ -193,6 +201,9 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
             MekaPane(visible = showShutdown) { ShutdownPane(core, onClose = { showShutdown = false }) }
             MekaPane(visible = showBrief) { BriefPane(core, onClose = { showBrief = false }) }
             MekaPane(visible = showNotifications) { NotificationsPane(core, onClose = { showNotifications = false }) }
+            MekaPane(visible = eventOpen != null) {
+                eventShown?.let { e -> EventDetailPane(core, e, onClose = { eventOpen = null }) }
+            }
             MekaPane(visible = showSearch) {
                 SearchPane(core, onClose = { showSearch = false }, openItem = { item -> showSearch = false; openItem(item) })
             }
@@ -282,6 +293,7 @@ private fun TodayPane(
     shutdown: ShutdownView, openShutdown: () -> Unit, openNotifications: () -> Unit, openSearch: () -> Unit,
     brief: MorningBriefView, openBrief: () -> Unit,
     reviewCard: ReviewCard, openReviewCard: () -> Unit,
+    openEvent: (CalendarEvent) -> Unit = {},
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
@@ -397,7 +409,7 @@ private fun TodayPane(
             // The next event within the hour: "Call with Tunde in 25 min".
             today.timeline.nextEvent?.let { e ->
                 item(key = "nextevent") {
-                    NextEventCard(e, Modifier.padding(bottom = MekaSpace.xs).animateItem().appear(rememberAppearance(2, play)))
+                    NextEventCard(e, Modifier.padding(bottom = MekaSpace.xs).animateItem().appear(rememberAppearance(2, play)), openEvent)
                 }
                 if (today.upNext == null) item(key = "s-nextevent") { Spacer(Modifier.height(MekaSpace.l)) }
             }
@@ -412,20 +424,22 @@ private fun TodayPane(
             if (tl.hasTimedOrAllDay) {
                 item(key = "h-day") { SectionLabel("Your day", Modifier.animateItem().appear(rememberAppearance(3, play))) }
                 if (tl.allDay.isNotEmpty()) {
-                    item(key = "allday") { AllDayChips(tl.allDay, Modifier.animateItem().appear(rememberAppearance(3, play))) }
+                    item(key = "allday") { AllDayChips(tl.allDay, Modifier.animateItem().appear(rememberAppearance(3, play)), openEvent) }
                 }
                 tl.earlierLabel?.let { label ->
                     item(key = "earlier") {
                         EarlierToggle(label, earlierOpen, { earlierOpen = !earlierOpen }, Modifier.animateItem().appear(rememberAppearance(3, play)))
                     }
                     if (earlierOpen) {
-                        items(tl.earlier, key = { "x-" + it.id }) { r -> TimelineEventRow(r, past = true, modifier = Modifier.animateItem()) }
+                        items(tl.earlier, key = { "x-" + it.id }) { r ->
+                            TimelineEventRow(r, past = true, modifier = Modifier.animateItem().opensEvent(r.event, openEvent))
+                        }
                     }
                 }
                 items(tl.rows, key = { "r-" + it.id }) { r ->
                     val m = Modifier.animateItem().appear(rememberAppearance(4, play))
                     when (r.kind) {
-                        TimelineKind.EVENT -> TimelineEventRow(r, past = false, modifier = m)
+                        TimelineKind.EVENT -> TimelineEventRow(r, past = false, modifier = m.opensEvent(r.event, openEvent))
                         TimelineKind.TASK -> r.task?.let { t ->
                             // The Up next task's title travels from its card, so its timeline row doesn't share it.
                             val motion = if (t.id == today.upNext?.id) RowMotion() else rowMotion(t.id)

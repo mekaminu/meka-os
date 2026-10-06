@@ -31,6 +31,10 @@ struct ShellView: View {
         .background(palette.background)
         // Search everything (⌘F from anywhere): results, with an open task's detail beside them.
         .sheet(isPresented: Binding(get: { model.showSearch }, set: { model.showSearch = $0 })) { SearchSheet(palette: palette) }
+        // Event detail (calendar redesign, slice 3), opened from Today or the Calendar section.
+        .sheet(isPresented: Binding(get: { model.openEvent != nil }, set: { if !$0 { model.openEvent = nil } })) {
+            EventDetailSheet(palette: palette)
+        }
     }
 
     /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).

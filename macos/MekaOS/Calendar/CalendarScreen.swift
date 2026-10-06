@@ -5,7 +5,7 @@ import SwiftUI
 /// (seven day pills with busy dots; ‹ › or ⌘[ ⌘] for other weeks) above the next 30 days grouped by day. All-day
 /// events are chips, fixtures are marked in the accent colour, planned tasks sit among the events, empty stretches
 /// fold into one "Nothing planned" line. Click a day to jump to it; scrolling keeps the strip on the week in view.
-/// Shows only: nothing here changes anything (event detail is slice 3).
+/// Shows only: nothing here changes anything; clicking an event opens its detail sheet (slice 3).
 ///
 /// Motion: the strip pushes across between weeks the way you moved; the lit pill blends across with a tick haptic;
 /// sections stagger in; rows glide as the day moves on; the now line's dot breathes. Reduce Motion: cross-fades, jumps
@@ -234,6 +234,7 @@ private struct AgendaEventRow: View {
         }
         .padding(.vertical, MekaSpace.xs)
         .padding(.horizontal, MekaSpace.xs)
+        .opensEvent(row.event)
     }
 }
 

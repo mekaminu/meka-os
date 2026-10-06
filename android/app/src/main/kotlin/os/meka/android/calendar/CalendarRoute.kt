@@ -34,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
+import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
@@ -62,6 +64,7 @@ import os.meka.android.today.NowLine
 import os.meka.android.today.TimeColumn
 import os.meka.core.domain.AgendaKind
 import os.meka.core.domain.AgendaSection
+import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.CalendarView
 import os.meka.core.domain.DayPill
 import os.meka.core.domain.TimelineKind
@@ -73,7 +76,7 @@ import os.meka.core.facade.MekaCore
  * the next 30 days grouped by day: "Today", "Tomorrow", "Thu 8 Oct". All-day events are chips, fixtures are marked in
  * the accent colour, planned tasks sit among the events, empty stretches fold into one "Nothing planned" line. Tap a
  * day to jump to it; scrolling the agenda keeps the strip on the week you're looking at. Shows only: nothing here
- * changes anything (event detail is slice 3).
+ * changes anything; tapping an event opens its detail (slice 3).
  *
  * Motion (catalogue "Calendar"): the strip slides between weeks; the lit pill's colour blends across with a tick
  * haptic; sections stagger in 40 ms apart; rows glide as the day moves on; the now line's dot breathes. Reduced
@@ -86,7 +89,17 @@ fun CalendarRoute(core: MekaCore) {
         Box(Modifier.fillMaxSize().background(Meka.colors.background))
         return
     }
-    Agenda(v)
+    // Tapping an event or an all-day chip opens its detail over the agenda (slice 3). The last one is kept so it
+    // stays visible while the pane leaves.
+    var openEvent by remember { mutableStateOf<CalendarEvent?>(null) }
+    var shown by remember { mutableStateOf<CalendarEvent?>(null) }
+    if (openEvent != null) shown = openEvent
+    Box(Modifier.fillMaxSize()) {
+        Agenda(v) { openEvent = it }
+        MekaPane(visible = openEvent != null) {
+            shown?.let { e -> EventDetailPane(core, e, onClose = { openEvent = null }) }
+        }
+    }
 }
 
 /** One line of the agenda list, flattened so the strip can jump to a section's header. */
@@ -113,7 +126,7 @@ private fun flatten(v: CalendarView): List<Entry> = buildList {
 }
 
 @Composable
-private fun Agenda(v: CalendarView) {
+private fun Agenda(v: CalendarView, onEvent: (CalendarEvent) -> Unit) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -161,7 +174,7 @@ private fun Agenda(v: CalendarView) {
             }
         }
         Box(Modifier.fillMaxWidth().padding(top = MekaSpace.s).height(1.dp).background(Meka.colors.hairline))
-        AgendaList(entries, list)
+        AgendaList(entries, list, onEvent)
     }
 }
 
@@ -219,7 +232,7 @@ private fun Pill(d: DayPill, lit: Boolean, modifier: Modifier, onTap: () -> Unit
 }
 
 @Composable
-private fun AgendaList(entries: List<Entry>, list: LazyListState) {
+private fun AgendaList(entries: List<Entry>, list: LazyListState, onEvent: (CalendarEvent) -> Unit) {
     LazyColumn(
         state = list,
         contentPadding = PaddingValues(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.s, bottom = MekaSpace.xl),
@@ -232,13 +245,13 @@ private fun AgendaList(entries: List<Entry>, list: LazyListState) {
             val m = Modifier.animateItem().appear(appearance)
             when (e) {
                 is Entry.Header -> SectionHeader(e.section, m)
-                is Entry.Chips -> AllDayChips(e.section.allDay, m.padding(start = os.meka.android.today.TIME_COLUMN))
+                is Entry.Chips -> AllDayChips(e.section.allDay, m.padding(start = os.meka.android.today.TIME_COLUMN), onEvent)
                 is Entry.Empty -> Text(
                     e.text, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = m.padding(start = os.meka.android.today.TIME_COLUMN, bottom = MekaSpace.xs),
                 )
                 is Entry.Line -> when (e.row.kind) {
-                    TimelineKind.EVENT -> EventRow(e.row, e.past, m)
+                    TimelineKind.EVENT -> EventRow(e.row, e.past, m.opensEvent(e.row.event, onEvent))
                     TimelineKind.TASK -> TaskRow(e.row, m)
                     TimelineKind.NOW -> NowLine(e.row, m)
                     TimelineKind.GAP -> Unit // the agenda has no gaps; Today shows free time
