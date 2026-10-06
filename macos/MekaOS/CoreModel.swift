@@ -22,6 +22,8 @@ final class CoreModel {
     var showCalendars = false
     var showPlan = false
     private(set) var plan: DayPlanner.Plan?
+    /// Tasks Plan Apply just sent into Today; their rows are softly lit for a moment once the sheet has gone.
+    private(set) var landing: Set<String> = []
     private(set) var accounts: [ConnectedAccount]? = nil
     var calendarsMessage: String?
     private var identity: DeviceIdentity?
@@ -111,7 +113,16 @@ final class CoreModel {
     func applyPlan() async {
         guard let core, let plan else { return }
         try? await core.applyPlan(plan: plan)
+        let placed = Set(plan.placements.map { $0.task.id })
+        landing = placed
         showPlan = false
+        try? await Task.sleep(for: .seconds(SharedMotion.landedSeconds))
+        if landing == placed { landing = [] }
+    }
+
+    /// Selects a task from a list: the highlight glides to the row and the detail slides across.
+    func select(_ id: String, reduced: Bool) {
+        withAnimation(MekaMotion.expand(reduced: reduced)) { selectedID = id }
     }
 
     // MARK: Calendars

@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -46,8 +47,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -59,6 +63,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaPane
+import os.meka.android.designsystem.MekaSharedLayout
+import os.meka.android.designsystem.rememberPaneMorph
+import os.meka.android.designsystem.sharedTitle
+import os.meka.android.designsystem.sharedTitleInPane
+import os.meka.android.shell.SharedMotion
 import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -82,6 +91,10 @@ import java.time.format.DateTimeFormatter
 /**
  * TODAY (brief §4). Closed Fold: one calm column. Open Fold / wide windows (≥ 600dp): Today | selected item.
  * State survives fold/unfold because selection is saveable and everything else comes from MekaCore flows.
+ *
+ * Motion (App shell): opening the Fold grows the detail pane out beside the list; on the closed Fold a task's title
+ * travels from its row into the detail pane and back; Plan Apply sends each planned block's title into its place in
+ * Today, where it is softly lit for a moment. Reduced motion: cross-fades only.
  */
 @Composable
 fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
@@ -91,6 +104,14 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var showCalendars by rememberSaveable { mutableStateOf(false) }
     var showPlan by rememberSaveable { mutableStateOf(false) }
+    // Tasks Plan Apply is sending into Today: their rows hide while the plan is up, then catch the flying titles.
+    var landing by remember { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(landing, showPlan) {
+        if (landing.isNotEmpty() && !showPlan) {
+            delay(SharedMotion.LANDED_MS.toLong())
+            landing = emptySet()
+        }
+    }
     val scope = rememberCoroutineScope()
     val openCalendars: (() -> Unit)? = if (connect == null) ({ showCalendars = true }) else null
     val openPlan: () -> Unit = { showPlan = true }
@@ -107,31 +128,66 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null) {
     val actions = todayActions(core, scope, { selectedId }) { selectedId = it }
 
     // Insets are applied once, by the app shell.
-    BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
-        val twoPane = maxWidth >= 600.dp
-        val all = (today.needsYou.map { it.task } + listOfNotNull(today.upNext) + today.yourDay)
-        val selected = all.firstOrNull { it.id == selectedId }
-        if (twoPane) {
-            Row(Modifier.fillMaxSize()) {
-                TodayPane(today, sync, actions, Modifier.weight(0.55f).fillMaxHeight(), connect, openCalendars, openPlan, !introPlayed)
-                Box(Modifier.width(1.dp).fillMaxHeight().background(Meka.colors.hairline))
-                DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, Modifier.weight(0.45f).fillMaxHeight())
+    MekaSharedLayout(Modifier.fillMaxSize()) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
+            val twoPane = maxWidth >= 600.dp
+            val all = (today.needsYou.map { it.task } + listOfNotNull(today.upNext) + today.yourDay)
+            val selected = all.firstOrNull { it.id == selectedId }
+            val rowMotion: (String) -> RowMotion = { id ->
+                RowMotion(
+                    shareTitle = true,
+                    titleVisible = SharedMotion.rowTitleVisible(id, selectedId, !twoPane, showPlan, landing),
+                    landed = SharedMotion.highlightLanded(id, showPlan, landing),
+                )
             }
-        } else {
-            TodayPane(today, sync, actions, Modifier.fillMaxSize(), connect, openCalendars, openPlan, !introPlayed)
-            // Single-pane: detail springs up over Today. The last task is kept so it stays visible while leaving.
+            TwoPaneMorph(
+                twoPane,
+                list = { m -> TodayPane(today, sync, actions, m, connect, openCalendars, openPlan, !introPlayed, rowMotion) },
+                detail = { m -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, m) },
+            )
+            // Closed Fold: detail springs up over Today. The last task is kept so it stays visible while leaving.
             var shown by remember { mutableStateOf<Task?>(null) }
             if (selected != null) shown = selected
-            MekaPane(visible = selected != null) {
+            MekaPane(visible = selected != null && !twoPane) {
                 shown?.let { s ->
                     DetailPane(s, conflicts.filter { it.taskId == s.id }, actions, Modifier.fillMaxSize(), onClose = { selectedId = null })
                 }
             }
+            MekaPane(visible = showPlan) {
+                PlanPane(core, landing = landing, onApplying = { landing = it }, onClose = { showPlan = false })
+            }
+            MekaPane(visible = showCalendars) { CalendarsPane(core, onClose = { showCalendars = false }) }
         }
-        MekaPane(visible = showPlan) { PlanPane(core, onClose = { showPlan = false }) }
-        MekaPane(visible = showCalendars) { CalendarsPane(core, onClose = { showCalendars = false }) }
     }
 }
+
+/**
+ * The list beside its detail, morphing between the closed and open Fold: unfolding grows the detail pane out from
+ * the right edge while the list narrows; folding shrinks it away. The list keeps its place in the tree, so its scroll
+ * position survives.
+ */
+@Composable
+internal fun BoxWithConstraintsScope.TwoPaneMorph(
+    twoPane: Boolean,
+    list: @Composable (Modifier) -> Unit,
+    detail: @Composable (Modifier) -> Unit,
+) {
+    val fraction by rememberPaneMorph(twoPane)
+    val total = maxWidth
+    Row(Modifier.fillMaxSize()) {
+        list(Modifier.weight(1f).fillMaxHeight())
+        if (fraction > 0.001f) {
+            Box(Modifier.width(1.dp).fillMaxHeight().background(Meka.colors.hairline))
+            detail(
+                Modifier.width(total * fraction).fillMaxHeight().clipToBounds()
+                    .graphicsLayer { alpha = SharedMotion.detailAlpha(fraction) },
+            )
+        }
+    }
+}
+
+/** How a task row takes part in shared transitions: whether its title travels, whether it draws it, a soft light on landing. */
+internal data class RowMotion(val shareTitle: Boolean = false, val titleVisible: Boolean = true, val landed: Boolean = false)
 
 /** Stagger groups on Today: greeting, needs you, up next, calendar, your day, done. */
 private const val TODAY_SECTIONS = 6
@@ -161,7 +217,7 @@ data class TodayActions(
 @Composable
 private fun TodayPane(
     today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?, openCalendars: (() -> Unit)?,
-    openPlan: () -> Unit, play: Boolean,
+    openPlan: () -> Unit, play: Boolean, rowMotion: (String) -> RowMotion,
 ) {
     Column(modifier.imePadding()) {
         LazyColumn(
@@ -205,14 +261,15 @@ private fun TodayPane(
             if (today.needsYou.isNotEmpty()) {
                 item(key = "h-needs") { SectionLabel("Needs you", Modifier.animateItem().appear(rememberAppearance(1, play))) }
                 items(today.needsYou, key = { "n-" + it.task.id }) { n ->
-                    TaskRow(n.task, actions, reason = n.reason, modifier = Modifier.animateItem().appear(rememberAppearance(1, play)))
+                    TaskRow(n.task, actions, reason = n.reason, motion = rowMotion(n.task.id),
+                        modifier = Modifier.animateItem().appear(rememberAppearance(1, play)))
                 }
                 item(key = "s-needs") { Spacer(Modifier.height(MekaSpace.l)) }
             }
             today.upNext?.let { t ->
                 item(key = "h-next") { SectionLabel("Up next", Modifier.animateItem().appear(rememberAppearance(2, play))) }
                 // One stable slot: when up next changes, the card's content cross-slides instead of the row swapping.
-                item(key = "upnext") { UpNextCard(t, actions, Modifier.animateItem().appear(rememberAppearance(2, play))) }
+                item(key = "upnext") { UpNextCard(t, actions, rowMotion, Modifier.animateItem().appear(rememberAppearance(2, play))) }
                 item(key = "s-next") { Spacer(Modifier.height(MekaSpace.l)) }
             }
             if (today.events.isNotEmpty()) {
@@ -222,7 +279,9 @@ private fun TodayPane(
             }
             if (today.yourDay.isNotEmpty()) {
                 item(key = "h-day") { SectionLabel("Your day", Modifier.animateItem().appear(rememberAppearance(4, play))) }
-                items(today.yourDay, key = { "d-" + it.id }) { t -> TaskRow(t, actions, modifier = Modifier.animateItem().appear(rememberAppearance(4, play))) }
+                items(today.yourDay, key = { "d-" + it.id }) { t ->
+                    TaskRow(t, actions, motion = rowMotion(t.id), modifier = Modifier.animateItem().appear(rememberAppearance(4, play)))
+                }
             }
             if (today.doneToday.isNotEmpty()) {
                 item(key = "done") {
@@ -254,7 +313,7 @@ internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun UpNextCard(t: Task, actions: TodayActions, modifier: Modifier) {
+private fun UpNextCard(t: Task, actions: TodayActions, rowMotion: (String) -> RowMotion, modifier: Modifier) {
     val reduced = Meka.reducedMotion
     // Up next changes: the new item slides in from the right as the old one slides out left (cross-fade when reduced).
     AnimatedContent(
@@ -276,7 +335,9 @@ private fun UpNextCard(t: Task, actions: TodayActions, modifier: Modifier) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(task.title, style = MekaType.upNextTitle, color = Meka.colors.textPrimary)
+                val m = rowMotion(task.id)
+                Text(task.title, style = MekaType.upNextTitle, color = Meka.colors.textPrimary,
+                    modifier = if (m.shareTitle) Modifier.sharedTitle(SharedMotion.taskKey(task.id), m.titleVisible) else Modifier)
                 meta(task)?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
             }
             CompleteButton(task, actions.complete)
@@ -285,15 +346,21 @@ private fun UpNextCard(t: Task, actions: TodayActions, modifier: Modifier) {
 }
 
 @Composable
-internal fun TaskRow(t: Task, actions: TodayActions, reason: NeedsYouReason? = null, modifier: Modifier = Modifier) {
+internal fun TaskRow(t: Task, actions: TodayActions, reason: NeedsYouReason? = null, motion: RowMotion = RowMotion(), modifier: Modifier = Modifier) {
+    // Just landed from the plan: lit softly, then settles.
+    val glow by animateColorAsState(
+        if (motion.landed) Meka.colors.surfaceRaised else Color.Transparent, MekaMotion.appear(Meka.reducedMotion), label = "landed",
+    )
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable { actions.select(t.id) }.padding(vertical = MekaSpace.s),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(glow).clickable { actions.select(t.id) }
+            .padding(vertical = MekaSpace.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CompleteButton(t, actions.complete)
         Spacer(Modifier.width(MekaSpace.m))
         Column(Modifier.weight(1f)) {
-            Text(t.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+            Text(t.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary,
+                modifier = if (motion.shareTitle) Modifier.sharedTitle(SharedMotion.taskKey(t.id), motion.titleVisible) else Modifier)
             val line = when (reason) {
                 NeedsYouReason.CONFLICT -> "Edited on two devices — choose a version"
                 NeedsYouReason.OVERDUE -> "Overdue"
@@ -391,7 +458,8 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
         cursorBrush = SolidColor(Meka.colors.accent),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { actions.rename(task.id, title) }),
-        modifier = Modifier.fillMaxWidth().padding(vertical = MekaSpace.m),
+        // On the closed Fold the title arrives from the row that was tapped (a no-op outside a pane).
+        modifier = Modifier.fillMaxWidth().padding(vertical = MekaSpace.m).sharedTitleInPane(SharedMotion.taskKey(task.id)),
     )
     meta(task)?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
 

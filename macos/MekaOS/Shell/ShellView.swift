@@ -87,6 +87,7 @@ struct NeedsYouView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
+    @Namespace private var selection
 
     var body: some View {
         HSplitView {
@@ -111,6 +112,7 @@ struct NeedsYouView: View {
                 .padding(.vertical, MekaSpace.xl)
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.needsYou.map(\.task.id))
             }
+            .environment(\.selectionNamespace, selection)
             .frame(minWidth: 380, idealWidth: 520)
             DetailView(task: model.selected, palette: palette)
                 .frame(minWidth: 280, idealWidth: 360)

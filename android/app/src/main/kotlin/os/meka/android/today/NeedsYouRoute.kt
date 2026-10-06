@@ -2,15 +2,11 @@ package os.meka.android.today
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
@@ -26,6 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaPane
+import os.meka.android.designsystem.MekaSharedLayout
+import os.meka.android.shell.SharedMotion
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
@@ -46,39 +44,40 @@ fun NeedsYouRoute(core: MekaCore) {
     val actions = todayActions(core, scope, { selectedId }) { selectedId = it }
     val selected = today.needsYou.map { it.task }.firstOrNull { it.id == selectedId }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
-        val list: @Composable (Modifier) -> Unit = { m ->
-            LazyColumn(
-                m,
-                contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-            ) {
-                item(key = "title") {
-                    Text("Needs you", style = MekaType.greeting, color = Meka.colors.textPrimary,
-                        modifier = Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0)))
-                }
-                if (today.needsYou.isEmpty()) {
-                    item(key = "clear") {
-                        Text("Nothing is waiting on you.", style = MekaType.upNextTitle, color = Meka.colors.textSecondary,
-                            modifier = Modifier.animateItem().appear(rememberAppearance(1)))
+    MekaSharedLayout(Modifier.fillMaxSize()) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
+            val twoPane = maxWidth >= 600.dp
+            val list: @Composable (Modifier) -> Unit = { m ->
+                LazyColumn(
+                    m,
+                    contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
+                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                ) {
+                    item(key = "title") {
+                        Text("Needs you", style = MekaType.greeting, color = Meka.colors.textPrimary,
+                            modifier = Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0)))
+                    }
+                    if (today.needsYou.isEmpty()) {
+                        item(key = "clear") {
+                            Text("Nothing is waiting on you.", style = MekaType.upNextTitle, color = Meka.colors.textSecondary,
+                                modifier = Modifier.animateItem().appear(rememberAppearance(1)))
+                        }
+                    }
+                    items(today.needsYou, key = { it.task.id }) { n ->
+                        val motion = RowMotion(shareTitle = true, titleVisible = SharedMotion.rowTitleVisible(n.task.id, selectedId, !twoPane, false, emptySet()))
+                        TaskRow(n.task, actions, reason = n.reason, motion = motion, modifier = Modifier.animateItem().appear(rememberAppearance(1)))
                     }
                 }
-                items(today.needsYou, key = { it.task.id }) { n ->
-                    TaskRow(n.task, actions, reason = n.reason, modifier = Modifier.animateItem().appear(rememberAppearance(1)))
-                }
             }
-        }
-        if (maxWidth >= 600.dp) {
-            Row(Modifier.fillMaxSize()) {
-                list(Modifier.weight(0.55f).fillMaxHeight())
-                Box(Modifier.width(1.dp).fillMaxHeight().background(Meka.colors.hairline))
-                DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, Modifier.weight(0.45f).fillMaxHeight())
-            }
-        } else {
-            list(Modifier.fillMaxSize())
+            // Opening the Fold grows the detail out beside the list; closed, the detail springs up over it.
+            TwoPaneMorph(
+                twoPane,
+                list = list,
+                detail = { m -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, m) },
+            )
             var shown by remember { mutableStateOf<Task?>(null) }
             if (selected != null) shown = selected
-            MekaPane(visible = selected != null) {
+            MekaPane(visible = selected != null && !twoPane) {
                 shown?.let { s ->
                     DetailPane(s, conflicts.filter { it.taskId == s.id }, actions, Modifier.fillMaxSize(), onClose = { selectedId = null })
                 }

@@ -33,6 +33,8 @@ import os.meka.android.designsystem.SkeletonRows
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.designsystem.sharedTitleInPane
+import os.meka.android.shell.SharedMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
@@ -45,12 +47,16 @@ import java.time.format.DateTimeFormatter
 private val hm = DateTimeFormatter.ofPattern("HH:mm")
 private fun t(ms: Long) = hm.format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))
 
+/** One line of the plan's timeline: a fixed event, or a suggested block for a task. */
+private data class PlanRow(val startMs: Long, val time: String, val title: String, val taskId: String?)
+
 /**
  * "Plan my day": a suggested timeline of tasks fitted around calendar events and fixtures. Nothing changes until
- * the owner taps Apply (autonomy level 1: suggest).
+ * the owner taps Apply (autonomy level 1: suggest). On Apply, [onApplying] names the tasks being placed; their block
+ * titles then fly into their rows in Today as the pane closes (see [landing]).
  */
 @Composable
-fun PlanPane(core: MekaCore, onClose: () -> Unit) {
+fun PlanPane(core: MekaCore, landing: Set<String> = emptySet(), onApplying: (Set<String>) -> Unit = {}, onClose: () -> Unit) {
     var plan by remember { mutableStateOf<DayPlanner.Plan?>(null) }
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
@@ -73,18 +79,23 @@ fun PlanPane(core: MekaCore, onClose: () -> Unit) {
         Spacer(Modifier.height(MekaSpace.s))
 
         // One timeline: fixed events and suggested tasks, in time order.
-        val rows = p.busy.map { Triple(it.startAtMs, "${t(it.startAtMs)}–${t(it.endAtMs)}", it.title to false) } +
-            p.placements.map { Triple(it.startMs, "${t(it.startMs)}–${t(it.endMs)}", it.task.title to true) }
+        val rows = p.busy.map { PlanRow(it.startAtMs, "${t(it.startAtMs)}–${t(it.endAtMs)}", it.title, null) } +
+            p.placements.map { PlanRow(it.startMs, "${t(it.startMs)}–${t(it.endMs)}", it.task.title, it.task.id) }
         // Timeline blocks cascade in, 40 ms apart.
-        rows.sortedBy { it.first }.forEachIndexed { i, (_, time, item) ->
-            val (title, suggested) = item
+        rows.sortedBy { it.startMs }.forEachIndexed { i, row ->
+            val suggested = row.taskId != null
             Row(
                 Modifier.appear(rememberAppearance(i)).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
                     .background(if (suggested) Meka.colors.surfaceRaised else Meka.colors.background)
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
             ) {
-                Text(time, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.width(104.dp))
-                Text(title, style = MekaType.itemTitle, color = if (suggested) Meka.colors.textPrimary else Meka.colors.textTertiary)
+                Text(row.time, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.width(104.dp))
+                // Once applied, this title is the one that travels into Today.
+                val travels = row.taskId != null && row.taskId in landing
+                Text(
+                    row.title, style = MekaType.itemTitle, color = if (suggested) Meka.colors.textPrimary else Meka.colors.textTertiary,
+                    modifier = if (travels) Modifier.sharedTitleInPane(SharedMotion.taskKey(row.taskId!!)) else Modifier,
+                )
             }
         }
         if (p.unplaced.isNotEmpty()) {
@@ -97,7 +108,11 @@ fun PlanPane(core: MekaCore, onClose: () -> Unit) {
             Text(
                 "Apply plan", style = MekaType.itemTitle, color = Meka.colors.onAccent,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
-                    .clickable(role = Role.Button) { haptics.light(); scope.launch { core.applyPlan(p); onClose() } }
+                    .clickable(role = Role.Button) {
+                        haptics.light()
+                        onApplying(p.placements.map { it.task.id }.toSet())
+                        scope.launch { core.applyPlan(p); onClose() }
+                    }
                     .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
             )
         }

@@ -2,6 +2,8 @@
 import SwiftUI
 
 /// TODAY on macOS: Today | detail split, resizable, keyboard-first (brief §45).
+/// Motion (App shell): the selection highlight glides from row to row and the detail slides across to the new task;
+/// after Plan Apply the placed tasks glide into place and are softly lit for a moment. Reduce Motion: cross-fades.
 struct TodayView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
@@ -14,11 +16,13 @@ struct TodayView: View {
     private static let sections = 6 // greeting, needs you, up next, calendar, your day, done
 
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
+    @Namespace private var selection
 
     var body: some View {
         @Bindable var model = model
         HSplitView {
             todayColumn
+                .environment(\.selectionNamespace, selection)
                 .frame(minWidth: 380, idealWidth: 520)
             DetailView(task: model.selected, palette: palette)
                 .frame(minWidth: 280, idealWidth: 360)
@@ -139,6 +143,8 @@ struct SectionLabel: View {
 
 struct TaskRow: View {
     @Environment(CoreModel.self) private var model
+    @Environment(\.selectionNamespace) private var selectionNamespace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let task: MekaTask
     let reason: NeedsYouReason?
     let palette: MekaPalette
@@ -162,16 +168,28 @@ struct TaskRow: View {
         }
         .padding(.vertical, MekaSpace.s)
         .padding(.horizontal, MekaSpace.xs)
-        .background(
-            RoundedRectangle(cornerRadius: MekaRadius.m)
-                .fill(model.selectedID == task.id ? palette.surfaceRaised : .clear)
-        )
+        .background {
+            ZStack {
+                // Just landed from the plan: a soft accent light that settles.
+                if landed {
+                    RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.accent.opacity(0.14))
+                        .transition(.opacity)
+                }
+                // One highlight per list, gliding to whichever row is selected.
+                if model.selectedID == task.id {
+                    RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised)
+                        .selectionGlide(selectionNamespace, reduced: reduceMotion)
+                }
+            }
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: landed)
+        }
         .contentShape(Rectangle())
-        .onTapGesture { model.selectedID = task.id }
+        .onTapGesture { model.select(task.id, reduced: reduceMotion) }
         .transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .scale(scale: 0.96))))
     }
 
     private var isAlert: Bool { reason == .conflict || reason == .overdue }
+    private var landed: Bool { SharedMotion.highlightLanded(task.id, planOpen: model.showPlan, landing: model.landing) }
 
     private var subtitle: String? {
         switch reason {
@@ -344,6 +362,7 @@ private struct PlanSheet: View {
 
 private struct UpNextCard: View {
     @Environment(CoreModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let task: MekaTask
     let palette: MekaPalette
 
@@ -355,7 +374,7 @@ private struct UpNextCard: View {
         }
         .padding(MekaSpace.l)
         .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surfaceRaised))
-        .onTapGesture { model.selectedID = task.id }
+        .onTapGesture { model.select(task.id, reduced: reduceMotion) }
     }
 }
 
@@ -411,16 +430,36 @@ private struct CaptureField: View {
     }
 }
 
+/// The detail beside a list. Selecting another task slides the new one across from the trailing edge (cross-fade
+/// with Reduce Motion); each task gets its own fresh title field.
 struct DetailView: View {
-    @Environment(CoreModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let task: MekaTask?
     let palette: MekaPalette
-    @State private var title = ""
 
     init(task: MekaTask?, palette: MekaPalette) {
         self.task = task
         self.palette = palette
     }
+
+    var body: some View {
+        ZStack {
+            DetailContent(task: task, palette: palette)
+                .id(task?.id ?? "")
+                .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.push(from: .trailing).combined(with: .opacity))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
+        .padding(MekaSpace.gutter)
+        .background(palette.surface)
+    }
+}
+
+private struct DetailContent: View {
+    @Environment(CoreModel.self) private var model
+    let task: MekaTask?
+    let palette: MekaPalette
+    @State private var title = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
@@ -430,7 +469,6 @@ struct DetailView: View {
                     .font(MekaType.upNextTitle)
                     .onSubmit { model.rename(task.id, to: title) }
                     .onAppear { title = task.title }
-                    .onChange(of: task.id) { title = task.title }
 
                 ForEach(model.conflicts.filter { $0.taskId == task.id }, id: \.field) { c in
                     Text("EDITED ON TWO DEVICES").font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
@@ -459,8 +497,7 @@ struct DetailView: View {
                 Spacer()
             }
         }
-        .padding(MekaSpace.gutter)
-        .background(palette.surface)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 

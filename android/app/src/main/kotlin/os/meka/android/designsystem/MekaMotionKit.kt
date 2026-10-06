@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -128,7 +129,7 @@ fun SkeletonRows(count: Int = 3, modifier: Modifier = Modifier, rowHeight: andro
 
 /**
  * A full-screen pane over the current screen (phone): springs up from the bottom and fades; leaves the same way.
- * Reduced motion: a cross-fade only.
+ * Reduced motion: a cross-fade only. Content can share elements with the screen below via [sharedTitleInPane].
  */
 @Composable
 fun MekaPane(visible: Boolean, content: @Composable () -> Unit) {
@@ -140,7 +141,10 @@ fun MekaPane(visible: Boolean, content: @Composable () -> Unit) {
         exit = if (reduced) fadeOut(MekaMotion.expand(true)) else
             slideOutVertically(MekaMotion.expand(false)) { it / 3 } + fadeOut(MekaMotion.appear(false)),
     ) {
-        Box(Modifier.fillMaxSize().background(Meka.colors.background)) { content() }
+        // Shared titles inside ride this pane's enter/exit (see MekaShared.kt).
+        CompositionLocalProvider(LocalPaneScope provides this) {
+            Box(Modifier.fillMaxSize().background(Meka.colors.background)) { content() }
+        }
     }
 }
 
