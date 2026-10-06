@@ -405,6 +405,32 @@ class MekaCoreTest {
     }
 
     @Test
+    fun searchFindsAcrossKindsFollowsEditsAndSyncAndClears() = runTest {
+        val a = core("android"); val m = core("mac")
+        val task = a.addTask("Renew passport")
+        a.addWaiting("Passport photos", "Snappy Snaps", 3)
+        a.recordDecision("Fast-track the passport", "Trip in November", null)
+        a.search("passp")
+        val v = a.searchView.value
+        assertEquals(listOf("Tasks", "Waiting for", "Decisions"), v.groups.map { it.label })
+        assertEquals("3 matches", v.summary)
+        assertEquals(task, v.groups[0].hits.single().task?.id)
+
+        a.complete(task) // the results follow edits while the query is set
+        assertEquals(listOf("Waiting for", "Decisions", "Done"), a.searchView.value.groups.map { it.label })
+
+        a.syncNow(); m.syncNow()
+        m.search("november")
+        assertEquals("Trip in November", m.searchView.value.hits.single().snippet)
+
+        a.search("")
+        assertEquals(false, a.searchView.value.active)
+        assertTrue(a.searchView.value.groups.isEmpty())
+        a.addTask("Passport form")
+        assertTrue(a.searchView.value.groups.isEmpty(), "nothing is searched once cleared")
+    }
+
+    @Test
     fun theMiddayDigestSumsUpWhatsDueOnceAndSettingsSync() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 11, 0).toInstant(london).toEpochMilliseconds()

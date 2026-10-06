@@ -58,6 +58,15 @@ struct GoalsScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(palette.background)
+        .onAppear { takeOpenItem() }
+        .onChange(of: model.openItem) { takeOpenItem() }
+    }
+
+    /// A search result opened here (a goal or a habit): unfold its row.
+    private func takeOpenItem() {
+        guard let item = model.openItem, SearchNav.destination(item.target) == .goals else { return }
+        open = item.id
+        model.openItem = nil
     }
 
     private var rowIDs: [String] {

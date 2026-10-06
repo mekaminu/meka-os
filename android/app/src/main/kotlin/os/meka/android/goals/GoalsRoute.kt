@@ -41,6 +41,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import os.meka.android.MekaApplication
+import os.meka.android.shell.SearchNav
+import os.meka.android.shell.ShellDestination
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -91,6 +95,15 @@ fun GoalsRoute(core: MekaCore) {
     val haptics = rememberMekaHaptics()
     val act: (suspend () -> Unit) -> Unit = { body -> scope.launch { runCatching { body() } } }
     val toggle: (String) -> Unit = { id -> open = if (open == id) null else id }
+    // A search result opened here: unfold its row.
+    val app = LocalContext.current.applicationContext as MekaApplication
+    val openItem by app.openItem.collectAsState()
+    LaunchedEffect(openItem) {
+        val item = openItem ?: return@LaunchedEffect
+        if (SearchNav.destination(item.target) != ShellDestination.GOALS) return@LaunchedEffect
+        open = item.id
+        app.openItem.value = null
+    }
 
     LazyColumn(
         Modifier.fillMaxSize().background(Meka.colors.background),

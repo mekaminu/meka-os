@@ -52,6 +52,7 @@ struct TodayView: View {
                             .foregroundStyle(palette.accent)
                     }
                     HStack(spacing: MekaSpace.l) {
+                        Button("Search") { model.showSearch = true }
                         Button("Plan my day") { model.showPlan = true }
                         if model.isConnected && !model.signedOut {
                             Button("Calendars") { model.showCalendars = true }

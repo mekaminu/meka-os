@@ -36,6 +36,11 @@ final class CoreModel {
         name: UserDefaults.standard.string(forKey: CoreModel.alertsKey), fallback: .off
     )
     var showNotifications = false
+    /// Search everything: results for the query in the sheet (local; follows edits and sync while it is open).
+    private(set) var searchResults: SearchView?
+    var showSearch = false
+    /// A search result Lists or Goals should open (its tab and unfolded row); cleared once shown.
+    var openItem: OpenItem?
     var showWork = false
     var selectedID: String?
     /// The shell's current destination and which way the last switch moved (for the push transition).
@@ -112,6 +117,9 @@ final class CoreModel {
         observers.append(Task { [weak self] in
             for await p in core.notificationPreview { self?.notifyPreview = p }
         })
+        observers.append(Task { [weak self] in
+            for await v in core.searchView { self?.searchResults = v }
+        })
         // Work mode and Today move with the clock: re-evaluate every half minute, then let the notification governor
         // post anything that is due on this Mac.
         observers.append(Task { [weak self] in
@@ -165,6 +173,23 @@ final class CoreModel {
         MekaHaptics.tick()
         withAnimation(MekaMotion.replan(reduced: reduced)) { destination = d }
     }
+
+    // MARK: Search
+
+    /// Searches everything for `query` ("" clears it); results arrive on `search`.
+    func search(_ query: String) { run { try await $0.search(query: query) } }
+
+    /// Opens a search result where it lives: Lists on its tab or Goals, with its row unfolded.
+    func open(_ hit: SearchHit, reduced: Bool) {
+        guard let d = SearchNav.destination(hit.target) else { return }
+        showSearch = false
+        search("")
+        openItem = OpenItem(target: hit.target, id: hit.id)
+        go(to: d, reduced: reduced)
+    }
+
+    /// "Reopen" on a done task found by search.
+    func reopen(_ id: String) { MekaHaptics.light(); run { try await $0.reopen(taskId: id) } }
 
     // MARK: Day plan
 

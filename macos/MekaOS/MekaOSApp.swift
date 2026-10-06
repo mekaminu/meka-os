@@ -33,6 +33,10 @@ struct MekaOSApp: App {
                     ForEach(MekaAppearance.allCases) { Text($0.label).tag($0.rawValue) }
                 }
             }
+            CommandGroup(after: .textEditing) {
+                Button("Search Everything…") { model.showSearch = true }
+                    .keyboardShortcut("f", modifiers: .command)
+            }
             CommandMenu("Go") {
                 ForEach(ShellDestination.allCases) { d in
                     Button(d.label) { model.go(to: d, reduced: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) }

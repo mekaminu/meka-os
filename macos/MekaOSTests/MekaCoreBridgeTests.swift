@@ -133,6 +133,26 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(core.shutdownView.value.offered)
     }
 
+    func testSearchThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "search-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let id = try await core.addTask(title: "Renew passport")
+        _ = try await core.addWaiting(title: "Passport photos", who: "Snappy Snaps", chaseInDays: KotlinInt(int: 3))
+        try await core.search(query: "passp")
+        let v = core.searchView.value
+        XCTAssertEqual(v.groups.map(\.label), ["Tasks", "Waiting for"])
+        XCTAssertEqual(v.summary, "2 matches")
+        let task = try XCTUnwrap(v.groups.first?.hits.first)
+        XCTAssertEqual(task.target, .task)
+        XCTAssertEqual(task.task?.id, id)
+        XCTAssertEqual(v.groups.last?.hits.first?.target, .listsWaiting)
+        try await core.search(query: "")
+        XCTAssertFalse(core.searchView.value.active)
+    }
+
     func testMorningBriefThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

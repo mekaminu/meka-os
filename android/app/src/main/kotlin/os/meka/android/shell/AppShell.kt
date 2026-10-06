@@ -142,8 +142,13 @@ private fun DestinationHost(current: ShellDestination, modifier: Modifier, body:
 
 @Composable
 private fun Destination(d: ShellDestination, core: MekaCore, connect: ConnectHook?, go: (ShellDestination) -> Unit) {
+    val app = LocalContext.current.applicationContext as MekaApplication
     when (d) {
-        ShellDestination.TODAY -> TodayRoute(core, connect, openReview = { go(ShellDestination.REVIEW) })
+        ShellDestination.TODAY -> TodayRoute(core, connect, openReview = { go(ShellDestination.REVIEW) }, openItem = { item ->
+            // Lists or Goals picks the item up when it appears (tab and unfolded row).
+            app.openItem.value = item
+            SearchNav.destination(item.target)?.let(go)
+        })
         ShellDestination.NEEDS_YOU -> NeedsYouRoute(core, openLists = { go(ShellDestination.LISTS) })
         ShellDestination.LISTS -> ListsRoute(core)
         ShellDestination.GOALS -> GoalsRoute(core)

@@ -31,6 +31,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import os.meka.android.MekaApplication
+import os.meka.android.shell.SearchNav
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -98,6 +102,15 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
     val act: (suspend () -> Unit) -> Unit = { body -> scope.launch { runCatching { body() } } }
     val toggle: (String) -> Unit = { id -> open = if (open == id) null else id }
     val leave: (suspend () -> Unit) -> Unit = { body -> haptics.light(); open = null; act(body) }
+    // A search result opened here: switch to its tab and unfold its row.
+    val app = LocalContext.current.applicationContext as MekaApplication
+    val openItem by app.openItem.collectAsState()
+    LaunchedEffect(openItem) {
+        val item = openItem ?: return@LaunchedEffect
+        val t = SearchNav.listTab(item.target) ?: return@LaunchedEffect
+        tab = t; open = item.id
+        app.openItem.value = null
+    }
 
     LazyColumn(
         Modifier.fillMaxSize().background(Meka.colors.background),

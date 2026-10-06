@@ -27,6 +27,9 @@ import os.meka.core.domain.CalendarEvents
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DayPlanner
 import os.meka.core.domain.QuickCapture
+import os.meka.core.domain.Search
+import os.meka.core.domain.SearchSources
+import os.meka.core.domain.SearchView
 import os.meka.core.domain.ObligationKind
 import os.meka.core.domain.RenewalRepeat
 import os.meka.core.domain.Renewals
@@ -162,6 +165,15 @@ class MekaCore(
      * north-star numbers (ADR-013). Step weeks with [showReviewWeek]. Synced "Done reviewing"; moves with the clock.
      */
     val reviewView: StateFlow<WeeklyReviewView> = _review.asStateFlow()
+
+    /** What the search field holds (a screen choice, not synced). */
+    private var searchQuery: String = ""
+    private val _search = MutableStateFlow(SearchView.EMPTY)
+    /**
+     * Search everything: tasks (open, Someday, done), calendar events, Waiting for, decisions, renewals, habits and
+     * goals matching [search]'s query, grouped by kind. Local only; follows edits and sync while a query is set.
+     */
+    val searchView: StateFlow<SearchView> = _search.asStateFlow()
 
     private val _workMode = MutableStateFlow(work.state(localClock()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
@@ -366,6 +378,14 @@ class MekaCore(
     /** Opens the review on the week Today's card is about (this week on Sunday, last week on Monday). */
     suspend fun showReviewCardWeek() = onCore { reviewOffset = _review.value.card.offset; refresh() }
 
+    // ---- Search ----
+
+    /** Searches everything for [query] ("" clears it); results arrive on [searchView] and follow later edits. */
+    suspend fun search(query: String) = onCore {
+        searchQuery = query.take(os.meka.core.domain.SearchRules.MAX_QUERY)
+        _search.value = runSearch(tasks.all())
+    }
+
     // ---- Notification governor ----
 
     /** Quiet hours as local minutes of the day; an end before the start crosses midnight. */
@@ -524,6 +544,7 @@ class MekaCore(
         _review.value = review.view(reviewOffset, all, events.all(), _goals.value, fasting.ended()) { day ->
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }
+        _search.value = runSearch(all)
         _notifyPreview.value = Governor.preview(currentNotices(), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(
@@ -533,6 +554,21 @@ class MekaCore(
                 conflict = c,
             )
         }
+    }
+
+    /** Search over the views as they stand (call after the lists and goals views are fresh). */
+    private fun runSearch(all: List<os.meka.core.domain.Task>): SearchView {
+        if (os.meka.core.domain.SearchRules.tokens(searchQuery).isEmpty()) return SearchView(searchQuery, emptyList(), 0)
+        val sources = SearchSources(
+            tasks = all,
+            events = events.all(),
+            waiting = _lists.value.waiting,
+            decisions = lists.decisionItems(includeSuperseded = true),
+            renewals = _lists.value.renewals.all,
+            habits = _goals.value.habits,
+            goals = _goals.value.goals,
+        )
+        return Search.run(searchQuery, sources, nowMs(), ZoneCalendar(timeZone))
     }
 
     /** Notices from the views as they stand (call after [refresh]). */

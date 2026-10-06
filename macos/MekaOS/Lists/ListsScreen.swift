@@ -85,6 +85,16 @@ struct ListsScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(palette.background)
+        .onAppear { takeOpenItem() }
+        .onChange(of: model.openItem) { takeOpenItem() }
+    }
+
+    /// A search result opened here: switch to its tab and unfold its row.
+    private func takeOpenItem() {
+        guard let item = model.openItem, let t = SearchNav.listTab(item.target) else { return }
+        tab = t
+        open = item.id
+        model.openItem = nil
     }
 
     private var rowIDs: [String] {

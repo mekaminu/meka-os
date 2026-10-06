@@ -43,6 +43,8 @@ class MekaApplication : Application() {
     val governor: NotificationGovernor by lazy { NotificationGovernor(this, this) }
     /** Set by tapping a MEKA notification: the shell opens this destination. */
     val openDestination = MutableStateFlow<ShellDestination?>(null)
+    /** Set by tapping a search result: Lists or Goals opens the right tab and unfolds the row, then clears it. */
+    val openItem = MutableStateFlow<os.meka.android.shell.OpenItem?>(null)
     /** MainActivity is visible (set in onStart/onStop): Meka is looking, so no nudge. */
     @Volatile var isOnScreen: Boolean = false
     /** Set by the nudge's tap: the shell opens Needs you with the after-work summary. */

@@ -72,6 +72,8 @@ import os.meka.android.designsystem.sharedTitle
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.SharedMotion
 import os.meka.android.notify.NotificationsPane
+import os.meka.android.search.SearchPane
+import os.meka.android.shell.OpenItem
 import os.meka.android.work.WorkPane
 import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.appear
@@ -111,7 +113,7 @@ import java.time.format.DateTimeFormatter
  * Today, where it is softly lit for a moment. Reduced motion: cross-fades only.
  */
 @Composable
-fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> Unit = {}) {
+fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> Unit = {}, openItem: (OpenItem) -> Unit = {}) {
     val today by core.today.collectAsState()
     val sync by core.syncStatus.collectAsState()
     val conflicts by core.conflicts.collectAsState()
@@ -122,6 +124,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
     var showShutdown by rememberSaveable { mutableStateOf(false) }
     var showBrief by rememberSaveable { mutableStateOf(false) }
     var showNotifications by rememberSaveable { mutableStateOf(false) }
+    var showSearch by rememberSaveable { mutableStateOf(false) }
     val work by core.workMode.collectAsState()
     val shutdown by core.shutdownView.collectAsState()
     val brief by core.briefView.collectAsState()
@@ -168,6 +171,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
                     TodayPane(today, sync, actions, m, connect, openCalendars, openPlan, !introPlayed, rowMotion,
                         workLabel = if (work.atWork) "At work" else "Off work", openWork = { showWork = true },
                         shutdown = shutdown, openShutdown = { showShutdown = true }, openNotifications = { showNotifications = true },
+                        openSearch = { showSearch = true },
                         brief = brief, openBrief = { showBrief = true },
                         reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } })
                 },
@@ -189,6 +193,9 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
             MekaPane(visible = showShutdown) { ShutdownPane(core, onClose = { showShutdown = false }) }
             MekaPane(visible = showBrief) { BriefPane(core, onClose = { showBrief = false }) }
             MekaPane(visible = showNotifications) { NotificationsPane(core, onClose = { showNotifications = false }) }
+            MekaPane(visible = showSearch) {
+                SearchPane(core, onClose = { showSearch = false }, openItem = { item -> showSearch = false; openItem(item) })
+            }
         }
     }
 }
@@ -272,7 +279,7 @@ data class TodayActions(
 private fun TodayPane(
     today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?, openCalendars: (() -> Unit)?,
     openPlan: () -> Unit, play: Boolean, rowMotion: (String) -> RowMotion, workLabel: String, openWork: () -> Unit,
-    shutdown: ShutdownView, openShutdown: () -> Unit, openNotifications: () -> Unit,
+    shutdown: ShutdownView, openShutdown: () -> Unit, openNotifications: () -> Unit, openSearch: () -> Unit,
     brief: MorningBriefView, openBrief: () -> Unit,
     reviewCard: ReviewCard, openReviewCard: () -> Unit,
 ) {
@@ -291,6 +298,11 @@ private fun TodayPane(
                         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
                         modifier = Modifier.padding(top = MekaSpace.xs).horizontalScroll(rememberScrollState()),
                     ) {
+                        Text(
+                            "Search", style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { openSearch() }.padding(vertical = MekaSpace.xxs),
+                        )
                         Text(
                             "Plan my day", style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
