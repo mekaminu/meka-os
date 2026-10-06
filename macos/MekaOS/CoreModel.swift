@@ -180,10 +180,11 @@ final class CoreModel {
 
     // MARK: Commands
 
-    func add(_ title: String) {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        run { try await $0.addTask(title: trimmed) }
+    /// Capture from anywhere (menu bar, Services): typed or pasted text becomes one task, first line the title and
+    /// the rest kept in the notes (the same rule as the Fold's share sheet, in the core).
+    func capture(_ text: String, subject: String? = nil) {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || subject != nil else { return }
+        run { _ = try await $0.capture(text: text, subject: subject) }
     }
 
     func complete(_ id: String) {

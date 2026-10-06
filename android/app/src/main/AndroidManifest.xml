@@ -29,6 +29,51 @@
             </intent-filter>
         </activity>
 
+        <!-- Capture from anywhere (build plan M1): share sheet, "Capture in MEKA" on selected text, widget and tile.
+             The sheet shows what arrived; nothing is saved until Meka taps Add. Own task so it never drags the app up. -->
+        <activity
+            android:name=".capture.CaptureActivity"
+            android:exported="true"
+            android:label="@string/capture_in_meka"
+            android:taskAffinity="os.meka.android.capture"
+            android:excludeFromRecents="true"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Meka.Capture"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".capture.CaptureTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_capture"
+            android:label="@string/capture_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data android:name="android.service.quicksettings.ACTIVE_TILE" android:value="false" />
+        </service>
+
+        <receiver
+            android:name=".capture.CaptureWidgetProvider"
+            android:exported="true"
+            android:label="@string/capture_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/capture_widget_info" />
+        </receiver>
+
         <!-- Work mode (build plan M1): official notification access only; Meka grants it in Settings.
              Reads WhatsApp, SMS and missed calls during work hours; never replies or marks anything read. -->
         <service

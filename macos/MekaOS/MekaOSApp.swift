@@ -3,6 +3,8 @@ import SwiftUI
 
 @main
 struct MekaOSApp: App {
+    /// Registers the "Add to MEKA" service (capture from any app's selected text).
+    @NSApplicationDelegateAdaptor(MekaAppDelegate.self) private var appDelegate
     @State private var model = CoreModel()
     @AppStorage(MekaAppearance.key) private var appearance = MekaAppearance.dark.rawValue
 
@@ -11,7 +13,12 @@ struct MekaOSApp: App {
             ShellView()
                 .environment(model)
                 .frame(minWidth: 760, minHeight: 560)
-                .task { await model.start() }
+                .task {
+                    await model.start()
+                    // Services captures that arrived while the core was starting go in now.
+                    let model = model
+                    CaptureInbox.shared.attach { text, subject in model.capture(text, subject: subject) }
+                }
                 .preferredColorScheme((MekaAppearance(rawValue: appearance) ?? .dark).scheme)
                 .animation(MekaMotion.themeBlend(reduced: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion), value: appearance)
         }

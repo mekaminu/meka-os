@@ -427,7 +427,7 @@ private struct CaptureField: View {
             .padding(.horizontal, MekaSpace.l)
             .padding(.vertical, MekaSpace.m)
             .background(Capsule().fill(palette.surfaceRaised))
-            .onSubmit { model.add(text); text = "" }
+            .onSubmit { model.capture(text); text = "" }
             .onChange(of: model.focusCapture) { focused = true }
     }
 }
@@ -519,7 +519,7 @@ struct QuickCaptureMenu: View {
     var body: some View {
         TextField("Capture anything…", text: $text)
             .textFieldStyle(.roundedBorder)
-            .onSubmit { model.add(text); text = "" }
+            .onSubmit { model.capture(text); text = "" }
             .padding(MekaSpace.m)
             .frame(width: 320)
     }

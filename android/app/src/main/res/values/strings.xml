@@ -2,4 +2,9 @@
 <resources>
     <string name="app_name">Meka</string>
     <string name="work_capture_label">MEKA work mode: holds messages and missed calls for after work</string>
+    <string name="capture_label">Capture</string>
+    <string name="capture_in_meka">Capture in MEKA</string>
+    <string name="capture_hint">Capture anything…</string>
+    <string name="capture_speak">Speak to capture</string>
+    <string name="capture_widget_description">Capture a task or a thought from your home screen</string>
 </resources>

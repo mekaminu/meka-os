@@ -26,6 +26,7 @@ import kotlinx.datetime.toLocalDateTime
 import os.meka.core.domain.CalendarEvents
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DayPlanner
+import os.meka.core.domain.QuickCapture
 import os.meka.core.domain.DayWindow
 import os.meka.core.domain.IdGenerator
 import os.meka.core.domain.LocalCalendar
@@ -111,6 +112,14 @@ class MekaCore(
     // ---- Commands (suspend → Swift async via SKIE) ----
 
     suspend fun addTask(title: String): String = onCore { tasks.create(NewTask(title)) }
+    /**
+     * Capture from anywhere: typed, spoken or shared text becomes one task (first line the title, the rest in
+     * the notes, see [QuickCapture]). Returns the new task's id, or null when there was nothing to capture.
+     */
+    suspend fun capture(text: String?, subject: String?): String? {
+        val draft = QuickCapture.draft(text, subject) ?: return null
+        return onCore { tasks.create(NewTask(draft.title, notes = draft.notes)) }
+    }
     suspend fun complete(taskId: String) = onCore { tasks.complete(taskId) }
     suspend fun reopen(taskId: String) = onCore { tasks.reopen(taskId) }
     suspend fun rename(taskId: String, title: String) = onCore { tasks.edit(taskId, TaskEdit(title = title)) }

@@ -208,7 +208,7 @@ data class ConnectHook(val defaultUrl: String, val connect: suspend (url: String
 
 /** The commands every task list (Today, Needs you) offers, wired to [core]. Selection is owned by the caller. */
 internal fun todayActions(core: MekaCore, scope: CoroutineScope, selected: () -> String?, setSelected: (String?) -> Unit) = TodayActions(
-    add = { title -> scope.launch { runCatching { core.addTask(title) } } },
+    add = { title -> scope.launch { runCatching { core.capture(title, null) } } },
     complete = { id -> scope.launch { core.complete(id); if (selected() == id) setSelected(null) } },
     select = { id -> setSelected(id) },
     rename = { id, t -> scope.launch { runCatching { core.rename(id, t) } } },

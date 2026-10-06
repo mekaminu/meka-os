@@ -44,6 +44,21 @@ class MekaCoreTest {
     }
 
     @Test
+    fun captureMakesOneTaskWithTitleAndNotesAndSyncsIt() = runTest {
+        val a = core("android"); val m = core("mac")
+        assertEquals(null, a.capture("  \n ", null))
+        val id = a.capture("Buy boots\nsize 9", null)
+        val task = a.today.value.upNext
+        assertEquals(id, task?.id)
+        assertEquals("Buy boots", task?.title)
+        assertEquals("size 9", task?.notes)
+        a.capture("https://example.com/a", "Read this article")
+        a.syncNow(); m.syncNow()
+        val titles = m.today.value.let { (listOfNotNull(it.upNext) + it.yourDay) }.map { it.title }.toSet()
+        assertEquals(setOf("Buy boots", "Read this article"), titles)
+    }
+
+    @Test
     fun offlineSyncReportsPendingThenRecovers() = runTest {
         val t = FaultyTransport(service).apply { online = false }
         val c = core("android", t)

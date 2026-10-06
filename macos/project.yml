@@ -33,6 +33,14 @@ targets:
         LSApplicationCategoryType: public.app-category.productivity
         NSHumanReadableCopyright: ""
         MekaSyncURL: $(MEKA_SYNC_URL)
+        # Capture from anywhere: select text in any app → Services → "Add to MEKA" (CaptureService.swift).
+        NSServices:
+          - NSMenuItem:
+              default: Add to MEKA
+            NSMessage: captureText
+            NSPortName: $(PRODUCT_NAME)
+            NSRequiredContext: {}
+            NSSendTypes: [public.utf8-plain-text]
     entitlements:
       path: MekaOS/MekaOS.entitlements
       properties:

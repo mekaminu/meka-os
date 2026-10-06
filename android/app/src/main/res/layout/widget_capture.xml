@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="4dp">
+
+    <TextView
+        android:id="@+id/capture_pill"
+        android:layout_width="0dp"
+        android:layout_height="48dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_pill"
+        android:gravity="center_vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:text="@string/capture_hint"
+        android:textColor="@color/widget_hint"
+        android:textSize="17sp" />
+
+    <ImageView
+        android:id="@+id/capture_mic"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/widget_mic_circle"
+        android:contentDescription="@string/capture_speak"
+        android:padding="12dp"
+        android:src="@drawable/ic_mic" />
+</LinearLayout>
