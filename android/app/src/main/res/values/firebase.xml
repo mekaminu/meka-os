@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Firebase (push via FCM, build plan M1), the values the google-services plugin would generate from
+     google-services.json, kept by hand so the build needs no extra Gradle plugin. FirebaseTest checks they match.
+     These identify the Firebase app; they are not secrets (the server's service-account key is). -->
+<resources>
+    <string name="google_app_id" translatable="false">1:524405878869:android:39534beb3e697f77eb64dc</string>
+    <string name="gcm_defaultSenderId" translatable="false">524405878869</string>
+    <string name="google_api_key" translatable="false">AIzaSyA3ol_2cJhoLmMqH6JsGTV3SzZbM_8nP24</string>
+    <string name="project_id" translatable="false">meka-os-5ae41</string>
+    <string name="google_storage_bucket" translatable="false">meka-os-5ae41.firebasestorage.app</string>
+</resources>

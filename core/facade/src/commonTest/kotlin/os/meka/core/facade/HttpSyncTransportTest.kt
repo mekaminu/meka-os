@@ -25,12 +25,15 @@ class HttpSyncTransportTest {
 
     private val requests = mutableListOf<HttpRequestData>()
     private val json = headersOf("Content-Type", "application/json")
+    private var pushStatus = HttpStatusCode.OK
+    private val pushReply = WireCodec.encodePushToken(WireCodec.PushToken("fcm", ""))
     private fun client() = HttpClient(MockEngine { req ->
         requests += req
         when (req.url.encodedPath) {
             "/v1/sync/pull" -> respond(WireCodec.encodePullResponse(os.meka.core.sync.PullResponse(emptyList(), false)), HttpStatusCode.OK, json)
             "/v1/devices/key" -> respond(WireCodec.encodeDeviceKey("A".repeat(124)), HttpStatusCode.OK, json)
             "/v1/integrations/google/connect" -> respond("not configured", HttpStatusCode.Conflict)
+            "/v1/push/token" -> respond(pushReply, pushStatus, json)
             else -> respond("", HttpStatusCode.NotFound)
         }
     })
@@ -62,5 +65,22 @@ class HttpSyncTransportTest {
         assertEquals(1, requests.count { it.url.encodedPath == "/v1/devices/key" })
         assertEquals(ConnectStart.NotSetUp, t.startConnect("google"))
         assertTrue(requests.last().url.encodedPath.endsWith("/connect"))
+    }
+
+    @Test
+    fun thePushAddressIsSentSignedAndAServerWithoutPushSaysSo() = runTest {
+        val t = HttpSyncTransport(client(), "https://meka.example", RecordingKey()) { "s".repeat(64) }
+        val token = "dQw4w9WgXcQ:APA91b" + "x".repeat(40)
+        t.registerPushToken("fcm", token)
+        val req = requests.last()
+        assertEquals("/v1/push/token", req.url.encodedPath)
+        assertEquals(WireCodec.PushToken("fcm", token), WireCodec.decodePushToken((req.body as TextContent).text))
+        assertTrue(req.headers[RequestSigning.HEADER_SIGNATURE] != null)
+        // The core reports success, and false (try again later) when the server has no push route.
+        val core = MekaCore("home", "fold", os.meka.core.sync.InMemoryReplicaStore(), t, kotlin.random.Random(1))
+        assertTrue(core.registerPushToken(token))
+        pushStatus = HttpStatusCode.NotFound
+        assertEquals(false, core.registerPushToken(token))
+        assertEquals(false, MekaCore("home", "fold", os.meka.core.sync.InMemoryReplicaStore(), null, kotlin.random.Random(1)).registerPushToken(token))
     }
 }

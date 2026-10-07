@@ -5,7 +5,10 @@ import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -24,11 +27,27 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         runCatching { app.nudger.evaluate(app.core.currentWorkMode()) }
         // A build published from the Mac is ready on the card the next time MEKA opens.
         runCatching { app.updater.check() }
+        // Push: if the server doesn't have this phone's address yet (offline before, or push was just set up), send it.
+        app.ensurePush()
         return if (ok) Result.success() else Result.retry()
     }
 
     companion object {
         private const val NAME = "meka-sync"
+        private const val NOW = "meka-sync-now"
+
+        /**
+         * Push said another device changed something: one sync now (expedited; if the quota is spent it runs as
+         * ordinary work as soon as it can). A wake arriving while one runs queues one more after it, so nothing
+         * stored meanwhile is missed; the server sends at most one wake every 20 s.
+         */
+        fun syncSoon(context: Context) {
+            val request = OneTimeWorkRequestBuilder<SyncWorker>()
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(NOW, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+        }
 
         fun schedulePeriodic(context: Context) {
             val request = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES)

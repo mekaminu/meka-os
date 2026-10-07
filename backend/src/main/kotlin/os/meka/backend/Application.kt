@@ -57,6 +57,8 @@ fun Application.mekaSync(
     verifier: RequestVerifier = RequestVerifier(),
     /** Published app builds (self-updating phone app); null disables the release routes. */
     releases: Releases? = null,
+    /** Push wake-ups (build plan M1: push via Firebase); null disables the push route and wake-ups. */
+    push: Push? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -121,6 +123,8 @@ fun Application.mekaSync(
             val req = WireCodec.decodePushRequest(body)
             if (req.householdId != who.householdId || req.deviceId != who.deviceId) throw Forbidden()
             val resp = withContext(Dispatchers.IO) { sync.push(req) } // blocking JDBC off the request threads
+            // Wake the household's other devices so they pull now (coalesced; sent off the request).
+            if (push != null && resp.acknowledged.isNotEmpty()) withContext(Dispatchers.IO) { runCatching { push.changed(who) } }
             call.respondText(WireCodec.encodePushResponse(resp), ContentType.Application.Json)
         }
 
@@ -202,6 +206,18 @@ fun Application.mekaSync(
                     is Releases.Upload.Conflict -> call.respondText(r.reason, status = HttpStatusCode.Conflict)
                     is Releases.Upload.Rejected -> call.respondText(r.reason, status = HttpStatusCode.BadRequest)
                 }
+            }
+        }
+
+        if (push != null) {
+            // A device's push address (an FCM token), or an empty token to stop waking it. Keyed devices only.
+            post("/v1/push/token") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val t = WireCodec.decodePushToken(body)
+                withContext(Dispatchers.IO) { push.register(who, t) }
+                call.application.environment.log.info(if (t.token.isEmpty()) "push address removed" else "push address registered") // no identifiers
+                call.respondText(WireCodec.encodePushToken(t.copy(token = "")), ContentType.Application.Json)
             }
         }
 
@@ -301,7 +317,10 @@ fun main(args: Array<String>) {
             val integrations = integrationsFromEnv(opStore)
             integrations?.let { startCalendarSync(it) }
             embeddedServer(Netty, port = port) {
-                mekaSync(opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations, releases = Releases(PostgresReleaseStore(ds)))
+                mekaSync(
+                    opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
+                    releases = Releases(PostgresReleaseStore(ds)), push = pushFromEnv(ds),
+                )
             }.start(wait = true)
         }
     }
@@ -324,6 +343,15 @@ fun integrationsFromEnv(opStore: PostgresOpStore): Integrations? {
     )
 }
 
+/**
+ * Push wake-ups through FCM. Null when the deployment names no service-account secret (local dev). With the secret
+ * still `{}` the routes work and tokens are kept, but nothing is sent until the owner pastes the key.
+ */
+fun pushFromEnv(ds: DataSource): Push? {
+    val secret = System.getenv("MEKA_FCM_SECRET")?.takeIf { it.isNotBlank() } ?: return null
+    return Push(PostgresPushTokenStore(ds), FcmSender.fromSecret(secret))
+}
+
 /** Calendar mirror cadence: every 5 minutes, first run shortly after start. Failures are recorded per account. */
 fun startCalendarSync(integrations: Integrations, periodMs: Long = 5 * 60_000L) {
     Thread.ofVirtual().name("calendar-sync").start {
@@ -338,7 +366,7 @@ fun startCalendarSync(integrations: Integrations, periodMs: Long = 5 * 60_000L) 
 object Migrations {
     private val all = listOf(
         1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql", 4 to "/db/V4__event_mirror_end.sql",
-        5 to "/db/V5__app_release.sql",
+        5 to "/db/V5__app_release.sql", 6 to "/db/V6__push_token.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

@@ -74,6 +74,8 @@ dependencies {
     implementation(libs.androidx.core)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.ktor.client.okhttp)
+    // Push via Firebase (build plan M1): FCM only, configured from res/values/firebase.xml (no google-services plugin).
+    implementation(libs.firebase.messaging)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(kotlin("test-junit")) // JUnit4 binding for kotlin.test under AGP unit tests

@@ -249,6 +249,22 @@ object WireCodec {
         o.str("platform").also { if (!platformPattern.matches(it)) throw WireFormatException("bad platform") }
     }
 
+    /**
+     * A device's push address (build plan M1: push via Firebase). [service] is `fcm` today; an empty [token] removes
+     * the device's address (push turned off on it). Tokens are opaque to MEKA; only their shape is checked.
+     */
+    data class PushToken(val service: String, val token: String)
+
+    private val pushTokenPattern = Regex("^[A-Za-z0-9:_.\\-]{20,4096}$")
+
+    fun encodePushToken(t: PushToken): String = doc { put("service", t.service); put("token", t.token) }
+    fun decodePushToken(s: String): PushToken = parse(s) { o ->
+        val t = PushToken(o.str("service"), o.str("token"))
+        if (!platformPattern.matches(t.service)) throw WireFormatException("bad push service")
+        if (t.token.isNotEmpty() && !pushTokenPattern.matches(t.token)) throw WireFormatException("bad push token")
+        t
+    }
+
     fun encodeChunkData(dataB64: String): String = doc { put("data", dataB64) }
     fun decodeChunkData(s: String): String = parse(s) { o -> o.str("data") }
 

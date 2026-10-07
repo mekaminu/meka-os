@@ -80,6 +80,18 @@ class WireCodecTest {
     }
 
     @Test
+    fun pushTokensRoundTripAndAreValidated() {
+        val t = WireCodec.PushToken("fcm", "dQw4w9WgXcQ:APA91bH-abc_DEF.123456789")
+        assertEquals(t, WireCodec.decodePushToken(WireCodec.encodePushToken(t)))
+        // An empty token removes the device's address.
+        assertEquals(t.copy(token = ""), WireCodec.decodePushToken(WireCodec.encodePushToken(t.copy(token = ""))))
+        assertFailsWith<WireFormatException> { WireCodec.decodePushToken(WireCodec.encodePushToken(t.copy(service = "FCM!"))) }
+        assertFailsWith<WireFormatException> { WireCodec.decodePushToken(WireCodec.encodePushToken(t.copy(token = "short"))) }
+        assertFailsWith<WireFormatException> { WireCodec.decodePushToken(WireCodec.encodePushToken(t.copy(token = "a".repeat(30) + "\"/"))) }
+        assertFailsWith<WireFormatException> { WireCodec.decodePushToken(WireCodec.encodePushToken(t.copy(token = "a".repeat(4097)))) }
+    }
+
+    @Test
     fun releaseDocumentsRoundTripAndAreValidated() {
         val size = WireCodec.RELEASE_CHUNK_BYTES * 2L + 10
         val r = WireCodec.AppRelease("android", 412, "0.1.412", "a".repeat(64), size, 3)

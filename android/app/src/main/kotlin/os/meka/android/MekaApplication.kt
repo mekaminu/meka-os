@@ -10,6 +10,9 @@ import os.meka.android.sync.SyncWorker
 import os.meka.android.notify.NotificationGovernor
 import os.meka.android.notify.OngoingNotifier
 import os.meka.android.notify.OngoingRouting
+import os.meka.android.push.PushMessages
+import os.meka.android.push.PushTokenPrefs
+import os.meka.android.push.PushTokens
 import os.meka.android.shell.ShellDestination
 import os.meka.android.update.AppUpdater
 import os.meka.android.widgets.HomeWidgetUpdater
@@ -84,7 +87,7 @@ class MekaApplication : Application() {
             transport = transport,
             secureRandom = SecureRandom().asKotlinRandom(),
         )
-        if (transport != null) SyncWorker.schedulePeriodic(this)
+        if (transport != null) { SyncWorker.schedulePeriodic(this); ensurePush() }
         // Every work-mode change on this phone (clock tick, sync, listener) goes past the nudger. Also runs once at
         // process start (after a reboot the listener's rebind starts us), which re-registers the end-of-work alarm.
         appScope.launch { core.workMode.collect { nudger.evaluate(it) } }
@@ -127,6 +130,20 @@ class MekaApplication : Application() {
         appScope.launch { runCatching { updater.check(force) } }
     }
 
+    private val pushPrefs by lazy { PushTokenPrefs(this) }
+
+    /** Makes sure the server can wake this phone: fetches the FCM token and sends it if the server lacks it. */
+    fun ensurePush() {
+        if (!core.isConnected) return
+        PushTokens.fetch { registerPush(it) }
+    }
+
+    /** A token from Firebase (new or rotated): sent once; if it can't be sent now, the next sync tries again. */
+    fun registerPush(token: String) {
+        if (!core.isConnected || !PushMessages.needsSending(token, pushPrefs.sent)) return
+        appScope.launch { if (core.registerPushToken(token)) pushPrefs.sent = token }
+    }
+
     val defaultServerUrl: String get() = identity.serverUrl() ?: BuildConfig.SYNC_URL
 
     /** One-time enrolment from the Connect card. Returns a user-facing error, or null on success. */
@@ -137,6 +154,8 @@ class MekaApplication : Application() {
                 identity.saveEnrolment(url, r.deviceSecret)
                 core.connect(Enrolment.transport(http, url, r.deviceSecret, deviceKey))
                 SyncWorker.schedulePeriodic(this)
+                pushPrefs.forget() // a re-enrolled device starts with no address on the server
+                ensurePush()
                 null
             }
             EnrolmentResult.Rejected -> "That enrolment code wasn't accepted."

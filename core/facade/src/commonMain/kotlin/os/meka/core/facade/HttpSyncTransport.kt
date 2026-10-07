@@ -36,6 +36,15 @@ sealed class ConnectStart {
     data class Failed(val reason: String) : ConnectStart()
 }
 
+/** The server can't take a push address right now (no push route, or this device's key isn't registered yet). */
+class PushUnavailableException : Exception("push isn't available on this server yet")
+
+/** Push addresses (build plan M1: push via Firebase), available once the device is connected. */
+interface PushApi {
+    /** Registers this device's address for [service] (`fcm`), or removes it with an empty [token]. */
+    suspend fun registerPushToken(service: String, token: String)
+}
+
 /** Account management calls, available once the device is connected. */
 interface AccountsApi {
     suspend fun startConnect(provider: String): ConnectStart
@@ -54,7 +63,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -123,6 +132,17 @@ class HttpSyncTransport(
             resp.status.value == 409 || resp.status.value == 400 -> throw PublishRefusedException(resp.bodyAsText().take(200))
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/releases/upload")
             else -> WireCodec.decodeUploadAck(resp.bodyAsText()).complete
+        }
+    }
+
+    override suspend fun registerPushToken(service: String, token: String) {
+        prepare() // the push route requires the device's signing key on the server
+        val resp = send("/v1/push/token", WireCodec.encodePushToken(WireCodec.PushToken(service, token)))
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/push/token")
+            // 404: a server without push (older, or not configured); 403: no signing key registered yet.
+            resp.status.value == 404 || resp.status.value == 403 -> throw PushUnavailableException()
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/push/token")
         }
     }
 

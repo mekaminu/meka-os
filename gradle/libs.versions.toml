@@ -23,6 +23,7 @@ hikari = "6.3.0"                       # unverified
 logback = "1.5.18"                     # unverified
 testcontainers = "1.21.0"              # unverified
 junit5 = "5.12.2"                      # unverified
+firebase-messaging = "24.1.0"           # unverified; FCM only (push wake-ups), no Analytics
 awssdk = "2.29.0"                      # unverified; KMS + Secrets Manager only, URL-connection HTTP client
 
 android-compileSdk = "37"   # required by Compose 1.12 / OkHttp 5.5 / SQLCipher 4.19 AARs; targetSdk stays 36
@@ -76,6 +77,7 @@ androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-ru
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
 androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "androidx-work" }
 androidx-core = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
+firebase-messaging = { module = "com.google.firebase:firebase-messaging", version.ref = "firebase-messaging" }
 
 postgres = { module = "org.postgresql:postgresql", version.ref = "postgres" }
 hikari = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }

@@ -134,6 +134,7 @@ class MekaCore(
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
     private var releasesApi: ReleasesApi? = transport as? ReleasesApi
+    private var pushApi: PushApi? = transport as? PushApi
 
     private val _today = MutableStateFlow(project())
     val today: StateFlow<Today> = _today.asStateFlow()
@@ -625,6 +626,7 @@ class MekaCore(
     suspend fun connect(transport: SyncTransport) = withContext(confined) {
         syncMutex.withLock { 
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
+            pushApi = transport as? PushApi
         }
         startSync()
     }
@@ -659,6 +661,16 @@ class MekaCore(
         val api = releasesApi ?: return PublishOutcome.Failed("Connect this Mac to your server first.")
         return ReleaseTransfer.publish(api, platform, bytes, versionCode, versionName)
     }
+
+    // ---- Push (build plan M1: push via Firebase) ----
+
+    /**
+     * Tells the server where to wake this device (an FCM token; empty removes it). True once the server has it;
+     * false when offline, not connected or the server has no push yet: the platform tries again later. The server
+     * only ever sends "sync now"; the change itself comes over the normal signed sync.
+     */
+    suspend fun registerPushToken(token: String, service: String = "fcm"): Boolean =
+        try { pushApi?.registerPushToken(service, token) != null } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
 
     /** For platform schedulers (WorkManager, BGTask): one round, returns true on success. */
     suspend fun syncNow(): Boolean = withContext(confined) { syncMutex.withLock { runSyncOnce() } == null }
