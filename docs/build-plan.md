@@ -163,6 +163,12 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
   - **Long-press / context menu → "Remind me"**: 5/10/15/30 min before (local notification through the governor), plus "Leave by" when the event has a location.
   - **Tap → event detail** (exists) gains the same actions as buttons, plus "Open in Google/Outlook" to edit the real event.
   - Swipe hint the first time (row nudges left and right once). Mac: same actions in the row's context menu and as hover buttons.
+- [ ] Motion pass 2 — make it visible (Meka, 2026-10-07: "can't see any animations yet"). Before calendar editing.
+  - **In-app Motion setting** (Settings and the Today header menu): Expressive (default) · Subtle · Off. The app follows this, not the phone's "Remove animations"/animator scale, unless it's set to Off; if the phone's scale is 0, show a one-time card explaining it and offering Expressive.
+  - **Expressive tokens:** rise 28 dp (was 12), stagger 60 ms (was 40), entries also scale from 0.96 and fade; springs a touch bouncier (damping ~0.75) for complete/approve; count-ups 900 ms.
+  - **Screen-level motion:** shared-axis slide between tabs (direction follows tab order), sheets spring up with a dimmed backdrop, list → detail container transform, pull-to-sync brass ring that fills then spins, the greeting letters fade in on first open of the day, tab icons morph (outline → filled) with a spring.
+  - **Feedback motion:** button press scale (0.97) everywhere, checkbox ring draw + check stroke, swipe actions reveal coloured backgrounds with icon pop, undo bar rises, empty states have a slow breathing illustration.
+  - Mac: the same set with matchedGeometryEffect and spring presets; hover lifts cards 2 pt.
 - [ ] Edit your calendars from MEKA (Meka, 2026-10-07: "one shop for my life") — right after Calendar actions. Add, edit, move and delete real Google (and later Outlook) events from both apps.
   - **Permission:** per account, switched on in Calendars ("Allow editing"); reconnecting asks Google for `calendar.events` (Microsoft: `Calendars.ReadWrite`). Read-only accounts keep working. Needs Meka #12 when it lands.
   - **You act, it happens:** your own taps apply straight away (no approval), with a 5-second Undo before the change is sent to Google. Edits made offline queue and send on reconnect; if the event changed in Google meanwhile, show both versions and let Meka choose (never overwrite silently).
