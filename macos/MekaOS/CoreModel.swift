@@ -563,6 +563,10 @@ final class CoreModel {
 
     /// Starts a fast `minutesAgo` minutes ago (0: now) with the plan's goal.
     func startFast(minutesAgo: Int32) { MekaHaptics.light(); run { _ = try await $0.startFast(startedMinutesAgo: minutesAgo) } }
+    /// Starts an extended fast of `hours` (Fasting v2: 24 h … 7 days), now.
+    func startExtendedFast(hours: Int32) { MekaHaptics.light(); run { _ = try await $0.startExtendedFast(hours: hours, startedMinutesAgo: 0) } }
+    /// Starts an extended fast that runs until `untilMs` ("Until Fri 18:00"), now.
+    func startFastUntil(_ untilMs: Int64) { MekaHaptics.light(); run { _ = try await $0.startFastUntil(untilMs: untilMs, startedMinutesAgo: 0) } }
     func endFast() { MekaHaptics.light(); run { try await $0.endFast() } }
     func resumeFast(_ id: String) { run { try await $0.resumeFast(id: id) } }
     func setFastTarget(_ hours: Int32) { run { try await $0.setFastTarget(hours: hours) } }

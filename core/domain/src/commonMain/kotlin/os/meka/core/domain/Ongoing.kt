@@ -97,12 +97,15 @@ object OngoingRules {
 
         val fast = fasting.current
         if (fast != null) {
-            val pct = (FastingRules.progress(fast.startedAtMs, fast.targetHours, nowMs) * 100).toInt().coerceIn(0, 100)
+            val pct = (fast.progress(nowMs) * 100).toInt().coerceIn(0, 100)
             val reached = nowMs >= fast.goalAtMs
-            val text = if (reached) "Goal reached at ${hhmm(fast.goalAtMs)} · ${fast.startedLine.replaceFirstChar { it.lowercase() }}"
-            else "Goal at ${hhmm(fast.goalAtMs)} · ${fast.startedLine.replaceFirstChar { it.lowercase() }}"
+            val goalWhen = if (fast.extended) fast.goalWhen else hhmm(fast.goalAtMs)
+            val started = fast.startedLine.replaceFirstChar { it.lowercase() }
+            // An extended fast leads with its day ("5-day fast · Day 3 of 5"); the clock beside it shows the hours.
+            val text = if (reached) "Goal reached at $goalWhen · $started" else "Goal at $goalWhen · $started"
             items += OngoingItem(
-                kind = OngoingKind.FAST, key = "fast-${fast.id}", title = "Fasting · goal ${fast.targetHours} h", text = text,
+                kind = OngoingKind.FAST, key = "fast-${fast.id}",
+                title = if (fast.extended) "${fast.title} · ${FastingRules.dayOf(fast.startedAtMs, fast.goalAtMs, nowMs)}" else fast.title, text = text,
                 publicTitle = "Fasting", clockBaseMs = fast.startedAtMs, countDown = false,
                 progressPercent = if (reached) 100 else pct, lit = reached, event = null, join = null,
                 short = FastingRules.duration(nowMs - fast.startedAtMs),
@@ -116,6 +119,7 @@ object OngoingRules {
             soon?.let { add(it.startAtMs) }
             started?.let { add(minOf(it.startAtMs + JUST_STARTED_MIN * MIN_MS, it.endAtMs)) }
             fast?.goalAtMs?.takeIf { it > nowMs }?.let { add(it) }
+            fast?.takeIf { it.extended }?.let { add(FastingRules.nextDayAt(it.startedAtMs, nowMs)) }
             add(cal.toEpochMs(cal.epochDayOf(nowMs) + 1, 0))
         }
         return OngoingView(items, items.firstOrNull()?.short, changes.filter { it > nowMs }.minOrNull() ?: Long.MAX_VALUE)

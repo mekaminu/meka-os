@@ -5,6 +5,8 @@ import SwiftUI
 /// while a fast runs and glows softly once the goal is reached; the last seven days fill on appear. Start (now or
 /// earlier), End, adjust the goal or the start (menus, as rule 7 allows), or discard a mistaken fast.
 /// Reduce Motion: the ring steps each second and the glow is steady.
+/// Fasting v2: an extended fast (24 h … 7 days, or until a day at 18:00) shows "Day 3 of 5 · 62 h"; the history below
+/// keeps every fast (planned against actual), the streak and a twelve-week heat strip. Tracking only, no advice.
 struct FastingSection: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -16,8 +18,12 @@ struct FastingSection: View {
                 HStack(alignment: .center, spacing: MekaSpace.m) {
                     FastRing(current: v.current, palette: palette)
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                        Text(v.current != nil ? "Fasting" : "Not fasting").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                        Text(v.current.map { $0.extended ? $0.title : "Fasting" } ?? "Not fasting")
+                            .font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                         if let cur = v.current {
+                            if let day = cur.dayLine {
+                                Text(day).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.accent)
+                            }
                             Text(cur.goalLine).font(MekaType.itemMeta).foregroundStyle(cur.reachedGoal ? palette.accent : palette.textSecondary)
                             Text(cur.startedLine).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                         } else {
@@ -32,6 +38,7 @@ struct FastingSection: View {
                 }
                 actions(v)
                 WeekBars(view: v, palette: palette)
+                FastingHistorySection(history: v.history, palette: palette)
             }
             .padding(MekaSpace.m)
             .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
@@ -44,12 +51,21 @@ struct FastingSection: View {
         HStack(spacing: MekaSpace.l) {
             if let cur = v.current {
                 Button("End fast") { model.endFast() }
-                Menu("Goal \(cur.targetHours) h") {
-                    ForEach(FastingRules.shared.TARGET_CHOICES, id: \.intValue) { h in
-                        Button("\(h.intValue) h") { model.setFastTarget(h.int32Value) }
+                if cur.extended {
+                    Menu("Goal \(FastingRules.shared.daysLabel(hours: cur.targetHours))") {
+                        ForEach(FastingRules.shared.EXTENDED_CHOICES, id: \.hours) { c in
+                            Button(c.label) { model.setFastTarget(c.hours) }
+                        }
                     }
+                    .menuStyle(.button).fixedSize()
+                } else {
+                    Menu("Goal \(cur.targetHours) h") {
+                        ForEach(FastingRules.shared.TARGET_CHOICES, id: \.intValue) { h in
+                            Button("\(h.intValue) h") { model.setFastTarget(h.int32Value) }
+                        }
+                    }
+                    .menuStyle(.button).fixedSize()
                 }
-                .menuStyle(.button).fixedSize()
                 Menu("Started…") {
                     ForEach(FastingRules.shared.MOVE_START_CHOICES, id: \.intValue) { m in
                         Button(FastingRules.shared.moveLabel(min: m.int32Value)) { model.moveFastStart(m.int32Value) }
@@ -64,6 +80,16 @@ struct FastingSection: View {
                     }
                 } primaryAction: {
                     model.startFast(minutesAgo: 0)
+                }
+                .menuStyle(.button).fixedSize()
+                Menu("Longer fast") {
+                    ForEach(FastingRules.shared.EXTENDED_CHOICES, id: \.hours) { c in
+                        Button(c.label) { model.startExtendedFast(hours: c.hours) }
+                    }
+                    Divider()
+                    ForEach(v.untilChoices, id: \.untilMs) { c in
+                        Button(c.label) { model.startFastUntil(c.untilMs) }
+                    }
                 }
                 .menuStyle(.button).fixedSize()
                 if let last = v.last, last.canResume {
@@ -91,7 +117,7 @@ private struct FastRing: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             let now = Int64(ctx.date.timeIntervalSince1970 * 1000)
-            let p = current.map { Double(FastingRules.shared.progress(startedAtMs: $0.startedAtMs, targetHours: $0.targetHours, nowMs: now)) } ?? 0
+            let p = current.map { Double($0.progress(nowMs: now)) } ?? 0
             ZStack {
                 if current?.reachedGoal == true {
                     Circle()
@@ -110,7 +136,8 @@ private struct FastRing: View {
                     if let cur = current {
                         Text(FastingRules.shared.clock(elapsedMs: now - cur.startedAtMs)).font(MekaType.itemTitle).monospacedDigit()
                             .foregroundStyle(palette.textPrimary)
-                        Text("of \(cur.targetHours) h").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        Text(cur.extended ? "of \(FastingRules.shared.daysLabel(hours: cur.targetHours))" : "of \(cur.targetHours) h")
+                            .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     } else {
                         Text("—").font(MekaType.itemTitle).foregroundStyle(palette.textTertiary)
                     }
@@ -163,6 +190,75 @@ private struct WeekBars: View {
         }
         .onAppear {
             if reduceMotion { shown = true } else { withAnimation(MekaMotion.replan(reduced: false)) { shown = true } }
+        }
+    }
+}
+
+/// Fasting v2's history: the streak, a twelve-week heat strip (hours fasted each day; weeks fade in left to right
+/// 40 ms apart) and every fast, planned against actual, behind a disclosure. Reduce Motion: shown at once.
+private struct FastingHistorySection: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let history: FastingHistory
+    let palette: MekaPalette
+    @State private var shown = false
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            if let streak = history.streakLine {
+                Text(streak).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+            }
+            HStack(alignment: .top, spacing: 3) {
+                ForEach(Array(history.heat.enumerated()), id: \.offset) { w, week in
+                    VStack(spacing: 3) {
+                        ForEach(week, id: \.epochDay) { d in
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(color(d))
+                                .overlay {
+                                    if d.isToday { RoundedRectangle(cornerRadius: 2).stroke(palette.textSecondary, lineWidth: 1) }
+                                }
+                                .frame(width: 12, height: 12)
+                        }
+                    }
+                    .opacity(shown ? 1 : 0)
+                    .animation(reduceMotion ? nil : MekaMotion.replan(reduced: false).delay(Double(w) * 0.04), value: shown)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(history.totalsLine ?? "No fasts yet")
+            Text(history.totalsLine ?? "Every fast you finish is kept here.").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            if !history.fasts.isEmpty {
+                DisclosureGroup(isExpanded: $expanded) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        ForEach(history.fasts, id: \.id) { f in
+                            VStack(alignment: .leading, spacing: 0) {
+                                HStack {
+                                    Text(f.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                                    Spacer()
+                                    Text(f.resultLine).font(MekaType.itemMeta).monospacedDigit()
+                                        .foregroundStyle(f.reachedGoal ? palette.accent : palette.textSecondary)
+                                }
+                                Text(f.whenLine).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            }
+                        }
+                    }
+                    .padding(.top, MekaSpace.xs)
+                } label: {
+                    Text("History").font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                }
+            }
+        }
+        .onAppear { shown = true }
+    }
+
+    private func color(_ d: FastingHeatDay) -> Color {
+        if d.isFuture { return palette.surfaceRaised.opacity(0.4) }
+        switch d.level {
+        case 0: return palette.surfaceRaised
+        case 1: return palette.accent.opacity(0.3)
+        case 2: return palette.accent.opacity(0.5)
+        case 3: return palette.accent.opacity(0.75)
+        default: return palette.accent
         }
     }
 }

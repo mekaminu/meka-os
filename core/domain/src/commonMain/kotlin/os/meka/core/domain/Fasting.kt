@@ -17,6 +17,11 @@ import os.meka.core.sync.fv
  * - History is the last seven local days, each fast counted on the day it ended.
  * - The planner keeps a short meal block free when the fast's goal lands today, and before the eating window closes
  *   ([plannerMeals]); meal blocks are shown, not applied.
+ * - Fasting v2 (Meka, 2026-10-07: "some weeks I fast for 5 days; just track, remind me and keep the history"): a fast
+ *   is either the **daily window** kind or an **extended** fast of days ("5-day fast", or "until Friday 18:00", stored
+ *   as the `goalAtMs` moment). A running extended fast says "Day 3 of 5 · 62 h". Ending early is fine and recorded as
+ *   is. [FastingHistory] keeps every fast (planned against actual), the streak of fasts that reached their goal and a
+ *   twelve-week heat strip of hours fasted per day. Tracking only: no food, calorie or weight advice, ever.
  */
 
 data class FastingPlanChoice(val label: String, val targetHours: Int, val eatingStartMin: Int, val eatingEndMin: Int)
@@ -30,14 +35,26 @@ data class FastingPlan(val targetHours: Int, val eatingStartMin: Int, val eating
 data class FastNow(
     val id: String,
     val startedAtMs: Long,
+    /** The goal in whole hours (rounded up for a fast "until" a moment). */
     val targetHours: Int,
     val goalAtMs: Long,
     val reachedGoal: Boolean,
     /** "Started 20:05 yesterday". */
     val startedLine: String,
-    /** "Goal 16 h · at 12:05" or "Goal reached at 12:05". */
+    /** "Goal 16 h · at 12:05" or "Goal reached at 12:05"; extended: "Goal 5 days · Sat 20:00". */
     val goalLine: String,
-)
+    /** True for an extended fast (days, not the daily window). */
+    val extended: Boolean = false,
+    /** "Fasting · goal 16 h" · "5-day fast" · "36 h fast" · "Fast until Fri 18:00". */
+    val title: String = "Fasting · goal $targetHours h",
+    /** Extended only: "Day 3 of 5 · 62 h", past the goal "Day 6 · 122 h · goal reached". */
+    val dayLine: String? = null,
+    /** When the goal is, short: "12:05" (daily window) or "Sat 20:00" (extended). */
+    val goalWhen: String = "",
+) {
+    /** Share of the goal done, 0 to 1. */
+    fun progress(nowMs: Long): Float = FastingRules.progressTo(startedAtMs, goalAtMs, nowMs)
+}
 
 /** The most recent finished fast. */
 data class LastFast(
@@ -52,12 +69,60 @@ data class LastFast(
     val canResume: Boolean,
 )
 
-/** One of the last seven days. */
 /** A finished fast, for the weekly review. */
-data class EndedFast(val startedAtMs: Long, val endedAtMs: Long, val targetHours: Int) {
-    val reachedGoal: Boolean get() = endedAtMs - startedAtMs >= targetHours * 3_600_000L
+data class EndedFast(val startedAtMs: Long, val endedAtMs: Long, val targetHours: Int, val goalMs: Long = targetHours * 3_600_000L) {
+    val reachedGoal: Boolean get() = endedAtMs - startedAtMs >= goalMs
 }
 
+/** One finished fast in the history: planned against actual. */
+data class FastRecord(
+    val id: String,
+    val startedAtMs: Long,
+    val endedAtMs: Long,
+    /** How long it was meant to be. */
+    val plannedMs: Long,
+    val actualMs: Long,
+    val reachedGoal: Boolean,
+    val extended: Boolean,
+    /** "5-day fast" · "16 h fast" · "Fast until Fri 18:00". */
+    val title: String,
+    /** "Mon 5 Oct 20:00 – Sat 10 Oct 14:00". */
+    val whenLine: String,
+    /** "4 d 18 h of 5 days · ended early" · "16 h 20 m · goal reached". */
+    val resultLine: String,
+)
+
+/** One day of the heat strip. */
+data class FastingHeatDay(
+    val epochDay: Long,
+    /** Hours fasted within this local day (a running fast counts up to now). */
+    val hours: Double,
+    /** 0 none · 1 under 8 h · 2 under 16 h · 3 under a whole day · 4 the whole day. */
+    val level: Int,
+    val isToday: Boolean,
+    /** Days after today in the last column, drawn empty. */
+    val isFuture: Boolean,
+)
+
+/** Every fast, newest first, with the streak and the heat strip (Fasting v2). */
+data class FastingHistory(
+    /** Finished fasts, newest first (at most [FastingRules.HISTORY_MAX]). */
+    val fasts: List<FastRecord>,
+    /** How many fasts in a row, counting back from the latest, reached their goal. */
+    val streak: Int,
+    /** "3 fasts in a row reached the goal"; null at 0. */
+    val streakLine: String?,
+    /** "42 fasts · 31 reached the goal · longest 4 d 18 h"; null with none. */
+    val totalsLine: String?,
+    /** Twelve Monday–Sunday weeks, oldest first, each 7 days. */
+    val heat: List<List<FastingHeatDay>>,
+) {
+    companion object {
+        val EMPTY = FastingHistory(emptyList(), 0, null, null, emptyList())
+    }
+}
+
+/** One of the last seven days. */
 data class FastingDay(
     val epochDay: Long,
     /** "Mon". */
@@ -78,6 +143,10 @@ data class FastingView(
     val week: List<FastingDay>,
     /** "5 fasts in 7 days · average 16 h 12 m · 4 reached the goal"; null with none. */
     val weekLine: String?,
+    /** Every fast, the streak and the heat strip. */
+    val history: FastingHistory = FastingHistory.EMPTY,
+    /** "Until …" goals offered for a new extended fast: the next six days at 18:00. */
+    val untilChoices: List<FastUntilChoice> = emptyList(),
 ) {
     val isFasting: Boolean get() = current != null
 
@@ -85,6 +154,11 @@ data class FastingView(
         val EMPTY = FastingView(FastingRules.DEFAULT_PLAN, null, null, "", emptyList(), null)
     }
 }
+
+/** "Until Fri 18:00" for a new extended fast. */
+data class FastUntilChoice(val label: String, val untilMs: Long)
+
+data class ExtendedFastChoice(val label: String, val hours: Int)
 
 object FastingRules {
     val PLAN_CHOICES = listOf(
@@ -100,7 +174,21 @@ object FastingRules {
     val STARTED_AGO_CHOICES = listOf(0, 30, 60, 120, 180)
     /** Nudges for a start time that was a little off. */
     val MOVE_START_CHOICES = listOf(-60, -30, 30)
-    const val MAX_TARGET_HOURS = 72
+    /** Extended fasts offered (Fasting v2). */
+    val EXTENDED_CHOICES = listOf(
+        ExtendedFastChoice("24 h", 24), ExtendedFastChoice("36 h", 36), ExtendedFastChoice("2 days", 48),
+        ExtendedFastChoice("3 days", 72), ExtendedFastChoice("5 days", 120), ExtendedFastChoice("7 days", 168),
+    )
+    /** The longest goal: ten days. */
+    const val MAX_TARGET_HOURS = 240
+    /** The shortest "until" goal. */
+    const val MIN_UNTIL_HOURS = 12
+    /** The "Until …" choices are this hour of day. */
+    const val UNTIL_HOUR = 18
+    /** Finished fasts kept in the history list (all of them stay in the data and the export). */
+    const val HISTORY_MAX = 30
+    /** Weeks in the heat strip. */
+    const val HEAT_WEEKS = 12
     /** A start can be set at most this far back. */
     const val MAX_BACKDATE_MIN = 48 * 60
     /** "End fast" can be undone for this long. */
@@ -150,6 +238,52 @@ object FastingRules {
 
     fun goalAt(startedAtMs: Long, targetHours: Int): Long = startedAtMs + targetHours * HOUR_MS
 
+    /** Share of the way from [startedAtMs] to [goalAtMs], 0 to 1 (capped). */
+    fun progressTo(startedAtMs: Long, goalAtMs: Long, nowMs: Long): Float =
+        ((nowMs - startedAtMs).toDouble() / (goalAtMs - startedAtMs).coerceAtLeast(1)).coerceIn(0.0, 1.0).toFloat()
+
+    /** "5-day fast", "36 h fast", "24 h fast". */
+    fun extendedTitle(targetHours: Int): String =
+        if (targetHours >= 48 && targetHours % 24 == 0) "${targetHours / 24}-day fast" else "$targetHours h fast"
+
+    /** "5 days", "36 h", "1 day". */
+    fun daysLabel(hours: Int): String = when {
+        hours % 24 == 0 && hours >= 24 -> "${hours / 24} ${if (hours == 24) "day" else "days"}"
+        else -> "$hours h"
+    }
+
+    /** "4 d 18 h" from two days up, else [duration]. */
+    fun longDuration(ms: Long): String {
+        val totalH = ms.coerceAtLeast(0) / HOUR_MS
+        return if (totalH >= 48) "${totalH / 24} d ${(totalH % 24).toString().padStart(2, '0')} h" else duration(ms)
+    }
+
+    /** "Day 3 of 5 · 62 h"; past the goal "Day 6 · 122 h · goal reached". */
+    fun dayLine(startedAtMs: Long, goalAtMs: Long, nowMs: Long): String {
+        val h = (nowMs - startedAtMs).coerceAtLeast(0) / HOUR_MS
+        return if (nowMs >= goalAtMs) "${dayOf(startedAtMs, goalAtMs, nowMs)} · $h h · goal reached" else "${dayOf(startedAtMs, goalAtMs, nowMs)} · $h h"
+    }
+
+    /** "Day 3 of 5"; past the goal "Day 6". Changes only once a day ([nextDayAt]). */
+    fun dayOf(startedAtMs: Long, goalAtMs: Long, nowMs: Long): String {
+        val day = (nowMs - startedAtMs).coerceAtLeast(0) / (24 * HOUR_MS) + 1
+        val totalDays = ((goalAtMs - startedAtMs).coerceAtLeast(1) + 24 * HOUR_MS - 1) / (24 * HOUR_MS)
+        return if (nowMs >= goalAtMs) "Day $day" else "Day $day of $totalDays"
+    }
+
+    /** When [dayOf] next changes. */
+    fun nextDayAt(startedAtMs: Long, nowMs: Long): Long =
+        startedAtMs + ((nowMs - startedAtMs).coerceAtLeast(0) / (24 * HOUR_MS) + 1) * 24 * HOUR_MS
+
+    /** 0 none · 1 under 8 h · 2 under 16 h · 3 under a whole day · 4 the whole day. */
+    fun heatLevel(hours: Double): Int = when {
+        hours <= 0.0 -> 0
+        hours < 8.0 -> 1
+        hours < 16.0 -> 2
+        hours < 23.5 -> 3
+        else -> 4
+    }
+
     /** True when [minuteOfDay] is inside the eating window (which may cross midnight). */
     fun inWindow(minuteOfDay: Int, startMin: Int, endMin: Int): Boolean =
         if (startMin <= endMin) minuteOfDay in startMin until endMin else minuteOfDay >= startMin || minuteOfDay < endMin
@@ -174,7 +308,10 @@ class Fasting(
     private val nowMs: () -> Long,
     private val calendar: LocalCalendar = LocalCalendar.UTC,
 ) {
-    private data class Fast(val id: String, val start: Long, val end: Long?, val target: Int)
+    private data class Fast(val id: String, val start: Long, val end: Long?, val target: Int, val goalAt: Long? = null, val extended: Boolean = false) {
+        /** When the goal is reached. */
+        val goal: Long get() = goalAt ?: (start + target * HOUR)
+    }
 
     // ---- Plan ----
 
@@ -210,25 +347,40 @@ class Fasting(
     // ---- Fasts ----
 
     /** Starts a fast [startedMinutesAgo] minutes ago with the plan's goal unless [targetHours] is given. */
-    fun start(startedMinutesAgo: Int = 0, targetHours: Int? = null): String {
+    fun start(startedMinutesAgo: Int = 0, targetHours: Int? = null): String =
+        begin(startedMinutesAgo, targetHours ?: plan().targetHours, extended = false, goalAt = null)
+
+    /** Starts an extended fast of [hours] (e.g. 120 for a 5-day fast). */
+    fun startExtended(hours: Int, startedMinutesAgo: Int = 0): String =
+        begin(startedMinutesAgo, hours, extended = true, goalAt = null)
+
+    /** Starts an extended fast that runs until [untilMs] ("until Friday 18:00"). */
+    fun startUntil(untilMs: Long, startedMinutesAgo: Int = 0): String {
+        val start = nowMs() - startedMinutesAgo * 60_000L
+        val span = untilMs - start
+        if (span < FastingRules.MIN_UNTIL_HOURS * HOUR) throw ValidationException("Pick an end at least ${FastingRules.MIN_UNTIL_HOURS} hours away")
+        if (span > FastingRules.MAX_TARGET_HOURS * HOUR) throw ValidationException("Pick an end within ten days")
+        return begin(startedMinutesAgo, ((span + HOUR - 1) / HOUR).toInt(), extended = true, goalAt = untilMs)
+    }
+
+    private fun begin(startedMinutesAgo: Int, target: Int, extended: Boolean, goalAt: Long?): String {
         if (open().isNotEmpty()) throw ValidationException("You're already fasting")
         if (startedMinutesAgo !in 0..FastingRules.MAX_BACKDATE_MIN) throw ValidationException("Pick a start in the last two days")
-        val target = targetHours ?: plan().targetHours
         checkTarget(target)
         val start = nowMs() - startedMinutesAgo * 60_000L
         // A fast can't begin inside one you've already finished.
         if (finished().any { start < it.end!! }) throw ValidationException("That overlaps your last fast")
         val id = ids()
-        replica.commitLocal(
-            EntityTypes.FAST, id,
-            linkedMapOf(
-                FastFields.STARTED_AT to start.fv(),
-                FastFields.TARGET_HOURS to target.fv(),
-                ActionableFields.CREATED_AT to nowMs().fv(),
-                ActionableFields.PROVENANCE_SOURCE to "user".fv(),
-                ActionableFields.PROVENANCE_TRUST to Trust.TRUSTED_USER.name.fv(),
-            ),
+        val fields = linkedMapOf(
+            FastFields.STARTED_AT to start.fv(),
+            FastFields.TARGET_HOURS to target.fv(),
+            ActionableFields.CREATED_AT to nowMs().fv(),
+            ActionableFields.PROVENANCE_SOURCE to "user".fv(),
+            ActionableFields.PROVENANCE_TRUST to Trust.TRUSTED_USER.name.fv(),
         )
+        if (extended) fields[FastFields.KIND] = KIND_EXTENDED.fv()
+        if (goalAt != null) fields[FastFields.GOAL_AT] = goalAt.fv()
+        replica.commitLocal(EntityTypes.FAST, id, fields)
         return id
     }
 
@@ -249,11 +401,13 @@ class Fasting(
         replica.commitLocal(EntityTypes.FAST, id, mapOf(FastFields.ENDED_AT to FieldValue.Null))
     }
 
-    /** Changes the running fast's goal. */
+    /** Changes the running fast's goal (in hours from its start; an "until" goal gives way to it). */
     fun setTarget(hours: Int) {
         checkTarget(hours)
         val f = current() ?: throw ValidationException("You're not fasting")
-        replica.commitLocal(EntityTypes.FAST, f.id, mapOf(FastFields.TARGET_HOURS to hours.fv()))
+        val fields = linkedMapOf(FastFields.TARGET_HOURS to hours.fv())
+        if (f.goalAt != null) fields[FastFields.GOAL_AT] = FieldValue.Null
+        replica.commitLocal(EntityTypes.FAST, f.id, fields)
     }
 
     /** Moves the running fast's start by [deltaMinutes] (negative: earlier). */
@@ -262,7 +416,9 @@ class Fasting(
         val start = f.start + deltaMinutes * 60_000L
         val now = nowMs()
         if (start > now) throw ValidationException("That's in the future")
-        if (now - start > FastingRules.MAX_BACKDATE_MIN * 60_000L) throw ValidationException("Pick a start in the last two days")
+        // Only an earlier start is limited (a fast of days is already further back than that).
+        if (deltaMinutes < 0 && now - start > FastingRules.MAX_BACKDATE_MIN * 60_000L && now - f.start <= FastingRules.MAX_BACKDATE_MIN * 60_000L)
+            throw ValidationException("Pick a start in the last two days")
         if (finished().any { start < it.end!! }) throw ValidationException("That overlaps your last fast")
         replica.commitLocal(EntityTypes.FAST, f.id, mapOf(FastFields.STARTED_AT to start.fv()))
     }
@@ -281,8 +437,9 @@ class Fasting(
         val plan = plan()
         val today = calendar.epochDayOf(now)
         val cur = current()?.let { f ->
-            val goal = FastingRules.goalAt(f.start, f.target)
+            val goal = f.goal
             val reached = now >= goal
+            val goalText = if (f.extended) dayTime(goal) else at(goal, today)
             FastNow(
                 id = f.id,
                 startedAtMs = f.start,
@@ -290,16 +447,29 @@ class Fasting(
                 goalAtMs = goal,
                 reachedGoal = reached,
                 startedLine = "Started ${at(f.start, today)}",
-                goalLine = if (reached) "Goal reached at ${at(goal, today)}" else "Goal ${f.target} h · at ${at(goal, today)}",
+                goalLine = when {
+                    reached -> "Goal reached at $goalText"
+                    f.extended && f.goalAt != null -> "Goal $goalText"
+                    f.extended -> "Goal ${FastingRules.daysLabel(f.target)} · $goalText"
+                    else -> "Goal ${f.target} h · at $goalText"
+                },
+                extended = f.extended,
+                title = if (f.extended) titleOf(f) else "Fasting · goal ${f.target} h",
+                dayLine = if (f.extended) FastingRules.dayLine(f.start, goal, now) else null,
+                goalWhen = if (f.extended) dayTime(goal) else FastingRules.hm(calendar.minuteOfDay(goal)),
             )
         }
         val history = merged()
         val last = history.maxByOrNull { it.end!! }?.let { f ->
             val ms = f.end!! - f.start
-            val reached = ms >= f.target * 3_600_000L
+            val reached = f.end >= f.goal
             LastFast(
                 id = f.id, startedAtMs = f.start, endedAtMs = f.end, hours = ms / 3_600_000.0, reachedGoal = reached,
-                line = "Last fast ${FastingRules.duration(ms)}" + if (reached) " · goal reached" else " · goal ${f.target} h",
+                line = "Last fast ${FastingRules.longDuration(ms)}" + when {
+                    reached -> " · goal reached"
+                    f.extended -> " · goal ${FastingRules.daysLabel(((f.goal - f.start) / HOUR).toInt())}"
+                    else -> " · goal ${f.target} h"
+                },
                 canResume = cur == null && now - f.end in 0..FastingRules.RESUME_WINDOW_MS,
             )
         }
@@ -310,17 +480,74 @@ class Fasting(
                 epochDay = day,
                 label = FastingRules.dayLabel(day),
                 hours = best?.let { (it.end!! - it.start) / 3_600_000.0 } ?: 0.0,
-                reachedGoal = ended.any { it.end!! - it.start >= it.target * 3_600_000L },
+                reachedGoal = ended.any { it.end!! >= it.goal },
                 isToday = day == today,
             )
         }
         val inWeek = history.filter { calendar.epochDayOf(it.end!!) in (today - 6)..today }
         val weekLine = inWeek.takeIf { it.isNotEmpty() }?.let { fs ->
             val avg = fs.sumOf { it.end!! - it.start } / fs.size
-            val met = fs.count { it.end!! - it.start >= it.target * 3_600_000L }
+            val met = fs.count { it.end!! >= it.goal }
             "${fs.size} ${if (fs.size == 1) "fast" else "fasts"} in 7 days · average ${FastingRules.duration(avg)} · $met reached the goal"
         }
-        return FastingView(plan, cur, last, FastingRules.windowLine(calendar.minuteOfDay(now), plan), days, weekLine)
+        return FastingView(
+            plan, cur, last, FastingRules.windowLine(calendar.minuteOfDay(now), plan), days, weekLine,
+            history = history(history, current(), now, today),
+            untilChoices = (1..6).map { ahead ->
+                val ms = calendar.toEpochMs(today + ahead, FastingRules.UNTIL_HOUR * 60)
+                FastUntilChoice("Until ${dayTime(ms)}", ms)
+            },
+        )
+    }
+
+    /** Every finished fast (newest first), the streak, the totals and the heat strip. */
+    private fun history(merged: List<Fast>, running: Fast?, now: Long, today: Long): FastingHistory {
+        val newest = merged.sortedByDescending { it.end!! }
+        val records = newest.take(FastingRules.HISTORY_MAX).map { f ->
+            val planned = f.goal - f.start
+            val actual = f.end!! - f.start
+            val reached = f.end >= f.goal
+            val plannedText = if (f.extended) FastingRules.daysLabel(((planned + HOUR - 1) / HOUR).toInt()) else "${f.target} h"
+            FastRecord(
+                id = f.id, startedAtMs = f.start, endedAtMs = f.end, plannedMs = planned, actualMs = actual,
+                reachedGoal = reached, extended = f.extended,
+                title = if (f.extended) titleOf(f) else "${f.target} h fast",
+                whenLine = "${dateTime(f.start)} – ${if (calendar.epochDayOf(f.start) == calendar.epochDayOf(f.end)) FastingRules.hm(calendar.minuteOfDay(f.end)) else dateTime(f.end)}",
+                resultLine = if (reached) "${FastingRules.longDuration(actual)} · goal reached"
+                else "${FastingRules.longDuration(actual)} of $plannedText · ended early",
+            )
+        }
+        val streak = newest.takeWhile { it.end!! >= it.goal }.size
+        val totals = newest.takeIf { it.isNotEmpty() }?.let { fs ->
+            val met = fs.count { it.end!! >= it.goal }
+            val longest = fs.maxOf { it.end!! - it.start }
+            "${fs.size} ${if (fs.size == 1) "fast" else "fasts"} · $met reached the goal · longest ${FastingRules.longDuration(longest)}"
+        }
+        // The heat strip: Monday-to-Sunday weeks ending with this one; a running fast counts up to now.
+        val monday = today - (CivilDate.isoDayOfWeek(today) - 1)
+        val first = monday - 7L * (FastingRules.HEAT_WEEKS - 1)
+        val spans = merged.map { it.start to it.end!! } + listOfNotNull(running?.let { it.start to now })
+        val heat = (0 until FastingRules.HEAT_WEEKS).map { w ->
+            (0 until 7).map { d ->
+                val day = first + 7L * w + d
+                val from = calendar.toEpochMs(day, 0)
+                val to = minOf(calendar.toEpochMs(day + 1, 0), now)
+                val ms = if (day > today) 0L else spans.sumOf { (s, e) -> (minOf(e, to) - maxOf(s, from)).coerceAtLeast(0) }
+                val hours = ms / HOUR.toDouble()
+                FastingHeatDay(day, hours, FastingRules.heatLevel(hours), day == today, day > today)
+            }
+        }
+        return FastingHistory(
+            fasts = records,
+            streak = streak,
+            streakLine = when (streak) {
+                0 -> null
+                1 -> "Your last fast reached its goal"
+                else -> "$streak fasts in a row reached the goal"
+            },
+            totalsLine = totals,
+            heat = heat,
+        )
     }
 
     /**
@@ -334,7 +561,7 @@ class Fasting(
         val cur = current()
         var eatingFrom = now
         if (cur != null) {
-            val goal = FastingRules.goalAt(cur.start, cur.target)
+            val goal = cur.goal
             if (goal >= now && goal in day) out += DayPlanner.MealBlock("Break your fast", goal, goal + meal)
             eatingFrom = maxOf(goal, now) + meal
         }
@@ -353,7 +580,9 @@ class Fasting(
         val start = this[FastFields.STARTED_AT].longOrNull ?: return null
         val end = this[FastFields.ENDED_AT].longOrNull
         val target = (this[FastFields.TARGET_HOURS].longOrNull?.toInt() ?: FastingRules.DEFAULT_PLAN.targetHours).coerceIn(1, FastingRules.MAX_TARGET_HOURS)
-        return Fast(ref.entityId, start, end?.let { maxOf(it, start) }, target)
+        val goalAt = this[FastFields.GOAL_AT].longOrNull?.takeIf { it > start }
+        val extended = this[FastFields.KIND].textOrNull == KIND_EXTENDED
+        return Fast(ref.entityId, start, end?.let { maxOf(it, start) }, target, goalAt, extended)
     }
 
     private fun live(id: String): Fast? = replica.entity(EntityTypes.FAST, id)?.toFast()
@@ -361,7 +590,7 @@ class Fasting(
     private fun open(): List<Fast> = all().filter { it.end == null }
 
     /** Finished fasts (overlapping ones merged), oldest first: for the weekly review. */
-    fun ended(): List<EndedFast> = merged().map { EndedFast(it.start, it.end!!, it.target) }
+    fun ended(): List<EndedFast> = merged().map { EndedFast(it.start, it.end!!, it.target, it.goal - it.start) }
 
     private fun finished(): List<Fast> = all().filter { it.end != null }
 
@@ -379,6 +608,18 @@ class Fasting(
         return out
     }
 
+    /** "5-day fast", "Fast until Fri 18:00". */
+    private fun titleOf(f: Fast): String = if (f.goalAt != null) "Fast until ${dayTime(f.goalAt)}" else FastingRules.extendedTitle(f.target)
+
+    /** "Sat 20:00". */
+    private fun dayTime(ms: Long): String =
+        "${FastingRules.dayLabel(calendar.epochDayOf(ms))} ${FastingRules.hm(calendar.minuteOfDay(ms))}"
+
+    /** "Mon 5 Oct 20:00". */
+    private fun dateTime(ms: Long): String {
+        return "${CivilDate.shortLabel(calendar.epochDayOf(ms))} ${FastingRules.hm(calendar.minuteOfDay(ms))}"
+    }
+
     /** "20:05", "20:05 yesterday", "12:05 tomorrow", "Mon 08:00". */
     private fun at(ms: Long, today: Long): String {
         val t = FastingRules.hm(calendar.minuteOfDay(ms))
@@ -391,10 +632,12 @@ class Fasting(
     }
 
     private fun checkTarget(hours: Int) {
-        if (hours !in 1..FastingRules.MAX_TARGET_HOURS) throw ValidationException("Pick a goal up to 72 hours")
+        if (hours !in 1..FastingRules.MAX_TARGET_HOURS) throw ValidationException("Pick a goal up to ten days")
     }
 
     companion object {
         const val PLAN_ID = "default"
+        const val KIND_EXTENDED = "extended"
+        private const val HOUR = 3_600_000L
     }
 }

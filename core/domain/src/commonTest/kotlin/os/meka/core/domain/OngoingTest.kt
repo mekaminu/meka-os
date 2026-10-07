@@ -137,4 +137,21 @@ class OngoingTest {
         assertEquals(listOf(OngoingKind.MEETING, OngoingKind.FAST), v.items.map { it.kind })
         assertEquals("10 min", v.menuBar)
     }
+
+    @Test
+    fun anExtendedFastLeadsWithItsDayAndLooksAgainWhenTheDayTurns() {
+        val world = SyncWorld()
+        world.clock.nowMs = at(20)
+        val f = Fasting(world.device("android").replica, { "F1" }, { world.clock.nowMs })
+        f.startExtended(120)
+        world.clock.nowMs = at(20 + 50) // Friday 22:00, day 3
+        val v = view(emptyList(), world.clock.nowMs, f.view())
+        val item = v.items.single()
+        assertEquals("5-day fast · Day 3 of 5", item.title)
+        assertEquals("Goal at Mon 20:00 · started Wed 20:00", item.text)
+        assertEquals(41, item.progressPercent)
+        assertEquals(at(72), v.nextChangeMs) // midnight comes before day 4 (Saturday 20:00)
+        world.clock.nowMs = at(72, 30)
+        assertEquals(at(20 + 72), view(emptyList(), world.clock.nowMs, f.view()).nextChangeMs) // then day 4
+    }
 }

@@ -168,6 +168,10 @@ object FastFields {
     const val STARTED_AT = "startedAtMs"
     const val ENDED_AT = "endedAtMs"
     const val TARGET_HOURS = "targetHours"
+    /** Fasting v2 (additive): "extended" for a fast of days (a 5-day fast, a fast until Friday 18:00); absent for the daily window. */
+    const val KIND = "kind"
+    /** Fasting v2 (additive): the goal as a moment ("until Friday 18:00"); absent when the goal is [TARGET_HOURS] from the start. */
+    const val GOAL_AT = "goalAtMs"
 }
 
 /** The fasting plan: usual goal and the eating window as local minutes of the day. */

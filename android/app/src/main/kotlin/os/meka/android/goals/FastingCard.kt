@@ -12,6 +12,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -54,8 +56,12 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.FastNow
+import os.meka.core.domain.FastRecord
+import os.meka.core.domain.FastingHeatDay
+import os.meka.core.domain.FastingHistory
 import os.meka.core.domain.FastingDay
 import os.meka.core.domain.FastingRules
 import os.meka.core.domain.FastingView
@@ -66,6 +72,10 @@ import os.meka.core.facade.MekaCore
  * the goal is reached; the last seven days fill on appear. Start (now or earlier), End, adjust the goal or the start,
  * or throw a mistaken fast away. No health claims, nothing started or ended for you. Reduced motion: no sweep or pulse,
  * the ring is redrawn each second and the glow is steady.
+ *
+ * Fasting v2: "Longer fast" starts an extended fast (24 h … 7 days, or until a day at 18:00), which shows
+ * "Day 3 of 5 · 62 h"; the history under the week keeps every fast (planned against actual), the streak and a
+ * twelve-week heat strip whose weeks fade in left to right. Tracking only: no food, calorie or weight advice.
  */
 @Composable
 internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
@@ -89,8 +99,12 @@ internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
             FastRing(cur, now)
             Spacer(Modifier.width(MekaSpace.m))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                Text(if (cur != null) "Fasting" else "Not fasting", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+                Text(
+                    when { cur == null -> "Not fasting"; cur.extended -> cur.title; else -> "Fasting" },
+                    style = MekaType.itemTitle, color = Meka.colors.textPrimary,
+                )
                 if (cur != null) {
+                    cur.dayLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent) }
                     Text(cur.goalLine, style = MekaType.itemMeta, color = if (cur.reachedGoal) Meka.colors.accent else Meka.colors.textSecondary)
                     Text(cur.startedLine, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
                 } else {
@@ -108,7 +122,11 @@ internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
             }
             AnimatedVisibility(adjusting, enter = unfold(), exit = fold()) {
                 Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
-                    Chips("Goal", FastingRules.TARGET_CHOICES.map { "$it h" to (it == cur.targetHours) }) { i -> act { core.setFastTarget(FastingRules.TARGET_CHOICES[i]) } }
+                    if (cur.extended) {
+                        Chips("Goal", FastingRules.EXTENDED_CHOICES.map { it.label to (it.hours == cur.targetHours) }) { i -> act { core.setFastTarget(FastingRules.EXTENDED_CHOICES[i].hours) } }
+                    } else {
+                        Chips("Goal", FastingRules.TARGET_CHOICES.map { "$it h" to (it == cur.targetHours) }) { i -> act { core.setFastTarget(FastingRules.TARGET_CHOICES[i]) } }
+                    }
                     Chips("Started", FastingRules.MOVE_START_CHOICES.map { FastingRules.moveLabel(it) to false }) { i -> act { core.moveFastStart(FastingRules.MOVE_START_CHOICES[i]) } }
                     Action("Discard this fast", critical = true) { adjusting = false; act { core.discardFast() } }
                 }
@@ -117,11 +135,18 @@ internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
             Chips("Start a fast", FastingRules.STARTED_AGO_CHOICES.map { FastingRules.startedAgoLabel(it) to false }) { i ->
                 haptics.light(); act { core.startFast(FastingRules.STARTED_AGO_CHOICES[i]) }
             }
+            Chips("Longer fast", FastingRules.EXTENDED_CHOICES.map { it.label to false } + v.untilChoices.map { it.label to false }) { i ->
+                haptics.light()
+                val n = FastingRules.EXTENDED_CHOICES.size
+                if (i < n) act { core.startExtendedFast(FastingRules.EXTENDED_CHOICES[i].hours, 0) }
+                else act { core.startFastUntil(v.untilChoices[i - n].untilMs, 0) }
+            }
             v.last?.takeIf { it.canResume }?.let { last -> Action("Undo end") { act { core.resumeFast(last.id) } } }
             Chips("Plan", FastingRules.PLAN_CHOICES.map { it.label to (FastingRules.planLabel(v.plan) == it.label) }) { i -> act { core.chooseFastingPlan(i) } }
         }
 
         WeekBars(v)
+        HistorySection(v.history)
     }
 }
 
@@ -129,7 +154,7 @@ internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
 @Composable
 private fun FastRing(cur: FastNow?, now: Long) {
     val reduced = Meka.reducedMotion
-    val target = cur?.let { FastingRules.progress(it.startedAtMs, it.targetHours, now) } ?: 0f
+    val target = cur?.progress(now) ?: 0f
     // A linear one-second glide keeps the sweep continuous between ticks.
     val sweep by animateFloatAsState(target, if (reduced) snap() else tween(1_000, easing = LinearEasing), label = "fast-sweep")
     val glowing = cur?.reachedGoal == true
@@ -155,7 +180,10 @@ private fun FastRing(cur: FastNow?, now: Long) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             if (cur != null) {
                 Text(FastingRules.clock(now - cur.startedAtMs), style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-                Text("of ${cur.targetHours} h", style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(
+                    if (cur.extended) "of ${FastingRules.daysLabel(cur.targetHours)}" else "of ${cur.targetHours} h",
+                    style = MekaType.caption, color = Meka.colors.textTertiary,
+                )
             } else {
                 Text("—", style = MekaType.itemTitle, color = Meka.colors.textTertiary)
             }
@@ -201,5 +229,67 @@ private fun DayBar(d: FastingDay, fraction: Float, modifier: Modifier) {
                     .background(if (d.reachedGoal) Meka.colors.accent else Meka.colors.textTertiary),
             )
         }
+    }
+}
+
+/**
+ * Fasting v2's history: the streak, a twelve-week heat strip (hours fasted each day, weeks fading in left to right
+ * 40 ms apart) and every fast, planned against actual, unfolding under "History". Reduced motion: shown at once.
+ */
+@Composable
+private fun HistorySection(h: FastingHistory) {
+    val reduced = Meka.reducedMotion
+    var open by rememberSaveable { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        h.streakLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent) }
+        Row(
+            Modifier.semantics { contentDescription = h.totalsLine ?: "No fasts yet" },
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            h.heat.forEachIndexed { w, week ->
+                val alpha = remember { Animatable(if (reduced) 1f else 0f) }
+                LaunchedEffect(Unit) {
+                    if (!reduced) { delay(MotionMath.staggerDelayMs(w, false).toLong()); alpha.animateTo(1f, MekaMotion.appear(false)) }
+                }
+                Column(Modifier.graphicsLayer { this.alpha = alpha.value }, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    week.forEach { d -> HeatCell(d) }
+                }
+            }
+        }
+        Text(h.totalsLine ?: "Every fast you finish is kept here.", style = MekaType.caption, color = Meka.colors.textTertiary)
+        if (h.fasts.isNotEmpty()) {
+            Action(if (open) "Hide history" else "History") { open = !open }
+            AnimatedVisibility(open, enter = unfold(), exit = fold()) {
+                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    h.fasts.forEach { f -> HistoryRow(f) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeatCell(d: FastingHeatDay) {
+    val accent = Meka.colors.accent
+    val color = when {
+        d.isFuture -> Meka.colors.surfaceRaised.copy(alpha = 0.4f)
+        d.level == 0 -> Meka.colors.surfaceRaised
+        d.level == 1 -> accent.copy(alpha = 0.3f)
+        d.level == 2 -> accent.copy(alpha = 0.5f)
+        d.level == 3 -> accent.copy(alpha = 0.75f)
+        else -> accent
+    }
+    val ring = if (d.isToday) Modifier.border(1.dp, Meka.colors.textSecondary, RoundedCornerShape(2.dp)) else Modifier
+    Box(Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(color).then(ring))
+}
+
+@Composable
+private fun HistoryRow(f: FastRecord) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(f.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            Text(f.resultLine, style = MekaType.itemMeta, color = if (f.reachedGoal) Meka.colors.accent else Meka.colors.textSecondary)
+        }
+        Text(f.whenLine, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }

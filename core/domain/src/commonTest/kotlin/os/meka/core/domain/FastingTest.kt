@@ -208,4 +208,114 @@ class FastingTest {
         hours(12) // 20:00
         assertTrue(f.plannerMeals(day).isEmpty())
     }
+
+    // ---- Fasting v2: extended fasts and history ----
+
+    @Test
+    fun aFiveDayFastCountsDaysAndHours() {
+        f.startExtended(120)
+        var cur = assertNotNull(f.view().current)
+        assertTrue(cur.extended)
+        assertEquals("5-day fast", cur.title)
+        assertEquals("Day 1 of 5 · 0 h", cur.dayLine)
+        assertEquals("Goal 5 days · Sat 20:00", cur.goalLine)
+        assertEquals("Sat 20:00", cur.goalWhen)
+        hours(62) // Thursday 10:00
+        cur = assertNotNull(f.view().current)
+        assertEquals("Day 3 of 5 · 62 h", cur.dayLine)
+        assertEquals(62f / 120f, cur.progress(world.clock.nowMs))
+        hours(60) // Saturday 22:00
+        cur = assertNotNull(f.view().current)
+        assertTrue(cur.reachedGoal)
+        assertEquals("Day 6 · 122 h · goal reached", cur.dayLine)
+        assertEquals("Goal reached at Sat 20:00", cur.goalLine)
+        // A fast of days isn't the daily window: no meals planned around it until its goal day.
+        f.end()
+        val v = f.view()
+        assertEquals("Last fast 5 d 02 h · goal reached", v.last!!.line)
+        val rec = v.history.fasts.single()
+        assertEquals("5-day fast", rec.title)
+        assertEquals("5 d 02 h · goal reached", rec.resultLine)
+        assertEquals(1, v.history.streak)
+    }
+
+    @Test
+    fun endingEarlyIsRecordedAsIsAndBreaksTheStreak() {
+        f.start(); hours(16); f.end(); hours(8) // Tuesday 12:00 → 20:00
+        f.start(); hours(17); f.end(); hours(7)
+        assertEquals("2 fasts in a row reached the goal", f.view().history.streakLine)
+        f.startExtended(72) // Wednesday 20:00
+        hours(50)
+        f.end()
+        val h = f.view().history
+        assertEquals(0, h.streak)
+        assertNull(h.streakLine)
+        val latest = h.fasts.first()
+        assertEquals("3-day fast", latest.title)
+        assertFalse(latest.reachedGoal)
+        assertEquals("2 d 02 h of 3 days · ended early", latest.resultLine)
+        assertEquals(72 * hourMs, latest.plannedMs)
+        assertEquals(50 * hourMs, latest.actualMs)
+        assertEquals("3 fasts · 2 reached the goal · longest 2 d 02 h", h.totalsLine)
+        assertEquals(listOf("3-day fast", "16 h fast", "16 h fast"), h.fasts.map { it.title })
+    }
+
+    @Test
+    fun aFastUntilAMomentUsesThatMoment() {
+        val v0 = f.view()
+        assertEquals(6, v0.untilChoices.size)
+        assertEquals("Until Tue 18:00", v0.untilChoices.first().label)
+        val fri = v0.untilChoices[3] // Friday 18:00
+        assertEquals("Until Fri 18:00", fri.label)
+        f.startUntil(fri.untilMs)
+        val cur = assertNotNull(f.view().current)
+        assertEquals("Fast until Fri 18:00", cur.title)
+        assertEquals("Goal Fri 18:00", cur.goalLine)
+        assertEquals(94, cur.targetHours) // Monday 20:00 → Friday 18:00 is 94 h
+        assertEquals("Day 1 of 4 · 0 h", cur.dayLine)
+        // Changing the goal to hours replaces the moment.
+        f.setTarget(120)
+        assertEquals("Goal 5 days · Sat 20:00", f.view().current!!.goalLine)
+        f.discard()
+        assertFailsWith<ValidationException> { f.startUntil(world.clock.nowMs + 2 * hourMs) }
+        assertFailsWith<ValidationException> { f.startUntil(world.clock.nowMs + 11 * dayMs) }
+        assertFailsWith<ValidationException> { f.startExtended(241) }
+    }
+
+    @Test
+    fun theHeatStripCountsHoursFastedEachDay() {
+        f.start(); hours(16); f.end() // Monday 20:00 → Tuesday 12:00
+        val h = f.view().history
+        assertEquals(FastingRules.HEAT_WEEKS, h.heat.size)
+        assertTrue(h.heat.all { it.size == 7 })
+        val days = h.heat.flatten()
+        val today = days.single { it.isToday } // Tuesday
+        assertEquals(12.0, today.hours)
+        assertEquals(2, today.level)
+        val monday = days[days.indexOf(today) - 1]
+        assertEquals(4.0, monday.hours)
+        assertEquals(1, monday.level)
+        assertTrue(days.last().isFuture) // Sunday
+        assertEquals(0, days.last().level)
+        // A running fast of days fills whole days.
+        hours(8); f.startExtended(72); hours(52) // Tuesday 20:00 → Thursday 24:00
+        val d2 = f.view().history.heat.flatten()
+        val wed = d2.single { it.isToday }.epochDay - 1
+        assertEquals(4, d2.single { it.epochDay == wed }.level)
+    }
+
+    @Test
+    fun anExtendedFastSyncsWithItsKindAndGoal() {
+        val mac = world.device("mac")
+        val m = fasting(mac)
+        f.startExtended(120)
+        d.sync(); mac.sync()
+        val cur = assertNotNull(m.view().current)
+        assertEquals("5-day fast", cur.title)
+        assertTrue(cur.extended)
+        hours(30)
+        m.moveStart(-30) // nudged on the Mac, seen on the Fold
+        d.sync(); mac.sync(); d.sync()
+        assertEquals("Day 2 of 5 · 30 h", f.view().current!!.dayLine)
+    }
 }

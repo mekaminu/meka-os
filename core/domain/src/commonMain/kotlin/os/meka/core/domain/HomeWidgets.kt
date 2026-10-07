@@ -119,11 +119,10 @@ object HomeWidgetRules {
             val reached = nowMs >= f.goalAtMs
             WidgetFast(
                 running = true,
-                title = "Fasting · goal ${f.targetHours} h",
-                line = if (reached) "Goal reached at ${hhmm(f.goalAtMs)}" else "Goal at ${hhmm(f.goalAtMs)}",
+                title = f.title,
+                line = (if (f.extended) f.goalWhen else hhmm(f.goalAtMs)).let { if (reached) "Goal reached at $it" else "Goal at $it" },
                 startedAtMs = f.startedAtMs,
-                progressPercent = if (reached) 100
-                else (FastingRules.progress(f.startedAtMs, f.targetHours, nowMs) * 100).toInt().coerceIn(0, 100),
+                progressPercent = if (reached) 100 else (f.progress(nowMs) * 100).toInt().coerceIn(0, 100),
                 reached = reached,
             )
         } else {

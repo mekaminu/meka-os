@@ -397,6 +397,10 @@ class MekaCore(
 
     /** Starts a fast [startedMinutesAgo] minutes ago (0: now) with the plan's goal. */
     suspend fun startFast(startedMinutesAgo: Int): String = onCore { fasting.start(startedMinutesAgo) }
+    /** Starts an extended fast of [hours] (Fasting v2: [os.meka.core.domain.FastingRules.EXTENDED_CHOICES]). */
+    suspend fun startExtendedFast(hours: Int, startedMinutesAgo: Int): String = onCore { fasting.startExtended(hours, startedMinutesAgo) }
+    /** Starts an extended fast that runs until [untilMs] ([os.meka.core.domain.FastingView.untilChoices]). */
+    suspend fun startFastUntil(untilMs: Long, startedMinutesAgo: Int): String = onCore { fasting.startUntil(untilMs, startedMinutesAgo) }
     /** Ends the running fast now. */
     suspend fun endFast() = onCore { fasting.end() }
     /** Undoes "End fast" for a few minutes after it ([os.meka.core.domain.LastFast.canResume]). */

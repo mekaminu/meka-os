@@ -275,6 +275,24 @@ class MekaCoreTest {
     }
 
     @Test
+    fun anExtendedFastSyncsAndEndsIntoTheHistory() = runTest {
+        val a = core("android"); val m = core("mac")
+        a.startExtendedFast(120, 0)
+        assertEquals("5-day fast", a.fastingView.value.current?.title)
+        a.syncNow(); m.syncNow()
+        assertEquals("Day 1 of 5 · 0 h", m.fastingView.value.current?.dayLine)
+        m.endFast()
+        m.syncNow(); a.syncNow()
+        val h = a.fastingView.value.history
+        assertEquals(listOf("5-day fast"), h.fasts.map { it.title })
+        assertTrue(h.fasts.single().resultLine.endsWith("ended early"))
+        assertEquals(12, h.heat.size)
+        val until = a.fastingView.value.untilChoices.last()
+        a.startFastUntil(until.untilMs, 0)
+        assertEquals(until.label.replace("Until", "Fast until"), a.fastingView.value.current?.title)
+    }
+
+    @Test
     fun theShutdownCarriesWhatsLeftToTomorrowAndIsPutAwayOnTheOtherDevice() = runTest {
         val a = core("android"); val m = core("mac")
         a.addTask("Post the letter")

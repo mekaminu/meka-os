@@ -186,7 +186,8 @@ class MorningBrief(
         }
 
         val fastingLine = fasting.current?.let { f ->
-            "Fasting · ${f.startedLine.replaceFirstChar { it.lowercase() }} · " +
+            if (f.extended) "${f.title} · ${f.dayLine}"
+            else "Fasting · ${f.startedLine.replaceFirstChar { it.lowercase() }} · " +
                 if (f.reachedGoal) "goal reached" else "goal at ${hhmm(f.goalAtMs)}"
         }
 
