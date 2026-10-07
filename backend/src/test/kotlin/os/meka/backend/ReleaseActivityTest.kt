@@ -44,7 +44,7 @@ class ReleaseActivityTest {
     /** The Fold, after pulling everything the server holds. */
     private fun fold(): ActivityLog {
         var n = 0
-        val replica = Replica("hh", "fold", HlcClock("fold") { nowMs }, InMemoryReplicaStore(), MekaSchema) { "f${n++}" }
+        val replica = Replica("hh", "fold", HlcClock("fold", { nowMs }), InMemoryReplicaStore(), MekaSchema) { "f${n++}" }
         replica.applyRemoteBatch(ops.after("hh", 0, 1000).map { it.op })
         return ActivityLog(replica, { "a${n++}" }, { nowMs })
     }
