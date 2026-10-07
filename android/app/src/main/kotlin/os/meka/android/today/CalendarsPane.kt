@@ -1,6 +1,9 @@
 package os.meka.android.today
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,22 +17,30 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaMotion
+import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.CalendarChoice
 import os.meka.android.designsystem.SkeletonRows
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -73,7 +84,10 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(MekaSpace.gutter), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    val onToday by core.calendarsOnToday.collectAsState()
+    val haptics = rememberMekaHaptics()
+
+    Column(Modifier.fillMaxSize().padding(MekaSpace.gutter).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
         Text("Calendars", style = MekaType.greeting, color = Meka.colors.textPrimary,
@@ -86,6 +100,21 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
             else -> {
                 if (list.isEmpty()) Text("No calendars connected yet.", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
                 list.forEachIndexed { i, a -> AccountRow(a, Modifier.appear(rememberAppearance(i)), onReconnect = { connect(a.provider) }) }
+            }
+        }
+        // On Today (all-day polish): a planning calendar can stay in the Calendar tab but off Today. Synced.
+        if (onToday.isNotEmpty()) {
+            Spacer(Modifier.height(MekaSpace.m))
+            Text("ON TODAY", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+            Text("Turn a calendar off to keep it in the Calendar tab but off Today and your day.",
+                style = MekaType.caption, color = Meka.colors.textTertiary)
+            onToday.forEachIndexed { i, c ->
+                CalendarSwitchRow(c, Modifier.appear(rememberAppearance(i))) {
+                    haptics.tick()
+                    scope.launch {
+                        runCatching { if (c.onToday) core.hideCalendarFromToday(c.key, c.label) else core.showCalendarOnToday(c.key) }
+                    }
+                }
             }
         }
         Spacer(Modifier.height(MekaSpace.l))
@@ -117,6 +146,25 @@ private fun AccountRow(a: ConnectedAccount, modifier: Modifier = Modifier, onRec
             Text("Reconnect", style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clickable(role = Role.Button) { onReconnect() }.padding(start = MekaSpace.m))
         }
+    }
+}
+
+/** One calendar with its On/Off pill; the pill's colour blends as it changes. */
+@Composable
+private fun CalendarSwitchRow(c: CalendarChoice, modifier: Modifier = Modifier, onToggle: () -> Unit) {
+    val pill by animateColorAsState(if (c.onToday) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(Meka.reducedMotion), label = "on-today")
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onToggle() }
+            .semantics { contentDescription = "${c.label} on Today"; selected = c.onToday }
+            .padding(vertical = MekaSpace.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(c.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+            c.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        }
+        Text(if (c.onToday) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(pill).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs))
     }
 }
 

@@ -193,6 +193,10 @@ class MekaCore(
     /** Hidden events and prep tasks (calendar actions); the event detail reads it. */
     val eventMarks: StateFlow<os.meka.core.domain.EventMarks> = _eventMarks.asStateFlow()
 
+    private val _calendarsOnToday = MutableStateFlow<List<os.meka.core.domain.CalendarChoice>>(emptyList())
+    /** Calendars' "On Today" list: every calendar in the mirror and whether it shows on Today (all-day polish). */
+    val calendarsOnToday: StateFlow<List<os.meka.core.domain.CalendarChoice>> = _calendarsOnToday.asStateFlow()
+
     private val _activity = MutableStateFlow(os.meka.core.domain.ActivityView.EMPTY)
     /** What MEKA did and why (V1 activity log): the last 30 days by day, newest first; follows sync. */
     val activityView: StateFlow<os.meka.core.domain.ActivityView> = _activity.asStateFlow()
@@ -313,6 +317,13 @@ class MekaCore(
     suspend fun makeAllDayTask(event: os.meka.core.domain.CalendarEvent): String = onCore { eventActions.makeTask(event) }
     /** Undo for [makeAllDayTask]: the task goes and the entry is back in Today. */
     suspend fun undoAllDayTask(eventId: String) = onCore { eventActions.unmakeTask(eventId) }
+    /**
+     * "Hide <calendar> from Today": every event of the calendar with [calendarKey] ([os.meka.core.domain.CalendarRules.key])
+     * leaves my day; the Calendar tab and Search keep them. Synced; [showCalendarOnToday] undoes it.
+     */
+    suspend fun hideCalendarFromToday(calendarKey: String, label: String) = onCore { eventActions.hideCalendar(calendarKey, label) }
+    /** Shows a hidden calendar on Today again (the undo bar, and the Calendars switch). */
+    suspend fun showCalendarOnToday(calendarKey: String) = onCore { eventActions.showCalendar(calendarKey) }
     /** Remind me [minutes] before the event (a governor heads-up, CLOCK precision); 0 turns it off. */
     suspend fun setEventReminder(eventId: String, minutes: Int) = onCore { eventActions.setReminder(eventId, minutes) }
     /** Leave by: a heads-up [travelMinutes] before the event starts (how long it takes to get there); 0 turns it off. */
@@ -743,6 +754,7 @@ class MekaCore(
         _search.value = runSearch(all)
         _activity.value = activity.view()
         _calendar.value = CalendarAgenda.build(all, allEvents, nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden)
+        _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars)
         _notifyPreview.value = Governor.preview(currentNotices(), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(

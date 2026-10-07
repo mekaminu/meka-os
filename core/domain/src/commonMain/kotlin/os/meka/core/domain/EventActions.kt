@@ -24,8 +24,16 @@ data class EventMarks(
     val reminders: Map<String, Int> = emptyMap(),
     /** Event id → minutes it takes to get there (a leave-by reminder). */
     val travel: Map<String, Int> = emptyMap(),
+    /** Calendars hidden from Today: key ([CalendarRules.key]) → name (see [CalendarRules]). */
+    val hiddenCalendars: Map<String, String> = emptyMap(),
 ) {
     fun isHidden(eventId: String) = eventId in hidden
+
+    /** Whether [e]'s calendar is hidden from Today. */
+    fun isCalendarHidden(e: CalendarEvent): Boolean = hiddenCalendars.isNotEmpty() && CalendarRules.key(e) in hiddenCalendars
+
+    /** For Swift: whether the calendar with [key] is hidden from Today. */
+    fun isCalendarKeyHidden(key: String): Boolean = key in hiddenCalendars
 
     /** For Swift: the reminder's minutes, or 0 for none. */
     fun reminderOf(eventId: String): Int = reminders[eventId] ?: 0
@@ -33,9 +41,10 @@ data class EventMarks(
     /** For Swift: the travel minutes, or 0 for none. */
     fun travelOf(eventId: String): Int = travel[eventId] ?: 0
 
-    /** The events that count for the day: everything not hidden. */
+    /** The events that count for the day: everything not hidden, one by one or by its calendar. */
     fun visible(events: List<CalendarEvent>): List<CalendarEvent> =
-        if (hidden.isEmpty()) events else events.filter { it.id !in hidden }
+        if (hidden.isEmpty() && hiddenCalendars.isEmpty()) events
+        else events.filter { it.id !in hidden && !isCalendarHidden(it) }
 
     companion object {
         val NONE = EventMarks(emptySet(), emptyMap())
@@ -71,7 +80,34 @@ class EventActions(
         fun minutes(field: String) = entities.mapNotNull { e ->
             e[field].longOrNull?.toInt()?.takeIf { it in 1..ReminderRules.MAX_MIN }?.let { e.ref.entityId to it }
         }.toMap()
-        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN))
+        val calendars = replica.entities(EntityTypes.CALENDAR_MARK)
+            .filter { it[CalendarMarkFields.HIDDEN_FROM_TODAY].boolOrNull == true }
+            .mapNotNull { c ->
+                val key = c[CalendarMarkFields.KEY].textOrNull ?: return@mapNotNull null
+                key to (c[CalendarMarkFields.LABEL].textOrNull ?: "")
+            }.toMap()
+        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars)
+    }
+
+    /**
+     * "Hide <calendar> from Today" (all-day polish): every event of the calendar with [key] leaves my day; the Calendar
+     * tab and Search keep them. Last switch on any device wins; [showCalendar] is the undo and the Calendars switch.
+     */
+    fun hideCalendar(key: String, label: String) = setCalendarHidden(key, label, true)
+    fun showCalendar(key: String) = setCalendarHidden(key, null, false)
+
+    private fun setCalendarHidden(key: String, label: String?, hidden: Boolean) {
+        require(key.isNotEmpty()) { "calendar key is empty" }
+        val id = CalendarRules.markId(key)
+        val current = replica.entity(EntityTypes.CALENDAR_MARK, id)
+        if ((current?.get(CalendarMarkFields.HIDDEN_FROM_TODAY)?.boolOrNull ?: false) == hidden) return
+        val fields = buildMap {
+            put(CalendarMarkFields.KEY, key.fv())
+            put(CalendarMarkFields.HIDDEN_FROM_TODAY, hidden.fv())
+            put(CalendarMarkFields.HIDDEN_AT, if (hidden) nowMs().fv() else FieldValue.Null)
+            label?.takeIf { it.isNotBlank() }?.let { put(CalendarMarkFields.LABEL, it.trim().take(200).fv()) }
+        }
+        replica.commitLocal(EntityTypes.CALENDAR_MARK, id, fields)
     }
 
     /** Remind me [minutes] before [eventId] starts; null (or 0) turns the reminder off. */

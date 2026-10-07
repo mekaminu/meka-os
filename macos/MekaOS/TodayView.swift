@@ -151,6 +151,9 @@ struct TodayView: View {
                         let tl = today.timeline
                         if tl.hasTimedOrAllDay {
                             SectionLabel("Today", palette).staggeredAppear(3, play: play)
+                            if !tl.allDayItems.isEmpty {
+                                AllDayLabel(label: tl.allDayLabel, palette: palette).staggeredAppear(3, play: play)
+                            }
                             ForEach(AllDayRules.shared.shown(items: tl.allDayItems, open: allDayOpen), id: \.event.id) { a in
                                 AllDayRow(item: a, palette: palette)
                                     .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .top)))
@@ -343,6 +346,29 @@ struct CalendarsSheet: View {
                 }
             } else {
                 SkeletonRows(count: 2, rowHeight: 48, palette: palette)
+            }
+            // On Today (all-day polish): a planning calendar can stay in the Calendar section but off Today. Synced.
+            if !model.calendarsOnToday.isEmpty {
+                SectionLabel("On Today", palette).padding(.top, MekaSpace.s)
+                Text("Turn a calendar off to keep it in the Calendar section but off Today and your day.")
+                    .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                ForEach(Array(model.calendarsOnToday.enumerated()), id: \.element.key) { i, c in
+                    let key = c.key, label = c.label
+                    Toggle(isOn: Binding(
+                        get: { c.onToday },
+                        set: { model.setCalendarOnToday(key: key, label: label, on: $0) }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(label).font(MekaType.itemMeta)
+                            if let detail = c.detail {
+                                Text(detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            }
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .tint(palette.accent)
+                    .staggeredAppear(i)
+                }
             }
             HStack {
                 Button("Connect Google Calendar") { Task { await model.connectCalendar("google") } }

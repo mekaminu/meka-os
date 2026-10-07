@@ -58,6 +58,7 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.CalendarEvent
+import os.meka.core.domain.CalendarRules
 import os.meka.core.domain.EventDetails
 import os.meka.core.domain.ReminderRules
 import os.meka.core.facade.MekaCore
@@ -122,8 +123,10 @@ class EventActionHandlers(
     val leaveBy: (CalendarEvent, Int) -> Unit = { _, _ -> },
     /** What's set now: (reminder minutes, travel minutes), 0 for none. */
     val current: (CalendarEvent) -> Pair<Int, Int> = { 0 to 0 },
-    /** "Make it a task" on an all-day entry that reads like a to-do (Today clarity). */
+    /** "Make it a task" on an all-day entry (Today clarity; from any entry's long-press since the all-day polish). */
     val makeTask: (CalendarEvent) -> Unit = {},
+    /** "Hide <calendar> from Today": (calendar key, its name). */
+    val hideCalendar: (String, String) -> Unit = { _, _ -> },
 )
 
 fun eventActionHandlers(core: MekaCore, scope: CoroutineScope, undo: EventUndo) = EventActionHandlers(
@@ -161,6 +164,12 @@ fun eventActionHandlers(core: MekaCore, scope: CoroutineScope, undo: EventUndo) 
         scope.launch {
             if (runCatching { core.makeAllDayTask(e) }.isFailure) return@launch
             undo.show("Made it a task") { core.undoAllDayTask(e.id) }
+        }
+    },
+    hideCalendar = { key, label ->
+        scope.launch {
+            if (runCatching { core.hideCalendarFromToday(key, label) }.isFailure) return@launch
+            undo.show(CalendarRules.hiddenLine(label)) { core.showCalendarOnToday(key) }
         }
     },
 )

@@ -38,6 +38,8 @@ final class CoreModel {
     var openEvent: CalendarEvent?
     /// Hidden events and prep tasks (calendar actions), synced with the Fold. MEKA-only: the real calendars are untouched.
     private(set) var eventMarks: EventMarks?
+    /// Calendars' "On Today" switches (all-day polish): every calendar in the mirror and whether it shows on Today.
+    private(set) var calendarsOnToday: [CalendarChoice] = []
     /// The calendar-action undo bar ("Hidden from your day · Undo"); goes after 5 seconds.
     private(set) var eventUndo: EventUndoOffer?
     /// Quiet hours, digest times and tiers (notification governor), synced with the Fold.
@@ -154,6 +156,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await m in core.eventMarks { self?.eventMarks = m }
+        })
+        observers.append(Task { [weak self] in
+            for await c in core.calendarsOnToday { self?.calendarsOnToday = c }
         })
         observers.append(Task { [weak self] in
             for await s in core.notificationSettings { self?.notifySettings = s }
@@ -771,6 +776,24 @@ final class CoreModel {
         }
     }
 
+    /// "Hide <calendar> from Today" (all-day polish): the calendar's events leave my day but stay in the Calendar
+    /// section and Search; synced with the Fold. Only strings cross to the core. Undo shows it again.
+    func hideCalendarFromToday(key: String, label: String) {
+        MekaHaptics.light()
+        run { try await $0.hideCalendarFromToday(calendarKey: key, label: label) }
+        offerEventUndo(CalendarRules.shared.hiddenLine(label: label), .showCalendar(key))
+    }
+
+    /// The Calendars switch: on shows the calendar on Today again, off hides it (no undo bar: the switch is the undo).
+    func setCalendarOnToday(key: String, label: String, on: Bool) {
+        MekaHaptics.tick()
+        if on {
+            run { try await $0.showCalendarOnToday(calendarKey: key) }
+        } else {
+            run { try await $0.hideCalendarFromToday(calendarKey: key, label: label) }
+        }
+    }
+
     func showEvent(_ eventID: String) {
         MekaHaptics.light()
         run { try await $0.showEvent(eventId: eventID) }
@@ -820,6 +843,7 @@ final class CoreModel {
         case .deleteTask(let id): run { try await $0.delete(taskId: id) }
         case .showEvent(let id): run { try await $0.showEvent(eventId: id) }
         case .unmakeTask(let id): run { try await $0.undoAllDayTask(eventId: id) }
+        case .showCalendar(let key): run { try await $0.showCalendarOnToday(calendarKey: key) }
         case .reminder(let id, let m): run { try await $0.setEventReminder(eventId: id, minutes: m) }
         case .leaveBy(let id, let m): run { try await $0.setEventLeaveBy(eventId: id, travelMinutes: m) }
         case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }
@@ -920,6 +944,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case showEvent(String)
         /// "Make it a task" on an all-day entry: the task goes, the entry comes back.
         case unmakeTask(String)
+        /// "Hide <calendar> from Today": the calendar (by key) is back on Today.
+        case showCalendar(String)
         case reminder(String, Int32)
         case leaveBy(String, Int32)
         /// Done / Tomorrow from the Needs you stack.

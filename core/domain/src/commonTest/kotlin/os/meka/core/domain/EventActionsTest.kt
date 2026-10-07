@@ -368,4 +368,48 @@ class EventActionsTest {
         assertEquals(EventActions.allDayTaskId("ad1"), em.makeTask(todo()))
         assertEquals(Lifecycle.ACTIVE, m.tasks.get("aad1")!!.lifecycle)
     }
+
+    // ---- Hide a calendar from Today (all-day polish, 2026-10-07) ----
+
+    private fun ts(id: String, title: String, allDay: Boolean = true) =
+        if (allDay) CalendarEvent(id, title, tue6 * 24 * hour, (tue6 + 1) * 24 * hour, true, null, "google", "meka@gmail.com", "Timestripe")
+        else CalendarEvent(id, title, at(tue6, 14), at(tue6, 15), false, null, "google", "meka@gmail.com", "Timestripe")
+
+    @Test
+    fun hidingACalendarTakesAllItsEventsOffTodayAndTheUndoBringsThemBack() {
+        val events = listOf(ts("t1", "Weekly goals"), ts("t2", "Deep work", allDay = false), ev(), todo())
+        val key = CalendarRules.key(events[0])
+        ea.hideCalendar(key, "Timestripe")
+        val marks = ea.marks()
+        assertTrue(marks.isCalendarHidden(events[1]))
+        assertTrue(marks.isCalendarKeyHidden(key))
+        assertFalse(marks.isHidden("t1")) // the events themselves aren't marked one by one
+        assertEquals(listOf("ev1", "ad1"), marks.visible(events).map { it.id })
+        val today = TodayProjection.project(emptyList(), at(tue6, 10), DayWindow(at(tue6, 0), at(tue6 + 1, 0), hour), marks.visible(events))
+        assertEquals(listOf("Check if to pay for the parking permit"), today.timeline.allDayItems.map { it.event.title })
+        assertEquals("All day · Personal", today.timeline.allDayLabel)
+        // Calendars lists it, switched off (two "Personal" calendars: one from the account, one with none, told apart by detail).
+        assertEquals(
+            listOf(Triple("Personal", "Google · meka@gmail.com", true), Triple("Personal", "Google", true), Triple("Timestripe", "Google · meka@gmail.com", false)),
+            CalendarRules.choices(events, marks.hiddenCalendars).map { Triple(it.label, it.detail, it.onToday) },
+        )
+        ea.showCalendar(key)
+        assertEquals(4, ea.marks().visible(events).size)
+    }
+
+    @Test
+    fun hidingACalendarSyncsAndTheLatestSwitchWins() {
+        val key = CalendarRules.key(ts("t1", "Weekly goals"))
+        ea.hideCalendar(key, "Timestripe")
+        ea.hideCalendar(key, "Timestripe") // twice: no new op
+        syncBoth()
+        assertEquals(mapOf(key to "Timestripe"), actions(m).marks().hiddenCalendars)
+        // Shown again on the Mac a minute later: that later switch wins on both devices.
+        world.clock.nowMs += 60_000
+        em.showCalendar(key)
+        syncBoth()
+        listOf(a, m).forEach { d -> assertTrue(actions(d).marks().hiddenCalendars.isEmpty()) }
+        val ops = a.replica.entities(EntityTypes.CALENDAR_MARK)
+        assertEquals(listOf(CalendarRules.markId(key)), ops.map { it.ref.entityId })
+    }
 }

@@ -32,11 +32,13 @@ object EntityTypes {
     const val AGENT_ACTION = "agent_action"
     /** MEKA-only marks on a mirrored calendar event (hidden from my day); id = the event's id (see [EventActions]). */
     const val EVENT_MARK = "event_mark"
+    /** MEKA-only marks on a calendar (hidden from Today); id from the calendar's key (see [CalendarRules]). */
+    const val CALENDAR_MARK = "calendar_mark"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
-        AGENT_ACTION, EVENT_MARK,
+        AGENT_ACTION, EVENT_MARK, CALENDAR_MARK,
     )
 }
 
@@ -219,6 +221,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.AGENT_ACTION -> MergePolicy.Lww
         // Event marks: a switch per event; the latest tap on any device wins.
         entityType == EntityTypes.EVENT_MARK -> MergePolicy.Lww
+        // Calendar marks likewise: a switch per calendar.
+        entityType == EntityTypes.CALENDAR_MARK -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

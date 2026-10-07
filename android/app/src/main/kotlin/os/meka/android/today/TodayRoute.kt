@@ -468,8 +468,11 @@ private fun TodayPane(
             val tl = today.timeline
             if (tl.hasTimedOrAllDay) {
                 item(key = "h-day") { SectionLabel("Today", Modifier.animateItem().appear(rememberAppearance(3, play))) }
+                if (tl.allDayItems.isNotEmpty()) item(key = "allday-label") {
+                    AllDayLabel(tl.allDayLabel, Modifier.animateItem().appear(rememberAppearance(3, play)))
+                }
                 items(AllDayRules.shown(tl.allDayItems, allDayOpen), key = { "a-" + it.event.id }) { a ->
-                    AllDayRow(a, Modifier.animateItem().appear(rememberAppearance(3, play)), openEvent, eventHandlers?.makeTask)
+                    AllDayRow(a, Modifier.animateItem().appear(rememberAppearance(3, play)), openEvent, eventHandlers)
                 }
                 AllDayRules.moreLabel(tl.allDayItems, allDayOpen)?.let { more ->
                     item(key = "allday-more") {

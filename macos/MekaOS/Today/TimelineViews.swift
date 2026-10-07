@@ -250,18 +250,32 @@ struct AllDayChips: View {
     }
 }
 
-/// One row of Today's "All day" group (Today clarity, matching the Fold's AllDayRow): the title in the regular event
-/// weight with its calendar under it; clicking opens the detail. An entry that reads like a to-do offers "Make it a
-/// task" (light haptic; the undo bar rises).
+/// The "All day" group's label, once above its rows (all-day polish, Meka 2026-10-07 22:37): "All day", or
+/// "All day · Timestripe" when every entry shares a calendar.
+struct AllDayLabel: View {
+    let label: String
+    let palette: MekaPalette
+
+    var body: some View {
+        Text(label).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+            .padding(.top, MekaSpace.xxs)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// One row of Today's "All day" group (matching the Fold's AllDayRow): the title in the regular event weight, aligned
+/// under the group's label in the timeline's title column, with its calendar under it only when calendars are mixed;
+/// clicking opens the detail. Right-click: Make it a task · Hide <calendar> from Today · Details. An entry that reads
+/// like a to-do also shows a small, quiet "Make it a task".
 struct AllDayRow: View {
     @Environment(CoreModel.self) private var model
     let item: AllDayItem
     let palette: MekaPalette
 
     var body: some View {
+        let hideLabel = "Hide \(item.calendarLabel) from Today"
         HStack(alignment: .center, spacing: 0) {
-            Text("All day").font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
-                .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
+            Spacer().frame(width: TimelineMetrics.timeColumn)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.event.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let line = item.line {
@@ -273,13 +287,21 @@ struct AllDayRow: View {
             if item.todo {
                 Button("Make it a task") { model.makeAllDayTask(item.event) }
                     .buttonStyle(MekaPressStyle())
-                    .font(MekaType.caption).foregroundStyle(palette.accent)
-                    .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
-                    .background(Capsule().fill(palette.surfaceRaised))
+                    .font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .padding(.horizontal, MekaSpace.xs).padding(.vertical, 2)
+                    .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
                     .help("Adds it to Today as a task and takes the entry off your day (your calendar is unchanged)")
             }
         }
         .padding(.vertical, MekaSpace.xs)
+        .contextMenu {
+            Button("Make it a task") { model.makeAllDayTask(item.event) }
+            Button(hideLabel) { model.hideCalendarFromToday(key: item.calendarKey, label: item.calendarLabel) }
+            Divider()
+            Button("Details…") { model.openEvent = item.event }
+        }
+        .accessibilityAction(named: "Make it a task") { model.makeAllDayTask(item.event) }
+        .accessibilityAction(named: hideLabel) { model.hideCalendarFromToday(key: item.calendarKey, label: item.calendarLabel) }
     }
 }
 

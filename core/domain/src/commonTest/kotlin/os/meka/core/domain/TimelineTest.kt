@@ -184,4 +184,59 @@ class TimelineTest {
         assertNull(line(listOf(ev("call", at(14), at(16)))))
         assertNull(line(emptyList(), listOf(task("loose"))))
     }
+
+    // ---- All-day polish (Meka, 2026-10-07 22:37): "All day" once, the calendar named once when shared ----
+
+    @Test
+    fun oneCalendarIsNamedOnceInTheLabelAndRowsDropTheirCaption() {
+        val tl = project(emptyList(), listOf(allDay("w", "Weekly goals", calendar = "Timestripe"), allDay("r", "Run 5k", days = 2, calendar = "Timestripe")), at(10))
+        assertEquals("All day · Timestripe", tl.allDayLabel)
+        assertEquals(listOf("until Wed 7 Oct", null), tl.allDayItems.map { it.line })
+        assertEquals(setOf("Timestripe"), tl.allDayItems.map { it.calendarLabel }.toSet())
+        // A single entry is named the same way.
+        assertEquals("All day · Personal", project(emptyList(), listOf(allDay("b", "Bank holiday")), at(10)).allDayLabel)
+        // An unnamed Google calendar has nothing to name.
+        val g = project(emptyList(), listOf(allDay("g1", calendar = null), allDay("g2", calendar = null)), at(10))
+        assertEquals("All day", g.allDayLabel)
+        assertEquals(listOf(null, null), g.allDayItems.map { it.line })
+        assertEquals("All day", TimelineRules.build(emptyList(), emptyList(), emptyList(), at(10), day, LocalCalendar.fixedOffset(hour)).allDayLabel)
+    }
+
+    @Test
+    fun mixedCalendarsKeepTheirOwnCaptions() {
+        val tl = project(emptyList(), listOf(allDay("w", "Weekly goals", calendar = "Timestripe"), allDay("b", "Bank holiday")), at(10))
+        assertEquals("All day", tl.allDayLabel)
+        assertEquals(listOf("Personal", "Timestripe"), tl.allDayItems.map { it.line })
+        // Same name, different accounts: two calendars, so each row says which.
+        val other = CalendarEvent("o", "Gym", oct6Day * 24 * hour, (oct6Day + 1) * 24 * hour, true, null, "google", "work@x.com", "Personal")
+        val t2 = project(emptyList(), listOf(allDay("b", "Bank holiday"), other), at(10))
+        assertEquals("All day", t2.allDayLabel)
+        assertEquals(listOf("Personal", "Personal"), t2.allDayItems.map { it.line })
+    }
+
+    @Test
+    fun calendarsAreKeyedByProviderAccountAndName() {
+        val a = CalendarEvent("1", "x", 0, 1, true, null, "google", "Meka@Gmail.com", "Timestripe")
+        assertEquals("google|meka@gmail.com|Timestripe", CalendarRules.key(a))
+        assertEquals("Timestripe", CalendarRules.label(a))
+        assertEquals("Google · Meka@Gmail.com", CalendarRules.detail(a))
+        val f = CalendarEvent("2", "Barça v Sevilla", 0, 1, false, null, "fixtures", null, "LaLiga")
+        assertEquals("fixtures||", CalendarRules.key(f))
+        assertEquals("Fixtures", CalendarRules.label(f))
+        assertEquals("Outlook", CalendarRules.label(CalendarEvent("3", "x", 0, 1, true, null, "microsoft", null, null)))
+        assertEquals("Google Calendar", CalendarRules.label(CalendarEvent("4", "x", 0, 1, true, null, "google", null, " ")))
+        assertEquals(CalendarRules.markId("fixtures||"), CalendarRules.markId("fixtures||"))
+        assertTrue(CalendarRules.markId("a").startsWith("c"))
+    }
+
+    @Test
+    fun calendarChoicesListEveryCalendarByNameAndHiddenOnesWithNoEvents() {
+        val ts = CalendarEvent("1", "Goals", 0, 1, true, null, "google", "meka@gmail.com", "Timestripe")
+        val p = CalendarEvent("2", "Call", 0, 1, false, null, "google", "meka@gmail.com", "Personal")
+        val p2 = p.copy(id = "3")
+        val choices = CalendarRules.choices(listOf(ts, p, p2), mapOf(CalendarRules.key(ts) to "Timestripe", "microsoft|old@x.com|Work" to "Work"))
+        assertEquals(listOf("Personal", "Timestripe", "Work"), choices.map { it.label })
+        assertEquals(listOf(true, false, false), choices.map { it.onToday })
+        assertNull(choices.last().detail)
+    }
 }

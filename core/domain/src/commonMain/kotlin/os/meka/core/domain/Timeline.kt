@@ -40,9 +40,16 @@ data class UpNextEvent(
  */
 data class AllDayItem(
     val event: CalendarEvent,
-    /** "Personal" · "Fixtures" · "Personal · until Thu 8 Oct"; null when there's nothing to say. */
+    /**
+     * "Personal" · "Fixtures" · "Personal · until Thu 8 Oct"; "until Thu 8 Oct" alone when the group's label already
+     * names the calendar (all-day polish); null when there's nothing to say.
+     */
     val line: String?,
     val todo: Boolean,
+    /** The calendar it comes from ([CalendarRules.key]), for "Hide <calendar> from Today". */
+    val calendarKey: String = CalendarRules.key(event),
+    /** "Timestripe" · "Fixtures" · "Outlook" · "Google Calendar": the calendar's name in menus. */
+    val calendarLabel: String = CalendarRules.label(event),
 )
 
 data class DayTimeline(
@@ -61,6 +68,8 @@ data class DayTimeline(
     val nextEvent: UpNextEvent?,
     /** [allDay] as rows of the "All day" group at the top of the timeline. */
     val allDayItems: List<AllDayItem> = emptyList(),
+    /** The group's label, shown once above its rows: "All day", or "All day · Timestripe" when they share a calendar. */
+    val allDayLabel: String = AllDayRules.LABEL,
 ) {
     /** Timed events still to come (or running) today. */
     val hasEventsAhead: Boolean get() = rows.any { it.kind == TimelineKind.EVENT }
@@ -151,10 +160,12 @@ object TimelineRules {
                 UpNextEvent(e, "${e.title} in ${inLabel(minutes)}", minutes, detail)
             }
 
+        val group = AllDayRules.group(allDay, today.epochDay)
         return DayTimeline(
             dateLabel = CivilDate.longLabel(today.epochDay),
             allDay = allDay,
-            allDayItems = allDay.map { AllDayRules.item(it, today.epochDay) },
+            allDayItems = group.items,
+            allDayLabel = group.label,
             earlier = ended.map { it.row },
             earlierLabel = if (ended.isEmpty()) null else "${ended.size} earlier",
             rows = rows,
@@ -196,11 +207,26 @@ object TimelineRules {
  * - One row each: the title, and under it the calendar's name (Google's calendar name, else "Outlook" / "Fixtures")
  *   and, for an entry running past today, "until Thu 8 Oct".
  * - At most [SHOWN] rows, then "+2 more", which unfolds the rest.
+ * - The group says "All day" once, above its rows (all-day polish, Meka 2026-10-07 22:37). When every entry comes from
+ *   one calendar, the label names it ("All day · Timestripe") and the rows drop the repeated caption; with calendars
+ *   mixed each row keeps its own.
  * - An entry that reads like a to-do gets "Make it a task": its first word is one of [TODO_VERBS] ("Check if to pay
  *   for…", "Pay council tax", "Call the garage"), or it starts "To do", "Todo" or "Reminder". Fixtures never do.
  */
 object AllDayRules {
     const val SHOWN = 3
+    const val LABEL = "All day"
+
+    /** The "All day" group: its label and rows. */
+    data class Group(val label: String, val items: List<AllDayItem>)
+
+    /** Rows for [events] (already sorted), with the calendar named once in the label when they all share one. */
+    fun group(events: List<CalendarEvent>, todayEpochDay: Long): Group {
+        val keys = events.map { CalendarRules.key(it) }.distinct()
+        val shared = if (keys.size == 1) calendarLabel(events.first()) else null
+        if (shared == null) return Group(LABEL, events.map { item(it, todayEpochDay) })
+        return Group("$LABEL · $shared", events.map { item(it, todayEpochDay, showCalendar = false) })
+    }
 
     /** First words that make an all-day entry read like something to do. Lower case. */
     val TODO_VERBS = setOf(
@@ -212,11 +238,11 @@ object AllDayRules {
 
     private val PREFIXES = listOf("to do", "to-do", "todo", "reminder")
 
-    fun item(e: CalendarEvent, todayEpochDay: Long): AllDayItem {
+    fun item(e: CalendarEvent, todayEpochDay: Long, showCalendar: Boolean = true): AllDayItem {
         // All-day bounds are UTC midnights with an exclusive end: the last day is the one before.
         val lastDay = (e.endAtMs - 1).floorDiv(CivilDate.DAY_MS)
         val until = if (lastDay > todayEpochDay) "until ${CivilDate.shortLabel(lastDay)}" else null
-        val line = listOfNotNull(calendarLabel(e), until).joinToString(" · ").ifEmpty { null }
+        val line = listOfNotNull(if (showCalendar) calendarLabel(e) else null, until).joinToString(" · ").ifEmpty { null }
         return AllDayItem(e, line, !e.isFixture && looksLikeTodo(e.title))
     }
 

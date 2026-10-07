@@ -7,7 +7,9 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,18 +24,26 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import os.meka.android.calendar.EventActionHandlers
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -124,32 +134,75 @@ internal fun AllDayChips(events: List<CalendarEvent>, modifier: Modifier = Modif
 }
 
 /**
- * One row of Today's "All day" group (Today clarity, Meka 2026-10-07): the title in the lighter event style with its
- * calendar under it; tapping opens the event's detail. An entry that reads like a to-do offers "Make it a task" (light
- * haptic; the undo bar rises).
+ * The "All day" group's label, once above its rows (all-day polish, Meka 2026-10-07 22:37): "All day", or
+ * "All day · Timestripe" when every entry shares a calendar.
  */
 @Composable
-internal fun AllDayRow(item: AllDayItem, modifier: Modifier = Modifier, onEvent: ((CalendarEvent) -> Unit)? = null, onMakeTask: ((CalendarEvent) -> Unit)? = null) {
+internal fun AllDayLabel(label: String, modifier: Modifier = Modifier) {
+    Text(label, style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = modifier.padding(top = MekaSpace.xxs))
+}
+
+/**
+ * One row of Today's "All day" group: the title in the lighter event style, aligned under the group's label in the
+ * timeline's title column, with its calendar under it only when calendars are mixed. Tapping opens the event's detail;
+ * long-pressing (tick haptic) opens Make it a task · Hide <calendar> from Today · Details. An entry that reads like a
+ * to-do also shows a small, quiet "Make it a task" (light haptic; the undo bar rises).
+ */
+@Composable
+internal fun AllDayRow(
+    item: AllDayItem,
+    modifier: Modifier = Modifier,
+    onEvent: ((CalendarEvent) -> Unit)? = null,
+    handlers: EventActionHandlers? = null,
+) {
     val haptics = rememberMekaHaptics()
-    Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
-            .then(if (onEvent != null) Modifier.clickable(role = Role.Button) { onEvent(item.event) } else Modifier)
-            .padding(vertical = MekaSpace.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("All day", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.width(TIME_COLUMN))
-        Column(Modifier.weight(1f)) {
-            Text(item.event.title, style = MekaType.body, color = Meka.colors.textPrimary)
-            item.line?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+    var menu by remember(item.event.id) { mutableStateOf(false) }
+    val hideLabel = "Hide ${item.calendarLabel} from Today"
+    Box(modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                .combinedClickable(
+                    role = Role.Button,
+                    onClick = { onEvent?.invoke(item.event) },
+                    onLongClickLabel = "All-day actions",
+                    onLongClick = if (handlers != null) ({ haptics.tick(); menu = true }) else null,
+                )
+                .semantics {
+                    if (handlers != null) customActions = listOf(
+                        CustomAccessibilityAction("Make it a task") { handlers.makeTask(item.event); true },
+                        CustomAccessibilityAction(hideLabel) { handlers.hideCalendar(item.calendarKey, item.calendarLabel); true },
+                    )
+                }
+                .padding(vertical = MekaSpace.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Spacer(Modifier.width(TIME_COLUMN))
+            Column(Modifier.weight(1f)) {
+                Text(item.event.title, style = MekaType.body, color = Meka.colors.textPrimary)
+                item.line?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            }
+            if (item.todo && handlers != null) {
+                // Quiet: no fill, a hairline outline and secondary text, so it doesn't compete with the titles.
+                Text(
+                    "Make it a task", style = MekaType.caption, color = Meka.colors.textSecondary,
+                    modifier = Modifier.padding(start = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.pill))
+                        .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.pill))
+                        .clickable(role = Role.Button) { haptics.light(); handlers.makeTask(item.event) }
+                        .padding(horizontal = MekaSpace.xs, vertical = 2.dp),
+                )
+            }
         }
-        if (item.todo && onMakeTask != null) {
-            Text(
-                "Make it a task", style = MekaType.caption, color = Meka.colors.accent,
-                modifier = Modifier.padding(start = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.pill))
-                    .background(Meka.colors.surfaceRaised)
-                    .clickable(role = Role.Button) { haptics.light(); onMakeTask(item.event) }
-                    .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs),
-            )
+        if (handlers != null) {
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                @Composable
+                fun entry(label: String, onClick: () -> Unit) = DropdownMenuItem(
+                    text = { Text(label, style = MekaType.itemMeta, color = Meka.colors.textPrimary) },
+                    onClick = { menu = false; onClick() },
+                )
+                entry("Make it a task") { haptics.light(); handlers.makeTask(item.event) }
+                entry(hideLabel) { haptics.light(); handlers.hideCalendar(item.calendarKey, item.calendarLabel) }
+                onEvent?.let { open -> entry("Details") { open(item.event) } }
+            }
         }
     }
 }
