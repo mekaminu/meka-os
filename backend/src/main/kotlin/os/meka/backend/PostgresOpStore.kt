@@ -36,8 +36,15 @@ class PostgresOpStore(private val ds: DataSource) : ServerOpStore {
         }
     }
 
-    private fun <T> conn(block: (Connection) -> T): T =
-        current.get()?.let(block) ?: ds.connection.use(block)
+    /**
+     * The current transaction's connection, else a fresh one. Not `current.get()?.let(block) ?: …`: a block that
+     * returns null (find of an op not stored yet) would run again on a second pooled connection while the transaction
+     * still holds its own, and concurrent pushes then starve the pool until Hikari's 30 s timeout (seen in CI).
+     */
+    private fun <T> conn(block: (Connection) -> T): T {
+        val c = current.get()
+        return if (c != null) block(c) else ds.connection.use(block)
+    }
 
     /** Runs [block] on the current transaction's connection, or a fresh one. For stores that share our transaction. */
     fun <T> withConnection(block: (Connection) -> T): T = conn(block)
