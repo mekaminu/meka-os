@@ -14,6 +14,7 @@ import platform.Security.SecRandomCopyBytes
 import platform.Security.errSecSuccess
 import platform.Security.kSecRandomDefault
 import platform.posix.memcpy
+import platform.posix.unlink
 import kotlin.random.Random
 
 /** CSPRNG backed by SecRandomCopyBytes, for ids (ADR-003). */
@@ -81,6 +82,39 @@ object MacCoreFactory {
         return core.publishRelease(meta.second, meta.first.versionCode, meta.first.versionName).message
     }
 
+    /**
+     * Spike S6 (ADR-002): proves this build's SQLite is SQLCipher and that a keyed database is really encrypted.
+     * Works on throwaway databases in [directory] (deleted afterwards); never touches the replica.
+     */
+    @OptIn(ExperimentalForeignApi::class)
+    fun databaseEncryptionProbe(directory: String): DatabaseEncryptionProbe {
+        val dir = directory.trimEnd('/')
+        val tag = randomHex(8)
+        val plainName = "s6-version-$tag.db"
+        val keyedName = "s6-keyed-$tag.db"
+        try {
+            val version = MacDatabase.cipherVersion(dir, plainName)
+                ?: return DatabaseEncryptionProbe(null, opensWithKey = false, fileUnreadable = false, refusedWithoutKey = false)
+            val key = randomHex(32)
+            val created = MacDatabase.opens(key, dir, keyedName)
+            val reopens = created && MacDatabase.opens(key, dir, keyedName)
+            // Closing the last connection checkpoints the WAL, so page 1 is in the main file by now.
+            val bytes = readMacFile("$dir/$keyedName")
+            val plainHeader = "SQLite format 3".encodeToByteArray()
+            val unreadable = bytes != null && bytes.size >= 1024 &&
+                !bytes.copyOfRange(0, plainHeader.size).contentEquals(plainHeader)
+            val refused = !MacDatabase.opens(randomHex(32), dir, keyedName) && !MacDatabase.opens(null, dir, keyedName)
+            return DatabaseEncryptionProbe(version, opensWithKey = reopens, fileUnreadable = unreadable, refusedWithoutKey = refused)
+        } finally {
+            for (name in listOf(plainName, keyedName)) {
+                for (suffix in listOf("", "-wal", "-shm", "-journal")) unlink("$dir/$name$suffix")
+            }
+        }
+    }
+
+    private fun randomHex(bytes: Int): String =
+        AppleSecureRandom.nextBytes(bytes).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+
     private fun readFoldUpdate(apkPath: String): Pair<Pair<os.meka.core.wire.WireCodec.ApkMetadata, ByteArray>?, String?> {
         val apk = readMacFile(apkPath)
         val dir = apkPath.substringBeforeLast('/', "")
@@ -92,6 +126,17 @@ object MacCoreFactory {
         return (meta to apk) to null
     }
 }
+
+/**
+ * Spike S6: what [MacCoreFactory.databaseEncryptionProbe] found. [cipherVersion] is null when the app is linked
+ * against the system SQLite (then nothing else was tried).
+ */
+data class DatabaseEncryptionProbe(
+    val cipherVersion: String?,
+    val opensWithKey: Boolean,
+    val fileUnreadable: Boolean,
+    val refusedWithoutKey: Boolean,
+)
 
 /** What the Mac shows before publishing a phone build: a summary, or the reason it can't be published. */
 data class FoldUpdateCheck(val summary: String?, val problem: String?)

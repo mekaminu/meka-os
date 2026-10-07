@@ -3,6 +3,20 @@ import XCTest
 
 /// Proves the Kotlin facade is usable from Swift: commands are async, flows are AsyncSequences.
 final class MekaCoreBridgeTests: XCTestCase {
+    /// Spike S6 (ADR-002): the app's SQLite is SQLCipher, and a keyed database file is really encrypted.
+    func testDatabaseEngineIsSQLCipher() {
+        let dir = (NSTemporaryDirectory() as NSString).appendingPathComponent("s6-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let probe = MacCoreFactory.shared.databaseEncryptionProbe(directory: dir)
+        let version = probe.cipherVersion
+        XCTAssertNotNil(version, "MekaKit's sqlite3 calls bound to the system SQLite, not SQLCipher")
+        XCTAssertTrue(version?.hasPrefix("4.") ?? false, "cipher_version: \(version ?? "nil")")
+        XCTAssertTrue(probe.opensWithKey, "an encrypted database didn't reopen with its key")
+        XCTAssertTrue(probe.fileUnreadable, "the keyed database file still has a plain SQLite header")
+        XCTAssertTrue(probe.refusedWithoutKey, "the keyed database opened without its key or with the wrong one")
+    }
+
     func testAddAndCompleteThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

@@ -5,6 +5,12 @@ options:
   deploymentTarget:
     macOS: "26.0"
   createIntermediateGroups: true
+packages:
+  # Spike S6 (ADR-002): Zetetic's official SQLCipher package (BSD-style licence, docs/third-party-notices.md). Its
+  # dynamic SQLCipher.framework replaces the system libsqlite3 for MekaKit's SQLDelight/SQLiter driver.
+  SQLCipher:
+    url: https://github.com/sqlcipher/SQLCipher.swift
+    exactVersion: 4.19.0
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -53,6 +59,7 @@ targets:
     dependencies:
       - framework: ../core/facade/build/XCFrameworks/release/MekaKit.xcframework
         embed: false
+      - package: SQLCipher   # dynamic, embedded and signed with the app; must be the only sqlite3 the app links
     preBuildScripts:
       - name: Build MekaKit XCFramework
         basedOnDependencyAnalysis: false
@@ -62,7 +69,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: os.meka.mac
-        OTHER_LDFLAGS: ["-lsqlite3"]   # replaced by SQLCipher linkage in spike S6
+        # No -lsqlite3: MekaKit's sqlite3_* calls bind to SQLCipher (spike S6). MekaCoreBridgeTests checks it.
   MekaOSTests:
     type: bundle.unit-test
     platform: macOS
