@@ -28,7 +28,8 @@ xcodebuild -project macos/MekaOS.xcodeproj -scheme MekaOS -configuration Debug \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath build/mac \
   CODE_SIGNING_ALLOWED=NO -quiet build
 
-# Signing decides whether the app keeps its Keychain access across rebuilds. macOS ties Keychain items to the
+# Signing decides whether the app keeps its Keychain access across rebuilds (only for keys not yet moved to the
+# Secure Enclave-sealed files, see macos/MekaOS/SealedKeyFiles.swift). macOS ties Keychain items to the
 # signer's Apple Team ID only for Apple-issued certificates; anything else (ad-hoc, self-signed) is tied to the exact
 # build, so every rebuild asks for the login keychain password. So: use the free "Apple Development" certificate
 # Xcode creates once an Apple ID is added (Xcode > Settings > Accounts). Developer ID replaces this for releases.
@@ -48,8 +49,9 @@ if [ -n "$DEV_ID" ]; then
   echo "Signed with $DEV_ID."
 else
   codesign --force --deep --sign - "$APP"
-  echo "WARNING: no Apple Development certificate found, so this build is signed ad hoc and macOS will ask for the"
-  echo "login keychain password. Fix once: Xcode > Settings > Accounts > + > Apple ID, then run this again."
+  echo "No Apple Development certificate found, so this build is signed ad hoc. That's fine on a Mac with a Secure"
+  echo "Enclave: MEKA keeps its keys in enclave-sealed files, so macOS only asks for the login keychain password once,"
+  echo "to move keys from an earlier build. (A Mac without one keeps using the Keychain and asks after each rebuild.)"
 fi
 
 mkdir -p "$HOME/Applications"

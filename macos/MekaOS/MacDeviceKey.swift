@@ -3,8 +3,8 @@ import Foundation
 @preconcurrency import MekaKit
 
 /// The Mac's request-signing key (ADR-005): ECDSA P-256 in the Secure Enclave when the Mac has one, so the private key
-/// cannot be copied off this machine. Only an opaque, enclave-bound handle is kept in the Keychain. Macs without an
-/// enclave fall back to a software key stored in the Keychain.
+/// cannot be copied off this machine. Only an opaque, enclave-bound handle is kept, in DeviceIdentity's sealed files.
+/// Macs without an enclave fall back to a software key stored in the Keychain.
 ///
 /// Called from Kotlin on background threads, so it is not main-actor isolated; its state never changes after init.
 nonisolated final class MacDeviceKey: NSObject, DeviceKey, @unchecked Sendable {
