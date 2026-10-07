@@ -23,6 +23,7 @@ import os.meka.core.domain.CapturedItem
  */
 object WorkAlerts {
     const val CHANNEL = "work_breakthrough"
+    const val VOICE_LINE = "Left a message with your call assistant and said it's urgent"
 
     fun canPost(context: Context): Boolean {
         val granted = Build.VERSION.SDK_INT < 33 ||
@@ -47,7 +48,10 @@ object WorkAlerts {
         val title = when (item.kind) {
             CaptureKind.MISSED_CALL -> "Missed call · ${item.personName}"
             CaptureKind.MESSAGE -> "${item.personName} · ${item.app.label}"
+            CaptureKind.VOICE_MESSAGE -> "Voice message · ${item.personName}"
         }
+        // A voice message without its transcript yet still says why it rang through.
+        val line = item.text ?: if (item.kind == CaptureKind.VOICE_MESSAGE) VOICE_LINE else why.label
         val open = PendingIntent.getActivity(
             context, 0,
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
@@ -56,9 +60,9 @@ object WorkAlerts {
         val n = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
-            .setContentText(item.text ?: why.label)
+            .setContentText(line)
             .setSubText(why.label)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(item.text ?: why.label))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(line))
             .setCategory(if (item.kind == CaptureKind.MISSED_CALL) NotificationRules.CATEGORY_MISSED_CALL else NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(open)

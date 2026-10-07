@@ -77,7 +77,7 @@ struct AfterWorkSheet: View {
                                 if let group = item.conversation {
                                     Text("in \(group)").font(MekaType.caption).foregroundStyle(palette.textTertiary)
                                 }
-                                Text(item.kind == .missedCall ? "Missed call" : (item.text ?? ""))
+                                Text(item.displayLine)
                                     .font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .textSelection(.enabled)

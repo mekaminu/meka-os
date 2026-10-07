@@ -101,7 +101,11 @@ class FcmSender(
 ) : PushSender {
     private var access: Pair<String, Long>? = null // token, expires at (ms)
 
-    override fun wake(address: PushAddress): SendResult {
+    override fun wake(address: PushAddress): SendResult = send(address, urgent = false)
+
+    override fun wakeUrgent(address: PushAddress): SendResult = send(address, urgent = true)
+
+    private fun send(address: PushAddress, urgent: Boolean): SendResult {
         if (address.service != SERVICE) return SendResult.FAILED
         val sa = account() ?: return SendResult.OFF
         val token = accessToken(sa) ?: return SendResult.FAILED
@@ -109,7 +113,7 @@ class FcmSender(
             http.post(
                 "https://fcm.googleapis.com/v1/projects/${sa.projectId}/messages:send",
                 mapOf("Authorization" to "Bearer $token", "Content-Type" to "application/json; charset=UTF-8"),
-                message(address.token).toString(),
+                message(address.token, urgent).toString(),
             )
         }.getOrElse { return SendResult.FAILED }
         return when {
@@ -140,12 +144,13 @@ class FcmSender(
     companion object {
         const val SERVICE = "fcm"
 
-        fun message(token: String): JsonObject = buildJsonObject {
+        /** [urgent] sends at high priority (an urgent voice message); the content is the same `{"t":"sync"}`. */
+        fun message(token: String, urgent: Boolean = false): JsonObject = buildJsonObject {
             putJsonObject("message") {
                 put("token", token)
                 putJsonObject("data") { put("t", "sync") }
                 putJsonObject("android") {
-                    put("priority", "normal")
+                    put("priority", if (urgent) "high" else "normal")
                     put("collapse_key", "sync")
                     put("ttl", "3600s")
                 }

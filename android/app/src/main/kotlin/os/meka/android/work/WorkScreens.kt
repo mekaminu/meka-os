@@ -68,7 +68,6 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AfterWorkSummary
 import os.meka.core.domain.CallScreeningRules
-import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.LocalClock
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.PersonSummary
@@ -337,10 +336,7 @@ private fun PersonCard(p: PersonSummary, expanded: Boolean, modifier: Modifier, 
                 p.items.forEach { item ->
                     Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
                         Text(time(item.atMs), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.width(44.dp))
-                        val body = when (item.kind) {
-                            CaptureKind.MISSED_CALL -> "Missed call"
-                            CaptureKind.MESSAGE -> item.text.orEmpty()
-                        }
+                        val body = item.displayLine
                         Column(Modifier.weight(1f)) {
                             item.conversation?.let { Text("in $it", style = MekaType.caption, color = Meka.colors.textTertiary) }
                             Text(body, style = MekaType.itemMeta, color = Meka.colors.textPrimary)

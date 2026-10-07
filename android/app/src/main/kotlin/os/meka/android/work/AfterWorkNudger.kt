@@ -17,6 +17,8 @@ import kotlinx.coroutines.launch
 import os.meka.android.MainActivity
 import os.meka.android.MekaApplication
 import os.meka.core.domain.AfterWorkNudge
+import os.meka.core.domain.BreakThrough
+import os.meka.core.domain.CallAssistantRules
 import os.meka.core.domain.LocalClock
 import os.meka.core.domain.WorkModeState
 import java.time.DayOfWeek
@@ -43,6 +45,23 @@ class AfterWorkNudger(private val context: Context, private val app: MekaApplica
         if (was != state.atWork) prefs.edit().putBoolean(KEY_AT_WORK, state.atWork).commit()
         val end = state.until
         if (state.atWork && end != null) scheduleEnd(end) else cancelEnd()
+    }
+
+    /**
+     * Urgent voice messages the call assistant took (written by the server, which woke this phone at high priority):
+     * each rings through once on the "Urgent while at work" channel, within an hour of the call. Called after every
+     * sync and whenever the synced summary changes.
+     */
+    fun alertVoiceMessages(): Unit = synchronized(lock) {
+        val lists = app.captures.lists.value
+        val items = app.core.afterWork.value.withLists(lists).people.flatMap { it.items }
+        val alerted = prefs.getStringSet(KEY_VOICE_ALERTED, emptySet()).orEmpty()
+        val due = CallAssistantRules.toAlert(items, alerted, System.currentTimeMillis())
+        if (due.isEmpty()) return
+        due.forEach { WorkAlerts.post(context, it, BreakThrough.URGENT) }
+        // Remember the latest few only: the rule's one-hour window keeps older ones from ringing again anyway.
+        val keep = (alerted + due.map { it.id }).toList().takeLast(MAX_ALERTED).toSet()
+        prefs.edit().putStringSet(KEY_VOICE_ALERTED, keep).commit()
     }
 
     /** The summary was read: the nudge has done its job. */
@@ -109,6 +128,8 @@ class AfterWorkNudger(private val context: Context, private val app: MekaApplica
         private const val NOTIFICATION_ID = 0x4D454B41 // "MEKA"
         private const val PREFS = "work-nudge"
         private const val KEY_AT_WORK = "atWork"
+        private const val KEY_VOICE_ALERTED = "voiceAlerted"
+        private const val MAX_ALERTED = 50
         /** Soft milestone: the system may batch it into the next ten minutes. */
         const val WINDOW_MS = 10 * 60_000L
     }

@@ -25,6 +25,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val ok = app.core.syncNow()
         // A Work switch flipped on the Mac arrives here: let the after-work nudge see it before the process sleeps.
         runCatching { app.nudger.evaluate(app.core.currentWorkMode()) }
+        // An urgent voice message the call assistant just took (the server woke us at high priority): ring through.
+        runCatching { app.nudger.alertVoiceMessages() }
         // A build published from the Mac is ready on the card the next time MEKA opens.
         runCatching { app.updater.check() }
         // Push: if the server doesn't have this phone's address yet (offline before, or push was just set up), send it.

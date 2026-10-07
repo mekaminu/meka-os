@@ -14,7 +14,12 @@ import os.meka.core.sync.fv
  */
 enum class CaptureApp(val label: String) { WHATSAPP("WhatsApp"), SMS("SMS"), PHONE("Phone") }
 
-enum class CaptureKind { MESSAGE, MISSED_CALL }
+enum class CaptureKind {
+    MESSAGE,
+    MISSED_CALL,
+    /** A message left with the call assistant (the server writes it; the text is its transcript, when there is one). */
+    VOICE_MESSAGE,
+}
 
 data class CapturedItem(
     /** Stable across re-posts of the same notification (WhatsApp re-posts every unread message each time). */
@@ -30,8 +35,20 @@ data class CapturedItem(
     val atMs: Long,
     /** Held from someone on the family list (set when synced, so the Mac can rank family without the lists). */
     val family: Boolean = false,
+    /** The caller told the call assistant it is urgent (a message's own words are checked by [Urgency]). */
+    val urgent: Boolean = false,
 ) {
     val personKey: String get() = People.key(personName)
+
+    /** Urgent by the caller's answer or by its own words ("urgent", "emergency"). */
+    val isUrgent: Boolean get() = urgent || Urgency.isUrgent(text)
+
+    /** One line for this item in the after-work summary, the same on both apps. */
+    val displayLine: String get() = when (kind) {
+        CaptureKind.MISSED_CALL -> "Missed call"
+        CaptureKind.MESSAGE -> text.orEmpty()
+        CaptureKind.VOICE_MESSAGE -> text?.let { "Voice message \u00b7 \u201c$it\u201d" } ?: "Voice message"
+    }
 }
 
 /**
@@ -94,7 +111,7 @@ object Capture {
 
     /** Whether an item captured at work should alert the owner straight away. */
     fun breakThrough(item: CapturedItem, lists: PeopleLists): BreakThrough? = when {
-        Urgency.isUrgent(item.text) -> BreakThrough.URGENT
+        item.isUrgent -> BreakThrough.URGENT
         lists.isAlwaysNotify(item.personName) -> BreakThrough.ALWAYS_NOTIFY
         else -> null
     }
@@ -132,10 +149,13 @@ data class PersonSummary(
     val latestText: String?,
     /** Everything from this person, oldest first. */
     val items: List<CapturedItem>,
+    /** Messages left with the call assistant. */
+    val voiceMessages: Int = 0,
 ) {
-    /** "3 messages · 1 missed call", plain counts until the AI layer writes one line per person. */
+    /** "3 messages · 1 voice message · 1 missed call", plain counts until the AI layer writes one line per person. */
     val line: String get() = listOfNotNull(
         plural(messages, "message").takeIf { messages > 0 },
+        plural(voiceMessages, "voice message").takeIf { voiceMessages > 0 },
         plural(missedCalls, "missed call").takeIf { missedCalls > 0 },
     ).joinToString(" · ")
 }
@@ -144,6 +164,7 @@ data class AfterWorkSummary(val people: List<PersonSummary>) {
     val isEmpty: Boolean get() = people.isEmpty()
     val messages: Int get() = people.sumOf { it.messages }
     val missedCalls: Int get() = people.sumOf { it.missedCalls }
+    val voiceMessages: Int get() = people.sumOf { it.voiceMessages }
     val urgentPeople: Int get() = people.count { it.urgent }
     /** Everything held, for "12 held for later" during work. */
     val itemCount: Int get() = people.sumOf { it.items.size }
@@ -156,20 +177,26 @@ data class AfterWorkSummary(val people: List<PersonSummary>) {
     val headline: String get() = if (isEmpty) "Nothing came in." else listOfNotNull(
         plural(people.size, "person", "people"),
         plural(messages, "message").takeIf { messages > 0 },
+        plural(voiceMessages, "voice message").takeIf { voiceMessages > 0 },
         plural(missedCalls, "missed call").takeIf { missedCalls > 0 },
     ).joinToString(" · ")
 }
 
 object AfterWorkSummaries {
-    /** Grouped by person. Urgent people first (latest first), then family, then everyone else by latest. */
+    /**
+     * Grouped by person. Urgent people first (latest first), then family, then everyone else by latest. A caller known
+     * only by number (the call assistant hears numbers) is shown by their listed name when the lists know the number.
+     */
     fun build(items: List<CapturedItem>, lists: PeopleLists): AfterWorkSummary {
-        val people = items.groupBy { it.personKey }.values.map { group ->
+        val named = items.map { i -> lists.nameForNumber(i.personName)?.let { i.copy(personName = it) } ?: i }
+        val people = named.groupBy { it.personKey }.values.map { group ->
             val sorted = group.sortedBy { it.atMs }
             PersonSummary(
                 personName = sorted.last().personName,
                 isFamily = lists.isFamily(sorted.last().personName) || sorted.any { it.family },
-                urgent = sorted.any { Urgency.isUrgent(it.text) },
+                urgent = sorted.any { it.isUrgent },
                 messages = sorted.count { it.kind == CaptureKind.MESSAGE },
+                voiceMessages = sorted.count { it.kind == CaptureKind.VOICE_MESSAGE },
                 missedCalls = sorted.count { it.kind == CaptureKind.MISSED_CALL },
                 apps = sorted.map { it.app }.distinct(),
                 firstAtMs = sorted.first().atMs,
@@ -215,6 +242,7 @@ object AfterWorkNudge {
         val counts = listOfNotNull(
             plural(summary.urgentPeople, "urgent", "urgent").takeIf { summary.urgentPeople > 0 },
             plural(summary.messages, "message").takeIf { summary.messages > 0 },
+            plural(summary.voiceMessages, "voice message").takeIf { summary.voiceMessages > 0 },
             plural(summary.missedCalls, "missed call").takeIf { summary.missedCalls > 0 },
         ).joinToString(" · ")
         return AfterWorkNudgeText(
@@ -240,6 +268,8 @@ object HeldMessageFields {
     const val AT = "atMs"
     /** On the family list when it was held (the lists are picked from contacts on the Fold and stay there). */
     const val FAMILY = "family"
+    /** The caller said it is urgent (call assistant voice messages; TrueWins). Absent = no. */
+    const val URGENT = "urgent"
     /** "Done" on either device: gone from the summary on both. */
     const val CLEARED = "cleared"
     const val CLEARED_AT = "clearedAtMs"
@@ -268,6 +298,7 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
                     put(HeldMessageFields.CONVERSATION, item.conversation?.take(200).fv())
                     put(HeldMessageFields.AT, item.atMs.fv())
                     put(HeldMessageFields.FAMILY, (item.family || lists.isFamily(item.personName)).fv())
+                    if (item.urgent) put(HeldMessageFields.URGENT, true.fv())
                 },
             )
             added++
@@ -289,6 +320,7 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
                 id = e.ref.entityId, app = app, kind = kind, personName = person,
                 text = e[HeldMessageFields.TEXT].textOrNull, conversation = e[HeldMessageFields.CONVERSATION].textOrNull,
                 atMs = at, family = e[HeldMessageFields.FAMILY].boolOrNull == true,
+                urgent = e[HeldMessageFields.URGENT].boolOrNull == true,
             )
         }.sortedWith(compareBy<CapturedItem>({ it.atMs }, { it.id })).takeLast(Capture.MAX_ITEMS)
     }

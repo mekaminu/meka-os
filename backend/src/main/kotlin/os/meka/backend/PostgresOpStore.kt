@@ -89,6 +89,16 @@ class PostgresOpStore(private val ds: DataSource) : ServerOpStore {
         }
     }
 
+    /** A field's current value, last writer wins by HLC (the encoding sorts like the HLC); null when never written. */
+    fun latestValue(householdId: String, entityType: String, entityId: String, field: String): FieldValue? = conn { c ->
+        c.prepareStatement(
+            "SELECT * FROM op_log WHERE household_id = ? AND entity_type = ? AND entity_id = ? AND field_name = ? ORDER BY hlc DESC LIMIT 1",
+        ).use { st ->
+            st.setString(1, householdId); st.setString(2, entityType); st.setString(3, entityId); st.setString(4, field)
+            st.executeQuery().use { rs -> if (rs.next()) rs.toOp().value else null }
+        }
+    }
+
     override fun isDeviceAuthorised(householdId: String, deviceId: String): Boolean = conn { c ->
         c.prepareStatement("SELECT 1 FROM device WHERE household_id = ? AND id = ? AND revoked_at IS NULL").use { st ->
             st.setString(1, householdId); st.setString(2, deviceId)

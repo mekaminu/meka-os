@@ -94,6 +94,8 @@ class MekaApplication : Application() {
         // Every work-mode change on this phone (clock tick, sync, listener) goes past the nudger. Also runs once at
         // process start (after a reboot the listener's rebind starts us), which re-registers the end-of-work alarm.
         appScope.launch { core.workMode.collect { nudger.evaluate(it) } }
+        // Urgent voice messages from the call assistant ring through as soon as they sync (also with the app open).
+        appScope.launch { core.afterWork.collect { runCatching { nudger.alertVoiceMessages() } } }
         // Messages held before the summary was synced join it once (re-holding is a no-op, cleared ones stay cleared).
         appScope.launch { runCatching { core.holdCaptured(captures.items.value, captures.lists.value) } }
         // The governor looks again whenever what it reads changes (settled for a moment, so a burst of edits or a

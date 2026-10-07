@@ -32,6 +32,9 @@ enum class SendResult {
  */
 fun interface PushSender {
     fun wake(address: PushAddress): SendResult
+
+    /** The same wake-up at high priority, so a dozing phone syncs now (an urgent voice message). Still only "sync". */
+    fun wakeUrgent(address: PushAddress): SendResult = wake(address)
 }
 
 /**
@@ -63,6 +66,16 @@ class Push(
 
     /** The server itself wrote ops for [householdId] (a calendar or fixtures poll): wake all its devices. */
     fun serverChanged(householdId: String) = wake(householdId, except = null)
+
+    /**
+     * Something urgent was written for [householdId] (a caller said their voice message is urgent): wake every device
+     * now at high priority, outside the coalescing, so the Fold alerts within seconds even when dozing.
+     */
+    fun urgent(householdId: String) {
+        for (a in store.household(householdId)) {
+            schedule(0) { if (sender.wakeUrgent(a) == SendResult.GONE) store.forget(householdId, a.token) }
+        }
+    }
 
     private fun wake(householdId: String, except: String?) {
         val targets = store.household(householdId).filter { it.deviceId != except }

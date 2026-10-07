@@ -62,6 +62,8 @@ fun Application.mekaSync(
     push: Push? = null,
     /** The release-only publisher's public key (GitHub builds the phone app); null refuses every publisher request. */
     publisher: PublisherKeySource? = null,
+    /** The call assistant's phone-service webhooks (build plan M1); null leaves them out. */
+    voice: VoiceRoutes? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -225,6 +227,28 @@ fun Application.mekaSync(
             }
         }
 
+        if (voice != null) {
+            // The call assistant's phone service (Twilio): form posts signed by the service over the exact public URL.
+            // No device or publisher may call these; an unsigned or wrongly signed request is refused.
+            post("/v1/voice/{provider}/{step}") {
+                if (call.isPublisher()) throw Forbidden()
+                val body = call.boundedBody()
+                val provider = voice.providers[call.parameters["provider"].orEmpty()]
+                    ?: return@post call.respondText("unknown provider", status = HttpStatusCode.NotFound)
+                val form = runCatching { parseForm(body) }.getOrElse { throw WireFormatException("bad form") }
+                val url = voice.publicUrl.trimEnd('/') + call.request.path()
+                if (!provider.verify(url, form) { call.request.header(it) }) throw Forbidden()
+                val event = provider.parse(call.parameters["step"].orEmpty(), form)
+                    ?: return@post call.respondText("unknown step", status = HttpStatusCode.NotFound)
+                val reply = withContext(Dispatchers.IO) { voice.assistant.handle(provider.id, event) }
+                // Transcribed (or failed): the recording has done its job; delete it from the phone service, off the request.
+                if (event is VoiceEvent.Transcribed) event.recording?.let { rec -> background { runCatching { provider.deleteRecording(rec) } } }
+                if (event is VoiceEvent.Recorded && reply == VoiceReply.AskUrgent) call.application.environment.log.info("voice message taken") // no identifiers
+                val (type, text) = provider.render(reply, voice.publicUrl)
+                call.respondText(text, ContentType.parse(type))
+            }
+        }
+
         // Long-poll for an open app: answers as soon as the household has ops after the cursor, else empty after
         // [waitMs]. Checks the database each [waitCheckMs] (an indexed query), so it stays correct with several tasks.
         post("/v1/sync/wait") {
@@ -347,11 +371,13 @@ fun main(args: Array<String>) {
             integrations?.let { startCalendarSync(it) }
             // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
+            val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push)
             embeddedServer(Netty, port = port) {
                 mekaSync(
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
                     releases = Releases(PostgresReleaseStore(ds), onPublished = { who, r -> releaseActivity.record(who, r) }), push = push,
                     publisher = System.getenv("MEKA_RELEASE_PUBLISHER_SECRET")?.takeIf { it.isNotBlank() }?.let { SecretsManagerPublisherKey(it) },
+                    voice = voice,
                 )
             }.start(wait = true)
         }
@@ -375,6 +401,20 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         holidays = listOf(GovUkBankHolidays()).associateBy { it.id },
         onChanged = onChanged,
     )
+}
+
+/**
+ * The call assistant's webhooks. Null unless the deployment names the Twilio secret and a public URL; while the secret
+ * is still `{}` every webhook is refused (no auth token to check signatures with).
+ */
+fun voiceFromEnv(opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?): VoiceRoutes? {
+    val secret = System.getenv("MEKA_VOICE_TWILIO_SECRET")?.takeIf { it.isNotBlank() } ?: return null
+    val publicUrl = System.getenv("MEKA_PUBLIC_URL")?.takeIf { it.isNotBlank() } ?: return null
+    val assistant = CallAssistant(
+        ops = opStore, fields = FieldReader { hh, type, id, field -> opStore.latestValue(hh, type, id, field) }, household = { devices.soleHousehold() },
+        onWritten = { hh -> push?.serverChanged(hh) }, onUrgent = { hh -> push?.urgent(hh) },
+    )
+    return VoiceRoutes(assistant, listOf(TwilioVoice.fromSecret(secret)), publicUrl)
 }
 
 /**

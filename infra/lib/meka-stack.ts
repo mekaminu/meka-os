@@ -210,6 +210,15 @@ export class MekaStack extends cdk.Stack {
       secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
     });
 
+    // The call assistant's phone service (Twilio, approved by Meka 2026-10-07): '{}' until he pastes the account's
+    // auth token, which the service uses only to check that webhooks really come from Twilio. Read at use time.
+    const voiceTwilio = new secretsmanager.Secret(this, 'VoiceTwilio', {
+      secretName: `${prefix}/voice/twilio`,
+      encryptionKey: this.key,
+      description: 'MEKA OS call assistant: {"auth_token": "..."} from the Twilio console (Account info → Auth token)',
+      secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
+    });
+
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc, clusterName: prefix, containerInsightsV2: ecs.ContainerInsights.DISABLED });
     const task = new ecs.FargateTaskDefinition(this, 'Task', {
       cpu: 256,
@@ -233,6 +242,7 @@ export class MekaStack extends cdk.Stack {
         MEKA_AI_SECRET: aiKey.secretArn,
         MEKA_FCM_SECRET: fcmKey.secretArn,
         MEKA_RELEASE_PUBLISHER_SECRET: publisherPublic.secretArn,
+        MEKA_VOICE_TWILIO_SECRET: voiceTwilio.secretArn,
       },
       secrets: {
         MEKA_DB_USER: ecs.Secret.fromSecretsManager(dbSecret, 'username'),
@@ -258,6 +268,7 @@ export class MekaStack extends cdk.Stack {
     aiKey.grantRead(task.taskRole);
     fcmKey.grantRead(task.taskRole);
     publisherPublic.grantRead(task.taskRole); // the public half only; the private key is never granted to the service
+    voiceTwilio.grantRead(task.taskRole);
 
     this.service = new ecs.FargateService(this, 'Service', {
       cluster,

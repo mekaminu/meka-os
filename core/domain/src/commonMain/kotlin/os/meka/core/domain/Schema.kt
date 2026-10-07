@@ -227,6 +227,7 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.CALENDAR_MARK -> MergePolicy.Lww
         // Held messages: written once by the Fold; Done on either device clears them for good.
         entityType == EntityTypes.HELD_MESSAGE && field == HeldMessageFields.CLEARED -> MergePolicy.TrueWins
+        entityType == EntityTypes.HELD_MESSAGE && field == HeldMessageFields.URGENT -> MergePolicy.TrueWins
         entityType == EntityTypes.HELD_MESSAGE -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
