@@ -169,6 +169,14 @@ export class MekaStack extends cdk.Stack {
     });
     const oauthGoogle = oauthSecret('google', 'Google');
     const oauthMicrosoft = oauthSecret('microsoft', 'Microsoft');
+    // The AI layer's API key (ADR-006). Empty until the owner pastes it in; the service treats empty as "AI off".
+    // The monthly spend cap lives in the Anthropic Console, so a leaked key can't spend past it.
+    const aiKey = new secretsmanager.Secret(this, 'AiKey', {
+      secretName: `${prefix}/ai/anthropic`,
+      encryptionKey: this.key,
+      description: 'MEKA OS AI key: {"api_key": "sk-ant-..."}',
+      secretStringValue: cdk.SecretValue.unsafePlainText(JSON.stringify({ api_key: '' })),
+    });
 
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc, clusterName: prefix, containerInsightsV2: ecs.ContainerInsights.DISABLED });
     const task = new ecs.FargateTaskDefinition(this, 'Task', {
@@ -190,6 +198,7 @@ export class MekaStack extends cdk.Stack {
         MEKA_KMS_KEY_ID: this.key.keyArn,
         MEKA_OAUTH_GOOGLE_SECRET: oauthGoogle.secretArn,
         MEKA_OAUTH_MICROSOFT_SECRET: oauthMicrosoft.secretArn,
+        MEKA_AI_SECRET: aiKey.secretArn,
       },
       secrets: {
         MEKA_DB_USER: ecs.Secret.fromSecretsManager(dbSecret, 'username'),
@@ -212,6 +221,7 @@ export class MekaStack extends cdk.Stack {
     // Read-only: the service never writes OAuth app credentials. Integration refresh tokens are KMS-encrypted in Postgres.
     oauthGoogle.grantRead(task.taskRole);
     oauthMicrosoft.grantRead(task.taskRole);
+    aiKey.grantRead(task.taskRole);
 
     this.service = new ecs.FargateService(this, 'Service', {
       cluster,

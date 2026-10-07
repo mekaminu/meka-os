@@ -169,6 +169,8 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
   - **Screen-level motion:** shared-axis slide between tabs (direction follows tab order), sheets spring up with a dimmed backdrop, list → detail container transform, pull-to-sync brass ring that fills then spins, the greeting letters fade in on first open of the day, tab icons morph (outline → filled) with a spring.
   - **Feedback motion:** button press scale (0.97) everywhere, checkbox ring draw + check stroke, swipe actions reveal coloured backgrounds with icon pop, undo bar rises, empty states have a slow breathing illustration.
   - Mac: the same set with matchedGeometryEffect and spring presets; hover lifts cards 2 pt.
+  - **Opening moment** (Meka: "something happening on my screen when I open it, like my trading app"): on open, the MEKA mark (a brass ring) draws itself in ~600 ms and hands off into a **Day ring** hero at the top of Today: a 24 h dial where the day's events and planned blocks draw in as brass arcs, free time stays dark, a "now" needle sweeps to the current time, and the centre counts up "3 h 45 free · 4 to do". Below it, live tiles count up (next event countdown, fast timer, habits done, renewals due). Plays fully on the first open of the day; later opens do a quick 300 ms version. Respects the Motion setting.
+- [ ] Alarms (Meka, 2026-10-07): **smart wake alarm** — suggests a wake time from tomorrow's first commitment + your prep/commute buffer (you confirm or set your own in the evening shutdown); a real full-screen alarm (Android exact alarm, snooze, gradual volume); after you dismiss it, the morning brief opens (and later reads aloud). **Leave-by alarms** for events with a place (buffer you set; travel times when a maps source is added). **Quick alarms/timers** from capture ("alarm 6:30", "timer 20 min"). Mac: alarms as critical notifications. Motion: the dismiss slider glows, the brief rises in.
 - [ ] Edit your calendars from MEKA (Meka, 2026-10-07: "one shop for my life") — right after Calendar actions. Add, edit, move and delete real Google (and later Outlook) events from both apps.
   - **Permission:** per account, switched on in Calendars ("Allow editing"); reconnecting asks Google for `calendar.events` (Microsoft: `Calendars.ReadWrite`). Read-only accounts keep working. Needs Meka #12 when it lands.
   - **You act, it happens:** your own taps apply straight away (no approval), with a 5-second Undo before the change is sent to Google. Edits made offline queue and send on reconnect; if the event changed in Google meanwhile, show both versions and let Meka choose (never overwrite silently).
@@ -194,7 +196,16 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
 - [ ] Approvals inbox ("Needs you") with biometric confirmation for financial/trading items
 - [!] AI layer (extraction, drafting, Ask MEKA) — needs Anthropic API key and monthly spend cap (Needs Meka #3)
 - [!] Email triage for Gmail and Outlook — needs mail read permission (Needs Meka #4)
+  - *Decided 2026-10-07:* junk and newsletters filed automatically (reversible, logged); important email → notification with a drafted reply for one-tap approval; **easy replies are batch-approved** ("Send all 5"), never sent on their own.
 - [ ] Promises spotted in email → Waiting for; receipts → Vault; renewals radar fills itself
+- [ ] Scheduling assistant: a "can we meet?" email gets a drafted reply with your free slots; when they pick one, the event is booked (calendar editing) after your tap.
+- [ ] Meeting prep: 15 min before a meeting, a card with who's coming, your last emails with them and open items between you.
+- [ ] Follow-up radar: emails you sent that got no reply after N days (per person) go to Waiting for with a chase drafted.
+- [ ] School and family logistics: school emails become events and tasks (forms, trips, payments, dates), shared with the household when it lands.
+- [ ] "Handle this": share or forward any email, screenshot or photo to MEKA; it proposes the task, event, reply, renewal or document and files it on your tap.
+- [ ] Spoken morning brief: the brief read aloud (on-device voice), started after the wake alarm or from a widget.
+- [ ] Errands by location: "when I'm near Tesco: milk, batteries" — a geofenced reminder (on-device location only).
+- [ ] Money at a glance: monthly spend by category from receipts and statements in email (no bank login), with bills and subscriptions from the radar.
 - [ ] Messaging drafts via Android notification listener (Level 3 max, never automatic)
 - [ ] People: birthdays, last contact, promises both ways, gift ideas
 - [ ] Travel mode: bookings → trip timeline; documents offline
@@ -218,7 +229,7 @@ Things only the owner can do. Build runs skip these and carry on with the rest.
 
 1. **Microsoft registration** for Outlook (10 min, steps already given).
 2. **Firebase project** (free) for push notifications: create it with your Google account, download `google-services.json`.
-3. **AI layer:** an Anthropic API key and a monthly spend cap you're comfortable with.
+3. **AI layer:** create an Anthropic API key with a monthly spend limit (Anthropic Console → Billing: add credit and a monthly limit; API keys: create key), then paste it into AWS Secrets Manager → `meka-os-dev/ai/anthropic` as `{"api_key": "sk-ant-…"}`. The slot exists from 2026-10-07; empty means AI stays off.
 4. **Mail permission:** reconnect Google and Outlook with mail read access when email triage lands.
 5. **Kestrel change:** OK to add an "approval request" event to Kestrel and let MEKA send back approve/decline.
 6. **Apple Developer Program** (paid yearly) for a notarised Mac app. Optional: dev builds keep working without it.

@@ -111,6 +111,7 @@ describe('MekaStack security and cost invariants (ADR-004)', () => {
   test('OAuth app credentials live under the env prefix and the service can only read them', () => {
     t.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'meka-os-dev/oauth/google' });
     t.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'meka-os-dev/oauth/microsoft' });
+    t.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'meka-os-dev/ai/anthropic' });
     const policies = t.findResources('AWS::IAM::Policy');
     const actions = Object.values(policies).flatMap((p: any) => p.Properties.PolicyDocument.Statement.flatMap((s: any) => ([] as string[]).concat(s.Action)));
     expect(actions.filter((a) => a.startsWith('secretsmanager:') && !/^secretsmanager:(GetSecretValue|DescribeSecret)$/.test(a))).toEqual([]);
