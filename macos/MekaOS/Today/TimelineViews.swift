@@ -38,6 +38,7 @@ extension View {
 struct EventActionsModifier: ViewModifier {
     @Environment(CoreModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openURL) private var openURL
     let event: CalendarEvent?
     let palette: MekaPalette
     @State private var hovering = false
@@ -73,6 +74,10 @@ struct EventActionsModifier: ViewModifier {
                     Button("Hide from my day") { model.hideEvent(e.id) }
                     Divider()
                     Button("Details…") { model.openEvent = e }
+                    // The real event in Google Calendar / Outlook on the web, to change it there (MEKA stays read-only).
+                    if let link = EventDetails.shared.openLink(e: e), let url = URL(string: link.url), url.scheme == "https" {
+                        Button(link.label) { openURL(url) }
+                    }
                 }
                 .accessibilityAction(named: "Prep task") { model.addPrepTask(e) }
                 .accessibilityAction(named: "Hide from my day") { model.hideEvent(e.id) }

@@ -22,6 +22,11 @@ object EventFields {
     const val DESCRIPTION = "description"
     /** The provider's own video-call link (Google Meet, Teams), https only. */
     const val JOIN_URL = "joinUrl"
+    /**
+     * The event's own page in the provider's web app (Google's `htmlLink`, Outlook's `webLink`), https only, so Meka
+     * can edit the real event there (calendar actions, slice 3). Additive; absent on events polled before it existed.
+     */
+    const val WEB_URL = "webUrl"
     /** True when the event was cancelled or is no longer in the provider's window. Can flip back to false. */
     const val REMOVED = "removed"
 }
@@ -41,6 +46,8 @@ data class CalendarEvent(
     val description: String? = null,
     /** The provider's video-call link (see [EventFields.JOIN_URL]). */
     val joinUrl: String? = null,
+    /** The provider's page for this event (see [EventFields.WEB_URL]). */
+    val webUrl: String? = null,
 ) {
     /** From the fixtures feed (FC Barcelona), marked in the Calendar tab. */
     val isFixture: Boolean get() = provider == "fixtures"
@@ -72,6 +79,7 @@ data class CalendarEvent(
                 calendarName = s[EventFields.CALENDAR].textOrNull,
                 description = s[EventFields.DESCRIPTION].textOrNull?.takeIf { it.isNotBlank() },
                 joinUrl = s[EventFields.JOIN_URL].textOrNull?.takeIf { it.isNotBlank() },
+                webUrl = s[EventFields.WEB_URL].textOrNull?.takeIf { it.isNotBlank() },
             )
         }
     }

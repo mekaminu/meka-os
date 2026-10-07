@@ -38,13 +38,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -55,6 +58,7 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.CalendarEvent
+import os.meka.core.domain.EventDetails
 import os.meka.core.domain.ReminderRules
 import os.meka.core.facade.MekaCore
 import kotlin.math.abs
@@ -62,9 +66,31 @@ import kotlin.math.roundToInt
 
 /**
  * Calendar actions (build plan, M1): swipe right on an event for a prep task, swipe left to hide it from my day,
- * long-press for Remind me / Leave by (and the same two actions). MEKA-only: the real calendars are never changed. An
+ * long-press for Remind me / Leave by (and the same two actions, and Open in Google Calendar / Outlook). MEKA-only: the real calendars are never changed. An
  * undo bar rises after each.
  */
+
+/**
+ * The first-time swipe hint (calendar actions, slice 3): the first swipeable event row MEKA ever shows nudges right
+ * and left once, so the two actions behind it peek out. Once per install; one row only, even with Today and the
+ * Calendar tab both on screen (the unfolded Fold).
+ */
+object SwipeHint {
+    private const val PREFS = "meka.hints"
+    private const val KEY = "eventSwipe"
+    private var claimed = false
+
+    /** True exactly once: the caller shows the hint. Marked as shown at once, so a crash mid-hint doesn't repeat it. */
+    @Synchronized
+    fun claim(context: Context): Boolean {
+        if (claimed) return false
+        claimed = true
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY, false)) return false
+        prefs.edit().putBoolean(KEY, true).apply()
+        return true
+    }
+}
 
 /** What the undo bar is offering: "Hidden from your day" with Undo. */
 data class UndoOffer(val message: String, val key: Long, val undo: (suspend () -> Unit)?)
@@ -155,6 +181,19 @@ fun SwipeableEvent(
     var dx by remember(event.id) { mutableFloatStateOf(0f) }
     val threshold = with(LocalDensity.current) { 96.dp.toPx() }
     var armed by remember(event.id) { mutableIntStateOf(0) } // -1 hide, 1 prep, 0 neither
+    val context = LocalContext.current
+    val nudge = with(LocalDensity.current) { 48.dp.toPx() }
+    // The swipe hint: half the way to arming, right then left, springing back each time. Reduced motion: no
+    // movement, so no hint (screen readers have the custom actions); it still counts as shown.
+    LaunchedEffect(event.id) {
+        if (!SwipeHint.claim(context.applicationContext) || reduced) return@LaunchedEffect
+        delay(900)
+        for (to in listOf(nudge, 0f, -nudge, 0f)) {
+            if (armed != 0) break
+            animate(dx, to, animationSpec = MekaMotion.complete(false)) { v, _ -> dx = v }
+            if (to == 0f) delay(120)
+        }
+    }
 
     BoxWithConstraints(
         modifier.fillMaxWidth().semantics {
@@ -234,6 +273,8 @@ private fun EventActionsMenu(event: CalendarEvent, handlers: EventActionHandlers
     val (remind, travel) = handlers.current(event)
     val remindChoices = ReminderRules.remindChoices(event, now)
     val travelChoices = ReminderRules.travelChoices(event, now)
+    val uriHandler = LocalUriHandler.current
+    val openIn = EventDetails.openLink(event)
     @Composable
     fun item(label: String, onClick: () -> Unit) = DropdownMenuItem(
         text = { Text(label, style = MekaType.itemMeta, color = Meka.colors.textPrimary) },
@@ -250,6 +291,8 @@ private fun EventActionsMenu(event: CalendarEvent, handlers: EventActionHandlers
                 }
                 item("Prep task") { set(EventMenu.CLOSED); handlers.prep(event) }
                 item("Hide from my day") { set(EventMenu.CLOSED); handlers.hide(event) }
+                // The real event in Google Calendar / Outlook, to change it there (MEKA itself stays read-only).
+                openIn?.let { o -> item(o.label) { set(EventMenu.CLOSED); runCatching { uriHandler.openUri(o.url) } } }
             }
             EventMenu.REMIND -> {
                 remindChoices.forEach { m ->

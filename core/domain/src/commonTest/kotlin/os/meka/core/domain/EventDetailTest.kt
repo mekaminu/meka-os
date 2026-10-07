@@ -21,8 +21,8 @@ class EventDetailTest {
 
     private fun ev(
         start: Long, end: Long, allDay: Boolean = false, location: String? = null, provider: String = "google",
-        description: String? = null, joinUrl: String? = null, calendarName: String? = "Personal",
-    ) = CalendarEvent("e1", "Call with Tunde", start, end, allDay, location, provider, "meka@gmail.com", calendarName, description, joinUrl)
+        description: String? = null, joinUrl: String? = null, calendarName: String? = "Personal", webUrl: String? = null,
+    ) = CalendarEvent("e1", "Call with Tunde", start, end, allDay, location, provider, "meka@gmail.com", calendarName, description, joinUrl, webUrl)
 
     @Test
     fun timedEventSaysWhenHowLongAndHowSoon() {
@@ -141,5 +141,38 @@ class EventDetailTest {
         // Events mirrored before notes existed simply have none.
         assertNull(all.getValue("ev2").description)
         assertNull(all.getValue("ev2").joinUrl)
+    }
+
+    @Test
+    fun openInTheProvidersWebAppOnlyForItsOwnHosts() {
+        val g = "https://www.google.com/calendar/event?eid=abc123"
+        assertEquals(OpenLink(g, "Open in Google Calendar"), EventDetails.build(ev(0, 1, webUrl = g), 0, cal).openIn)
+        val g2 = "https://calendar.google.com/calendar/event?eid=abc"
+        assertEquals("Open in Google Calendar", EventDetails.build(ev(0, 1, webUrl = g2), 0, cal).openIn?.label)
+        val o = "https://outlook.live.com/owa/?itemid=AAMk%3D&exvsurl=1&path=/calendar/item"
+        assertEquals(OpenLink(o, "Open in Outlook"), EventDetails.build(ev(0, 1, provider = "microsoft", webUrl = o), 0, cal).openIn)
+        // Nothing mirrored yet, a fixture, the wrong provider's host, http, look-alikes and other Google pages: no button.
+        assertNull(EventDetails.build(ev(0, 1), 0, cal).openIn)
+        assertNull(EventDetails.build(ev(0, 1, provider = "fixtures", webUrl = g), 0, cal).openIn)
+        assertNull(EventDetails.build(ev(0, 1, provider = "microsoft", webUrl = g), 0, cal).openIn)
+        assertNull(EventDetails.build(ev(0, 1, webUrl = "http://www.google.com/calendar/event?eid=a"), 0, cal).openIn)
+        assertNull(EventDetails.build(ev(0, 1, webUrl = "https://www.google.com.evil.example/calendar/x"), 0, cal).openIn)
+        assertNull(EventDetails.build(ev(0, 1, webUrl = "https://www.google.com@evil.example/calendar/x"), 0, cal).openIn)
+        assertNull(EventDetails.build(ev(0, 1, webUrl = "https://www.google.com/url?q=https://evil.example"), 0, cal).openIn)
+        assertNull(EventDetails.build(ev(0, 1, webUrl = "javascript:alert(1)"), 0, cal).openIn)
+    }
+
+    @Test
+    fun webLinkIsReadFromTheMirroredEvent() {
+        var n = 0
+        val replica = Replica("hh", "server", HlcClock("server", { 1_000L }), InMemoryReplicaStore(), MekaSchema) { "op" + n++ }
+        replica.commitLocal(EntityTypes.EVENT, "ev1", mapOf(
+            EventFields.TITLE to "Standup".fv(), EventFields.START_AT to 0L.fv(),
+            EventFields.WEB_URL to "https://www.google.com/calendar/event?eid=x".fv(),
+        ))
+        replica.commitLocal(EntityTypes.EVENT, "ev2", mapOf(EventFields.TITLE to "Old".fv(), EventFields.START_AT to 0L.fv()))
+        val all = CalendarEvents(replica).all().associateBy { it.id }
+        assertEquals("https://www.google.com/calendar/event?eid=x", all.getValue("ev1").webUrl)
+        assertNull(all.getValue("ev2").webUrl)
     }
 }

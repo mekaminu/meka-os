@@ -194,6 +194,16 @@ fun EventDetailPane(core: MekaCore, event: CalendarEvent, onClose: () -> Unit) {
         d.calendarLine?.let { line ->
             DetailBlock("Calendar", 3) {
                 Text(line, style = MekaType.body, color = if (d.isFixture) Meka.colors.accent else Meka.colors.textPrimary)
+                // The real event, to edit it there: MEKA itself never changes Meka's calendars (read-only in M1).
+                d.openIn?.let { o ->
+                    Text(
+                        o.label, style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.clickable(role = Role.Button) {
+                            haptics.light()
+                            runCatching { uriHandler.openUri(o.url) }
+                        }.padding(vertical = MekaSpace.xs),
+                    )
+                }
             }
         }
 

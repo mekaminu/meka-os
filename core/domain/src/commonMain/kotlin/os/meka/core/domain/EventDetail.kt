@@ -3,6 +3,9 @@ package os.meka.core.domain
 /** A video-call link found on an event: "Join Google Meet" with its https address. */
 data class JoinLink(val url: String, val label: String)
 
+/** "Open in Google Calendar" / "Open in Outlook": the real event in the provider's web app, to edit it there. */
+data class OpenLink(val url: String, val label: String)
+
 /** What the event detail pane shows (calendar redesign, slice 3). */
 data class EventDetailView(
     val id: String,
@@ -42,6 +45,8 @@ data class EventDetailView(
     val travelChoices: List<Int> = emptyList(),
     /** "Reminder 10 min before" · "Leave by 13:30 · 30 min away"; null when neither is set. */
     val reminderLine: String? = null,
+    /** The real event in Google Calendar or Outlook on the web (calendar actions, slice 3); null when unknown. */
+    val openIn: OpenLink? = null,
 )
 
 /**
@@ -152,7 +157,28 @@ object EventDetails {
             remindChoices = ReminderRules.remindChoices(e, nowMs),
             travelChoices = ReminderRules.travelChoices(e, nowMs),
             reminderLine = if (e.startAtMs > nowMs) ReminderRules.line(e, marks, calendar) else null,
+            openIn = openLink(e),
         )
+    }
+
+    /** The provider's web app, by host: a link to anywhere else (or for another provider) is never offered. */
+    private val WEB_HOSTS = mapOf(
+        "google" to listOf("calendar.google.com", "www.google.com"),
+        "microsoft" to listOf("outlook.live.com", "outlook.office.com", "outlook.office365.com"),
+    )
+
+    /**
+     * "Open in Google Calendar" / "Open in Outlook" for the event's own page, when the server mirrored one and it is
+     * an https link on that provider's own web app (the link comes from the provider, but checking costs nothing).
+     */
+    fun openLink(e: CalendarEvent): OpenLink? {
+        val url = e.webUrl?.trim()?.takeIf { isHttps(it) } ?: return null
+        val host = hostOf(url) ?: return null
+        val hosts = WEB_HOSTS[e.provider] ?: return null
+        if (host !in hosts) return null
+        // www.google.com serves many things; only its calendar pages count.
+        if (host == "www.google.com" && !url.substring(8 + host.length).startsWith("/calendar/")) return null
+        return OpenLink(url, if (e.provider == "microsoft") "Open in Outlook" else "Open in Google Calendar")
     }
 
     /** "Prep task at 13:30" · "Prep task at Wed 7 Oct 13:30" · "Prep task due 14:00" · "Prep task done". */

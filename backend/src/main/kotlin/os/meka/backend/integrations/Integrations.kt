@@ -218,6 +218,8 @@ class Integrations(
                     // Notes and the call link (calendar redesign, slice 3). Not written at all until an event has them.
                     EventFields.DESCRIPTION to (e.description?.take(MAX_NOTES)?.let { FieldValue.Text(it) } ?: FieldValue.Null),
                     EventFields.JOIN_URL to (httpsOrNull(e.joinUrl)?.take(MAX_TEXT)?.let { FieldValue.Text(it) } ?: FieldValue.Null),
+                    // The real event's page, to edit it there (calendar actions, slice 3). Additive like the above.
+                    EventFields.WEB_URL to (httpsOrNull(e.webUrl)?.takeIf { it.length <= MAX_URL }?.let { FieldValue.Text(it) } ?: FieldValue.Null),
                     EventFields.REMOVED to FieldValue.Bool(false),
                 )
                 write(a, entityId, e.startMs, e.endMs, false, mirror[entityId], desired)
@@ -270,6 +272,8 @@ class Integrations(
         const val WINDOW_AHEAD_MS = 30 * 24 * 3_600_000L
         private const val MAX_TEXT = 500
         private const val MAX_NOTES = 2_000
+        // A cut link is a broken link: longer ones (none seen in practice) are left out rather than cut.
+        private const val MAX_URL = 2_000
         private const val MAX_HEADLINE = 300
         /** Headlines mirrored per topic. */
         const val NEWS_SLOTS = 4

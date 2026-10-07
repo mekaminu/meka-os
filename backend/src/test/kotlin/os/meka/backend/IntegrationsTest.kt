@@ -200,6 +200,35 @@ class IntegrationsTest {
     }
 
     @Test
+    fun theEventsWebPageIsMirroredSoItCanBeOpenedToEdit() {
+        val acc = connect()
+        provider.events = listOf(ev("a", "Standup", 9))
+        integrations.syncAccount(acc)
+        val before = ops.size
+        // An event polled before web links existed gains one op, nothing else is rewritten.
+        val link = "https://www.google.com/calendar/event?eid=YWJj"
+        provider.events = listOf(ev("a", "Standup", 9).copy(webUrl = link))
+        integrations.syncAccount(acc)
+        assertEquals(before + 1, ops.size)
+        integrations.syncAccount(acc)
+        assertEquals(before + 1, ops.size)
+        val r = Replica("home", "fold", HlcClock("fold", { now }), InMemoryReplicaStore(), MekaSchema) { "d" + (counter++) }
+        r.applyRemoteBatch(ops.after("home", 0, 10_000).map { it.op })
+        assertEquals(link, CalendarEvents(r).all().single().webUrl)
+        // Not https, or too long to keep whole: not mirrored (a cut link would be a broken one).
+        provider.events = listOf(ev("a", "Standup", 9).copy(webUrl = "http://www.google.com/calendar/event?eid=YWJj"))
+        integrations.syncAccount(acc)
+        val r2 = Replica("home", "mac", HlcClock("mac", { now }), InMemoryReplicaStore(), MekaSchema) { "m" + (counter++) }
+        r2.applyRemoteBatch(ops.after("home", 0, 10_000).map { it.op })
+        assertEquals(null, CalendarEvents(r2).all().single().webUrl)
+        provider.events = listOf(ev("a", "Standup", 9).copy(webUrl = "https://outlook.live.com/owa/?itemid=" + "A".repeat(2_100)))
+        integrations.syncAccount(acc)
+        val r3 = Replica("home", "mac2", HlcClock("mac2", { now }), InMemoryReplicaStore(), MekaSchema) { "n" + (counter++) }
+        r3.applyRemoteBatch(ops.after("home", 0, 10_000).map { it.op })
+        assertEquals(null, CalendarEvents(r3).all().single().webUrl)
+    }
+
+    @Test
     fun calendarNotesBecomePlainText() {
         val html = "Hi all,<br>Agenda:<ul><li>One</li><li>Two &amp; three</li></ul><p>Join <a href=\"https://meet.google.com/x\">here</a></p>" +
             "<a href=\"https://zoom.us/j/1\">https://zoom.us/j/1</a>&nbsp;&#169;"

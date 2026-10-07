@@ -41,6 +41,8 @@ data class RemoteEvent(
     val description: String? = null,
     /** The provider's own video-call link (Google Meet, Teams); https only. */
     val joinUrl: String? = null,
+    /** The event's own page in the provider's web app (Google `htmlLink`, Outlook `webLink`); https only. */
+    val webUrl: String? = null,
 )
 
 /** The refresh token was revoked or expired: the owner has to connect the account again. */
@@ -221,6 +223,7 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
                             "$calId/${e["id"].str()}", e["summary"].str() ?: "", startMs, endMs, allDay, e["location"].str(), calName,
                             description = plainText(e["description"].str()),
                             joinUrl = httpsOrNull(e["hangoutLink"].str()) ?: httpsOrNull(video),
+                            webUrl = httpsOrNull(e["htmlLink"].str()),
                         ))
                     }
                     page = resp["nextPageToken"].str()
@@ -273,7 +276,7 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
             buildList {
                 var url: String? = "https://graph.microsoft.com/v1.0/me/calendars/${Http.enc(calId)}/calendarView?" + Http.query(mapOf(
                     "startDateTime" to rfc3339(fromMs), "endDateTime" to rfc3339(toMs), "\$top" to "500",
-                    "\$select" to "id,subject,start,end,isAllDay,location,isCancelled,bodyPreview,onlineMeeting",
+                    "\$select" to "id,subject,start,end,isAllDay,location,isCancelled,bodyPreview,onlineMeeting,webLink",
                 ))
                 while (url != null) {
                     val resp = http.getJson(url, accessToken, utc)
@@ -295,6 +298,7 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
                             "$calId/${e["id"].str()}", e["subject"].str() ?: "", parse(start), parse(end), allDay, location, calName,
                             description = plainText(e["bodyPreview"].str()),
                             joinUrl = httpsOrNull(join),
+                            webUrl = httpsOrNull(e["webLink"].str()),
                         ))
                     }
                     url = resp["@odata.nextLink"].str()

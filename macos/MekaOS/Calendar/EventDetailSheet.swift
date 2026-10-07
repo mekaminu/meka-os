@@ -132,6 +132,14 @@ struct EventDetailSheet: View {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         SectionLabel("Calendar", palette)
                         Text(line).font(MekaType.body).foregroundStyle(d.isFixture ? palette.accent : palette.textPrimary)
+                        if let link = d.openIn, let url = URL(string: link.url), url.scheme == "https" {
+                            Button(link.label) {
+                                MekaHaptics.tick()
+                                openURL(url)
+                            }
+                            .buttonStyle(.link)
+                            .help("Change the real event there; MEKA doesn't edit your calendars yet")
+                        }
                     }
                     .staggeredAppear(3)
                 }
