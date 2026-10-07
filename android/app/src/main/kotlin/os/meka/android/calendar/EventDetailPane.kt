@@ -1,6 +1,12 @@
 package os.meka.android.calendar
 
+import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.platform.LocalContext
+import os.meka.android.MekaApplication
+import os.meka.core.domain.ReminderRules
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -117,7 +123,35 @@ fun EventDetailPane(core: MekaCore, event: CalendarEvent, onClose: () -> Unit) {
                 scope.launch { runCatching { if (d.hidden) core.showEvent(event.id) else core.hideEvent(event.id) } }
             }
         }
-        val actionNote = listOfNotNull(d.prepLine, if (d.hidden) "Hidden from your day" else null).joinToString(" · ")
+        // Remind me / Leave by: a heads-up through the notification governor (quiet hours apply).
+        if (d.remindChoices.isNotEmpty() || d.remindMin != 0) {
+            ReminderChips("Remind me", d.remindChoices, d.remindMin, { "$it min" }, 1) { m ->
+                haptics.tick()
+                scope.launch { runCatching { core.setEventReminder(event.id, m) } }
+            }
+        }
+        if (d.travelChoices.isNotEmpty() || d.travelMin != 0) {
+            ReminderChips("Leave by · how long to get there", d.travelChoices, d.travelMin, { ReminderRules.travelLabel(it) }, 1) { m ->
+                haptics.tick()
+                scope.launch { runCatching { core.setEventLeaveBy(event.id, m) } }
+            }
+        }
+        val context = LocalContext.current
+        val exact = remember(tick, marks) { (context.applicationContext as? MekaApplication)?.governor?.exactAllowed() ?: true }
+        if ((d.remindMin != 0 || d.travelMin != 0) && !exact) {
+            Text(
+                "Reminders may be up to 5 min late · Allow on time", style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.padding(bottom = MekaSpace.m).clickable(role = Role.Button) {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + context.packageName))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                },
+            )
+        }
+        val actionNote = listOfNotNull(d.prepLine, d.reminderLine, if (d.hidden) "Hidden from your day" else null).joinToString(" · ")
         val reduced = Meka.reducedMotion
         AnimatedContent(
             targetState = actionNote,
@@ -170,10 +204,38 @@ fun EventDetailPane(core: MekaCore, event: CalendarEvent, onClose: () -> Unit) {
         }
 
         Text(
-            "Change the event itself in your calendar. Prep tasks and hiding stay in MEKA.", style = MekaType.caption, color = Meka.colors.textTertiary,
+            "Change the event itself in your calendar. Prep tasks, reminders and hiding stay in MEKA.", style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(5)),
         )
         Spacer(Modifier.height(MekaSpace.xl))
+    }
+}
+
+/**
+ * "Remind me" with a chip per choice still ahead; the one that's set is filled (tap it again to turn it off). Its
+ * colour blends across when chosen. A set choice that's no longer offered still shows, so it can be turned off.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ReminderChips(label: String, choices: List<Int>, current: Int, text: (Int) -> String, index: Int, onPick: (Int) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.m).appear(rememberAppearance(index))) {
+        Text(label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(bottom = MekaSpace.xs))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            (if (current != 0 && current !in choices) listOf(current) + choices else choices).forEach { m ->
+                val on = m == current
+                val bg by androidx.compose.animation.animateColorAsState(
+                    if (on) Meka.colors.accent else Meka.colors.background, MekaMotion.themeBlend(reduced), label = "reminder-chip",
+                )
+                Text(
+                    text(m), style = MekaType.itemMeta, color = if (on) Meka.colors.onAccent else Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+                        .border(1.dp, Meka.colors.accent.copy(alpha = 0.6f), RoundedCornerShape(MekaRadius.pill))
+                        .clickable(role = Role.Button) { onPick(if (on) 0 else m) }
+                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                )
+            }
+        }
     }
 }
 

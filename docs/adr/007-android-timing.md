@@ -24,3 +24,6 @@ Rules:
 ## Consequences
 - Precision is a property of each reminder record, so the UI can be honest about it.
 - The battery/background test suite (Stage 8) asserts that no exact alarm is registered for non-`CLOCK` reminders.
+
+## Addendum, 2026-10-07: the first CLOCK reminders
+Event reminders (Remind me / Leave by on a calendar event) are the first notices classified `precision = CLOCK`. The Fold now declares `SCHEDULE_EXACT_ALARM`; the governor's alarm is `setExactAndAllowWhileIdle` only while the next wake is a CLOCK reminder and `canScheduleExactAlarms()` is true, else `setWindow` with a 5-minute window. Android 13+ doesn't grant the permission by default, so nothing changes until Meka allows "Alarms & reminders": the event detail says "Reminders may be up to 5 min late · Allow on time" and opens that setting. `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED` re-runs the governor (with boot and update). The governor drops a reminder that couldn't post before the event started rather than sending it late. Still no `USE_EXACT_ALARM`.

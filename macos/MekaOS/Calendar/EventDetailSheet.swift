@@ -59,7 +59,7 @@ struct EventDetailSheet: View {
             Button(d.hidden ? "Show in my day" : "Hide from my day") {
                 if d.hidden { model.showEvent(d.id) } else { model.hideEvent(d.id, offerUndo: false) }
             }
-            let note = [d.prepLine, d.hidden ? "Hidden from your day" : nil].compactMap { $0 }.joined(separator: " · ")
+            let note = [d.prepLine, d.reminderLine, d.hidden ? "Hidden from your day" : nil].compactMap { $0 }.joined(separator: " · ")
             if !note.isEmpty {
                 Text(note).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .contentTransition(.opacity)
@@ -67,6 +67,41 @@ struct EventDetailSheet: View {
         }
         .controlSize(.small)
         .staggeredAppear(1)
+
+        // Remind me / Leave by: a heads-up through the notification governor (quiet hours apply).
+        let remindChoices = d.remindChoices.map { $0.int32Value }
+        let travelChoices = d.travelChoices.map { $0.int32Value }
+        if !remindChoices.isEmpty || d.remindMin != 0 || !travelChoices.isEmpty || d.travelMin != 0 {
+            HStack(spacing: MekaSpace.m) {
+                if !remindChoices.isEmpty || d.remindMin != 0 {
+                    Picker("Remind me", selection: Binding(
+                        get: { d.remindMin },
+                        set: { model.setEventReminder(d.id, $0, offerUndo: false) }
+                    )) {
+                        Text("No reminder").tag(Int32(0))
+                        ForEach(Self.withCurrent(remindChoices, d.remindMin), id: \.self) { m in
+                            Text(ReminderRules.shared.choiceLabel(minutes: m)).tag(m)
+                        }
+                    }
+                    .fixedSize()
+                }
+                if !travelChoices.isEmpty || d.travelMin != 0 {
+                    Picker("Leave by", selection: Binding(
+                        get: { d.travelMin },
+                        set: { model.setEventLeaveBy(d.id, $0, offerUndo: false) }
+                    )) {
+                        Text("Off").tag(Int32(0))
+                        ForEach(Self.withCurrent(travelChoices, d.travelMin), id: \.self) { m in
+                            Text(ReminderRules.shared.travelLabel(minutes: m)).tag(m)
+                        }
+                    }
+                    .fixedSize()
+                    .help("How long it takes to get there; MEKA says when to leave")
+                }
+            }
+            .controlSize(.small)
+            .staggeredAppear(1)
+        }
 
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.l) {
@@ -112,7 +147,7 @@ struct EventDetailSheet: View {
                     .staggeredAppear(4)
                 }
 
-                Text("Change the event itself in your calendar. Prep tasks and hiding stay in MEKA.")
+                Text("Change the event itself in your calendar. Prep tasks, reminders and hiding stay in MEKA.")
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .staggeredAppear(5)
             }
@@ -120,6 +155,11 @@ struct EventDetailSheet: View {
             .padding(.top, MekaSpace.s)
         }
         .frame(maxHeight: 420)
+    }
+
+    /// The choices, with the one that's set kept at the front when it's no longer offered (so it still shows).
+    static func withCurrent(_ choices: [Int32], _ current: Int32) -> [Int32] {
+        current != 0 && !choices.contains(current) ? [current] + choices : choices
     }
 
     /// Apple Maps search for the place.

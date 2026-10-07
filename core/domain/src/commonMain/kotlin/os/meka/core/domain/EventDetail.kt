@@ -32,6 +32,16 @@ data class EventDetailView(
     val prepLine: String? = null,
     /** A prep task can be added (the event hasn't ended and has none open). */
     val canPrep: Boolean = false,
+    /** Remind me this many minutes before (0: none). */
+    val remindMin: Int = 0,
+    /** Leave by: minutes to get there (0: none). */
+    val travelMin: Int = 0,
+    /** The reminder choices still ahead (minutes before); empty when Remind me isn't offered. */
+    val remindChoices: List<Int> = emptyList(),
+    /** The travel times still ahead; empty when Leave by isn't offered (no place, all day, too late). */
+    val travelChoices: List<Int> = emptyList(),
+    /** "Reminder 10 min before" · "Leave by 13:30 · 30 min away"; null when neither is set. */
+    val reminderLine: String? = null,
 )
 
 /**
@@ -137,6 +147,11 @@ object EventDetails {
             prepTaskId = prep?.id,
             prepLine = prep?.let { prepLine(it, today, calendar) },
             canPrep = status != "Ended" && (prep == null || prep.isDone),
+            remindMin = marks.reminderOf(e.id),
+            travelMin = marks.travelOf(e.id),
+            remindChoices = ReminderRules.remindChoices(e, nowMs),
+            travelChoices = ReminderRules.travelChoices(e, nowMs),
+            reminderLine = if (e.startAtMs > nowMs) ReminderRules.line(e, marks, calendar) else null,
         )
     }
 

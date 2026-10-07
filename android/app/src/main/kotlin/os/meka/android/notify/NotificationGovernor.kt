@@ -65,11 +65,26 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
         schedule(r.nextWakeMs, r.nextWakePrecision)
     }
 
+    /**
+     * ADR-007: a CLOCK reminder (Remind me / Leave by on an event) uses an exact alarm when Meka has allowed "Alarms &
+     * reminders" for MEKA; otherwise, and for everything else, a windowed one. No exact alarm is ever asked for silently.
+     */
     private fun schedule(atMs: Long?, precision: NoticePrecision) {
         val am = context.getSystemService(AlarmManager::class.java) ?: return
         if (atMs == null) { am.cancel(alarmIntent()); return }
+        if (precision == NoticePrecision.CLOCK && am.canScheduleExactAlarms()) {
+            try {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, alarmIntent())
+                return
+            } catch (e: SecurityException) {
+                // Withdrawn between the check and the call: fall back to the window below.
+            }
+        }
         am.setWindow(AlarmManager.RTC_WAKEUP, atMs, NotifyRouting.windowMs(precision), alarmIntent())
     }
+
+    /** Whether event reminders arrive on time ("Alarms & reminders" allowed) or within a few minutes. */
+    fun exactAllowed(): Boolean = context.getSystemService(AlarmManager::class.java)?.canScheduleExactAlarms() == true
 
     private fun alarmIntent(): PendingIntent = PendingIntent.getBroadcast(
         context, 0, Intent(context, GovernorAlarmReceiver::class.java),
@@ -150,7 +165,7 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
             val (name, importance, about) = when (tier) {
                 NoticeTier.CRITICAL -> Triple("Critical", NotificationManager.IMPORTANCE_HIGH, "Rare: things that can't wait, even in quiet hours.")
                 NoticeTier.ACTION -> Triple("Needs a decision", NotificationManager.IMPORTANCE_HIGH, "Approvals and choices only you can make; held during quiet hours.")
-                NoticeTier.HEADS_UP -> Triple("Heads-ups", NotificationManager.IMPORTANCE_DEFAULT, "Cancel-by dates, your fasting goal, the morning brief and the evening shutdown.")
+                NoticeTier.HEADS_UP -> Triple("Heads-ups", NotificationManager.IMPORTANCE_DEFAULT, "Event reminders, cancel-by dates, your fasting goal, the morning brief and the evening shutdown.")
                 else -> Triple("Digests", NotificationManager.IMPORTANCE_LOW, "The midday and evening round-up of what's due.")
             }
             nm.createNotificationChannel(NotificationChannel(id, name, importance).apply { description = about })
@@ -208,13 +223,19 @@ class GovernorAlarmReceiver : BroadcastReceiver() {
     }
 }
 
+private val RESTART_ACTIONS = setOf(
+    Intent.ACTION_BOOT_COMPLETED,
+    Intent.ACTION_MY_PACKAGE_REPLACED,
+    AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED,
+)
+
 /**
- * After a reboot or an app update the system has dropped MEKA's alarms; re-register them from the local data, which
+ * After a reboot, an app update or a change to "Alarms & reminders" the system has dropped (or may now upgrade) MEKA's alarms; re-register them from the local data, which
  * is the source of truth (ADR-007). Starting the app process also re-arms the end-of-work alarm.
  */
 class RestartReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        if (intent.action !in RESTART_ACTIONS) return
         val app = context.applicationContext as MekaApplication
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {

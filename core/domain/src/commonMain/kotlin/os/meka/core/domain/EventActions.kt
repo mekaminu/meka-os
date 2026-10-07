@@ -9,6 +9,10 @@ object EventMarkFields {
     /** Hidden from my day: the timeline, the planner, the brief, the shutdown and the review leave it out. */
     const val HIDDEN = "hidden"
     const val HIDDEN_AT = "hiddenAtMs"
+    /** Remind me this many minutes before the start (Int; null: no reminder). */
+    const val REMIND_MIN = "remindMin"
+    /** Leave by: how many minutes it takes to get there (Int; null: no leave-by reminder). */
+    const val TRAVEL_MIN = "travelMin"
 }
 
 /** What MEKA knows about events beyond the provider's mirror: which are hidden and which have a prep task. */
@@ -16,8 +20,18 @@ data class EventMarks(
     val hidden: Set<String>,
     /** Event id → its prep task (open or done; deleted ones are gone). */
     val prepTasks: Map<String, Task>,
+    /** Event id → remind me this many minutes before. */
+    val reminders: Map<String, Int> = emptyMap(),
+    /** Event id → minutes it takes to get there (a leave-by reminder). */
+    val travel: Map<String, Int> = emptyMap(),
 ) {
     fun isHidden(eventId: String) = eventId in hidden
+
+    /** For Swift: the reminder's minutes, or 0 for none. */
+    fun reminderOf(eventId: String): Int = reminders[eventId] ?: 0
+
+    /** For Swift: the travel minutes, or 0 for none. */
+    fun travelOf(eventId: String): Int = travel[eventId] ?: 0
 
     /** The events that count for the day: everything not hidden. */
     fun visible(events: List<CalendarEvent>): List<CalendarEvent> =
@@ -47,11 +61,29 @@ class EventActions(
     private val calendar: LocalCalendar = LocalCalendar.UTC,
 ) {
     fun marks(all: List<Task> = tasks.all()): EventMarks {
-        val hidden = replica.entities(EntityTypes.EVENT_MARK)
+        val entities = replica.entities(EntityTypes.EVENT_MARK)
+        val hidden = entities
             .filter { it[EventMarkFields.HIDDEN].boolOrNull == true }
             .map { it.ref.entityId }.toSet()
         val prep = all.filter { it.eventId != null && it.lifecycle != Lifecycle.CANCELLED }.associateBy { it.eventId!! }
-        return EventMarks(hidden, prep)
+        fun minutes(field: String) = entities.mapNotNull { e ->
+            e[field].longOrNull?.toInt()?.takeIf { it in 1..ReminderRules.MAX_MIN }?.let { e.ref.entityId to it }
+        }.toMap()
+        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN))
+    }
+
+    /** Remind me [minutes] before [eventId] starts; null (or 0) turns the reminder off. */
+    fun setReminder(eventId: String, minutes: Int?) = setMinutes(eventId, EventMarkFields.REMIND_MIN, minutes)
+
+    /** A leave-by reminder [travelMinutes] before [eventId] starts (how long it takes to get there); null (or 0) turns it off. */
+    fun setLeaveBy(eventId: String, travelMinutes: Int?) = setMinutes(eventId, EventMarkFields.TRAVEL_MIN, travelMinutes)
+
+    private fun setMinutes(eventId: String, field: String, minutes: Int?) {
+        val m = minutes?.takeIf { it != 0 }
+        require(m == null || m in 1..ReminderRules.MAX_MIN) { "minutes must be 1..${ReminderRules.MAX_MIN}" }
+        val current = replica.entity(EntityTypes.EVENT_MARK, eventId)?.get(field)?.longOrNull?.toInt()
+        if (current == m) return
+        replica.commitLocal(EntityTypes.EVENT_MARK, eventId, mapOf(field to m.fv()))
     }
 
     /** Adds (or brings back) the prep task for [event]; returns its id. An open one is left as it is. */
@@ -113,4 +145,82 @@ object PrepRules {
         val space = head.lastIndexOf(' ')
         return (if (space > MAX_TITLE / 2) head.take(space) else head).trimEnd() + "…"
     }
+}
+
+/**
+ * Remind me and Leave by (calendar actions, slice 2), non-AI and pure. Both are notices for the notification governor
+ * (source [NoticeSource.EVENT_REMINDER], Heads-up, CLOCK precision per ADR-007), so quiet hours and the device's
+ * choice apply like everything else; a reminder that can't post before the event starts is dropped, never sent late.
+ *
+ * - Remind me: [REMIND_CHOICES] minutes before a timed event: "Call with Tunde" · "In 10 min · 14:00 · Room 4".
+ * - Leave by: offered when the event has a place; "it takes 30 min to get there" posts at start − 30 min:
+ *   "Leave now for Dentist" · "Starts 14:00 · 30 min away · High St Surgery". No maps lookup: the travel time is Meka's.
+ *
+ * A notice's key holds the event's start, so a moved event reminds again at its new time. Hidden events, all-day
+ * events and events that have started don't remind.
+ */
+object ReminderRules {
+    const val MAX_MIN = 240
+    val REMIND_CHOICES = listOf(5, 10, 15, 30)
+    val TRAVEL_CHOICES = listOf(10, 15, 20, 30, 45, 60)
+    private const val MIN_MS = 60_000L
+
+    fun notices(events: List<CalendarEvent>, marks: EventMarks, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        if (marks.reminders.isEmpty() && marks.travel.isEmpty()) return emptyList()
+        val out = mutableListOf<Notice>()
+        for (e in events) {
+            if (e.allDay || e.startAtMs <= nowMs || marks.isHidden(e.id)) continue
+            val start = LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))
+            val place = e.location?.trim()?.takeIf { it.isNotEmpty() && !isLink(it) }
+            marks.reminders[e.id]?.let { m ->
+                out += Notice(
+                    key = "event:${e.id}:${e.startAtMs}:remind:$m", source = NoticeSource.EVENT_REMINDER, tier = NoticeTier.HEADS_UP,
+                    title = e.title, text = listOfNotNull("In ${EventDetails.durationLabel(m * MIN_MS)}", start, place).joinToString(" · "),
+                    atMs = e.startAtMs - m * MIN_MS, target = NoticeTarget.TODAY, expiresAtMs = e.startAtMs,
+                    precision = NoticePrecision.CLOCK,
+                )
+            }
+            val travel = marks.travel[e.id]
+            if (travel != null && place != null) {
+                out += Notice(
+                    key = "event:${e.id}:${e.startAtMs}:leave:$travel", source = NoticeSource.EVENT_REMINDER, tier = NoticeTier.HEADS_UP,
+                    title = "Leave now for ${e.title}",
+                    text = "Starts $start · ${EventDetails.durationLabel(travel * MIN_MS)} away · $place",
+                    atMs = e.startAtMs - travel * MIN_MS, target = NoticeTarget.TODAY, expiresAtMs = e.startAtMs,
+                    precision = NoticePrecision.CLOCK,
+                )
+            }
+        }
+        return out
+    }
+
+    /** The reminder choices still ahead of now for [e] (a reminder set to a time already gone would post at once). */
+    fun remindChoices(e: CalendarEvent, nowMs: Long): List<Int> =
+        if (e.allDay) emptyList() else REMIND_CHOICES.filter { e.startAtMs - it * MIN_MS > nowMs }
+
+    /** The travel times still ahead of now; none when the event has no place to go to. */
+    fun travelChoices(e: CalendarEvent, nowMs: Long): List<Int> {
+        val place = e.location?.trim()?.takeIf { it.isNotEmpty() && !isLink(it) }
+        if (e.allDay || place == null) return emptyList()
+        return TRAVEL_CHOICES.filter { e.startAtMs - it * MIN_MS > nowMs }
+    }
+
+    /** "Reminder 10 min before" · "Leave by 13:30 · 30 min away"; null when neither is set. */
+    fun line(e: CalendarEvent, marks: EventMarks, cal: LocalCalendar): String? {
+        val parts = mutableListOf<String>()
+        marks.reminders[e.id]?.let { parts += "Reminder ${EventDetails.durationLabel(it * MIN_MS)} before" }
+        marks.travel[e.id]?.takeIf { !e.allDay }?.let {
+            parts += "Leave by ${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs - it * MIN_MS))} · ${EventDetails.durationLabel(it * MIN_MS)} away"
+        }
+        return parts.joinToString(" · ").ifEmpty { null }
+    }
+
+    /** "10 min before" for a menu item. */
+    fun choiceLabel(minutes: Int): String = "${EventDetails.durationLabel(minutes * MIN_MS)} before"
+
+    /** "30 min away" for a menu item. */
+    fun travelLabel(minutes: Int): String = "${EventDetails.durationLabel(minutes * MIN_MS)} away"
+
+    internal fun isLink(location: String) =
+        (location.startsWith("https://") || location.startsWith("http://")) && !location.contains(' ')
 }

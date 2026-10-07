@@ -11,7 +11,9 @@
     <!-- Self-updating phone app: hand a build the Mac published to Android's installer. Android asks Meka once to
          allow it ("Install unknown apps") and shows its own Install prompt every time. Personal builds only (ADR-010). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <!-- M1+: SCHEDULE_EXACT_ALARM (CLOCK-precision reminders only, ADR-007). Never USE_EXACT_ALARM (ADR-010). -->
+    <!-- Event reminders (Remind me / Leave by): CLOCK precision only, ADR-007. Not granted by default; Meka can allow
+         "Alarms & reminders" from the event detail, else reminders use a 5-minute window. Never USE_EXACT_ALARM. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:name=".MekaApplication"
@@ -115,6 +117,7 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
     </application>

@@ -344,6 +344,15 @@ class MekaCoreTest {
         m.showEvent(call.id)
         m.syncNow(); a.syncNow()
         assertTrue(!a.eventMarks.value.isHidden(call.id))
+
+        // Remind me (slice 2): set on one device, shown on both; 0 turns it off.
+        a.setEventReminder(call.id, 10)
+        assertEquals("Reminder 10 min before", a.eventDetail(call).reminderLine)
+        a.syncNow(); m.syncNow()
+        assertEquals(10, m.eventMarks.value.reminderOf(call.id))
+        m.setEventReminder(call.id, 0)
+        m.syncNow(); a.syncNow()
+        assertEquals(null, a.eventDetail(call).reminderLine)
     }
 
     @Test

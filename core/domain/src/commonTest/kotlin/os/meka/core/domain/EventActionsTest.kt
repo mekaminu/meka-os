@@ -197,4 +197,137 @@ class EventActionsTest {
         // An ended event can't be prepared for.
         assertFalse(EventDetails.build(e, at(tue6, 16), cal, ea.marks()).canPrep)
     }
+
+    // ---- Remind me and Leave by (slice 2) ----
+
+    private fun placed(id: String = "ev2", start: Long = at(tue6, 14)) =
+        CalendarEvent(id, "Dentist", start, start + hour, false, "High St Surgery", "google", "meka@gmail.com", "Personal")
+
+    @Test
+    fun aReminderIsAClockHeadsUpBeforeTheStartAndStaleOnceItStarts() {
+        val e = ev()
+        ea.setReminder("ev1", 10)
+        assertEquals(10, ea.marks().reminders["ev1"])
+        val n = ReminderRules.notices(listOf(e), ea.marks(), world.clock.nowMs, cal).single()
+        assertEquals(NoticeSource.EVENT_REMINDER, n.source)
+        assertEquals(NoticeTier.HEADS_UP, n.tier)
+        assertEquals(NoticePrecision.CLOCK, n.precision)
+        assertEquals("Call with Tunde", n.title)
+        assertEquals("In 10 min · 14:00", n.text)
+        assertEquals(at(tue6, 13, 50), n.atMs)
+        assertEquals(at(tue6, 14), n.expiresAtMs)
+        assertEquals(NoticeTarget.TODAY, n.target)
+
+        // Through the governor: wakes for it, posts at 13:50, once.
+        val settings = NotificationSettings.DEFAULT
+        val r0 = Governor.evaluate(listOf(n), settings, DeviceAlerts.ALL, GovernorState(), at(tue6, 13), cal)
+        assertTrue(r0.post.isEmpty())
+        assertEquals(at(tue6, 13, 50), r0.nextWakeMs)
+        assertEquals(NoticePrecision.CLOCK, r0.nextWakePrecision)
+        val r1 = Governor.evaluate(listOf(n), settings, DeviceAlerts.ALL, r0.state, at(tue6, 13, 51), cal)
+        assertEquals(listOf(n.key), r1.post.map { it.key })
+        assertTrue(Governor.evaluate(listOf(n), settings, DeviceAlerts.ALL, r1.state, at(tue6, 13, 52), cal).post.isEmpty())
+        // A phone asleep until after the start never sends it late.
+        assertTrue(Governor.evaluate(listOf(n), settings, DeviceAlerts.ALL, r0.state, at(tue6, 14, 1), cal).post.isEmpty())
+    }
+
+    @Test
+    fun leaveByNeedsAPlaceAndSaysWhenToGo() {
+        ea.setLeaveBy("ev2", 30)
+        ea.setLeaveBy("ev1", 30) // no place: no notice
+        val ns = ReminderRules.notices(listOf(ev(), placed()), ea.marks(), world.clock.nowMs, cal)
+        val n = ns.single()
+        assertEquals("Leave now for Dentist", n.title)
+        assertEquals("Starts 14:00 · 30 min away · High St Surgery", n.text)
+        assertEquals(at(tue6, 13, 30), n.atMs)
+        assertEquals("Reminder 10 min before · Leave by 13:30 · 30 min away",
+            ea.setReminder("ev2", 10).let { ReminderRules.line(placed(), ea.marks(), cal) })
+    }
+
+    @Test
+    fun hiddenStartedAndAllDayEventsDontRemindAndAMovedEventRemindsAgain() {
+        ea.setReminder("ev1", 15)
+        ea.setReminder("ev3", 15)
+        val allDay = ev("ev3", start = (tue6 + 1) * CivilDate.DAY_MS, end = (tue6 + 2) * CivilDate.DAY_MS, allDay = true)
+        val before = ReminderRules.notices(listOf(ev(), allDay), ea.marks(), world.clock.nowMs, cal).single()
+        val moved = ReminderRules.notices(listOf(ev(start = at(tue6, 16), end = at(tue6, 17))), ea.marks(), world.clock.nowMs, cal).single()
+        assertTrue(before.key != moved.key)
+        assertEquals(at(tue6, 15, 45), moved.atMs)
+        assertTrue(ReminderRules.notices(listOf(ev()), ea.marks(), at(tue6, 14, 1), cal).isEmpty())
+        ea.hide("ev1")
+        assertTrue(ReminderRules.notices(listOf(ev()), ea.marks(), world.clock.nowMs, cal).isEmpty())
+    }
+
+    @Test
+    fun turningOffAndBadValues() {
+        ea.setReminder("ev1", 10)
+        ea.setReminder("ev1", null)
+        assertTrue(ea.marks().reminders.isEmpty())
+        ea.setLeaveBy("ev1", 20)
+        ea.setLeaveBy("ev1", 0)
+        assertTrue(ea.marks().travel.isEmpty())
+        assertTrue(runCatching { ea.setReminder("ev1", 241) }.isFailure)
+        assertTrue(runCatching { ea.setReminder("ev1", -5) }.isFailure)
+        // Turning a reminder on doesn't touch hiding, and the other way round.
+        ea.hide("ev1")
+        ea.setReminder("ev1", 5)
+        assertTrue(ea.marks().isHidden("ev1"))
+        ea.show("ev1")
+        assertEquals(5, ea.marks().reminderOf("ev1"))
+        assertEquals(0, ea.marks().travelOf("ev1"))
+    }
+
+    @Test
+    fun choicesOnlyOfferTimesStillAhead() {
+        world.clock.nowMs = at(tue6, 13, 48)
+        assertEquals(listOf(5, 10), ReminderRules.remindChoices(ev(), world.clock.nowMs))
+        assertEquals(listOf(10), ReminderRules.travelChoices(placed(), world.clock.nowMs))
+        assertTrue(ReminderRules.travelChoices(ev(), world.clock.nowMs).isEmpty())
+        val link = placed().copy(location = "https://meet.google.com/abc-defg-hij")
+        assertTrue(ReminderRules.travelChoices(link, world.clock.nowMs).isEmpty())
+        assertEquals("10 min before", ReminderRules.choiceLabel(10))
+        assertEquals("1 h away", ReminderRules.travelLabel(60))
+    }
+
+    @Test
+    fun remindersSyncLastTapWins() {
+        ea.setReminder("ev1", 10)
+        syncBoth()
+        assertEquals(10, em.marks().reminders["ev1"])
+        world.clock.nowMs += min
+        em.setReminder("ev1", 30)
+        world.clock.nowMs += min
+        ea.setLeaveBy("ev1", 15)
+        syncBoth()
+        assertEquals(em.marks(), ea.marks())
+        assertEquals(30, ea.marks().reminders["ev1"])
+        assertEquals(15, em.marks().travel["ev1"])
+    }
+
+    @Test
+    fun theDetailOffersRemindersAndSaysWhatIsSet() {
+        val e = placed()
+        var d = EventDetails.build(e, at(tue6, 10), cal, ea.marks())
+        assertEquals(ReminderRules.REMIND_CHOICES, d.remindChoices)
+        assertEquals(ReminderRules.TRAVEL_CHOICES, d.travelChoices)
+        assertNull(d.reminderLine)
+        ea.setReminder("ev2", 15)
+        d = EventDetails.build(e, at(tue6, 10), cal, ea.marks())
+        assertEquals(15, d.remindMin)
+        assertEquals("Reminder 15 min before", d.reminderLine)
+        // Once it has started there's nothing to remind about.
+        d = EventDetails.build(e, at(tue6, 14, 5), cal, ea.marks())
+        assertNull(d.reminderLine)
+        assertTrue(d.remindChoices.isEmpty())
+    }
+
+    @Test
+    fun noticeSourcesIncludeEventReminders() {
+        ea.setReminder("ev1", 5)
+        val ns = NoticeSources.collect(
+            ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, Today(emptyList(), null, emptyList(), emptyList()), world.clock.nowMs, cal,
+            events = listOf(ev()), marks = ea.marks(),
+        )
+        assertEquals(1, ns.count { it.source == NoticeSource.EVENT_REMINDER })
+    }
 }

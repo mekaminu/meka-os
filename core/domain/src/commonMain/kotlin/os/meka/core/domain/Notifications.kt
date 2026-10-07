@@ -14,8 +14,8 @@ import os.meka.core.sync.fv
  * - [NoticeTier.DIGEST] is summed up in the midday and evening digests (12:30 and 18:00 until changed).
  * - [NoticeTier.SILENT] is never posted: it only shows in the app.
  *
- * All reminders here are soft milestones (ADR-007): the platforms wake with inexact, windowed alarms. Precision is a
- * property of each notice, so a CLOCK reminder can ask for more when one exists.
+ * Most reminders here are soft milestones (ADR-007): the platforms wake with inexact, windowed alarms. Precision is a
+ * property of each notice: event reminders are CLOCK, and the Fold uses an exact alarm for them when Meka allows it.
  */
 enum class NoticeTier(val label: String) {
     CRITICAL("Critical"),
@@ -41,6 +41,8 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     BRIEF("Morning brief", NoticeTier.HEADS_UP),
     SHUTDOWN("Time to shut down the day", NoticeTier.HEADS_UP),
     WEEKLY_REVIEW("Weekly review", NoticeTier.HEADS_UP),
+    /** Remind me / Leave by on a calendar event (calendar actions); Meka sets each one. */
+    EVENT_REMINDER("Event reminders", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -361,6 +363,7 @@ object Governor {
         NoticeSource.BRIEF -> "your morning brief"
         NoticeSource.SHUTDOWN -> "time to shut down"
         NoticeSource.WEEKLY_REVIEW -> "your weekly review"
+        NoticeSource.EVENT_REMINDER -> plural(n, "event reminder")
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -387,6 +390,8 @@ object NoticeSources {
         cal: LocalCalendar,
         brief: MorningBriefView = MorningBriefView.EMPTY,
         review: ReviewCard = ReviewCard.NONE,
+        events: List<CalendarEvent> = emptyList(),
+        marks: EventMarks = EventMarks.NONE,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -461,6 +466,8 @@ object NoticeSources {
                 expiresAtMs = cal.toEpochMs(review.weekStart + 8, 0),
             )
         }
+        // Remind me and Leave by, set on calendar events.
+        out += ReminderRules.notices(events, marks, nowMs, cal)
         return out
     }
 }

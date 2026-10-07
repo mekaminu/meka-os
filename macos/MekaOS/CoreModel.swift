@@ -695,6 +695,40 @@ final class CoreModel {
 
     func isEventHidden(_ eventID: String) -> Bool { eventMarks?.hidden.contains(eventID) ?? false }
 
+    /// Remind me this many minutes before (0: none) and the minutes it takes to get there (0: no leave-by).
+    func eventReminder(_ eventID: String) -> Int32 { eventMarks?.reminderOf(eventId: eventID) ?? 0 }
+    func eventTravel(_ eventID: String) -> Int32 { eventMarks?.travelOf(eventId: eventID) ?? 0 }
+
+    /// The reminder choices still ahead for an event (empty for all-day or started events).
+    func remindChoices(_ event: CalendarEvent) -> [Int32] {
+        ReminderRules.shared.remindChoices(e: event, nowMs: Self.nowMs()).map { $0.int32Value }
+    }
+
+    /// The travel times still ahead (empty when the event has no place).
+    func travelChoices(_ event: CalendarEvent) -> [Int32] {
+        ReminderRules.shared.travelChoices(e: event, nowMs: Self.nowMs()).map { $0.int32Value }
+    }
+
+    /// Remind me [minutes] before (a heads-up through the notification governor); 0 turns it off. Undo puts it back.
+    func setEventReminder(_ eventID: String, _ minutes: Int32, offerUndo: Bool = true) {
+        let before = eventReminder(eventID)
+        MekaHaptics.tick()
+        run { try await $0.setEventReminder(eventId: eventID, minutes: minutes) }
+        guard offerUndo else { return }
+        offerEventUndo(minutes == 0 ? "Reminder off" : "Reminder " + ReminderRules.shared.choiceLabel(minutes: minutes), .reminder(eventID, before))
+    }
+
+    /// Leave by: a heads-up [minutes] before the start (how long it takes to get there); 0 turns it off.
+    func setEventLeaveBy(_ eventID: String, _ minutes: Int32, offerUndo: Bool = true) {
+        let before = eventTravel(eventID)
+        MekaHaptics.tick()
+        run { try await $0.setEventLeaveBy(eventId: eventID, travelMinutes: minutes) }
+        guard offerUndo else { return }
+        offerEventUndo(minutes == 0 ? "Leave-by reminder off" : "Leave-by reminder · " + ReminderRules.shared.travelLabel(minutes: minutes), .leaveBy(eventID, before))
+    }
+
+    private static func nowMs() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
+
     func undoEventAction() {
         guard let offer = eventUndo, let action = offer.action else { return }
         eventUndo = nil
@@ -702,6 +736,8 @@ final class CoreModel {
         switch action {
         case .deleteTask(let id): run { try await $0.delete(taskId: id) }
         case .showEvent(let id): run { try await $0.showEvent(eventId: id) }
+        case .reminder(let id, let m): run { try await $0.setEventReminder(eventId: id, minutes: m) }
+        case .leaveBy(let id, let m): run { try await $0.setEventLeaveBy(eventId: id, travelMinutes: m) }
         }
     }
 
@@ -757,6 +793,8 @@ struct EventUndoOffer: Identifiable, Equatable {
     enum Action: Equatable {
         case deleteTask(String)
         case showEvent(String)
+        case reminder(String, Int32)
+        case leaveBy(String, Int32)
     }
 
     let id = UUID()

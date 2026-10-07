@@ -68,6 +68,7 @@ struct EventActionsModifier: ViewModifier {
                     withAnimation(MekaMotion.appear(reduced: reduceMotion)) { hovering = h }
                 }
                 .contextMenu {
+                    reminderMenus(e)
                     Button("Prep task") { model.addPrepTask(e) }
                     Button("Hide from my day") { model.hideEvent(e.id) }
                     Divider()
@@ -78,6 +79,44 @@ struct EventActionsModifier: ViewModifier {
         } else {
             content
         }
+    }
+
+    /// Remind me and Leave by (when the event has a place): only times still ahead; the one set is ticked, with Off.
+    @ViewBuilder
+    private func reminderMenus(_ e: CalendarEvent) -> some View {
+        let remind = model.eventReminder(e.id)
+        let travel = model.eventTravel(e.id)
+        let remindChoices = model.remindChoices(e)
+        let travelChoices = model.travelChoices(e)
+        if !remindChoices.isEmpty || remind != 0 {
+            Menu("Remind me") {
+                ForEach(remindChoices, id: \.self) { m in
+                    Toggle(ReminderRules.shared.choiceLabel(minutes: m), isOn: Binding(
+                        get: { m == remind },
+                        set: { on in model.setEventReminder(e.id, on ? m : 0) }
+                    ))
+                }
+                if remind != 0 {
+                    Divider()
+                    Button("Off") { model.setEventReminder(e.id, 0) }
+                }
+            }
+        }
+        if !travelChoices.isEmpty || travel != 0 {
+            Menu("Leave by") {
+                ForEach(travelChoices, id: \.self) { m in
+                    Toggle(ReminderRules.shared.travelLabel(minutes: m), isOn: Binding(
+                        get: { m == travel },
+                        set: { on in model.setEventLeaveBy(e.id, on ? m : 0) }
+                    ))
+                }
+                if travel != 0 {
+                    Divider()
+                    Button("Off") { model.setEventLeaveBy(e.id, 0) }
+                }
+            }
+        }
+        if !remindChoices.isEmpty || remind != 0 || !travelChoices.isEmpty || travel != 0 { Divider() }
     }
 }
 

@@ -481,8 +481,8 @@ private fun TodayPane(
                 items(tl.rows, key = { "r-" + it.id }) { r ->
                     val m = Modifier.animateItem().appear(rememberAppearance(4, play))
                     when (r.kind) {
-                        TimelineKind.EVENT -> SwipeableEvent(r.event, eventHandlers, m) { sm ->
-                            TimelineEventRow(r, past = false, modifier = sm.opensEvent(r.event, openEvent))
+                        TimelineKind.EVENT -> SwipeableEvent(r.event, eventHandlers, m, onOpen = openEvent) { sm ->
+                            TimelineEventRow(r, past = false, modifier = sm)
                         }
                         TimelineKind.TASK -> r.task?.let { t ->
                             // The Up next task's title travels from its card, so its timeline row doesn't share it.

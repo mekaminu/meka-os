@@ -289,6 +289,10 @@ class MekaCore(
     suspend fun hideEvent(eventId: String) = onCore { eventActions.hide(eventId) }
     /** Shows a hidden event in my day again (also the Undo for [hideEvent]). */
     suspend fun showEvent(eventId: String) = onCore { eventActions.show(eventId) }
+    /** Remind me [minutes] before the event (a governor heads-up, CLOCK precision); 0 turns it off. */
+    suspend fun setEventReminder(eventId: String, minutes: Int) = onCore { eventActions.setReminder(eventId, minutes) }
+    /** Leave by: a heads-up [travelMinutes] before the event starts (how long it takes to get there); 0 turns it off. */
+    suspend fun setEventLeaveBy(eventId: String, travelMinutes: Int) = onCore { eventActions.setLeaveBy(eventId, travelMinutes) }
 
     // ---- Lists: Waiting for · Someday · Decisions ----
 
@@ -687,7 +691,10 @@ class MekaCore(
 
     /** Notices from the views as they stand (call after [refresh]). */
     private fun currentNotices() =
-        NoticeSources.collect(_lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card)
+        NoticeSources.collect(
+            _lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card,
+            events.all(), _eventMarks.value,
+        )
 
     private fun project(all: List<os.meka.core.domain.Task> = tasks.all(), dayEvents: List<os.meka.core.domain.CalendarEvent> = visibleEvents(all)): Today {
         val now = nowMs()

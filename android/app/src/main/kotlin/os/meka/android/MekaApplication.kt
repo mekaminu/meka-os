@@ -87,6 +87,8 @@ class MekaApplication : Application() {
                 core.listsView.map { }, core.fastingView.map { }, core.shutdownView.map { }, core.briefView.map { }, core.today.map { },
                 core.reviewView.map { it.card }.distinctUntilChanged().map { },
                 core.notificationSettings.map { }, governor.device.map { },
+                // Event reminders: a reminder set or changed, or an event moved on the server.
+                core.eventMarks.map { }, core.calendarView.map { },
             ).debounce(GOVERNOR_SETTLE_MS).collect { runCatching { governor.run() } }
         }
     }

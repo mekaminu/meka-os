@@ -272,7 +272,7 @@ private fun AgendaList(
                 is Entry.Hidden -> HiddenRow(e.event, m, { onEvent(e.event) }) { showAgain(e.event) }
                 is Entry.Line -> when (e.row.kind) {
                     TimelineKind.EVENT -> if (e.past) EventRow(e.row, true, m.opensEvent(e.row.event, onEvent))
-                    else SwipeableEvent(e.row.event, handlers, m) { sm -> EventRow(e.row, false, sm.opensEvent(e.row.event, onEvent)) }
+                    else SwipeableEvent(e.row.event, handlers, m, onOpen = onEvent) { sm -> EventRow(e.row, false, sm) }
                     TimelineKind.TASK -> TaskRow(e.row, m)
                     TimelineKind.NOW -> NowLine(e.row, m)
                     TimelineKind.GAP -> Unit // the agenda has no gaps; Today shows free time

@@ -9,6 +9,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -20,6 +21,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,13 +55,15 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.CalendarEvent
+import os.meka.core.domain.ReminderRules
 import os.meka.core.facade.MekaCore
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Calendar actions (build plan, M1): swipe right on an event for a prep task, swipe left to hide it from my day.
- * MEKA-only: the real calendars are never changed. An undo bar rises after either.
+ * Calendar actions (build plan, M1): swipe right on an event for a prep task, swipe left to hide it from my day,
+ * long-press for Remind me / Leave by (and the same two actions). MEKA-only: the real calendars are never changed. An
+ * undo bar rises after each.
  */
 
 /** What the undo bar is offering: "Hidden from your day" with Undo. */
@@ -81,10 +86,16 @@ class EventUndo {
 @Composable
 fun rememberEventUndo() = remember { EventUndo() }
 
-/** The two actions, wired to the core with the undo bar. */
+/** The actions, wired to the core with the undo bar. */
 class EventActionHandlers(
     val prep: (CalendarEvent) -> Unit,
     val hide: (CalendarEvent) -> Unit,
+    /** Remind me this many minutes before; 0 turns it off. */
+    val remind: (CalendarEvent, Int) -> Unit = { _, _ -> },
+    /** Leave by: minutes to get there; 0 turns it off. */
+    val leaveBy: (CalendarEvent, Int) -> Unit = { _, _ -> },
+    /** What's set now: (reminder minutes, travel minutes), 0 for none. */
+    val current: (CalendarEvent) -> Pair<Int, Int> = { 0 to 0 },
 )
 
 fun eventActionHandlers(core: MekaCore, scope: CoroutineScope, undo: EventUndo) = EventActionHandlers(
@@ -101,6 +112,23 @@ fun eventActionHandlers(core: MekaCore, scope: CoroutineScope, undo: EventUndo) 
             undo.show("Hidden from your day") { core.showEvent(e.id) }
         }
     },
+    remind = { e, minutes ->
+        scope.launch {
+            val before = core.eventMarks.value.reminderOf(e.id)
+            if (runCatching { core.setEventReminder(e.id, minutes) }.isFailure) return@launch
+            undo.show(if (minutes == 0) "Reminder off" else "Reminder ${ReminderRules.choiceLabel(minutes)}") { core.setEventReminder(e.id, before) }
+        }
+    },
+    leaveBy = { e, minutes ->
+        scope.launch {
+            val before = core.eventMarks.value.travelOf(e.id)
+            if (runCatching { core.setEventLeaveBy(e.id, minutes) }.isFailure) return@launch
+            undo.show(if (minutes == 0) "Leave-by reminder off" else "Leave-by reminder · ${ReminderRules.travelLabel(minutes)}") {
+                core.setEventLeaveBy(e.id, before)
+            }
+        }
+    },
+    current = { e -> core.eventMarks.value.let { it.reminderOf(e.id) to it.travelOf(e.id) } },
 )
 
 /**
@@ -113,12 +141,15 @@ fun SwipeableEvent(
     event: CalendarEvent?,
     handlers: EventActionHandlers?,
     modifier: Modifier = Modifier,
+    /** Tapping the row opens the event; long-pressing opens the actions menu. */
+    onOpen: ((CalendarEvent) -> Unit)? = null,
     content: @Composable (Modifier) -> Unit,
 ) {
     if (event == null || handlers == null) {
-        content(modifier)
+        content(modifier.opensEvent(event, onOpen))
         return
     }
+    var menu by remember(event.id) { mutableStateOf(EventMenu.CLOSED) }
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     var dx by remember(event.id) { mutableFloatStateOf(0f) }
@@ -130,9 +161,11 @@ fun SwipeableEvent(
             customActions = listOf(
                 CustomAccessibilityAction("Prep task") { handlers.prep(event); true },
                 CustomAccessibilityAction("Hide from my day") { handlers.hide(event); true },
+                CustomAccessibilityAction("Remind me") { menu = EventMenu.MAIN; true },
             )
         },
     ) {
+        EventActionsMenu(event, handlers, menu) { menu = it }
         val max = constraints.maxWidth.toFloat().coerceAtLeast(threshold * 1.5f)
         val x = dx
         val side = if (x > 0) 1 else if (x < 0) -1 else 0
@@ -177,8 +210,61 @@ fun SwipeableEvent(
                         }
                         animate(dx, 0f, animationSpec = MekaMotion.complete(reduced)) { v, _ -> dx = v }
                     },
+                )
+                .combinedClickable(
+                    role = Role.Button,
+                    onClick = { onOpen?.invoke(event) },
+                    onLongClickLabel = "Event actions",
+                    onLongClick = { haptics.tick(); menu = EventMenu.MAIN },
                 ),
         )
+    }
+}
+
+/** Which page of the long-press menu is showing. */
+enum class EventMenu { CLOSED, MAIN, REMIND, LEAVE }
+
+/**
+ * The long-press menu: Remind me… and Leave by… (when the event has a place) open their choices in place; Prep task
+ * and Hide from my day as on the swipe. Only times still ahead are offered; the one that's set has a tick and "Off".
+ */
+@Composable
+private fun EventActionsMenu(event: CalendarEvent, handlers: EventActionHandlers, page: EventMenu, set: (EventMenu) -> Unit) {
+    val now = System.currentTimeMillis()
+    val (remind, travel) = handlers.current(event)
+    val remindChoices = ReminderRules.remindChoices(event, now)
+    val travelChoices = ReminderRules.travelChoices(event, now)
+    @Composable
+    fun item(label: String, onClick: () -> Unit) = DropdownMenuItem(
+        text = { Text(label, style = MekaType.itemMeta, color = Meka.colors.textPrimary) },
+        onClick = onClick,
+    )
+    DropdownMenu(expanded = page != EventMenu.CLOSED, onDismissRequest = { set(EventMenu.CLOSED) }) {
+        when (page) {
+            EventMenu.MAIN -> {
+                if (remindChoices.isNotEmpty() || remind != 0) {
+                    item(if (remind != 0) "Remind me · ${ReminderRules.choiceLabel(remind)} ›" else "Remind me ›") { set(EventMenu.REMIND) }
+                }
+                if (travelChoices.isNotEmpty() || travel != 0) {
+                    item(if (travel != 0) "Leave by · ${ReminderRules.travelLabel(travel)} ›" else "Leave by ›") { set(EventMenu.LEAVE) }
+                }
+                item("Prep task") { set(EventMenu.CLOSED); handlers.prep(event) }
+                item("Hide from my day") { set(EventMenu.CLOSED); handlers.hide(event) }
+            }
+            EventMenu.REMIND -> {
+                remindChoices.forEach { m ->
+                    item((if (m == remind) "✓ " else "") + ReminderRules.choiceLabel(m)) { set(EventMenu.CLOSED); if (m != remind) handlers.remind(event, m) }
+                }
+                if (remind != 0) item("Off") { set(EventMenu.CLOSED); handlers.remind(event, 0) }
+            }
+            EventMenu.LEAVE -> {
+                travelChoices.forEach { m ->
+                    item((if (m == travel) "✓ " else "") + ReminderRules.travelLabel(m)) { set(EventMenu.CLOSED); if (m != travel) handlers.leaveBy(event, m) }
+                }
+                if (travel != 0) item("Off") { set(EventMenu.CLOSED); handlers.leaveBy(event, 0) }
+            }
+            EventMenu.CLOSED -> Unit
+        }
     }
 }
 
