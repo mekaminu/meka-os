@@ -206,6 +206,12 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
 - [ ] Spoken morning brief: the brief read aloud (on-device voice), started after the wake alarm or from a widget.
 - [ ] Errands by location: "when I'm near Tesco: milk, batteries" — a geofenced reminder (on-device location only).
 - [ ] Money at a glance: monthly spend by category from receipts and statements in email (no bank login), with bills and subscriptions from the radar.
+- [ ] Deliveries: "3 parcels arriving today" from shipping emails (carrier, window, tracking link); delivered ones clear themselves.
+- [ ] Returns and warranties: purchase emails set a return-by date and a warranty end; reminders before each; the receipt is kept in the Vault.
+- [ ] Appointment nudges: dentist, optician, GP check, car service, haircut… each with a usual interval; "due" nudges with a drafted booking email or a call reminder; the next visit lands in the calendar.
+- [ ] Bills due: a reminder a few days before each payment with the amount and a pay link (from the radar and bill emails); never pays anything itself.
+- [ ] Life admin hour: once a week MEKA books one slot and gathers the small admin jobs (forms, calls, renewals, replies) into it, instead of nagging all week.
+- [ ] Gift planner: birthdays and anniversaries two weeks ahead, gift ideas you note about each person, an order-by date from delivery times.
 - [ ] Messaging drafts via Android notification listener (Level 3 max, never automatic)
 - [ ] People: birthdays, last contact, promises both ways, gift ideas
 - [ ] Travel mode: bookings → trip timeline; documents offline
