@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "524405878869",
+    "project_id": "meka-os-5ae41",
+    "storage_bucket": "meka-os-5ae41.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:524405878869:android:39534beb3e697f77eb64dc",
+        "android_client_info": {
+          "package_name": "os.meka.android"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3ol_2cJhoLmMqH6JsGTV3SzZbM_8nP24"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

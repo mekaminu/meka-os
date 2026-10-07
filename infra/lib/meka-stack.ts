@@ -177,6 +177,13 @@ export class MekaStack extends cdk.Stack {
       description: 'MEKA OS AI key: {"api_key": "sk-ant-..."}',
       secretStringValue: cdk.SecretValue.unsafePlainText(JSON.stringify({ api_key: '' })),
     });
+    // Firebase Cloud Messaging service account (push notifications). '{}' until the owner pastes the JSON key file.
+    const fcmKey = new secretsmanager.Secret(this, 'FcmKey', {
+      secretName: `${prefix}/fcm/service-account`,
+      encryptionKey: this.key,
+      description: 'MEKA OS push: the Firebase service-account JSON (Project settings → Service accounts → Generate new private key)',
+      secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
+    });
 
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc, clusterName: prefix, containerInsightsV2: ecs.ContainerInsights.DISABLED });
     const task = new ecs.FargateTaskDefinition(this, 'Task', {
@@ -199,6 +206,7 @@ export class MekaStack extends cdk.Stack {
         MEKA_OAUTH_GOOGLE_SECRET: oauthGoogle.secretArn,
         MEKA_OAUTH_MICROSOFT_SECRET: oauthMicrosoft.secretArn,
         MEKA_AI_SECRET: aiKey.secretArn,
+        MEKA_FCM_SECRET: fcmKey.secretArn,
       },
       secrets: {
         MEKA_DB_USER: ecs.Secret.fromSecretsManager(dbSecret, 'username'),
@@ -222,6 +230,7 @@ export class MekaStack extends cdk.Stack {
     oauthGoogle.grantRead(task.taskRole);
     oauthMicrosoft.grantRead(task.taskRole);
     aiKey.grantRead(task.taskRole);
+    fcmKey.grantRead(task.taskRole);
 
     this.service = new ecs.FargateService(this, 'Service', {
       cluster,
