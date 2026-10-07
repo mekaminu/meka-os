@@ -19,16 +19,29 @@ struct TodayView: View {
 
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
     @Namespace private var selection
+    /// The content width, for the command centre's columns.
+    @State private var width: CGFloat = 0
 
     var body: some View {
         @Bindable var model = model
+        // The command centre (Fold modes, slice 2): beside Today, Needs you over Coming up; a wide window gives
+        // Coming up its own column. An open task's detail takes Needs you's place.
+        let layout = CommandCentreRules.shared.layout(contentWidthDp: Float(width))
+        let columns = CommandCentreRules.shared.columns(layout: layout, taskOpen: model.selected != nil)
+        let three = columns.contains(CommandColumn.comingUp)
         HSplitView {
             todayColumn
                 .environment(\.selectionNamespace, selection)
                 .frame(minWidth: 380, idealWidth: 520)
-            DetailView(task: model.selected, palette: palette)
+            CommandSideView(column: columns.count > 1 ? columns[1] : CommandColumn.detail, palette: palette)
                 .frame(minWidth: 280, idealWidth: 360)
+            if three {
+                ComingUpColumnView(shared: false, palette: palette)
+                    .frame(minWidth: 240, idealWidth: 300)
+                    .transition(.opacity)
+            }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .background(palette.background)
         .sheet(isPresented: $model.showConnect) { ConnectSheet(palette: palette) }
         .sheet(isPresented: $model.showPlan) { PlanSheet(palette: palette) }
@@ -111,7 +124,8 @@ struct TodayView: View {
                                 .font(MekaType.upNextTitle).foregroundStyle(palette.textSecondary)
                                 .staggeredAppear(1, play: play)
                         }
-                        if !today.needsYou.isEmpty {
+                        // The Needs you column beside Today lists them (never shown twice).
+                        if !today.needsYou.isEmpty && CommandCentreRules.shared.todayListsNeedsYou(layout: CommandCentreRules.shared.layout(contentWidthDp: Float(width))) {
                             SectionLabel("Needs you", palette).staggeredAppear(1, play: play)
                             ForEach(today.needsYou, id: \.task.id) { item in
                                 TaskRow(task: item.task, reason: item.reason, palette: palette).staggeredAppear(1, play: play)

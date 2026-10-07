@@ -1,5 +1,10 @@
 package os.meka.android.today
 
+import androidx.activity.compose.BackHandler
+import os.meka.android.work.AfterWorkHost
+import os.meka.core.domain.CommandCentreRules
+import os.meka.core.domain.CommandLayout
+
 import os.meka.android.calendar.EventDetailPane
 import os.meka.android.calendar.opensEvent
 import os.meka.android.calendar.EventActionHandlers
@@ -128,7 +133,10 @@ import java.time.format.DateTimeFormatter
  * Today, where it is softly lit for a moment. Reduced motion: cross-fades only.
  */
 @Composable
-fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> Unit = {}, openItem: (OpenItem) -> Unit = {}) {
+fun TodayRoute(
+    core: MekaCore, connect: ConnectHook? = null, openReview: () -> Unit = {}, openItem: (OpenItem) -> Unit = {},
+    openLists: () -> Unit = {}, openCalendar: () -> Unit = {},
+) {
     val today by core.today.collectAsState()
     val sync by core.syncStatus.collectAsState()
     val conflicts by core.conflicts.collectAsState()
@@ -146,6 +154,10 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
     val shutdown by core.shutdownView.collectAsState()
     val brief by core.briefView.collectAsState()
     val review by core.reviewView.collectAsState()
+    // The command centre beside Today on the open Fold (Fold modes, slice 2): Needs you and Coming up.
+    val stack by core.needsYouStack.collectAsState()
+    val calendar by core.calendarView.collectAsState()
+    var showAfterWork by rememberSaveable { mutableStateOf(false) }
     // Tasks Plan Apply is sending into Today: their rows hide while the plan is up, then catch the flying titles.
     var landing by remember { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(landing, showPlan) {
@@ -170,13 +182,18 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
     // Calendar actions: swipe an event right for a prep task, left to hide it from my day; an undo bar rises.
     val eventUndo = rememberEventUndo()
     val eventHandlers = remember(core, scope, eventUndo) { eventActionHandlers(core, scope, eventUndo) }
+    val moves = rememberDecisionMoves(core, eventUndo, openTask = { selectedId = it }, openLists = openLists)
 
     // Insets are applied once, by the app shell.
     MekaSharedLayout(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
-            val twoPane = maxWidth >= 600.dp
+            val layout = CommandCentreRules.layout(maxWidth.value)
+            val twoPane = layout != CommandLayout.SINGLE
             val all = (today.needsYou.map { it.task } + listOfNotNull(today.upNext) + today.yourDay)
             val selected = all.firstOrNull { it.id == selectedId }
+            val columns = CommandCentreRules.columns(layout, taskOpen = selected != null)
+            // In the command centre an open task stands in for Needs you; back (or Close) brings Needs you back.
+            BackHandler(enabled = twoPane && selected != null) { selectedId = null }
             val rowMotion: (String) -> RowMotion = { id ->
                 RowMotion(
                     shareTitle = true,
@@ -186,8 +203,10 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
             }
             TwoPaneMorph(
                 twoPane,
+                detailShare = if (twoPane) CommandCentreRules.sideShare(layout) else CommandCentreRules.SIDE_SHARE_TWO,
                 list = { m ->
                     TodayPane(today, sync, actions, m, connect, openPlan, !introPlayed, rowMotion,
+                        listsNeedsYou = CommandCentreRules.todayListsNeedsYou(layout),
                         workLabel = if (work.atWork) "At work" else "Off work", openWork = { showWork = true },
                         shutdown = shutdown, openShutdown = { showShutdown = true }, shutdownOpen = showShutdown,
                         openSearch = { showSearch = true },
@@ -195,7 +214,14 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
                         reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } },
                         openEvent = { eventOpen = it }, eventHandlers = eventHandlers)
                 },
-                detail = { m -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, m) },
+                detail = { m ->
+                    CommandSide(
+                        columns, m,
+                        detail = { dm -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, dm, onClose = { selectedId = null }) },
+                        needsYou = { nm -> CommandNeedsYou(core, stack, moves, nm, openAfterWork = { showAfterWork = true }) },
+                        comingUp = { cm, shared -> ComingUpColumn(calendar, shared, cm, openEvent = { eventOpen = it }, openCalendar = openCalendar) },
+                    )
+                },
             )
             // Closed Fold: detail springs up over Today. The last task is kept so it stays visible while leaving.
             var shown by remember { mutableStateOf<Task?>(null) }
@@ -214,6 +240,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
             MekaPane(visible = eventOpen != null) {
                 eventShown?.let { e -> EventDetailPane(core, e, onClose = { eventOpen = null }) }
             }
+            MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
             MekaPane(visible = showSearch) {
                 SearchPane(core, onClose = { showSearch = false }, openItem = { item -> showSearch = false; openItem(item) })
             }
@@ -232,9 +259,11 @@ internal fun BoxWithConstraintsScope.TwoPaneMorph(
     twoPane: Boolean,
     list: @Composable (Modifier) -> Unit,
     detail: @Composable (Modifier) -> Unit,
+    /** The detail's share of the width once open; the morph scales to it (the command centre's three columns take more). */
+    detailShare: Float = SharedMotion.DETAIL_FRACTION,
 ) {
     val fraction by rememberPaneMorph(twoPane)
-    val total = maxWidth
+    val total = maxWidth * (detailShare / SharedMotion.DETAIL_FRACTION)
     Row(Modifier.fillMaxSize()) {
         list(Modifier.weight(1f).fillMaxHeight())
         if (fraction > 0.001f) {
@@ -306,6 +335,8 @@ private fun TodayPane(
     reviewCard: ReviewCard, openReviewCard: () -> Unit,
     openEvent: (CalendarEvent) -> Unit = {},
     eventHandlers: EventActionHandlers? = null,
+    /** False in the command centre, where the Needs you column beside Today shows them. */
+    listsNeedsYou: Boolean = true,
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
@@ -408,7 +439,7 @@ private fun TodayPane(
                         modifier = Modifier.animateItem().appear(rememberAppearance(1, play)))
                 }
             }
-            if (today.needsYou.isNotEmpty()) {
+            if (listsNeedsYou && today.needsYou.isNotEmpty()) {
                 item(key = "h-needs") { SectionLabel("Needs you", Modifier.animateItem().appear(rememberAppearance(1, play))) }
                 items(today.needsYou, key = { "n-" + it.task.id }) { n ->
                     TaskRow(n.task, actions, reason = n.reason, motion = rowMotion(n.task.id),

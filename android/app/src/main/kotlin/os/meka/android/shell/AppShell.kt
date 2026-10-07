@@ -201,7 +201,10 @@ private fun Destination(
         SearchNav.destination(item.target)?.let(go)
     }
     when (d) {
-        ShellDestination.TODAY -> TodayRoute(core, connect, openReview = { openPlace(ShellDestination.REVIEW, PlaceVia.CARD) }, openItem = openItem)
+        ShellDestination.TODAY -> TodayRoute(
+            core, connect, openReview = { openPlace(ShellDestination.REVIEW, PlaceVia.CARD) }, openItem = openItem,
+            openLists = { go(ShellDestination.LISTS) }, openCalendar = { go(ShellDestination.CALENDAR) },
+        )
         ShellDestination.NEEDS_YOU -> NeedsYouRoute(core, openLists = { go(ShellDestination.LISTS) })
         ShellDestination.CALENDAR -> CalendarRoute(core)
         ShellDestination.ASK -> AskRoute(core, connected = connect == null, openPlace = { openPlace(it, PlaceVia.MORE) }, openItem = openItem)

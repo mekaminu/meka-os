@@ -9,6 +9,8 @@ struct NeedsYouStackView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let palette: MekaPalette
+    /// The Needs you tab takes the keyboard on appear; the command centre beside Today doesn't (click a card first).
+    var autofocus: Bool = true
 
     @State private var drag: CGSize = .zero
     @State private var armed: DecisionMove?
@@ -68,7 +70,7 @@ struct NeedsYouStackView: View {
         .focusable()
         .focusEffectDisabled()
         .focused($focused)
-        .onAppear { focused = true }
+        .onAppear { if autofocus { focused = true } }
         .onKeyPress(.rightArrow) { key(.yes, shown.first) }
         .onKeyPress(.leftArrow) { key(.later, shown.first) }
         .onKeyPress(.upArrow) { key(.open, shown.first) }
