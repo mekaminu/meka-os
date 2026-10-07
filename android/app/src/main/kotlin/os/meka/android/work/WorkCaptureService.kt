@@ -18,7 +18,8 @@ import os.meka.core.domain.CapturedItem
 
 /**
  * Work mode's listener (build plan M1). Reads WhatsApp, SMS and missed-call notifications through Android's official
- * notification access, only while MEKA is in work mode, and keeps them on this phone for the after-work summary.
+ * notification access, only while MEKA is in work mode, and keeps them for the after-work summary (a sealed copy
+ * on this phone, and synced through Meka's own server so the Mac shows the same summary).
  * Urgent messages ("urgent", "emergency") and people on the always-notify list alert straight away.
  *
  * It never replies, never marks anything read and never dismisses the original notification.
@@ -40,6 +41,8 @@ class WorkCaptureService : NotificationListenerService() {
             if (items.isEmpty()) return@launch
             val fresh = meka.captures.add(items)
             val lists = meka.captures.lists.value
+            // Into the synced summary too (Needs Meka #10), so the Mac shows it and Done on either clears both.
+            if (fresh.isNotEmpty()) runCatching { meka.core.holdCaptured(fresh, lists) }
             fresh.forEach { item -> Capture.breakThrough(item, lists)?.let { WorkAlerts.post(this@WorkCaptureService, item, it) } }
         }
     }

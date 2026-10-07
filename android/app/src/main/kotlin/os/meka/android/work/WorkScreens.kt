@@ -65,7 +65,6 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
-import os.meka.core.domain.AfterWorkSummaries
 import os.meka.core.domain.AfterWorkSummary
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.LocalClock
@@ -218,7 +217,7 @@ fun AfterWorkPane(summary: AfterWorkSummary, onDone: () -> Unit, onClose: () -> 
         }
         Spacer(Modifier.height(MekaSpace.m))
         if (!summary.isEmpty) PillButton("Done", filled = true) { haptics.light(); onDone() }
-        Text("Done clears MEKA's copy only. WhatsApp and Messages are untouched.", style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text("Done clears MEKA's copy on the Fold and the Mac. WhatsApp and Messages are untouched.", style = MekaType.caption, color = Meka.colors.textTertiary)
         Spacer(Modifier.height(MekaSpace.xl))
     }
 }
@@ -227,15 +226,15 @@ fun AfterWorkPane(summary: AfterWorkSummary, onDone: () -> Unit, onClose: () -> 
 @Composable
 fun AfterWorkCard(core: MekaCore, modifier: Modifier = Modifier, onOpen: () -> Unit) {
     val store = (LocalContext.current.applicationContext as MekaApplication).captures
-    val items by store.items.collectAsState()
+    val synced by core.afterWork.collectAsState()
     val lists by store.lists.collectAsState()
     val work by core.workMode.collectAsState()
-    if (items.isEmpty()) return
+    if (synced.isEmpty) return
     if (work.atWork) {
-        Text("${work.line} · ${items.size} held for later", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = modifier)
+        Text("${work.line} · ${synced.itemCount} held for later", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = modifier)
         return
     }
-    val summary = remember(items, lists) { AfterWorkSummaries.build(items, lists) }
+    val summary = remember(synced, lists) { synced.withLists(lists) }
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onOpen() }.padding(MekaSpace.m),
@@ -248,16 +247,24 @@ fun AfterWorkCard(core: MekaCore, modifier: Modifier = Modifier, onOpen: () -> U
     }
 }
 
-/** Hosts the after-work summary from the store, so Needs you only passes visibility. */
+/**
+ * Hosts the after-work summary (synced, so the Mac shows the same one), so Needs you only passes visibility. Done
+ * clears it on both devices and drops this phone's sealed copy.
+ */
 @Composable
 fun AfterWorkHost(onClose: () -> Unit) {
     val app = LocalContext.current.applicationContext as MekaApplication
     val store = app.captures
-    val items by store.items.collectAsState()
+    val synced by app.core.afterWork.collectAsState()
     val lists by store.lists.collectAsState()
-    val summary = remember(items, lists) { AfterWorkSummaries.build(items, lists) }
+    val summary = remember(synced, lists) { synced.withLists(lists) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { app.nudger.dismiss() } // he's reading it: the nudge has done its job
-    AfterWorkPane(summary, onDone = { store.clear(); onClose() }, onClose = onClose)
+    AfterWorkPane(summary, onDone = {
+        scope.launch { runCatching { app.core.clearAfterWork() } }
+        store.clear()
+        onClose()
+    }, onClose = onClose)
 }
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")

@@ -17,7 +17,6 @@ import kotlinx.coroutines.launch
 import os.meka.android.MainActivity
 import os.meka.android.MekaApplication
 import os.meka.core.domain.AfterWorkNudge
-import os.meka.core.domain.AfterWorkSummaries
 import os.meka.core.domain.LocalClock
 import os.meka.core.domain.WorkModeState
 import java.time.DayOfWeek
@@ -37,7 +36,7 @@ class AfterWorkNudger(private val context: Context, private val app: MekaApplica
 
     fun evaluate(state: WorkModeState): Unit = synchronized(lock) {
         val was = if (prefs.contains(KEY_AT_WORK)) prefs.getBoolean(KEY_AT_WORK, false) else null
-        val summary = AfterWorkSummaries.build(app.captures.items.value, app.captures.lists.value)
+        val summary = app.core.afterWork.value.withLists(app.captures.lists.value)
         if (AfterWorkNudge.shouldNudge(was, state.atWork, summary, app.isOnScreen)) {
             AfterWorkNudge.text(summary)?.let { post(it.title, it.text, it.publicText) }
         }

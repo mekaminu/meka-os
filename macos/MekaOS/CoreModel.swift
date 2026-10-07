@@ -12,8 +12,11 @@ final class CoreModel {
     private(set) var today: Today?
     private(set) var syncLine: String?
     private(set) var conflicts: [ConflictChoice] = []
-    /// Work mode (schedule + manual switch), synced with the Fold. The held messages live on the Fold only.
+    /// Work mode (schedule + manual switch), synced with the Fold.
     private(set) var work: WorkModeState?
+    /// "While you were at work": what the Fold held during work mode, synced (Needs Meka #10). Done clears both.
+    private(set) var afterWork: AfterWorkSummary?
+    var showAfterWork = false
     /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
     private(set) var lists: ListsView?
     /// Needs you as a stack of decisions (four tabs, slice 2); see `needsYouCards`.
@@ -129,6 +132,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await w in core.workMode { self?.work = w }
+        })
+        observers.append(Task { [weak self] in
+            for await s in core.afterWork { self?.afterWork = s }
         })
         observers.append(Task { [weak self] in
             for await l in core.listsView { self?.lists = l }
@@ -792,6 +798,13 @@ final class CoreModel {
         } else {
             run { try await $0.hideCalendarFromToday(calendarKey: key, label: label) }
         }
+    }
+
+    /// Done on the after-work summary: cleared here and on the Fold. WhatsApp and Messages are untouched.
+    func clearAfterWork() {
+        MekaHaptics.light()
+        showAfterWork = false
+        run { _ = try await $0.clearAfterWork() }
     }
 
     func showEvent(_ eventID: String) {

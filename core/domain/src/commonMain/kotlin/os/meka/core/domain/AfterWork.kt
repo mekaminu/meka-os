@@ -1,5 +1,9 @@
 package os.meka.core.domain
 
+import os.meka.core.sync.FieldValue
+import os.meka.core.sync.Replica
+import os.meka.core.sync.fv
+
 /**
  * "While you were at work" (build plan M1). The Fold's notification listener captures WhatsApp messages, SMS and
  * missed calls during work mode; these rules decide what breaks through at once and how the after-work summary
@@ -24,6 +28,8 @@ data class CapturedItem(
     /** Group chat name, when the message came from a group. */
     val conversation: String?,
     val atMs: Long,
+    /** Held from someone on the family list (set when synced, so the Mac can rank family without the lists). */
+    val family: Boolean = false,
 ) {
     val personKey: String get() = People.key(personName)
 }
@@ -112,6 +118,12 @@ data class AfterWorkSummary(val people: List<PersonSummary>) {
     val messages: Int get() = people.sumOf { it.messages }
     val missedCalls: Int get() = people.sumOf { it.missedCalls }
     val urgentPeople: Int get() = people.count { it.urgent }
+    /** Everything held, for "12 held for later" during work. */
+    val itemCount: Int get() = people.sumOf { it.items.size }
+
+    /** The same summary with this device's family list applied too (the Fold has the lists; the Mac uses the flags). */
+    fun withLists(lists: PeopleLists): AfterWorkSummary =
+        if (lists.family.isEmpty()) this else AfterWorkSummaries.build(people.flatMap { it.items }, lists)
 
     /** "4 people · 9 messages · 2 missed calls" */
     val headline: String get() = if (isEmpty) "Nothing came in." else listOfNotNull(
@@ -128,7 +140,7 @@ object AfterWorkSummaries {
             val sorted = group.sortedBy { it.atMs }
             PersonSummary(
                 personName = sorted.last().personName,
-                isFamily = lists.isFamily(sorted.last().personName),
+                isFamily = lists.isFamily(sorted.last().personName) || sorted.any { it.family },
                 urgent = sorted.any { Urgency.isUrgent(it.text) },
                 messages = sorted.count { it.kind == CaptureKind.MESSAGE },
                 missedCalls = sorted.count { it.kind == CaptureKind.MISSED_CALL },
@@ -183,5 +195,103 @@ object AfterWorkNudge {
             text = "$who · $counts",
             publicText = "Your after-work summary is ready",
         )
+    }
+}
+
+/**
+ * Fields of a `held_message` (after-work summary on the Mac, Needs Meka #10, approved 2026-10-07): one per item the
+ * Fold's listener held at work, synced through Meka's own server like his other data so the Mac shows the same
+ * summary. Written once by the Fold; only [CLEARED] (TrueWins) and the blanked [TEXT] change afterwards.
+ */
+object HeldMessageFields {
+    const val APP = "app"
+    const val KIND = "kind"
+    const val PERSON = "person"
+    /** Message text, display only (untrusted, ADR-006); blanked when the summary is cleared. */
+    const val TEXT = "text"
+    const val CONVERSATION = "conversation"
+    const val AT = "atMs"
+    /** On the family list when it was held (the lists are picked from contacts on the Fold and stay there). */
+    const val FAMILY = "family"
+    /** "Done" on either device: gone from the summary on both. */
+    const val CLEARED = "cleared"
+    const val CLEARED_AT = "clearedAtMs"
+}
+
+/**
+ * The held messages as synced entities, non-AI. The Fold [hold]s what its listener captured (a re-post of the same
+ * message is one entity, also across a reinstall: the id comes from [Capture.itemId]); both apps read [items] for the
+ * summary; Done on either [clear]s it everywhere and blanks the text. Items older than [RETENTION_MS] are not shown,
+ * like the Fold's own sealed copy.
+ */
+class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) {
+    /** Writes the items not already held; returns how many were new. Never revives a cleared one. */
+    fun hold(items: List<CapturedItem>, lists: PeopleLists = PeopleLists()): Int {
+        var added = 0
+        for (item in items) {
+            val id = entityId(item.id)
+            if (replica.entity(EntityTypes.HELD_MESSAGE, id) != null) continue
+            replica.commitLocal(
+                EntityTypes.HELD_MESSAGE, id,
+                buildMap {
+                    put(HeldMessageFields.APP, item.app.name.fv())
+                    put(HeldMessageFields.KIND, item.kind.name.fv())
+                    put(HeldMessageFields.PERSON, item.personName.take(200).fv())
+                    put(HeldMessageFields.TEXT, item.text?.take(2_000).fv())
+                    put(HeldMessageFields.CONVERSATION, item.conversation?.take(200).fv())
+                    put(HeldMessageFields.AT, item.atMs.fv())
+                    put(HeldMessageFields.FAMILY, (item.family || lists.isFamily(item.personName)).fv())
+                },
+            )
+            added++
+        }
+        return added
+    }
+
+    /** What is waiting: not cleared, from the last [RETENTION_MS], oldest first, at most [Capture.MAX_ITEMS]. */
+    fun items(): List<CapturedItem> {
+        val cutoff = nowMs() - RETENTION_MS
+        return replica.entities(EntityTypes.HELD_MESSAGE).mapNotNull { e ->
+            if (e[HeldMessageFields.CLEARED].boolOrNull == true) return@mapNotNull null
+            val at = e[HeldMessageFields.AT].longOrNull ?: return@mapNotNull null
+            if (at < cutoff) return@mapNotNull null
+            val app = e[HeldMessageFields.APP].textOrNull?.let { n -> CaptureApp.entries.firstOrNull { it.name == n } } ?: return@mapNotNull null
+            val kind = e[HeldMessageFields.KIND].textOrNull?.let { n -> CaptureKind.entries.firstOrNull { it.name == n } } ?: return@mapNotNull null
+            val person = e[HeldMessageFields.PERSON].textOrNull ?: return@mapNotNull null
+            CapturedItem(
+                id = e.ref.entityId, app = app, kind = kind, personName = person,
+                text = e[HeldMessageFields.TEXT].textOrNull, conversation = e[HeldMessageFields.CONVERSATION].textOrNull,
+                atMs = at, family = e[HeldMessageFields.FAMILY].boolOrNull == true,
+            )
+        }.sortedWith(compareBy<CapturedItem>({ it.atMs }, { it.id })).takeLast(Capture.MAX_ITEMS)
+    }
+
+    /** The summary both apps show. */
+    fun summary(lists: PeopleLists = PeopleLists()): AfterWorkSummary = AfterWorkSummaries.build(items(), lists)
+
+    /**
+     * Done: everything held up to now leaves the summary on both devices, and its text is blanked. Something that
+     * arrives later (a message held while the Mac's Done was on its way) stays until the next Done.
+     */
+    fun clear(): Int {
+        val now = nowMs()
+        var n = 0
+        for (e in replica.entities(EntityTypes.HELD_MESSAGE)) {
+            if (e[HeldMessageFields.CLEARED].boolOrNull == true) continue
+            if ((e[HeldMessageFields.AT].longOrNull ?: 0L) > now) continue
+            replica.commitLocal(
+                EntityTypes.HELD_MESSAGE, e.ref.entityId,
+                mapOf(HeldMessageFields.CLEARED to true.fv(), HeldMessageFields.CLEARED_AT to now.fv(), HeldMessageFields.TEXT to FieldValue.Null),
+            )
+            n++
+        }
+        return n
+    }
+
+    companion object {
+        const val RETENTION_MS = 7 * 24 * 60 * 60_000L
+
+        /** The `held_message` id for a captured item's id: the same on every device and install. */
+        fun entityId(captureId: String): String = "h" + ActivityRules.fnv64("held:$captureId")
     }
 }

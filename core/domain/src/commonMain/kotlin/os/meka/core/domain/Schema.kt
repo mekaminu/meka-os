@@ -34,11 +34,13 @@ object EntityTypes {
     const val EVENT_MARK = "event_mark"
     /** MEKA-only marks on a calendar (hidden from Today); id from the calendar's key (see [CalendarRules]). */
     const val CALENDAR_MARK = "calendar_mark"
+    /** A message or missed call the Fold held during work mode (after-work summary); id from the capture's id. */
+    const val HELD_MESSAGE = "held_message"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
-        AGENT_ACTION, EVENT_MARK, CALENDAR_MARK,
+        AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE,
     )
 }
 
@@ -223,6 +225,9 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.EVENT_MARK -> MergePolicy.Lww
         // Calendar marks likewise: a switch per calendar.
         entityType == EntityTypes.CALENDAR_MARK -> MergePolicy.Lww
+        // Held messages: written once by the Fold; Done on either device clears them for good.
+        entityType == EntityTypes.HELD_MESSAGE && field == HeldMessageFields.CLEARED -> MergePolicy.TrueWins
+        entityType == EntityTypes.HELD_MESSAGE -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

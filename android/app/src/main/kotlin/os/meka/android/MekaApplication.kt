@@ -43,7 +43,10 @@ class MekaApplication : Application() {
         private set
     lateinit var identity: DeviceIdentityStore
         private set
-    /** Work mode's held messages and people lists; on this phone only, never synced. */
+    /**
+     * Work mode's sealed copy of held messages (to spot re-posts) and the people lists; the summary itself is the
+     * synced one ([MekaCore.afterWork]).
+     */
     val captures: CaptureStore by lazy { CaptureStore(this) }
     /** "Your after-work summary is ready" when work mode ends with something held. */
     val nudger: AfterWorkNudger by lazy { AfterWorkNudger(this, this) }
@@ -91,6 +94,8 @@ class MekaApplication : Application() {
         // Every work-mode change on this phone (clock tick, sync, listener) goes past the nudger. Also runs once at
         // process start (after a reboot the listener's rebind starts us), which re-registers the end-of-work alarm.
         appScope.launch { core.workMode.collect { nudger.evaluate(it) } }
+        // Messages held before the summary was synced join it once (re-holding is a no-op, cleared ones stay cleared).
+        appScope.launch { runCatching { core.holdCaptured(captures.items.value, captures.lists.value) } }
         // The governor looks again whenever what it reads changes (settled for a moment, so a burst of edits or a
         // sync is one evaluation), and once at process start, which re-arms its alarm. Time is its own alarm.
         appScope.launch {

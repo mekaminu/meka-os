@@ -2,8 +2,8 @@
 import SwiftUI
 
 /// Work mode on the Mac (build plan M1): the Work switch and work hours, synced with the Fold. The Fold does the
-/// holding: WhatsApp, texts and missed calls during work, and the after-work summary, stay on the phone, and the
-/// family and always-notify lists are picked there from contacts.
+/// holding (WhatsApp, texts and missed calls during work) and the family and always-notify lists are picked there
+/// from contacts; the after-work summary is synced and shows in Needs you (`AfterWorkSheet`).
 struct WorkSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -59,7 +59,7 @@ struct WorkSheet: View {
             Toggle("Use these hours (off: the switch only)", isOn: Binding(get: { enabled }, set: { enabled = $0; save() }))
                 .staggeredAppear(2)
 
-            Text("During work your Fold holds WhatsApp, texts and missed calls and shows them after, grouped by person, urgent first. \"Urgent\" or \"emergency\" alerts you straight away. MEKA never replies or marks anything read, and what it holds stays on the phone.")
+            Text("During work your Fold holds WhatsApp, texts and missed calls and shows them after, grouped by person, urgent first. \"Urgent\" or \"emergency\" alerts you straight away. The summary shows here too, in Needs you. MEKA never replies or marks anything read.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, MekaSpace.s)

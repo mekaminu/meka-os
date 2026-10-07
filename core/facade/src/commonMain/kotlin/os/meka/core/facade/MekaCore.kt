@@ -132,6 +132,7 @@ class MekaCore(
     private val interruptions = os.meka.core.domain.Interruptions(replica, ZoneCalendar(timeZone))
     private val activity = os.meka.core.domain.ActivityLog(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val eventActions = os.meka.core.domain.EventActions(replica, tasks, nowMs, ZoneCalendar(timeZone))
+    private val held = os.meka.core.domain.HeldMessages(replica, nowMs)
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
     private var releasesApi: ReleasesApi? = transport as? ReleasesApi
@@ -207,6 +208,13 @@ class MekaCore(
      * goals matching [search]'s query, grouped by kind. Local only; follows edits and sync while a query is set.
      */
     val searchView: StateFlow<SearchView> = _search.asStateFlow()
+
+    private val _afterWork = MutableStateFlow(os.meka.core.domain.AfterWorkSummary(emptyList()))
+    /**
+     * "While you were at work": what the Fold held during work mode, grouped by person (urgent, then family, then
+     * latest). Synced (Needs Meka #10), so the Mac shows the same summary; Done on either device clears it on both.
+     */
+    val afterWork: StateFlow<os.meka.core.domain.AfterWorkSummary> = _afterWork.asStateFlow()
 
     private val _workMode = MutableStateFlow(work.state(localClock(), todayEpochDay()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
@@ -325,6 +333,14 @@ class MekaCore(
     /** Shows a hidden calendar on Today again (the undo bar, and the Calendars switch). */
     suspend fun showCalendarOnToday(calendarKey: String) = onCore { eventActions.showCalendar(calendarKey) }
     /** Remind me [minutes] before the event (a governor heads-up, CLOCK precision); 0 turns it off. */
+    /**
+     * The Fold's listener held these at work: they join the synced after-work summary (new ones only; a re-post or a
+     * cleared one is skipped). [lists] marks family. Returns how many were new.
+     */
+    suspend fun holdCaptured(items: List<os.meka.core.domain.CapturedItem>, lists: os.meka.core.domain.PeopleLists): Int =
+        onCore { held.hold(items, lists) }
+    /** Done on the after-work summary: cleared on every device, texts blanked. WhatsApp and Messages are untouched. */
+    suspend fun clearAfterWork(): Int = onCore { held.clear() }
     suspend fun setEventReminder(eventId: String, minutes: Int) = onCore { eventActions.setReminder(eventId, minutes) }
     /** Leave by: a heads-up [travelMinutes] before the event starts (how long it takes to get there); 0 turns it off. */
     suspend fun setEventLeaveBy(eventId: String, travelMinutes: Int) = onCore { eventActions.setLeaveBy(eventId, travelMinutes) }
@@ -755,6 +771,7 @@ class MekaCore(
         _activity.value = activity.view()
         _calendar.value = CalendarAgenda.build(all, allEvents, nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden)
         _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars)
+        _afterWork.value = held.summary()
         _notifyPreview.value = Governor.preview(currentNotices(), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(

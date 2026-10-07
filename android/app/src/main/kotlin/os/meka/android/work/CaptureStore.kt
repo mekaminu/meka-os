@@ -24,7 +24,8 @@ import javax.crypto.spec.GCMParameterSpec
 /**
  * What the notification listener held during work mode, plus the owner's family and always-notify lists.
  *
- * Device-only: messages never leave the Fold and never enter the synced op log. The file is sealed with a
+ * This file is the Fold's own copy (it spots WhatsApp's re-posts and keeps the lists, which stay on the phone); the
+ * summary both apps show is synced separately ([os.meka.core.domain.HeldMessages], Needs Meka #10). The file is sealed with a
  * non-exportable Android Keystore AES-GCM key (ADR-002's pattern) and written atomically. Items older than
  * [RETENTION_MS] are dropped on load, so nothing lingers if the summary is never cleared.
  */

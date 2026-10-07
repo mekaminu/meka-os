@@ -62,6 +62,25 @@ class MekaCoreTest {
     }
 
     @Test
+    fun afterWorkSummaryHeldOnTheFoldShowsOnTheMacAndDoneOnTheMacClearsBoth() = runTest {
+        val a = core("android"); val m = core("mac")
+        val at = now - 3_600_000L
+        val item = os.meka.core.domain.CapturedItem(
+            os.meka.core.domain.Capture.itemId(os.meka.core.domain.CaptureApp.WHATSAPP, os.meka.core.domain.CaptureKind.MESSAGE, "Mum", null, at, "call me"),
+            os.meka.core.domain.CaptureApp.WHATSAPP, os.meka.core.domain.CaptureKind.MESSAGE, "Mum", "call me", null, at,
+        )
+        assertEquals(1, a.holdCaptured(listOf(item), os.meka.core.domain.PeopleLists(family = setOf("Mum"))))
+        assertEquals(0, a.holdCaptured(listOf(item), os.meka.core.domain.PeopleLists()))
+        a.syncNow(); m.syncNow()
+        assertEquals("1 person · 1 message", m.afterWork.value.headline)
+        assertTrue(m.afterWork.value.people.single().isFamily)
+        assertEquals(1, m.clearAfterWork())
+        m.syncNow(); a.syncNow()
+        assertTrue(a.afterWork.value.isEmpty)
+        assertTrue(m.afterWork.value.isEmpty)
+    }
+
+    @Test
     fun offlineSyncReportsPendingThenRecovers() = runTest {
         val t = FaultyTransport(service).apply { online = false }
         val c = core("android", t)
