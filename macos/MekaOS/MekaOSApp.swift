@@ -44,6 +44,8 @@ struct MekaOSApp: App {
             CommandGroup(after: .textEditing) {
                 Button("Search Everything…") { model.showSearch = true }
                     .keyboardShortcut("f", modifiers: .command)
+                Button("Command Bar…") { model.showCommandBar.toggle() }
+                    .keyboardShortcut("k", modifiers: .command)
             }
             CommandMenu("Go") {
                 ForEach(ShellDestination.allCases) { d in

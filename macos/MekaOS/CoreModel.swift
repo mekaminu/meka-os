@@ -52,6 +52,10 @@ final class CoreModel {
     /// Search everything: results for the query in the sheet (local; follows edits and sync while it is open).
     private(set) var searchResults: SearchView?
     var showSearch = false
+    /// What the command bar's "Search for …" hands to the search sheet; taken (and cleared) when the sheet opens.
+    var searchSeed: String?
+    /// The ⌘K command bar over MEKA's window (Outside the app).
+    var showCommandBar = false
     /// A search result Lists or Goals should open (its tab and unfolded row); cleared once shown.
     var openItem: OpenItem?
     var showWork = false
@@ -297,6 +301,45 @@ final class CoreModel {
         lastDirection = ShellNav.direction(from: destination, to: d)
         MekaHaptics.tick()
         withAnimation(MekaMotion.replan(reduced: reduced)) { destination = d }
+    }
+
+    // MARK: Command bar
+
+    /// What the command bar needs to offer the right half of each pair.
+    func commandBarContext(appearance: String) -> CommandBarContext {
+        CommandBarContext(
+            atWork: work?.atWork ?? false,
+            fasting: fasting?.current != nil,
+            fastGoalHours: fasting?.plan.targetHours ?? 16,
+            connected: isConnected,
+            appearance: appearance
+        )
+    }
+
+    /// Runs a command-bar row by doing what the same button elsewhere on the Mac does (appearance is the view's).
+    func perform(_ row: CommandBarRow, reduced: Bool) {
+        if let d = CommandBarNav.destination(row.action) {
+            go(to: d, reduced: reduced)
+            return
+        }
+        switch row.action {
+        case .planDay: go(to: .today, reduced: reduced); showPlan = true
+        case .morningBrief: go(to: .today, reduced: reduced); showBrief = true
+        case .shutDown: go(to: .today, reduced: reduced); showShutdown = true
+        case .syncNow: Task { await syncNow() }
+        case .workStart: setWorkSwitch(true)
+        case .workFinish: setWorkSwitch(false)
+        case .fastStart: startFast(minutesAgo: 0)
+        case .fastEnd: endFast()
+        case .workMode: showWork = true
+        case .notifications: showNotifications = true
+        case .activity: showActivity = true
+        case .yourData: showYourData = true
+        case .calendars: showCalendars = true
+        case .searchFor: searchSeed = row.text; showSearch = true
+        case .addTask: if let text = row.text { MekaHaptics.light(); capture(text) }
+        default: break
+        }
     }
 
     // MARK: Search

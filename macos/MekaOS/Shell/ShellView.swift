@@ -37,6 +37,14 @@ struct ShellView: View {
             // Calendar actions: "Hidden from your day · Undo" rises over whichever screen you did it on.
             .overlay(alignment: .bottom) { EventUndoBar(palette: palette).padding(.bottom, MekaSpace.xxl) }
         }
+        // The ⌘K command bar, over the whole window (sidebar included).
+        .overlay {
+            if model.showCommandBar {
+                CommandBarOverlay(palette: palette)
+                    .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+            }
+        }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.showCommandBar)
         .background(palette.background)
         // Search everything (⌘F from anywhere): results, with an open task's detail beside them.
         .sheet(isPresented: Binding(get: { model.showSearch }, set: { model.showSearch = $0 })) { SearchSheet(palette: palette) }

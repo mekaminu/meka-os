@@ -68,7 +68,12 @@ struct SearchSheet: View {
         .padding(MekaSpace.l)
         .frame(width: 860, height: 600)
         .background(palette.background)
-        .onAppear { fieldFocused = true; model.search(query) }
+        .onAppear {
+            fieldFocused = true
+            // "Search for …" from the command bar opens the sheet with what was typed there.
+            if let seed = model.searchSeed { query = seed; model.searchSeed = nil }
+            model.search(query)
+        }
         .task(id: query) {
             if !query.isEmpty { try? await Task.sleep(for: .milliseconds(120)) }
             guard !Task.isCancelled else { return }
