@@ -98,7 +98,6 @@ import os.meka.android.update.UpdateCard
 import os.meka.android.update.UpdateState
 import kotlinx.coroutines.flow.MutableStateFlow
 import os.meka.android.shell.OpenItem
-import os.meka.android.work.WorkPane
 import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -147,7 +146,6 @@ fun TodayRoute(
     val conflicts by core.conflicts.collectAsState()
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var showPlan by rememberSaveable { mutableStateOf(false) }
-    var showWork by rememberSaveable { mutableStateOf(false) }
     var showShutdown by rememberSaveable { mutableStateOf(false) }
     var showBrief by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
@@ -155,7 +153,6 @@ fun TodayRoute(
     var eventOpen by remember { mutableStateOf<CalendarEvent?>(null) }
     var eventShown by remember { mutableStateOf<CalendarEvent?>(null) }
     if (eventOpen != null) eventShown = eventOpen
-    val work by core.workMode.collectAsState()
     val shutdown by core.shutdownView.collectAsState()
     val brief by core.briefView.collectAsState()
     val review by core.reviewView.collectAsState()
@@ -218,7 +215,6 @@ fun TodayRoute(
                 list = { m ->
                     TodayPane(today, sync, actions, m, connect, openPlan, !introPlayed, rowMotion,
                         listsNeedsYou = CommandCentreRules.todayListsNeedsYou(layout),
-                        workLabel = if (work.atWork) "At work" else "Off work", openWork = { showWork = true },
                         shutdown = shutdown, openShutdown = { showShutdown = true }, shutdownOpen = showShutdown,
                         openSearch = { showSearch = true },
                         brief = brief, openBrief = { showBrief = true }, briefOpen = showBrief,
@@ -246,7 +242,6 @@ fun TodayRoute(
             MekaPane(visible = showPlan) {
                 PlanPane(core, landing = landing, onApplying = { landing = it }, onClose = { showPlan = false })
             }
-            MekaPane(visible = showWork) { WorkPane(core, onClose = { showWork = false }) }
             MekaPane(visible = showShutdown) { ShutdownPane(core, onClose = { showShutdown = false }) }
             MekaPane(visible = showBrief) { BriefPane(core, onClose = { showBrief = false }) }
             MekaPane(visible = eventOpen != null) {
@@ -341,7 +336,7 @@ data class TodayActions(
 @Composable
 private fun TodayPane(
     today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?,
-    openPlan: () -> Unit, play: Boolean, rowMotion: (String) -> RowMotion, workLabel: String, openWork: () -> Unit,
+    openPlan: () -> Unit, play: Boolean, rowMotion: (String) -> RowMotion,
     shutdown: ShutdownView, openShutdown: () -> Unit, shutdownOpen: Boolean, openSearch: () -> Unit,
     brief: MorningBriefView, openBrief: () -> Unit, briefOpen: Boolean,
     reviewCard: ReviewCard, openReviewCard: () -> Unit,
@@ -387,27 +382,6 @@ private fun TodayPane(
                             "Plan my day", style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                                 .clickable(role = Role.Button) { openPlan() }.padding(vertical = MekaSpace.xxs),
-                        )
-                        Text(
-                            workLabel, style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                                .clickable(role = Role.Button) { openWork() }.padding(vertical = MekaSpace.xxs),
-                        )
-                        Text(
-                            "Brief", style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                                .clickable(role = Role.Button) { openBrief() }.padding(vertical = MekaSpace.xxs),
-                        )
-                        Text(
-                            "Shut down", style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                                .clickable(role = Role.Button) { openShutdown() }.padding(vertical = MekaSpace.xxs),
-                        )
-                        val theme = Meka.theme
-                        Text(
-                            "Theme: ${theme.choice.label}", style = MekaType.caption, color = Meka.colors.textSecondary,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                                .clickable(role = Role.Button) { theme.set(theme.choice.next()) }.padding(vertical = MekaSpace.xxs),
                         )
                     }
                 }

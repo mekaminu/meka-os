@@ -60,6 +60,9 @@ class SharedMotionTest {
         assertEquals("pane-brief", SharedMotion.paneKey(SharedMotion.BRIEF))
         assertEquals("pane-shutdown", SharedMotion.paneKey(SharedMotion.SHUTDOWN))
         assertEquals("pane-WORK", SharedMotion.paneKey(MoreItem.WORK))
+        // The brief and shutdown More rows share their Today card's key: either title travels into the same pane title.
+        assertEquals(SharedMotion.paneKey(SharedMotion.BRIEF), SharedMotion.paneKey(MoreItem.BRIEF))
+        assertEquals(SharedMotion.paneKey(SharedMotion.SHUTDOWN), SharedMotion.paneKey(MoreItem.SHUTDOWN))
     }
 
     @Test

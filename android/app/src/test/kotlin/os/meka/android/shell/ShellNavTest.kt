@@ -51,7 +51,10 @@ class ShellNavTest {
     @Test
     fun moreListsEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
         assertEquals(
-            listOf("Lists", "Goals and habits", "Review", "Vault", "Work mode", "Notifications", "Activity", "Your data", "Calendars"),
+            listOf(
+                "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "Shut down the day", "Work mode", "Notifications",
+                "Appearance", "Activity", "Your data", "Calendars",
+            ),
             ShellNav.more(connected = true).map { it.label },
         )
         assertFalse(MoreItem.CALENDARS in ShellNav.more(connected = false))
@@ -69,6 +72,19 @@ class ShellNavTest {
         assertTrue(ShellNav.moreLit(MoreItem.LISTS, 2))
         assertFalse(ShellNav.moreLit(MoreItem.LISTS, 0))
         assertFalse(ShellNav.moreLit(MoreItem.REVIEW, 2))
+    }
+
+    @Test
+    fun headerMovesIntoMoreWithWorkSayingWhereYouAre() {
+        // Today clarity, slice 2: Today's header keeps Search and Plan my day; the rest is in More.
+        assertEquals("At work · Work hours and the Work switch", ShellNav.moreLine(MoreItem.WORK, 0, atWork = true))
+        assertEquals("Off work · Work hours and the Work switch", ShellNav.moreLine(MoreItem.WORK, 3, atWork = false))
+        assertEquals("Your day, who you're waiting on and headlines", ShellNav.moreLine(MoreItem.BRIEF, 2))
+        assertEquals("Tick off, carry over and see tomorrow", ShellNav.moreLine(MoreItem.SHUTDOWN, 0))
+        assertFalse(ShellNav.moreLit(MoreItem.WORK, 2))
+        // Appearance unfolds in place; every other row opens a place or a pane.
+        assertEquals(listOf(MoreItem.APPEARANCE), MoreItem.entries.filter { ShellNav.unfoldsInPlace(it) })
+        assertTrue(listOf(MoreItem.BRIEF, MoreItem.SHUTDOWN, MoreItem.APPEARANCE).all { it.destination == null })
     }
 
     @Test

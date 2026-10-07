@@ -60,6 +60,9 @@ struct ShellView: View {
         // Opened from Today's header or Ask's More list, so they live on the shell.
         .sheet(isPresented: Binding(get: { model.showCalendars }, set: { model.showCalendars = $0 })) { CalendarsSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showWork }, set: { model.showWork = $0 })) { WorkSheet(palette: palette) }
+        // The brief and the shutdown open from Today's cards and from Ask's More, so they live on the shell too.
+        .sheet(isPresented: Binding(get: { model.showBrief }, set: { model.showBrief = $0 })) { BriefSheet(palette: palette) }
+        .sheet(isPresented: Binding(get: { model.showShutdown }, set: { model.showShutdown = $0 })) { ShutdownSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showNotifications }, set: { model.showNotifications = $0 })) {
             NotificationsSheet(palette: palette)
         }

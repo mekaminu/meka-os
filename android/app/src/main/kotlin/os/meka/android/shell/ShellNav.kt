@@ -28,16 +28,22 @@ enum class ShellLayout {
 }
 
 /**
- * A row in Ask's "More" list: a place behind Ask ([destination]) or a pane that springs up over Ask (null).
+ * A row in Ask's "More" list: a place behind Ask ([destination]), a pane that springs up over Ask (null), or
+ * Appearance, which unfolds its choices in place ([ShellNav.unfoldsInPlace]).
  * Lines are fixed words, not counts, except Lists when something on it is due ([ShellNav.moreLine]).
+ * Today's header keeps only Search and Plan my day (Today clarity, slice 2): the brief, the shutdown, work mode and
+ * the theme moved here.
  */
 enum class MoreItem(val label: String, val line: String, val destination: ShellDestination?) {
     LISTS("Lists", "Waiting for · Someday · Decisions · Renewals", ShellDestination.LISTS),
     GOALS("Goals and habits", "Habits, goals and fasting", ShellDestination.GOALS),
     REVIEW("Review", "Your week, looked back on", ShellDestination.REVIEW),
     VAULT("Vault", "Your data now; documents later", ShellDestination.VAULT),
+    BRIEF("Morning brief", "Your day, who you're waiting on and headlines", null),
+    SHUTDOWN("Shut down the day", "Tick off, carry over and see tomorrow", null),
     WORK("Work mode", "Work hours and the Work switch", null),
     NOTIFICATIONS("Notifications", "Quiet hours, digests and what reaches you", null),
+    APPEARANCE("Appearance", "Dark, Light or Auto", null),
     ACTIVITY("Activity", "What MEKA did and why", null),
     YOUR_DATA("Your data", "Export everything as one file", null),
     CALENDARS("Calendars", "Connected accounts and feeds", null),
@@ -69,8 +75,17 @@ object ShellNav {
     fun more(connected: Boolean): List<MoreItem> = MoreItem.entries.filter { connected || it != MoreItem.CALENDARS }
 
     /** A More row's line: Lists says what's due when something is ("2 need you"), else the fixed words. */
-    fun moreLine(item: MoreItem, listsDue: Int): String =
-        if (item == MoreItem.LISTS && listsDue > 0) "$listsDue need${if (listsDue == 1) "s" else ""} you · ${item.line}" else item.line
+    fun moreLine(item: MoreItem, listsDue: Int, atWork: Boolean = false): String = when {
+        item == MoreItem.LISTS && listsDue > 0 -> "$listsDue need${if (listsDue == 1) "s" else ""} you · ${item.line}"
+        item == MoreItem.WORK -> workLine(atWork)
+        else -> item.line
+    }
+
+    /** Appearance unfolds its three choices in the row itself; every other row opens something. */
+    fun unfoldsInPlace(item: MoreItem): Boolean = item == MoreItem.APPEARANCE
+
+    /** Work mode's line says where you are now ("At work · Work hours and the Work switch"), as the header did. */
+    fun workLine(atWork: Boolean): String = "${if (atWork) "At work" else "Off work"} · ${MoreItem.WORK.line}"
 
     /** Whether a More row's line is lit in the accent colour. */
     fun moreLit(item: MoreItem, listsDue: Int): Boolean = item == MoreItem.LISTS && listsDue > 0

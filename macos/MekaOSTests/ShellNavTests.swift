@@ -45,11 +45,24 @@ final class ShellNavTests: XCTestCase {
     func testMoreListsEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
         XCTAssertEqual(
             ShellNav.more(connected: true).map(\.label),
-            ["Lists", "Goals and habits", "Review", "Vault", "Work mode", "Notifications", "Activity", "Your data", "Calendars"]
+            ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "Shut down the day", "Work mode", "Notifications",
+             "Appearance", "Activity", "Your data", "Calendars"]
         )
         XCTAssertFalse(ShellNav.more(connected: false).contains(.calendars))
         let places = Set(ShellNav.more(connected: false).compactMap(\.destination))
         XCTAssertEqual(places, Set(ShellDestination.allCases.filter { ShellNav.parent($0) != nil }))
+    }
+
+    @MainActor
+    func testHeaderMovesIntoMoreWithWorkSayingWhereYouAre() {
+        // Today clarity, slice 2: Today's header keeps Search and Plan my day; the rest is in More.
+        XCTAssertEqual(ShellNav.moreLine(.work, listsDue: 0, atWork: true), "At work · Work hours and the Work switch")
+        XCTAssertEqual(ShellNav.moreLine(.work, listsDue: 3, atWork: false), "Off work · Work hours and the Work switch")
+        XCTAssertEqual(ShellNav.moreLine(.brief, listsDue: 2), "Your day, who you're waiting on and headlines")
+        XCTAssertEqual(ShellNav.moreLine(.shutdown, listsDue: 0), "Tick off, carry over and see tomorrow")
+        XCTAssertFalse(ShellNav.moreLit(.work, listsDue: 2))
+        XCTAssertEqual(MoreItem.allCases.filter(ShellNav.unfoldsInPlace), [.appearance])
+        XCTAssertTrue([MoreItem.brief, .shutdown, .appearance].allSatisfy { $0.destination == nil })
     }
 
     @MainActor

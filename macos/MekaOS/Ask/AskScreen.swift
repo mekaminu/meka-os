@@ -42,8 +42,15 @@ struct AskScreen: View {
                     .foregroundStyle(palette.textTertiary)
                     .staggeredAppear(2)
                 ForEach(Array(ShellNav.more(connected: model.isConnected && !model.signedOut).enumerated()), id: \.element) { i, item in
-                    MoreRow(item: item, listsDue: model.listsDue, palette: palette) { open(item) }
-                        .staggeredAppear(3 + i)
+                    Group {
+                        if ShellNav.unfoldsInPlace(item) {
+                            AppearanceRow(palette: palette)
+                        } else {
+                            MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue, atWork: model.work?.atWork == true),
+                                    lit: ShellNav.moreLit(item, listsDue: model.listsDue), palette: palette) { open(item) }
+                        }
+                    }
+                    .staggeredAppear(3 + i)
                 }
             }
             .frame(maxWidth: 560, alignment: .leading)
@@ -57,19 +64,22 @@ struct AskScreen: View {
     private func open(_ item: MoreItem) {
         if let d = item.destination { model.go(to: d, reduced: reduceMotion); return }
         switch item {
+        case .brief: model.showBrief = true
+        case .shutdown: model.showShutdown = true
         case .work: model.showWork = true
         case .notifications: model.showNotifications = true
         case .activity: model.showActivity = true
         case .yourData: model.showYourData = true
         case .calendars: model.showCalendars = true
-        case .lists, .goals, .review, .vault: break
+        case .lists, .goals, .review, .vault, .appearance: break
         }
     }
 }
 
 private struct MoreRow: View {
     let item: MoreItem
-    let listsDue: Int
+    let line: String
+    let lit: Bool
     let palette: MekaPalette
     let action: () -> Void
     @State private var hovering = false
@@ -81,10 +91,10 @@ private struct MoreRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     // Places and settings you open, not things you act on: the regular weight (type weight, 2026-10-06).
                     Text(item.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
-                    Text(ShellNav.moreLine(item, listsDue: listsDue))
+                    Text(line)
                         .font(MekaType.caption)
-                        .foregroundStyle(ShellNav.moreLit(item, listsDue: listsDue) ? palette.accent : palette.textSecondary)
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: listsDue)
+                        .foregroundStyle(lit ? palette.accent : palette.textSecondary)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
                 }
                 Spacer()
                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(palette.textTertiary)
@@ -98,5 +108,35 @@ private struct MoreRow: View {
         .buttonStyle(MekaPressStyle())
         .onHover { h in withAnimation(MekaMotion.appear(reduced: reduceMotion)) { hovering = h } }
         .accessibilityHint(item.destination == nil ? "Opens a sheet" : "Opens \(item.label)")
+    }
+}
+
+/// Appearance (Today clarity, slice 2: the theme moved here from Today's header). On the Mac the three choices sit in a
+/// segmented control in the row itself; every colour blends across (`themeBlend`) as the choice changes.
+private struct AppearanceRow: View {
+    let palette: MekaPalette
+    @AppStorage(MekaAppearance.key) private var appearance = MekaAppearance.dark.rawValue
+    @State private var hovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(MoreItem.appearance.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                Text(MoreItem.appearance.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
+            Spacer()
+            Picker(MoreItem.appearance.label, selection: $appearance) {
+                ForEach(MekaAppearance.allCases) { a in Text(a.label).tag(a.rawValue) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+        }
+        .padding(.horizontal, MekaSpace.m)
+        .padding(.vertical, MekaSpace.s)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .offset(y: hovering && !reduceMotion ? -2 : 0)
+        .onHover { h in withAnimation(MekaMotion.appear(reduced: reduceMotion)) { hovering = h } }
     }
 }

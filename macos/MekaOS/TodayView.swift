@@ -7,8 +7,6 @@ import SwiftUI
 struct TodayView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
-    @AppStorage(MekaAppearance.key) private var appearance = MekaAppearance.dark.rawValue
-    private var currentAppearance: MekaAppearance { MekaAppearance(rawValue: appearance) ?? .dark }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// App open: greeting fades up, then each section 40 ms apart. Plays once; later arrivals use row transitions.
     @State private var introPlayed = false
@@ -46,8 +44,6 @@ struct TodayView: View {
         .background(palette.background)
         .sheet(isPresented: $model.showConnect) { ConnectSheet(palette: palette) }
         .sheet(isPresented: $model.showPlan) { PlanSheet(palette: palette) }
-        .sheet(isPresented: $model.showShutdown) { ShutdownSheet(palette: palette) }
-        .sheet(isPresented: $model.showBrief) { BriefSheet(palette: palette) }
     }
 
     private var todayColumn: some View {
@@ -71,12 +67,7 @@ struct TodayView: View {
                     HStack(spacing: MekaSpace.l) {
                         Button("Search") { model.showSearch = true }
                         Button("Plan my day") { model.showPlan = true }
-                        Button(model.work?.atWork == true ? "At work" : "Off work") { model.showWork = true }
-                        Button("Brief") { model.showBrief = true }
-                        Button("Shut down") { model.showShutdown = true }
-                        // Notifications, Activity, Your data and Calendars live in Ask's More (and the menus) now.
-                        Button("Theme: \(currentAppearance.label)") { appearance = currentAppearance.next.rawValue }
-                            .foregroundStyle(palette.textSecondary)
+                        // Work mode, the brief, the shutdown and the theme live in Ask's More now (Today clarity, slice 2).
                     }
                     .buttonStyle(.plain)
                     .font(MekaType.caption)

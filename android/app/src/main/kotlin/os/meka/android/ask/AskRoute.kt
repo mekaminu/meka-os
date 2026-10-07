@@ -2,6 +2,8 @@ package os.meka.android.ask
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,9 +28,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import os.meka.android.activity.ActivityPane
 import os.meka.android.designsystem.Meka
@@ -50,7 +55,11 @@ import os.meka.android.designsystem.sharedTitle
 import os.meka.android.shell.OpenItem
 import os.meka.android.shell.ShellDestination
 import os.meka.android.shell.ShellNav
+import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.today.BriefPane
 import os.meka.android.today.CalendarsPane
+import os.meka.android.today.ShutdownPane
 import os.meka.android.work.WorkPane
 import os.meka.core.facade.MekaCore
 
@@ -65,6 +74,9 @@ import os.meka.core.facade.MekaCore
 @Composable
 fun AskRoute(core: MekaCore, connected: Boolean, openPlace: (ShellDestination) -> Unit, openItem: (OpenItem) -> Unit) {
     val lists by core.listsView.collectAsState()
+    val work by core.workMode.collectAsState()
+    // Appearance unfolds its three choices in its own row.
+    var appearanceOpen by rememberSaveable { mutableStateOf(false) }
     var pane by rememberSaveable { mutableStateOf<MoreItem?>(null) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     val items = ShellNav.more(connected)
@@ -106,12 +118,19 @@ fun AskRoute(core: MekaCore, connected: Boolean, openPlace: (ShellDestination) -
                     modifier = Modifier.padding(bottom = MekaSpace.xxs).appear(rememberAppearance(2)))
             }
             itemsIndexed(items, key = { _, it -> it.name }) { i, item ->
-                MoreRow(item, lists.dueCount, pane == item, Modifier.appear(rememberAppearance(3 + i))) {
-                    val d = item.destination
-                    if (d != null) openPlace(d) else pane = item
+                if (ShellNav.unfoldsInPlace(item)) {
+                    AppearanceRow(appearanceOpen, Modifier.appear(rememberAppearance(3 + i))) { appearanceOpen = !appearanceOpen }
+                } else {
+                    MoreRow(item, ShellNav.moreLine(item, lists.dueCount, work.atWork), ShellNav.moreLit(item, lists.dueCount),
+                        pane == item, Modifier.appear(rememberAppearance(3 + i))) {
+                        val d = item.destination
+                        if (d != null) openPlace(d) else pane = item
+                    }
                 }
             }
         }
+        MekaPane(visible = pane == MoreItem.BRIEF) { BriefPane(core, onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.SHUTDOWN) { ShutdownPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.WORK) { WorkPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.NOTIFICATIONS) { NotificationsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.ACTIVITY) { ActivityPane(core, onClose = { pane = null }) }
@@ -124,8 +143,7 @@ fun AskRoute(core: MekaCore, connected: Boolean, openPlace: (ShellDestination) -
 }
 
 @Composable
-private fun MoreRow(item: MoreItem, listsDue: Int, paneOpen: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val lit = ShellNav.moreLit(item, listsDue)
+private fun MoreRow(item: MoreItem, line: String, lit: Boolean, paneOpen: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val lineColor by animateColorAsState(
         if (lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(Meka.reducedMotion), label = "more-line",
     )
@@ -145,8 +163,64 @@ private fun MoreRow(item: MoreItem, listsDue: Int, paneOpen: Boolean, modifier: 
             val travel = if (d != null) Modifier.sharedPlace(SharedMotion.placeKey(d, PlaceVia.MORE))
             else Modifier.sharedTitle(SharedMotion.paneKey(item), visible = !paneOpen)
             Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = travel)
-            Text(ShellNav.moreLine(item, listsDue), style = MekaType.caption, color = lineColor, maxLines = 2)
+            Text(line, style = MekaType.caption, color = lineColor, maxLines = 2)
         }
         Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.padding(start = MekaSpace.s))
+    }
+}
+
+/**
+ * Appearance (Today clarity, slice 2: the theme moved here from Today's header). The row unfolds Dark · Light · Auto
+ * in place; the chosen chip's colour blends across with a tick haptic and every colour on screen blends with it
+ * (`themeBlend`). Reduced motion: the chips appear at once and colours cross-fade.
+ */
+@Composable
+private fun AppearanceRow(open: Boolean, modifier: Modifier, toggle: () -> Unit) {
+    val theme = Meka.theme
+    val haptics = rememberMekaHaptics()
+    Column(
+        modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(MekaRadius.m))
+            .background(Meka.colors.surface)
+            .animateContentSize(MekaMotion.expand(Meka.reducedMotion))
+    ) {
+        Row(
+            Modifier.fillMaxWidth()
+                .clickable(role = Role.Button, onClick = toggle)
+                .semantics { stateDescription = "${theme.choice.label}, ${if (open) "expanded" else "collapsed"}" }
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(MoreItem.APPEARANCE.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+                Text("${theme.choice.label} · ${MoreItem.APPEARANCE.line}", style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+            val turn by animateFloatAsState(if (open) 90f else 0f, MekaMotion.appear(Meka.reducedMotion), label = "appearance-chevron")
+            Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary,
+                modifier = Modifier.padding(start = MekaSpace.s).rotate(turn))
+        }
+        if (open) {
+            Row(
+                Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.s),
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                ThemeChoice.entries.forEach { c ->
+                    val chosen = theme.choice == c
+                    val bg by animateColorAsState(
+                        if (chosen) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.themeBlend(Meka.reducedMotion), label = "chip-bg",
+                    )
+                    val fg by animateColorAsState(
+                        if (chosen) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.themeBlend(Meka.reducedMotion), label = "chip-fg",
+                    )
+                    Text(
+                        c.label, style = MekaType.caption, color = fg,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+                            .clickable(role = Role.RadioButton) { if (!chosen) { haptics.tick(); theme.set(c) } }
+                            .semantics { selected = chosen }
+                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                    )
+                }
+            }
+        }
     }
 }

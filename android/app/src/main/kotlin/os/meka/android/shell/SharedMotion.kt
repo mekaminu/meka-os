@@ -45,7 +45,12 @@ object SharedMotion {
     /** A card's or a More row's title and the title of the pane it opens share this key. */
     fun paneKey(name: String): String = "pane-$name"
 
-    fun paneKey(item: MoreItem): String = paneKey(item.name)
+    /** The brief and shutdown rows share their Today card's key, so either one's title travels into the same pane title. */
+    fun paneKey(item: MoreItem): String = when (item) {
+        MoreItem.BRIEF -> paneKey(BRIEF)
+        MoreItem.SHUTDOWN -> paneKey(SHUTDOWN)
+        else -> paneKey(item.name)
+    }
 
     /**
      * A title that travels across the shell, from where a place was opened ([via]) into the place's own title. The

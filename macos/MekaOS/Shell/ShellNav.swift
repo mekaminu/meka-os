@@ -41,9 +41,11 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
 
 enum ShellLayout { case bottomBar, rail }
 
-/// A row in Ask's More list: a place behind Ask (`destination`) or a sheet over the current screen (nil).
+/// A row in Ask's More list: a place behind Ask (`destination`), a sheet over the current screen (nil), or
+/// Appearance, which shows its choices in the row itself (`ShellNav.unfoldsInPlace`). Today's header keeps only
+/// Search and Plan my day (Today clarity, slice 2): the brief, the shutdown, work mode and the theme moved here.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, review, vault, work, notifications, activity, yourData, calendars
+    case lists, goals, review, vault, brief, shutdown, work, notifications, appearance, activity, yourData, calendars
     var id: Int { rawValue }
 
     var label: String {
@@ -52,8 +54,11 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .goals: "Goals and habits"
         case .review: "Review"
         case .vault: "Vault"
+        case .brief: "Morning brief"
+        case .shutdown: "Shut down the day"
         case .work: "Work mode"
         case .notifications: "Notifications"
+        case .appearance: "Appearance"
         case .activity: "Activity"
         case .yourData: "Your data"
         case .calendars: "Calendars"
@@ -66,8 +71,11 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .goals: "Habits, goals and fasting"
         case .review: "Your week, looked back on"
         case .vault: "Your data now; documents later"
+        case .brief: "Your day, who you're waiting on and headlines"
+        case .shutdown: "Tick off, carry over and see tomorrow"
         case .work: "Work hours and the Work switch"
         case .notifications: "Quiet hours, digests and what reaches you"
+        case .appearance: "Dark, Light or Auto"
         case .activity: "What MEKA did and why"
         case .yourData: "Export everything as one file"
         case .calendars: "Connected accounts and feeds"
@@ -80,7 +88,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .goals: .goals
         case .review: .review
         case .vault: .vault
-        case .work, .notifications, .activity, .yourData, .calendars: nil
+        case .brief, .shutdown, .work, .notifications, .appearance, .activity, .yourData, .calendars: nil
         }
     }
 }
@@ -112,10 +120,17 @@ enum ShellNav {
     static func more(connected: Bool) -> [MoreItem] { MoreItem.allCases.filter { connected || $0 != .calendars } }
 
     /// Lists says what's due when something is ("2 need you · …"), else the fixed words.
-    static func moreLine(_ item: MoreItem, listsDue: Int) -> String {
+    static func moreLine(_ item: MoreItem, listsDue: Int, atWork: Bool = false) -> String {
+        if item == .work { return workLine(atWork: atWork) }
         guard item == .lists, listsDue > 0 else { return item.line }
         return "\(listsDue) need\(listsDue == 1 ? "s" : "") you · \(item.line)"
     }
+
+    /// Appearance shows its three choices in the row itself; every other row opens something.
+    static func unfoldsInPlace(_ item: MoreItem) -> Bool { item == .appearance }
+
+    /// Work mode's line says where you are now ("At work · Work hours and the Work switch"), as the header did.
+    static func workLine(atWork: Bool) -> String { "\(atWork ? "At work" : "Off work") · \(MoreItem.work.line)" }
 
     static func moreLit(_ item: MoreItem, listsDue: Int) -> Bool { item == .lists && listsDue > 0 }
 
