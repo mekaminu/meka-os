@@ -83,8 +83,8 @@ class SyncApiTest {
         application { mekaSync(InMemoryServerOpStore(), devices, enrolToken = token) }
         suspend fun enrol(hh: String, dev: String) =
             client.post("/v1/enrol") { header("Authorization", "Enrol $token"); setBody(WireCodec.encodeEnrolRequest(WireCodec.EnrolRequest(hh, dev, dev))) }
-        // "hh" and "other-hh" exist (set up above); a third household can't be started with the code.
-        enrol("third-hh", "fold8").let { assertEquals(HttpStatusCode.Forbidden, it.status); assertEquals("household", it.bodyAsText()) }
+        // "hh" and "other-hh" exist (set up above); a third household can't be started with the code (ids are [a-z0-9]).
+        enrol("elsewhere", "fold8").let { assertEquals(HttpStatusCode.Forbidden, it.status); assertEquals("household", it.bodyAsText()) }
         // A revoked device stays revoked, whatever the code says.
         devices.revoke("android")
         enrol("hh", "android").let { assertEquals(HttpStatusCode.Forbidden, it.status); assertEquals("revoked", it.bodyAsText()) }
