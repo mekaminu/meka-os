@@ -118,9 +118,10 @@ fun EventDetailPane(core: MekaCore, event: CalendarEvent, onClose: () -> Unit) {
             }
         }
         val actionNote = listOfNotNull(d.prepLine, if (d.hidden) "Hidden from your day" else null).joinToString(" · ")
+        val reduced = Meka.reducedMotion
         AnimatedContent(
             targetState = actionNote,
-            transitionSpec = { fadeIn(MekaMotion.appear(Meka.reducedMotion)) togetherWith fadeOut(MekaMotion.appear(Meka.reducedMotion)) },
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "event-actions-note",
         ) { note ->
             if (note.isNotEmpty()) {
