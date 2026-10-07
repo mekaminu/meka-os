@@ -29,6 +29,11 @@ class Integrations(
     private val feeds: Map<String, FeedProvider> = emptyMap(),
     /** Public news sources mirrored for the morning brief (no sign-in; the apps choose which topics to show). */
     private val news: Map<String, NewsProvider> = emptyMap(),
+    /**
+     * Called after a calendar or fixtures poll wrote ops for a household (not for headlines), so push can wake its
+     * devices: a moved event's reminders re-arm and a moved kick-off is announced within seconds of the poll.
+     */
+    private val onChanged: (householdId: String) -> Unit = {},
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -118,8 +123,9 @@ class Integrations(
             val from = now() - WINDOW_BACK_MS
             val to = now() + WINDOW_AHEAD_MS
             val events = p.events(tokens.accessToken, from, to)
-            apply(a, events, from, to)
+            val wrote = apply(a, events, from, to)
             store.transaction { store.markSynced(a.id, now()) }
+            if (wrote) runCatching { onChanged(a.householdId) }
         } catch (e: ReconnectRequired) {
             store.transaction { store.markError(a.id, "needs_reconnect", e.message ?: "reconnect") }
         } catch (e: Exception) {
@@ -132,8 +138,9 @@ class Integrations(
         try {
             val from = now() - WINDOW_BACK_MS
             val to = now() + WINDOW_AHEAD_MS
-            apply(a, feed.events(from, to), from, to)
+            val wrote = apply(a, feed.events(from, to), from, to)
             store.transaction { store.markSynced(a.id, now()) }
+            if (wrote) runCatching { onChanged(a.householdId) }
         } catch (e: Exception) {
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
             throw e
@@ -197,12 +204,16 @@ class Integrations(
         }
     }
 
-    /** Writes ops only for real changes, chaining each field on the server's previous op so nothing conflicts. */
-    internal fun apply(a: AccountRow, events: List<RemoteEvent>, fromMs: Long, toMs: Long) = store.transaction {
+    /**
+     * Writes ops only for real changes, chaining each field on the server's previous op so nothing conflicts.
+     * Returns whether anything was written.
+     */
+    internal fun apply(a: AccountRow, events: List<RemoteEvent>, fromMs: Long, toMs: Long): Boolean = store.transaction {
         ops.transaction {
             store.lockAccount(a.id)
             val mirror = store.mirror(a.householdId, a.id)
             val seen = HashSet<String>()
+            var wrote = false
             for (e in events) {
                 val entityId = entityId(a, e.id)
                 if (!seen.add(entityId)) continue
@@ -222,7 +233,14 @@ class Integrations(
                     EventFields.WEB_URL to (httpsOrNull(e.webUrl)?.takeIf { it.length <= MAX_URL }?.let { FieldValue.Text(it) } ?: FieldValue.Null),
                     EventFields.REMOVED to FieldValue.Bool(false),
                 )
-                write(a, entityId, e.startMs, e.endMs, false, mirror[entityId], desired)
+                // A fixture whose kick-off moved while the old time was still ahead: remember the old time and when
+                // the move was seen, so the apps can say "Kick-off moved" (push, slice 2). Additive; fixtures only.
+                val prev = mirror[entityId]
+                if (a.provider in feeds && prev != null && !prev.removed && !e.allDay && prev.startMs != e.startMs && prev.startMs > now()) {
+                    desired[EventFields.MOVED_FROM] = FieldValue.Int64(prev.startMs)
+                    desired[EventFields.MOVED_AT] = FieldValue.Int64(now())
+                }
+                wrote = write(a, entityId, e.startMs, e.endMs, false, prev, desired) || wrote
             }
             // Anything we mirrored inside this window that the provider no longer reports was cancelled or deleted.
             // Providers return events that overlap the window, so judge removals by overlap too. All-day events near
@@ -232,17 +250,20 @@ class Integrations(
                 val overlaps = m.endMs > fromMs && m.startMs < toMs
                 val nearFarEdge = m.allDay && m.startMs > toMs - 14 * 3_600_000L
                 if (!overlaps || nearFarEdge) continue
-                write(a, m.entityId, m.startMs, m.endMs, true, m, mapOf(EventFields.REMOVED to FieldValue.Bool(true)))
+                wrote = write(a, m.entityId, m.startMs, m.endMs, true, m, mapOf(EventFields.REMOVED to FieldValue.Bool(true))) || wrote
             }
+            wrote
         }
     }
 
+    /** Returns whether any op was appended. */
     private fun write(
         a: AccountRow, entityId: String, startMs: Long, endMs: Long, removed: Boolean, prev: MirrorRow?, desired: Map<String, FieldValue>,
         entityType: String = EntityTypes.EVENT,
-    ) {
+    ): Boolean {
         val fieldOps = HashMap(prev?.fieldOps ?: emptyMap())
         var changed = prev == null || prev.removed != removed || prev.startMs != startMs || prev.endMs != endMs
+        var appended = false
         for ((field, value) in desired) {
             val key = valueKey(value)
             val last = fieldOps[field]
@@ -257,9 +278,11 @@ class Integrations(
             ops.append(op)
             fieldOps[field] = op.opId to key
             changed = true
+            appended = true
         }
         val allDay = (desired[EventFields.ALL_DAY] as? FieldValue.Bool)?.value ?: prev?.allDay ?: false
         if (changed) store.putMirror(a.householdId, MirrorRow(entityId, a.id, startMs, removed, fieldOps, endMs, allDay))
+        return appended
     }
 
     private fun token(bytes: Int): String =

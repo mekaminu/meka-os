@@ -314,12 +314,13 @@ fun main(args: Array<String>) {
             val port = System.getenv("PORT")?.toInt() ?: 8080
             val enrolToken = System.getenv("MEKA_ENROL_TOKEN")
             val opStore = PostgresOpStore(ds)
-            val integrations = integrationsFromEnv(opStore)
+            val push = pushFromEnv(ds)
+            val integrations = integrationsFromEnv(opStore, onChanged = { hh -> push?.serverChanged(hh) })
             integrations?.let { startCalendarSync(it) }
             embeddedServer(Netty, port = port) {
                 mekaSync(
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
-                    releases = Releases(PostgresReleaseStore(ds)), push = pushFromEnv(ds),
+                    releases = Releases(PostgresReleaseStore(ds)), push = push,
                 )
             }.start(wait = true)
         }
@@ -327,7 +328,7 @@ fun main(args: Array<String>) {
 }
 
 /** Null unless the deployment provides a KMS key and a public URL (local dev runs without integrations). */
-fun integrationsFromEnv(opStore: PostgresOpStore): Integrations? {
+fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: String) -> Unit = {}): Integrations? {
     val key = System.getenv("MEKA_KMS_KEY_ID") ?: return null
     val publicUrl = System.getenv("MEKA_PUBLIC_URL") ?: return null
     val secrets = buildMap {
@@ -340,6 +341,7 @@ fun integrationsFromEnv(opStore: PostgresOpStore): Integrations? {
         clients = SecretsManagerOAuthClients(secrets), cipher = KmsTokenCipher(key), publicUrl = publicUrl,
         feeds = listOf(EspnTeamFixtures()).associateBy { it.id },
         news = listOf(BbcNewsRss()).associateBy { it.id },
+        onChanged = onChanged,
     )
 }
 

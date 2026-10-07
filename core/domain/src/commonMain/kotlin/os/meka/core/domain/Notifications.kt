@@ -45,6 +45,8 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     WEEKLY_REVIEW("Weekly review", NoticeTier.HEADS_UP),
     /** Remind me / Leave by on a calendar event (calendar actions); Meka sets each one. */
     EVENT_REMINDER("Event reminders", NoticeTier.HEADS_UP),
+    /** A fixture's kick-off moved (the fixtures feed, seen by the server). */
+    FIXTURE_MOVED("Kick-off changes", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -367,6 +369,7 @@ object Governor {
         NoticeSource.SHUTDOWN -> "time to shut down"
         NoticeSource.WEEKLY_REVIEW -> "your weekly review"
         NoticeSource.EVENT_REMINDER -> plural(n, "event reminder")
+        NoticeSource.FIXTURE_MOVED -> plural(n, "kick-off") + " moved"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -490,6 +493,7 @@ object NoticeSources {
         }
         // Remind me and Leave by, set on calendar events.
         out += ReminderRules.notices(events, marks, nowMs, cal)
+        out += FixtureMoves.notices(events, marks, nowMs, cal)
         return out
     }
 }

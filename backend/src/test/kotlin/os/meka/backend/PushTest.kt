@@ -104,6 +104,17 @@ class PushTest {
     }
 
     @Test
+    fun aServerSideChangeWakesEveryDeviceOfTheHousehold() {
+        val h = Harness()
+        h.store.put(fold, "fcm", foldToken)
+        h.store.put(mac, "fcm", macToken)
+        h.store.put(DeviceIdentity("other", "phone"), "fcm", "other-token:" + "z".repeat(40))
+        h.push.serverChanged("hh")
+        h.runQueued()
+        assertEquals(setOf(foldToken, macToken), h.sent.map { it.token }.toSet())
+    }
+
+    @Test
     fun aGoneTokenIsForgottenAndOtherHouseholdsAreNeverWoken() {
         val h = Harness()
         h.store.put(fold, "fcm", foldToken)

@@ -29,6 +29,12 @@ object EventFields {
     const val WEB_URL = "webUrl"
     /** True when the event was cancelled or is no longer in the provider's window. Can flip back to false. */
     const val REMOVED = "removed"
+    /**
+     * Fixtures only (push, slice 2): the kick-off before the server last saw it move, and when it saw that. Written
+     * only when a fixture whose old kick-off was still ahead moved; additive, absent otherwise (ADR-008 addendum).
+     */
+    const val MOVED_FROM = "movedFromMs"
+    const val MOVED_AT = "movedAtMs"
 }
 
 /** Typed read model of a calendar event. */
@@ -48,6 +54,9 @@ data class CalendarEvent(
     val joinUrl: String? = null,
     /** The provider's page for this event (see [EventFields.WEB_URL]). */
     val webUrl: String? = null,
+    /** A fixture's previous kick-off and when the move was seen (see [EventFields.MOVED_FROM]). */
+    val movedFromMs: Long? = null,
+    val movedAtMs: Long? = null,
 ) {
     /** From the fixtures feed (FC Barcelona), marked in the Calendar tab. */
     val isFixture: Boolean get() = provider == "fixtures"
@@ -80,6 +89,8 @@ data class CalendarEvent(
                 description = s[EventFields.DESCRIPTION].textOrNull?.takeIf { it.isNotBlank() },
                 joinUrl = s[EventFields.JOIN_URL].textOrNull?.takeIf { it.isNotBlank() },
                 webUrl = s[EventFields.WEB_URL].textOrNull?.takeIf { it.isNotBlank() },
+                movedFromMs = s[EventFields.MOVED_FROM].longOrNull,
+                movedAtMs = s[EventFields.MOVED_AT].longOrNull,
             )
         }
     }
@@ -88,4 +99,37 @@ data class CalendarEvent(
 /** Read access to mirrored calendar events. Apps never write events; the server's ingestion does. */
 class CalendarEvents(private val replica: os.meka.core.sync.Replica) {
     fun all(): List<CalendarEvent> = replica.entities(EntityTypes.EVENT).mapNotNull { CalendarEvent.from(it) }
+}
+
+/**
+ * "Kick-off moved" (push via Firebase, slice 2; ADR-007's server-originated, time-sensitive case). When the fixtures
+ * feed moves a match whose old kick-off was still ahead, the server records the old time ([EventFields.MOVED_FROM]);
+ * this turns that into a heads-up through the governor (source [NoticeSource.FIXTURE_MOVED]): "Kick-off moved:
+ * Barcelona v Real Madrid" · "Now 21:00 · was 18:30 · Sat 18 Oct" (the day shown when it changed too). One notice per
+ * new time (the key holds it); stale after [STALE_MS] or at kick-off; hidden fixtures and all-day ones stay quiet.
+ * The server's push wakes the phone so the governor sees the move within seconds of the server's poll.
+ */
+object FixtureMoves {
+    const val STALE_MS = 2 * 24 * 3_600_000L
+
+    fun notices(events: List<CalendarEvent>, marks: EventMarks, nowMs: Long, cal: LocalCalendar): List<Notice> =
+        events.mapNotNull { e ->
+            val from = e.movedFromMs ?: return@mapNotNull null
+            val at = e.movedAtMs ?: return@mapNotNull null
+            if (!e.isFixture || e.allDay || from == e.startAtMs || e.startAtMs <= nowMs || marks.isHidden(e.id)) return@mapNotNull null
+            Notice(
+                key = "fixture:${e.id}:moved:${e.startAtMs}", source = NoticeSource.FIXTURE_MOVED, tier = NoticeTier.HEADS_UP,
+                title = "Kick-off moved: ${e.title}", text = line(e.startAtMs, from, cal),
+                atMs = at, target = NoticeTarget.TODAY, expiresAtMs = minOf(at + STALE_MS, e.startAtMs),
+            )
+        }
+
+    /** "Now 21:00 · was 18:30 · Sat 18 Oct", or "Now Sun 19 Oct 18:30 · was Sat 18 Oct 18:30" when the day changed. */
+    fun line(newMs: Long, oldMs: Long, cal: LocalCalendar): String {
+        fun hhmm(ms: Long) = LocalClock.formatMinute(cal.minuteOfDay(ms))
+        val newDay = cal.epochDayOf(newMs)
+        val oldDay = cal.epochDayOf(oldMs)
+        return if (newDay == oldDay) "Now ${hhmm(newMs)} · was ${hhmm(oldMs)} · ${CivilDate.shortLabel(newDay)}"
+        else "Now ${CivilDate.shortLabel(newDay)} ${hhmm(newMs)} · was ${CivilDate.shortLabel(oldDay)} ${hhmm(oldMs)}"
+    }
 }

@@ -66,4 +66,43 @@ class FixturesTest {
         assertEquals("fixtures", e.provider)
         assertTrue(e.location!!.startsWith("Estadi"))
     }
+
+    @Test
+    fun aMovedKickOffIsRecordedAndEveryPollThatWroteWakesTheHousehold() {
+        var date = "2026-10-10T16:30Z"
+        val feed = EspnTeamFixtures({ url ->
+            if (url.contains("/esp.1/")) schedule(match("1", date, "Barcelona", "Real Madrid")) else error("404")
+        })
+        val store = InMemoryIntegrationStore(knownHouseholds = listOf("home"))
+        val ops = InMemoryServerOpStore()
+        val noCipher = object : TokenCipher {
+            override fun encrypt(plain: ByteArray, context: Map<String, String>) = plain
+            override fun decrypt(cipher: ByteArray, context: Map<String, String>) = cipher
+        }
+        val woken = mutableListOf<String>()
+        var clock = now
+        val integrations = Integrations(
+            store, ops, emptyMap(), { null }, noCipher, "https://meka.example", { clock }, feeds = mapOf(feed.id to feed),
+            onChanged = { woken += it },
+        )
+        fun event(): os.meka.core.domain.CalendarEvent {
+            val r = Replica("home", "fold", HlcClock("fold", { clock }), InMemoryReplicaStore(), MekaSchema) { "d" + System.nanoTime() }
+            r.applyRemoteBatch(ops.after("home", 0, 1000).map { it.op })
+            return CalendarEvents(r).all().single()
+        }
+        integrations.syncAll()
+        assertEquals(listOf("home"), woken)
+        assertEquals(null, event().movedFromMs)
+        integrations.syncAll() // nothing changed: no ops, no wake
+        assertEquals(1, woken.size)
+
+        clock = now + 3_600_000L
+        date = "2026-10-10T19:00Z"
+        integrations.syncAll()
+        assertEquals(2, woken.size)
+        val e = event()
+        assertEquals(1_791_649_800_000L, e.movedFromMs) // 2026-10-10T16:30Z
+        assertEquals(clock, e.movedAtMs)
+        assertEquals(1_791_658_800_000L, e.startAtMs)
+    }
 }

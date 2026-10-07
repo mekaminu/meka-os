@@ -59,11 +59,16 @@ class Push(
     }
 
     /** [from] stored ops: wake every other device of its household that has an address. */
-    fun changed(from: DeviceIdentity) {
-        val targets = store.household(from.householdId).filter { it.deviceId != from.deviceId }
+    fun changed(from: DeviceIdentity) = wake(from.householdId, except = from.deviceId)
+
+    /** The server itself wrote ops for [householdId] (a calendar or fixtures poll): wake all its devices. */
+    fun serverChanged(householdId: String) = wake(householdId, except = null)
+
+    private fun wake(householdId: String, except: String?) {
+        val targets = store.household(householdId).filter { it.deviceId != except }
         for (a in targets) {
-            val delay = plan(Key(from.householdId, a.deviceId)) ?: continue
-            schedule(delay) { send(Key(from.householdId, a.deviceId)) }
+            val delay = plan(Key(householdId, a.deviceId)) ?: continue
+            schedule(delay) { send(Key(householdId, a.deviceId)) }
         }
     }
 
