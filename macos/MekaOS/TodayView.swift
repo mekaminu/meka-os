@@ -606,11 +606,15 @@ struct QuickCaptureMenu: View {
     @State private var text = ""
 
     var body: some View {
-        TextField("Capture anything…", text: $text)
-            .textFieldStyle(.roundedBorder)
-            .onSubmit { model.capture(text); text = "" }
-            .padding(MekaSpace.m)
-            .frame(width: 320)
+        VStack(alignment: .leading, spacing: 0) {
+            // The menu-bar "now" (Fold modes, slice 3): the one thing that matters now, with its one-tap actions.
+            NowCard()
+            TextField("Capture anything…", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { model.capture(text); text = "" }
+                .padding(MekaSpace.m)
+                .frame(width: 320)
+        }
     }
 }
 

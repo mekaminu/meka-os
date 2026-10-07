@@ -3,6 +3,10 @@ package os.meka.android.today
 import androidx.activity.compose.BackHandler
 import os.meka.android.work.AfterWorkHost
 import os.meka.core.domain.CommandCentreRules
+import os.meka.core.domain.NowKind
+import os.meka.core.domain.NowView
+import os.meka.android.fold.NowCard
+import os.meka.android.fold.NowHandlers
 import os.meka.core.domain.CommandLayout
 
 import os.meka.android.calendar.EventDetailPane
@@ -183,6 +187,12 @@ fun TodayRoute(
     val eventUndo = rememberEventUndo()
     val eventHandlers = remember(core, scope, eventUndo) { eventActionHandlers(core, scope, eventUndo) }
     val moves = rememberDecisionMoves(core, eventUndo, openTask = { selectedId = it }, openLists = openLists)
+    // The cover screen's "now" card (Fold modes, slice 3): read from Today, which refreshes every minute.
+    val nowView = remember(today) { core.coverNow() }
+    val nowHandlers = NowHandlers(
+        complete = actions.complete, tomorrow = actions.snooze, openTask = actions.select,
+        openEvent = { eventOpen = it }, openNeedsYou = null, // Needs you is listed just above it on the cover screen
+    )
 
     // Insets are applied once, by the app shell.
     MekaSharedLayout(Modifier.fillMaxSize()) {
@@ -212,7 +222,8 @@ fun TodayRoute(
                         openSearch = { showSearch = true },
                         brief = brief, openBrief = { showBrief = true }, briefOpen = showBrief,
                         reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } },
-                        openEvent = { eventOpen = it }, eventHandlers = eventHandlers)
+                        openEvent = { eventOpen = it }, eventHandlers = eventHandlers,
+                        now = if (twoPane) null else nowView, nowHandlers = nowHandlers)
                 },
                 detail = { m ->
                     CommandSide(
@@ -337,6 +348,9 @@ private fun TodayPane(
     eventHandlers: EventActionHandlers? = null,
     /** False in the command centre, where the Needs you column beside Today shows them. */
     listsNeedsYou: Boolean = true,
+    /** The closed Fold's cover screen (Fold modes, slice 3): the "now" card heads Today in place of Up next. */
+    now: NowView? = null,
+    nowHandlers: NowHandlers? = null,
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
@@ -447,17 +461,26 @@ private fun TodayPane(
                 }
                 item(key = "s-needs") { Spacer(Modifier.height(MekaSpace.l)) }
             }
-            if (today.upNext != null || today.timeline.nextEvent != null) {
+            val nowCard = now?.takeIf { it.kind != NowKind.CLEAR }
+            if (nowCard != null && nowHandlers != null) {
+                // One stable slot: when the thing changes, the card's content cross-slides.
+                item(key = "now") {
+                    NowCard(
+                        nowCard, nowHandlers, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(2, play)),
+                        titleModifier = { id -> rowMotion(id).let { m -> if (m.shareTitle) Modifier.sharedTitle(SharedMotion.taskKey(id), m.titleVisible) else Modifier } },
+                    )
+                }
+            } else if (today.upNext != null || today.timeline.nextEvent != null) {
                 item(key = "h-next") { SectionLabel("Up next", Modifier.animateItem().appear(rememberAppearance(2, play))) }
             }
-            // The next event within the hour: "Call with Tunde in 25 min".
-            today.timeline.nextEvent?.let { e ->
+            // The next event within the hour: "Call with Tunde in 25 min" (the "now" card carries it on the cover screen).
+            if (nowCard == null) today.timeline.nextEvent?.let { e ->
                 item(key = "nextevent") {
                     NextEventCard(e, Modifier.padding(bottom = MekaSpace.xs).animateItem().appear(rememberAppearance(2, play)), openEvent)
                 }
                 if (today.upNext == null) item(key = "s-nextevent") { Spacer(Modifier.height(MekaSpace.l)) }
             }
-            today.upNext?.let { t ->
+            if (nowCard == null) today.upNext?.let { t ->
                 // One stable slot: when up next changes, the card's content cross-slides instead of the row swapping.
                 item(key = "upnext") { UpNextCard(t, actions, rowMotion, Modifier.animateItem().appear(rememberAppearance(2, play))) }
                 item(key = "s-next") { Spacer(Modifier.height(MekaSpace.l)) }

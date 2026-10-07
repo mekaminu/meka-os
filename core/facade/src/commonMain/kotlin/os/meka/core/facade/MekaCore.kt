@@ -544,6 +544,14 @@ class MekaCore(
             nowMs(), ZoneCalendar(timeZone), nextAlarmMs, _notifySettings.value.quiet, _today.value, _brief.value, _shutdown.value,
         )
 
+    /**
+     * The "now" card (Fold modes, slice 3): the one thing that matters now (an event starting or just started, Up
+     * next, or clear) with its one-tap actions, for the closed Fold's cover screen and the Mac's menu bar. Pure and
+     * cheap, read from the current Today (which refreshes every minute). Nothing is stored.
+     */
+    fun coverNow(): os.meka.core.domain.NowView =
+        os.meka.core.domain.CoverNowRules.now(_today.value, nowMs(), ZoneCalendar(timeZone))
+
     suspend fun resolve(choice: ConflictChoice, chosenOption: String) = onCore {
         tasks.resolveConflict(choice.conflict, FieldValue.Text(chosenOption))
     }

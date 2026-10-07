@@ -673,6 +673,12 @@ final class CoreModel {
     /// Event detail: when, how soon, which calendar, place, notes and a Join link (pure, computed in the core).
     func eventDetail(_ event: CalendarEvent) -> EventDetailView? { core?.eventDetail(event: event) }
 
+    /// The "now" card for the menu bar (Fold modes, slice 3): read from Today, so it follows Today's minute refresh.
+    var coverNow: NowView? {
+        _ = today // observed: the card redraws whenever Today does
+        return core?.coverNow()
+    }
+
     // MARK: Calendar actions (MEKA-only; the real calendars stay read-only)
 
     /// Adds the event's prep task ("Prepare for …", planned 30 min before it); Undo deletes it.

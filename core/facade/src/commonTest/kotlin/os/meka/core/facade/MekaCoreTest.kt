@@ -347,6 +347,24 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theNowCardFollowsUpNextAndClearsWhenItIsDoneOnTheOtherDevice() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 7, 16, 30).toInstant(london).toEpochMilliseconds() // Wed, BST
+        val a = core("android"); val m = core("mac")
+        val id = a.addTask("Post the letter")
+        a.schedule(id, kotlinx.datetime.LocalDateTime(2026, 10, 7, 17, 0).toInstant(london).toEpochMilliseconds())
+        val v = a.coverNow()
+        assertEquals(os.meka.core.domain.NowKind.TASK, v.kind)
+        assertEquals("Post the letter", v.title)
+        assertEquals("At 17:00", v.line) // local time, not UTC
+        a.syncNow(); m.syncNow()
+        assertEquals("Post the letter", m.coverNow().title)
+        m.complete(id)
+        m.syncNow(); a.syncNow()
+        assertEquals(os.meka.core.domain.NowKind.CLEAR, a.coverNow().kind)
+    }
+
+    @Test
     fun theCalendarTabShowsAPlannedTaskOnItsDayOnBothDevices() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 10, 6, 10, 0).toInstant(london).toEpochMilliseconds() // Tue 6 Oct
