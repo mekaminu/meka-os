@@ -34,12 +34,39 @@ data class CapturedItem(
     val personKey: String get() = People.key(personName)
 }
 
-/** People the owner picked from contacts. Matched by name, the way notifications identify senders. */
-data class PeopleLists(val family: Set<String> = emptySet(), val alwaysNotify: Set<String> = emptySet()) {
+/**
+ * People the owner picked from contacts. Matched by name, the way notifications identify senders, and by phone
+ * number for calls ([numbers]: a name's numbers, picked with it; the call assistant only sees the caller's number).
+ */
+data class PeopleLists(
+    val family: Set<String> = emptySet(),
+    val alwaysNotify: Set<String> = emptySet(),
+    val numbers: Map<String, Set<String>> = emptyMap(),
+) {
     private val familyKeys = family.map(People::key).toSet()
     private val alwaysKeys = alwaysNotify.map(People::key).toSet()
     fun isFamily(name: String) = People.key(name) in familyKeys
     fun isAlwaysNotify(name: String) = People.key(name) in alwaysKeys
+
+    /** The listed name a phone number belongs to (family first), or null. */
+    fun nameForNumber(number: String): String? {
+        val key = People.key(number)
+        if (!key.startsWith("tel:")) return null
+        fun find(names: Set<String>) = names.firstOrNull { n -> numbers[n].orEmpty().any { People.key(it) == key } }
+        return find(family) ?: find(alwaysNotify)
+    }
+
+    /** A listed name with no number yet: its calls can't be recognised until it is picked again with one. */
+    fun hasNumber(name: String) = numbers[name].orEmpty().isNotEmpty()
+
+    /** Adds [number] to [name]'s numbers (blank numbers are ignored). */
+    fun withNumber(name: String, number: String?): PeopleLists {
+        val n = number?.trim()?.takeIf { it.isNotEmpty() } ?: return this
+        return copy(numbers = numbers + (name to (numbers[name].orEmpty() + n)))
+    }
+
+    /** Drops numbers of names on neither list. */
+    fun pruned(): PeopleLists = copy(numbers = numbers.filterKeys { it in family || it in alwaysNotify })
 }
 
 object People {

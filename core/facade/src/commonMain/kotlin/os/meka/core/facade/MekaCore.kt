@@ -561,6 +561,9 @@ class MekaCore(
     suspend fun setWorkSwitch(on: Boolean) = onCore { work.setSwitch(on, localClock(), todayEpochDay()) }
     suspend fun workBackToSchedule() = onCore { work.backToSchedule() }
 
+    /** The call assistant's one switch (synced; the Fold screens calls during work while it is on). */
+    suspend fun setCallAssistant(on: Boolean) = onCore { work.setCallAssistant(on); refresh() }
+
     /** Work hours. [days] are ISO (1 = Monday); minutes are local minutes of the day. */
     suspend fun setWorkSchedule(days: List<Int>, startMinute: Int, endMinute: Int, enabled: Boolean) =
         onCore { work.setSchedule(WorkSchedule(days.toSet(), startMinute, endMinute, enabled)) }

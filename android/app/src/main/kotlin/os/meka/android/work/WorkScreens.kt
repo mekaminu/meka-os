@@ -5,11 +5,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.provider.ContactsContract
+import android.provider.ContactsContract.CommonDataKinds.Phone
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -66,6 +67,7 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AfterWorkSummary
+import os.meka.core.domain.CallScreeningRules
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.LocalClock
 import os.meka.core.domain.PeopleLists
@@ -96,28 +98,40 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var listening by remember { mutableStateOf(hasNotificationAccess(context)) }
     var alertsOk by remember { mutableStateOf(WorkAlerts.canPost(context)) }
+    var screening by remember { mutableStateOf(MekaCallScreeningService.roleHeld(context)) }
     LaunchedEffect(Unit) {
         // Re-check when Meka comes back from the system settings screen.
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             listening = hasNotificationAccess(context)
             alertsOk = WorkAlerts.canPost(context)
+            screening = MekaCallScreeningService.roleHeld(context)
         }
+    }
+    val askScreening = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        screening = MekaCallScreeningService.roleHeld(context)
     }
     val askAlerts = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         alertsOk = WorkAlerts.canPost(context)
         if (alertsOk) WorkAlerts.ensureChannel(context)
     }
     var adding by remember { mutableStateOf<ListKind?>(null) }
-    val pickContact = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
+    // Picks a contact's phone number (no contacts permission: the picker grants this one entry), so the call
+    // assistant can recognise their calls; messages are still matched by the name.
+    val pickContact = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val kind = adding
         adding = null
-        val name = uri?.let { u ->
+        val picked = result.data?.data?.let { u ->
             runCatching {
-                context.contentResolver.query(u, arrayOf(ContactsContract.Contacts.DISPLAY_NAME), null, null, null)
-                    ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+                context.contentResolver.query(u, arrayOf(Phone.DISPLAY_NAME, Phone.NUMBER), null, null, null)
+                    ?.use { c -> if (c.moveToFirst()) c.getString(0)?.trim() to c.getString(1) else null }
             }.getOrNull()
-        }?.trim()
-        if (kind != null && !name.isNullOrEmpty()) store.setLists(kind.add(lists, name))
+        }
+        val name = picked?.first
+        if (kind != null && !name.isNullOrEmpty()) store.setLists(kind.add(lists, name).withNumber(name, picked?.second))
+    }
+    fun pick(kind: ListKind) {
+        adding = kind
+        runCatching { pickContact.launch(Intent(Intent.ACTION_PICK, Phone.CONTENT_URI)) }
     }
     val schedule = work.schedule
     fun save(s: WorkSchedule) = scope.launch { core.setWorkSchedule(s.days.sorted(), s.startMinute, s.endMinute, s.enabled) }
@@ -186,9 +200,36 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         )
 
         Spacer(Modifier.height(MekaSpace.m))
-        PeopleSection(ListKind.FAMILY, lists, store::setLists, 4) { adding = ListKind.FAMILY; pickContact.launch(null) }
+        Label("Call assistant", 4)
+        Crossfade(
+            CallScreeningRules.statusLine(work.callAssistant, work.atWork, screening),
+            animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "call-line",
+        ) { line ->
+            Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(4)))
+        }
+        PillButton(if (work.callAssistant) "Turn the call assistant off" else "Turn the call assistant on", filled = false) {
+            haptics.tick(); scope.launch { core.setCallAssistant(!work.callAssistant) }
+        }
+        AnimatedVisibility(
+            work.callAssistant && !screening,
+            enter = if (Meka.reducedMotion) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (Meka.reducedMotion) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            PillButton("Let MEKA screen calls", filled = true) {
+                MekaCallScreeningService.roleRequest(context)?.let { runCatching { askScreening.launch(it) } }
+            }
+        }
+        Text(
+            "At work, family, your always-notify list and anyone who calls twice within 3 minutes ring. Other calls are " +
+                "declined, so your network's \"forward when busy\" takes them: voicemail for now, the assistant once its " +
+                "number is set up. MEKA never answers a call, and declined calls still show as missed calls after work.",
+            style = MekaType.caption, color = Meka.colors.textTertiary,
+        )
+
+        Spacer(Modifier.height(MekaSpace.m))
+        PeopleSection(ListKind.FAMILY, lists, store::setLists, 5) { pick(ListKind.FAMILY) }
         Spacer(Modifier.height(MekaSpace.s))
-        PeopleSection(ListKind.ALWAYS, lists, store::setLists, 5) { adding = ListKind.ALWAYS; pickContact.launch(null) }
+        PeopleSection(ListKind.ALWAYS, lists, store::setLists, 6) { pick(ListKind.ALWAYS) }
         Spacer(Modifier.height(MekaSpace.xl))
     }
 }
@@ -312,8 +353,8 @@ private fun PersonCard(p: PersonSummary, expanded: Boolean, modifier: Modifier, 
 }
 
 private enum class ListKind(val title: String, val hint: String) {
-    FAMILY("Family", "Shown first after work. Calls from family will ring when the call assistant lands."),
-    ALWAYS("Always notify", "Messages and missed calls from these people alert you straight away.");
+    FAMILY("Family", "Shown first after work. Their calls ring while the call assistant screens."),
+    ALWAYS("Always notify", "Messages and missed calls from these people alert you straight away, and their calls ring.");
 
     fun names(l: PeopleLists) = if (this == FAMILY) l.family else l.alwaysNotify
     fun add(l: PeopleLists, name: String) = if (this == FAMILY) l.copy(family = l.family + name) else l.copy(alwaysNotify = l.alwaysNotify + name)
@@ -326,7 +367,12 @@ private fun PeopleSection(kind: ListKind, lists: PeopleLists, set: (PeopleLists)
     Text(kind.hint, style = MekaType.caption, color = Meka.colors.textTertiary)
     kind.names(lists).sortedBy { it.lowercase() }.forEach { name ->
         Row(Modifier.fillMaxWidth().appear(rememberAppearance(index)), verticalAlignment = Alignment.CenterVertically) {
-            Text(name, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                Text(name, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+                if (!lists.hasNumber(name)) {
+                    Text("No number · add again from contacts so their calls ring", style = MekaType.caption, color = Meka.colors.textTertiary)
+                }
+            }
             Text("Remove", style = MekaType.caption, color = Meka.colors.accent,
                 modifier = Modifier.clickable(role = Role.Button) { set(kind.remove(lists, name)) }.padding(MekaSpace.xs))
         }

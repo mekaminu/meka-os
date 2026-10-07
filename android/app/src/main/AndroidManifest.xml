@@ -132,6 +132,19 @@
                 android:value="conversations|alerting" />
         </service>
 
+        <!-- Call assistant (build plan M1, Needs Meka #9): Android's call screening role, granted by Meka in the Work
+             screen. During work, with the assistant's switch on, calls from anyone but family, the always-notify
+             list and repeat callers are declined (busy), so the carrier's "forward when busy" sends them on.
+             Off work or switched off, every call rings. It never answers a call and never reads call audio. -->
+        <service
+            android:name=".work.MekaCallScreeningService"
+            android:exported="true"
+            android:permission="android.permission.BIND_SCREENING_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+
         <!-- Work mode: an inexact alarm near the end of work (setWindow, ADR-007) for the "summary ready" nudge. -->
         <receiver
             android:name=".work.WorkEndReceiver"

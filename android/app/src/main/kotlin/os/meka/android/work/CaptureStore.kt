@@ -53,7 +53,7 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
     /** The owner has read the summary. Only MEKA's copy goes; WhatsApp and Messages are untouched. */
     fun clear() = synchronized(lock) { _items.value = emptyList(); save() }
 
-    fun setLists(lists: PeopleLists) = synchronized(lock) { _lists.value = lists; save() }
+    fun setLists(lists: PeopleLists) = synchronized(lock) { _lists.value = lists.pruned(); save() }
 
     private fun load() {
         val bytes = try { file.readFully() } catch (e: java.io.FileNotFoundException) { return }
@@ -64,9 +64,11 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
         val cutoff = nowMs() - RETENTION_MS
         _items.value = json.optJSONArray("items")?.let { a -> (0 until a.length()).mapNotNull { readItem(a.getJSONObject(it)) } }
             .orEmpty().filter { it.atMs >= cutoff }
+        val numbers = json.optJSONObject("numbers")?.let { o -> o.keys().asSequence().associateWith { o.optJSONArray(it).strings() } }.orEmpty()
         _lists.value = PeopleLists(
             family = json.optJSONArray("family").strings(),
             alwaysNotify = json.optJSONArray("alwaysNotify").strings(),
+            numbers = numbers,
         )
     }
 
@@ -76,6 +78,7 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
             .put("items", JSONArray().also { a -> _items.value.forEach { a.put(writeItem(it)) } })
             .put("family", JSONArray(_lists.value.family.sorted()))
             .put("alwaysNotify", JSONArray(_lists.value.alwaysNotify.sorted()))
+            .put("numbers", JSONObject().also { o -> _lists.value.numbers.forEach { (name, nums) -> o.put(name, JSONArray(nums.sorted())) } })
         val sealed = seal(json.toString().toByteArray(Charsets.UTF_8))
         val out = file.startWrite()
         try { out.write(sealed); file.finishWrite(out) } catch (e: Exception) { file.failWrite(out); throw e }

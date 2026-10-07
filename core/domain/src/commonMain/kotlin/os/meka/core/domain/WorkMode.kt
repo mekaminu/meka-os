@@ -17,6 +17,8 @@ object WorkFields {
     const val SCHEDULE = "workSchedule"
     /** "ON|OFF;setAtMs;scheduledWhenSet(0|1)", or Null when following the schedule. */
     const val SWITCH = "workSwitch"
+    /** The call assistant's one switch (Bool, last writer wins; absent = off). Added 2026-10-07. */
+    const val CALL_ASSISTANT = "callAssistant"
 }
 
 /** Local wall-clock position in the week: ISO day of week (1 = Monday … 7 = Sunday) and minute of day (0 … 1439). */
@@ -149,6 +151,8 @@ data class WorkModeState(
     val line: String,
     /** Today's bank holiday when it falls on a work day ("Christmas Day"): work mode stays off. */
     val holiday: String? = null,
+    /** The call assistant's switch ([CallScreeningRules]): screen calls during work. Off until Meka turns it on. */
+    val callAssistant: Boolean = false,
 ) {
     /** The switch overrides the schedule: offer "Back to schedule". */
     val switchedManually: Boolean get() = source == WorkSource.MANUAL
@@ -268,7 +272,15 @@ class WorkMode(
 
     /** [epochDay] is today's local date; with it, bank holidays are days off. */
     fun state(clock: LocalClock, epochDay: Long? = null): WorkModeState =
-        WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, holidays())
+        WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, holidays()).copy(callAssistant = callAssistant())
+
+    fun callAssistant(): Boolean = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_ASSISTANT)?.boolOrNull == true
+
+    /** The call assistant's one switch, synced (either app can turn it off). */
+    fun setCallAssistant(on: Boolean) {
+        if (callAssistant() == on && replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_ASSISTANT) != null) return
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.CALL_ASSISTANT to on.fv()))
+    }
 
     fun setSchedule(s: WorkSchedule) {
         if (s == schedule() && replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SCHEDULE)?.textOrNull != null) return

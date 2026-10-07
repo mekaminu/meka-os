@@ -19,6 +19,7 @@ struct WorkSheet: View {
     private static let step = 15
 
     private var atWork: Bool { model.work?.atWork ?? false }
+    private var callAssistant: Bool { model.work?.callAssistant ?? false }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
@@ -59,11 +60,29 @@ struct WorkSheet: View {
             Toggle("Use these hours (off: the switch only)", isOn: Binding(get: { enabled }, set: { enabled = $0; save() }))
                 .staggeredAppear(2)
 
+            Text("CALL ASSISTANT").font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.s)
+                .staggeredAppear(3)
+            Toggle(isOn: Binding(get: { callAssistant }, set: { model.setCallAssistant($0) })) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text("Screen calls at work on the Fold").font(MekaType.itemMeta)
+                    Text(CallScreeningRules.shared.statusLine(switchedOn: callAssistant, atWork: atWork, screeningAllowed: nil))
+                        .font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .contentTransition(.opacity)
+                }
+            }
+            .toggleStyle(.switch)
+            .staggeredAppear(3)
+            Text("Family, the always-notify list and anyone calling twice within 3 minutes ring; other calls are declined so the network's \"forward when busy\" takes them. The Fold asks once for permission to screen calls.")
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .staggeredAppear(3)
+
             Text("During work your Fold holds WhatsApp, texts and missed calls and shows them after, grouped by person, urgent first. \"Urgent\" or \"emergency\" alerts you straight away. The summary shows here too, in Needs you. MEKA never replies or marks anything read.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, MekaSpace.s)
-                .staggeredAppear(3)
+                .staggeredAppear(4)
 
             HStack {
                 Spacer()
@@ -74,6 +93,7 @@ struct WorkSheet: View {
         .frame(width: 460)
         .animation(MekaMotion.replan(reduced: reduceMotion), value: model.work?.line)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.switchedManually)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.callAssistant)
         .onAppear(perform: load)
     }
 

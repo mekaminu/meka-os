@@ -461,6 +461,8 @@ final class CoreModel {
 
     func setWorkSwitch(_ on: Bool) { MekaHaptics.tick(); run { try await $0.setWorkSwitch(on: on) } }
     func workBackToSchedule() { run { try await $0.workBackToSchedule() } }
+    /// The call assistant's one switch (synced; the Fold does the screening during work).
+    func setCallAssistant(_ on: Bool) { MekaHaptics.tick(); run { try await $0.setCallAssistant(on: on) } }
 
     /// Saves work hours. Days are ISO (1 = Monday); minutes are local minutes of the day.
     func setWorkSchedule(days: Set<Int>, startMinute: Int, endMinute: Int, enabled: Bool) {
