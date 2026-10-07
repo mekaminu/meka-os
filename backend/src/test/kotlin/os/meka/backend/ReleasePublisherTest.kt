@@ -95,9 +95,9 @@ class ReleasePublisherTest {
         assertEquals(HttpStatusCode.Unauthorized, latestWith(ReleasePublisher.headers(privateKey, "/v1/releases/latest", body) + ("Authorization" to "Publisher mac")))
         // Signed for another route.
         assertEquals(HttpStatusCode.Unauthorized, latestWith(ReleasePublisher.headers(privateKey, "/v1/releases/upload", body)))
-        // A device can't enrol under the publisher's name.
+        // A device can't enrol under the publisher's name: device ids are [a-z0-9] only, and "github-build" isn't one.
         val enrol = WireCodec.encodeEnrolRequest(WireCodec.EnrolRequest("hh", ReleasePublisher.ID, "x"))
-        assertEquals(HttpStatusCode.Forbidden, client.post("/v1/enrol") { header("Authorization", "Enrol ${"e".repeat(40)}"); setBody(enrol) }.status)
+        assertEquals(HttpStatusCode.BadRequest, client.post("/v1/enrol") { header("Authorization", "Enrol ${"e".repeat(40)}"); setBody(enrol) }.status)
     }
 
     @Test

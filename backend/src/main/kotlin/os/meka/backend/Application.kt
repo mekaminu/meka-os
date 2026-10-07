@@ -94,7 +94,6 @@ fun Application.mekaSync(
             val auth = call.request.header("Authorization") ?: throw Unauthorised()
             if (!auth.startsWith("Enrol ") || !Secrets.constantTimeEquals(auth.removePrefix("Enrol ").trim(), token)) throw Unauthorised()
             val req = WireCodec.decodeEnrolRequest(call.boundedBody())
-            if (req.deviceId == ReleasePublisher.ID) throw Forbidden() // that name is the GitHub publisher's, not a device's
             when (val r = withContext(Dispatchers.IO) { devices.enrolWithCode(req.householdId, req.deviceId, req.name) }) {
                 is EnrolOutcome.Enrolled -> {
                     call.application.environment.log.info("device enrolled") // no identifiers in logs
