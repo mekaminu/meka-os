@@ -27,8 +27,9 @@ Status marks: `[x]` done · `[~]` in progress (partly landed) · `[ ]` not start
 10. **Actions minutes are finite** (2,000 free standard minutes a month, then Meka's Actions budget, raised on
     2026-10-06 to about $40/month so the build can run around the clock; it stops at the limit). Docs-only commits
     don't trigger CI, and deploy only runs when a commit touches the server (backend/, infra/, core/, build files).
-    Land at most **24 code pushes to `main` per UTC day** (count the day's `ci` runs with event `push` first; if 24
-    already ran, stop with "Daily CI allowance used."), and don't chain the next run with fire_trigger. The `macos` job
+    Land at most **70 code pushes to `main` per UTC day** (count the day's `ci` runs with event `push` first; if 70
+    already ran, stop with "Daily CI allowance used."). Runs go **back to back** (Meka, 2026-10-07): a run that landed
+    something with CI green starts the next one with fire_trigger; the hourly schedule is the safety net. The `macos` job
     (about 10x the cost of Linux) runs weekly and on manual dispatch only, and build runs dispatch it **at most once a
     day, at night**: the first run at or after 21:00 UTC dispatches `ci` once if any commit since the last green
     dispatched/scheduled `ci` run touched `macos/`, `core/` or the build files. A Mac-touching item can be marked done
