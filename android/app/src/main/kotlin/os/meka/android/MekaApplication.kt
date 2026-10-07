@@ -12,6 +12,8 @@ import os.meka.android.notify.OngoingNotifier
 import os.meka.android.notify.OngoingRouting
 import os.meka.android.shell.ShellDestination
 import os.meka.android.update.AppUpdater
+import os.meka.android.widgets.HomeWidgetUpdater
+import os.meka.android.widgets.WidgetRouting
 import os.meka.android.work.AfterWorkNudger
 import os.meka.android.work.CaptureStore
 import kotlinx.coroutines.CoroutineScope
@@ -46,6 +48,8 @@ class MekaApplication : Application() {
     val governor: NotificationGovernor by lazy { NotificationGovernor(this, this) }
     /** Ongoing notifications: the next event's countdown and a running fast. */
     val ongoing: OngoingNotifier by lazy { OngoingNotifier(this, this) }
+    /** Home-screen widgets: Next up, Needs you and Fast. */
+    val widgets: HomeWidgetUpdater by lazy { HomeWidgetUpdater(this, this) }
     /** Self-updating phone app: newer builds the Mac published, offered in Today. */
     val updater: AppUpdater by lazy { AppUpdater(this) }
     /** Set by tapping a MEKA notification: the shell opens this destination. */
@@ -102,6 +106,14 @@ class MekaApplication : Application() {
                 .map { OngoingRouting.signature(core.ongoing()) }
                 .distinctUntilChanged()
                 .collect { runCatching { ongoing.run() } }
+        }
+        // Home-screen widgets the same way: redrawn only when what they say changes (the launcher ticks their
+        // clocks), and once at process start, which re-arms their alarm. Nothing runs without a MEKA widget placed.
+        appScope.launch {
+            merge(core.today.map { }, core.fastingView.map { }, core.listsView.map { }, core.needsYouStack.map { })
+                .map { WidgetRouting.signature(core.homeWidgets()) }
+                .distinctUntilChanged()
+                .collect { runCatching { widgets.run() } }
         }
     }
 

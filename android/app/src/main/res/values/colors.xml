@@ -5,4 +5,6 @@
     <color name="widget_hint">#FF7E7E86</color>
     <color name="widget_accent">#FF8A6F2F</color>
     <color name="widget_on_accent">#FFFFFFFF</color>
+    <color name="widget_text">#FF111113</color>
+    <color name="widget_critical">#FFB4372C</color>
 </resources>

@@ -365,6 +365,29 @@ class MekaCoreTest {
     }
 
     @Test
+    fun homeWidgetsFollowUpNextAndAFastStartedOnTheOtherDevice() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 7, 16, 30).toInstant(london).toEpochMilliseconds() // Wed, BST
+        val a = core("android"); val m = core("mac")
+        val id = a.addTask("Post the letter")
+        a.schedule(id, kotlinx.datetime.LocalDateTime(2026, 10, 7, 17, 0).toInstant(london).toEpochMilliseconds())
+        var w = a.homeWidgets()
+        assertEquals("Up next", w.next.label)
+        assertEquals("Post the letter", w.next.title)
+        assertEquals("At 17:00", w.next.line) // local time, not UTC
+        assertEquals("Nothing needs you", w.needsYou.label)
+        assertEquals(false, w.fast.running)
+        assertEquals(now + 30 * 60_000L, w.nextChangeMs)
+
+        m.startFast(60)
+        m.syncNow(); a.syncNow()
+        w = a.homeWidgets()
+        assertEquals(true, w.fast.running)
+        assertEquals(now - 60 * 60_000L, w.fast.startedAtMs)
+        assertEquals("Fasting · goal 16 h", w.fast.title)
+    }
+
+    @Test
     fun theCalendarTabShowsAPlannedTaskOnItsDayOnBothDevices() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 10, 6, 10, 0).toInstant(london).toEpochMilliseconds() // Tue 6 Oct

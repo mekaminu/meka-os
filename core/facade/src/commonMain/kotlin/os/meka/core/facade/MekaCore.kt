@@ -560,6 +560,19 @@ class MekaCore(
     fun ongoing(): os.meka.core.domain.OngoingView =
         os.meka.core.domain.OngoingRules.view(_today.value, _fasting.value, nowMs(), ZoneCalendar(timeZone))
 
+    /**
+     * The home-screen widgets (Outside the app, slice 2): Next up, Needs you and Fast, read from the current views.
+     * Pure and cheap; [os.meka.core.domain.HomeWidgetsView.nextChangeMs] says when to look again. Nothing is stored.
+     */
+    fun homeWidgets(): os.meka.core.domain.HomeWidgetsView {
+        val cal = ZoneCalendar(timeZone)
+        val today = _today.value
+        return os.meka.core.domain.HomeWidgetRules.view(
+            os.meka.core.domain.CoverNowRules.now(today, nowMs(), cal), today, _lists.value.dueCount,
+            _needsYouStack.value, _fasting.value, nowMs(), cal,
+        )
+    }
+
     suspend fun resolve(choice: ConflictChoice, chosenOption: String) = onCore {
         tasks.resolveConflict(choice.conflict, FieldValue.Text(chosenOption))
     }

@@ -4,4 +4,6 @@
     <color name="widget_hint">#FFA1A1AA</color>
     <color name="widget_accent">#FFC9B37E</color>
     <color name="widget_on_accent">#FF14120C</color>
+    <color name="widget_text">#FFF4F4F5</color>
+    <color name="widget_critical">#FFF2766B</color>
 </resources>

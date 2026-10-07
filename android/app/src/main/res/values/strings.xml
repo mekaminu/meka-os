@@ -7,4 +7,13 @@
     <string name="capture_hint">Capture anything…</string>
     <string name="capture_speak">Speak to capture</string>
     <string name="capture_widget_description">Capture a task or a thought from your home screen</string>
+    <!-- Home-screen widgets (Outside the app, slice 2). -->
+    <string name="widget_next_label">Next up</string>
+    <string name="widget_next_description">The one thing that matters now, with a countdown to your next event</string>
+    <string name="widget_needs_you_label">Needs you</string>
+    <string name="widget_needs_you_description">How many decisions wait for you, and the first of them</string>
+    <string name="widget_fast_label">Fast</string>
+    <string name="widget_fast_description">A running fast\'s timer and progress, or your eating window</string>
+    <string name="widget_preview_next">Your next event or task</string>
+    <string name="widget_preview_fast">No fast running</string>
 </resources>

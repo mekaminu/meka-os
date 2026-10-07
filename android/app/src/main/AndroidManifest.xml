@@ -84,6 +84,39 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/capture_widget_info" />
         </receiver>
 
+        <!-- Home-screen widgets (Outside the app, slice 2): Next up, Needs you and Fast. Plain RemoteViews; the
+             launcher ticks their clocks; redrawn when what they say changes and on their own windowed alarm (ADR-007). -->
+        <receiver
+            android:name=".widgets.NextUpWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_next_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/next_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.NeedsYouWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_needs_you_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/needs_you_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.FastWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_fast_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/fast_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.HomeWidgetAlarmReceiver"
+            android:exported="false" />
+
         <!-- Work mode (build plan M1): official notification access only; Meka grants it in Settings.
              Reads WhatsApp, SMS and missed calls during work hours; never replies or marks anything read. -->
         <service

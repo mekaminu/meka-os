@@ -242,6 +242,7 @@ class RestartReceiver : BroadcastReceiver() {
             try {
                 app.governor.run()
                 app.ongoing.run()
+                app.widgets.run()
                 app.nudger.evaluate(app.core.currentWorkMode())
             } finally {
                 pending.finish()
