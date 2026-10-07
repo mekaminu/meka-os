@@ -75,12 +75,14 @@ object DataExport {
         EntityTypes.HABIT to ("habit" to "habits"),
         EntityTypes.HABIT_COMPLETION to ("habit tick" to "habit ticks"),
         EntityTypes.FAST to ("fast" to "fasts"),
+        EntityTypes.AGENT_ACTION to ("activity entry" to "activity entries"),
     )
 
     /** Summary order: what Meka made first, then the rest as "settings". */
     private val SUMMARY_ORDER = listOf(
         EntityTypes.TASK, EntityTypes.CHECKLIST_ITEM, EntityTypes.EVENT, EntityTypes.COMMITMENT, EntityTypes.DECISION,
         EntityTypes.OBLIGATION, EntityTypes.GOAL, EntityTypes.HABIT, EntityTypes.HABIT_COMPLETION, EntityTypes.FAST,
+        EntityTypes.AGENT_ACTION,
     )
 
     fun summary(data: ExportData): ExportSummary {

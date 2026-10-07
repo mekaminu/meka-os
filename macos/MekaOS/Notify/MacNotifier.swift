@@ -6,6 +6,9 @@ import UserNotifications
 /// digests) live in the Kotlin core; this only delivers. Titles and digests replace earlier ones with the same id.
 @MainActor
 enum MacNotifier {
+    /// Same value as the core's `MekaCore.DIGEST_KEY`.
+    static let digestKey = "meka.digest"
+
     /// Asks macOS once; afterwards the choice lives in System Settings → Notifications → Meka.
     static func requestPermission() async -> Bool {
         (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
@@ -43,7 +46,11 @@ enum MacNotifier {
             content.threadIdentifier = "meka-digest"
             content.interruptionLevel = .passive   // a digest never interrupts
             content.userInfo = ["target": NotifyRules.shared.targetName(t: digest.target)]
-            try? await center.add(UNNotificationRequest(identifier: "meka.digest", content: content, trigger: nil))
+            // The digest's key (MekaCore.DIGEST_KEY) tells the core it went out, for the activity log; it still never
+            // counts as an interruption.
+            if (try? await center.add(UNNotificationRequest(identifier: digestKey, content: content, trigger: nil))) != nil {
+                posted.append(digestKey)
+            }
         }
         return posted
     }

@@ -56,6 +56,11 @@ final class CoreModel {
     private(set) var foldUpdatePublished = false
     /// Export and backup: what an export would hold, and how the last one went.
     var showYourData = false
+    /// What MEKA did and why (V1 activity log), synced with the Fold; and what the last undo said when it wasn't
+    /// simply "Undone" (the row itself shows that).
+    private(set) var activity: ActivityView?
+    private(set) var activityNote: String?
+    var showActivity = false
     private(set) var exportSummary: ExportSummary?
     private(set) var exporting = false
     private(set) var exportOutcome: String?
@@ -140,6 +145,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await v in core.searchView { self?.searchResults = v }
+        })
+        observers.append(Task { [weak self] in
+            for await v in core.activityView { self?.activity = v }
         })
         // Work mode and Today move with the clock: re-evaluate every half minute, then let the notification governor
         // post anything that is due on this Mac.
@@ -533,6 +541,20 @@ final class CoreModel {
 
     /// Shows or hides a news topic's headlines in the brief; synced with the Fold.
     func setNewsTopic(_ id: String, on: Bool) { MekaHaptics.tick(); run { try await $0.setNewsTopic(topicId: id, on: on) } }
+
+    // MARK: Activity log
+
+    /// Puts back what an activity entry changed (light haptic); syncs like any edit. Only a String crosses into the core.
+    func undoActivity(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                let line = try await core.undoActivity(id: id)
+                activityNote = line == "Undone" ? nil : line
+            } catch { lastError = error.localizedDescription }
+        }
+    }
 
     // MARK: Weekly review
 

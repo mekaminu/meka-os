@@ -55,9 +55,11 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
         val r = app.core.governNotifications(prefs.getString(KEY_STATE, null), _device.value)
         if (WorkAlerts.canPost(context)) {
             val posted = r.post.filter { post(it) }
-            r.digest?.let { postDigest(it) }
+            val digest = r.digest?.takeIf { postDigest(it) }
             // Counts only, for the weekly review's Interruptions (ADR-013): what actually reached a live channel.
+            // The same notices (and the digest) go in the activity log, "What MEKA did and why".
             app.core.notificationsPosted(posted)
+            digest?.let { app.core.digestPosted(it) }
         } // else: what would have posted still shows in the app; nothing piles up for later (and nothing counts)
         prefs.edit().putString(KEY_STATE, r.stateEncoded).commit()
         schedule(r.nextWakeMs, r.nextWakePrecision)
@@ -96,7 +98,8 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
         return notify(NotifyRouting.notificationId(n.key), b.build()) && live
     }
 
-    private fun postDigest(d: Digest) {
+    /** Posts the digest; false when its channel is turned off in the phone's settings or the post was refused. */
+    private fun postDigest(d: Digest): Boolean {
         val channel = ensureChannel(NoticeTier.DIGEST)
         val style = NotificationCompat.InboxStyle().setSummaryText(d.summary)
         d.lines.forEach { style.addLine(it) }
@@ -117,7 +120,9 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
             .setContentIntent(openIntent(d.target, NotifyRouting.DIGEST_ID))
             .setAutoCancel(true)
             .build()
-        notify(NotifyRouting.DIGEST_ID, n) // a new digest replaces the last one
+        val live = context.getSystemService(NotificationManager::class.java)
+            ?.getNotificationChannel(channel)?.importance != NotificationManager.IMPORTANCE_NONE
+        return notify(NotifyRouting.DIGEST_ID, n) && live // a new digest replaces the last one
     }
 
     @SuppressLint("MissingPermission") // checked by WorkAlerts.canPost() in run(); a late revoke is caught here

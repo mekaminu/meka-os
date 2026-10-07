@@ -67,6 +67,7 @@ struct TodayView: View {
                         Button("Brief") { model.showBrief = true }
                         Button("Shut down") { model.showShutdown = true }
                         Button("Notifications") { model.showNotifications = true }
+                        Button("Activity") { model.showActivity = true }
                         Button("Your data") { model.showYourData = true }
                         Button("Theme: \(currentAppearance.label)") { appearance = currentAppearance.next.rawValue }
                             .foregroundStyle(palette.textSecondary)

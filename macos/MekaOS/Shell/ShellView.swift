@@ -39,6 +39,7 @@ struct ShellView: View {
         .sheet(isPresented: Binding(get: { model.showFoldUpdate }, set: { model.showFoldUpdate = $0 })) { FoldUpdateSheet(palette: palette) }
         // Export everything (your data), from Today's header or File → Export All Data….
         .sheet(isPresented: Binding(get: { model.showYourData }, set: { model.showYourData = $0 })) { YourDataSheet(palette: palette) }
+        .sheet(isPresented: Binding(get: { model.showActivity }, set: { model.showActivity = $0 })) { ActivitySheet(palette: palette) }
     }
 
     /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).

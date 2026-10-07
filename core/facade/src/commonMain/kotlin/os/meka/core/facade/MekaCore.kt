@@ -129,6 +129,7 @@ class MekaCore(
     private var reviewOffset: Int? = null
     private val notifyPrefs = NotificationPrefs(replica)
     private val interruptions = os.meka.core.domain.Interruptions(replica, ZoneCalendar(timeZone))
+    private val activity = os.meka.core.domain.ActivityLog(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
     private var releasesApi: ReleasesApi? = transport as? ReleasesApi
@@ -178,6 +179,10 @@ class MekaCore(
 
     /** What the search field holds (a screen choice, not synced). */
     private var searchQuery: String = ""
+    private val _activity = MutableStateFlow(os.meka.core.domain.ActivityView.EMPTY)
+    /** What MEKA did and why (V1 activity log): the last 30 days by day, newest first; follows sync. */
+    val activityView: StateFlow<os.meka.core.domain.ActivityView> = _activity.asStateFlow()
+
     private val _search = MutableStateFlow(SearchView.EMPTY)
     /**
      * Search everything: tasks (open, Someday, done), calendar events, Waiting for, decisions, renewals, habits and
@@ -445,11 +450,36 @@ class MekaCore(
      * post). Call it every time the device could post, even with nothing, so the weekly review's Interruptions count
      * (ADR-013) starts the first time a device can notify you. Counts only, synced; never titles or text.
      */
-    suspend fun notificationsPosted(posted: List<Notice>) = onCore { interruptions.record(posted, nowMs()) }
+    suspend fun notificationsPosted(posted: List<Notice>) = onCore {
+        interruptions.record(posted, nowMs())
+        // The activity log keeps what reached you, with why (V1); counts above stay text-free (ADR-013).
+        activity.recordPosted(posted)
+        _activity.value = activity.view()
+    }
 
-    /** Same as [notificationsPosted], by notice key: lets Swift report what it posted with plain strings (Sendable). */
-    suspend fun notificationsPostedKeys(result: GovernorResult, keys: List<String>) =
+    /** The digest from the last [governNotifications] went out on this device: it goes in the activity log. */
+    suspend fun digestPosted(digest: os.meka.core.domain.Digest) = onCore {
+        activity.recordDigest(digest)
+        _activity.value = activity.view()
+    }
+
+    /**
+     * Same as [notificationsPosted], by notice key: lets Swift report what it posted with plain strings (Sendable).
+     * [DIGEST_KEY] among [keys] means the digest went out too.
+     */
+    suspend fun notificationsPostedKeys(result: GovernorResult, keys: List<String>) {
         notificationsPosted(result.post.filter { it.key in keys.toSet() })
+        val digest = result.digest
+        if (digest != null && DIGEST_KEY in keys) digestPosted(digest)
+    }
+
+    // ---- Activity log ----
+
+    /**
+     * Undoes what activity entry [id] changed (only fields still as MEKA left them); returns what happened, in words
+     * ("Undone", "Partly undone: …"). Syncs like any edit.
+     */
+    suspend fun undoActivity(id: String): String = onCore { activity.undo(id).line.also { refresh() } }
 
     // ---- Work mode ----
 
@@ -501,6 +531,8 @@ class MekaCore(
     companion object {
         const val FOREGROUND_SYNC_MS: Long = 30_000L
         const val SIGNED_OUT_MESSAGE = "This device was signed out of your server. Reconnect it with the enrolment code; nothing is lost."
+        /** The key a platform reports among posted keys when the digest went out ([notificationsPostedKeys]). */
+        const val DIGEST_KEY = "meka.digest"
     }
 
     fun stopSync() { syncLoop?.cancel(); syncLoop = null }
@@ -606,6 +638,7 @@ class MekaCore(
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }
         _search.value = runSearch(all)
+        _activity.value = activity.view()
         _calendar.value = CalendarAgenda.build(all, events.all(), nowMs(), ZoneCalendar(timeZone))
         _notifyPreview.value = Governor.preview(currentNotices(), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->

@@ -78,6 +78,7 @@ import os.meka.android.shell.SharedMotion
 import os.meka.android.notify.NotificationsPane
 import os.meka.android.search.SearchPane
 import os.meka.android.MekaApplication
+import os.meka.android.activity.ActivityPane
 import os.meka.android.export.YourData
 import os.meka.android.update.UpdateCard
 import os.meka.android.update.UpdateState
@@ -135,6 +136,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
     var showNotifications by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var showData by rememberSaveable { mutableStateOf(false) }
+    var showActivity by rememberSaveable { mutableStateOf(false) }
     // An event's detail (calendar redesign, slice 3); the last one is kept while the pane leaves.
     var eventOpen by remember { mutableStateOf<CalendarEvent?>(null) }
     var eventShown by remember { mutableStateOf<CalendarEvent?>(null) }
@@ -186,6 +188,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
                         workLabel = if (work.atWork) "At work" else "Off work", openWork = { showWork = true },
                         shutdown = shutdown, openShutdown = { showShutdown = true }, openNotifications = { showNotifications = true },
                         openData = { showData = true },
+                        openActivity = { showActivity = true },
                         openSearch = { showSearch = true },
                         brief = brief, openBrief = { showBrief = true },
                         reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } },
@@ -210,6 +213,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
             MekaPane(visible = showBrief) { BriefPane(core, onClose = { showBrief = false }) }
             MekaPane(visible = showNotifications) { NotificationsPane(core, onClose = { showNotifications = false }) }
             MekaPane(visible = showData) { YourData(core, onClose = { showData = false }) }
+            MekaPane(visible = showActivity) { ActivityPane(core, onClose = { showActivity = false }) }
             MekaPane(visible = eventOpen != null) {
                 eventShown?.let { e -> EventDetailPane(core, e, onClose = { eventOpen = null }) }
             }
@@ -303,6 +307,7 @@ private fun TodayPane(
     brief: MorningBriefView, openBrief: () -> Unit,
     reviewCard: ReviewCard, openReviewCard: () -> Unit,
     openEvent: (CalendarEvent) -> Unit = {},
+    openActivity: () -> Unit = {},
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
@@ -363,6 +368,11 @@ private fun TodayPane(
                             "Notifications", style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                                 .clickable(role = Role.Button) { openNotifications() }.padding(vertical = MekaSpace.xxs),
+                        )
+                        Text(
+                            "Activity", style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { openActivity() }.padding(vertical = MekaSpace.xxs),
                         )
                         Text(
                             "Your data", style = MekaType.caption, color = Meka.colors.accent,

@@ -28,10 +28,13 @@ object EntityTypes {
     const val HEADLINE = "headline"
     /** How many notifications one device posted at an interrupting tier on one day (see [Interruptions]). */
     const val INTERRUPTION_DAY = "interruption_day"
+    /** One thing MEKA did on its own, with why and, for a change, what it was before (see [ActivityLog]). */
+    const val AGENT_ACTION = "agent_action"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
+        AGENT_ACTION,
     )
 }
 
@@ -204,6 +207,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.HEADLINE -> MergePolicy.Lww
         // Interruption counts: each entity is written only by the device named in its id.
         entityType == EntityTypes.INTERRUPTION_DAY -> MergePolicy.Lww
+        // Activity entries: written by MEKA when it acts; only the undo marks change afterwards.
+        entityType == EntityTypes.AGENT_ACTION -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

@@ -393,6 +393,31 @@ class MekaCoreTest {
     }
 
     @Test
+    fun whatReachedYouShowsInTheActivityLogOnBothDevices() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 4, 20, 30).toInstant(london).toEpochMilliseconds() // Sunday evening
+        val a = core("android"); val m = core("mac")
+        a.tick()
+        assertTrue(a.activityView.value.isEmpty)
+
+        val result = a.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        val keys = result.post.map { it.key }
+        assertTrue(keys.isNotEmpty())
+        // The Mac path: keys as plain strings, the digest flagged by its key.
+        a.notificationsPostedKeys(result, keys + MekaCore.DIGEST_KEY)
+        a.digestPosted(os.meka.core.domain.Digest("Evening digest · 2 things", "2 to chase", listOf("a", "b"), 2, "Evening digest",
+            os.meka.core.domain.NoticeTarget.LISTS))
+        a.syncNow(); m.syncNow()
+        m.tick()
+        val rows = m.activityView.value.days.single().rows
+        assertEquals(keys.size + 1, rows.size)
+        assertTrue(rows.any { it.summary == "Reminded you: Review your week" }, rows.toString())
+        assertTrue(rows.any { it.summary == "Sent a digest: Evening digest · 2 things" })
+        assertTrue(rows.none { it.canUndo })
+        assertEquals("This can't be undone", m.undoActivity(rows.first().id))
+    }
+
+    @Test
     fun headlinesFromTheServerShowInTheBriefForTheChosenTopicsOnBothDevices() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 7, 45).toInstant(london).toEpochMilliseconds()
