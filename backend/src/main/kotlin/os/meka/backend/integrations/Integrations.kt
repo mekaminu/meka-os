@@ -1,6 +1,11 @@
 package os.meka.backend.integrations
 
 import os.meka.backend.Secrets
+import os.meka.core.domain.BankHoliday
+import os.meka.core.domain.BankHolidayFields
+import os.meka.core.domain.BankHolidayStore
+import os.meka.core.domain.BankHolidays
+import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.HeadlineFields
@@ -29,6 +34,8 @@ class Integrations(
     private val feeds: Map<String, FeedProvider> = emptyMap(),
     /** Public news sources mirrored for the morning brief (no sign-in; the apps choose which topics to show). */
     private val news: Map<String, NewsProvider> = emptyMap(),
+    /** Public lists of days off mirrored for work mode (UK bank holidays; no sign-in). */
+    private val holidays: Map<String, HolidayProvider> = emptyMap(),
     /**
      * Called after a calendar or fixtures poll wrote ops for a household (not for headlines), so push can wake its
      * devices: a moved event's reminders re-arm and a moved kick-off is announced within seconds of the poll.
@@ -94,7 +101,7 @@ class Integrations(
 
     /** Every household follows the default feeds (owner's stated MVP need). Idempotent. */
     fun ensureFeeds() {
-        val all = feeds.values.map { it.id to it.label } + news.values.map { it.id to it.source }
+        val all = feeds.values.map { it.id to it.label } + news.values.map { it.id to it.source } + holidays.values.map { it.id to it.label }
         for (hh in store.households()) for ((id, label) in all) {
             if (store.accounts(hh).none { it.provider == id }) {
                 store.transaction { store.upsertAccount(hh, id, label, ByteArray(0)) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
@@ -111,6 +118,7 @@ class Integrations(
         val a = store.account(accountId) ?: return
         feeds[a.provider]?.let { feed -> return syncFeed(a, feed) }
         news[a.provider]?.let { source -> return syncNews(a, source) }
+        holidays[a.provider]?.let { list -> return syncHolidays(a, list) }
         val p = providers[a.provider] ?: return
         val client = clients.get(a.provider) ?: return
         val ctx = context(a.householdId, a.provider)
@@ -161,6 +169,40 @@ class Integrations(
         } catch (e: Exception) {
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
             throw e
+        }
+    }
+
+    /** The list changes a few times a year: refresh weekly (sooner after a failure, at the next poll). */
+    private fun syncHolidays(a: AccountRow, list: HolidayProvider) {
+        val last = a.lastSyncAtMs
+        if (a.status == "ok" && last != null && now() - last < HOLIDAYS_PERIOD_MS) return
+        try {
+            val wrote = applyHolidays(a, list.label, list.holidays())
+            store.transaction { store.markSynced(a.id, now()) }
+            // Work mode on every device should follow a changed list without waiting for their next sync.
+            if (wrote) runCatching { onChanged(a.householdId) }
+        } catch (e: Exception) {
+            store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
+            throw e
+        }
+    }
+
+    /**
+     * Writes the list (from the start of last year on, so it stays small) into the household's one
+     * `context_mode/bank_holidays` entity, only when it changed. Returns whether anything was written.
+     */
+    internal fun applyHolidays(a: AccountRow, label: String, list: List<BankHoliday>): Boolean = store.transaction {
+        ops.transaction {
+            store.lockAccount(a.id)
+            val thisYear = CivilDate.fromEpochDay(now().floorDiv(CivilDate.DAY_MS)).year
+            val from = CivilDate.toEpochDay(thisYear - 1, 1, 1)
+            val kept = list.filter { it.epochDay >= from }
+            val desired = linkedMapOf(
+                BankHolidayFields.DATES to FieldValue.Text(BankHolidays.encode(kept)),
+                BankHolidayFields.SOURCE to FieldValue.Text(label),
+            )
+            val prev = store.mirror(a.householdId, a.id)[BankHolidayStore.ENTITY_ID]
+            write(a, BankHolidayStore.ENTITY_ID, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
         }
     }
 
@@ -301,6 +343,7 @@ class Integrations(
         /** Headlines mirrored per topic. */
         const val NEWS_SLOTS = 4
         const val NEWS_PERIOD_MS = 60 * 60_000L
+        const val HOLIDAYS_PERIOD_MS = 7 * 24 * 60 * 60_000L
 
         /** Stable per (account, topic, slot): a topic always uses the same few entities. */
         fun newsEntityId(a: AccountRow, topic: String, slot: Int): String = "hl" + Secrets.sha256Hex("${a.id}|$topic|$slot").take(30)

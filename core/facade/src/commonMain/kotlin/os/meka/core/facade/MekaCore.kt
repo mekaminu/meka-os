@@ -116,7 +116,8 @@ class MekaCore(
     private val replica = Replica(householdId, deviceId, HlcClock(deviceId, nowMs), store, MekaSchema, ids::next)
     private val tasks = Tasks(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val events = CalendarEvents(replica)
-    private val work = WorkMode(replica, nowMs)
+    private val bankHolidays = os.meka.core.domain.BankHolidayStore(replica)
+    private val work = WorkMode(replica, { bankHolidays.calendar() }, nowMs)
     private val lists = os.meka.core.domain.Lists(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val renewals = Renewals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -203,7 +204,7 @@ class MekaCore(
      */
     val searchView: StateFlow<SearchView> = _search.asStateFlow()
 
-    private val _workMode = MutableStateFlow(work.state(localClock()))
+    private val _workMode = MutableStateFlow(work.state(localClock(), todayEpochDay()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
     val workMode: StateFlow<WorkModeState> = _workMode.asStateFlow()
 
@@ -530,7 +531,7 @@ class MekaCore(
     // ---- Work mode ----
 
     /** The Work switch. Choosing what the schedule already says returns to the schedule. */
-    suspend fun setWorkSwitch(on: Boolean) = onCore { work.setSwitch(on, localClock()) }
+    suspend fun setWorkSwitch(on: Boolean) = onCore { work.setSwitch(on, localClock(), todayEpochDay()) }
     suspend fun workBackToSchedule() = onCore { work.backToSchedule() }
 
     /** Work hours. [days] are ISO (1 = Monday); minutes are local minutes of the day. */
@@ -538,7 +539,7 @@ class MekaCore(
         onCore { work.setSchedule(WorkSchedule(days.toSet(), startMinute, endMinute, enabled)) }
 
     /** Fresh work-mode state for background callers (the notification listener), not waiting for a [tick]. */
-    suspend fun currentWorkMode(): WorkModeState = onCore { work.state(localClock()).also { _workMode.value = it } }
+    suspend fun currentWorkMode(): WorkModeState = onCore { work.state(localClock(), todayEpochDay()).also { _workMode.value = it } }
 
     /** Re-evaluates everything that depends on the clock (work mode, Today). Cheap; call it about once a minute. */
     suspend fun tick() = onCore { refresh() }
@@ -727,14 +728,15 @@ class MekaCore(
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(_today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone))
         _goals.value = goals.view(all)
         _fasting.value = fasting.view()
-        val workState = work.state(localClock())
+        val workState = work.state(localClock(), todayEpochDay())
+        val holidays = bankHolidays.calendar()
         _workMode.value = workState
         val today = dayWindow(nowMs())
-        _shutdown.value = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs))
+        _shutdown.value = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), holidays)
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
-            news.all(), news.choices())
+            news.all(), news.choices(), holidays)
         _review.value = review.view(reviewOffset, all, dayEvents, _goals.value, fasting.ended()) { day ->
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }

@@ -24,6 +24,7 @@ import io.ktor.server.routing.get
 import os.meka.backend.integrations.BbcNewsRss
 import os.meka.backend.integrations.EspnTeamFixtures
 import os.meka.backend.integrations.GoogleCalendar
+import os.meka.backend.integrations.GovUkBankHolidays
 import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.KmsTokenCipher
 import os.meka.backend.integrations.MicrosoftCalendar
@@ -341,6 +342,7 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         clients = SecretsManagerOAuthClients(secrets), cipher = KmsTokenCipher(key), publicUrl = publicUrl,
         feeds = listOf(EspnTeamFixtures()).associateBy { it.id },
         news = listOf(BbcNewsRss()).associateBy { it.id },
+        holidays = listOf(GovUkBankHolidays()).associateBy { it.id },
         onChanged = onChanged,
     )
 }

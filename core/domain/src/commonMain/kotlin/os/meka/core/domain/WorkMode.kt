@@ -145,15 +145,79 @@ data class WorkModeState(
     val schedule: WorkSchedule,
     /** When work mode next turns off (at work) or on (off work), from the schedule; null if it never will. */
     val until: LocalClock?,
-    /** "At work until 17:30" · "Off work · next shift tomorrow 09:00". */
+    /** "At work until 17:30" · "Off work · next shift tomorrow 09:00" · "Off work · Christmas Day · next shift Mon 09:00". */
     val line: String,
+    /** Today's bank holiday when it falls on a work day ("Christmas Day"): work mode stays off. */
+    val holiday: String? = null,
 ) {
     /** The switch overrides the schedule: offer "Back to schedule". */
     val switchedManually: Boolean get() = source == WorkSource.MANUAL
 }
 
 object WorkModeRules {
-    fun state(schedule: WorkSchedule, switch: WorkSwitch?, clock: LocalClock, nowMs: Long): WorkModeState {
+    /**
+     * [epochDay] is today's local date. With it, a shift that starts on a bank holiday in [holidays] doesn't count
+     * (a night shift belongs to the day it starts on), and "next shift" skips holidays. Without it, only the weekly
+     * schedule counts.
+     */
+    fun state(
+        schedule: WorkSchedule, switch: WorkSwitch?, clock: LocalClock, nowMs: Long,
+        epochDay: Long? = null, holidays: HolidayCalendar = HolidayCalendar.NONE,
+    ): WorkModeState {
+        if (epochDay == null) return weeklyState(schedule, switch, clock, nowMs)
+        val minute = clock.minuteOfDay
+        val scheduled = scheduledOn(schedule, holidays, epochDay, minute)
+        val active = switch?.takeIf { it.isActive(scheduled, nowMs) }
+        val atWork = active?.on ?: scheduled
+        val change = datedChange(schedule, holidays, epochDay, minute, atWork)
+        val whenText = change?.let { (d, m) -> describeDated(d, m, epochDay, minute) }
+        val holiday = holidays.title(epochDay)?.takeIf { !atWork && schedule.enabled && clock.isoDayOfWeek in schedule.days }
+        val line = when {
+            atWork && whenText != null -> "At work until $whenText"
+            atWork -> "At work"
+            else -> listOfNotNull("Off work", holiday, whenText?.let { "next shift $it" }).joinToString(" · ")
+        }
+        val until = change?.let { (d, m) -> LocalClock(CivilDate.isoDayOfWeek(d), m) }
+        return WorkModeState(atWork, if (active != null) WorkSource.MANUAL else WorkSource.SCHEDULE, schedule, until, line, holiday)
+    }
+
+    /** Whether the schedule has MEKA at work at [minute] on [epochDay], bank holidays off. */
+    fun scheduledOn(schedule: WorkSchedule, holidays: HolidayCalendar, epochDay: Long, minute: Int): Boolean {
+        if (!schedule.isScheduled(LocalClock(CivilDate.isoDayOfWeek(epochDay), minute))) return false
+        val shiftDay = if (schedule.crossesMidnight && minute < schedule.endMinute) epochDay - 1 else epochDay
+        return !holidays.isHoliday(shiftDay)
+    }
+
+    /** A work day: the schedule has a shift starting that day and it isn't a bank holiday. */
+    fun isWorkDay(schedule: WorkSchedule, holidays: HolidayCalendar, epochDay: Long): Boolean =
+        schedule.enabled && schedule.startMinute != schedule.endMinute && CivilDate.isoDayOfWeek(epochDay) in schedule.days && !holidays.isHoliday(epochDay)
+
+    /** The next (day, minute) at which [scheduledOn] differs from [atWork], up to five weeks ahead (a run of holidays). */
+    private fun datedChange(schedule: WorkSchedule, holidays: HolidayCalendar, day: Long, minute: Int, atWork: Boolean): Pair<Long, Int>? {
+        if (!schedule.enabled || schedule.days.isEmpty() || schedule.startMinute == schedule.endMinute) return null
+        val boundaries = listOf(schedule.startMinute, schedule.endMinute).distinct().sorted()
+        for (offset in 0..35) {
+            val d = day + offset
+            for (m in boundaries) {
+                if (offset == 0 && m <= minute) continue
+                if (scheduledOn(schedule, holidays, d, m) != atWork) return d to m
+            }
+        }
+        return null
+    }
+
+    /** "17:30" today, "tomorrow 09:00", "Mon 09:00" within the week, else "Mon 4 Jan 09:00". */
+    fun describeDated(day: Long, minute: Int, today: Long, nowMinute: Int): String {
+        val hhmm = LocalClock.formatMinute(minute)
+        return when (val ahead = day - today) {
+            0L -> if (minute > nowMinute) hhmm else "${LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(day) - 1]} $hhmm"
+            1L -> "tomorrow $hhmm"
+            in 2L..6L -> "${LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(day) - 1]} $hhmm"
+            else -> "${CivilDate.shortLabel(day)} $hhmm"
+        }
+    }
+
+    private fun weeklyState(schedule: WorkSchedule, switch: WorkSwitch?, clock: LocalClock, nowMs: Long): WorkModeState {
         val scheduled = schedule.isScheduled(clock)
         val active = switch?.takeIf { it.isActive(scheduled, nowMs) }
         val atWork = active?.on ?: scheduled
@@ -191,13 +255,20 @@ object WorkModeRules {
 }
 
 /** Reads and writes the synced work-mode entity. */
-class WorkMode(private val replica: Replica, private val nowMs: () -> Long) {
+class WorkMode(
+    private val replica: Replica,
+    /** The mirrored bank holidays ([BankHolidayStore]); none until the server has sent them. */
+    private val holidays: () -> HolidayCalendar = { HolidayCalendar.NONE },
+    private val nowMs: () -> Long,
+) {
     fun schedule(): WorkSchedule =
         WorkSchedule.decode(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SCHEDULE)?.textOrNull) ?: WorkSchedule.DEFAULT
 
     fun currentSwitch(): WorkSwitch? = WorkSwitch.decode(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SWITCH)?.textOrNull)
 
-    fun state(clock: LocalClock): WorkModeState = WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs())
+    /** [epochDay] is today's local date; with it, bank holidays are days off. */
+    fun state(clock: LocalClock, epochDay: Long? = null): WorkModeState =
+        WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, holidays())
 
     fun setSchedule(s: WorkSchedule) {
         if (s == schedule() && replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SCHEDULE)?.textOrNull != null) return
@@ -205,8 +276,9 @@ class WorkMode(private val replica: Replica, private val nowMs: () -> Long) {
     }
 
     /** The Work switch. Choosing what the schedule already says just returns to the schedule. */
-    fun setSwitch(on: Boolean, clock: LocalClock) {
-        val scheduled = schedule().isScheduled(clock)
+    fun setSwitch(on: Boolean, clock: LocalClock, epochDay: Long? = null) {
+        val scheduled = if (epochDay == null) schedule().isScheduled(clock)
+        else WorkModeRules.scheduledOn(schedule(), holidays(), epochDay, clock.minuteOfDay)
         if (on == scheduled) { backToSchedule(); return }
         replica.commitLocal(
             EntityTypes.CONTEXT_MODE, ENTITY_ID,

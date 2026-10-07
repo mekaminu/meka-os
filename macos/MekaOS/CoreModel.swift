@@ -407,7 +407,7 @@ final class CoreModel {
     }
 
     static func providerName(_ p: String) -> String {
-        switch p { case "google": "Google"; case "microsoft": "Outlook"; case "fixtures": "Fixtures"; case "news": "Headlines"; default: p }
+        switch p { case "google": "Google"; case "microsoft": "Outlook"; case "fixtures": "Fixtures"; case "news": "Headlines"; case "bank_holidays": "Bank holidays"; default: p }
     }
 
     // MARK: Notifications

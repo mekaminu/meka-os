@@ -157,6 +157,31 @@ class MekaCoreTest {
     }
 
     @Test
+    fun aBankHolidayFromTheServerKeepsWorkModeOffOnBothDevices() = runTest {
+        // 1_790_000_000_000 ms is Monday 21 Sept 2026, 15:13 in London: a work day, unless the server says it's a holiday.
+        val fold = core("fold"); val mac = core("mac")
+        assertTrue(fold.workMode.value.atWork)
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        serverOps.append(
+            os.meka.core.sync.Op(
+                "srvbh1", "hh", os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.BankHolidayStore.ENTITY_ID,
+                os.meka.core.domain.BankHolidayFields.DATES, os.meka.core.sync.FieldValue.Text("2026-09-21=Test holiday;2026-12-25=Christmas Day"),
+                clock.now(), emptyList(), "server",
+            ),
+        )
+        fold.syncNow(); mac.syncNow()
+        for (c in listOf(fold, mac)) {
+            assertEquals(false, c.currentWorkMode().atWork)
+            assertEquals("Off work · Test holiday · next shift tomorrow 09:00", c.workMode.value.line)
+            assertEquals("Test holiday · no work", c.briefView.value.workLine)
+        }
+        // "Work on" on the holiday is a real override, and it syncs.
+        mac.setWorkSwitch(true)
+        mac.syncNow(); fold.syncNow()
+        assertTrue(fold.currentWorkMode().let { it.atWork && it.switchedManually })
+    }
+
+    @Test
     fun repeatingTaskComesBackTomorrowAtTheSameLocalTimeAcrossTheClockChange() = runTest {
         // Saturday 24 Oct 2026, 10:00 BST; the clocks go back overnight (Sunday 25 Oct).
         now = 1_792_832_400_000L

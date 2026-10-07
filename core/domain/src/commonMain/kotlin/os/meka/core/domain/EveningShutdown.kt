@@ -88,8 +88,9 @@ object ShutdownRules {
     val WORK_END_RANGE = 15 * 60..22 * 60
 
     /** The minute the shutdown is offered on local day [epochDay]: the end of work on a work day, else 18:00. */
-    fun startMinute(schedule: WorkSchedule, epochDay: Long): Int {
-        val workDay = schedule.enabled && CivilDate.isoDayOfWeek(epochDay) in schedule.days && !schedule.crossesMidnight
+    fun startMinute(schedule: WorkSchedule, epochDay: Long, holidays: HolidayCalendar = HolidayCalendar.NONE): Int {
+        val workDay = schedule.enabled && CivilDate.isoDayOfWeek(epochDay) in schedule.days && !schedule.crossesMidnight &&
+            !holidays.isHoliday(epochDay)
         return if (workDay && schedule.endMinute in WORK_END_RANGE) schedule.endMinute else DEFAULT_START_MIN
     }
 
@@ -187,10 +188,12 @@ class EveningShutdown(
         atWork: Boolean,
         today: DayWindow,
         tomorrow: DayWindow,
+        /** Bank holidays are days off: no work hours that evening or in tomorrow's preview. */
+        holidays: HolidayCalendar = HolidayCalendar.NONE,
     ): ShutdownView {
         val now = nowMs()
         val minute = calendar.minuteOfDay(now)
-        val start = ShutdownRules.startMinute(schedule, today.epochDay)
+        val start = ShutdownRules.startMinute(schedule, today.epochDay, holidays)
         val doneToday = doneDay() == today.epochDay
         val doneCount = all.count { it.lifecycle == Lifecycle.DONE && it.completedAtMs != null && it.completedAtMs in today }
 
@@ -204,7 +207,7 @@ class EveningShutdown(
             }
             ShutdownItem(t, line, overdue, canSkip = t.recurrence != null, canSomeday = !t.isRepeating)
         }
-        val preview = preview(all, events, schedule, tomorrow, left.map { it.task.id }.toSet())
+        val preview = preview(all, events, schedule, tomorrow, left.map { it.task.id }.toSet(), holidays)
 
         val leftLine = if (left.isEmpty()) "Nothing left from today" else "${left.size} left from today"
         val tomorrowBit = when {
@@ -227,7 +230,9 @@ class EveningShutdown(
         )
     }
 
-    private fun preview(all: List<Task>, events: List<CalendarEvent>, schedule: WorkSchedule, tomorrow: DayWindow, leftIds: Set<String>): TomorrowPreview {
+    private fun preview(
+        all: List<Task>, events: List<CalendarEvent>, schedule: WorkSchedule, tomorrow: DayWindow, leftIds: Set<String>, holidays: HolidayCalendar,
+    ): TomorrowPreview {
         val dayEvents = events.filter { it.overlaps(tomorrow) }
         val dayTasks = ShutdownRules.tomorrowTasks(all, tomorrow, leftIds)
 
@@ -263,8 +268,7 @@ class EveningShutdown(
             firstRow?.let { "first at ${it.time}" },
         ).joinToString(" · ")
 
-        val workDay = schedule.enabled && CivilDate.isoDayOfWeek(tomorrow.epochDay) in schedule.days
-        val workLine = if (workDay) "Work ${LocalClock.formatMinute(schedule.startMinute)}–${LocalClock.formatMinute(schedule.endMinute)}" else null
+        val workLine = BriefRules.workLine(schedule, holidays, tomorrow.epochDay)
         return TomorrowPreview(
             label = "Tomorrow · ${CivilDate.shortLabel(tomorrow.epochDay)}",
             workLine = workLine,

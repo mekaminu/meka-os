@@ -71,6 +71,16 @@ data class MorningBriefView(
 
 /** Pure rules, unit-tested without a replica. */
 object BriefRules {
+    /**
+     * "Work 09:00–17:30" on a work day; on a bank holiday that would have been one, "Christmas Day · no work"; else null.
+     * Shared by the brief and the shutdown's tomorrow preview.
+     */
+    fun workLine(schedule: WorkSchedule, holidays: HolidayCalendar, epochDay: Long): String? {
+        if (!schedule.enabled || CivilDate.isoDayOfWeek(epochDay) !in schedule.days) return null
+        holidays.title(epochDay)?.let { return "$it · no work" }
+        return "Work ${LocalClock.formatMinute(schedule.startMinute)}–${LocalClock.formatMinute(schedule.endMinute)}"
+    }
+
     /** When the brief starts when quiet hours don't say otherwise. */
     const val DEFAULT_START_MIN = 7 * 60
     /** Quiet hours that end inside this range start the brief; outside it (a night owl, a night shift) 07:00 does. */
@@ -131,6 +141,8 @@ class MorningBrief(
         today: DayWindow,
         headlines: List<Headline> = emptyList(),
         newsTopics: List<NewsTopicChoice> = NewsTopics.ALL.map { NewsTopicChoice(it.id, it.label, it.id in NewsTopics.DEFAULT) },
+        /** Bank holidays are days off: "Christmas Day · no work" instead of the work hours. */
+        holidays: HolidayCalendar = HolidayCalendar.NONE,
     ): MorningBriefView {
         val now = nowMs()
         val minute = calendar.minuteOfDay(now)
@@ -176,8 +188,7 @@ class MorningBrief(
         ).joinToString(" · ")
         val overdue = dayTasks.count { it.dueAtMs != null && it.dueAtMs < now }
 
-        val workDay = schedule.enabled && CivilDate.isoDayOfWeek(today.epochDay) in schedule.days
-        val workLine = if (workDay) "Work ${LocalClock.formatMinute(schedule.startMinute)}–${LocalClock.formatMinute(schedule.endMinute)}" else null
+        val workLine = BriefRules.workLine(schedule, holidays, today.epochDay)
 
         // Lists: what you're waiting on (already sorted: due chases first), and what needs doing on the radar.
         val attention = buildList {
