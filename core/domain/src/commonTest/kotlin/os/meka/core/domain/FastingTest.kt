@@ -318,4 +318,78 @@ class FastingTest {
         d.sync(); mac.sync(); d.sync()
         assertEquals("Day 2 of 5 · 30 h", f.view().current!!.dayLine)
     }
+
+    // ---- Fasting v2 slice 2: check-ins and "you did it" ----
+
+    private fun notices(nowMs: Long = world.clock.nowMs) = NoticeSources.collect(
+        ListsView.EMPTY, f.view(), ShutdownView.EMPTY.copy(doneToday = true), Today(emptyList(), null, emptyList(), emptyList()),
+        nowMs, LocalCalendar.UTC,
+    ).filter { it.source == NoticeSource.FAST_CHECK_IN || it.source == NoticeSource.FAST_GOAL }
+
+    @Test
+    fun anExtendedFastChecksInOnceADayAndSaysYouDidItAtTheGoal() {
+        val start = world.clock.nowMs // Monday 20:00
+        f.startExtended(120)
+        val ns = notices()
+        val checkIns = ns.filter { it.source == NoticeSource.FAST_CHECK_IN }
+        // Days 2–5 begin at 24, 48, 72 and 96 h; the goal (120 h) says "you did it" instead of a sixth check-in.
+        assertEquals((1..4).map { start + it * dayMs }, checkIns.map { it.atMs })
+        assertEquals("5-day fast · Day 3 of 5", checkIns[1].title)
+        assertEquals("48 h so far · goal Sat 20:00 · ending early is fine", checkIns[1].text)
+        assertEquals(start + 3 * dayMs, checkIns[1].expiresAtMs) // stands until the next one
+        assertEquals(start + 5 * dayMs, checkIns.last().expiresAtMs) // the last one until the goal
+        assertEquals(NoticeTarget.GOALS, checkIns[0].target)
+        val goal = ns.single { it.source == NoticeSource.FAST_GOAL }
+        assertEquals("You did it · 5 days", goal.title)
+        assertEquals("5-day fast · end it whenever you're ready", goal.text)
+        assertEquals(start + 5 * dayMs, goal.atMs)
+        // Keys are per fast and day, so each posts once.
+        assertEquals(4, checkIns.map { it.key }.toSet().size)
+
+        // Through the governor: Tuesday 20:00 (the 18:00 digest already out) posts Day 2 at once.
+        hours(24)
+        val r = Governor.evaluate(notices(), NotificationSettings.DEFAULT, DeviceAlerts.ALL, GovernorState(lastDigestSlotMs = world.clock.nowMs), world.clock.nowMs, LocalCalendar.UTC)
+        assertEquals(listOf("5-day fast · Day 2 of 5"), r.post.map { it.title })
+        assertNull(f.view().current!!.doneLine)
+
+        // At the goal the card has its "you did it" line; ending it then is recorded as reached.
+        hours(96)
+        assertEquals("You did it · 5 days", f.view().current!!.doneLine)
+        f.end()
+        assertTrue(f.view().history.fasts.single().reachedGoal)
+        assertTrue(notices().isEmpty())
+    }
+
+    @Test
+    fun aDailyFastHasNoCheckInsAndNoDoneLine() {
+        f.start()
+        assertTrue(notices().none { it.source == NoticeSource.FAST_CHECK_IN })
+        assertEquals("Fasting goal reached", notices().single().title)
+        hours(17)
+        assertNull(f.view().current!!.doneLine)
+    }
+
+    @Test
+    fun aShortExtendedFastSkipsACheckInTooCloseToItsGoal() {
+        val start = world.clock.nowMs
+        f.startExtended(36) // a check-in at 24 h is 12 h before the goal: kept
+        assertEquals(listOf(start + dayMs), FastingRules.checkInTimes(start, start + 36 * hourMs))
+        assertEquals(emptyList(), FastingRules.checkInTimes(start, start + 28 * hourMs)) // 4 h before: left out
+        assertEquals(emptyList(), FastingRules.checkInTimes(start, start + 24 * hourMs))
+        assertEquals("You did it · 36 h", FastingRules.doneLine(start, start + 36 * hourMs))
+        assertEquals(9, FastingRules.checkInTimes(start, start + 240 * hourMs).size)
+    }
+
+    @Test
+    fun aCheckInInQuietHoursRidesInTheNextDigest() {
+        hours(3) // Monday 23:00, inside quiet hours (22:00–07:00)
+        f.startExtended(72)
+        hours(24) // Tuesday 23:00: Day 2 begins in quiet hours
+        val cal = LocalCalendar.UTC
+        val quiet = Governor.evaluate(notices(), NotificationSettings.DEFAULT, DeviceAlerts.ALL, GovernorState(), world.clock.nowMs, cal)
+        assertTrue(quiet.post.isEmpty())
+        hours(13); world.clock.advance(31 * 60_000L) // Wednesday 12:31, the midday digest
+        val noon = Governor.evaluate(notices(), NotificationSettings.DEFAULT, DeviceAlerts.ALL, quiet.state, world.clock.nowMs, cal)
+        assertTrue(noon.digest!!.lines.any { it.startsWith("3-day fast · Day 2 of 3 · 24 h so far") })
+    }
 }

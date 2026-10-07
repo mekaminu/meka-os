@@ -22,6 +22,7 @@ import os.meka.android.MainActivity
 import os.meka.android.MekaApplication
 import os.meka.android.shell.ShellDestination
 import os.meka.android.work.WorkAlerts
+import os.meka.core.domain.FastingRules
 import os.meka.core.domain.OngoingItem
 import os.meka.core.domain.OngoingKind
 import os.meka.core.domain.OngoingView
@@ -85,6 +86,12 @@ class OngoingNotifier(private val context: Context, private val app: MekaApplica
             .setPublicVersion(public)
             .setContentIntent(openIntent(OngoingRouting.destination(item.kind), id))
             .setDeleteIntent(dismissIntent(item.key, id))
+        // Fasting v2: End fast from the shade. A mistaken tap can be undone from the "Fast ended" note that follows.
+        if (item.kind == OngoingKind.FAST) {
+            val end = Intent(context, OngoingFastReceiver::class.java)
+                .setAction(OngoingFastReceiver.ACTION_END).putExtra(EXTRA_FAST_ID, OngoingRouting.fastId(item.key))
+            b.addAction(0, "End fast", PendingIntent.getBroadcast(context, id + 2, end, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+        }
         item.join?.let { j ->
             val view = Intent(Intent.ACTION_VIEW, Uri.parse(j.url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             b.addAction(0, j.label, PendingIntent.getActivity(context, id + 1, view, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
@@ -119,6 +126,33 @@ class OngoingNotifier(private val context: Context, private val app: MekaApplica
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
+    /**
+     * After End fast from the shade: a silent "Fast ended · 62 h 10 m" on the Now channel with Undo, for as long as the
+     * core allows a resume (10 minutes); it times out on its own.
+     */
+    fun postEnded(fastId: String) {
+        val last = app.core.fastingView.value.last?.takeIf { it.id == fastId && it.canResume } ?: return
+        if (!WorkAlerts.canPost(context)) return
+        val id = OngoingRouting.endedId
+        val undo = Intent(context, OngoingFastReceiver::class.java)
+            .setAction(OngoingFastReceiver.ACTION_UNDO).putExtra(EXTRA_FAST_ID, fastId)
+        val n = NotificationCompat.Builder(context, ensureChannel())
+            .setSmallIcon(android.R.drawable.stat_notify_more)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setContentTitle("Fast ended")
+            .setContentText(last.line)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(NotificationCompat.Builder(context, OngoingRouting.CHANNEL).setSmallIcon(android.R.drawable.stat_notify_more).setContentTitle("Fast ended").build())
+            .setTimeoutAfter(FastingRules.RESUME_WINDOW_MS)
+            .setContentIntent(openIntent(ShellDestination.GOALS, id))
+            .addAction(0, "Undo", PendingIntent.getBroadcast(context, id + 1, undo, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+            .build()
+        notify(id, n)
+    }
+
+    fun clearEnded() = NotificationManagerCompat.from(context).cancel(OngoingRouting.endedId)
+
     /** Meka swiped [key] away. */
     fun dismissed(key: String) {
         val set = prefs.getStringSet(KEY_DISMISSED, emptySet()).orEmpty() + key
@@ -144,6 +178,7 @@ class OngoingNotifier(private val context: Context, private val app: MekaApplica
         private const val KEY_SHOWN = "shown"
         private const val KEY_DISMISSED = "dismissed"
         const val EXTRA_KEY = "os.meka.ongoing.key"
+        const val EXTRA_FAST_ID = "os.meka.ongoing.fastId"
         /** `Notification.EXTRA_REQUEST_PROMOTED_ONGOING` (API 36), spelled out so older SDK stubs don't matter. */
         private const val EXTRA_REQUEST_PROMOTED_ONGOING = "android.requestPromotedOngoing"
     }
@@ -162,6 +197,12 @@ object OngoingRouting {
     fun signature(v: OngoingView): List<Any?> =
         v.items.map { listOf(it.key, it.title, it.text, it.publicTitle, it.clockBaseMs, it.countDown, it.progressPercent, it.lit, it.join?.url) } +
             listOf(v.nextChangeMs)
+
+    /** The fast's id from its ongoing key ("fast-<id>"); null for anything else. */
+    fun fastId(key: String): String? = key.takeIf { it.startsWith("fast-") }?.removePrefix("fast-")?.takeIf { it.isNotEmpty() }
+
+    /** The "Fast ended · Undo" note. */
+    val endedId: Int get() = notificationId("fast-ended")
 
     fun destination(kind: OngoingKind): ShellDestination = when (kind) {
         OngoingKind.MEETING -> ShellDestination.TODAY
@@ -185,5 +226,39 @@ class OngoingDismissReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val key = intent.getStringExtra(OngoingNotifier.EXTRA_KEY) ?: return
         (context.applicationContext as MekaApplication).ongoing.dismissed(key)
+    }
+}
+
+/**
+ * End fast / Undo from the notification shade (Fasting v2). Ends only the fast the notification was about (a fast
+ * started since on the Mac is left alone); Undo resumes it while the core still allows (10 minutes).
+ */
+class OngoingFastReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val id = intent.getStringExtra(OngoingNotifier.EXTRA_FAST_ID) ?: return
+        val app = context.applicationContext as MekaApplication
+        val pending = goAsync()
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            try {
+                when (intent.action) {
+                    ACTION_END -> if (app.core.fastingView.value.current?.id == id) {
+                        runCatching { app.core.endFast() }
+                        app.core.tick()
+                        app.ongoing.postEnded(id)
+                    }
+                    ACTION_UNDO -> {
+                        runCatching { app.core.resumeFast(id) }
+                        app.core.tick()
+                        app.ongoing.clearEnded()
+                    }
+                }
+                app.ongoing.run()
+            } finally { pending.finish() }
+        }
+    }
+
+    companion object {
+        const val ACTION_END = "os.meka.ongoing.END_FAST"
+        const val ACTION_UNDO = "os.meka.ongoing.UNDO_END_FAST"
     }
 }

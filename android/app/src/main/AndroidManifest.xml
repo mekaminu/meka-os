@@ -150,6 +150,10 @@
         <receiver
             android:name=".notify.OngoingDismissReceiver"
             android:exported="false" />
+        <!-- Fasting v2: End fast and its Undo from the ongoing notification. -->
+        <receiver
+            android:name=".notify.OngoingFastReceiver"
+            android:exported="false" />
         <!-- Self-updating phone app: the install session's status (Android's Install prompt, then success or failure). -->
         <receiver
             android:name=".update.UpdateStatusReceiver"

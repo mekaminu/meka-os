@@ -38,6 +38,8 @@ enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW }
 enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     RENEWAL_CANCEL_BY("Cancel-by dates", NoticeTier.HEADS_UP),
     FAST_GOAL("Fasting goal reached", NoticeTier.HEADS_UP),
+    /** Once a day during an extended fast (Fasting v2): "5-day fast · Day 3 of 5". */
+    FAST_CHECK_IN("Fasting check-ins", NoticeTier.HEADS_UP),
     BRIEF("Morning brief", NoticeTier.HEADS_UP),
     SHUTDOWN("Time to shut down the day", NoticeTier.HEADS_UP),
     WEEKLY_REVIEW("Weekly review", NoticeTier.HEADS_UP),
@@ -360,6 +362,7 @@ object Governor {
     private fun countLine(s: NoticeSource, n: Int): String = when (s) {
         NoticeSource.RENEWAL_CANCEL_BY -> "$n to cancel or keep"
         NoticeSource.FAST_GOAL -> "fasting goal reached"
+        NoticeSource.FAST_CHECK_IN -> "a fasting check-in"
         NoticeSource.BRIEF -> "your morning brief"
         NoticeSource.SHUTDOWN -> "time to shut down"
         NoticeSource.WEEKLY_REVIEW -> "your weekly review"
@@ -434,11 +437,30 @@ object NoticeSources {
             )
         }
         fasting.current?.let { f ->
-            out += Notice(
+            out += if (f.extended) Notice(
+                // Fasting v2: an extended fast's goal is the "you did it" moment.
+                key = "fast:${f.id}:goal:${f.goalAtMs}", source = NoticeSource.FAST_GOAL, tier = NoticeTier.HEADS_UP,
+                title = FastingRules.doneLine(f.startedAtMs, f.goalAtMs), text = "${f.title} · end it whenever you're ready",
+                atMs = f.goalAtMs, target = NoticeTarget.GOALS, expiresAtMs = f.goalAtMs + FAST_GOAL_STALE_MS,
+            ) else Notice(
                 key = "fast:${f.id}:goal:${f.targetHours}", source = NoticeSource.FAST_GOAL, tier = NoticeTier.HEADS_UP,
                 title = "Fasting goal reached", text = "${f.targetHours} h · end it whenever you're ready",
                 atMs = f.goalAtMs, target = NoticeTarget.GOALS, expiresAtMs = f.goalAtMs + FAST_GOAL_STALE_MS,
             )
+            // Gentle once-a-day check-ins on an extended fast; each stands until the next (or the goal). Quiet hours
+            // apply as to any heads-up: one that falls in them rides in the next digest.
+            if (f.extended) {
+                val times = FastingRules.checkInTimes(f.startedAtMs, f.goalAtMs)
+                times.forEachIndexed { i, t ->
+                    val hours = (t - f.startedAtMs) / 3_600_000L
+                    out += Notice(
+                        key = "fast:${f.id}:day:${i + 2}", source = NoticeSource.FAST_CHECK_IN, tier = NoticeTier.HEADS_UP,
+                        title = "${f.title} · ${FastingRules.dayOf(f.startedAtMs, f.goalAtMs, t)}",
+                        text = "$hours h so far · goal ${f.goalWhen} · ending early is fine",
+                        atMs = t, target = NoticeTarget.GOALS, expiresAtMs = times.getOrNull(i + 1) ?: f.goalAtMs,
+                    )
+                }
+            }
         }
         val shutdownAt = cal.toEpochMs(day, shutdown.startMinute)
         if (!shutdown.doneToday && (shutdown.offered || nowMs < shutdownAt)) {

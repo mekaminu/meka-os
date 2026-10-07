@@ -51,6 +51,11 @@ data class FastNow(
     val dayLine: String? = null,
     /** When the goal is, short: "12:05" (daily window) or "Sat 20:00" (extended). */
     val goalWhen: String = "",
+    /**
+     * Extended only, once its goal is reached: "You did it · 5 days". The apps play the "you did it" moment (a ring
+     * burst) once per fast when this first appears.
+     */
+    val doneLine: String? = null,
 ) {
     /** Share of the goal done, 0 to 1. */
     fun progress(nowMs: Long): Float = FastingRules.progressTo(startedAtMs, goalAtMs, nowMs)
@@ -275,6 +280,20 @@ object FastingRules {
     fun nextDayAt(startedAtMs: Long, nowMs: Long): Long =
         startedAtMs + ((nowMs - startedAtMs).coerceAtLeast(0) / (24 * HOUR_MS) + 1) * 24 * HOUR_MS
 
+    /** "You did it · 5 days" (whole days) or "You did it · 36 h". */
+    fun doneLine(startedAtMs: Long, goalAtMs: Long): String =
+        "You did it · ${daysLabel((((goalAtMs - startedAtMs).coerceAtLeast(0) + HOUR_MS - 1) / HOUR_MS).toInt())}"
+
+    /** A check-in closer than this to the goal is left out: the goal's own "you did it" follows soon enough. */
+    const val CHECK_IN_GAP_MS = 6 * HOUR_MS
+
+    /**
+     * When an extended fast checks in: once a day, as each new day of the fast begins (24 h, 48 h … after its start),
+     * never within [CHECK_IN_GAP_MS] of the goal. At most nine (goals go up to ten days). Daily-window fasts don't.
+     */
+    fun checkInTimes(startedAtMs: Long, goalAtMs: Long): List<Long> =
+        (1..MAX_TARGET_HOURS / 24).map { startedAtMs + it * 24 * HOUR_MS }.takeWhile { it <= goalAtMs - CHECK_IN_GAP_MS }
+
     /** 0 none · 1 under 8 h · 2 under 16 h · 3 under a whole day · 4 the whole day. */
     fun heatLevel(hours: Double): Int = when {
         hours <= 0.0 -> 0
@@ -457,6 +476,7 @@ class Fasting(
                 title = if (f.extended) titleOf(f) else "Fasting · goal ${f.target} h",
                 dayLine = if (f.extended) FastingRules.dayLine(f.start, goal, now) else null,
                 goalWhen = if (f.extended) dayTime(goal) else FastingRules.hm(calendar.minuteOfDay(goal)),
+                doneLine = if (f.extended && reached) FastingRules.doneLine(f.start, goal) else null,
             )
         }
         val history = merged()

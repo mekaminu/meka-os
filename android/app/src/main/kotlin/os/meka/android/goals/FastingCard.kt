@@ -1,5 +1,6 @@
 package os.meka.android.goals
 
+import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -48,6 +49,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -76,6 +78,9 @@ import os.meka.core.facade.MekaCore
  * Fasting v2: "Longer fast" starts an extended fast (24 h … 7 days, or until a day at 18:00), which shows
  * "Day 3 of 5 · 62 h"; the history under the week keeps every fast (planned against actual), the streak and a
  * twelve-week heat strip whose weeks fade in left to right. Tracking only: no food, calorie or weight advice.
+ * When an extended fast reaches its goal, "You did it · 5 days" pops in and the ring bursts once (a ring of light
+ * spreading out with twelve short rays, light haptic), once per fast on this phone ([FastBurst]). Reduced motion: the
+ * line fades in, no burst.
  */
 @Composable
 internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
@@ -90,13 +95,28 @@ internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
     LaunchedEffect(cur?.id) {
         while (cur != null) { now = System.currentTimeMillis(); delay(1_000) }
     }
+    // The "you did it" moment: once per extended fast, the first time its goal is seen reached on this phone.
+    val context = LocalContext.current
+    val reduced = Meka.reducedMotion
+    val burst = remember { Animatable(0f) }
+    val pop = remember { Animatable(1f) }
+    val doneId = cur?.takeIf { it.doneLine != null }?.id
+    LaunchedEffect(doneId) {
+        if (doneId == null || !FastBurst.claim(context, doneId)) return@LaunchedEffect
+        if (reduced) return@LaunchedEffect
+        haptics.light()
+        launch { pop.snapTo(0.6f); pop.animateTo(1f, MekaMotion.complete(false)) }
+        burst.snapTo(0f)
+        burst.animateTo(1f, tween(900))
+        burst.snapTo(0f)
+    }
 
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            FastRing(cur, now)
+            FastRing(cur, now, burst.value)
             Spacer(Modifier.width(MekaSpace.m))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Text(
@@ -104,6 +124,12 @@ internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
                     style = MekaType.itemTitle, color = Meka.colors.textPrimary,
                 )
                 if (cur != null) {
+                    AnimatedVisibility(cur.doneLine != null, enter = androidx.compose.animation.fadeIn(MekaMotion.appear(reduced))) {
+                        Text(
+                            cur.doneLine.orEmpty(), style = MekaType.itemTitle, color = Meka.colors.accent,
+                            modifier = Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f) },
+                        )
+                    }
                     cur.dayLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent) }
                     Text(cur.goalLine, style = MekaType.itemMeta, color = if (cur.reachedGoal) Meka.colors.accent else Meka.colors.textSecondary)
                     Text(cur.startedLine, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
@@ -152,7 +178,7 @@ internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
 
 /** The ring: sweeps with the clock, glows softly at the goal. Shows the timer, or the plan's goal when not fasting. */
 @Composable
-private fun FastRing(cur: FastNow?, now: Long) {
+private fun FastRing(cur: FastNow?, now: Long, burst: Float = 0f) {
     val reduced = Meka.reducedMotion
     val target = cur?.progress(now) ?: 0f
     // A linear one-second glide keeps the sweep continuous between ticks.
@@ -176,6 +202,19 @@ private fun FastRing(cur: FastNow?, now: Long) {
             val arcSize = Size(size.width - inset * 2, size.height - inset * 2)
             drawArc(track, 0f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
             if (cur != null) drawArc(accent, -90f, 360f * sweep, false, Offset(inset, inset), arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+            // The "you did it" burst: a ring of light spreading out past the track and twelve rays, fading as it goes.
+            if (burst > 0f) {
+                val r0 = arcSize.width / 2
+                val fade = (1f - burst).coerceIn(0f, 1f)
+                drawCircle(accent.copy(alpha = 0.6f * fade), r0 + burst * 10.dp.toPx(), center, style = Stroke(stroke * (1f - burst * 0.7f)))
+                val inner = r0 + stroke + burst * 4.dp.toPx()
+                val outer = inner + 6.dp.toPx() * (0.4f + burst)
+                for (i in 0 until 12) {
+                    val a = Math.toRadians(i * 30.0 - 90.0)
+                    val dir = Offset(kotlin.math.cos(a).toFloat(), kotlin.math.sin(a).toFloat())
+                    drawLine(accent.copy(alpha = fade), center + dir * inner, center + dir * outer, 2.dp.toPx(), StrokeCap.Round)
+                }
+            }
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             if (cur != null) {
@@ -291,5 +330,20 @@ private fun HistoryRow(f: FastRecord) {
             Text(f.resultLine, style = MekaType.itemMeta, color = if (f.reachedGoal) Meka.colors.accent else Meka.colors.textSecondary)
         }
         Text(f.whenLine, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/** The "you did it" burst plays once per fast on this phone. */
+object FastBurst {
+    private const val PREFS = "meka.hints"
+    private const val KEY = "fastBurst"
+
+    /** True the first time for [fastId]; marked at once so a recomposition or restart doesn't replay it. */
+    @Synchronized
+    fun claim(context: Context, fastId: String): Boolean {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getString(KEY, null) == fastId) return false
+        prefs.edit().putString(KEY, fastId).apply()
+        return true
     }
 }

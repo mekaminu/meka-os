@@ -7,20 +7,31 @@ import SwiftUI
 /// Reduce Motion: the ring steps each second and the glow is steady.
 /// Fasting v2: an extended fast (24 h … 7 days, or until a day at 18:00) shows "Day 3 of 5 · 62 h"; the history below
 /// keeps every fast (planned against actual), the streak and a twelve-week heat strip. Tracking only, no advice.
+/// When an extended fast reaches its goal, "You did it · 5 days" pops in and the ring bursts once (a ring of light
+/// spreading out with twelve rays), once per fast on this Mac. Reduce Motion: the line fades in, no burst.
 struct FastingSection: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let palette: MekaPalette
+    /// The fast whose "you did it" burst has already played here.
+    @AppStorage("meka.fastBurst") private var burstFastId = ""
+    @State private var burst: Double = 0
+    @State private var pop: Double = 1
 
     var body: some View {
         if let v = model.fasting {
             VStack(alignment: .leading, spacing: MekaSpace.s) {
                 HStack(alignment: .center, spacing: MekaSpace.m) {
-                    FastRing(current: v.current, palette: palette)
+                    FastRing(current: v.current, palette: palette, burst: burst)
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Text(v.current.map { $0.extended ? $0.title : "Fasting" } ?? "Not fasting")
                             .font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                         if let cur = v.current {
+                            if let done = cur.doneLine {
+                                Text(done).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                                    .scaleEffect(pop, anchor: .leading)
+                                    .transition(.opacity)
+                            }
                             if let day = cur.dayLine {
                                 Text(day).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.accent)
                             }
@@ -43,7 +54,23 @@ struct FastingSection: View {
             .padding(MekaSpace.m)
             .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
             .animation(MekaMotion.replan(reduced: reduceMotion), value: v.current?.id)
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: v.current?.doneLine)
+            .onChange(of: v.current?.doneLine == nil ? nil : v.current?.id, initial: true) { _, id in
+                celebrate(id)
+            }
         }
+    }
+
+    /// The "you did it" moment, once per fast on this Mac.
+    private func celebrate(_ id: String?) {
+        guard let id, id != burstFastId else { return }
+        burstFastId = id
+        guard !reduceMotion else { return }
+        MekaHaptics.light()
+        pop = 0.6
+        withAnimation(MekaMotion.complete(reduced: false)) { pop = 1 }
+        burst = 0
+        withAnimation(.easeOut(duration: 0.9)) { burst = 1 } completion: { burst = 0 }
     }
 
     @ViewBuilder
@@ -112,6 +139,8 @@ private struct FastRing: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let current: FastNow?
     let palette: MekaPalette
+    /// 0 → 1 while the "you did it" burst plays; 0 otherwise.
+    var burst: Double = 0
     @State private var glow = false
 
     var body: some View {
@@ -132,6 +161,13 @@ private struct FastRing: View {
                         // A linear one-second glide keeps the sweep continuous between ticks.
                         .animation(reduceMotion ? nil : .linear(duration: 1), value: p)
                 }
+                if burst > 0 {
+                    BurstShape(progress: burst)
+                        .stroke(palette.accent.opacity(1 - burst), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    Circle()
+                        .stroke(palette.accent.opacity(0.6 * (1 - burst)), lineWidth: 8 * (1 - burst * 0.7))
+                        .padding(10 - burst * 10)
+                }
                 VStack(spacing: 0) {
                     if let cur = current {
                         Text(FastingRules.shared.clock(elapsedMs: now - cur.startedAtMs)).font(MekaType.itemTitle).monospacedDigit()
@@ -151,6 +187,28 @@ private struct FastRing: View {
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) { glow = true }
         }
+    }
+}
+
+/// Twelve short rays spreading out from just outside the ring as [progress] goes 0 → 1.
+private struct BurstShape: Shape {
+    var progress: Double
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let c = CGPoint(x: rect.midX, y: rect.midY)
+        let r0 = min(rect.width, rect.height) / 2 - 10 + 4 + 4 * progress
+        let r1 = r0 + 6 * (0.4 + progress)
+        for i in 0..<12 {
+            let a = Double(i) * .pi / 6 - .pi / 2
+            p.move(to: CGPoint(x: c.x + cos(a) * r0, y: c.y + sin(a) * r0))
+            p.addLine(to: CGPoint(x: c.x + cos(a) * r1, y: c.y + sin(a) * r1))
+        }
+        return p
     }
 }
 

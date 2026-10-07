@@ -26,6 +26,14 @@ class OngoingRoutingTest {
     }
 
     @Test
+    fun endFastReadsTheFastIdFromItsKeyOnly() {
+        assertEquals("F1", OngoingRouting.fastId("fast-F1"))
+        assertEquals(null, OngoingRouting.fastId("meeting-c"))
+        assertEquals(null, OngoingRouting.fastId("fast-"))
+        assertNotEquals(OngoingRouting.endedId, OngoingRouting.notificationId("fast-F1"))
+    }
+
+    @Test
     fun tappingOpensTodayForAnEventAndGoalsForTheFast() {
         assertEquals(ShellDestination.TODAY, OngoingRouting.destination(OngoingKind.MEETING))
         assertEquals(ShellDestination.GOALS, OngoingRouting.destination(OngoingKind.FAST))
