@@ -68,6 +68,8 @@ import os.meka.android.goals.GoalsRoute
 import os.meka.android.today.ConnectHook
 import os.meka.android.today.NeedsYouRoute
 import os.meka.android.today.TodayRoute
+import os.meka.android.ask.AskRoute
+import androidx.activity.compose.BackHandler
 import os.meka.core.facade.MekaCore
 import kotlinx.coroutines.delay
 import os.meka.android.MekaApplication
@@ -102,6 +104,9 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     LaunchedEffect(openDestination) {
         openDestination?.let { current = it; app.openDestination.value = null }
     }
+
+    // A place reached from Ask's More list sits behind Ask: back returns there.
+    BackHandler(enabled = ShellNav.parent(current) != null) { ShellNav.parent(current)?.let(go) }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background).safeDrawingPadding()) {
         val layout = ShellNav.layoutFor(maxWidth.value)
@@ -147,39 +152,57 @@ private fun DestinationHost(current: ShellDestination, modifier: Modifier, body:
 @Composable
 private fun Destination(d: ShellDestination, core: MekaCore, connect: ConnectHook?, go: (ShellDestination) -> Unit) {
     val app = LocalContext.current.applicationContext as MekaApplication
+    val openItem: (OpenItem) -> Unit = { item ->
+        // Lists or Goals picks the item up when it appears (tab and unfolded row).
+        app.openItem.value = item
+        SearchNav.destination(item.target)?.let(go)
+    }
     when (d) {
-        ShellDestination.TODAY -> TodayRoute(core, connect, openReview = { go(ShellDestination.REVIEW) }, openItem = { item ->
-            // Lists or Goals picks the item up when it appears (tab and unfolded row).
-            app.openItem.value = item
-            SearchNav.destination(item.target)?.let(go)
-        })
-        ShellDestination.CALENDAR -> CalendarRoute(core)
+        ShellDestination.TODAY -> TodayRoute(core, connect, openReview = { go(ShellDestination.REVIEW) }, openItem = openItem)
         ShellDestination.NEEDS_YOU -> NeedsYouRoute(core, openLists = { go(ShellDestination.LISTS) })
-        ShellDestination.LISTS -> ListsRoute(core)
-        ShellDestination.GOALS -> GoalsRoute(core)
-        ShellDestination.REVIEW -> ReviewRoute(core)
+        ShellDestination.CALENDAR -> CalendarRoute(core)
+        ShellDestination.ASK -> AskRoute(core, connected = connect == null, go = go, openItem = openItem)
+        ShellDestination.LISTS -> BehindAsk(go) { ListsRoute(core) }
+        ShellDestination.GOALS -> BehindAsk(go) { GoalsRoute(core) }
+        ShellDestination.REVIEW -> BehindAsk(go) { ReviewRoute(core) }
         // Documents land here in V2; until then the Vault holds the export of everything (build plan M1).
-        ShellDestination.VAULT -> YourData(core, vaultLine = "Encrypted documents, with expiry dates sent to your plan, land here.")
+        ShellDestination.VAULT -> BehindAsk(go) {
+            YourData(core, vaultLine = "Encrypted documents, with expiry dates sent to your plan, land here.")
+        }
     }
 }
 
-/** Closed Fold: six labels (they shrink a little to fit a narrow screen), a pill springs to the lit one. */
+/** A place reached from Ask's More list: a quiet "‹ Ask" above it (back does the same). */
+@Composable
+private fun BehindAsk(go: (ShellDestination) -> Unit, body: @Composable () -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        Text(
+            "‹ Ask", style = MekaType.caption, color = Meka.colors.accent,
+            modifier = Modifier.padding(start = MekaSpace.gutter - MekaSpace.xxs, top = MekaSpace.xs)
+                .clip(RoundedCornerShape(MekaRadius.m))
+                .clickable(role = Role.Button) { go(ShellDestination.ASK) }
+                .clearAndSetSemantics { contentDescription = "Back to Ask" }
+                .padding(horizontal = MekaSpace.xxs, vertical = MekaSpace.xxs),
+        )
+        Box(Modifier.weight(1f).fillMaxWidth()) { body() }
+    }
+}
+
+/** Closed Fold: the four tabs (labels shrink a little if a narrow screen needs it), a pill springs to the lit one. */
 @Composable
 private fun BottomBar(current: ShellDestination, needsYou: Int, go: (ShellDestination) -> Unit) {
     val items = ShellNav.destinations(ShellLayout.BOTTOM_BAR)
-    val lit = ShellNav.barSelection(current, ShellLayout.BOTTOM_BAR)
+    val lit = ShellNav.barSelection(current)
     BoxWithConstraints(
         Modifier.fillMaxWidth().background(Meka.colors.surface).padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
     ) {
         val slot = maxWidth / items.size
-        val x by animateDpAsState(slot * (lit?.let { items.indexOf(it) } ?: 0), MekaMotion.replan(Meka.reducedMotion), label = "bar-pill")
-        AnimatedVisibility(lit != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
-            Box(Modifier.offset(x = x).width(slot).height(44.dp).padding(horizontal = MekaSpace.xxs)
-                .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
-        }
+        val x by animateDpAsState(slot * items.indexOf(lit), MekaMotion.replan(Meka.reducedMotion), label = "bar-pill")
+        Box(Modifier.offset(x = x).width(slot).height(44.dp).padding(horizontal = MekaSpace.xxs)
+            .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
         Row(Modifier.fillMaxWidth()) {
             items.forEach { d ->
-                NavItem(d, d == current, needsYou, Modifier.weight(1f).height(44.dp), go, fit = true)
+                NavItem(d, d == lit, needsYou, Modifier.weight(1f).height(44.dp), go, fit = true)
             }
         }
     }
@@ -191,12 +214,13 @@ private fun Rail(current: ShellDestination, needsYou: Int, go: (ShellDestination
     val items = ShellNav.destinations(ShellLayout.RAIL)
     val rowHeight = 48.dp
     Box(Modifier.width(112.dp).fillMaxHeight().background(Meka.colors.surface).padding(vertical = MekaSpace.xl, horizontal = MekaSpace.xs)) {
-        val y by animateDpAsState(rowHeight * items.indexOf(current), MekaMotion.replan(Meka.reducedMotion), label = "rail-pill")
+        val lit = ShellNav.barSelection(current)
+        val y by animateDpAsState(rowHeight * items.indexOf(lit), MekaMotion.replan(Meka.reducedMotion), label = "rail-pill")
         Box(Modifier.offset(y = y).fillMaxWidth().height(rowHeight).padding(vertical = MekaSpace.xxs)
             .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
         Column(verticalArrangement = Arrangement.Top) {
             items.forEachIndexed { i, d ->
-                NavItem(d, d == current, needsYou, Modifier.fillMaxWidth().height(rowHeight).appear(rememberAppearance(i)), go)
+                NavItem(d, d == lit, needsYou, Modifier.fillMaxWidth().height(rowHeight).appear(rememberAppearance(i)), go)
             }
         }
     }
@@ -217,7 +241,7 @@ private fun NavItem(d: ShellDestination, lit: Boolean, needsYou: Int, modifier: 
     ) {
         BasicText(
             d.label, style = MekaType.caption.copy(color = color), maxLines = 1, softWrap = false,
-            // Six labels share the closed Fold's width: step down to 10 sp rather than clip "Needs you".
+            // The tabs share the closed Fold's width: step down to 10 sp rather than clip "Needs you".
             autoSize = if (fit) TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.caption.fontSize, stepSize = 0.5.sp) else null,
             modifier = if (fit) Modifier.weight(1f, fill = false) else Modifier,
         )

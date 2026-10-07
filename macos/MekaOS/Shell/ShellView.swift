@@ -1,8 +1,10 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// The Mac shell (build plan M1): a sidebar (Today · Calendar · Needs you · Lists · Goals · Review · Vault) beside the
-/// destination. Switching pushes the content the way you moved down the sidebar; Reduce Motion cross-fades.
+/// The Mac shell (build plan M1; Four tabs, one front door): a sidebar with the four tabs (Today · Needs you · Calendar ·
+/// Ask) and, below them, a More section with the places that sit behind Ask (Lists · Goals · Review · Vault; the Mac
+/// has the room, as rule 7 allows), beside the destination. Switching pushes the content the way you moved down the
+/// sidebar; Reduce Motion cross-fades.
 struct ShellView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
@@ -17,6 +19,11 @@ struct ShellView: View {
                         .badge(d == .needsYou ? ShellNav.badge(needsYouCount).map { Text($0) } : nil)
                         .accessibilityLabel(ShellNav.accessibilityLabel(d, needsYouCount: needsYouCount))
                         .tag(d as ShellDestination?)
+                }
+                Section("More") {
+                    ForEach(ShellDestination.allCases.filter { ShellNav.parent($0) != nil }) { d in
+                        Label(d.label, systemImage: d.symbol).tag(d as ShellDestination?)
+                    }
                 }
             }
             .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 260)
@@ -42,6 +49,12 @@ struct ShellView: View {
         // Export everything (your data), from Today's header or File → Export All Data….
         .sheet(isPresented: Binding(get: { model.showYourData }, set: { model.showYourData = $0 })) { YourDataSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showActivity }, set: { model.showActivity = $0 })) { ActivitySheet(palette: palette) }
+        // Opened from Today's header or Ask's More list, so they live on the shell.
+        .sheet(isPresented: Binding(get: { model.showCalendars }, set: { model.showCalendars = $0 })) { CalendarsSheet(palette: palette) }
+        .sheet(isPresented: Binding(get: { model.showWork }, set: { model.showWork = $0 })) { WorkSheet(palette: palette) }
+        .sheet(isPresented: Binding(get: { model.showNotifications }, set: { model.showNotifications = $0 })) {
+            NotificationsSheet(palette: palette)
+        }
     }
 
     /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).
@@ -65,8 +78,9 @@ struct ShellView: View {
     private func destination(_ d: ShellDestination) -> some View {
         switch d {
         case .today: TodayView()
-        case .calendar: CalendarScreen()
         case .needsYou: NeedsYouView()
+        case .calendar: CalendarScreen()
+        case .ask: AskScreen(palette: palette)
         case .lists: ListsScreen()
         case .goals: GoalsScreen()
         case .review: ReviewScreen()

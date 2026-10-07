@@ -1,13 +1,18 @@
 package os.meka.android.shell
 
 /**
- * The app shell's rules (build plan M1, App shell), kept free of Compose so they are unit-tested and match the Mac
- * (macos/MekaOS/Shell/ShellNav.swift) rule for rule.
+ * The app shell's rules (build plan M1, App shell; Four tabs, one front door), kept free of Compose so they are
+ * unit-tested and match the Mac (macos/MekaOS/Shell/ShellNav.swift) rule for rule.
+ *
+ * The bar holds four tabs (Today · Needs you · Calendar · Ask). Everything else stays a destination but is reached
+ * from Ask's "More" list, cards on Today, search and notifications; it sits "behind" Ask, so Ask stays lit there and
+ * back returns to Ask. Enum order is the order content slides in: the places behind Ask come after it.
  */
 enum class ShellDestination(val label: String) {
     TODAY("Today"),
-    CALENDAR("Calendar"),
     NEEDS_YOU("Needs you"),
+    CALENDAR("Calendar"),
+    ASK("Ask"),
     LISTS("Lists"),
     GOALS("Goals"),
     REVIEW("Review"),
@@ -22,27 +27,53 @@ enum class ShellLayout {
     RAIL,
 }
 
+/**
+ * A row in Ask's "More" list: a place behind Ask ([destination]) or a pane that springs up over Ask (null).
+ * Lines are fixed words, not counts, except Lists when something on it is due ([ShellNav.moreLine]).
+ */
+enum class MoreItem(val label: String, val line: String, val destination: ShellDestination?) {
+    LISTS("Lists", "Waiting for · Someday · Decisions · Renewals", ShellDestination.LISTS),
+    GOALS("Goals and habits", "Habits, goals and fasting", ShellDestination.GOALS),
+    REVIEW("Review", "Your week, looked back on", ShellDestination.REVIEW),
+    VAULT("Vault", "Your data now; documents later", ShellDestination.VAULT),
+    WORK("Work mode", "Work hours and the Work switch", null),
+    NOTIFICATIONS("Notifications", "Quiet hours, digests and what reaches you", null),
+    ACTIVITY("Activity", "What MEKA did and why", null),
+    YOUR_DATA("Your data", "Export everything as one file", null),
+    CALENDARS("Calendars", "Connected accounts and feeds", null),
+}
+
 object ShellNav {
     /** Same breakpoint Today uses for its two panes. */
     const val WIDE_DP = 600f
 
+    /** The four tabs, in the bar, the rail and the top of the Mac sidebar. */
+    val TABS = listOf(ShellDestination.TODAY, ShellDestination.NEEDS_YOU, ShellDestination.CALENDAR, ShellDestination.ASK)
+
     fun layoutFor(widthDp: Float): ShellLayout = if (widthDp >= WIDE_DP) ShellLayout.RAIL else ShellLayout.BOTTOM_BAR
 
-    /**
-     * Destinations shown in the bar or rail. The closed Fold's bar has six (labels shrink a little to fit); the Vault
-     * (V2) lives on the rail and the Mac sidebar until it has something in it.
-     */
-    fun destinations(layout: ShellLayout): List<ShellDestination> = when (layout) {
-        ShellLayout.RAIL -> ShellDestination.entries
-        ShellLayout.BOTTOM_BAR -> ShellDestination.entries - ShellDestination.VAULT
-    }
+    /** Destinations shown in the bar or rail: the same four either way. */
+    @Suppress("UNUSED_PARAMETER")
+    fun destinations(layout: ShellLayout): List<ShellDestination> = TABS
 
-    /** Which bar item is lit for [current]; null when [current] isn't in the bar (Vault reached on the rail, then folded). */
-    fun barSelection(current: ShellDestination, layout: ShellLayout): ShellDestination? =
-        current.takeIf { it in destinations(layout) }
+    /** The tab a destination sits behind: Ask for the places in More, null for the tabs themselves. */
+    fun parent(d: ShellDestination): ShellDestination? = if (d in TABS) null else ShellDestination.ASK
 
-    /** Content slides the way you moved along the bar: +1 forward (from the right), -1 back, 0 for no change. */
+    /** Which tab is lit for [current]: itself, or Ask for a place reached from More. */
+    fun barSelection(current: ShellDestination): ShellDestination = parent(current) ?: current
+
+    /** Content slides the way you moved: +1 forward (from the right), -1 back, 0 for no change. */
     fun direction(from: ShellDestination, to: ShellDestination): Int = to.ordinal.compareTo(from.ordinal).coerceIn(-1, 1)
+
+    /** Ask's More list; Calendars only once this device is connected (before that, Today offers Connect). */
+    fun more(connected: Boolean): List<MoreItem> = MoreItem.entries.filter { connected || it != MoreItem.CALENDARS }
+
+    /** A More row's line: Lists says what's due when something is ("2 need you"), else the fixed words. */
+    fun moreLine(item: MoreItem, listsDue: Int): String =
+        if (item == MoreItem.LISTS && listsDue > 0) "$listsDue need${if (listsDue == 1) "s" else ""} you · ${item.line}" else item.line
+
+    /** Whether a More row's line is lit in the accent colour. */
+    fun moreLit(item: MoreItem, listsDue: Int): Boolean = item == MoreItem.LISTS && listsDue > 0
 
     /** Badge text on Needs you: nothing at zero, the count up to 9, then "9+". */
     fun badge(count: Int): String? = when {

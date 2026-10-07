@@ -31,12 +31,9 @@ struct TodayView: View {
         }
         .background(palette.background)
         .sheet(isPresented: $model.showConnect) { ConnectSheet(palette: palette) }
-        .sheet(isPresented: $model.showCalendars) { CalendarsSheet(palette: palette) }
         .sheet(isPresented: $model.showPlan) { PlanSheet(palette: palette) }
-        .sheet(isPresented: $model.showWork) { WorkSheet(palette: palette) }
         .sheet(isPresented: $model.showShutdown) { ShutdownSheet(palette: palette) }
         .sheet(isPresented: $model.showBrief) { BriefSheet(palette: palette) }
-        .sheet(isPresented: $model.showNotifications) { NotificationsSheet(palette: palette) }
     }
 
     private var todayColumn: some View {
@@ -301,7 +298,8 @@ struct TaskRow: View {
 
 /// Connected calendars. Connecting opens the provider's own sign-in page in the browser; MEKA OS never sees the
 /// password. The list refreshes whenever the app becomes active again (i.e. when the owner returns from the browser).
-private struct CalendarsSheet: View {
+/// Connected calendars and feeds; opened from Today's header or Ask's More list (sheet lives on the shell).
+struct CalendarsSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let palette: MekaPalette
