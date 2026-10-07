@@ -379,13 +379,13 @@ private fun TodayPane(
                 item(key = "shutdown") {
                     ShutdownCard(shutdown, openShutdown, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
                 }
-            } else if (shutdown.doneLine != null) {
+            } else if (shutdown.evening || shutdown.doneLine != null) {
+                // Tomorrow at a glance once the evening starts (after shutting down, or while still at work); tapping
+                // opens the shutdown pane with tomorrow in full.
                 item(key = "shutdown-done") {
-                    Text(
-                        "${shutdown.doneLine} · Tomorrow: ${shutdown.tomorrow.summary}",
-                        style = MekaType.caption, color = Meka.colors.textTertiary,
-                        modifier = Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play))
-                            .clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { openShutdown() },
+                    TomorrowGlance(
+                        shutdown.doneLine, shutdown.tomorrow.glance.takeIf { shutdown.evening }, openShutdown,
+                        Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)),
                     )
                 }
             }

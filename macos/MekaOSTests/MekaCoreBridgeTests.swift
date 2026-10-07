@@ -128,6 +128,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         v = core.shutdownView.value
         XCTAssertTrue(v.left.isEmpty)
         XCTAssertEqual(v.tomorrow.rows.map(\.title), ["Post the letter"])
+        XCTAssertEqual(v.tomorrow.glance, "Tomorrow: 1 task")
         try await core.shutDown()
         XCTAssertTrue(core.shutdownView.value.doneToday)
         XCTAssertFalse(core.shutdownView.value.offered)

@@ -256,3 +256,26 @@ internal fun ShutdownCard(v: ShutdownView, onOpen: () -> Unit, modifier: Modifie
         Text(v.cardLine, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
     }
 }
+
+/**
+ * Tomorrow at a glance in Today once the evening starts and the shutdown card isn't showing: the quiet "Day shut down
+ * at 18:42" line (if done) over "Tomorrow: first thing 09:00 Standup · 3 events". The glance cross-fades as tomorrow
+ * changes (both with and without reduced motion: it is only ever a fade). Tapping opens the shutdown pane.
+ */
+@Composable
+internal fun TomorrowGlance(doneLine: String?, glance: String?, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+    val reduced = Meka.reducedMotion
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onOpen() }
+            .padding(vertical = MekaSpace.xxs),
+    ) {
+        doneLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        if (glance != null) {
+            AnimatedContent(
+                targetState = glance,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "tomorrow-glance",
+            ) { g -> Text(g, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 2) }
+        }
+    }
+}

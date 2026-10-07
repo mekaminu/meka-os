@@ -42,6 +42,10 @@ data class TomorrowPreview(
     val taskCount: Int,
     /** "2 events · 4 tasks · first at 09:30", or "Nothing planned yet". */
     val summary: String,
+    /** The first thing that starts tomorrow (not an all-day event, not one still running from tonight), if any. */
+    val first: TomorrowRow? = null,
+    /** Tomorrow at a glance, for Today in the evening: "Tomorrow: first thing 09:00 Standup · 3 events · 2 tasks". */
+    val glance: String = ShutdownRules.GLANCE_EMPTY,
 )
 
 data class ShutdownView(
@@ -61,6 +65,11 @@ data class ShutdownView(
     val tomorrow: TomorrowPreview,
     /** The card's second line: "3 left · tomorrow: 2 events, first at 09:30". */
     val cardLine: String,
+    /**
+     * The evening has started ([startMinute] has passed today), so Today shows tomorrow at a glance
+     * ([TomorrowPreview.glance]) when the shutdown card isn't there to show it: after shutting down, or while still at work.
+     */
+    val evening: Boolean = false,
 ) {
     companion object {
         val EMPTY = ShutdownView(
@@ -110,6 +119,39 @@ object ShutdownRules {
         }
 
     fun count(n: Int, one: String, many: String = one + "s") = if (n == 1) "1 $one" else "$n $many"
+
+    const val GLANCE_EMPTY = "Tomorrow: nothing planned yet"
+    /** Titles in the glance are cut at a word to keep it one line on the Fold's cover screen. */
+    const val GLANCE_TITLE_MAX = 32
+
+    /**
+     * Tomorrow at a glance: what comes first, then how much is on. "Tomorrow: first thing 09:00 Standup · 3 events ·
+     * 2 tasks"; with nothing timed, an all-day event leads ("Tomorrow: Bank holiday all day · 1 task"); counts are left
+     * out when the first thing is all there is ("Tomorrow: first thing 09:00 Dentist").
+     */
+    fun glance(rows: List<TomorrowRow>, first: TomorrowRow?, events: Int, tasks: Int): String {
+        if (rows.isEmpty()) return GLANCE_EMPTY
+        val allDay = rows.firstOrNull { it.time == "All day" }
+        val lead = when {
+            first != null -> "first thing ${first.time} ${shorten(first.title)}"
+            allDay != null -> "${shorten(allDay.title)} all day"
+            else -> null
+        }
+        val counts = if (lead != null && rows.size == 1) emptyList() else listOfNotNull(
+            count(events, "event").takeIf { events > 0 },
+            count(tasks, "task").takeIf { tasks > 0 },
+        )
+        return "Tomorrow: " + (listOfNotNull(lead) + counts).joinToString(" · ")
+    }
+
+    /** Cuts [title] at a word boundary to at most [GLANCE_TITLE_MAX] characters, with "…". */
+    fun shorten(title: String): String {
+        val t = title.trim()
+        if (t.length <= GLANCE_TITLE_MAX) return t
+        val cut = t.substring(0, GLANCE_TITLE_MAX - 1)
+        val space = cut.lastIndexOf(' ')
+        return (if (space >= GLANCE_TITLE_MAX / 2) cut.substring(0, space) else cut).trimEnd(' ', ',', '·', '-', '–') + "…"
+    }
 }
 
 class EveningShutdown(
@@ -181,6 +223,7 @@ class EveningShutdown(
             leftLine = leftLine,
             tomorrow = preview,
             cardLine = cardLine,
+            evening = minute >= start,
         )
     }
 
@@ -213,11 +256,11 @@ class EveningShutdown(
         val rows = keyed.map { it.row } + untimed
 
         // The first thing that starts tomorrow (not an all-day event, not one still running from tonight).
-        val first = keyed.firstOrNull { it.key > tomorrow.startMs || (it.key == tomorrow.startMs && !it.row.time!!.startsWith("Until")) }?.row?.time
+        val firstRow = keyed.firstOrNull { it.key > tomorrow.startMs || (it.key == tomorrow.startMs && !it.row.time!!.startsWith("Until")) }?.row
         val summary = if (rows.isEmpty()) "Nothing planned yet" else listOfNotNull(
             ShutdownRules.count(dayEvents.size, "event").takeIf { dayEvents.isNotEmpty() },
             ShutdownRules.count(dayTasks.size, "task").takeIf { dayTasks.isNotEmpty() },
-            first?.let { "first at $it" },
+            firstRow?.let { "first at ${it.time}" },
         ).joinToString(" · ")
 
         val workDay = schedule.enabled && CivilDate.isoDayOfWeek(tomorrow.epochDay) in schedule.days
@@ -229,6 +272,8 @@ class EveningShutdown(
             eventCount = dayEvents.size,
             taskCount = dayTasks.size,
             summary = summary,
+            first = firstRow,
+            glance = ShutdownRules.glance(rows, firstRow, dayEvents.size, dayTasks.size),
         )
     }
 

@@ -103,10 +103,9 @@ struct TodayView: View {
                                 .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
                                 .padding(.bottom, MekaSpace.l)
                                 .staggeredAppear(1, play: play)
-                        } else if let done = s.doneLine {
-                            Button("\(done) · Tomorrow: \(s.tomorrow.summary)") { model.showShutdown = true }
-                                .buttonStyle(.plain)
-                                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        } else if s.evening || s.doneLine != nil {
+                            // Tomorrow at a glance once the evening starts (after shutting down, or while still at work).
+                            TomorrowGlanceView(doneLine: s.doneLine, glance: s.evening ? s.tomorrow.glance : nil, palette: palette)
                                 .padding(.bottom, MekaSpace.l)
                                 .transition(.opacity)
                         }

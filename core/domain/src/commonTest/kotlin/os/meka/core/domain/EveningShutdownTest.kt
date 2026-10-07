@@ -164,6 +164,53 @@ class EveningShutdownTest {
         assertEquals("4 events · 2 tasks · first at 07:00", p.summary)
         assertEquals(4, p.eventCount)
         assertEquals(2, p.taskCount)
+        assertEquals("Gym", p.first?.title)
+        assertEquals("Tomorrow: first thing 07:00 Gym · 4 events · 2 tasks", p.glance)
+    }
+
+    @Test
+    fun tomorrowAtAGlanceLeadsWithTheFirstThingThenAnAllDayEvent() {
+        val tomorrow = today() + 1
+        val standup = event("s", "Standup", at(tomorrow, 9), at(tomorrow, 9, 15))
+        // The only thing tomorrow: no counts after it.
+        assertEquals("Tomorrow: first thing 09:00 Standup", view(events = listOf(standup)).tomorrow.glance)
+        // Something still running from tonight isn't the first thing tomorrow.
+        val late = event("late", "Late film", at(today(), 23), at(tomorrow, 1))
+        assertEquals("Tomorrow: first thing 09:00 Standup · 2 events", view(events = listOf(late, standup)).tomorrow.glance)
+        // Nothing timed: an all-day event leads.
+        val holiday = event("h", "Bank holiday", tomorrow * dayMs, (tomorrow + 1) * dayMs, allDay = true)
+        ta.create(NewTask("Pay rent", dueAtMs = at(tomorrow, 12)))
+        assertEquals("Tomorrow: Bank holiday all day · 1 event · 1 task", view(events = listOf(holiday)).tomorrow.glance)
+        // Only untimed tasks: just the count.
+        assertEquals("Tomorrow: 1 task", view().tomorrow.glance)
+        assertNull(view().tomorrow.first)
+        // A long title is cut at a word.
+        assertEquals(
+            "Tomorrow: first thing 08:00 Quarterly planning with the…",
+            view(events = listOf(event("q", "Quarterly planning with the whole regional team", at(tomorrow, 8), at(tomorrow, 10)))).tomorrow.glance
+                .substringBefore(" · "),
+        )
+        assertEquals("Standup", ShutdownRules.shorten("  Standup "))
+        assertEquals(ShutdownRules.GLANCE_TITLE_MAX, ShutdownRules.shorten("x".repeat(50)).length)
+    }
+
+    @Test
+    fun theGlanceIsForTheEveningOnTodayAfterShuttingDownOrWhileStillAtWork() {
+        world.clock.nowMs = at(today(), 17, 0)
+        assertFalse(view().evening)
+        world.clock.nowMs = at(today(), 17, 30) // work ends: the evening starts
+        assertTrue(view().evening)
+        assertTrue(view(atWork = true).evening) // working late: no card, but the glance shows
+        assertFalse(view(atWork = true).offered)
+        sa.shutDown()
+        assertTrue(view().evening)
+        assertFalse(view().offered)
+        assertEquals("Tomorrow: nothing planned yet", view().tomorrow.glance)
+        // Saturday: the evening starts at 18:00.
+        world.clock.nowMs = at(today() + 4, 17, 45)
+        assertFalse(view().evening)
+        world.clock.nowMs = at(today(), 18, 0)
+        assertTrue(view().evening)
     }
 
     @Test
@@ -172,6 +219,7 @@ class EveningShutdownTest {
         val v = view()
         assertNull(v.tomorrow.workLine)
         assertEquals("Nothing planned yet", v.tomorrow.summary)
+        assertEquals("Tomorrow: nothing planned yet", v.tomorrow.glance)
         assertEquals("Nothing left · nothing planned for tomorrow yet", v.cardLine)
         assertEquals("No tasks finished today", v.doneCountLine)
     }

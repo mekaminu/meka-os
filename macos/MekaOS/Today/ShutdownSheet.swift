@@ -174,3 +174,34 @@ struct ShutdownCard: View {
         .onTapGesture { model.showShutdown = true }
     }
 }
+
+/// Tomorrow at a glance in Today once the evening starts and the shutdown card isn't showing: the quiet
+/// "Day shut down at 18:42" line (if done) over "Tomorrow: first thing 09:00 Standup · 3 events". The glance
+/// cross-fades as tomorrow changes (only ever a fade, so reduced motion is the same). Clicking opens the shutdown sheet.
+struct TomorrowGlanceView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let doneLine: String?
+    let glance: String?
+    let palette: MekaPalette
+
+    var body: some View {
+        Button { model.showShutdown = true } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                if let doneLine {
+                    Text(doneLine).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+                if let glance {
+                    Text(glance).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                        .lineLimit(2)
+                        .id(glance)
+                        .transition(.opacity)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: glance)
+        }
+        .buttonStyle(.plain)
+    }
+}
