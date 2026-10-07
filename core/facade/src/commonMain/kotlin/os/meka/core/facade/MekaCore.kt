@@ -534,6 +534,16 @@ class MekaCore(
     /** Re-evaluates everything that depends on the clock (work mode, Today). Cheap; call it about once a minute. */
     suspend fun tick() = onCore { refresh() }
 
+    /**
+     * The bedside clock for the half-folded Fold (Fold modes): the time, the phone's next alarm ([nextAlarmMs], from the
+     * platform; null when none is set) and one short section for this part of the day, read from the current views.
+     * Pure and cheap; the Fold calls it every few seconds while it stands half folded. Nothing is stored.
+     */
+    fun bedside(nextAlarmMs: Long?): os.meka.core.domain.BedsideView =
+        os.meka.core.domain.FoldModeRules.bedside(
+            nowMs(), ZoneCalendar(timeZone), nextAlarmMs, _notifySettings.value.quiet, _today.value, _brief.value, _shutdown.value,
+        )
+
     suspend fun resolve(choice: ConflictChoice, chosenOption: String) = onCore {
         tasks.resolveConflict(choice.conflict, FieldValue.Text(chosenOption))
     }

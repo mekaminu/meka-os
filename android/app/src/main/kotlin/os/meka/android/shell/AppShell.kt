@@ -74,6 +74,11 @@ import os.meka.android.today.ConnectHook
 import os.meka.android.today.NeedsYouRoute
 import os.meka.android.today.TodayRoute
 import os.meka.android.ask.AskRoute
+import os.meka.android.fold.BedsideClock
+import os.meka.android.fold.rememberFoldState
+import os.meka.core.domain.FoldMode
+import os.meka.core.domain.FoldModeRules
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.activity.compose.BackHandler
 import os.meka.core.facade.MekaCore
 import kotlinx.coroutines.delay
@@ -120,6 +125,17 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     // A place reached from Ask's More list sits behind Ask: back returns there.
     BackHandler(enabled = ShellNav.parent(current) != null) { ShellNav.parent(current)?.let(go) }
 
+    // Fold modes: half folded on a table, the bedside clock takes the screen; opening flat cross-fades back to the
+    // app where it was (each destination keeps its state in [states]).
+    val fold = rememberFoldState()
+    val mode = FoldModeRules.mode(LocalConfiguration.current.screenWidthDp.toFloat(), fold.posture)
+    val reducedMode = Meka.reducedMotion
+    AnimatedContent(
+        targetState = mode == FoldMode.BEDSIDE,
+        transitionSpec = { fadeIn(MekaMotion.appear(reducedMode)) togetherWith fadeOut(MekaMotion.appear(reducedMode)) },
+        label = "fold-mode",
+    ) { bedside ->
+    if (bedside) BedsideClock(core, fold) else
     // One shared-transition layout for the whole shell: titles travel within a screen and, from cards and More rows,
     // across the shell's slide into the place they open (Four tabs, slice 3).
     MekaSharedLayout(Modifier.fillMaxSize()) {
@@ -145,6 +161,7 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
                 ) { BottomBar(current, needsYou, go) }
             }
         }
+    }
     }
     }
 }

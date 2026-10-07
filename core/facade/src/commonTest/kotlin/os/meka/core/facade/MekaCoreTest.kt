@@ -326,6 +326,27 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theBedsideClockShowsTheBriefInTheMorningAndWhatIsNextOnceItIsRead() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 7, 45).toInstant(london).toEpochMilliseconds() // Tue, BST
+        val a = core("android")
+        a.addTask("Post the letter")
+        a.tick()
+        val alarm = kotlinx.datetime.LocalDateTime(2026, 9, 23, 6, 30).toInstant(london).toEpochMilliseconds()
+        val v = a.bedside(alarm)
+        assertEquals("07:45", v.time) // local time, not UTC
+        assertEquals("Tuesday 22 September", v.dateLabel)
+        assertEquals("Alarm 06:30 · in 22 h 45", v.alarmLine)
+        assertEquals(os.meka.core.domain.BedsideSection.MORNING, v.section)
+        assertEquals(os.meka.core.domain.BedsideOpens.BRIEF, v.opens)
+        a.briefSeen()
+        val day = a.bedside(null)
+        assertEquals(os.meka.core.domain.BedsideSection.DAY, day.section)
+        assertEquals(listOf("Next: Post the letter"), day.lines)
+        assertEquals("No alarm set", day.alarmLine)
+    }
+
+    @Test
     fun theCalendarTabShowsAPlannedTaskOnItsDayOnBothDevices() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 10, 6, 10, 0).toInstant(london).toEpochMilliseconds() // Tue 6 Oct
