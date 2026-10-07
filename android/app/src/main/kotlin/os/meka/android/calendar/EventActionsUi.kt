@@ -122,6 +122,8 @@ class EventActionHandlers(
     val leaveBy: (CalendarEvent, Int) -> Unit = { _, _ -> },
     /** What's set now: (reminder minutes, travel minutes), 0 for none. */
     val current: (CalendarEvent) -> Pair<Int, Int> = { 0 to 0 },
+    /** "Make it a task" on an all-day entry that reads like a to-do (Today clarity). */
+    val makeTask: (CalendarEvent) -> Unit = {},
 )
 
 fun eventActionHandlers(core: MekaCore, scope: CoroutineScope, undo: EventUndo) = EventActionHandlers(
@@ -155,6 +157,12 @@ fun eventActionHandlers(core: MekaCore, scope: CoroutineScope, undo: EventUndo) 
         }
     },
     current = { e -> core.eventMarks.value.let { it.reminderOf(e.id) to it.travelOf(e.id) } },
+    makeTask = { e ->
+        scope.launch {
+            if (runCatching { core.makeAllDayTask(e) }.isFailure) return@launch
+            undo.show("Made it a task") { core.undoAllDayTask(e.id) }
+        }
+    },
 )
 
 /**

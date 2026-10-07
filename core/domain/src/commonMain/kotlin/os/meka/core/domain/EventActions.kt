@@ -65,7 +65,9 @@ class EventActions(
         val hidden = entities
             .filter { it[EventMarkFields.HIDDEN].boolOrNull == true }
             .map { it.ref.entityId }.toSet()
-        val prep = all.filter { it.eventId != null && it.lifecycle != Lifecycle.CANCELLED }.associateBy { it.eventId!! }
+        // Only prep tasks: an all-day entry made into a task is linked to its event too, but isn't its prep.
+        val prep = all.filter { it.eventId != null && it.id == prepTaskId(it.eventId) && it.lifecycle != Lifecycle.CANCELLED }
+            .associateBy { it.eventId!! }
         fun minutes(field: String) = entities.mapNotNull { e ->
             e[field].longOrNull?.toInt()?.takeIf { it in 1..ReminderRules.MAX_MIN }?.let { e.ref.entityId to it }
         }.toMap()
@@ -100,6 +102,29 @@ class EventActions(
         return id
     }
 
+    /**
+     * "Make it a task" for an all-day entry that reads like a to-do ([AllDayRules]): a task with the entry's title, no
+     * date (so it sits in Today's Anytime list until done), linked to the event; the entry then leaves Today (hidden,
+     * like "Hide from my day") so it isn't shown twice. Its id comes from the event, so a double tap or both devices
+     * offline make one task; an open one is left as it is. Returns the task's id.
+     */
+    fun makeTask(event: CalendarEvent): String {
+        val id = allDayTaskId(event.id)
+        val existing = tasks.get(id)
+        if (existing == null || existing.lifecycle.isTerminal) {
+            tasks.createWithId(id, NewTask(cutTitle(event.title)), mapOf(TaskFields.EVENT_ID to event.id.fv()))
+        }
+        hide(event.id)
+        return id
+    }
+
+    /** Undo for [makeTask]: deletes the task (if still there) and shows the entry again. */
+    fun unmakeTask(eventId: String) {
+        val id = allDayTaskId(eventId)
+        if (tasks.get(id) != null) tasks.delete(id)
+        show(eventId)
+    }
+
     fun hide(eventId: String) = setHidden(eventId, true)
     fun show(eventId: String) = setHidden(eventId, false)
 
@@ -118,6 +143,11 @@ class EventActions(
 
         /** The prep task's id for an event: the same on every device. */
         fun prepTaskId(eventId: String) = "p$eventId"
+
+        /** The task made from an all-day entry: the same on every device. */
+        fun allDayTaskId(eventId: String) = "a$eventId"
+
+        private fun cutTitle(s: String) = s.trim().let { if (it.length <= PrepRules.MAX_TITLE) it else it.take(PrepRules.MAX_TITLE - 1).trimEnd() + "…" }
     }
 }
 

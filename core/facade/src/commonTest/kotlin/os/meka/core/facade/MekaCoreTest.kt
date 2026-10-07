@@ -38,6 +38,7 @@ class MekaCoreTest {
     fun todayUpdatesAfterCommands() = runTest {
         val c = core("android")
         assertTrue(c.today.value.isClear)
+        assertTrue(c.today.value.isAllClear)
         val id = c.addTask("Call James about football")
         assertEquals(id, c.today.value.upNext?.id)
         c.complete(id)

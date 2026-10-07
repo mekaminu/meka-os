@@ -29,6 +29,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(today?.upNext?.id, id)
         try await core.complete(taskId: id)
         XCTAssertTrue(core.today.value.isClear)
+        XCTAssertTrue(core.today.value.isAllClear)
     }
 
     func testRepeatingTaskThroughTheBridge() async throws {

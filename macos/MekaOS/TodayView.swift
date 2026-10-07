@@ -14,6 +14,7 @@ struct TodayView: View {
     @State private var introPlayed = false
     /// "3 earlier" unfolds the finished events in place.
     @State private var earlierOpen = false
+    @State private var allDayOpen = false
     private var play: Bool { !introPlayed }
     private static let sections = 6 // greeting, needs you, up next, your day (header), your day (rows), done
 
@@ -119,9 +120,12 @@ struct TodayView: View {
                     }
 
                     if let today = model.today {
-                        if today.isClear {
-                            Text("You're clear.")
-                                .font(MekaType.upNextTitle).foregroundStyle(palette.textSecondary)
+                        // "You're clear." only when nothing at all is left today; "Nothing else timed today" beside
+                        // all-day items (Today clarity).
+                        if let line = today.clearLine {
+                            Text(line)
+                                .font(today.isAllClear ? MekaType.upNextTitle : MekaType.body)
+                                .foregroundStyle(palette.textSecondary)
                                 .staggeredAppear(1, play: play)
                         }
                         // The Needs you column beside Today lists them (never shown twice).
@@ -150,13 +154,19 @@ struct TodayView: View {
                                 .staggeredAppear(2, play: play)
                             Spacer().frame(height: MekaSpace.l)
                         }
-                        // One timeline: all-day chips, finished events folded, events and planned tasks in time
-                        // order with the now line and free gaps; then tasks with no time.
+                        // One timeline under "Today": the All day group first (one row each, at most 3 then "+2
+                        // more"), finished events folded, events and planned tasks in time order with the now line
+                        // and free gaps; then tasks with no time.
                         let tl = today.timeline
                         if tl.hasTimedOrAllDay {
-                            SectionLabel("Your day", palette).staggeredAppear(3, play: play)
-                            if !tl.allDay.isEmpty {
-                                AllDayChips(events: tl.allDay, palette: palette).staggeredAppear(3, play: play)
+                            SectionLabel("Today", palette).staggeredAppear(3, play: play)
+                            ForEach(AllDayRules.shared.shown(items: tl.allDayItems, open: allDayOpen), id: \.event.id) { a in
+                                AllDayRow(item: a, palette: palette)
+                                    .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .top)))
+                                    .staggeredAppear(3, play: play)
+                            }
+                            if let more = AllDayRules.shared.moreLabel(items: tl.allDayItems, open: allDayOpen) {
+                                AllDayMore(label: more, open: $allDayOpen, palette: palette).staggeredAppear(3, play: play)
                             }
                             if let label = tl.earlierLabel {
                                 EarlierToggle(label: label, open: $earlierOpen, palette: palette).staggeredAppear(3, play: play)
@@ -191,6 +201,8 @@ struct TodayView: View {
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.review?.card.offered)
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.timeline.rows.map(\.id))
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: earlierOpen)
+                .animation(MekaMotion.complete(reduced: reduceMotion), value: allDayOpen)
+                .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.timeline.allDayItems.map(\.event.id))
             }
             .task {
                 guard !introPlayed else { return }

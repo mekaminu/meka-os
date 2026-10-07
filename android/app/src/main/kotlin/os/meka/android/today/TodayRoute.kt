@@ -108,6 +108,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.core.domain.TimelineKind
+import os.meka.core.domain.AllDayRules
 import os.meka.core.domain.NeedsYouReason
 import os.meka.core.domain.RepeatChoice
 import os.meka.core.domain.MorningBriefView
@@ -290,7 +291,7 @@ internal fun BoxWithConstraintsScope.TwoPaneMorph(
 /** How a task row takes part in shared transitions: whether its title travels, whether it draws it, a soft light on landing. */
 internal data class RowMotion(val shareTitle: Boolean = false, val titleVisible: Boolean = true, val landed: Boolean = false)
 
-/** Stagger groups on Today: greeting, needs you, up next, your day (header), your day (rows), done. */
+/** Stagger groups on Today: greeting, needs you, up next, the timeline (header and all day), the timeline (rows), done. */
 private const val TODAY_SECTIONS = 6
 
 /** Present only while the device isn't enrolled for sync. */
@@ -354,6 +355,8 @@ private fun TodayPane(
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
+    // "+2 more" unfolds the rest of the all-day group.
+    var allDayOpen by rememberSaveable { mutableStateOf(false) }
     val updater = (LocalContext.current.applicationContext as? MekaApplication)?.updater
     val update by remember(updater) { updater?.state ?: MutableStateFlow<UpdateState>(UpdateState.None) }.collectAsState()
     Column(modifier.imePadding()) {
@@ -447,9 +450,10 @@ private fun TodayPane(
                     )
                 }
             }
-            if (today.isClear) {
+            // "You're clear." only when nothing at all is left today; "Nothing else timed today" beside all-day items.
+            today.clearLine?.let { line ->
                 item(key = "clear") {
-                    Text("You're clear.", style = MekaType.upNextTitle, color = Meka.colors.textSecondary,
+                    Text(line, style = if (today.isAllClear) MekaType.upNextTitle else MekaType.body, color = Meka.colors.textSecondary,
                         modifier = Modifier.animateItem().appear(rememberAppearance(1, play)))
                 }
             }
@@ -485,13 +489,18 @@ private fun TodayPane(
                 item(key = "upnext") { UpNextCard(t, actions, rowMotion, Modifier.animateItem().appear(rememberAppearance(2, play))) }
                 item(key = "s-next") { Spacer(Modifier.height(MekaSpace.l)) }
             }
-            // One timeline: all-day chips, finished events folded, events and planned tasks in time order with the
-            // now line and free gaps; then tasks with no time.
+            // One timeline under "Today": the "All day" group first (one row each, at most 3 then "+2 more"), finished
+            // events folded, events and planned tasks in time order with the now line and free gaps; then tasks with no time.
             val tl = today.timeline
             if (tl.hasTimedOrAllDay) {
-                item(key = "h-day") { SectionLabel("Your day", Modifier.animateItem().appear(rememberAppearance(3, play))) }
-                if (tl.allDay.isNotEmpty()) {
-                    item(key = "allday") { AllDayChips(tl.allDay, Modifier.animateItem().appear(rememberAppearance(3, play)), openEvent) }
+                item(key = "h-day") { SectionLabel("Today", Modifier.animateItem().appear(rememberAppearance(3, play))) }
+                items(AllDayRules.shown(tl.allDayItems, allDayOpen), key = { "a-" + it.event.id }) { a ->
+                    AllDayRow(a, Modifier.animateItem().appear(rememberAppearance(3, play)), openEvent, eventHandlers?.makeTask)
+                }
+                AllDayRules.moreLabel(tl.allDayItems, allDayOpen)?.let { more ->
+                    item(key = "allday-more") {
+                        AllDayMore(more, { allDayOpen = true }, Modifier.animateItem().appear(rememberAppearance(3, play)))
+                    }
                 }
                 tl.earlierLabel?.let { label ->
                     item(key = "earlier") {

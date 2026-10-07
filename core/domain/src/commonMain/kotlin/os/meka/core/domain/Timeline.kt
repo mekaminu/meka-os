@@ -34,10 +34,21 @@ data class UpNextEvent(
     val detail: String,
 )
 
+/**
+ * One row of Today's "All day" group (Today clarity, 2026-10-07): the title with its calendar under it, and whether it
+ * reads like a to-do ("Check if to pay for…"), which offers "Make it a task".
+ */
+data class AllDayItem(
+    val event: CalendarEvent,
+    /** "Personal" · "Fixtures" · "Personal · until Thu 8 Oct"; null when there's nothing to say. */
+    val line: String?,
+    val todo: Boolean,
+)
+
 data class DayTimeline(
     /** "Tuesday 6 October" */
     val dateLabel: String,
-    /** All-day events, shown as chips above the timeline. */
+    /** All-day events touching today, by title. */
     val allDay: List<CalendarEvent>,
     /** Events that have ended, folded away under [earlierLabel]. */
     val earlier: List<TimelineRow>,
@@ -48,7 +59,12 @@ data class DayTimeline(
     /** Open tasks for today with no time: "Anytime today". */
     val anytime: List<Task>,
     val nextEvent: UpNextEvent?,
+    /** [allDay] as rows of the "All day" group at the top of the timeline. */
+    val allDayItems: List<AllDayItem> = emptyList(),
 ) {
+    /** Timed events still to come (or running) today. */
+    val hasEventsAhead: Boolean get() = rows.any { it.kind == TimelineKind.EVENT }
+
     /** Nothing timed, nothing all-day, nothing ended: the timeline section can be left out. */
     val hasTimedOrAllDay: Boolean get() = allDay.isNotEmpty() || earlier.isNotEmpty() || rows.isNotEmpty()
 
@@ -138,6 +154,7 @@ object TimelineRules {
         return DayTimeline(
             dateLabel = CivilDate.longLabel(today.epochDay),
             allDay = allDay,
+            allDayItems = allDay.map { AllDayRules.item(it, today.epochDay) },
             earlier = ended.map { it.row },
             earlierLabel = if (ended.isEmpty()) null else "${ended.size} earlier",
             rows = rows,
@@ -169,5 +186,59 @@ object TimelineRules {
         "microsoft" -> "Outlook"
         "fixtures" -> "Fixtures"
         else -> null // Google is the default calendar and needs no label
+    }
+}
+
+/**
+ * Today's "All day" group (Today clarity, Meka 2026-10-07: the chip row cut titles off and didn't say it scrolled).
+ * Non-AI, pure, unit-tested.
+ *
+ * - One row each: the title, and under it the calendar's name (Google's calendar name, else "Outlook" / "Fixtures")
+ *   and, for an entry running past today, "until Thu 8 Oct".
+ * - At most [SHOWN] rows, then "+2 more", which unfolds the rest.
+ * - An entry that reads like a to-do gets "Make it a task": its first word is one of [TODO_VERBS] ("Check if to pay
+ *   for…", "Pay council tax", "Call the garage"), or it starts "To do", "Todo" or "Reminder". Fixtures never do.
+ */
+object AllDayRules {
+    const val SHOWN = 3
+
+    /** First words that make an all-day entry read like something to do. Lower case. */
+    val TODO_VERBS = setOf(
+        "apply", "arrange", "ask", "book", "buy", "call", "cancel", "chase", "check", "collect", "confirm", "email",
+        "file", "fill", "finish", "fix", "follow", "get", "order", "pay", "phone", "pick", "post", "prepare", "print",
+        "register", "remember", "renew", "reply", "return", "ring", "schedule", "send", "sign", "sort", "submit",
+        "text", "top", "transfer", "update",
+    )
+
+    private val PREFIXES = listOf("to do", "to-do", "todo", "reminder")
+
+    fun item(e: CalendarEvent, todayEpochDay: Long): AllDayItem {
+        // All-day bounds are UTC midnights with an exclusive end: the last day is the one before.
+        val lastDay = (e.endAtMs - 1).floorDiv(CivilDate.DAY_MS)
+        val until = if (lastDay > todayEpochDay) "until ${CivilDate.shortLabel(lastDay)}" else null
+        val line = listOfNotNull(calendarLabel(e), until).joinToString(" · ").ifEmpty { null }
+        return AllDayItem(e, line, !e.isFixture && looksLikeTodo(e.title))
+    }
+
+    fun looksLikeTodo(title: String): Boolean {
+        val t = title.trim().trimStart('-', '*', '•', '[', ']', ' ').lowercase()
+        if (PREFIXES.any { t.startsWith(it) && (t.length == it.length || !t[it.length].isLetter()) }) return true
+        val first = t.takeWhile { it.isLetter() }
+        return first in TODO_VERBS
+    }
+
+    /** The rows to show: all of them when [open] or when there are no more than [SHOWN]; else the first [SHOWN]. */
+    fun shown(items: List<AllDayItem>, open: Boolean): List<AllDayItem> =
+        if (open || items.size <= SHOWN) items else items.take(SHOWN)
+
+    /** "+2 more" while folded; null when everything is shown. */
+    fun moreLabel(items: List<AllDayItem>, open: Boolean): String? =
+        if (open || items.size <= SHOWN) null else "+${items.size - SHOWN} more"
+
+    private fun calendarLabel(e: CalendarEvent): String? = when {
+        e.isFixture -> "Fixtures"
+        !e.calendarName.isNullOrBlank() -> e.calendarName
+        e.provider == "microsoft" -> "Outlook"
+        else -> null
     }
 }

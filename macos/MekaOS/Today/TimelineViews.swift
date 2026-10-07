@@ -250,6 +250,56 @@ struct AllDayChips: View {
     }
 }
 
+/// One row of Today's "All day" group (Today clarity, matching the Fold's AllDayRow): the title in the regular event
+/// weight with its calendar under it; clicking opens the detail. An entry that reads like a to-do offers "Make it a
+/// task" (light haptic; the undo bar rises).
+struct AllDayRow: View {
+    @Environment(CoreModel.self) private var model
+    let item: AllDayItem
+    let palette: MekaPalette
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 0) {
+            Text("All day").font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.event.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                if let line = item.line {
+                    Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .opensEvent(item.event)
+            if item.todo {
+                Button("Make it a task") { model.makeAllDayTask(item.event) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption).foregroundStyle(palette.accent)
+                    .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+                    .background(Capsule().fill(palette.surfaceRaised))
+                    .help("Adds it to Today as a task and takes the entry off your day (your calendar is unchanged)")
+            }
+        }
+        .padding(.vertical, MekaSpace.xs)
+    }
+}
+
+/// "+2 more" under the all-day rows: unfolds the rest with a spring.
+struct AllDayMore: View {
+    let label: String
+    @Binding var open: Bool
+    let palette: MekaPalette
+
+    var body: some View {
+        Button { open = true } label: {
+            Text(label).font(MekaType.caption).foregroundStyle(palette.accent)
+                .padding(.leading, TimelineMetrics.timeColumn)
+                .padding(.vertical, MekaSpace.xxs)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// "3 earlier ›": unfolds the events that have finished.
 struct EarlierToggle: View {
     let label: String

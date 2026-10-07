@@ -2,6 +2,7 @@ package os.meka.core.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -126,5 +127,61 @@ class TimelineTest {
         val u = TodayProjection.project(listOf(task("a", priority = 2), task("b")), at(10), day)
         assertEquals("a", u.upNext!!.id)
         assertEquals(listOf("b"), u.timeline.anytime.map { it.id })
+    }
+
+    // ---- Today clarity (Meka, 2026-10-07): the "All day" group and an honest "You're clear." ----
+
+    private val oct6Day = CivilDate.toEpochDay(2026, 10, 6)
+    private fun allDay(id: String, title: String = id, days: Int = 1, calendar: String? = "Personal", provider: String = "google") =
+        CalendarEvent(id, title, oct6Day * 24 * hour, (oct6Day + days) * 24 * hour, true, null, provider, null, calendar)
+
+    @Test
+    fun allDayEntriesAreRowsWithTheirCalendarAndHowLongTheyRun() {
+        val tl = project(emptyList(), listOf(allDay("b", "Bank holiday"), allDay("a", "Away", days = 3), allDay("f", "Barça v Sevilla", calendar = null, provider = "fixtures")), at(10))
+        assertEquals(listOf("Away", "Bank holiday", "Barça v Sevilla"), tl.allDayItems.map { it.event.title })
+        assertEquals(listOf("Personal · until Thu 8 Oct", "Personal", "Fixtures"), tl.allDayItems.map { it.line })
+        val outlook = AllDayRules.item(allDay("o", calendar = null, provider = "microsoft"), oct6Day)
+        assertEquals("Outlook", outlook.line)
+        assertNull(AllDayRules.item(allDay("g", calendar = null), oct6Day).line)
+    }
+
+    @Test
+    fun atMostThreeShowThenMoreUnfoldsTheRest() {
+        val items = (1..5).map { AllDayRules.item(allDay("e$it"), oct6Day) }
+        assertEquals(3, AllDayRules.shown(items, open = false).size)
+        assertEquals("+2 more", AllDayRules.moreLabel(items, open = false))
+        assertEquals(5, AllDayRules.shown(items, open = true).size)
+        assertNull(AllDayRules.moreLabel(items, open = true))
+        val three = items.take(3)
+        assertEquals(3, AllDayRules.shown(three, open = false).size)
+        assertNull(AllDayRules.moreLabel(three, open = false))
+    }
+
+    @Test
+    fun entriesThatReadLikeToDosOfferMakeItATask() {
+        listOf("Check if to pay for the parking permit", "Pay council tax", "call the garage", "- Book MOT", "To do: forms", "Reminder: bins", "Renew passport")
+            .forEach { assertTrue(AllDayRules.looksLikeTodo(it), it) }
+        listOf("Bank holiday", "Mum's birthday", "Away", "Checkout day", "Payday", "Today", "Reminders app", "Calling Hours")
+            .forEach { assertFalse(AllDayRules.looksLikeTodo(it), it) }
+        assertTrue(AllDayRules.item(allDay("p", "Pay rent"), oct6Day).todo)
+        // Fixtures never do, whatever they're called.
+        assertFalse(AllDayRules.item(allDay("f", "Check the line-up", provider = "fixtures"), oct6Day).todo)
+    }
+
+    @Test
+    fun clearOnlyWhenNothingIsLeftIncludingAllDayItems() {
+        fun line(events: List<CalendarEvent>, tasks: List<Task> = emptyList(), now: Long = at(15)) =
+            TodayProjection.project(tasks, now, day, events).clearLine
+        assertEquals("You're clear.", line(emptyList()))
+        assertTrue(TodayProjection.project(emptyList(), at(15), day).isAllClear)
+        assertFalse(TodayProjection.project(emptyList(), at(15), day, listOf(allDay("b"))).isAllClear)
+        // Only events that have ended: nothing is left.
+        assertEquals("You're clear.", line(listOf(ev("standup", at(9), at(9, 30)))))
+        // All-day items remain: not clear, but nothing else is timed.
+        assertEquals("Nothing else timed today", line(listOf(allDay("b", "Bank holiday"), ev("standup", at(9), at(9, 30)))))
+        // An event still to come, or a task: the timeline and the task say what's left.
+        assertNull(line(listOf(allDay("b"), ev("call", at(16), at(17)))))
+        assertNull(line(listOf(ev("call", at(14), at(16)))))
+        assertNull(line(emptyList(), listOf(task("loose"))))
     }
 }

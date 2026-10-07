@@ -24,8 +24,26 @@ data class Today(
     /** "You're clear." — nothing needs attention and nothing is left today. */
     val isClear: Boolean get() = needsYou.isEmpty() && upNext == null && yourDay.isEmpty()
 
+    /**
+     * The line Today shows when no task is left (Today clarity, Meka 2026-10-07: "You're clear." showed beside all-day
+     * items). "You're clear." only when nothing at all is left today: no tasks, no timed event still to come and no
+     * all-day item; "Nothing else timed today" when all-day items remain; null while a task or a timed event is left
+     * (the timeline shows those). Events that have ended don't count: they're done.
+     */
+    val clearLine: String?
+        get() = when {
+            !isClear || timeline.hasEventsAhead -> null
+            timeline.allDay.isNotEmpty() -> NOTHING_ELSE_TIMED
+            else -> CLEAR
+        }
+
+    /** [clearLine] is "You're clear." (shown large); "Nothing else timed today" is a quieter line. */
+    val isAllClear: Boolean get() = clearLine == CLEAR
+
     companion object {
         const val MAX_NEEDS_YOU = 5
+        const val CLEAR = "You're clear."
+        const val NOTHING_ELSE_TIMED = "Nothing else timed today"
     }
 }
 

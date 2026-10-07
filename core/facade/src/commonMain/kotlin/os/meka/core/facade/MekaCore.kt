@@ -307,6 +307,10 @@ class MekaCore(
     suspend fun hideEvent(eventId: String) = onCore { eventActions.hide(eventId) }
     /** Shows a hidden event in my day again (also the Undo for [hideEvent]). */
     suspend fun showEvent(eventId: String) = onCore { eventActions.show(eventId) }
+    /** "Make it a task" on an all-day entry that reads like a to-do: a task with its title, and the entry leaves Today. */
+    suspend fun makeAllDayTask(event: os.meka.core.domain.CalendarEvent): String = onCore { eventActions.makeTask(event) }
+    /** Undo for [makeAllDayTask]: the task goes and the entry is back in Today. */
+    suspend fun undoAllDayTask(eventId: String) = onCore { eventActions.unmakeTask(eventId) }
     /** Remind me [minutes] before the event (a governor heads-up, CLOCK precision); 0 turns it off. */
     suspend fun setEventReminder(eventId: String, minutes: Int) = onCore { eventActions.setReminder(eventId, minutes) }
     /** Leave by: a heads-up [travelMinutes] before the event starts (how long it takes to get there); 0 turns it off. */

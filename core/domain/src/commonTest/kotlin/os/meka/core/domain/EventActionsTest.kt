@@ -330,4 +330,42 @@ class EventActionsTest {
         )
         assertEquals(1, ns.count { it.source == NoticeSource.EVENT_REMINDER })
     }
+
+    // ---- Make it a task (Today clarity, 2026-10-07) ----
+
+    private fun todo() = CalendarEvent("ad1", "Check if to pay for the parking permit", tue6 * 24 * hour, (tue6 + 1) * 24 * hour, true, null, "google", null, "Personal")
+
+    @Test
+    fun makeItATaskAddsAnUndatedTaskAndTheEntryLeavesToday() {
+        val e = todo()
+        val id = ea.makeTask(e)
+        val t = a.tasks.get(id)!!
+        assertEquals("Check if to pay for the parking permit", t.title)
+        assertEquals("ad1", t.eventId)
+        assertNull(t.dueAtMs)
+        assertNull(t.scheduledAtMs)
+        assertTrue(ea.marks().isHidden("ad1"))
+        // It isn't the entry's prep task.
+        assertNull(ea.marks().prepTasks["ad1"])
+        val today = TodayProjection.project(a.tasks.all(), at(tue6, 10), DayWindow(at(tue6, 0), at(tue6 + 1, 0), hour), ea.marks().visible(listOf(e)))
+        assertTrue(today.timeline.allDay.isEmpty())
+        assertEquals(id, (listOfNotNull(today.upNext) + today.yourDay).single().id)
+    }
+
+    @Test
+    fun makeItATaskOnBothDevicesOfflineMakesOneTaskAndUndoBringsTheEntryBack() {
+        ea.makeTask(todo())
+        em.makeTask(todo())
+        syncBoth()
+        listOf(a, m).forEach { d -> assertEquals(1, d.tasks.all().count { it.eventId == "ad1" }) }
+        ea.unmakeTask("ad1")
+        syncBoth()
+        listOf(a, m).forEach { d ->
+            assertTrue(d.tasks.all().none { it.eventId == "ad1" })
+            assertFalse(actions(d).marks().isHidden("ad1"))
+        }
+        // Made again after the undo: the same task comes back.
+        assertEquals(EventActions.allDayTaskId("ad1"), em.makeTask(todo()))
+        assertEquals(Lifecycle.ACTIVE, m.tasks.get("aad1")!!.lifecycle)
+    }
 }

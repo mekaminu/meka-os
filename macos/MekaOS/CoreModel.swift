@@ -757,6 +757,20 @@ final class CoreModel {
         if offerUndo { offerEventUndo("Hidden from your day", .showEvent(eventID)) }
     }
 
+    /// "Make it a task" on an all-day entry that reads like a to-do (Today clarity): a task with its title, and the
+    /// entry leaves Today; Undo deletes the task and brings the entry back. The event is handed to the core once.
+    func makeAllDayTask(_ event: CalendarEvent) {
+        guard let core else { return }
+        let eventID = event.id
+        MekaHaptics.light()
+        Task {
+            do {
+                _ = try await core.makeAllDayTask(event: event)
+                offerEventUndo("Made it a task", .unmakeTask(eventID))
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     func showEvent(_ eventID: String) {
         MekaHaptics.light()
         run { try await $0.showEvent(eventId: eventID) }
@@ -805,6 +819,7 @@ final class CoreModel {
         switch action {
         case .deleteTask(let id): run { try await $0.delete(taskId: id) }
         case .showEvent(let id): run { try await $0.showEvent(eventId: id) }
+        case .unmakeTask(let id): run { try await $0.undoAllDayTask(eventId: id) }
         case .reminder(let id, let m): run { try await $0.setEventReminder(eventId: id, minutes: m) }
         case .leaveBy(let id, let m): run { try await $0.setEventLeaveBy(eventId: id, travelMinutes: m) }
         case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }
@@ -903,6 +918,8 @@ struct EventUndoOffer: Identifiable, Equatable {
     enum Action: Equatable {
         case deleteTask(String)
         case showEvent(String)
+        /// "Make it a task" on an all-day entry: the task goes, the entry comes back.
+        case unmakeTask(String)
         case reminder(String, Int32)
         case leaveBy(String, Int32)
         /// Done / Tomorrow from the Needs you stack.

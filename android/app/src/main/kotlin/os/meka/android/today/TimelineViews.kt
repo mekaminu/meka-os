@@ -39,6 +39,8 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.AllDayItem
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.TimelineRow
 import os.meka.core.domain.UpNextEvent
@@ -118,6 +120,49 @@ internal fun AllDayChips(events: List<CalendarEvent>, modifier: Modifier = Modif
                     .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs),
             )
         }
+    }
+}
+
+/**
+ * One row of Today's "All day" group (Today clarity, Meka 2026-10-07): the title in the lighter event style with its
+ * calendar under it; tapping opens the event's detail. An entry that reads like a to-do offers "Make it a task" (light
+ * haptic; the undo bar rises).
+ */
+@Composable
+internal fun AllDayRow(item: AllDayItem, modifier: Modifier = Modifier, onEvent: ((CalendarEvent) -> Unit)? = null, onMakeTask: ((CalendarEvent) -> Unit)? = null) {
+    val haptics = rememberMekaHaptics()
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+            .then(if (onEvent != null) Modifier.clickable(role = Role.Button) { onEvent(item.event) } else Modifier)
+            .padding(vertical = MekaSpace.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("All day", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.width(TIME_COLUMN))
+        Column(Modifier.weight(1f)) {
+            Text(item.event.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            item.line?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        }
+        if (item.todo && onMakeTask != null) {
+            Text(
+                "Make it a task", style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.padding(start = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.pill))
+                    .background(Meka.colors.surfaceRaised)
+                    .clickable(role = Role.Button) { haptics.light(); onMakeTask(item.event) }
+                    .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs),
+            )
+        }
+    }
+}
+
+/** "+2 more" under the all-day rows: unfolds the rest (they spring in with the list's item motion). */
+@Composable
+internal fun AllDayMore(label: String, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onOpen() }.padding(vertical = MekaSpace.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Spacer(Modifier.width(TIME_COLUMN))
+        Text(label, style = MekaType.caption, color = Meka.colors.accent)
     }
 }
 
