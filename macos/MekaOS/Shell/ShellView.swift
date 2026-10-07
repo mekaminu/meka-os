@@ -37,6 +37,8 @@ struct ShellView: View {
         }
         // Self-updating phone app: publish the APK this Mac built for the Fold to offer.
         .sheet(isPresented: Binding(get: { model.showFoldUpdate }, set: { model.showFoldUpdate = $0 })) { FoldUpdateSheet(palette: palette) }
+        // Export everything (your data), from Today's header or File → Export All Data….
+        .sheet(isPresented: Binding(get: { model.showYourData }, set: { model.showYourData = $0 })) { YourDataSheet(palette: palette) }
     }
 
     /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).
@@ -65,32 +67,8 @@ struct ShellView: View {
         case .lists: ListsScreen()
         case .goals: GoalsScreen()
         case .review: ReviewScreen()
-        default: UpcomingView(destination: d, palette: palette)
+        case .vault: VaultScreen(palette: palette)
         }
-    }
-}
-
-/// A calm placeholder for destinations whose feature hasn't landed yet: says what's coming, nothing to click.
-private struct UpcomingView: View {
-    let destination: ShellDestination
-    let palette: MekaPalette
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.m) {
-            Text(destination.label)
-                .font(MekaType.greeting).tracking(MekaType.greetingTracking)
-                .foregroundStyle(palette.textPrimary)
-                .staggeredAppear(0)
-            Text(ShellNav.upcomingLine(destination) ?? "")
-                .font(MekaType.body).foregroundStyle(palette.textSecondary)
-                .frame(maxWidth: 480, alignment: .leading)
-                .staggeredAppear(1)
-            Spacer()
-        }
-        .padding(.horizontal, MekaSpace.gutter)
-        .padding(.vertical, MekaSpace.xl)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(palette.background)
     }
 }
 

@@ -3,6 +3,7 @@ import Foundation
 import Observation
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 /// Bridges the Kotlin `MekaCore` facade into SwiftUI. Kotlin owns all state and rules; this only mirrors flows.
 @MainActor
@@ -53,6 +54,12 @@ final class CoreModel {
     private(set) var publishingFoldUpdate = false
     private(set) var foldUpdateOutcome: String?
     private(set) var foldUpdatePublished = false
+    /// Export and backup: what an export would hold, and how the last one went.
+    var showYourData = false
+    private(set) var exportSummary: ExportSummary?
+    private(set) var exporting = false
+    private(set) var exportOutcome: String?
+    private(set) var exportSaved = false
     var selectedID: String?
     /// The shell's current destination and which way the last switch moved (for the push transition).
     private(set) var destination: ShellDestination = .today
@@ -215,6 +222,51 @@ final class CoreModel {
 
     /// The server refused this device (revoked or key mismatch); re-enrolling with the code fixes it.
     var signedOut: Bool { syncLine?.hasPrefix("This device was signed out") == true }
+
+    // MARK: Export (your data)
+
+    /// "312 items" · "214 tasks · 48 calendar events · …", for the export section.
+    func loadExportSummary() async {
+        guard let core else { return }
+        do { exportSummary = try await core.exportSummary() } catch { lastError = error.localizedDescription }
+    }
+
+    /// Builds the export, asks where to save it (save panel) and writes it there. Nothing is sent anywhere.
+    func exportEverything(reduced: Bool) async {
+        guard let core, !exporting else { return }
+        exporting = true
+        exportOutcome = nil
+        exportSaved = false
+        let file: DataExportFile
+        do {
+            file = try await core.exportAll()
+        } catch {
+            exporting = false
+            exportOutcome = "Couldn't put the export together: \(error.localizedDescription)"
+            return
+        }
+        // Plain strings from here on: the Kotlin object stays on the main actor.
+        let json = file.json
+        let totalLine = file.summary.totalLine
+        exportSummary = file.summary
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = file.fileName
+        panel.allowedContentTypes = [.json]
+        panel.canCreateDirectories = true
+        panel.message = "Save everything in MEKA as one JSON file. It isn't encrypted."
+        guard panel.runModal() == .OK, let url = panel.url else { exporting = false; return }
+        do {
+            try json.write(to: url, atomically: true, encoding: .utf8)
+            MekaHaptics.light()
+            withAnimation(reduced ? MekaMotion.appear(reduced: true) : .spring(response: 0.35, dampingFraction: 0.6)) {
+                exportSaved = true
+                exportOutcome = "Saved \(url.lastPathComponent) · \(totalLine)"
+            }
+        } catch {
+            exportOutcome = "Couldn't save there: \(error.localizedDescription)"
+        }
+        exporting = false
+    }
 
     // MARK: Shell
 

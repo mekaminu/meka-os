@@ -78,6 +78,7 @@ import os.meka.android.shell.SharedMotion
 import os.meka.android.notify.NotificationsPane
 import os.meka.android.search.SearchPane
 import os.meka.android.MekaApplication
+import os.meka.android.export.YourData
 import os.meka.android.update.UpdateCard
 import os.meka.android.update.UpdateState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -133,6 +134,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
     var showBrief by rememberSaveable { mutableStateOf(false) }
     var showNotifications by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
+    var showData by rememberSaveable { mutableStateOf(false) }
     // An event's detail (calendar redesign, slice 3); the last one is kept while the pane leaves.
     var eventOpen by remember { mutableStateOf<CalendarEvent?>(null) }
     var eventShown by remember { mutableStateOf<CalendarEvent?>(null) }
@@ -183,6 +185,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
                     TodayPane(today, sync, actions, m, connect, openCalendars, openPlan, !introPlayed, rowMotion,
                         workLabel = if (work.atWork) "At work" else "Off work", openWork = { showWork = true },
                         shutdown = shutdown, openShutdown = { showShutdown = true }, openNotifications = { showNotifications = true },
+                        openData = { showData = true },
                         openSearch = { showSearch = true },
                         brief = brief, openBrief = { showBrief = true },
                         reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } },
@@ -206,6 +209,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
             MekaPane(visible = showShutdown) { ShutdownPane(core, onClose = { showShutdown = false }) }
             MekaPane(visible = showBrief) { BriefPane(core, onClose = { showBrief = false }) }
             MekaPane(visible = showNotifications) { NotificationsPane(core, onClose = { showNotifications = false }) }
+            MekaPane(visible = showData) { YourData(core, onClose = { showData = false }) }
             MekaPane(visible = eventOpen != null) {
                 eventShown?.let { e -> EventDetailPane(core, e, onClose = { eventOpen = null }) }
             }
@@ -295,7 +299,7 @@ data class TodayActions(
 private fun TodayPane(
     today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?, openCalendars: (() -> Unit)?,
     openPlan: () -> Unit, play: Boolean, rowMotion: (String) -> RowMotion, workLabel: String, openWork: () -> Unit,
-    shutdown: ShutdownView, openShutdown: () -> Unit, openNotifications: () -> Unit, openSearch: () -> Unit,
+    shutdown: ShutdownView, openShutdown: () -> Unit, openNotifications: () -> Unit, openSearch: () -> Unit, openData: () -> Unit,
     brief: MorningBriefView, openBrief: () -> Unit,
     reviewCard: ReviewCard, openReviewCard: () -> Unit,
     openEvent: (CalendarEvent) -> Unit = {},
@@ -359,6 +363,11 @@ private fun TodayPane(
                             "Notifications", style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                                 .clickable(role = Role.Button) { openNotifications() }.padding(vertical = MekaSpace.xxs),
+                        )
+                        Text(
+                            "Your data", style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { openData() }.padding(vertical = MekaSpace.xxs),
                         )
                         val theme = Meka.theme
                         Text(

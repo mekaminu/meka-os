@@ -31,6 +31,8 @@ struct MekaOSApp: App {
                     .keyboardShortcut("n", modifiers: .command)
                 Divider()
                 Button("Publish Fold Update…") { model.prepareFoldUpdate(path: nil) }
+                Button("Export All Data…") { model.showYourData = true }
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
             }
             CommandGroup(after: .toolbar) {
                 Picker("Appearance", selection: $appearance) {

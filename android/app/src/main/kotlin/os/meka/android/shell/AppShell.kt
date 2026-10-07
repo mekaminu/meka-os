@@ -62,6 +62,7 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.calendar.CalendarRoute
+import os.meka.android.export.YourData
 import os.meka.android.lists.ListsRoute
 import os.meka.android.goals.GoalsRoute
 import os.meka.android.today.ConnectHook
@@ -157,17 +158,8 @@ private fun Destination(d: ShellDestination, core: MekaCore, connect: ConnectHoo
         ShellDestination.LISTS -> ListsRoute(core)
         ShellDestination.GOALS -> GoalsRoute(core)
         ShellDestination.REVIEW -> ReviewRoute(core)
-        ShellDestination.VAULT -> Upcoming(d, "Encrypted documents, with expiry dates sent to your plan, land here.")
-    }
-}
-
-/** A calm placeholder for destinations whose feature hasn't landed yet: says what's coming, nothing to tap. */
-@Composable
-private fun Upcoming(d: ShellDestination, line: String) {
-    Column(Modifier.fillMaxSize().padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl)) {
-        Text(d.label, style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
-        Spacer(Modifier.height(MekaSpace.m))
-        Text(line, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+        // Documents land here in V2; until then the Vault holds the export of everything (build plan M1).
+        ShellDestination.VAULT -> YourData(core, vaultLine = "Encrypted documents, with expiry dates sent to your plan, land here.")
     }
 }
 

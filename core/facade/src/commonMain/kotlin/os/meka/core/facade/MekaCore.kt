@@ -392,6 +392,26 @@ class MekaCore(
     /** Opens the review on the week Today's card is about (this week on Sunday, last week on Monday). */
     suspend fun showReviewCardWeek() = onCore { reviewOffset = _review.value.card.offset; refresh() }
 
+    // ---- Export ----
+
+    /** What an export would hold right now ("312 items" · "214 tasks · 48 calendar events · …"). */
+    suspend fun exportSummary(): os.meka.core.domain.ExportSummary =
+        onCore { os.meka.core.domain.DataExport.summary(os.meka.core.domain.DataExport.collect(replica, replica.deviceId, nowMs())) }
+
+    /**
+     * Everything on this device as one JSON file (build plan M1): the platform asks where to save it and writes
+     * [DataExportFile.json] there. Nothing is sent anywhere. The file isn't encrypted.
+     */
+    suspend fun exportAll(): DataExportFile = onCore {
+        val now = nowMs()
+        val data = os.meka.core.domain.DataExport.collect(replica, replica.deviceId, now)
+        DataExportFile(
+            fileName = os.meka.core.domain.DataExport.fileName(now, ZoneCalendar(timeZone)),
+            json = DataExportCodec.encode(data),
+            summary = os.meka.core.domain.DataExport.summary(data),
+        )
+    }
+
     // ---- Search ----
 
     /** Searches everything for [query] ("" clears it); results arrive on [searchView] and follow later edits. */
