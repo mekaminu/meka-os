@@ -4,6 +4,13 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import os.meka.backend.integrations.Integrations
+import os.meka.core.domain.ActivityRules
+import os.meka.core.domain.AppUpdateRules
+import os.meka.core.domain.EntityTypes
+import os.meka.core.sync.HlcClock
+import os.meka.core.sync.Op
+import os.meka.core.sync.ServerOpStore
 import os.meka.core.wire.WireCodec
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient
@@ -62,6 +69,52 @@ object ReleasePublisher {
     }
 
     private fun newNonce() = UUID.randomUUID().toString().replace("-", "")
+}
+
+/**
+ * Lists the GitHub build's publishes in Activity ("GitHub build published build 412", build plan: hands-free phone
+ * updates). When a build from [ReleasePublisher] is complete, the server writes one `agent_action` entry into the
+ * household's synced data as server-authored ops (like the mirrored calendars; ADR-008 addendum), so every device shows
+ * it with no new route. Builds a household device published (the Mac's manual fallback) aren't listed: the Mac did
+ * that itself. Op ids are fixed per build and field, so a build is recorded once however often it is reported.
+ */
+class ReleaseActivity(
+    private val ops: ServerOpStore,
+    private val now: () -> Long = System::currentTimeMillis,
+    /** Called after an entry was written, so push can wake the household's devices. */
+    private val onWritten: (householdId: String) -> Unit = {},
+) {
+    private val clock = HlcClock(Integrations.SERVER_DEVICE, now)
+
+    /** Returns whether an entry was written. */
+    fun record(who: DeviceIdentity, release: WireCodec.AppRelease): Boolean {
+        if (who.deviceId != ReleasePublisher.ID) return false
+        val hh = who.householdId
+        val id = ActivityRules.releaseId(release.platform, release.versionCode)
+        val build = AppUpdateRules.Build(release.versionCode, release.versionName, release.sizeBytes)
+        val fields = ActivityRules.releaseFields(ReleasePublisher.LABEL, "release:${ReleasePublisher.ID}", build, now())
+        val wrote = ops.transaction {
+            var appended = false
+            for ((field, value) in fields) {
+                val opId = opId(id, field)
+                if (ops.find(hh, opId) != null) continue
+                ops.append(
+                    Op(
+                        opId = opId, householdId = hh, entityType = EntityTypes.AGENT_ACTION, entityId = id, field = field,
+                        value = value, hlc = synchronized(clock) { clock.now() }, baseOpIds = emptyList(), deviceId = Integrations.SERVER_DEVICE,
+                    ),
+                )
+                appended = true
+            }
+            appended
+        }
+        if (wrote) runCatching { onWritten(hh) }
+        return wrote
+    }
+
+    companion object {
+        fun opId(entryId: String, field: String) = "srvrel$entryId${field.lowercase().filter(Char::isLetterOrDigit)}"
+    }
 }
 
 /** Where the server finds the publisher's public key; null while none is set (then every publisher request is refused). */

@@ -29,7 +29,12 @@ interface ReleaseStore {
  * phone checks the hash again, and Android refuses an update not signed with the installed app's key, so a build the
  * owner didn't sign can never be installed even if this server were compromised.
  */
-class Releases(private val store: ReleaseStore, private val keep: Int = 2) {
+class Releases(
+    private val store: ReleaseStore,
+    private val keep: Int = 2,
+    /** Called once when a build becomes complete (not for a re-publish of the same build); failures are ignored. */
+    private val onPublished: (who: DeviceIdentity, release: AppRelease) -> Unit = { _, _ -> },
+) {
     sealed class Upload {
         data class Ack(val received: Int, val complete: Boolean) : Upload()
         /** The build number is already taken by different contents, or isn't newer than what's published. */
@@ -66,6 +71,7 @@ class Releases(private val store: ReleaseStore, private val keep: Int = 2) {
         }
         store.markComplete(hh, r.platform, r.versionCode)
         store.prune(hh, r.platform, keep)
+        runCatching { onPublished(who, r) } // the build is published either way
         return Upload.Ack(r.chunkCount, true)
     }
 

@@ -345,10 +345,12 @@ fun main(args: Array<String>) {
             val push = pushFromEnv(ds)
             val integrations = integrationsFromEnv(opStore, onChanged = { hh -> push?.serverChanged(hh) })
             integrations?.let { startCalendarSync(it) }
+            // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
+            val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
             embeddedServer(Netty, port = port) {
                 mekaSync(
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
-                    releases = Releases(PostgresReleaseStore(ds)), push = push,
+                    releases = Releases(PostgresReleaseStore(ds), onPublished = { who, r -> releaseActivity.record(who, r) }), push = push,
                     publisher = System.getenv("MEKA_RELEASE_PUBLISHER_SECRET")?.takeIf { it.isNotBlank() }?.let { SecretsManagerPublisherKey(it) },
                 )
             }.start(wait = true)

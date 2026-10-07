@@ -234,4 +234,39 @@ class ActivityTest {
         assertEquals(UndoOutcome.NOT_UNDOABLE, la.undo(la.items().single().id))
         assertEquals(UndoOutcome.NOT_UNDOABLE, la.undo("nope"))
     }
+
+    // ---- Phone builds published by GitHub ----
+
+    @Test
+    fun aGitHubBuildShowsOnBothDevicesWithNothingToUndo() {
+        val build = AppUpdateRules.Build(412, "0.1.412", 24_300_000)
+        val id = ActivityRules.releaseId("android", 412)
+        assertEquals(id, ActivityRules.releaseId("android", 412))
+        assertTrue(id != ActivityRules.releaseId("android", 413) && id != ActivityRules.releaseId("macos", 412))
+        // The server writes it; here the Fold's replica stands in for the server's op, then it syncs to the Mac.
+        a.replica.commitLocal(EntityTypes.AGENT_ACTION, id, ActivityRules.releaseFields("GitHub build", "release:github-build", build, world.clock.nowMs))
+        syncBoth()
+        for (l in listOf(la, lm)) {
+            val view = l.view()
+            assertEquals("This week: 1 phone build", view.weekLine)
+            val row = view.days.single().rows.single()
+            assertEquals(ActivityKind.PUBLISHED, row.kind)
+            assertEquals("09:00", row.time)
+            assertEquals("GitHub build published build 412", row.summary)
+            assertEquals("MEKA 0.1.412 · 24.3 MB · install it from Today on the Fold", row.detail)
+            assertEquals("Why: Hands-free phone updates · after a green CI run on main", row.why)
+            assertFalse(row.canUndo)
+            assertEquals(UndoOutcome.NOT_UNDOABLE, l.undo(id))
+        }
+    }
+
+    @Test
+    fun anEntryOfAKindThisAppDoesntKnowIsSkipped() {
+        a.replica.commitLocal(
+            EntityTypes.AGENT_ACTION, "x1",
+            mapOf(ActivityFields.AT to world.clock.nowMs.fv(), ActivityFields.KIND to "FROM_THE_FUTURE".fv(), ActivityFields.SUMMARY to "?".fv()),
+        )
+        assertTrue(la.items().isEmpty())
+        assertTrue(la.view().isEmpty)
+    }
 }

@@ -41,6 +41,11 @@ enum class ActivityKind {
     DIGEST,
     /** MEKA changed something of yours (an automatic action); can be undone. */
     CHANGED,
+    /**
+     * A new phone build was published without Meka (the GitHub build, after a green CI run on main). Written by the
+     * server; nothing to undo (nothing installs without his tap). Older apps skip entries of a kind they don't know.
+     */
+    PUBLISHED,
 }
 
 /** One field MEKA changed: what it was, and what MEKA set. */
@@ -130,6 +135,39 @@ object ActivityRules {
         n.text.takeIf { it.isNotBlank() },
         "${n.source.label} · ${n.tier.label}",
     )
+
+    /** Entry id for a published app build: one per platform and build number, however often it is reported. */
+    fun releaseId(platform: String, versionCode: Long): String = "r" + fnv64("release:$platform:$versionCode")
+
+    /**
+     * What a build published by [publisher] (e.g. "GitHub build") says in Activity: "GitHub build published build 412"
+     * · "MEKA 0.1.412 · 24.3 MB · install it from Today on the Fold" · "Why: Hands-free phone updates · after a green
+     * CI run on main".
+     */
+    fun releaseSummary(publisher: String, b: AppUpdateRules.Build): Triple<String, String?, String> = Triple(
+        "$publisher published build ${b.versionCode}",
+        "MEKA ${b.versionName} · ${AppUpdateRules.sizeLabel(b.sizeBytes)} · install it from Today on the Fold",
+        "Hands-free phone updates · after a green CI run on main",
+    )
+
+    /**
+     * The fields of that entry, as the server writes them into Meka's synced data when the build is complete (ADR-008
+     * addendum): the same fields [ActivityLog] writes, so every device shows it like any other entry.
+     */
+    fun releaseFields(publisher: String, source: String, b: AppUpdateRules.Build, atMs: Long): Map<String, FieldValue> {
+        val (summary, detail, why) = releaseSummary(publisher, b)
+        return linkedMapOf(
+            ActivityFields.AT to FieldValue.Int64(atMs),
+            ActivityFields.KIND to FieldValue.Text(ActivityKind.PUBLISHED.name),
+            ActivityFields.SUMMARY to FieldValue.Text(summary.take(MAX_LINE)),
+            ActivityFields.DETAIL to FieldValue.Text(detail!!.take(MAX_LINE)),
+            ActivityFields.WHY to FieldValue.Text(why.take(MAX_LINE)),
+            ActivityFields.SOURCE to FieldValue.Text(source),
+        )
+    }
+
+    /** Longest summary, detail or why line kept in an entry. */
+    const val MAX_LINE = 300
 
     fun digestSummary(d: Digest): Triple<String, String?, String> = Triple(
         "Sent a digest: ${d.title}",
@@ -233,6 +271,7 @@ object ActivityRules {
             week.count { it.kind == ActivityKind.REMINDED }.takeIf { it > 0 }?.let { plural(it, "reminder") },
             week.count { it.kind == ActivityKind.DIGEST }.takeIf { it > 0 }?.let { plural(it, "digest") },
             week.count { it.kind == ActivityKind.CHANGED }.takeIf { it > 0 }?.let { plural(it, "change") },
+            week.count { it.kind == ActivityKind.PUBLISHED }.takeIf { it > 0 }?.let { plural(it, "phone build") },
         )
         val weekLine = if (parts.isEmpty()) "Nothing this week" else "This week: " + parts.joinToString(" · ")
         return ActivityView(if (shown.isEmpty()) "" else weekLine, days, EMPTY_LINE)
@@ -382,17 +421,13 @@ class ActivityLog(
             buildMap {
                 put(ActivityFields.AT, nowMs().fv())
                 put(ActivityFields.KIND, kind.name.fv())
-                put(ActivityFields.SUMMARY, summary.take(MAX_LINE).fv())
-                detail?.let { put(ActivityFields.DETAIL, it.take(MAX_LINE).fv()) }
-                put(ActivityFields.WHY, why.take(MAX_LINE).fv())
+                put(ActivityFields.SUMMARY, summary.take(ActivityRules.MAX_LINE).fv())
+                detail?.let { put(ActivityFields.DETAIL, it.take(ActivityRules.MAX_LINE).fv()) }
+                put(ActivityFields.WHY, why.take(ActivityRules.MAX_LINE).fv())
                 put(ActivityFields.SOURCE, source.fv())
                 level?.let { put(ActivityFields.LEVEL, it.fv()) }
                 changes?.let { put(ActivityFields.CHANGES, it.fv()) }
             },
         )
-    }
-
-    private companion object {
-        const val MAX_LINE = 300
     }
 }
