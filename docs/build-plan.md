@@ -243,7 +243,7 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
   - *Remaining:* nothing automatic exists yet, so no entry can be undone in the apps today; each automatic action (V1 policy engine onwards) must go through `ActivityLog.act`. Later slices: "Prevented misses" (ADR-013) from reminders followed by the item being done before it was due; filtering by kind; the Fold's work-mode alerts and after-work nudge in the log once they move onto the governor.
 - [ ] Policy engine UI: "What MEKA may do" per area, kill switch, locked rows
 - [ ] Approvals inbox ("Needs you") with biometric confirmation for financial/trading items
-- [!] AI layer (extraction, drafting, Ask MEKA) — needs Anthropic API key and monthly spend cap (Needs Meka #3)
+- [ ] AI layer (extraction, drafting, Ask MEKA) — key in place since 2026-10-07 (Secrets Manager `meka-os-dev/ai/anthropic`, `{"api_key": …}`; Anthropic Console org cap $40/month, shared with Kestrel). First slice: the service reads the key (empty = AI off), one health check call, and a server-side reminder that the key expires on 2027-10-07 (shown in Needs you from 2027-09-20).
 - [!] Email triage for Gmail and Outlook — needs mail read permission (Needs Meka #4)
   - *Decided 2026-10-07:* junk and newsletters filed automatically (reversible, logged); important email → notification with a drafted reply for one-tap approval; **easy replies are batch-approved** ("Send all 5"), never sent on their own.
 - [ ] Promises spotted in email → Waiting for; receipts → Vault; renewals radar fills itself
@@ -284,7 +284,7 @@ Things only the owner can do. Build runs skip these and carry on with the rest.
 
 1. **Microsoft registration** for Outlook (10 min, steps already given).
 2. **Firebase project** (free) for push notifications: create it with your Google account, download `google-services.json`.
-3. **AI layer:** create an Anthropic API key with a monthly spend limit (Anthropic Console → Billing: add credit and a monthly limit; API keys: create key), then paste it into AWS Secrets Manager → `meka-os-dev/ai/anthropic` as `{"api_key": "sk-ant-…"}`. The slot exists from 2026-10-07; empty means AI stays off.
+3. **AI layer** — done 2026-10-07: key saved in Secrets Manager (expires 2027-10-07; $40/month cap shared with Kestrel).
 4. **Mail permission:** reconnect Google and Outlook with mail read access when email triage lands.
 5. **Kestrel change:** OK to add an "approval request" event to Kestrel and let MEKA send back approve/decline.
 6. **Apple Developer Program** (paid yearly) for a notarised Mac app. Optional: dev builds keep working without it.
