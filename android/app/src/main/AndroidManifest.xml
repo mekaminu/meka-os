@@ -14,6 +14,9 @@
     <!-- Event reminders (Remind me / Leave by): CLOCK precision only, ADR-007. Not granted by default; Meka can allow
          "Alarms & reminders" from the event detail, else reminders use a 5-minute window. Never USE_EXACT_ALARM. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Ongoing notifications (Outside the app): Android 16's "live updates" treatment for the event countdown and a
+         running fast (a normal permission, granted at install; ignored on older Android). -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
 
     <application
         android:name=".MekaApplication"
@@ -106,6 +109,13 @@
              an update. -->
         <receiver
             android:name=".notify.GovernorAlarmReceiver"
+            android:exported="false" />
+        <!-- Ongoing notifications (Outside the app): their windowed alarm (ADR-007) and the swipe-away record. -->
+        <receiver
+            android:name=".notify.OngoingAlarmReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".notify.OngoingDismissReceiver"
             android:exported="false" />
         <!-- Self-updating phone app: the install session's status (Android's Install prompt, then success or failure). -->
         <receiver

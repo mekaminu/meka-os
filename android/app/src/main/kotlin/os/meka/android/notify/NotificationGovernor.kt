@@ -241,6 +241,7 @@ class RestartReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
                 app.governor.run()
+                app.ongoing.run()
                 app.nudger.evaluate(app.core.currentWorkMode())
             } finally {
                 pending.finish()

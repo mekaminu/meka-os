@@ -552,6 +552,14 @@ class MekaCore(
     fun coverNow(): os.meka.core.domain.NowView =
         os.meka.core.domain.CoverNowRules.now(_today.value, nowMs(), ZoneCalendar(timeZone))
 
+    /**
+     * What runs outside the app (Outside the app, slice 1): the next event's countdown from 30 minutes before it and a
+     * running fast, for the Fold's ongoing notifications and the Mac's menu bar. Pure and cheap, read from the current
+     * Today and fasting views; [OngoingView.nextChangeMs] says when to look again. Nothing is stored.
+     */
+    fun ongoing(): os.meka.core.domain.OngoingView =
+        os.meka.core.domain.OngoingRules.view(_today.value, _fasting.value, nowMs(), ZoneCalendar(timeZone))
+
     suspend fun resolve(choice: ConflictChoice, chosenOption: String) = onCore {
         tasks.resolveConflict(choice.conflict, FieldValue.Text(chosenOption))
     }

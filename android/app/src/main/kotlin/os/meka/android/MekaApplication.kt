@@ -8,6 +8,8 @@ import os.meka.android.security.AndroidDeviceKey
 import os.meka.android.security.DatabaseKeyStore
 import os.meka.android.sync.SyncWorker
 import os.meka.android.notify.NotificationGovernor
+import os.meka.android.notify.OngoingNotifier
+import os.meka.android.notify.OngoingRouting
 import os.meka.android.shell.ShellDestination
 import os.meka.android.update.AppUpdater
 import os.meka.android.work.AfterWorkNudger
@@ -42,6 +44,8 @@ class MekaApplication : Application() {
     val nudger: AfterWorkNudger by lazy { AfterWorkNudger(this, this) }
     /** Notification governor: tiers, quiet hours and the two digests, posted on this phone. */
     val governor: NotificationGovernor by lazy { NotificationGovernor(this, this) }
+    /** Ongoing notifications: the next event's countdown and a running fast. */
+    val ongoing: OngoingNotifier by lazy { OngoingNotifier(this, this) }
     /** Self-updating phone app: newer builds the Mac published, offered in Today. */
     val updater: AppUpdater by lazy { AppUpdater(this) }
     /** Set by tapping a MEKA notification: the shell opens this destination. */
@@ -90,6 +94,14 @@ class MekaApplication : Application() {
                 // Event reminders: a reminder set or changed, or an event moved on the server.
                 core.eventMarks.map { }, core.calendarView.map { },
             ).debounce(GOVERNOR_SETTLE_MS).collect { runCatching { governor.run() } }
+        }
+        // Ongoing notifications follow Today and the fast, but only re-post when what they show changes (Today moves
+        // every minute; the system ticks their clocks). Also once at process start, which re-arms their alarm.
+        appScope.launch {
+            merge(core.today.map { }, core.fastingView.map { })
+                .map { OngoingRouting.signature(core.ongoing()) }
+                .distinctUntilChanged()
+                .collect { runCatching { ongoing.run() } }
         }
     }
 

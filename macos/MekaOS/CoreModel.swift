@@ -679,6 +679,15 @@ final class CoreModel {
         return core?.coverNow()
     }
 
+    /// What runs outside the app (Outside the app, slice 1): beside MEKA's mark in the menu bar, the next event's
+    /// countdown from half an hour before ("12 min", then "Now") or a running fast ("14 h 12 m"). Read from Today and the
+    /// fast, so it follows Today's minute refresh. nil when nothing is going on.
+    var menuBarStatus: (text: String, symbol: String)? {
+        _ = today; _ = fasting // observed: the menu bar redraws whenever either does
+        guard let v = core?.ongoing(), let text = v.menuBar, let first = v.items.first else { return nil }
+        return (text, first.kind == .meeting ? "clock" : "circle.lefthalf.filled")
+    }
+
     // MARK: Calendar actions (MEKA-only; the real calendars stay read-only)
 
     /// Adds the event's prep task ("Prepare for …", planned 30 min before it); Undo deletes it.

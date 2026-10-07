@@ -119,7 +119,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(cur.reachedGoal)
         XCTAssertEqual(FastingRules.shared.clock(elapsedMs: 3_600_000), "1:00:00")
         XCTAssertEqual(FastingRules.shared.planLabel(p: core.fastingView.value.plan), "16:8")
+        // Outside the app: the running fast is what the menu bar shows beside the mark.
+        let ongoing = core.ongoing()
+        XCTAssertEqual(ongoing.items.last?.kind, .fast)
+        XCTAssertEqual(ongoing.items.last?.progressPercent?.intValue, 6)
+        XCTAssertNotNil(ongoing.menuBar)
         try await core.endFast()
+        XCTAssertTrue(core.ongoing().items.filter { $0.kind == .fast }.isEmpty)
         XCTAssertNil(core.fastingView.value.current)
         XCTAssertEqual(core.fastingView.value.last?.canResume, true)
         XCTAssertEqual(core.fastingView.value.week.count, 7)

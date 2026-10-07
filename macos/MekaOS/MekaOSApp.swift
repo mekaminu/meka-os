@@ -64,12 +64,29 @@ struct MekaOSApp: App {
             }
         }
 
-        // Menu-bar quick capture (brief §45).
-        MenuBarExtra("Meka", systemImage: "circle.dotted") {
+        // Menu-bar quick capture (brief §45), with the now card; beside the mark, the next event's countdown or a
+        // running fast (Outside the app).
+        MenuBarExtra {
             QuickCaptureMenu().environment(model)
                 .preferredColorScheme((MekaAppearance(rawValue: appearance) ?? .dark).scheme)
+        } label: {
+            MenuBarStatusLabel(model: model)
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+/// MEKA's mark in the menu bar, and beside it "12 min" before the next event or "14 h 12 m" into a fast.
+struct MenuBarStatusLabel: View {
+    let model: CoreModel
+
+    var body: some View {
+        if let status = model.menuBarStatus {
+            Image(systemName: status.symbol)
+            Text(status.text).monospacedDigit()
+        } else {
+            Image(systemName: "circle.dotted")
+        }
     }
 }
 
