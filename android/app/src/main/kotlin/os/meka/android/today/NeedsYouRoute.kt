@@ -1,20 +1,12 @@
 package os.meka.android.today
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
-import os.meka.android.designsystem.MekaRadius
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -29,13 +21,20 @@ import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.MekaSharedLayout
-import os.meka.android.shell.SharedMotion
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.work.AfterWorkCard
 import os.meka.android.work.AfterWorkHost
+import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
+import os.meka.android.calendar.EventUndoBar
+import os.meka.android.calendar.rememberEventUndo
+import os.meka.core.domain.DecisionCard
+import os.meka.core.domain.DecisionEffect
+import os.meka.core.domain.DecisionMove
+import os.meka.core.domain.NeedsYouStackRules
 import os.meka.core.domain.Task
 import os.meka.core.facade.MekaCore
 import androidx.compose.runtime.LaunchedEffect
@@ -43,28 +42,51 @@ import os.meka.android.MekaApplication
 import androidx.compose.ui.platform.LocalContext
 
 /**
- * NEEDS YOU: everything waiting on a decision (conflicts, overdue, due today but unscheduled). Approvals join this
- * list in V1. Same layout rules as Today: two panes when wide, detail springs up over the list when narrow.
+ * NEEDS YOU: a stack of decisions (four tabs, slice 2): conflicts, overdue, due today but unscheduled, then "From your
+ * lists" when chases, reviews or renewals are due. Right = yes/do, left = later, up = open, each card with its why
+ * ([DecisionStackView]). Approvals join the stack in V1. Same layout rules as Today: two panes when wide, the detail
+ * springs up over the stack when narrow.
  */
 @Composable
 fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
     val today by core.today.collectAsState()
-    val lists by core.listsView.collectAsState()
+    val stack by core.needsYouStack.collectAsState()
     val conflicts by core.conflicts.collectAsState()
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val actions = todayActions(core, scope, { selectedId }) { selectedId = it }
     val selected = today.needsYou.map { it.task }.firstOrNull { it.id == selectedId }
     var showAfterWork by rememberSaveable { mutableStateOf(false) }
+    // Cards set aside with "Later" on this screen (nothing is written): they go to the back of the stack.
+    var setAside by remember { mutableStateOf(listOf<String>()) }
+    val undo = rememberEventUndo()
     val app = LocalContext.current.applicationContext as MekaApplication
     val openAfterWork by app.openAfterWork.collectAsState()
     LaunchedEffect(openAfterWork) {
         if (openAfterWork) { showAfterWork = true; app.openAfterWork.value = false }
     }
+    val onMove: (DecisionCard, DecisionMove) -> Unit = { card, move ->
+        when (val effect = card.effect(move)) {
+            DecisionEffect.COMPLETE_TASK, DecisionEffect.SNOOZE_TASK -> {
+                val id = card.taskId
+                if (id != null) scope.launch {
+                    val done = runCatching { core.decide(id, effect) }.getOrNull()
+                    if (done != null) undo.show(NeedsYouStackRules.message(card, move)) { core.undoDecision(done) }
+                }
+            }
+            DecisionEffect.OPEN_TASK -> selectedId = card.taskId
+            DecisionEffect.OPEN_LISTS -> openLists()
+            DecisionEffect.SET_ASIDE -> {
+                setAside = setAside - card.id + card.id
+                undo.show(NeedsYouStackRules.message(card, move)) { setAside = setAside - card.id }
+            }
+        }
+    }
 
     MekaSharedLayout(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
             val twoPane = maxWidth >= 600.dp
+            val cards = NeedsYouStackRules.ordered(stack, setAside)
             val list: @Composable (Modifier) -> Unit = { m ->
                 LazyColumn(
                     m,
@@ -78,22 +100,19 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
                     item(key = "after-work") {
                         AfterWorkCard(core, Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(1))) { showAfterWork = true }
                     }
-                    lists.dueLine?.let { line ->
-                        item(key = "lists-due") { ListsDueCard(line, Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(1)), openLists) }
-                    }
-                    if (today.needsYou.isEmpty() && lists.dueLine == null) {
+                    if (cards.isEmpty()) {
                         item(key = "clear") {
                             Text("Nothing is waiting on you.", style = MekaType.upNextTitle, color = Meka.colors.textSecondary,
                                 modifier = Modifier.animateItem().appear(rememberAppearance(1)))
                         }
-                    }
-                    items(today.needsYou, key = { it.task.id }) { n ->
-                        val motion = RowMotion(shareTitle = true, titleVisible = SharedMotion.rowTitleVisible(n.task.id, selectedId, !twoPane, false, emptySet()))
-                        TaskRow(n.task, actions, reason = n.reason, motion = motion, modifier = Modifier.animateItem().appear(rememberAppearance(1)))
+                    } else {
+                        item(key = "stack") {
+                            DecisionStackView(cards, onMove, Modifier.animateItem().appear(rememberAppearance(1)))
+                        }
                     }
                 }
             }
-            // Opening the Fold grows the detail out beside the list; closed, the detail springs up over it.
+            // Opening the Fold grows the detail out beside the stack; closed, the detail springs up over it.
             TwoPaneMorph(
                 twoPane,
                 list = list,
@@ -107,18 +126,8 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
                 }
             }
             MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
+            EventUndoBar(undo, Modifier.align(Alignment.BottomCenter))
         }
     }
 }
 
-/** Chases and reviews that are due today, one calm card that opens Lists. */
-@Composable
-private fun ListsDueCard(line: String, modifier: Modifier, open: () -> Unit) {
-    Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
-            .clickable(role = Role.Button, onClickLabel = "Open Lists") { open() }.padding(MekaSpace.m),
-    ) {
-        Text("From your lists", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-        Text(line, style = MekaType.itemMeta, color = Meka.colors.accent)
-    }
-}

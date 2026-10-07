@@ -219,6 +219,27 @@ class MekaCoreTest {
     }
 
     @Test
+    fun needsYouStackFollowsListsAndDecideUndoesOnBothDevices() = runTest {
+        val a = core("android"); val m = core("mac")
+        val today = a.todayEpochDay()
+        assertTrue(a.needsYouStack.value.isEmpty)
+        a.addRenewal("Netflix", os.meka.core.domain.ObligationKind.SUBSCRIPTION, today + 2,
+            os.meka.core.domain.RenewalRepeat.MONTHLY, "10.99", null)
+        val card = a.needsYouStack.value.cards.single()
+        assertEquals(os.meka.core.domain.NeedsYouStackRules.LISTS_ID, card.id)
+        assertEquals("1 renewal due", card.why)
+
+        val id = a.addTask("Send invoice")
+        val undo = a.decide(id, os.meka.core.domain.DecisionEffect.COMPLETE_TASK)!!
+        a.syncNow(); m.syncNow()
+        assertEquals(listOf(id), m.today.value.doneToday.map { it.id })
+        assertTrue(a.undoDecision(undo))
+        a.syncNow(); m.syncNow()
+        assertEquals(id, m.today.value.upNext?.id)
+        assertEquals(null, a.decide(id, os.meka.core.domain.DecisionEffect.OPEN_TASK))
+    }
+
+    @Test
     fun habitsTickSyncAndThePlanMakesRoomForOnesThatAreDue() = runTest {
         val a = core("android"); val m = core("mac")
         val goal = a.addGoal("Fitter by spring", null, os.meka.core.domain.GoalHorizon.MEDIUM)

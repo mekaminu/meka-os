@@ -145,6 +145,13 @@ class MekaCore(
      */
     val listsView: StateFlow<ListsView> = _lists.asStateFlow()
 
+    private val _needsYouStack = MutableStateFlow(os.meka.core.domain.NeedsYouStack.EMPTY)
+    /**
+     * Needs you as a stack of decisions (four tabs, slice 2): Today's Needs you, then "From your lists" when something
+     * is due, each card with its why and what right / left / up do. Follows edits and sync; moves with the clock.
+     */
+    val needsYouStack: StateFlow<os.meka.core.domain.NeedsYouStack> = _needsYouStack.asStateFlow()
+
     private val _goals = MutableStateFlow(GoalsView.EMPTY)
     /** Habits (pace, streaks, this week) and goals (progress). Synced; moves with the clock. */
     val goalsView: StateFlow<GoalsView> = _goals.asStateFlow()
@@ -268,6 +275,17 @@ class MekaCore(
     suspend fun skipOccurrence(taskId: String) = onCore { tasks.skipOccurrence(taskId) }
     /** Moves just this occurrence (or a one-off task) out of Today for [days] days. */
     suspend fun snooze(taskId: String, days: Int = 1) = onCore { tasks.snoozeOccurrence(taskId, days) }
+
+    /**
+     * Done or Tomorrow from the Needs you stack ([os.meka.core.domain.DecisionEffect.COMPLETE_TASK] /
+     * [os.meka.core.domain.DecisionEffect.SNOOZE_TASK]); returns what the undo bar needs, or null when nothing changed
+     * (the task was already done, or the effect is one the app handles: opening or setting aside).
+     */
+    suspend fun decide(taskId: String, effect: os.meka.core.domain.DecisionEffect): os.meka.core.domain.DecisionUndo? =
+        onCore { tasks.decide(taskId, effect) }
+
+    /** Undo for [decide]: puts the task back only while it is still as the move left it. */
+    suspend fun undoDecision(undo: os.meka.core.domain.DecisionUndo): Boolean = onCore { tasks.undoDecision(undo) }
 
     /** Steps: a repeating task with steps is a routine, and each new occurrence brings them back unticked. */
     suspend fun addStep(taskId: String, text: String): String = onCore { tasks.addChecklistItem(taskId, text) }
@@ -647,6 +665,7 @@ class MekaCore(
         val dayEvents = marks.visible(allEvents)
         _today.value = project(all, dayEvents)
         _lists.value = lists.view(all, renewals.view())
+        _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(_today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone))
         _goals.value = goals.view(all)
         _fasting.value = fasting.view()
         val workState = work.state(localClock())

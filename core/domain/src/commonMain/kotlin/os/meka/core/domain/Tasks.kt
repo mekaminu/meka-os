@@ -349,6 +349,44 @@ class Tasks(
         replica.commitLocal(EntityTypes.TASK, id, mapOf(ActionableFields.LIFECYCLE to Lifecycle.ACTIVE.name.fv()))
     }
 
+    /**
+     * Done or Tomorrow from the Needs you stack, returning what the undo bar needs. Done on a repeating occurrence
+     * creates the next one, as anywhere else.
+     */
+    fun decide(id: String, effect: DecisionEffect): DecisionUndo? {
+        val before = get(id) ?: throw ValidationException("Task not found")
+        if (before.lifecycle.isTerminal) return null
+        when (effect) {
+            DecisionEffect.COMPLETE_TASK -> complete(id)
+            DecisionEffect.SNOOZE_TASK -> snoozeOccurrence(id, 1)
+            else -> return null
+        }
+        val after = get(id) ?: return null
+        return DecisionUndo(id, effect, TaskTiming.of(before), TaskTiming.of(after))
+    }
+
+    /**
+     * Puts back what [decide] changed, only while the task is still as it was left (a change made since, here or on
+     * another device, wins). Returns false when there was nothing to put back. A repeating task's next occurrence,
+     * created by Done, stays (it waits for its own day), as with Reopen.
+     */
+    fun undoDecision(u: DecisionUndo): Boolean {
+        val now = get(u.taskId) ?: return false
+        if (TaskTiming.of(now) != u.after) return false
+        val changes = linkedMapOf<String, FieldValue>()
+        when (u.effect) {
+            DecisionEffect.COMPLETE_TASK -> changes[ActionableFields.LIFECYCLE] = u.before.lifecycle.name.fv()
+            DecisionEffect.SNOOZE_TASK -> {
+                changes[TaskFields.DEFERRED_TO_DAY] = u.before.deferredToDay?.fv() ?: FieldValue.Null
+                changes[TaskFields.SCHEDULED_AT] = u.before.scheduledAtMs?.fv() ?: FieldValue.Null
+                changes[ActionableFields.DUE_AT] = u.before.dueAtMs?.fv() ?: FieldValue.Null
+            }
+            else -> return false
+        }
+        replica.commitLocal(EntityTypes.TASK, u.taskId, changes)
+        return true
+    }
+
     fun moveToSomeday(id: String, kind: SomedayKind = SomedayKind.IDEA) {
         requireExists(id)
         replica.commitLocal(

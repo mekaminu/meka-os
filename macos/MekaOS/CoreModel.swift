@@ -16,6 +16,10 @@ final class CoreModel {
     private(set) var work: WorkModeState?
     /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
     private(set) var lists: ListsView?
+    /// Needs you as a stack of decisions (four tabs, slice 2); see `needsYouCards`.
+    private(set) var needsYouStack: NeedsYouStack?
+    /// Cards set aside with "Later" on this Mac (nothing is written): they go to the back of the stack.
+    private(set) var needsYouSetAside: [String] = []
     /// Habits (pace, streaks) and goals (progress). Synced with the Fold.
     private(set) var goals: GoalsView?
     /// The running fast, the eating window and the last seven days. Synced with the Fold.
@@ -122,6 +126,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await l in core.listsView { self?.lists = l }
+        })
+        observers.append(Task { [weak self] in
+            for await n in core.needsYouStack { self?.needsYouStack = n }
         })
         observers.append(Task { [weak self] in
             for await g in core.goalsView { self?.goals = g }
@@ -738,10 +745,51 @@ final class CoreModel {
         case .showEvent(let id): run { try await $0.showEvent(eventId: id) }
         case .reminder(let id, let m): run { try await $0.setEventReminder(eventId: id, minutes: m) }
         case .leaveBy(let id, let m): run { try await $0.setEventLeaveBy(eventId: id, travelMinutes: m) }
+        case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }
+        case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         }
     }
 
     func dismissEventUndo() { eventUndo = nil }
+
+    // MARK: Needs you stack
+
+    /// The stack as shown: set-aside cards at the back, in the order they were set aside.
+    var needsYouCards: [DecisionCard] {
+        guard let stack = needsYouStack else { return [] }
+        return NeedsYouStackRules.shared.ordered(stack: stack, setAside: needsYouSetAside)
+    }
+
+    /// A move on a card (→ yes, ← later, ↑ open): Done and Tomorrow go to the core with an undo bar; Choose/Open
+    /// select the task beside the stack; Go through opens Lists; Later sets the card aside on this screen.
+    func decide(_ card: DecisionCard, _ move: DecisionMove, reduced: Bool) {
+        let message = NeedsYouStackRules.shared.message(card: card, move: move)
+        let effect = card.effect(move: move)
+        switch effect {
+        case .completeTask, .snoozeTask:
+            guard let id = card.taskId, let core else { return }
+            MekaHaptics.light()
+            if selectedID == id { selectedID = nil }
+            Task {
+                do {
+                    if let undo = try await core.decide(taskId: id, effect: effect) {
+                        offerEventUndo(message, .decision(undo))
+                    }
+                } catch { lastError = error.localizedDescription }
+            }
+        case .openTask:
+            if let id = card.taskId { select(id, reduced: reduced) }
+        case .openLists:
+            go(to: .lists, reduced: reduced)
+        case .setAside:
+            MekaHaptics.light()
+            withAnimation(MekaMotion.replan(reduced: reduced)) {
+                needsYouSetAside.removeAll { $0 == card.id }
+                needsYouSetAside.append(card.id)
+            }
+            offerEventUndo(message, .unsetAside(card.id))
+        }
+    }
 
     private func offerEventUndo(_ message: String, _ action: EventUndoOffer.Action?) {
         let offer = EventUndoOffer(message: message, action: action)
@@ -795,6 +843,10 @@ struct EventUndoOffer: Identifiable, Equatable {
         case showEvent(String)
         case reminder(String, Int32)
         case leaveBy(String, Int32)
+        /// Done / Tomorrow from the Needs you stack.
+        case decision(DecisionUndo)
+        /// A card set aside with Later comes back to the front.
+        case unsetAside(String)
     }
 
     let id = UUID()

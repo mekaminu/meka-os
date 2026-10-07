@@ -89,53 +89,33 @@ struct ShellView: View {
     }
 }
 
-/// NEEDS YOU on the Mac: everything waiting on a decision, beside the detail. Approvals join this list in V1.
+/// NEEDS YOU on the Mac: a stack of decisions beside the detail (four tabs, slice 2): conflicts, overdue, due today
+/// but unscheduled, then "From your lists". → yes/do, ← later, ↑ open (keys, buttons or a drag). Approvals join in V1.
 struct NeedsYouView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
-    @Namespace private var selection
 
     var body: some View {
         HSplitView {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: MekaSpace.xs) {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     Text("Needs you")
                         .font(MekaType.greeting).tracking(MekaType.greetingTracking)
                         .foregroundStyle(palette.textPrimary)
                         .padding(.bottom, MekaSpace.l)
                         .staggeredAppear(0)
-                    let items = model.today?.needsYou ?? []
-                    if let line = model.lists?.dueLine {
-                        Button { model.go(to: .lists, reduced: reduceMotion) } label: {
-                            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                                Text("From your lists").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-                                Text(line).font(MekaType.itemMeta).foregroundStyle(palette.accent)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(MekaSpace.m)
-                            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Opens Lists")
-                        .padding(.bottom, MekaSpace.s)
-                        .staggeredAppear(1)
-                    }
-                    if items.isEmpty && model.lists?.dueLine == nil {
+                    if model.needsYouCards.isEmpty {
                         Text("Nothing is waiting on you.")
                             .font(MekaType.upNextTitle).foregroundStyle(palette.textSecondary)
                             .staggeredAppear(1)
-                    }
-                    ForEach(items, id: \.task.id) { item in
-                        TaskRow(task: item.task, reason: item.reason, palette: palette).staggeredAppear(1)
+                    } else {
+                        NeedsYouStackView(palette: palette).staggeredAppear(1)
                     }
                 }
                 .padding(.horizontal, MekaSpace.gutter)
                 .padding(.vertical, MekaSpace.xl)
-                .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.needsYou.map(\.task.id))
             }
-            .environment(\.selectionNamespace, selection)
             .frame(minWidth: 380, idealWidth: 520)
             DetailView(task: model.selected, palette: palette)
                 .frame(minWidth: 280, idealWidth: 360)
