@@ -25,6 +25,8 @@ env:
 
 jobs:
   # App-only commits (android/, macos/, design/) don't change the server, so skip the 6-minute deploy for them.
+  # "Changed" is measured against the commit the stack last deployed (its DeployedCommit output), not HEAD~1, so a
+  # server commit whose CI failed, followed by an app-only fix, still deploys. No recorded commit → deploy.
   changes:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
@@ -35,14 +37,25 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-          fetch-depth: 2
+          fetch-depth: 0
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        continue-on-error: true # can't read the stack → no base → deploy
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
       - id: diff
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "server=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          if git diff --name-only HEAD~1 HEAD | grep -qE '^(backend/|infra/|core/|gradle/|build\.gradle\.kts|settings\.gradle\.kts|gradle\.properties|\.github/workflows/deploy\.yml)'; then
+          BASE=$(aws cloudformation describe-stacks --stack-name "MekaOs-$ENV_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='DeployedCommit'].OutputValue" --output text 2>/dev/null || true)
+          if ! [[ "$BASE" =~ ^[0-9a-f]{40}$ ]] || ! git merge-base --is-ancestor "$BASE" HEAD 2>/dev/null; then
+            echo "server=true" >> "$GITHUB_OUTPUT"; echo "::notice title=Deploying::no usable deployed commit recorded ($BASE)"; exit 0
+          fi
+          if git diff --name-only "$BASE" HEAD | grep -qE '^(backend/|infra/|core/|gradle/|build\.gradle\.kts|settings\.gradle\.kts|gradle\.properties|\.github/workflows/deploy\.yml)'; then
             echo "server=true" >> "$GITHUB_OUTPUT"
           else
-            echo "server=false" >> "$GITHUB_OUTPUT"; echo "::notice title=Deploy skipped::no server changes in this commit"
+            echo "server=false" >> "$GITHUB_OUTPUT"; echo "::notice title=Deploy skipped::no server changes since ${BASE:0:12}"
           fi
 
   deploy:
@@ -88,7 +101,7 @@ jobs:
 
       - name: Deploy service stack
         working-directory: infra
-        run: ../tools/ci-run.sh npx cdk deploy "MekaOs-$ENV_NAME" -c env=$ENV_NAME -c imageTag=$IMAGE_TAG --require-approval never --outputs-file ../cdk-outputs.json
+        run: ../tools/ci-run.sh npx cdk deploy "MekaOs-$ENV_NAME" -c env=$ENV_NAME -c imageTag=$IMAGE_TAG -c commit=$(git rev-parse HEAD) --require-approval never --outputs-file ../cdk-outputs.json
 
       - name: Smoke test through CloudFront
         run: |

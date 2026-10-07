@@ -88,9 +88,16 @@ fun Application.mekaSync(
             val auth = call.request.header("Authorization") ?: throw Unauthorised()
             if (!auth.startsWith("Enrol ") || !Secrets.constantTimeEquals(auth.removePrefix("Enrol ").trim(), token)) throw Unauthorised()
             val req = WireCodec.decodeEnrolRequest(call.boundedBody())
-            val secret = withContext(Dispatchers.IO) { devices.enrol(req.householdId, req.deviceId, req.name) }
-            call.application.environment.log.info("device enrolled") // no identifiers in logs
-            call.respondText(WireCodec.encodeEnrolResponse(secret), ContentType.Application.Json)
+            when (val r = withContext(Dispatchers.IO) { devices.enrolWithCode(req.householdId, req.deviceId, req.name) }) {
+                is EnrolOutcome.Enrolled -> {
+                    call.application.environment.log.info("device enrolled") // no identifiers in logs
+                    call.respondText(WireCodec.encodeEnrolResponse(r.secret), ContentType.Application.Json)
+                }
+                is EnrolOutcome.Refused -> {
+                    call.application.environment.log.warn("enrolment refused: ${r.reason}")
+                    call.respondText(r.reason, status = HttpStatusCode.Forbidden)
+                }
+            }
         }
 
         // Registers the device's hardware-bound signing key (ADR-005). The request must be signed with that very key

@@ -42,6 +42,11 @@ export interface MekaStackProps extends cdk.StackProps {
   readonly certificateArn?: string;
   /** Container image tag in the registry stack's ECR repository (CI passes the git SHA). */
   readonly imageTag?: string;
+  /**
+   * The full git commit being deployed (CI passes it). Kept as the `DeployedCommit` output so the next deploy can
+   * tell whether anything server-side changed since the last successful one (deploy.yml, `changes` job).
+   */
+  readonly deployedCommit?: string;
   /** From MekaRegistryStack. */
   readonly repo: ecr.IRepository;
 }
@@ -280,5 +285,6 @@ export class MekaStack extends cdk.Stack {
     container.addEnvironment('MEKA_PUBLIC_URL', `https://${distribution.distributionDomainName}`);
     new cdk.CfnOutput(this, 'SyncUrl', { value: `https://${distribution.distributionDomainName}` });
     new cdk.CfnOutput(this, 'EnrolTokenSecret', { value: enrolToken.secretName });
+    if (props.deployedCommit) new cdk.CfnOutput(this, 'DeployedCommit', { value: props.deployedCommit });
   }
 }

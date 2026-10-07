@@ -37,3 +37,13 @@ There is a single owner today, and the owner's wife may be a user later (ADR-008
 - **Re-enrolling** a device id rotates its secret and clears any revocation.
 - **Revoking everything.** To revoke all future enrolments, rotate the enrolment code. To revoke one device, revoke that device.
 - **Household.** Both devices use the household id `home`.
+
+## Amendment 2026-10-07: device keys as built, and what the enrolment code may do
+- **Device keys.** Devices sign with **P-256 ECDSA** (SHA256withECDSA), not Ed25519: it is what the Android Keystore's StrongBox/TEE and the Mac's Secure Enclave both hold in hardware. Each request signs `MEKA1 · method · path · time · nonce · SHA-256(body)`, with a time window and a nonce replay check (`RequestVerifier`). A device registers its key once (`POST /v1/devices/key`, signed with that key); after that its unsigned requests are refused. The bearer secret stays as a second factor.
+- **Where the secrets live.** Fold: Android Keystore. Mac: the signing key in the Secure Enclave; the device id, household, secret and server address in small files sealed with a Secure Enclave key-agreement key (`SealedKeyFiles`), so ad-hoc rebuilds don't trigger Keychain prompts. A Mac without a Secure Enclave keeps the Keychain.
+- **The enrolment code is narrower than the server's own enrol path.** `POST /v1/enrol`:
+  - never brings back a **revoked** device (403 `revoked`); revocation is undone only on the server (`enrol-device` command), which is the owner's own act;
+  - can't start a **second household** once one exists (403 `household`);
+  - still re-enrols a device that isn't revoked, rotating its secret and clearing its signing key ("Reconnect" after a lost key or a reinstall that kept the device id).
+  The apps show both refusals in words (core `Enrolment.refusal`).
+- **Not yet restricted:** enrolling a *new* device id into the household. Passkey enrolment (or approving a new device from an existing one) replaces the shared code for that; until then, rotating the code in Secrets Manager (`meka-os-<env>/enrol-token`) after setting up a device is the way to shut it.

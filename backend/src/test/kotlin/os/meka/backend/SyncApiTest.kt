@@ -78,6 +78,22 @@ class SyncApiTest {
     }
 
     @Test
+    fun theEnrolmentCodeCantBringBackARevokedDeviceOrStartAnotherHousehold() = testApplication {
+        val token = "t".repeat(48)
+        application { mekaSync(InMemoryServerOpStore(), devices, enrolToken = token) }
+        suspend fun enrol(hh: String, dev: String) =
+            client.post("/v1/enrol") { header("Authorization", "Enrol $token"); setBody(WireCodec.encodeEnrolRequest(WireCodec.EnrolRequest(hh, dev, dev))) }
+        // "hh" and "other-hh" exist (set up above); a third household can't be started with the code.
+        enrol("third-hh", "fold8").let { assertEquals(HttpStatusCode.Forbidden, it.status); assertEquals("household", it.bodyAsText()) }
+        // A revoked device stays revoked, whatever the code says.
+        devices.revoke("android")
+        enrol("hh", "android").let { assertEquals(HttpStatusCode.Forbidden, it.status); assertEquals("revoked", it.bodyAsText()) }
+        assertEquals(HttpStatusCode.Unauthorized, client.post("/v1/sync/pull") { header("Authorization", "Bearer $androidSecret"); setBody(WireCodec.encodePullRequest(PullRequest("hh", "android", 0, 10))) }.status)
+        // Reconnecting a device that isn't revoked still works.
+        assertEquals(HttpStatusCode.OK, enrol("hh", "mac").status)
+    }
+
+    @Test
     fun enrolmentIsDisabledWithoutAConfiguredToken() = testApplication {
         application { mekaSync(InMemoryServerOpStore(), devices) }
         val body = WireCodec.encodeEnrolRequest(WireCodec.EnrolRequest("hh", "fold8", "Fold 8"))

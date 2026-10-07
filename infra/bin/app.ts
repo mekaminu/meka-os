@@ -13,4 +13,5 @@ new MekaStack(app, `MekaOs-${envName}`, {
   env,
   repo: registry.repo,
   imageTag: app.node.tryGetContext('imageTag'),
+  deployedCommit: app.node.tryGetContext('commit'),
 });

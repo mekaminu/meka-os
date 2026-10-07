@@ -55,3 +55,8 @@ The backend exists for sync, ingestion (calendar, email, fixtures, news), heavy 
     4. deploy the service stack
     5. smoke-test `/health` through CloudFront
   - **Scope of the deploy role:** it is administrator *inside the dedicated account only*. That is accepted because the account holds nothing but MEKA OS.
+
+## Amendment 2026-10-07: deploy only what changed, measured from the last deploy
+- The service stack records the commit it was deployed from as the `DeployedCommit` output (CI passes `-c commit=<sha>`).
+- `deploy.yml` decides "server changed" by diffing that commit against the one CI just passed, not against `HEAD~1`. A server commit whose CI failed, followed by an app-only fix, now still deploys. If no deployed commit is recorded (or it isn't an ancestor, or the stack can't be read), it deploys.
+- Watch item: a KMS key left over from an early stack attempt (the data key is `RETAIN`ed by design, so a deleted stack leaves its key behind). Only the key behind `alias/meka-os-dev-data` is in use; any other `app=meka-os` key with no alias can be scheduled for deletion by the owner (KMS keeps it 7–30 days, cancellable). Build runs don't delete keys.

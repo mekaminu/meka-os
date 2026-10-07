@@ -9,6 +9,7 @@ import os.meka.core.wire.WireCodec
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class EnrolmentTest {
     private fun client(status: HttpStatusCode, body: String = "") = HttpClient(MockEngine { req ->
@@ -27,5 +28,15 @@ class EnrolmentTest {
     fun wrongCodeIsRejectedAndPlainHttpIsRefused() = runTest {
         assertIs<EnrolmentResult.Rejected>(Enrolment.enrol(client(HttpStatusCode.Unauthorized), "https://x", "code123", "home", "fold8", "Fold"))
         assertIs<EnrolmentResult.Failed>(Enrolment.enrol(client(HttpStatusCode.OK), "http://x", "code123", "home", "fold8", "Fold"))
+    }
+
+    @Test
+    fun serverRefusalsBecomeWords() = runTest {
+        val revoked = Enrolment.enrol(client(HttpStatusCode.Forbidden, "revoked"), "https://x", "code123", "home", "fold8", "Fold")
+        assertEquals(EnrolmentResult.Failed(Enrolment.refusal("revoked")), revoked)
+        assertTrue((revoked as EnrolmentResult.Failed).reason.startsWith("This device was revoked"))
+        val household = Enrolment.enrol(client(HttpStatusCode.Forbidden, "household"), "https://x", "code123", "elsewhere", "fold8", "Fold")
+        assertEquals("The enrolment code only adds devices to your existing household.", (household as EnrolmentResult.Failed).reason)
+        assertEquals("The server refused this device", Enrolment.refusal("forbidden"))
     }
 }

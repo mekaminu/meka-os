@@ -52,4 +52,29 @@ class PostgresOpStoreTest {
             assertEquals(200, all.map { it.op.opId }.toSet().size)
         }
     }
+
+    @Test
+    fun theEnrolmentCodeNeverBringsBackARevokedDeviceOrStartsASecondHousehold() {
+        if (url == null) return
+        ds().use { ds ->
+            Migrations.apply(ds)
+            ds.connection.use { c -> c.createStatement().execute("TRUNCATE op_log, device, household CASCADE") }
+            val reg = PostgresDeviceRegistry(ds)
+            // The very first enrolment may create the household.
+            val first = reg.enrolWithCode("home", "fold", "Fold")
+            check(first is EnrolOutcome.Enrolled)
+            // Reconnect: a device that isn't revoked re-enrols and gets a new secret.
+            val again = reg.enrolWithCode("home", "fold", "Fold")
+            check(again is EnrolOutcome.Enrolled)
+            assertEquals(null, reg.authenticate(first.secret))
+            assertEquals(DeviceIdentity("home", "fold"), reg.authenticate(again.secret))
+            assertEquals(EnrolOutcome.Refused(REFUSED_HOUSEHOLD), reg.enrolWithCode("elsewhere", "x", "x"))
+            check(reg.enrolWithCode("home", "mac", "Mac") is EnrolOutcome.Enrolled)
+            reg.revoke("home", "mac")
+            assertEquals(EnrolOutcome.Refused(REFUSED_REVOKED), reg.enrolWithCode("home", "mac", "Mac"))
+            // The owner's own server-side path still can.
+            reg.enrol("home", "mac", "Mac")
+            check(reg.enrolWithCode("home", "mac", "Mac") is EnrolOutcome.Enrolled)
+        }
+    }
 }

@@ -2,12 +2,12 @@ import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { MekaRegistryStack, MekaStack } from '../lib/meka-stack';
 
-function synth(props: Partial<{ envName: string }> = {}) {
+function synth(props: Partial<{ envName: string; deployedCommit: string }> = {}) {
   const app = new cdk.App();
   const env = { account: '111111111111', region: 'eu-west-2' };
   const envName = props.envName ?? 'dev';
   const registry = new MekaRegistryStack(app, 'Reg', { envName, env });
-  const stack = new MekaStack(app, 'Test', { envName, env, repo: registry.repo, imageTag: 'abc123' });
+  const stack = new MekaStack(app, 'Test', { envName, env, repo: registry.repo, imageTag: 'abc123', deployedCommit: props.deployedCommit });
   return Template.fromStack(stack);
 }
 
@@ -114,6 +114,12 @@ describe('MekaStack security and cost invariants (ADR-004)', () => {
     const policies = t.findResources('AWS::IAM::Policy');
     const actions = Object.values(policies).flatMap((p: any) => p.Properties.PolicyDocument.Statement.flatMap((s: any) => ([] as string[]).concat(s.Action)));
     expect(actions.filter((a) => a.startsWith('secretsmanager:') && !/^secretsmanager:(GetSecretValue|DescribeSecret)$/.test(a))).toEqual([]);
+  });
+
+  test('records the deployed commit only when CI passes one (deploy.yml diffs against it)', () => {
+    const sha = '29720ce900d5aa07156abbdf1f420121003b40b9';
+    synth({ deployedCommit: sha }).hasOutput('DeployedCommit', { Value: sha });
+    expect(Object.keys(t.findOutputs('DeployedCommit'))).toEqual([]);
   });
 
   test('prod keeps deletion protection', () => {

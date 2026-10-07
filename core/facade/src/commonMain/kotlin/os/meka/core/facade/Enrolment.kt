@@ -41,6 +41,7 @@ object Enrolment {
             }
             when {
                 resp.status.value == 401 -> EnrolmentResult.Rejected
+                resp.status.value == 403 -> EnrolmentResult.Failed(refusal(resp.bodyAsText()))
                 !resp.status.isSuccess() -> EnrolmentResult.Failed("Server returned ${resp.status.value}")
                 else -> EnrolmentResult.Enrolled(WireCodec.decodeEnrolResponse(resp.bodyAsText()))
             }
@@ -49,6 +50,13 @@ object Enrolment {
         } catch (e: Exception) {
             EnrolmentResult.Failed("Couldn't reach the server")
         }
+    }
+
+    /** The server's refusal codes (ADR-005 amendment 2026-10-07) in words. */
+    fun refusal(code: String): String = when (code.trim()) {
+        "revoked" -> "This device was revoked, so the enrolment code can't reconnect it. Undo the revocation on the server first."
+        "household" -> "The enrolment code only adds devices to your existing household."
+        else -> "The server refused this device"
     }
 
     fun transport(client: HttpClient, baseUrl: String, deviceSecret: String, deviceKey: DeviceKey? = null): HttpSyncTransport =
