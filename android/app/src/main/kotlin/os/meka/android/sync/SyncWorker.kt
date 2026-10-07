@@ -22,6 +22,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val ok = app.core.syncNow()
         // A Work switch flipped on the Mac arrives here: let the after-work nudge see it before the process sleeps.
         runCatching { app.nudger.evaluate(app.core.currentWorkMode()) }
+        // A build published from the Mac is ready on the card the next time MEKA opens.
+        runCatching { app.updater.check() }
         return if (ok) Result.success() else Result.retry()
     }
 

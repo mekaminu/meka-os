@@ -27,3 +27,9 @@ The owner chose personal distribution: a sideloaded Android APK, and a Developer
   - `READ_SMS` only in a `personal` product flavour
   - no private APIs
   - no hard-coded secrets
+
+## Addendum, 2026-10-07: self-updating phone app
+- After the first ADB install, updates go over the air: the Mac builds and publishes the APK to the owner's own server (chunked, signed requests from a keyed device), and the phone downloads it into a `PackageInstaller` session. Android shows its own Install prompt every time; MEKA never installs silently.
+- Integrity: the whole-file SHA-256 is checked by the server and again by the phone, and Android refuses an update not signed with the installed app's key. A compromised server therefore can't install anything the owner didn't sign.
+- `REQUEST_INSTALL_PACKAGES` is a personal-distribution permission (Play restricts it). A store build drops it with the self-updater, like `READ_SMS` (a `personal` flavour when a store build is wanted).
+- These are non-ADB installs, so developer verification will apply to them once enforcement reaches the UK; the Limited Distribution account above covers them.

@@ -7,9 +7,13 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import os.meka.core.data.MacDatabase
 import os.meka.core.data.SqlReplicaStore
+import os.meka.core.domain.AppUpdateRules
+import platform.Foundation.NSData
+import platform.Foundation.dataWithContentsOfFile
 import platform.Security.SecRandomCopyBytes
 import platform.Security.errSecSuccess
 import platform.Security.kSecRandomDefault
+import platform.posix.memcpy
 import kotlin.random.Random
 
 /** CSPRNG backed by SecRandomCopyBytes, for ids (ADR-003). */
@@ -59,4 +63,45 @@ object MacCoreFactory {
 
     suspend fun connect(core: MekaCore, serverUrl: String, deviceSecret: String, deviceKey: DeviceKey? = null) =
         core.connect(Enrolment.transport(http, serverUrl.trim().trimEnd('/'), deviceSecret, deviceKey))
+
+    /**
+     * Self-updating phone app: what publishing the APK at [apkPath] would send ("MEKA 0.1.412 · build 412 · 24.3 MB"),
+     * or why it can't be published. Reads the Gradle `output-metadata.json` beside the APK for the build number.
+     */
+    fun checkFoldUpdate(apkPath: String): FoldUpdateCheck {
+        val (meta, problem) = readFoldUpdate(apkPath)
+        if (meta == null) return FoldUpdateCheck(null, problem)
+        return FoldUpdateCheck(AppUpdateRules.summary(AppUpdateRules.Build(meta.first.versionCode, meta.first.versionName, meta.second.size.toLong())), null)
+    }
+
+    /** Publishes the APK at [apkPath] to the server for the Fold to offer. Returns one line for the Mac to show. */
+    suspend fun publishFoldUpdate(core: MekaCore, apkPath: String): String {
+        val (meta, problem) = readFoldUpdate(apkPath)
+        if (meta == null) return problem ?: "That file can't be published."
+        return core.publishRelease(meta.second, meta.first.versionCode, meta.first.versionName).message
+    }
+
+    private fun readFoldUpdate(apkPath: String): Pair<Pair<os.meka.core.wire.WireCodec.ApkMetadata, ByteArray>?, String?> {
+        val apk = readMacFile(apkPath)
+        val dir = apkPath.substringBeforeLast('/', "")
+        val metaJson = readMacFile("$dir/output-metadata.json")?.decodeToString()
+        val (meta, problem) = ReleaseTransfer.checkApk(apk, metaJson)
+        if (meta == null || apk == null) return null to problem
+        val name = apkPath.substringAfterLast('/')
+        if (meta.outputFile != name) return null to "output-metadata.json beside it describes ${meta.outputFile.take(60)}, not $name."
+        return (meta to apk) to null
+    }
+}
+
+/** What the Mac shows before publishing a phone build: a summary, or the reason it can't be published. */
+data class FoldUpdateCheck(val summary: String?, val problem: String?)
+
+/** Reads a whole file, or null if it can't be read. */
+@OptIn(ExperimentalForeignApi::class)
+internal fun readMacFile(path: String): ByteArray? {
+    val data = NSData.dataWithContentsOfFile(path) ?: return null
+    val n = data.length.toInt()
+    val out = ByteArray(n)
+    if (n > 0) out.usePinned { pinned -> memcpy(pinned.addressOf(0), data.bytes, data.length) }
+    return out
 }

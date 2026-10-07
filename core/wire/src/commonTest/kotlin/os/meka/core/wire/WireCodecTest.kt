@@ -78,4 +78,41 @@ class WireCodecTest {
         assertEquals(accounts, WireCodec.decodeAccounts(WireCodec.encodeAccounts(accounts)))
         assertEquals("https://accounts.example/x?y=1", WireCodec.decodeConnectUrl(WireCodec.encodeConnectUrl("https://accounts.example/x?y=1")))
     }
+
+    @Test
+    fun releaseDocumentsRoundTripAndAreValidated() {
+        val size = WireCodec.RELEASE_CHUNK_BYTES * 2L + 10
+        val r = WireCodec.AppRelease("android", 412, "0.1.412", "a".repeat(64), size, 3)
+        assertEquals(r, WireCodec.decodeRelease(WireCodec.encodeRelease(r)))
+        assertEquals(null, WireCodec.decodeRelease(WireCodec.encodeRelease(null)))
+        assertEquals(3, WireCodec.releaseChunkCount(size))
+        assertEquals(10, WireCodec.releaseChunkSize(size, 2))
+        // The last chunk's base64 must be exactly as long as its bytes need ("AAAAAAAAAAAAAA==" is 10 bytes).
+        val last = WireCodec.ReleaseChunk(r, 2, "AAAAAAAAAAAAAA==")
+        assertEquals(last, WireCodec.decodeReleaseChunk(WireCodec.encodeReleaseChunk(last)))
+        assertFailsWith<WireFormatException> { WireCodec.decodeReleaseChunk(WireCodec.encodeReleaseChunk(last.copy(dataB64 = "AAAA"))) }
+        assertFailsWith<WireFormatException> { WireCodec.decodeReleaseChunk(WireCodec.encodeReleaseChunk(last.copy(index = 3))) }
+        // A chunk count that doesn't match the size, a bad hash or an absurd size are refused.
+        assertFailsWith<WireFormatException> { WireCodec.decodeRelease(WireCodec.encodeRelease(r.copy(chunkCount = 2))) }
+        assertFailsWith<WireFormatException> { WireCodec.decodeRelease(WireCodec.encodeRelease(r.copy(sha256 = "Z".repeat(64)))) }
+        assertFailsWith<WireFormatException> {
+            WireCodec.decodeRelease(WireCodec.encodeRelease(r.copy(sizeBytes = WireCodec.RELEASE_MAX_BYTES + 1, chunkCount = 201)))
+        }
+        val ref = WireCodec.ChunkRef("android", 412, 1)
+        assertEquals(ref, WireCodec.decodeChunkRef(WireCodec.encodeChunkRef(ref)))
+        assertEquals("android", WireCodec.decodePlatform(WireCodec.encodePlatform("android")))
+        assertFailsWith<WireFormatException> { WireCodec.decodePlatform(WireCodec.encodePlatform("../x")) }
+        assertEquals(WireCodec.UploadAck(2, false), WireCodec.decodeUploadAck(WireCodec.encodeUploadAck(WireCodec.UploadAck(2, false))))
+    }
+
+    @Test
+    fun apkMetadataIsReadFromWhatGradleWrites() {
+        val written = """{"version":3,"artifactType":{"type":"APK","kind":"Directory"},"applicationId":"os.meka.android",
+            "variantName":"debug","elements":[{"type":"SINGLE","filters":[],"attributes":[],"versionCode":412,
+            "versionName":"0.1.412","outputFile":"app-debug.apk"}],"elementType":"File","minSdkVersionForDexing":31}"""
+        assertEquals(WireCodec.ApkMetadata("os.meka.android", 412, "0.1.412", "app-debug.apk"), WireCodec.decodeApkMetadata(written))
+        assertEquals(null, WireCodec.decodeApkMetadata("not json"))
+        assertEquals(null, WireCodec.decodeApkMetadata(written.replace("\"versionCode\":412", "\"versionCode\":0")))
+        assertEquals(null, WireCodec.decodeApkMetadata(written.replace("app-debug.apk", "app-debug.aab")))
+    }
 }

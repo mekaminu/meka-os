@@ -19,6 +19,8 @@ struct MekaOSApp: App {
                     let model = model
                     CaptureInbox.shared.attach { text, subject in model.capture(text, subject: subject) }
                 }
+                // tools/publish-fold.sh hands over the APK it built: mekaos://publish-fold-update?apk=…
+                .onOpenURL { model.handle(url: $0) }
                 .preferredColorScheme((MekaAppearance(rawValue: appearance) ?? .dark).scheme)
                 .animation(MekaMotion.themeBlend(reduced: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion), value: appearance)
         }
@@ -27,6 +29,8 @@ struct MekaOSApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("Capture") { model.focusCapture.toggle() }
                     .keyboardShortcut("n", modifiers: .command)
+                Divider()
+                Button("Publish Fold Update…") { model.prepareFoldUpdate(path: nil) }
             }
             CommandGroup(after: .toolbar) {
                 Picker("Appearance", selection: $appearance) {

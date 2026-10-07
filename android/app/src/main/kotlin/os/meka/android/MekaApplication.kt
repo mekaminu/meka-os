@@ -9,6 +9,7 @@ import os.meka.android.security.DatabaseKeyStore
 import os.meka.android.sync.SyncWorker
 import os.meka.android.notify.NotificationGovernor
 import os.meka.android.shell.ShellDestination
+import os.meka.android.update.AppUpdater
 import os.meka.android.work.AfterWorkNudger
 import os.meka.android.work.CaptureStore
 import kotlinx.coroutines.CoroutineScope
@@ -41,6 +42,8 @@ class MekaApplication : Application() {
     val nudger: AfterWorkNudger by lazy { AfterWorkNudger(this, this) }
     /** Notification governor: tiers, quiet hours and the two digests, posted on this phone. */
     val governor: NotificationGovernor by lazy { NotificationGovernor(this, this) }
+    /** Self-updating phone app: newer builds the Mac published, offered in Today. */
+    val updater: AppUpdater by lazy { AppUpdater(this) }
     /** Set by tapping a MEKA notification: the shell opens this destination. */
     val openDestination = MutableStateFlow<ShellDestination?>(null)
     /** Set by tapping a search result: Lists or Goals opens the right tab and unfolds the row, then clears it. */
@@ -90,6 +93,12 @@ class MekaApplication : Application() {
 
     companion object {
         private const val GOVERNOR_SETTLE_MS = 2_000L
+    }
+
+    /** Looks for a newer published build (at most every 10 minutes unless [force]d); never installs anything. */
+    fun lookForUpdate(force: Boolean = false) {
+        if (!core.isConnected) return
+        appScope.launch { runCatching { updater.check(force) } }
     }
 
     val defaultServerUrl: String get() = identity.serverUrl() ?: BuildConfig.SYNC_URL

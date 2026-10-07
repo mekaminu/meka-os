@@ -16,6 +16,17 @@
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
     <key>MekaSyncURL</key>
     <string>$(MEKA_SYNC_URL)</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>os.meka.mac.publish</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>mekaos</string>
+            </array>
+        </dict>
+    </array>
     <key>NSServices</key>
     <array>
         <dict>

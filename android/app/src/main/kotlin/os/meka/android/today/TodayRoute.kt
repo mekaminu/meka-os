@@ -52,6 +52,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
@@ -76,6 +77,10 @@ import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.SharedMotion
 import os.meka.android.notify.NotificationsPane
 import os.meka.android.search.SearchPane
+import os.meka.android.MekaApplication
+import os.meka.android.update.UpdateCard
+import os.meka.android.update.UpdateState
+import kotlinx.coroutines.flow.MutableStateFlow
 import os.meka.android.shell.OpenItem
 import os.meka.android.work.WorkPane
 import os.meka.android.designsystem.MotionMath
@@ -297,6 +302,8 @@ private fun TodayPane(
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
+    val updater = (LocalContext.current.applicationContext as? MekaApplication)?.updater
+    val update by remember(updater) { updater?.state ?: MutableStateFlow<UpdateState>(UpdateState.None) }.collectAsState()
     Column(modifier.imePadding()) {
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -360,6 +367,12 @@ private fun TodayPane(
                                 .clickable(role = Role.Button) { theme.set(theme.choice.next()) }.padding(vertical = MekaSpace.xxs),
                         )
                     }
+                }
+            }
+            // Self-updating phone app: the card rises in when the Mac has published a newer build.
+            if (update !is UpdateState.None && updater != null) {
+                item(key = "update") {
+                    UpdateCard(update, updater, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
                 }
             }
             // Morning brief: the card rises in when the morning starts and goes at noon or once read.

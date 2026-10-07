@@ -33,6 +33,10 @@ targets:
         LSApplicationCategoryType: public.app-category.productivity
         NSHumanReadableCopyright: ""
         MekaSyncURL: $(MEKA_SYNC_URL)
+        # Self-updating phone app: tools/publish-fold.sh opens mekaos://publish-fold-update?apk=… (FoldUpdateSheet).
+        CFBundleURLTypes:
+          - CFBundleURLName: os.meka.mac.publish
+            CFBundleURLSchemes: [mekaos]
         # Capture from anywhere: select text in any app → Services → "Add to MEKA" (CaptureService.swift).
         NSServices:
           - NSMenuItem:

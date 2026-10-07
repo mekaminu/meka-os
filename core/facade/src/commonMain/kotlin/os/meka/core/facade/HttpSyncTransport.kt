@@ -18,6 +18,7 @@ import os.meka.core.sync.SyncTransport
 import os.meka.core.sync.TransportException
 import os.meka.core.wire.WireCodec
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.io.encoding.Base64
 import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -53,7 +54,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi {
+) : SyncTransport, AccountsApi, ReleasesApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -95,6 +96,35 @@ class HttpSyncTransport(
 
     override suspend fun accounts(): List<ConnectedAccount> =
         WireCodec.decodeAccounts(post("/v1/integrations/list", "")).map { ConnectedAccount(it.provider, it.email, it.status, it.lastSyncAtMs) }
+
+    override suspend fun latestRelease(platform: String): AppRelease? {
+        prepare() // release routes require the device's signing key on the server
+        return WireCodec.decodeRelease(post("/v1/releases/latest", WireCodec.encodePlatform(platform)))?.let {
+            AppRelease(it.platform, it.versionCode, it.versionName, it.sha256, it.sizeBytes, it.chunkCount)
+        }
+    }
+
+    override suspend fun releaseChunk(platform: String, versionCode: Long, index: Int): ByteArray {
+        val body = post("/v1/releases/chunk", WireCodec.encodeChunkRef(WireCodec.ChunkRef(platform, versionCode, index)))
+        return try {
+            Base64.decode(WireCodec.decodeChunkData(body))
+        } catch (e: IllegalArgumentException) {
+            throw TransportException("malformed chunk", e)
+        }
+    }
+
+    override suspend fun uploadReleaseChunk(release: AppRelease, index: Int, bytes: ByteArray): Boolean {
+        prepare()
+        val r = WireCodec.AppRelease(release.platform, release.versionCode, release.versionName, release.sha256, release.sizeBytes, release.chunkCount)
+        val resp = send("/v1/releases/upload", WireCodec.encodeReleaseChunk(WireCodec.ReleaseChunk(r, index, Base64.encode(bytes))))
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/releases/upload")
+            resp.status.value == 403 -> throw PublishRefusedException("this device's signing key isn't registered with the server yet")
+            resp.status.value == 409 || resp.status.value == 400 -> throw PublishRefusedException(resp.bodyAsText().take(200))
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/releases/upload")
+            else -> WireCodec.decodeUploadAck(resp.bodyAsText()).complete
+        }
+    }
 
     private suspend fun post(path: String, body: String): String {
         val resp = send(path, body)

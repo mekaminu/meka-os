@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Notification governor: re-register its inexact alarm after a reboot (ADR-007). -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Self-updating phone app: hand a build the Mac published to Android's installer. Android asks Meka once to
+         allow it ("Install unknown apps") and shows its own Install prompt every time. Personal builds only (ADR-010). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- M1+: SCHEDULE_EXACT_ALARM (CLOCK-precision reminders only, ADR-007). Never USE_EXACT_ALARM (ADR-010). -->
 
     <application
@@ -101,6 +104,10 @@
              an update. -->
         <receiver
             android:name=".notify.GovernorAlarmReceiver"
+            android:exported="false" />
+        <!-- Self-updating phone app: the install session's status (Android's Install prompt, then success or failure). -->
+        <receiver
+            android:name=".update.UpdateStatusReceiver"
             android:exported="false" />
         <receiver
             android:name=".notify.RestartReceiver"

@@ -168,6 +168,108 @@ object WireCodec {
         }
     }
 
+    /**
+     * A published app build (self-updating phone app). Stored on the server in [RELEASE_CHUNK_BYTES] chunks so every
+     * request stays under the API's body limit and goes through the normal signed-request checks. Integrity: the
+     * SHA-256 of the whole file (checked by the server and again by the phone), and Android's own check that an update
+     * is signed with the same key as the installed app.
+     */
+    data class AppRelease(
+        val platform: String,
+        val versionCode: Long,
+        val versionName: String,
+        val sha256: String,
+        val sizeBytes: Long,
+        val chunkCount: Int,
+    )
+
+    /** One chunk of a release being published; [dataB64] is the chunk's bytes in standard base64. */
+    data class ReleaseChunk(val release: AppRelease, val index: Int, val dataB64: String)
+
+    data class ChunkRef(val platform: String, val versionCode: Long, val index: Int)
+
+    data class UploadAck(val received: Int, val complete: Boolean)
+
+    const val RELEASE_CHUNK_BYTES = 1 shl 20
+    const val RELEASE_MAX_BYTES = 200L shl 20
+    private val platformPattern = Regex("^[a-z]{1,16}$")
+    private val shaPattern = Regex("^[0-9a-f]{64}$")
+
+    /** Chunks a file of [sizeBytes] is split into. */
+    fun releaseChunkCount(sizeBytes: Long): Int = ((sizeBytes + RELEASE_CHUNK_BYTES - 1) / RELEASE_CHUNK_BYTES).toInt()
+
+    /** Bytes chunk [index] of a file of [sizeBytes] holds. */
+    fun releaseChunkSize(sizeBytes: Long, index: Int): Int =
+        minOf(RELEASE_CHUNK_BYTES.toLong(), sizeBytes - index.toLong() * RELEASE_CHUNK_BYTES).toInt()
+
+    private fun JsonObject.release(): AppRelease {
+        val r = AppRelease(
+            platform = str("platform"), versionCode = getValue("code").jsonPrimitive.long, versionName = str("name"),
+            sha256 = str("sha256"), sizeBytes = getValue("size").jsonPrimitive.long, chunkCount = getValue("chunks").jsonPrimitive.int,
+        )
+        if (!platformPattern.matches(r.platform)) throw WireFormatException("bad platform")
+        if (r.versionCode !in 1L..2_100_000_000L) throw WireFormatException("bad version code")
+        if (r.versionName.isBlank() || r.versionName.length > 64) throw WireFormatException("bad version name")
+        if (!shaPattern.matches(r.sha256)) throw WireFormatException("bad sha256")
+        if (r.sizeBytes !in 1L..RELEASE_MAX_BYTES) throw WireFormatException("bad size")
+        if (r.chunkCount != releaseChunkCount(r.sizeBytes)) throw WireFormatException("bad chunk count")
+        return r
+    }
+
+    private fun kotlinx.serialization.json.JsonObjectBuilder.putRelease(r: AppRelease) {
+        put("platform", r.platform); put("code", r.versionCode); put("name", r.versionName)
+        put("sha256", r.sha256); put("size", r.sizeBytes); put("chunks", r.chunkCount)
+    }
+
+    /** The newest complete release, or none. */
+    fun encodeRelease(r: AppRelease?): String = doc { if (r != null) put("release", buildJsonObject { putRelease(r) }) }
+    fun decodeRelease(s: String): AppRelease? = parse(s) { o -> o["release"]?.jsonObject?.release() }
+
+    fun encodeReleaseChunk(c: ReleaseChunk): String = doc { putRelease(c.release); put("i", c.index); put("data", c.dataB64) }
+    fun decodeReleaseChunk(s: String): ReleaseChunk = parse(s) { o ->
+        val r = o.release()
+        val i = o.getValue("i").jsonPrimitive.int
+        if (i !in 0 until r.chunkCount) throw WireFormatException("bad chunk index")
+        val data = o.str("data")
+        val expected = releaseChunkSize(r.sizeBytes, i)
+        if (data.length != (expected + 2) / 3 * 4) throw WireFormatException("bad chunk length")
+        ReleaseChunk(r, i, data)
+    }
+
+    fun encodeChunkRef(c: ChunkRef): String = doc { put("platform", c.platform); put("code", c.versionCode); put("i", c.index) }
+    fun decodeChunkRef(s: String): ChunkRef = parse(s) { o ->
+        val c = ChunkRef(o.str("platform"), o.getValue("code").jsonPrimitive.long, o.getValue("i").jsonPrimitive.int)
+        if (!platformPattern.matches(c.platform) || c.index < 0 || c.versionCode < 1) throw WireFormatException("bad chunk reference")
+        c
+    }
+
+    /** Asks for the newest release of a platform. */
+    fun encodePlatform(platform: String): String = doc { put("platform", platform) }
+    fun decodePlatform(s: String): String = parse(s) { o ->
+        o.str("platform").also { if (!platformPattern.matches(it)) throw WireFormatException("bad platform") }
+    }
+
+    fun encodeChunkData(dataB64: String): String = doc { put("data", dataB64) }
+    fun decodeChunkData(s: String): String = parse(s) { o -> o.str("data") }
+
+    fun encodeUploadAck(a: UploadAck): String = doc { put("received", a.received); put("complete", a.complete) }
+    fun decodeUploadAck(s: String): UploadAck = parse(s) { o ->
+        UploadAck(o.getValue("received").jsonPrimitive.int, o.getValue("complete").jsonPrimitive.boolean)
+    }
+
+    /** What the Android Gradle plugin writes beside an APK (`output-metadata.json`): the build's identity. */
+    data class ApkMetadata(val applicationId: String, val versionCode: Long, val versionName: String, val outputFile: String)
+
+    /** Reads `output-metadata.json`; null when it isn't one or names no single APK. Not a wire document (no "w"). */
+    fun decodeApkMetadata(s: String): ApkMetadata? = runCatching {
+        val o = json.parseToJsonElement(s).jsonObject
+        val e = o.getValue("elements").jsonArray.singleOrNull()?.jsonObject ?: return null
+        ApkMetadata(
+            applicationId = o.str("applicationId"), versionCode = e.getValue("versionCode").jsonPrimitive.long,
+            versionName = e.str("versionName"), outputFile = e.str("outputFile"),
+        ).takeIf { it.versionCode > 0 && it.versionName.isNotBlank() && it.versionName.length <= 64 && it.outputFile.endsWith(".apk") }
+    }.getOrNull()
+
     private fun doc(body: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit): String =
         buildJsonObject { put("w", VERSION); body() }.toString()
 

@@ -55,6 +55,8 @@ fun Application.mekaSync(
     /** Runs work off the request (the first calendar sync right after connecting). */
     background: (() -> Unit) -> Unit = { Thread.ofVirtual().start(it) },
     verifier: RequestVerifier = RequestVerifier(),
+    /** Published app builds (self-updating phone app); null disables the release routes. */
+    releases: Releases? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -161,6 +163,41 @@ fun Application.mekaSync(
             }
         }
 
+        if (releases != null) {
+            // Self-updating phone app: the newest published build, its chunks, and publishing one (from the Mac).
+            // Signed requests from keyed devices only.
+            post("/v1/releases/latest") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val platform = WireCodec.decodePlatform(body)
+                val latest = withContext(Dispatchers.IO) { releases.latest(who, platform) }
+                call.respondText(WireCodec.encodeRelease(latest), ContentType.Application.Json)
+            }
+
+            post("/v1/releases/chunk") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val ref = WireCodec.decodeChunkRef(body)
+                val bytes = withContext(Dispatchers.IO) { releases.chunk(who, ref) }
+                    ?: return@post call.respondText("no such build", status = HttpStatusCode.NotFound)
+                call.respondText(WireCodec.encodeChunkData(java.util.Base64.getEncoder().encodeToString(bytes)), ContentType.Application.Json)
+            }
+
+            post("/v1/releases/upload") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val chunk = WireCodec.decodeReleaseChunk(body)
+                when (val r = withContext(Dispatchers.IO) { releases.upload(who, chunk) }) {
+                    is Releases.Upload.Ack -> {
+                        if (r.complete) call.application.environment.log.info("app build published") // no identifiers
+                        call.respondText(WireCodec.encodeUploadAck(WireCodec.UploadAck(r.received, r.complete)), ContentType.Application.Json)
+                    }
+                    is Releases.Upload.Conflict -> call.respondText(r.reason, status = HttpStatusCode.Conflict)
+                    is Releases.Upload.Rejected -> call.respondText(r.reason, status = HttpStatusCode.BadRequest)
+                }
+            }
+        }
+
         // Long-poll for an open app: answers as soon as the household has ops after the cursor, else empty after
         // [waitMs]. Checks the database each [waitCheckMs] (an indexed query), so it stays correct with several tasks.
         post("/v1/sync/wait") {
@@ -257,7 +294,7 @@ fun main(args: Array<String>) {
             val integrations = integrationsFromEnv(opStore)
             integrations?.let { startCalendarSync(it) }
             embeddedServer(Netty, port = port) {
-                mekaSync(opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations)
+                mekaSync(opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations, releases = Releases(PostgresReleaseStore(ds)))
             }.start(wait = true)
         }
     }
@@ -292,7 +329,10 @@ fun startCalendarSync(integrations: Integrations, periodMs: Long = 5 * 60_000L) 
 }
 
 object Migrations {
-    private val all = listOf(1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql", 4 to "/db/V4__event_mirror_end.sql")
+    private val all = listOf(
+        1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql", 4 to "/db/V4__event_mirror_end.sql",
+        5 to "/db/V5__app_release.sql",
+    )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->
         c.autoCommit = false

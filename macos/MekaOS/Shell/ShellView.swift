@@ -35,6 +35,8 @@ struct ShellView: View {
         .sheet(isPresented: Binding(get: { model.openEvent != nil }, set: { if !$0 { model.openEvent = nil } })) {
             EventDetailSheet(palette: palette)
         }
+        // Self-updating phone app: publish the APK this Mac built for the Fold to offer.
+        .sheet(isPresented: Binding(get: { model.showFoldUpdate }, set: { model.showFoldUpdate = $0 })) { FoldUpdateSheet(palette: palette) }
     }
 
     /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).

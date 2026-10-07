@@ -131,6 +131,7 @@ class MekaCore(
     private val interruptions = os.meka.core.domain.Interruptions(replica, ZoneCalendar(timeZone))
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
+    private var releasesApi: ReleasesApi? = transport as? ReleasesApi
 
     private val _today = MutableStateFlow(project())
     val today: StateFlow<Today> = _today.asStateFlow()
@@ -486,7 +487,9 @@ class MekaCore(
 
     /** Attaches sync after enrolment (or swaps it), without restarting the app. Local data is kept and pushed. */
     suspend fun connect(transport: SyncTransport) = withContext(confined) {
-        syncMutex.withLock { syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi }
+        syncMutex.withLock { 
+            syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
+        }
         startSync()
     }
 
@@ -499,6 +502,27 @@ class MekaCore(
     /** Accounts connected for this household, for the Calendars screen. Empty when offline or not connected. */
     suspend fun connectedAccounts(): List<ConnectedAccount> =
         try { accountsApi?.accounts() ?: emptyList() } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
+
+    // ---- Self-updating phone app (build plan M1) ----
+
+    /** The newest published build for [platform]; null when there is none, offline, or not connected. */
+    suspend fun latestRelease(platform: String = ReleaseTransfer.ANDROID): AppRelease? =
+        try { releasesApi?.latestRelease(platform) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+
+    /**
+     * Downloads [release] into [sink] chunk by chunk, calling [progress] with the chunks done. Throws on network
+     * errors; the caller checks the whole file's hash before installing.
+     */
+    suspend fun downloadRelease(release: AppRelease, sink: suspend (ByteArray) -> Unit, progress: (Int) -> Unit) {
+        val api = releasesApi ?: throw os.meka.core.sync.TransportException("not connected")
+        ReleaseTransfer.download(api, release, sink, progress)
+    }
+
+    /** Publishes a build this device holds (the Mac publishing the phone app it built). */
+    suspend fun publishRelease(bytes: ByteArray, versionCode: Long, versionName: String, platform: String = ReleaseTransfer.ANDROID): PublishOutcome {
+        val api = releasesApi ?: return PublishOutcome.Failed("Connect this Mac to your server first.")
+        return ReleaseTransfer.publish(api, platform, bytes, versionCode, versionName)
+    }
 
     /** For platform schedulers (WorkManager, BGTask): one round, returns true on success. */
     suspend fun syncNow(): Boolean = withContext(confined) { syncMutex.withLock { runSyncOnce() } == null }

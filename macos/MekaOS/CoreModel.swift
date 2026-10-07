@@ -46,6 +46,13 @@ final class CoreModel {
     /// A search result Lists or Goals should open (its tab and unfolded row); cleared once shown.
     var openItem: OpenItem?
     var showWork = false
+    /// Self-updating phone app: the APK chosen to publish, what it is (or why it can't go), and how publishing went.
+    var showFoldUpdate = false
+    private(set) var foldUpdatePath: String?
+    private(set) var foldUpdateCheck: FoldUpdateCheck?
+    private(set) var publishingFoldUpdate = false
+    private(set) var foldUpdateOutcome: String?
+    private(set) var foldUpdatePublished = false
     var selectedID: String?
     /// The shell's current destination and which way the last switch moved (for the push transition).
     private(set) var destination: ShellDestination = .today
@@ -166,6 +173,43 @@ final class CoreModel {
             }
         } catch {
             return error.localizedDescription
+        }
+    }
+
+    // MARK: Fold update (self-updating phone app)
+
+    /// Opens the publish sheet for the APK at [path] (from File → Publish Fold Update… or tools/publish-fold.sh).
+    func prepareFoldUpdate(path: String?) {
+        foldUpdatePath = path
+        foldUpdateCheck = path.map { MacCoreFactory.shared.checkFoldUpdate(apkPath: $0) }
+        foldUpdateOutcome = nil
+        foldUpdatePublished = false
+        showFoldUpdate = true
+    }
+
+    /// mekaos://publish-fold-update?apk=/path/to/app-debug.apk
+    func handle(url: URL) {
+        guard url.scheme == "mekaos", url.host == "publish-fold-update" else { return }
+        let apk = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "apk" }?.value
+        prepareFoldUpdate(path: apk)
+    }
+
+    func publishFoldUpdate(reduced: Bool) async {
+        guard let path = foldUpdatePath, !publishingFoldUpdate else { return }
+        guard let core else { foldUpdateOutcome = "MEKA is still starting. Try again in a moment."; return }
+        publishingFoldUpdate = true
+        let message: String
+        do {
+            message = try await MacCoreFactory.shared.publishFoldUpdate(core: core, apkPath: path)
+        } catch {
+            message = "Couldn't publish: \(error.localizedDescription)"
+        }
+        publishingFoldUpdate = false
+        let published = message.hasPrefix("Published")
+        if published { MekaHaptics.light() }
+        withAnimation(reduced ? MekaMotion.appear(reduced: true) : .spring(response: 0.35, dampingFraction: 0.6)) {
+            foldUpdatePublished = published
+            foldUpdateOutcome = message
         }
     }
 

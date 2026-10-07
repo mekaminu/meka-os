@@ -4,6 +4,17 @@ plugins {
     // AGP 9 provides built-in Kotlin support for Android modules; no separate kotlin-android plugin.
 }
 
+// Self-updating phone app: every build gets a higher versionCode (the number of commits on the branch it was built
+// from), so the Fold can tell a newer build the Mac published from the one it has, and Android accepts it as an update.
+// -Pmeka.versionCode=N overrides it. CI's shallow clone counts 1, which is fine for checks.
+val mekaVersionCode: Int = providers.gradleProperty("meka.versionCode").map { it.toInt() }.orNull
+    ?: runCatching {
+        providers.exec {
+            commandLine("git", "rev-list", "--count", "HEAD")
+            isIgnoreExitValue = true
+        }.standardOutput.asText.get().trim().toInt()
+    }.getOrDefault(1)
+
 android {
     namespace = "os.meka.android"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -12,8 +23,8 @@ android {
         applicationId = "os.meka.android"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0-m0"
+        versionCode = mekaVersionCode
+        versionName = "0.1.$mekaVersionCode"
         // Sync endpoint is configured per build; no secrets in the binary (ADR-005).
         buildConfigField("String", "SYNC_URL", "\"${providers.gradleProperty("meka.syncUrl").getOrElse("")}\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

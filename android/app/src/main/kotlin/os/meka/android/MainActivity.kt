@@ -71,6 +71,9 @@ class MainActivity : ComponentActivity() {
         val app = application as MekaApplication
         app.isOnScreen = true
         app.core.startSync()
+        // Self-updating phone app: look for a newer build, and bring back Android's Install prompt if one is waiting.
+        app.lookForUpdate()
+        app.updater.showPrompt(this)
     }
 
     override fun onStop() {
