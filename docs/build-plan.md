@@ -85,6 +85,10 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
 | Command bar (Mac ⌘K) | The bar scale-fades in from 0.96 over a dimmed window; rows glide as results narrow while typing; the lit row's highlight glides between rows (↑ ↓ or hover); running a command gives a tick haptic and the bar drops away. Reduced motion: cross-fades |
 | Loading | Skeleton shimmer, never a spinner on its own |
 
+## Fix first (Meka's feedback, take before anything below)
+
+- [ ] Today screen clarity (Meka, 2026-10-07, screenshots from the Fold at 21:31): (1) **All-day items** are a single horizontally scrolling chip row under "YOUR DAY" — items are cut off ("Pa…") and nothing says the row scrolls. Replace with a vertical **"All day"** group at the top of the timeline: one row each (title + calendar name, same lighter event style), at most 3 shown then "+N more" that expands with a spring; an all-day entry that reads like a to-do (e.g. "Check if to pay for…") gets a one-tap "Make it a task". (2) **"You're clear."** is shown while all-day items and earlier events exist — only say it when nothing is left today *including* all-day items; otherwise show "Nothing else timed today". (3) **Header links** (Search · Plan my day · Off work · Brief · Shut down · Theme) are crowded: keep Plan my day and Search visible, move Off work/Work mode, Brief, Shut down and Theme into the More sheet / Ask (the Shut down card already covers the evening). (4) Rename the "YOUR DAY" label to "Today" items logic: timed rows under the timeline, all-day group above. Both apps; motion per the catalogue.
+
 ## Milestones
 
 ### M0 · Foundation — done
