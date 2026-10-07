@@ -113,3 +113,120 @@ jobs:
             sleep 20
           done
           echo "::error title=Smoke test failed::$URL/health did not return ok"; exit 1
+
+  # Hands-free phone updates (build plan): after a green CI run whose commits changed the phone app since the build the
+  # server last offered, build the debug APK, sign it with the Mac's debug key (secret MEKA_FOLD_SIGNING_KEY) and
+  # publish it as GitHub's release-only publisher. The Fold then offers "MEKA update ready"; nothing installs without
+  # Meka's tap, and Android refuses a build not signed like the installed app. Runs after the server deploy (or its
+  # skip), so a build never reaches a server older than it. tools/publish-fold.sh on the Mac stays the manual fallback.
+  publish-fold:
+    needs: [changes, deploy]
+    if: ${{ always() && needs.changes.result == 'success' && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      HAS_SIGNING_KEY: ${{ secrets.MEKA_FOLD_SIGNING_KEY != '' }}
+    steps:
+      - name: Signing key present?
+        id: key
+        run: |
+          if [ "$HAS_SIGNING_KEY" = "true" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "ok=false" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Phone update skipped::the MEKA_FOLD_SIGNING_KEY secret isn't set (run 'Copy phone signing key.command' on the Mac); publish with tools/publish-fold.sh meanwhile"
+      - uses: actions/checkout@v5
+        if: steps.key.outputs.ok == 'true'
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0 # versionCode is the commit count
+      - uses: actions/setup-java@v5
+        if: steps.key.outputs.ok == 'true'
+        with: { distribution: temurin, java-version: "21" }
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.key.outputs.ok == 'true'
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.key.outputs.ok == 'true'
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Publisher tool
+        if: steps.key.outputs.ok == 'true'
+        run: tools/ci-run.sh ./gradlew :backend:installDist
+
+      - name: Publisher key (made once; readable only by this role)
+        if: steps.key.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          CLI=backend/build/install/backend/bin/backend
+          SECRET="meka-os-$ENV_NAME/release-publisher"
+          KEYFILE="$RUNNER_TEMP/publisher.key"
+          umask 077
+          PRIV=$(aws secretsmanager get-secret-value --secret-id "$SECRET" --query SecretString --output text | jq -r '.private_key // empty')
+          if [ -z "$PRIV" ]; then
+            PAIR=$($CLI publisher-keygen)
+            PRIV=$(jq -r .private_key <<<"$PAIR"); PUB=$(jq -r .public_key <<<"$PAIR")
+            echo "::add-mask::$PRIV"
+            # Public half first: if the second write fails, the next run simply makes a new pair.
+            aws secretsmanager put-secret-value --secret-id "meka-os-$ENV_NAME/release-publisher-public" \
+              --secret-string "$(jq -cn --arg k "$PUB" '{public_key:$k}')" >/dev/null
+            aws secretsmanager put-secret-value --secret-id "$SECRET" --secret-string "$(jq -cn --arg k "$PRIV" '{private_key:$k}')" >/dev/null
+            echo "::notice title=Phone updates::made the GitHub publisher's key pair"
+            sleep 70 # the server re-reads the public key once a minute
+          fi
+          echo "::add-mask::$PRIV"
+          printf '%s' "$PRIV" > "$KEYFILE"
+
+      - name: Anything new for the phone?
+        id: decide
+        if: steps.key.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          CLI=backend/build/install/backend/bin/backend
+          URL=$(aws cloudformation describe-stacks --stack-name "MekaOs-$ENV_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='SyncUrl'].OutputValue" --output text)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          LATEST=$(MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" $CLI publisher-latest "$URL")
+          COUNT=$(git rev-list --count HEAD)
+          if [ "$LATEST" -ge "$COUNT" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"; echo "::notice title=Phone update skipped::build $LATEST is already published"; exit 0
+          fi
+          # The commit the published build was made from (main is linear: build N = the Nth commit).
+          BASE=""
+          if [ "$LATEST" -gt 0 ]; then
+            CANDIDATE=$(git rev-list --reverse HEAD | sed -n "${LATEST}p")
+            if [ -n "$CANDIDATE" ] && [ "$(git rev-list --count "$CANDIDATE")" = "$LATEST" ]; then BASE=$CANDIDATE; fi
+          fi
+          if [ -n "$BASE" ] && ! git diff --name-only "$BASE" HEAD | grep -qE '^(android/|core/|design/|gradle/|build\.gradle\.kts|settings\.gradle\.kts|gradle\.properties)'; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"; echo "::notice title=Phone update skipped::no phone changes since build $LATEST"; exit 0
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"; echo "Publishing build $COUNT (published: $LATEST)"
+
+      - name: Build the phone app with the Mac's debug key
+        if: steps.decide.outputs.publish == 'true'
+        env:
+          SIGNING_KEY: ${{ secrets.MEKA_FOLD_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          DIR="${ANDROID_USER_HOME:-$HOME/.android}"
+          mkdir -p "$DIR"
+          (umask 077; printf '%s' "$SIGNING_KEY" | tr -d '\r\n ' | base64 -d > "$DIR/debug.keystore")
+          WANT=$(keytool -list -v -keystore "$DIR/debug.keystore" -storepass android -alias androiddebugkey 2>/dev/null \
+            | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f') || true
+          [ -n "$WANT" ] || { echo "::error title=Phone update::MEKA_FOLD_SIGNING_KEY isn't a debug keystore (password android, alias androiddebugkey)"; exit 1; }
+          tools/ci-run.sh ./gradlew :android:app:assembleDebug
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          SIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          GOT=$("$SIGNER" verify --print-certs "$APK" | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
+          [ "$GOT" = "$WANT" ] || { echo "::error title=Phone update::the APK wasn't signed with the Mac's debug key"; exit 1; }
+
+      - name: Publish to the Fold
+        if: steps.decide.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          D=android/app/build/outputs/apk/debug
+          MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend \
+            publisher-publish "${{ steps.decide.outputs.url }}" "$D/app-debug.apk" "$D/output-metadata.json"
+
+      - name: Remove the keys from the runner
+        if: always()
+        run: rm -f "${ANDROID_USER_HOME:-$HOME/.android}/debug.keystore" "$RUNNER_TEMP/publisher.key"

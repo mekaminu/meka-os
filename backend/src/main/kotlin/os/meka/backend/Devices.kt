@@ -32,6 +32,12 @@ interface DeviceRegistry {
 
     /** Stores the device's first signing key. Returns false if a different key is already registered. */
     fun registerKey(device: DeviceIdentity, publicKeyB64: String): Boolean
+
+    /**
+     * The one household this server holds, or null when it holds none or more than one. The release-only publisher
+     * (GitHub build) publishes for it; enrolment with the code never starts a second household.
+     */
+    fun soleHousehold(): String?
 }
 
 object Secrets {
@@ -109,6 +115,15 @@ class PostgresDeviceRegistry(private val ds: DataSource) : DeviceRegistry {
         publicKey(device) == publicKeyB64
     }
 
+    override fun soleHousehold(): String? = ds.connection.use { c ->
+        c.prepareStatement("SELECT id FROM household LIMIT 2").use { st ->
+            st.executeQuery().use { rs ->
+                val ids = buildList { while (rs.next()) add(rs.getString(1)) }
+                ids.singleOrNull()
+            }
+        }
+    }
+
     fun revoke(householdId: String, deviceId: String) = ds.connection.use { c: Connection ->
         c.prepareStatement("UPDATE device SET revoked_at = now() WHERE household_id = ? AND id = ?").use {
             it.setString(1, householdId); it.setString(2, deviceId); it.executeUpdate()
@@ -148,6 +163,7 @@ class InMemoryDeviceRegistry : DeviceRegistry {
     override fun authenticate(bearerSecret: String) = byHash[Secrets.sha256Hex(bearerSecret)]
     override fun publicKey(device: DeviceIdentity) = keys[device]
     override fun registerKey(device: DeviceIdentity, publicKeyB64: String): Boolean = keys.getOrPut(device) { publicKeyB64 } == publicKeyB64
+    override fun soleHousehold(): String? = households.singleOrNull()
 }
 
 const val REFUSED_REVOKED = "revoked"

@@ -118,6 +118,33 @@ describe('MekaStack security and cost invariants (ADR-004)', () => {
     expect(actions.filter((a) => a.startsWith('secretsmanager:') && !/^secretsmanager:(GetSecretValue|DescribeSecret)$/.test(a))).toEqual([]);
   });
 
+  test('the release publisher key is readable only by the GitHub deploy role; the service gets the public half', () => {
+    t.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'meka-os-dev/release-publisher' });
+    t.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'meka-os-dev/release-publisher-public' });
+    const secrets = t.findResources('AWS::SecretsManager::Secret');
+    const id = (name: string) => Object.entries(secrets).find(([, r]: any) => r.Properties.Name === name)![0];
+    const privateId = id('meka-os-dev/release-publisher');
+    const publicId = id('meka-os-dev/release-publisher-public');
+    // An explicit deny for everyone but the deploy role.
+    t.hasResourceProperties('AWS::SecretsManager::ResourcePolicy', {
+      SecretId: { Ref: privateId },
+      ResourcePolicy: {
+        Statement: [Match.objectLike({
+          Effect: 'Deny', Principal: { AWS: '*' }, Action: 'secretsmanager:GetSecretValue',
+          Condition: { ArnNotEquals: { 'aws:PrincipalArn': 'arn:aws:iam::111111111111:role/meka-os-github-deploy' } },
+        })],
+      },
+    });
+    // No IAM policy in the stack grants the private key; the task role reads the public one.
+    const policies = Object.values(t.findResources('AWS::IAM::Policy')) as any[];
+    const resources = policies.flatMap((p) => p.Properties.PolicyDocument.Statement.flatMap((s: any) => ([] as any[]).concat(s.Resource)));
+    expect(resources.filter((r) => r && r.Ref === privateId)).toEqual([]);
+    expect(resources.filter((r) => r && r.Ref === publicId).length).toBeGreaterThan(0);
+    t.hasResourceProperties('AWS::ECS::TaskDefinition', {
+      ContainerDefinitions: [Match.objectLike({ Environment: Match.arrayWith([Match.objectLike({ Name: 'MEKA_RELEASE_PUBLISHER_SECRET', Value: { Ref: publicId } })]) })],
+    });
+  });
+
   test('records the deployed commit only when CI passes one (deploy.yml diffs against it)', () => {
     const sha = '29720ce900d5aa07156abbdf1f420121003b40b9';
     synth({ deployedCommit: sha }).hasOutput('DeployedCommit', { Value: sha });

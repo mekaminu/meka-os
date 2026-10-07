@@ -20,6 +20,24 @@ class AppUpdatesTest {
     }
 
     @Test
+    fun theUpdateNotificationComesOncePerBuildAndOnlyWhenMekaIsNotOnScreen() {
+        val b413 = b412.copy(versionCode = 413)
+        assertEquals(true, AppUpdateRules.shouldNotify(b412, toldCode = null, onScreen = false))
+        assertEquals(false, AppUpdateRules.shouldNotify(b412, toldCode = null, onScreen = true))
+        assertEquals(false, AppUpdateRules.shouldNotify(null, toldCode = null, onScreen = false))
+        // Once told (by the notification or the card on screen), not again for that build; a newer one is news.
+        assertEquals(412L, AppUpdateRules.told(b412, null))
+        assertEquals(false, AppUpdateRules.shouldNotify(b412, toldCode = 412, onScreen = false))
+        assertEquals(true, AppUpdateRules.shouldNotify(b413, toldCode = 412, onScreen = false))
+        assertEquals(413L, AppUpdateRules.told(b413, 412))
+        // An older build showing up (a rollback on the server) neither notifies nor rewinds what was told.
+        assertEquals(false, AppUpdateRules.shouldNotify(b412, toldCode = 413, onScreen = false))
+        assertEquals(413L, AppUpdateRules.told(b412, 413))
+        assertEquals(413L, AppUpdateRules.told(null, 413))
+        assertEquals("Build 412 · 24.3 MB · open MEKA to install", AppUpdateRules.notificationLine(b412))
+    }
+
+    @Test
     fun linesAndSizes() {
         assertEquals("Build 412 · 24.3 MB", AppUpdateRules.line(b412))
         assertEquals("MEKA 0.1.412 · build 412 · 24.3 MB", AppUpdateRules.summary(b412))

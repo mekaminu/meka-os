@@ -35,9 +35,10 @@ sealed interface UpdateState {
 }
 
 /**
- * Self-updating phone app (build plan M1). Asks the server for the newest build the Mac published; when it is newer
+ * Self-updating phone app (build plan M1). Asks the server for the newest published build (GitHub publishes one after
+ * each green CI run that changed the phone app; the Mac can still publish by hand); when it is newer
  * than this one, Today offers it. Install downloads it chunk by chunk straight into an Android install session,
- * checks the whole file's SHA-256 against what the Mac published, and hands it to Android, which shows its own
+ * checks the whole file's SHA-256 against what was published, and hands it to Android, which shows its own
  * Install prompt (Meka's one tap) and refuses a build not signed with this app's key. Nothing installs by itself.
  */
 class AppUpdater(private val app: MekaApplication) {
@@ -66,11 +67,14 @@ class AppUpdater(private val app: MekaApplication) {
             current is UpdateState.NeedsPermission && current.release == latest -> current
             else -> UpdateState.Ready(latest)
         }
+        // A quiet note once per build while MEKA isn't on screen (GitHub publishes builds by itself now).
+        UpdateNotice.onOffer(app, offer, app.isOnScreen)
     }
 
     /** "Later": hides this build; a newer one is offered again. */
     fun later(release: AppRelease) {
         prefs.edit().putLong(KEY_LATER, release.versionCode).apply()
+        UpdateNotice.cancel(app)
         _state.value = UpdateState.None
     }
 
@@ -109,7 +113,7 @@ class AppUpdater(private val app: MekaApplication) {
                 val hex = digest.digest().joinToString("") { "%02x".format(it) }
                 if (hex != release.sha256) {
                     session.abandon()
-                    _state.value = UpdateState.Failed(release, "The download didn't match the build the Mac published. Try again.")
+                    _state.value = UpdateState.Failed(release, "The download didn't match the published build. Try again.")
                     return
                 }
                 _state.value = UpdateState.Confirming(release)
@@ -167,7 +171,7 @@ class AppUpdater(private val app: MekaApplication) {
 
         fun failureLine(status: Int): String = when (status) {
             PackageInstaller.STATUS_FAILURE_CONFLICT, PackageInstaller.STATUS_FAILURE_INCOMPATIBLE ->
-                "Android refused it: it isn't signed like the MEKA you have. Publish it from the Mac that installed MEKA."
+                "Android refused it: it isn't signed like the MEKA you have (it must carry the debug key of the Mac that installed MEKA)."
             PackageInstaller.STATUS_FAILURE_STORAGE -> "Not enough space on the phone for the update."
             PackageInstaller.STATUS_FAILURE_BLOCKED -> "Android blocked the install."
             else -> "Android couldn't install it. Try again."

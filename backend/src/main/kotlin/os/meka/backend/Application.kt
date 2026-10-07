@@ -60,6 +60,8 @@ fun Application.mekaSync(
     releases: Releases? = null,
     /** Push wake-ups (build plan M1: push via Firebase); null disables the push route and wake-ups. */
     push: Push? = null,
+    /** The release-only publisher's public key (GitHub builds the phone app); null refuses every publisher request. */
+    publisher: PublisherKeySource? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -87,10 +89,12 @@ fun Application.mekaSync(
 
         // One-time device enrolment (ADR-005 M0). Disabled unless MEKA_ENROL_TOKEN is configured.
         post("/v1/enrol") {
+            if (call.isPublisher()) throw Forbidden()
             val token = enrolToken?.takeIf { it.length >= 32 } ?: throw Unauthorised()
             val auth = call.request.header("Authorization") ?: throw Unauthorised()
             if (!auth.startsWith("Enrol ") || !Secrets.constantTimeEquals(auth.removePrefix("Enrol ").trim(), token)) throw Unauthorised()
             val req = WireCodec.decodeEnrolRequest(call.boundedBody())
+            if (req.deviceId == ReleasePublisher.ID) throw Forbidden() // that name is the GitHub publisher's, not a device's
             when (val r = withContext(Dispatchers.IO) { devices.enrolWithCode(req.householdId, req.deviceId, req.name) }) {
                 is EnrolOutcome.Enrolled -> {
                     call.application.environment.log.info("device enrolled") // no identifiers in logs
@@ -176,11 +180,11 @@ fun Application.mekaSync(
         }
 
         if (releases != null) {
-            // Self-updating phone app: the newest published build, its chunks, and publishing one (from the Mac).
-            // Signed requests from keyed devices only.
+            // Self-updating phone app: the newest published build, its chunks, and publishing one (from the Mac, or
+            // from GitHub's release-only publisher, which may call only latest and upload). Signed requests only.
             post("/v1/releases/latest") {
                 val body = call.boundedBody()
-                val who = call.device(devices, verifier, body, requireKey = true)
+                val who = call.releaseCaller(devices, verifier, body, publisher)
                 val platform = WireCodec.decodePlatform(body)
                 val latest = withContext(Dispatchers.IO) { releases.latest(who, platform) }
                 call.respondText(WireCodec.encodeRelease(latest), ContentType.Application.Json)
@@ -197,11 +201,11 @@ fun Application.mekaSync(
 
             post("/v1/releases/upload") {
                 val body = call.boundedBody()
-                val who = call.device(devices, verifier, body, requireKey = true)
+                val who = call.releaseCaller(devices, verifier, body, publisher)
                 val chunk = WireCodec.decodeReleaseChunk(body)
                 when (val r = withContext(Dispatchers.IO) { releases.upload(who, chunk) }) {
                     is Releases.Upload.Ack -> {
-                        if (r.complete) call.application.environment.log.info("app build published") // no identifiers
+                        if (r.complete) call.application.environment.log.info(if (who.deviceId == ReleasePublisher.ID) "app build published by GitHub" else "app build published") // no identifiers
                         call.respondText(WireCodec.encodeUploadAck(WireCodec.UploadAck(r.received, r.complete)), ContentType.Application.Json)
                     }
                     is Releases.Upload.Conflict -> call.respondText(r.reason, status = HttpStatusCode.Conflict)
@@ -260,7 +264,10 @@ private fun resultPage(title: String, message: String) = """<!doctype html><html
 main{max-width:30rem}h1{font-size:1.5rem;margin:0 0 .5rem}p{margin:0;opacity:.8}</style></head>
 <body><main><h1>${html(title)}</h1><p>${html(message)}</p></main></body></html>"""
 
+private fun ApplicationCall.isPublisher(): Boolean = request.header("Authorization")?.startsWith("${ReleasePublisher.AUTH_SCHEME} ") == true
+
 private fun ApplicationCall.bearer(devices: DeviceRegistry): DeviceIdentity {
+    if (isPublisher()) throw Forbidden() // the release-only publisher may call nothing that takes a device
     val auth = request.header("Authorization") ?: throw Unauthorised()
     if (!auth.startsWith("Bearer ")) throw Unauthorised()
     return devices.authenticate(auth.removePrefix("Bearer ").trim()) ?: throw Unauthorised()
@@ -284,6 +291,25 @@ private suspend fun ApplicationCall.device(devices: DeviceRegistry, verifier: Re
     return who
 }
 
+/**
+ * A release route's caller: a keyed household device, or the release-only publisher (GitHub build). The publisher is
+ * known by its public key alone (no bearer secret), must sign this exact request, may call only
+ * [ReleasePublisher.ROUTES], and publishes for the server's one household.
+ */
+private suspend fun ApplicationCall.releaseCaller(devices: DeviceRegistry, verifier: RequestVerifier, body: String, publisher: PublisherKeySource?): DeviceIdentity {
+    if (!isPublisher()) return device(devices, verifier, body, requireKey = true)
+    val name = request.header("Authorization").orEmpty().removePrefix("${ReleasePublisher.AUTH_SCHEME} ").trim()
+    if (name != ReleasePublisher.ID) throw Unauthorised()
+    if (request.path() !in ReleasePublisher.ROUTES) throw Forbidden()
+    val key = publisher?.let { withContext(Dispatchers.IO) { it.publicKey() } } ?: throw Forbidden()
+    val h = request.headers
+    if (!verifier.verify(key, request.httpMethod.value, request.path(), body, h["X-Meka-Time"], h["X-Meka-Nonce"], h["X-Meka-Signature"])) {
+        throw Unauthorised()
+    }
+    val household = withContext(Dispatchers.IO) { devices.soleHousehold() } ?: throw Forbidden()
+    return DeviceIdentity(household, ReleasePublisher.ID)
+}
+
 /** Reads at most MAX_BODY_BYTES + 1 bytes, so chunked bodies cannot exhaust memory. */
 private suspend fun ApplicationCall.boundedBody(): String {
     val len = request.header("Content-Length")?.toLongOrNull()
@@ -303,6 +329,8 @@ fun dataSourceFromEnv(): HikariDataSource = HikariDataSource(
 )
 
 fun main(args: Array<String>) {
+    // The GitHub publish job's commands need no database (build plan: hands-free phone updates).
+    if (args.firstOrNull() in ReleasePublisherCli.COMMANDS) kotlin.system.exitProcess(ReleasePublisherCli.run(args.toList()))
     val ds = dataSourceFromEnv()
     Migrations.apply(ds)
     when (args.firstOrNull()) {
@@ -322,6 +350,7 @@ fun main(args: Array<String>) {
                 mekaSync(
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
                     releases = Releases(PostgresReleaseStore(ds)), push = push,
+                    publisher = System.getenv("MEKA_RELEASE_PUBLISHER_SECRET")?.takeIf { it.isNotBlank() }?.let { SecretsManagerPublisherKey(it) },
                 )
             }.start(wait = true)
         }

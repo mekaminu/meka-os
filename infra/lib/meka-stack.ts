@@ -185,6 +185,31 @@ export class MekaStack extends cdk.Stack {
       secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
     });
 
+    // Hands-free phone updates: GitHub's release-only publisher. Its P-256 private key is readable ONLY by the GitHub
+    // deploy role (an explicit deny for every other principal, the service included); the publish job makes the key
+    // pair the first time and writes the public half to the second secret, which the service reads to check its
+    // signatures. Both start as '{}'. The publisher may call only the release latest/upload routes (backend tests).
+    const deployRoleArn = `arn:aws:iam::${this.account}:role/meka-os-github-deploy`;
+    const publisherKey = new secretsmanager.Secret(this, 'ReleasePublisherKey', {
+      secretName: `${prefix}/release-publisher`,
+      encryptionKey: this.key,
+      description: 'MEKA OS phone updates: the GitHub publisher\'s private key (written by the deploy workflow; readable only by the deploy role)',
+      secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
+    });
+    publisherKey.addToResourcePolicy(new cdk.aws_iam.PolicyStatement({
+      effect: cdk.aws_iam.Effect.DENY,
+      principals: [new cdk.aws_iam.AnyPrincipal()],
+      actions: ['secretsmanager:GetSecretValue'],
+      resources: ['*'],
+      conditions: { ArnNotEquals: { 'aws:PrincipalArn': deployRoleArn } },
+    }));
+    const publisherPublic = new secretsmanager.Secret(this, 'ReleasePublisherPublic', {
+      secretName: `${prefix}/release-publisher-public`,
+      encryptionKey: this.key,
+      description: 'MEKA OS phone updates: {"public_key": ...} of the GitHub publisher (not secret; written by the deploy workflow)',
+      secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
+    });
+
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc, clusterName: prefix, containerInsightsV2: ecs.ContainerInsights.DISABLED });
     const task = new ecs.FargateTaskDefinition(this, 'Task', {
       cpu: 256,
@@ -207,6 +232,7 @@ export class MekaStack extends cdk.Stack {
         MEKA_OAUTH_MICROSOFT_SECRET: oauthMicrosoft.secretArn,
         MEKA_AI_SECRET: aiKey.secretArn,
         MEKA_FCM_SECRET: fcmKey.secretArn,
+        MEKA_RELEASE_PUBLISHER_SECRET: publisherPublic.secretArn,
       },
       secrets: {
         MEKA_DB_USER: ecs.Secret.fromSecretsManager(dbSecret, 'username'),
@@ -231,6 +257,7 @@ export class MekaStack extends cdk.Stack {
     oauthMicrosoft.grantRead(task.taskRole);
     aiKey.grantRead(task.taskRole);
     fcmKey.grantRead(task.taskRole);
+    publisherPublic.grantRead(task.taskRole); // the public half only; the private key is never granted to the service
 
     this.service = new ecs.FargateService(this, 'Service', {
       cluster,

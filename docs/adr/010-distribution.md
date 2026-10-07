@@ -33,3 +33,9 @@ The owner chose personal distribution: a sideloaded Android APK, and a Developer
 - Integrity: the whole-file SHA-256 is checked by the server and again by the phone, and Android refuses an update not signed with the installed app's key. A compromised server therefore can't install anything the owner didn't sign.
 - `REQUEST_INSTALL_PACKAGES` is a personal-distribution permission (Play restricts it). A store build drops it with the self-updater, like `READ_SMS` (a `personal` flavour when a store build is wanted).
 - These are non-ADB installs, so developer verification will apply to them once enforcement reaches the UK; the Limited Distribution account above covers them.
+
+## Addendum, 2026-10-07: GitHub publishes phone builds (hands-free phone updates)
+- After a green CI run that changed the phone app since the published build, the deploy workflow builds the debug APK, signs it with the owner's Mac debug key (GitHub secret `MEKA_FOLD_SIGNING_KEY`, decoded on the runner for the build and deleted after; never printed or uploaded as an artifact; the job checks the APK carries that key's certificate) and publishes it.
+- It publishes as a **release-only publisher**, not a household device: a P-256 key whose private half is in Secrets Manager, readable only by the GitHub deploy role (explicit deny for everyone else, the service included); the server knows only its public key. It may call only the release "latest" and "upload" routes; every other route is 403. Its builds are recorded as published by `github-build`.
+- The phone's checks are unchanged: whole-file SHA-256, Android's own signature check against the installed app, and Meka's tap on Android's Install prompt. A quiet low-importance notification says a build is ready, at most once per build.
+- `tools/publish-fold.sh` (publishing from the Mac) stays as the manual fallback; the same commit gives the same build number either way, and the server refuses a build that isn't newer.

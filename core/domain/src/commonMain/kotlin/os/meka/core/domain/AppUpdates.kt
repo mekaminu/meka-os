@@ -16,6 +16,21 @@ object AppUpdateRules {
 
     const val TITLE = "MEKA update ready"
 
+    /**
+     * The quiet "MEKA update ready" notification (hands-free phone updates): at most once per build. It is posted
+     * only while MEKA isn't on screen (the Today card says it there); a build that was offered while Meka was looking
+     * counts as told ([toldCode] is the last build he was told about either way). Never for a build put off with Later.
+     */
+    fun shouldNotify(offered: Build?, toldCode: Long?, onScreen: Boolean): Boolean =
+        offered != null && !onScreen && (toldCode == null || offered.versionCode > toldCode)
+
+    /** The build Meka has now been told about: [offered]'s number, else what he was told before. */
+    fun told(offered: Build?, toldCode: Long?): Long? =
+        if (offered != null && (toldCode == null || offered.versionCode > toldCode)) offered.versionCode else toldCode
+
+    /** The notification's line: "Build 412 · 24.3 MB · open MEKA to install". */
+    fun notificationLine(b: Build): String = "${line(b)} · open MEKA to install"
+
     /** "Build 412 · 24.3 MB". */
     fun line(b: Build): String = "Build ${b.versionCode} · ${sizeLabel(b.sizeBytes)}"
 
