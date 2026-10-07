@@ -137,6 +137,20 @@ struct SkeletonRows: View {
     }
 }
 
+/// Cards and More rows press in as they're clicked (scale 0.97 on the complete spring) before what they open
+/// scale-fades in (Four tabs, slice 3; the Mac's simpler stand-in for the Fold's travelling titles, rule 7).
+/// Reduce Motion: a brief dim instead.
+struct MekaPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .opacity(configuration.isPressed && reduceMotion ? 0.85 : 1)
+            .animation(MekaMotion.complete(reduced: reduceMotion), value: configuration.isPressed)
+    }
+}
+
 /// Haptics named for what happened (catalogue: light on complete, medium on approve). Trackpad only; silent otherwise.
 enum MekaHaptics {
     static func light() { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }

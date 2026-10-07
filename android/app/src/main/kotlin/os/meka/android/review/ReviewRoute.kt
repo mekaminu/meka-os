@@ -61,6 +61,8 @@ import os.meka.core.domain.ReviewHabit
 import os.meka.core.domain.ReviewTile
 import os.meka.core.domain.WeeklyReviewView
 import os.meka.core.facade.MekaCore
+import os.meka.android.designsystem.LocalPlaceTitleKey
+import os.meka.android.designsystem.sharedPlace
 
 /**
  * REVIEW (build plan M1, ADR-013): the weekly review. One Monday–Sunday week looked back on — numbers at the top,
@@ -111,7 +113,8 @@ private fun Week(v: WeeklyReviewView, step: (Int) -> Unit, reviewDone: () -> Uni
     ) {
         item(key = "title") {
             Column(Modifier.padding(bottom = MekaSpace.m).appear(rememberAppearance(0))) {
-                Text("Review", style = MekaType.greeting, color = Meka.colors.textPrimary)
+                Text("Review", style = MekaType.greeting, color = Meka.colors.textPrimary,
+                    modifier = Modifier.sharedPlace(LocalPlaceTitleKey.current))
                 Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
                     StepButton("‹", "Previous week", v.canGoBack) { step(-1) }
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -325,12 +328,12 @@ private fun ReviewedCheck(visible: Boolean) {
  * and stays through Monday until that week is reviewed on either device; tapping it opens Review on that week.
  */
 @Composable
-internal fun ReviewCardTile(card: ReviewCard, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+internal fun ReviewCardTile(card: ReviewCard, onOpen: () -> Unit, modifier: Modifier = Modifier, titleModifier: Modifier = Modifier) {
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onOpen() }.padding(MekaSpace.l),
     ) {
-        Text(card.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Text(card.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = titleModifier)
         Text(card.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
     }
 }

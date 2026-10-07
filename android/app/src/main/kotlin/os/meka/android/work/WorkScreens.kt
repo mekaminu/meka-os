@@ -76,6 +76,9 @@ import os.meka.core.facade.MekaCore
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import os.meka.android.shell.SharedMotion
+import os.meka.android.shell.MoreItem
+import os.meka.android.designsystem.sharedTitleInPane
 
 private const val STEP_MINUTES = 15
 
@@ -126,7 +129,8 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
-        Text("Work mode", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
+        Text("Work mode", style = MekaType.greeting, color = Meka.colors.textPrimary,
+            modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.WORK)).appear(rememberAppearance(0)))
         Text(work.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
 
         Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {

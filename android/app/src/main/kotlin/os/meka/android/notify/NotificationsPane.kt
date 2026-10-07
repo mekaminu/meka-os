@@ -64,6 +64,9 @@ import os.meka.core.domain.NoticeSource
 import os.meka.core.domain.NoticeTier
 import os.meka.core.domain.NotificationSettings
 import os.meka.core.facade.MekaCore
+import os.meka.android.shell.SharedMotion
+import os.meka.android.shell.MoreItem
+import os.meka.android.designsystem.sharedTitleInPane
 
 private const val STEP_MINUTES = 15
 
@@ -99,7 +102,8 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
-        Text("Notifications", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
+        Text("Notifications", style = MekaType.greeting, color = Meka.colors.textPrimary,
+            modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.NOTIFICATIONS)).appear(rememberAppearance(0)))
         Column(Modifier.appear(rememberAppearance(0))) {
             Crossfade(preview.quietLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "quiet-line") {
                 Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary)

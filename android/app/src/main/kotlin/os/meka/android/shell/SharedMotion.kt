@@ -35,4 +35,36 @@ object SharedMotion {
 
     /** A task that just landed from the plan is lit once the plan has gone. */
     fun highlightLanded(id: String, planOpen: Boolean, landing: Set<String>): Boolean = !planOpen && id in landing
+
+    // Four tabs, slice 3: cards and More rows carry their title into what they open.
+
+    /** Today's cards that open a pane over Today. */
+    const val BRIEF = "brief"
+    const val SHUTDOWN = "shutdown"
+
+    /** A card's or a More row's title and the title of the pane it opens share this key. */
+    fun paneKey(name: String): String = "pane-$name"
+
+    fun paneKey(item: MoreItem): String = paneKey(item.name)
+
+    /**
+     * A title that travels across the shell, from where a place was opened ([via]) into the place's own title. The
+     * key names both ends, so the review card and Ask's Review row never fly into each other while the shell slides
+     * between Today and Ask.
+     */
+    fun placeKey(place: ShellDestination, via: PlaceVia): String = "place-${place.name}-${via.name}"
+
+    /** The key the place's title wears: the way it was last opened, if that was a card or a More row. */
+    fun placeTitleKey(place: ShellDestination, arrival: String?): String? =
+        arrival?.takeIf { it.startsWith("place-${place.name}-") }
+
+    /**
+     * After a plain move (a tab, back, a notification, a search result): going to a tab keeps how the place was
+     * opened, so its title flies back to the row or card it came from; going straight to a place forgets it, so no
+     * title flies in from a row that wasn't tapped.
+     */
+    fun arrivalAfterGo(to: ShellDestination, arrival: String?): String? = if (to in ShellNav.TABS) arrival else null
 }
+
+/** Where a place behind Ask was opened from. */
+enum class PlaceVia { MORE, CARD }

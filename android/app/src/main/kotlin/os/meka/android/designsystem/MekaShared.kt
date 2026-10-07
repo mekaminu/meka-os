@@ -8,6 +8,7 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -34,14 +35,33 @@ val LocalSharedScope = compositionLocalOf<SharedTransitionScope?> { null }
 /** The enter/exit scope of the [MekaPane] this content sits in, if any. */
 val LocalPaneScope = compositionLocalOf<AnimatedVisibilityScope?> { null }
 
+/**
+ * Keys inside one shell destination are prefixed with its name, so the same task open on Today and on Needs you never
+ * flies between the two while the shell slides from one to the other ([sharedPlace] keys are not prefixed).
+ */
+val LocalSharedKeyPrefix = compositionLocalOf { "" }
+
+/** The shell's enter/exit scope for the destination this content sits in (the shell's sliding content). */
+val LocalShellContent = compositionLocalOf<AnimatedVisibilityScope?> { null }
+
+/** The key this place's title wears for [sharedPlace], set by the shell from how the place was opened; null: none. */
+val LocalPlaceTitleKey = compositionLocalOf<String?> { null }
+
 /** Shared titles travel on the expand spring, like the panes they ride with. */
 private val MekaBounds = BoundsTransform { _: Rect, _: Rect -> MekaMotion.expand<Rect>(false) }
 
-/** Sets up shared-element transitions for everything inside. */
+/**
+ * Sets up shared-element transitions for everything inside. Inside the app shell, which already set one up, it reuses
+ * the shell's, so there is only ever one layout (titles can then travel across the shell too).
+ */
 @Composable
 fun MekaSharedLayout(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    SharedTransitionLayout(modifier) {
-        CompositionLocalProvider(LocalSharedScope provides this) { content() }
+    if (LocalSharedScope.current != null) {
+        Box(modifier) { content() }
+    } else {
+        SharedTransitionLayout(modifier) {
+            CompositionLocalProvider(LocalSharedScope provides this) { content() }
+        }
     }
 }
 
@@ -53,7 +73,7 @@ fun MekaSharedLayout(modifier: Modifier = Modifier, content: @Composable () -> U
 fun Modifier.sharedTitle(key: String, visible: Boolean): Modifier {
     val shared = LocalSharedScope.current ?: return this
     if (Meka.reducedMotion) return this
-    val state = shared.rememberSharedContentState(key)
+    val state = shared.rememberSharedContentState(LocalSharedKeyPrefix.current + key)
     return with(shared) { this@sharedTitle.sharedElementWithCallerManagedVisibility(state, visible, boundsTransform = MekaBounds) }
 }
 
@@ -63,8 +83,22 @@ fun Modifier.sharedTitleInPane(key: String): Modifier {
     val shared = LocalSharedScope.current ?: return this
     val pane = LocalPaneScope.current ?: return this
     if (Meka.reducedMotion) return this
-    val state = shared.rememberSharedContentState(key)
+    val state = shared.rememberSharedContentState(LocalSharedKeyPrefix.current + key)
     return with(shared) { this@sharedTitleInPane.sharedElement(state, pane, boundsTransform = MekaBounds) }
+}
+
+/**
+ * A title that travels across the shell (Four tabs, slice 3): a More row's label or a Today card's title into the
+ * place it opens, riding the shell's slide, and back again. Null [key], no shell, or reduced motion: nothing.
+ */
+@Composable
+fun Modifier.sharedPlace(key: String?): Modifier {
+    if (key == null) return this
+    val shared = LocalSharedScope.current ?: return this
+    val content = LocalShellContent.current ?: return this
+    if (Meka.reducedMotion) return this
+    val state = shared.rememberSharedContentState(key)
+    return with(shared) { this@sharedPlace.sharedElement(state, content, boundsTransform = MekaBounds) }
 }
 
 /**

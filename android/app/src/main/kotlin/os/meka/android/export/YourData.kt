@@ -53,6 +53,11 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.ExportSummary
 import os.meka.core.facade.DataExportFile
 import os.meka.core.facade.MekaCore
+import os.meka.android.designsystem.LocalPlaceTitleKey
+import os.meka.android.designsystem.sharedPlace
+import os.meka.android.shell.SharedMotion
+import os.meka.android.shell.MoreItem
+import os.meka.android.designsystem.sharedTitleInPane
 
 /** Where an export is: nothing yet, building the file, waiting on the save picker, saved, or failed. */
 private sealed interface ExportPhase {
@@ -120,8 +125,10 @@ fun YourData(core: MekaCore, modifier: Modifier = Modifier, onClose: (() -> Unit
             Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
         }
+        // Over Ask the title arrives from its More row; as the Vault it arrives across the shell from Ask's Vault row.
         Text(if (vaultLine != null) "Vault" else "Your data", style = MekaType.greeting, color = Meka.colors.textPrimary,
-            modifier = Modifier.appear(rememberAppearance(0)))
+            modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.YOUR_DATA)).sharedPlace(LocalPlaceTitleKey.current)
+                .appear(rememberAppearance(0)))
         vaultLine?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0))) }
 
         Spacer(Modifier.height(MekaSpace.m))

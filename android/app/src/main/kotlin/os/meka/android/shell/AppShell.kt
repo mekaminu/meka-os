@@ -53,6 +53,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.LocalPlaceTitleKey
+import os.meka.android.designsystem.LocalSharedKeyPrefix
+import os.meka.android.designsystem.LocalShellContent
+import os.meka.android.designsystem.MekaSharedLayout
+import androidx.compose.runtime.CompositionLocalProvider
 import os.meka.android.review.ReviewRoute
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -89,7 +94,14 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     // Due chases and decision reviews wait on you too, so they count in the badge.
     val needsYou = today.needsYou.size + lists.dueCount
     val haptics = rememberMekaHaptics()
-    val go: (ShellDestination) -> Unit = { d -> if (d != current) { haptics.tick(); current = d } }
+    // How the current place behind Ask was opened (a More row, a Today card): its title travels from there and back.
+    var arrival by rememberSaveable { mutableStateOf<String?>(null) }
+    val go: (ShellDestination) -> Unit = { d ->
+        if (d != current) { haptics.tick(); arrival = SharedMotion.arrivalAfterGo(d, arrival); current = d }
+    }
+    val openPlace: (ShellDestination, PlaceVia) -> Unit = { d, via ->
+        if (d != current) { haptics.tick(); arrival = SharedMotion.placeKey(d, via); current = d }
+    }
     val states = rememberSaveableStateHolder()
     // Work mode and Today move with the clock: re-evaluate every half minute while the app is on screen.
     LaunchedEffect(core) {
@@ -102,16 +114,19 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     // Tapping a MEKA notification lands where it belongs (a digest on Needs you, a cancel-by date on Lists…).
     val openDestination by app.openDestination.collectAsState()
     LaunchedEffect(openDestination) {
-        openDestination?.let { current = it; app.openDestination.value = null }
+        openDestination?.let { arrival = SharedMotion.arrivalAfterGo(it, arrival); current = it; app.openDestination.value = null }
     }
 
     // A place reached from Ask's More list sits behind Ask: back returns there.
     BackHandler(enabled = ShellNav.parent(current) != null) { ShellNav.parent(current)?.let(go) }
 
+    // One shared-transition layout for the whole shell: titles travel within a screen and, from cards and More rows,
+    // across the shell's slide into the place they open (Four tabs, slice 3).
+    MekaSharedLayout(Modifier.fillMaxSize()) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background).safeDrawingPadding()) {
         val layout = ShellNav.layoutFor(maxWidth.value)
         val content: @Composable (Modifier) -> Unit = { m ->
-            DestinationHost(current, m) { d -> states.SaveableStateProvider(d.name) { Destination(d, core, connect, go) } }
+            DestinationHost(current, arrival, m) { d -> states.SaveableStateProvider(d.name) { Destination(d, core, connect, go, openPlace) } }
         }
         when (layout) {
             ShellLayout.RAIL -> Row(Modifier.fillMaxSize()) {
@@ -131,10 +146,11 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
             }
         }
     }
+    }
 }
 
 @Composable
-private fun DestinationHost(current: ShellDestination, modifier: Modifier, body: @Composable (ShellDestination) -> Unit) {
+private fun DestinationHost(current: ShellDestination, arrival: String?, modifier: Modifier, body: @Composable (ShellDestination) -> Unit) {
     val reduced = Meka.reducedMotion
     AnimatedContent(
         targetState = current,
@@ -146,11 +162,21 @@ private fun DestinationHost(current: ShellDestination, modifier: Modifier, body:
         },
         label = "shell",
         modifier = modifier,
-    ) { d -> body(d) }
+    ) { d ->
+        // Each destination's keys are its own; a place's title wears the key of the row or card it was opened from.
+        CompositionLocalProvider(
+            LocalShellContent provides this,
+            LocalSharedKeyPrefix provides d.name + ":",
+            LocalPlaceTitleKey provides SharedMotion.placeTitleKey(d, arrival),
+        ) { body(d) }
+    }
 }
 
 @Composable
-private fun Destination(d: ShellDestination, core: MekaCore, connect: ConnectHook?, go: (ShellDestination) -> Unit) {
+private fun Destination(
+    d: ShellDestination, core: MekaCore, connect: ConnectHook?, go: (ShellDestination) -> Unit,
+    openPlace: (ShellDestination, PlaceVia) -> Unit,
+) {
     val app = LocalContext.current.applicationContext as MekaApplication
     val openItem: (OpenItem) -> Unit = { item ->
         // Lists or Goals picks the item up when it appears (tab and unfolded row).
@@ -158,10 +184,10 @@ private fun Destination(d: ShellDestination, core: MekaCore, connect: ConnectHoo
         SearchNav.destination(item.target)?.let(go)
     }
     when (d) {
-        ShellDestination.TODAY -> TodayRoute(core, connect, openReview = { go(ShellDestination.REVIEW) }, openItem = openItem)
+        ShellDestination.TODAY -> TodayRoute(core, connect, openReview = { openPlace(ShellDestination.REVIEW, PlaceVia.CARD) }, openItem = openItem)
         ShellDestination.NEEDS_YOU -> NeedsYouRoute(core, openLists = { go(ShellDestination.LISTS) })
         ShellDestination.CALENDAR -> CalendarRoute(core)
-        ShellDestination.ASK -> AskRoute(core, connected = connect == null, go = go, openItem = openItem)
+        ShellDestination.ASK -> AskRoute(core, connected = connect == null, openPlace = { openPlace(it, PlaceVia.MORE) }, openItem = openItem)
         ShellDestination.LISTS -> BehindAsk(go) { ListsRoute(core) }
         ShellDestination.GOALS -> BehindAsk(go) { GoalsRoute(core) }
         ShellDestination.REVIEW -> BehindAsk(go) { ReviewRoute(core) }

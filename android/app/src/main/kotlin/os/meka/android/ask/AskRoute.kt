@@ -43,6 +43,10 @@ import os.meka.android.export.YourData
 import os.meka.android.notify.NotificationsPane
 import os.meka.android.search.SearchPane
 import os.meka.android.shell.MoreItem
+import os.meka.android.shell.PlaceVia
+import os.meka.android.shell.SharedMotion
+import os.meka.android.designsystem.sharedPlace
+import os.meka.android.designsystem.sharedTitle
 import os.meka.android.shell.OpenItem
 import os.meka.android.shell.ShellDestination
 import os.meka.android.shell.ShellNav
@@ -55,11 +59,11 @@ import os.meka.core.facade.MekaCore
  * Until the AI layer lands (Needs Meka #3) asking is searching: the field opens Search everything. Below it, More
  * lists every place behind Ask (Lists, Goals and habits, Review, Vault: they open with the shell's forward slide and
  * keep Ask lit) and the settings-like panes, which spring up over Ask as they do over Today.
- * Motion: the title, field and More rows stagger in 40 ms apart; a lit Lists line blends its colour. Reduced motion
- * cross-fades.
+ * Motion: the title, field and More rows stagger in 40 ms apart; a lit Lists line blends its colour; a row's label
+ * travels into the title of what it opens (and back). Reduced motion cross-fades.
  */
 @Composable
-fun AskRoute(core: MekaCore, connected: Boolean, go: (ShellDestination) -> Unit, openItem: (OpenItem) -> Unit) {
+fun AskRoute(core: MekaCore, connected: Boolean, openPlace: (ShellDestination) -> Unit, openItem: (OpenItem) -> Unit) {
     val lists by core.listsView.collectAsState()
     var pane by rememberSaveable { mutableStateOf<MoreItem?>(null) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
@@ -102,9 +106,9 @@ fun AskRoute(core: MekaCore, connected: Boolean, go: (ShellDestination) -> Unit,
                     modifier = Modifier.padding(bottom = MekaSpace.xxs).appear(rememberAppearance(2)))
             }
             itemsIndexed(items, key = { _, it -> it.name }) { i, item ->
-                MoreRow(item, lists.dueCount, Modifier.appear(rememberAppearance(3 + i))) {
+                MoreRow(item, lists.dueCount, pane == item, Modifier.appear(rememberAppearance(3 + i))) {
                     val d = item.destination
-                    if (d != null) go(d) else pane = item
+                    if (d != null) openPlace(d) else pane = item
                 }
             }
         }
@@ -120,7 +124,7 @@ fun AskRoute(core: MekaCore, connected: Boolean, go: (ShellDestination) -> Unit,
 }
 
 @Composable
-private fun MoreRow(item: MoreItem, listsDue: Int, modifier: Modifier, onClick: () -> Unit) {
+private fun MoreRow(item: MoreItem, listsDue: Int, paneOpen: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val lit = ShellNav.moreLit(item, listsDue)
     val lineColor by animateColorAsState(
         if (lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(Meka.reducedMotion), label = "more-line",
@@ -135,7 +139,12 @@ private fun MoreRow(item: MoreItem, listsDue: Int, modifier: Modifier, onClick: 
     ) {
         Column(Modifier.weight(1f)) {
             // Places and settings you open, not things you act on: the regular body weight (type weight, 2026-10-06).
-            Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+            // The label travels into what it opens: a place's title across the shell's slide, a pane's title as it
+            // springs up (it steps aside while the pane has it).
+            val d = item.destination
+            val travel = if (d != null) Modifier.sharedPlace(SharedMotion.placeKey(d, PlaceVia.MORE))
+            else Modifier.sharedTitle(SharedMotion.paneKey(item), visible = !paneOpen)
+            Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = travel)
             Text(ShellNav.moreLine(item, listsDue), style = MekaType.caption, color = lineColor, maxLines = 2)
         }
         Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.padding(start = MekaSpace.s))

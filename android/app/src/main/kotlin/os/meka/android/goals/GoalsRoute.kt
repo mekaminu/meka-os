@@ -81,6 +81,8 @@ import os.meka.core.domain.HabitItem
 import os.meka.core.domain.HabitPace
 import os.meka.core.domain.HabitTiming
 import os.meka.core.facade.MekaCore
+import os.meka.android.designsystem.LocalPlaceTitleKey
+import os.meka.android.designsystem.sharedPlace
 
 /**
  * GOALS (build plan M1): fasting ([FastingCard]), habits with this week's pace and streaks, and goals with progress. A habit's circle pops with
@@ -111,7 +113,8 @@ fun GoalsRoute(core: MekaCore) {
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         item(key = "title") {
-            Text("Goals", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
+            Text("Goals", style = MekaType.greeting, color = Meka.colors.textPrimary,
+                modifier = Modifier.sharedPlace(LocalPlaceTitleKey.current).appear(rememberAppearance(0)))
         }
         item(key = "pace") {
             val line = view.paceLine

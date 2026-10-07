@@ -57,15 +57,10 @@ struct TodayView: View {
                     HStack(spacing: MekaSpace.l) {
                         Button("Search") { model.showSearch = true }
                         Button("Plan my day") { model.showPlan = true }
-                        if model.isConnected && !model.signedOut {
-                            Button("Calendars") { model.showCalendars = true }
-                        }
                         Button(model.work?.atWork == true ? "At work" : "Off work") { model.showWork = true }
                         Button("Brief") { model.showBrief = true }
                         Button("Shut down") { model.showShutdown = true }
-                        Button("Notifications") { model.showNotifications = true }
-                        Button("Activity") { model.showActivity = true }
-                        Button("Your data") { model.showYourData = true }
+                        // Notifications, Activity, Your data and Calendars live in Ask's More (and the menus) now.
                         Button("Theme: \(currentAppearance.label)") { appearance = currentAppearance.next.rawValue }
                             .foregroundStyle(palette.textSecondary)
                     }

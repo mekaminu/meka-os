@@ -80,11 +80,11 @@ import os.meka.android.designsystem.rememberPaneMorph
 import os.meka.android.designsystem.sharedTitle
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.SharedMotion
-import os.meka.android.notify.NotificationsPane
+import os.meka.android.shell.PlaceVia
+import os.meka.android.shell.ShellDestination
+import os.meka.android.designsystem.sharedPlace
 import os.meka.android.search.SearchPane
 import os.meka.android.MekaApplication
-import os.meka.android.activity.ActivityPane
-import os.meka.android.export.YourData
 import os.meka.android.update.UpdateCard
 import os.meka.android.update.UpdateState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -133,15 +133,11 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
     val sync by core.syncStatus.collectAsState()
     val conflicts by core.conflicts.collectAsState()
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
-    var showCalendars by rememberSaveable { mutableStateOf(false) }
     var showPlan by rememberSaveable { mutableStateOf(false) }
     var showWork by rememberSaveable { mutableStateOf(false) }
     var showShutdown by rememberSaveable { mutableStateOf(false) }
     var showBrief by rememberSaveable { mutableStateOf(false) }
-    var showNotifications by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
-    var showData by rememberSaveable { mutableStateOf(false) }
-    var showActivity by rememberSaveable { mutableStateOf(false) }
     // An event's detail (calendar redesign, slice 3); the last one is kept while the pane leaves.
     var eventOpen by remember { mutableStateOf<CalendarEvent?>(null) }
     var eventShown by remember { mutableStateOf<CalendarEvent?>(null) }
@@ -159,7 +155,6 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
         }
     }
     val scope = rememberCoroutineScope()
-    val openCalendars: (() -> Unit)? = if (connect == null) ({ showCalendars = true }) else null
     val openPlan: () -> Unit = { showPlan = true }
     // App open: greeting fades up, then each section 40 ms apart. Plays once per launch (not again on fold/unfold);
     // anything arriving later uses animateItem.
@@ -192,13 +187,11 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
             TwoPaneMorph(
                 twoPane,
                 list = { m ->
-                    TodayPane(today, sync, actions, m, connect, openCalendars, openPlan, !introPlayed, rowMotion,
+                    TodayPane(today, sync, actions, m, connect, openPlan, !introPlayed, rowMotion,
                         workLabel = if (work.atWork) "At work" else "Off work", openWork = { showWork = true },
-                        shutdown = shutdown, openShutdown = { showShutdown = true }, openNotifications = { showNotifications = true },
-                        openData = { showData = true },
-                        openActivity = { showActivity = true },
+                        shutdown = shutdown, openShutdown = { showShutdown = true }, shutdownOpen = showShutdown,
                         openSearch = { showSearch = true },
-                        brief = brief, openBrief = { showBrief = true },
+                        brief = brief, openBrief = { showBrief = true }, briefOpen = showBrief,
                         reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } },
                         openEvent = { eventOpen = it }, eventHandlers = eventHandlers)
                 },
@@ -215,13 +208,9 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
             MekaPane(visible = showPlan) {
                 PlanPane(core, landing = landing, onApplying = { landing = it }, onClose = { showPlan = false })
             }
-            MekaPane(visible = showCalendars) { CalendarsPane(core, onClose = { showCalendars = false }) }
             MekaPane(visible = showWork) { WorkPane(core, onClose = { showWork = false }) }
             MekaPane(visible = showShutdown) { ShutdownPane(core, onClose = { showShutdown = false }) }
             MekaPane(visible = showBrief) { BriefPane(core, onClose = { showBrief = false }) }
-            MekaPane(visible = showNotifications) { NotificationsPane(core, onClose = { showNotifications = false }) }
-            MekaPane(visible = showData) { YourData(core, onClose = { showData = false }) }
-            MekaPane(visible = showActivity) { ActivityPane(core, onClose = { showActivity = false }) }
             MekaPane(visible = eventOpen != null) {
                 eventShown?.let { e -> EventDetailPane(core, e, onClose = { eventOpen = null }) }
             }
@@ -310,13 +299,12 @@ data class TodayActions(
 
 @Composable
 private fun TodayPane(
-    today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?, openCalendars: (() -> Unit)?,
+    today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?,
     openPlan: () -> Unit, play: Boolean, rowMotion: (String) -> RowMotion, workLabel: String, openWork: () -> Unit,
-    shutdown: ShutdownView, openShutdown: () -> Unit, openNotifications: () -> Unit, openSearch: () -> Unit, openData: () -> Unit,
-    brief: MorningBriefView, openBrief: () -> Unit,
+    shutdown: ShutdownView, openShutdown: () -> Unit, shutdownOpen: Boolean, openSearch: () -> Unit,
+    brief: MorningBriefView, openBrief: () -> Unit, briefOpen: Boolean,
     reviewCard: ReviewCard, openReviewCard: () -> Unit,
     openEvent: (CalendarEvent) -> Unit = {},
-    openActivity: () -> Unit = {},
     eventHandlers: EventActionHandlers? = null,
 ) {
     // "3 earlier" unfolds the finished events in place.
@@ -352,13 +340,6 @@ private fun TodayPane(
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                                 .clickable(role = Role.Button) { openPlan() }.padding(vertical = MekaSpace.xxs),
                         )
-                        if (openCalendars != null) {
-                            Text(
-                                "Calendars", style = MekaType.caption, color = Meka.colors.accent,
-                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                                    .clickable(role = Role.Button) { openCalendars() }.padding(vertical = MekaSpace.xxs),
-                            )
-                        }
                         Text(
                             workLabel, style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
@@ -373,21 +354,6 @@ private fun TodayPane(
                             "Shut down", style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                                 .clickable(role = Role.Button) { openShutdown() }.padding(vertical = MekaSpace.xxs),
-                        )
-                        Text(
-                            "Notifications", style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                                .clickable(role = Role.Button) { openNotifications() }.padding(vertical = MekaSpace.xxs),
-                        )
-                        Text(
-                            "Activity", style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                                .clickable(role = Role.Button) { openActivity() }.padding(vertical = MekaSpace.xxs),
-                        )
-                        Text(
-                            "Your data", style = MekaType.caption, color = Meka.colors.accent,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                                .clickable(role = Role.Button) { openData() }.padding(vertical = MekaSpace.xxs),
                         )
                         val theme = Meka.theme
                         Text(
@@ -407,19 +373,24 @@ private fun TodayPane(
             // Morning brief: the card rises in when the morning starts and goes at noon or once read.
             if (brief.offered) {
                 item(key = "brief") {
-                    BriefCard(brief, openBrief, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
+                    // Its title travels into the brief pane's (Four tabs, slice 3).
+                    BriefCard(brief, openBrief, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)),
+                        titleModifier = Modifier.sharedTitle(SharedMotion.paneKey(SharedMotion.BRIEF), !briefOpen))
                 }
             }
             // Weekly review: the card rises in on Sunday evening and stays through Monday until reviewed.
             if (reviewCard.offered) {
                 item(key = "review") {
-                    ReviewCardTile(reviewCard, openReviewCard, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
+                    // Its title travels across the shell into the Review tab's.
+                    ReviewCardTile(reviewCard, openReviewCard, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)),
+                        titleModifier = Modifier.sharedPlace(SharedMotion.placeKey(ShellDestination.REVIEW, PlaceVia.CARD)))
                 }
             }
             // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.
             if (shutdown.offered) {
                 item(key = "shutdown") {
-                    ShutdownCard(shutdown, openShutdown, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
+                    ShutdownCard(shutdown, openShutdown, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)),
+                        titleModifier = Modifier.sharedTitle(SharedMotion.paneKey(SharedMotion.SHUTDOWN), !shutdownOpen))
                 }
             } else if (shutdown.evening || shutdown.doneLine != null) {
                 // Tomorrow at a glance once the evening starts (after shutting down, or while still at work); tapping

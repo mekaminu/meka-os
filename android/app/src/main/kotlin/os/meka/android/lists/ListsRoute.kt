@@ -82,6 +82,8 @@ import os.meka.core.domain.SomedayKind
 import os.meka.core.domain.Task
 import os.meka.core.domain.WaitingItem
 import os.meka.core.facade.MekaCore
+import os.meka.android.designsystem.LocalPlaceTitleKey
+import os.meka.android.designsystem.sharedPlace
 
 /** The three lists, in the order of the tabs. */
 enum class ListTab(val label: String) { WAITING("Waiting for"), SOMEDAY("Someday"), DECISIONS("Decisions"), RENEWALS("Renewals") }
@@ -118,7 +120,8 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         item(key = "title") {
-            Text("Lists", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
+            Text("Lists", style = MekaType.greeting, color = Meka.colors.textPrimary,
+                modifier = Modifier.sharedPlace(LocalPlaceTitleKey.current).appear(rememberAppearance(0)))
         }
         item(key = "due") {
             Text(

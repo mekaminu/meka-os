@@ -95,7 +95,7 @@ private struct MoreRow: View {
             .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
             .offset(y: hovering && !reduceMotion ? -2 : 0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MekaPressStyle())
         .onHover { h in withAnimation(MekaMotion.appear(reduced: reduceMotion)) { hovering = h } }
         .accessibilityHint(item.destination == nil ? "Opens a sheet" : "Opens \(item.label)")
     }

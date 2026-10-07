@@ -55,6 +55,8 @@ import os.meka.core.domain.ShutdownView
 import os.meka.core.domain.SomedayKind
 import os.meka.core.domain.TomorrowRow
 import os.meka.core.facade.MekaCore
+import os.meka.android.shell.SharedMotion
+import os.meka.android.designsystem.sharedTitleInPane
 
 /** How long the "Day shut down" check stays before the pane drops away. */
 private const val SHUT_DOWN_HOLD_MS = 700L
@@ -88,7 +90,9 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
         }
         item(key = "title") {
             Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0))) {
-                Text("Shut down the day", style = MekaType.greeting, color = Meka.colors.textPrimary)
+                // The title arrives from the shutdown card in Today (Four tabs, slice 3).
+                Text("Shut down the day", style = MekaType.greeting, color = Meka.colors.textPrimary,
+                    modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(SharedMotion.SHUTDOWN)))
                 if (v.doneCount > 0) {
                     CountUpText(v.doneCount, MekaType.itemMeta, Meka.colors.textSecondary, Modifier.padding(top = MekaSpace.xxs)) { "$it done today" }
                 } else {
@@ -247,12 +251,12 @@ private fun ShutdownButton(label: String, filled: Boolean, modifier: Modifier = 
  * evening starts (the list animates new items in) and goes once the day is shut down.
  */
 @Composable
-internal fun ShutdownCard(v: ShutdownView, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+internal fun ShutdownCard(v: ShutdownView, onOpen: () -> Unit, modifier: Modifier = Modifier, titleModifier: Modifier = Modifier) {
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onOpen() }.padding(MekaSpace.l),
     ) {
-        Text("Shut down the day", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Text("Shut down the day", style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = titleModifier)
         Text(v.cardLine, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
     }
 }

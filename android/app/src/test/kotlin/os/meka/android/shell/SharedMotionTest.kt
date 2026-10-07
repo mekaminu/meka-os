@@ -54,4 +54,30 @@ class SharedMotionTest {
         assertTrue(SharedMotion.highlightLanded("a", planOpen = false, landing = setOf("a")))
         assertFalse(SharedMotion.highlightLanded("b", planOpen = false, landing = setOf("a")))
     }
+
+    @Test
+    fun cardsAndMoreRowsShareTheirPaneTitle() {
+        assertEquals("pane-brief", SharedMotion.paneKey(SharedMotion.BRIEF))
+        assertEquals("pane-shutdown", SharedMotion.paneKey(SharedMotion.SHUTDOWN))
+        assertEquals("pane-WORK", SharedMotion.paneKey(MoreItem.WORK))
+    }
+
+    @Test
+    fun aPlaceTitleTravelsOnlyFromWhereItWasOpened() {
+        val fromRow = SharedMotion.placeKey(ShellDestination.REVIEW, PlaceVia.MORE)
+        val fromCard = SharedMotion.placeKey(ShellDestination.REVIEW, PlaceVia.CARD)
+        assertEquals("place-REVIEW-MORE", fromRow)
+        assertTrue(fromRow != fromCard, "the review card and Ask's Review row never fly into each other")
+        assertEquals(fromCard, SharedMotion.placeTitleKey(ShellDestination.REVIEW, fromCard))
+        assertEquals(null, SharedMotion.placeTitleKey(ShellDestination.LISTS, fromCard), "another place's arrival")
+        assertEquals(null, SharedMotion.placeTitleKey(ShellDestination.REVIEW, null))
+    }
+
+    @Test
+    fun aPlainMoveToATabKeepsTheArrivalButStraightToAPlaceForgetsIt() {
+        val a = SharedMotion.placeKey(ShellDestination.LISTS, PlaceVia.MORE)
+        assertEquals(a, SharedMotion.arrivalAfterGo(ShellDestination.ASK, a), "back to Ask: the title flies back to its row")
+        assertEquals(a, SharedMotion.arrivalAfterGo(ShellDestination.TODAY, a))
+        assertEquals(null, SharedMotion.arrivalAfterGo(ShellDestination.LISTS, a), "a search result or notification")
+    }
 }

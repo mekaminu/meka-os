@@ -42,6 +42,9 @@ import os.meka.core.facade.MekaCore
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import os.meka.android.shell.SharedMotion
+import os.meka.android.shell.MoreItem
+import os.meka.android.designsystem.sharedTitleInPane
 
 /**
  * Connected calendars. Connecting opens the provider's own sign-in page in the browser; MEKA OS never sees the
@@ -73,7 +76,8 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(MekaSpace.gutter), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
-        Text("Calendars", style = MekaType.greeting, color = Meka.colors.textPrimary)
+        Text("Calendars", style = MekaType.greeting, color = Meka.colors.textPrimary,
+            modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.CALENDARS)))
         Text("Read-only. Events appear in Today on all your devices.", style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         Spacer(Modifier.height(MekaSpace.m))
 

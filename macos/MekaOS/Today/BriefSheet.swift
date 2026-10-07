@@ -174,14 +174,16 @@ struct BriefCard: View {
     let palette: MekaPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Morning brief").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-            Text(brief.cardLine).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+        Button { model.showBrief = true } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Morning brief").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                Text(brief.cardLine).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(MekaSpace.l)
+            .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surfaceRaised))
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(MekaSpace.l)
-        .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surfaceRaised))
-        .contentShape(Rectangle())
-        .onTapGesture { model.showBrief = true }
+        .buttonStyle(MekaPressStyle())
     }
 }

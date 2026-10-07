@@ -53,6 +53,8 @@ import os.meka.core.domain.DueState
 import os.meka.core.domain.MorningBriefView
 import os.meka.core.domain.WaitingItem
 import os.meka.core.facade.MekaCore
+import os.meka.android.shell.SharedMotion
+import os.meka.android.designsystem.sharedTitleInPane
 
 /** How long the "Got it" check stays before the pane drops away. */
 private const val GOT_IT_HOLD_MS = 600L
@@ -87,7 +89,9 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit) {
         }
         item(key = "title") {
             Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0))) {
-                Text("${v.greeting}, Meka", style = MekaType.greeting, color = Meka.colors.textPrimary)
+                // The title arrives from the brief card in Today (Four tabs, slice 3).
+                Text("${v.greeting}, Meka", style = MekaType.greeting, color = Meka.colors.textPrimary,
+                    modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(SharedMotion.BRIEF)))
                 Text(listOfNotNull(v.dateLabel, v.workLine).joinToString(" · "), style = MekaType.itemMeta,
                     color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
             }
@@ -256,12 +260,12 @@ private fun BriefButton(label: String, filled: Boolean, modifier: Modifier = Mod
  * of quiet hours) and goes at noon or once read.
  */
 @Composable
-internal fun BriefCard(v: MorningBriefView, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+internal fun BriefCard(v: MorningBriefView, onOpen: () -> Unit, modifier: Modifier = Modifier, titleModifier: Modifier = Modifier) {
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onOpen() }.padding(MekaSpace.l),
     ) {
-        Text("Morning brief", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Text("Morning brief", style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = titleModifier)
         Text(v.cardLine, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
     }
 }

@@ -262,15 +262,16 @@ struct ReviewCardView: View {
     let palette: MekaPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(card.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-            Text(card.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+        Button { model.openReviewCard(reduced: reduceMotion) } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(card.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                Text(card.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(MekaSpace.l)
+            .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surfaceRaised))
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(MekaSpace.l)
-        .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surfaceRaised))
-        .contentShape(Rectangle())
-        .onTapGesture { model.openReviewCard(reduced: reduceMotion) }
-        .accessibilityAddTraits(.isButton)
+        .buttonStyle(MekaPressStyle())
     }
 }

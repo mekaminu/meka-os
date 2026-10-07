@@ -42,6 +42,9 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.ActivityRow
 import os.meka.core.facade.MekaCore
+import os.meka.android.shell.SharedMotion
+import os.meka.android.shell.MoreItem
+import os.meka.android.designsystem.sharedTitleInPane
 
 /**
  * What MEKA did and why (V1 activity log): every reminder and digest that reached you, and later every change MEKA
@@ -65,7 +68,8 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit) {
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
-        Text("Activity", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
+        Text("Activity", style = MekaType.greeting, color = Meka.colors.textPrimary,
+            modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.ACTIVITY)).appear(rememberAppearance(0)))
         Text(
             if (view.isEmpty) view.emptyLine else "What MEKA did and why. ${view.weekLine}.",
             style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)),
