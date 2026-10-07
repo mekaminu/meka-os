@@ -38,6 +38,8 @@ data class Task(
     val occurrenceDay: Long? = null,
     /** Local epoch day a snoozed occurrence waits for. */
     val deferredToDay: Long? = null,
+    /** The calendar event a prep task is for (calendar actions); null for other tasks. */
+    val eventId: String? = null,
 ) {
     val isDone: Boolean get() = lifecycle == Lifecycle.DONE
 
@@ -86,6 +88,7 @@ data class Task(
                 seriesId = s[TaskFields.SERIES_ID].textOrNull,
                 occurrenceDay = s[TaskFields.OCCURRENCE_DAY].longOrNull,
                 deferredToDay = s[TaskFields.DEFERRED_TO_DAY].longOrNull,
+                eventId = s[TaskFields.EVENT_ID].textOrNull,
             )
         }
     }
@@ -135,11 +138,16 @@ class Tasks(
     private val calendar: LocalCalendar = LocalCalendar.UTC,
 ) {
 
-    fun create(draft: NewTask): String {
+    fun create(draft: NewTask): String = createWithId(ids(), draft)
+
+    /**
+     * Creates (or, if [id] was deleted or finished, brings back) a task under a chosen id, so two devices making
+     * the same thing offline converge on one task. [extra] adds fields such as [TaskFields.EVENT_ID].
+     */
+    fun createWithId(id: String, draft: NewTask, extra: Map<String, FieldValue> = emptyMap()): String {
         val title = draft.title.trim()
         if (title.isEmpty()) throw ValidationException("A task needs a title")
         if (title.length > 500) throw ValidationException("Title is too long")
-        val id = ids()
         val fields = linkedMapOf<String, FieldValue>(
             ActionableFields.TITLE to title.fv(),
             ActionableFields.LIFECYCLE to draft.lifecycle.name.fv(),
@@ -160,6 +168,14 @@ class Tasks(
         draft.ownerPersonId?.let { fields[ActionableFields.OWNER_PERSON_ID] = it.fv() }
         if (draft.lifecycle == Lifecycle.SOMEDAY) {
             fields[ActionableFields.SOMEDAY_KIND] = (draft.somedayKind ?: SomedayKind.IDEA).name.fv()
+        }
+        fields.putAll(extra)
+        replica.entity(EntityTypes.TASK, id)?.let { old ->
+            // Coming back: undo a deletion and clear what the old one finished with.
+            if (old.deleted) fields[ActionableFields.DELETED] = false.fv()
+            if (old[ActionableFields.COMPLETED_AT].longOrNull != null) fields[ActionableFields.COMPLETED_AT] = FieldValue.Null
+            if (draft.scheduledAtMs == null && old[TaskFields.SCHEDULED_AT].longOrNull != null) fields[TaskFields.SCHEDULED_AT] = FieldValue.Null
+            if (old[TaskFields.DEFERRED_TO_DAY].longOrNull != null) fields[TaskFields.DEFERRED_TO_DAY] = FieldValue.Null
         }
         replica.commitLocal(EntityTypes.TASK, id, fields)
         return id

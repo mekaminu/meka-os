@@ -54,7 +54,12 @@ data class AgendaSection(
     val rows: List<TimelineRow>,
     /** "Nothing planned" for an empty today or tomorrow; null otherwise. */
     val emptyLine: String?,
-)
+    /** Events hidden from my day (calendar actions), listed quietly at the bottom of the day with "Show". */
+    val hidden: List<CalendarEvent> = emptyList(),
+) {
+    /** "1 hidden from your day" · "2 hidden from your day"; null when none. */
+    val hiddenLabel: String? get() = if (hidden.isEmpty()) null else "${hidden.size} hidden from your day"
+}
 
 data class CalendarView(
     /** "Tuesday 6 October" */
@@ -101,6 +106,7 @@ object CalendarAgenda {
         nowMs: Long,
         calendar: LocalCalendar,
         days: Int = DAYS,
+        hidden: Set<String> = emptySet(),
     ): CalendarView {
         val today = calendar.epochDayOf(nowMs)
         val lastDay = today + days - 1
@@ -110,13 +116,16 @@ object CalendarAgenda {
             (it.lifecycle == Lifecycle.ACTIVE || it.lifecycle == Lifecycle.INBOX) && it.scheduledAtMs != null
         }
 
-        data class Day(val epochDay: Long, val allDay: List<CalendarEvent>, val ended: List<TimelineRow>, val rows: List<TimelineRow>, val events: Int, val fixtures: Int, val tasks: Int) {
+        val shown = events.filter { it.id !in hidden }
+        val hiddenEvents = events.filter { it.id in hidden }
+
+        data class Day(val epochDay: Long, val allDay: List<CalendarEvent>, val ended: List<TimelineRow>, val rows: List<TimelineRow>, val events: Int, val fixtures: Int, val tasks: Int, val hidden: List<CalendarEvent>) {
             val count get() = allDay.size + ended.size + rows.count { it.kind != TimelineKind.NOW }
         }
 
         val dayData = (today..lastDay).map { d ->
             val w = window(d, calendar)
-            val dayEvents = events.filter { it.overlaps(w) }
+            val dayEvents = shown.filter { it.overlaps(w) }
             val allDay = dayEvents.filter { it.allDay }.sortedWith(compareBy({ it.startAtMs }, { it.title }))
 
             data class Item(val row: TimelineRow, val start: Long, val end: Long, val isEvent: Boolean)
@@ -161,6 +170,7 @@ object CalendarAgenda {
                 events = allDay.size + timedEvents.size,
                 fixtures = (allDay + timedEvents).count { it.isFixture },
                 tasks = items.count { !it.isEvent },
+                hidden = hiddenEvents.filter { it.overlaps(w) }.sortedWith(compareBy({ it.startAtMs }, { it.title })),
             )
         }
 
@@ -169,7 +179,7 @@ object CalendarAgenda {
             while (i < dayData.size) {
                 val day = dayData[i]
                 val d = day.epochDay
-                if (day.count > 0 || d <= today + 1) {
+                if (day.count > 0 || day.hidden.isNotEmpty() || d <= today + 1) {
                     val named = d == today || d == today + 1
                     add(
                         AgendaSection(
@@ -182,17 +192,18 @@ object CalendarAgenda {
                                 today + 1 -> "Tomorrow"
                                 else -> CivilDate.shortLabel(d)
                             },
-                            subtitle = if (named) CivilDate.longLabel(d) else countsLine(day.events, day.fixtures, day.tasks),
+                            subtitle = if (named) CivilDate.longLabel(d) else countsLine(day.events, day.fixtures, day.tasks) ?: "Nothing planned",
                             allDay = day.allDay,
                             ended = day.ended,
                             rows = day.rows,
-                            emptyLine = if (day.count == 0) "Nothing planned" else null,
+                            emptyLine = if (day.count == 0 && named) "Nothing planned" else null,
+                            hidden = day.hidden,
                         ),
                     )
                     i++
                 } else {
                     var j = i
-                    while (j + 1 < dayData.size && dayData[j + 1].count == 0) j++
+                    while (j + 1 < dayData.size && dayData[j + 1].count == 0 && dayData[j + 1].hidden.isEmpty()) j++
                     val last = dayData[j].epochDay
                     add(AgendaSection("f-$d", AgendaKind.FREE, d, last, spanLabel(d, last), "Nothing planned", emptyList(), emptyList(), emptyList(), null))
                     i = j + 1
@@ -238,7 +249,7 @@ object CalendarAgenda {
             )
         }.toList()
 
-        val totalEvents = events.filter { e -> dayData.any { e.overlaps(window(it.epochDay, calendar)) } }
+        val totalEvents = shown.filter { e -> dayData.any { e.overlaps(window(it.epochDay, calendar)) } }
         val summary = listOfNotNull(
             when (totalEvents.size) {
                 0 -> "Nothing in your calendars for the next $days days"

@@ -130,6 +130,7 @@ class MekaCore(
     private val notifyPrefs = NotificationPrefs(replica)
     private val interruptions = os.meka.core.domain.Interruptions(replica, ZoneCalendar(timeZone))
     private val activity = os.meka.core.domain.ActivityLog(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val eventActions = os.meka.core.domain.EventActions(replica, tasks, nowMs, ZoneCalendar(timeZone))
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
     private var releasesApi: ReleasesApi? = transport as? ReleasesApi
@@ -179,6 +180,10 @@ class MekaCore(
 
     /** What the search field holds (a screen choice, not synced). */
     private var searchQuery: String = ""
+    private val _eventMarks = MutableStateFlow(os.meka.core.domain.EventMarks.NONE)
+    /** Hidden events and prep tasks (calendar actions); the event detail reads it. */
+    val eventMarks: StateFlow<os.meka.core.domain.EventMarks> = _eventMarks.asStateFlow()
+
     private val _activity = MutableStateFlow(os.meka.core.domain.ActivityView.EMPTY)
     /** What MEKA did and why (V1 activity log): the last 30 days by day, newest first; follows sync. */
     val activityView: StateFlow<os.meka.core.domain.ActivityView> = _activity.asStateFlow()
@@ -243,7 +248,8 @@ class MekaCore(
     suspend fun planDay(): DayPlanner.Plan = onCore {
         val now = nowMs()
         val day = dayWindow(now)
-        DayPlanner.plan(tasks.all(), events.all(), now, day, habits = goals.plannerHabits(), meals = fasting.plannerMeals(day))
+        val all = tasks.all()
+        DayPlanner.plan(all, visibleEvents(all), now, day, habits = goals.plannerHabits(), meals = fasting.plannerMeals(day))
     }
 
     /** Schedules each planned task at its suggested time; everything syncs like a manual edit. */
@@ -273,7 +279,16 @@ class MekaCore(
 
     /** Event detail (calendar redesign, slice 3): when, how soon, which calendar, place, notes and a Join link. Pure. */
     fun eventDetail(event: os.meka.core.domain.CalendarEvent): os.meka.core.domain.EventDetailView =
-        os.meka.core.domain.EventDetails.build(event, nowMs(), ZoneCalendar(timeZone))
+        os.meka.core.domain.EventDetails.build(event, nowMs(), ZoneCalendar(timeZone), _eventMarks.value)
+
+    // ---- Calendar actions (MEKA-only; the real calendars stay read-only) ----
+
+    /** Adds the event's prep task ("Prepare for …", planned 30 min before, due at its start); returns the task id. */
+    suspend fun addPrepTask(event: os.meka.core.domain.CalendarEvent): String = onCore { eventActions.addPrep(event) }
+    /** Hides an event from my day (timeline, planner, brief, shutdown, review); the Calendar tab still lists it. */
+    suspend fun hideEvent(eventId: String) = onCore { eventActions.hide(eventId) }
+    /** Shows a hidden event in my day again (also the Undo for [hideEvent]). */
+    suspend fun showEvent(eventId: String) = onCore { eventActions.show(eventId) }
 
     // ---- Lists: Waiting for · Someday · Decisions ----
 
@@ -622,24 +637,28 @@ class MekaCore(
 
     private fun refresh() {
         val all = tasks.all()
-        _today.value = project(all)
+        val marks = eventActions.marks(all)
+        _eventMarks.value = marks
+        val allEvents = events.all()
+        val dayEvents = marks.visible(allEvents)
+        _today.value = project(all, dayEvents)
         _lists.value = lists.view(all, renewals.view())
         _goals.value = goals.view(all)
         _fasting.value = fasting.view()
         val workState = work.state(localClock())
         _workMode.value = workState
         val today = dayWindow(nowMs())
-        _shutdown.value = shutdown.view(all, events.all(), workState.schedule, workState.atWork, today, dayWindow(today.endMs))
+        _shutdown.value = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs))
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
-        _brief.value = brief.view(all, events.all(), workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
+        _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
             news.all(), news.choices())
-        _review.value = review.view(reviewOffset, all, events.all(), _goals.value, fasting.ended()) { day ->
+        _review.value = review.view(reviewOffset, all, dayEvents, _goals.value, fasting.ended()) { day ->
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }
         _search.value = runSearch(all)
         _activity.value = activity.view()
-        _calendar.value = CalendarAgenda.build(all, events.all(), nowMs(), ZoneCalendar(timeZone))
+        _calendar.value = CalendarAgenda.build(all, allEvents, nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden)
         _notifyPreview.value = Governor.preview(currentNotices(), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(
@@ -670,10 +689,13 @@ class MekaCore(
     private fun currentNotices() =
         NoticeSources.collect(_lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card)
 
-    private fun project(all: List<os.meka.core.domain.Task> = tasks.all()): Today {
+    private fun project(all: List<os.meka.core.domain.Task> = tasks.all(), dayEvents: List<os.meka.core.domain.CalendarEvent> = visibleEvents(all)): Today {
         val now = nowMs()
-        return TodayProjection.project(all, now, dayWindow(now), events.all(), ZoneCalendar(timeZone))
+        return TodayProjection.project(all, now, dayWindow(now), dayEvents, ZoneCalendar(timeZone))
     }
+
+    /** Calendar events minus those hidden from my day. */
+    private fun visibleEvents(all: List<os.meka.core.domain.Task>) = eventActions.marks(all).visible(events.all())
 
     private fun localClock(): LocalClock {
         val t = Instant.fromEpochMilliseconds(nowMs()).toLocalDateTime(timeZone())

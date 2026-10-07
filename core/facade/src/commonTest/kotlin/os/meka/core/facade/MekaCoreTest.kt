@@ -323,6 +323,30 @@ class MekaCoreTest {
     }
 
     @Test
+    fun calendarActionsAddAPrepTaskAndHideAnEventOnBothDevices() = runTest {
+        val london = TimeZone.of("Europe/London")
+        fun at(h: Int, min: Int = 0) = kotlinx.datetime.LocalDateTime(2026, 10, 6, h, min).toInstant(london).toEpochMilliseconds()
+        now = at(10) // Tue 6 Oct
+        val a = core("android"); val m = core("mac")
+        val call = os.meka.core.domain.CalendarEvent("evabc", "Call with Tunde", at(14), at(15), false, null, "google", "meka@gmail.com", "Personal")
+        val id = a.addPrepTask(call)
+        assertEquals(id, a.addPrepTask(call))
+        val prep = a.today.value.timeline.rows.single { it.task?.id == id }
+        assertEquals("13:30" to "Prepare for Call with Tunde", prep.time to prep.title)
+        assertEquals("Prep task at 13:30", a.eventDetail(call).prepLine)
+
+        a.hideEvent(call.id)
+        assertTrue(a.eventMarks.value.isHidden(call.id))
+        assertTrue(a.eventDetail(call).hidden)
+        a.syncNow(); m.syncNow()
+        assertTrue(m.eventMarks.value.isHidden(call.id))
+        assertEquals("Prep task at 13:30", m.eventDetail(call).prepLine)
+        m.showEvent(call.id)
+        m.syncNow(); a.syncNow()
+        assertTrue(!a.eventMarks.value.isHidden(call.id))
+    }
+
+    @Test
     fun theWeeklyReviewCountsTheWeekStepsBackAndDoneReviewingSyncs() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 10, 1, 18, 30).toInstant(london).toEpochMilliseconds() // a Thursday

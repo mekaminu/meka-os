@@ -94,11 +94,17 @@ fun CalendarRoute(core: MekaCore) {
     var openEvent by remember { mutableStateOf<CalendarEvent?>(null) }
     var shown by remember { mutableStateOf<CalendarEvent?>(null) }
     if (openEvent != null) shown = openEvent
+    // Calendar actions: swipe right for a prep task, left to hide from my day; hidden events wait at the day's foot.
+    val scope = rememberCoroutineScope()
+    val undo = rememberEventUndo()
+    val handlers = remember(core, scope, undo) { eventActionHandlers(core, scope, undo) }
+    val showAgain: (CalendarEvent) -> Unit = { e -> scope.launch { runCatching { core.showEvent(e.id) } } }
     Box(Modifier.fillMaxSize()) {
-        Agenda(v) { openEvent = it }
+        Agenda(v, handlers, showAgain) { openEvent = it }
         MekaPane(visible = openEvent != null) {
             shown?.let { e -> EventDetailPane(core, e, onClose = { openEvent = null }) }
         }
+        EventUndoBar(undo, Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -113,6 +119,8 @@ private sealed interface Entry {
         override val key = section.id + "/" + row.id
     }
     data class Empty(override val section: AgendaSection, val text: String) : Entry { override val key = "x-" + section.id }
+    data class HiddenLabel(override val section: AgendaSection, val text: String) : Entry { override val key = "hl-" + section.id }
+    data class Hidden(override val section: AgendaSection, val event: CalendarEvent) : Entry { override val key = section.id + "/hidden-" + event.id }
 }
 
 private fun flatten(v: CalendarView): List<Entry> = buildList {
@@ -122,11 +130,15 @@ private fun flatten(v: CalendarView): List<Entry> = buildList {
         s.ended.forEach { add(Entry.Line(s, it, past = true)) }
         s.rows.forEach { add(Entry.Line(s, it, past = false)) }
         s.emptyLine?.let { add(Entry.Empty(s, it)) }
+        s.hiddenLabel?.let { label ->
+            add(Entry.HiddenLabel(s, label))
+            s.hidden.forEach { add(Entry.Hidden(s, it)) }
+        }
     }
 }
 
 @Composable
-private fun Agenda(v: CalendarView, onEvent: (CalendarEvent) -> Unit) {
+private fun Agenda(v: CalendarView, handlers: EventActionHandlers, showAgain: (CalendarEvent) -> Unit, onEvent: (CalendarEvent) -> Unit) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -174,7 +186,7 @@ private fun Agenda(v: CalendarView, onEvent: (CalendarEvent) -> Unit) {
             }
         }
         Box(Modifier.fillMaxWidth().padding(top = MekaSpace.s).height(1.dp).background(Meka.colors.hairline))
-        AgendaList(entries, list, onEvent)
+        AgendaList(entries, list, handlers, showAgain, onEvent)
     }
 }
 
@@ -232,7 +244,10 @@ private fun Pill(d: DayPill, lit: Boolean, modifier: Modifier, onTap: () -> Unit
 }
 
 @Composable
-private fun AgendaList(entries: List<Entry>, list: LazyListState, onEvent: (CalendarEvent) -> Unit) {
+private fun AgendaList(
+    entries: List<Entry>, list: LazyListState, handlers: EventActionHandlers, showAgain: (CalendarEvent) -> Unit,
+    onEvent: (CalendarEvent) -> Unit,
+) {
     LazyColumn(
         state = list,
         contentPadding = PaddingValues(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.s, bottom = MekaSpace.xl),
@@ -250,8 +265,14 @@ private fun AgendaList(entries: List<Entry>, list: LazyListState, onEvent: (Cale
                     e.text, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = m.padding(start = os.meka.android.today.TIME_COLUMN, bottom = MekaSpace.xs),
                 )
+                is Entry.HiddenLabel -> Text(
+                    e.text, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = m.padding(start = os.meka.android.today.TIME_COLUMN, top = MekaSpace.xs),
+                )
+                is Entry.Hidden -> HiddenRow(e.event, m, { onEvent(e.event) }) { showAgain(e.event) }
                 is Entry.Line -> when (e.row.kind) {
-                    TimelineKind.EVENT -> EventRow(e.row, e.past, m.opensEvent(e.row.event, onEvent))
+                    TimelineKind.EVENT -> if (e.past) EventRow(e.row, true, m.opensEvent(e.row.event, onEvent))
+                    else SwipeableEvent(e.row.event, handlers, m) { sm -> EventRow(e.row, false, sm.opensEvent(e.row.event, onEvent)) }
                     TimelineKind.TASK -> TaskRow(e.row, m)
                     TimelineKind.NOW -> NowLine(e.row, m)
                     TimelineKind.GAP -> Unit // the agenda has no gaps; Today shows free time
@@ -296,6 +317,24 @@ private fun EventRow(r: TimelineRow, past: Boolean, modifier: Modifier) {
                 )
             }
         }
+    }
+}
+
+/** An event hidden from my day: dimmed, with Show to bring it back. */
+@Composable
+private fun HiddenRow(event: CalendarEvent, modifier: Modifier, onOpen: () -> Unit, onShow: () -> Unit) {
+    val haptics = rememberMekaHaptics()
+    Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
+        Spacer(Modifier.width(os.meka.android.today.TIME_COLUMN))
+        Text(
+            event.title, style = MekaType.caption, color = Meka.colors.textTertiary,
+            modifier = Modifier.weight(1f).clickable(role = Role.Button) { onOpen() },
+        )
+        Text(
+            "Show", style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.clickable(role = Role.Button) { haptics.light(); onShow() }
+                .padding(start = MekaSpace.m, top = MekaSpace.xxs, bottom = MekaSpace.xxs),
+        )
     }
 }
 

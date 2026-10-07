@@ -2,7 +2,20 @@ package os.meka.android.calendar
 
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import os.meka.android.designsystem.MekaMotion
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -56,7 +69,9 @@ fun EventDetailPane(core: MekaCore, event: CalendarEvent, onClose: () -> Unit) {
             tick++
         }
     }
-    val d = remember(event, tick) { core.eventDetail(event) }
+    val marks by core.eventMarks.collectAsState()
+    val d = remember(event, tick, marks) { core.eventDetail(event) }
+    val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     val haptics = rememberMekaHaptics()
     BackHandler(onBack = onClose)
@@ -82,6 +97,34 @@ fun EventDetailPane(core: MekaCore, event: CalendarEvent, onClose: () -> Unit) {
                     color = if (d.statusLit) Meka.colors.accent else Meka.colors.textTertiary,
                     modifier = Modifier.padding(top = MekaSpace.xxs),
                 )
+            }
+        }
+
+        // Calendar actions: MEKA-only, the real event is untouched.
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = MekaSpace.l).appear(rememberAppearance(1)),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (d.canPrep) {
+                ActionChip("Prep task") {
+                    haptics.light()
+                    scope.launch { runCatching { core.addPrepTask(event) } }
+                }
+            }
+            ActionChip(if (d.hidden) "Show in my day" else "Hide from my day") {
+                haptics.light()
+                scope.launch { runCatching { if (d.hidden) core.showEvent(event.id) else core.hideEvent(event.id) } }
+            }
+        }
+        val actionNote = listOfNotNull(d.prepLine, if (d.hidden) "Hidden from your day" else null).joinToString(" · ")
+        AnimatedContent(
+            targetState = actionNote,
+            transitionSpec = { fadeIn(MekaMotion.appear(Meka.reducedMotion)) togetherWith fadeOut(MekaMotion.appear(Meka.reducedMotion)) },
+            label = "event-actions-note",
+        ) { note ->
+            if (note.isNotEmpty()) {
+                Text(note, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.l))
             }
         }
 
@@ -126,11 +169,23 @@ fun EventDetailPane(core: MekaCore, event: CalendarEvent, onClose: () -> Unit) {
         }
 
         Text(
-            "Change it in your calendar; MEKA shows it here.", style = MekaType.caption, color = Meka.colors.textTertiary,
+            "Change the event itself in your calendar. Prep tasks and hiding stay in MEKA.", style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(5)),
         )
         Spacer(Modifier.height(MekaSpace.xl))
     }
+}
+
+/** A quiet outlined pill button for the event's actions. */
+@Composable
+private fun ActionChip(label: String, onTap: () -> Unit) {
+    Text(
+        label, style = MekaType.itemMeta, color = Meka.colors.accent,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+            .border(1.dp, Meka.colors.accent.copy(alpha = 0.6f), RoundedCornerShape(MekaRadius.pill))
+            .clickable(role = Role.Button) { onTap() }
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    )
 }
 
 @Composable

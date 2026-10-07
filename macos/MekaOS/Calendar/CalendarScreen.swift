@@ -170,6 +170,7 @@ private struct DayPillView: View {
 
 /// One section: "Today" with its date, all-day chips, then events, planned tasks and (today) the now line.
 private struct AgendaSectionView: View {
+    @Environment(CoreModel.self) private var model
     let section: AgendaSection
     let palette: MekaPalette
 
@@ -194,7 +195,7 @@ private struct AgendaSectionView: View {
             ForEach(section.ended, id: \.id) { r in AgendaEventRow(row: r, past: true, palette: palette) }
             ForEach(section.rows, id: \.id) { r in
                 switch r.kind {
-                case .event: AgendaEventRow(row: r, past: false, palette: palette)
+                case .event: AgendaEventRow(row: r, past: false, palette: palette).eventActions(r.event, palette: palette)
                 case .task: AgendaTaskRow(row: r, palette: palette)
                 case .now: NowLine(row: r, palette: palette)
                 default: EmptyView() // the agenda has no gaps; Today shows free time
@@ -204,6 +205,25 @@ private struct AgendaSectionView: View {
                 Text(empty).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.leading, TimelineMetrics.timeColumn + MekaSpace.xs)
                     .padding(.bottom, MekaSpace.xs)
+            }
+            // Hidden from my day (calendar actions): listed quietly at the day's foot with Show.
+            if let label = section.hiddenLabel {
+                Text(label).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .padding(.leading, TimelineMetrics.timeColumn + MekaSpace.xs)
+                    .padding(.top, MekaSpace.xs)
+                ForEach(section.hidden, id: \.id) { e in
+                    HStack(spacing: MekaSpace.m) {
+                        Text(e.title).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            .opensEvent(e)
+                        Spacer()
+                        Button("Show") { model.showEvent(e.id) }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(palette.accent)
+                    }
+                    .padding(.leading, TimelineMetrics.timeColumn + MekaSpace.xs)
+                    .padding(.trailing, MekaSpace.xs)
+                    .transition(.opacity)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

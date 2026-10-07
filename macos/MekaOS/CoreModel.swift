@@ -32,6 +32,10 @@ final class CoreModel {
     private(set) var calendar: CalendarView?
     /// The event whose detail sheet is open (calendar redesign, slice 3), from Today or the Calendar section.
     var openEvent: CalendarEvent?
+    /// Hidden events and prep tasks (calendar actions), synced with the Fold. MEKA-only: the real calendars are untouched.
+    private(set) var eventMarks: EventMarks?
+    /// The calendar-action undo bar ("Hidden from your day · Undo"); goes after 5 seconds.
+    private(set) var eventUndo: EventUndoOffer?
     /// Quiet hours, digest times and tiers (notification governor), synced with the Fold.
     private(set) var notifySettings: NotificationSettings?
     /// "Quiet until 07:00", "Next digest 18:00 · 3 things so far".
@@ -136,6 +140,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await c in core.calendarView { self?.calendar = c }
+        })
+        observers.append(Task { [weak self] in
+            for await m in core.eventMarks { self?.eventMarks = m }
         })
         observers.append(Task { [weak self] in
             for await s in core.notificationSettings { self?.notifySettings = s }
@@ -659,6 +666,56 @@ final class CoreModel {
     /// Event detail: when, how soon, which calendar, place, notes and a Join link (pure, computed in the core).
     func eventDetail(_ event: CalendarEvent) -> EventDetailView? { core?.eventDetail(event: event) }
 
+    // MARK: Calendar actions (MEKA-only; the real calendars stay read-only)
+
+    /// Adds the event's prep task ("Prepare for …", planned 30 min before it); Undo deletes it.
+    func addPrepTask(_ event: CalendarEvent) {
+        guard let core else { return }
+        let hadOpen = eventMarks?.prepTasks[event.id].map { !$0.isDone } ?? false
+        MekaHaptics.light()
+        Task {
+            do {
+                let id = try await core.addPrepTask(event: event)
+                offerEventUndo(hadOpen ? "Already has a prep task" : "Prep task added", hadOpen ? nil : .deleteTask(id))
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Hides an event from my day (timeline, planner, brief, shutdown, review); Undo shows it again.
+    func hideEvent(_ eventID: String, offerUndo: Bool = true) {
+        MekaHaptics.light()
+        run { try await $0.hideEvent(eventId: eventID) }
+        if offerUndo { offerEventUndo("Hidden from your day", .showEvent(eventID)) }
+    }
+
+    func showEvent(_ eventID: String) {
+        MekaHaptics.light()
+        run { try await $0.showEvent(eventId: eventID) }
+    }
+
+    func isEventHidden(_ eventID: String) -> Bool { eventMarks?.hidden.contains(eventID) ?? false }
+
+    func undoEventAction() {
+        guard let offer = eventUndo, let action = offer.action else { return }
+        eventUndo = nil
+        MekaHaptics.light()
+        switch action {
+        case .deleteTask(let id): run { try await $0.delete(taskId: id) }
+        case .showEvent(let id): run { try await $0.showEvent(eventId: id) }
+        }
+    }
+
+    func dismissEventUndo() { eventUndo = nil }
+
+    private func offerEventUndo(_ message: String, _ action: EventUndoOffer.Action?) {
+        let offer = EventUndoOffer(message: message, action: action)
+        eventUndo = offer
+        Task {
+            try? await Task.sleep(for: .seconds(5))
+            if eventUndo?.id == offer.id { eventUndo = nil }
+        }
+    }
+
     func completeSelected() { if let id = selectedID { complete(id) } }
     func deleteSelected() { if let id = selectedID { delete(id) } }
     func syncNow() async { _ = try? await core?.syncNow() }
@@ -693,4 +750,16 @@ final class CoreModel {
         default: return nil
         }
     }
+}
+
+/// What the calendar-action undo bar offers.
+struct EventUndoOffer: Identifiable, Equatable {
+    enum Action: Equatable {
+        case deleteTask(String)
+        case showEvent(String)
+    }
+
+    let id = UUID()
+    let message: String
+    let action: Action?
 }

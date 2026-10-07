@@ -199,7 +199,7 @@ struct TodayView: View {
     @ViewBuilder
     private func timelineRow(_ r: TimelineRow) -> some View {
         switch r.kind {
-        case .event: TimelineEventRow(row: r, past: false, palette: palette)
+        case .event: TimelineEventRow(row: r, past: false, palette: palette).eventActions(r.event, palette: palette)
         case .task:
             if let t = r.task { TaskRow(task: t, reason: nil, palette: palette, time: r.time, timelineLine: r.detail) }
         case .gap: GapRow(row: r, palette: palette)

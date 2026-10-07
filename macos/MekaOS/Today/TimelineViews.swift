@@ -32,6 +32,91 @@ extension View {
     func opensEvent(_ event: CalendarEvent?) -> some View { modifier(OpensEvent(event: event)) }
 }
 
+/// Calendar actions on an event row (matching the Fold's swipes): Prep task and Hide from my day, in the row's
+/// context menu and as small buttons while the pointer is over it (the row lifts 2 pt). MEKA-only: the real calendar is
+/// untouched. Reduce Motion: no lift, the buttons fade.
+struct EventActionsModifier: ViewModifier {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let event: CalendarEvent?
+    let palette: MekaPalette
+    @State private var hovering = false
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let e = event {
+            content
+                .overlay(alignment: .trailing) {
+                    if hovering {
+                        HStack(spacing: MekaSpace.xs) {
+                            Button("Prep task") { model.addPrepTask(e) }
+                            Button("Hide") { model.hideEvent(e.id) }
+                                .help("Hide from my day (MEKA only; your calendar is unchanged)")
+                        }
+                        .buttonStyle(.borderless)
+                        .font(MekaType.caption)
+                        .foregroundStyle(palette.accent)
+                        .padding(.horizontal, MekaSpace.s)
+                        .padding(.vertical, MekaSpace.xxs)
+                        .background(palette.surfaceRaised, in: Capsule())
+                        .padding(.trailing, MekaSpace.xs)
+                        .transition(.opacity)
+                    }
+                }
+                .offset(y: hovering && !reduceMotion ? -2 : 0)
+                .onHover { h in
+                    withAnimation(MekaMotion.appear(reduced: reduceMotion)) { hovering = h }
+                }
+                .contextMenu {
+                    Button("Prep task") { model.addPrepTask(e) }
+                    Button("Hide from my day") { model.hideEvent(e.id) }
+                    Divider()
+                    Button("Details…") { model.openEvent = e }
+                }
+                .accessibilityAction(named: "Prep task") { model.addPrepTask(e) }
+                .accessibilityAction(named: "Hide from my day") { model.hideEvent(e.id) }
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func eventActions(_ event: CalendarEvent?, palette: MekaPalette) -> some View {
+        modifier(EventActionsModifier(event: event, palette: palette))
+    }
+}
+
+/// The calendar-action undo bar: rises from the bottom with the message and Undo; goes after 5 seconds.
+struct EventUndoBar: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let palette: MekaPalette
+
+    var body: some View {
+        ZStack {
+            if let offer = model.eventUndo {
+                HStack(spacing: MekaSpace.m) {
+                    Text(offer.message).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                    if offer.action != nil {
+                        Button("Undo") { model.undoEventAction() }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(palette.accent)
+                    }
+                }
+                .padding(.horizontal, MekaSpace.l)
+                .padding(.vertical, MekaSpace.s)
+                .background(palette.surfaceRaised, in: Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
+                .padding(.bottom, MekaSpace.l)
+                .id(offer.id)
+                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.eventUndo)
+    }
+}
+
 /// An event: time on the left, title and where/which calendar under it. A running one is marked "Now".
 struct TimelineEventRow: View {
     let row: TimelineRow

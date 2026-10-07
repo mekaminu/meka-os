@@ -27,6 +27,8 @@ struct ShellView: View {
                     .transition(transition)
             }
             .clipped()
+            // Calendar actions: "Hidden from your day · Undo" rises over whichever screen you did it on.
+            .overlay(alignment: .bottom) { EventUndoBar(palette: palette).padding(.bottom, MekaSpace.xxl) }
         }
         .background(palette.background)
         // Search everything (⌘F from anywhere): results, with an open task's detail beside them.

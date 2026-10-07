@@ -24,6 +24,14 @@ data class EventDetailView(
     val notes: String?,
     val join: JoinLink?,
     val isFixture: Boolean,
+    /** Hidden from my day (calendar actions): the pane offers "Show in my day". */
+    val hidden: Boolean = false,
+    /** The event's prep task, when there is one (open or done). */
+    val prepTaskId: String? = null,
+    /** "Prep task at 13:30" · "Prep task due 14:00" · "Prep task done"; null without one. */
+    val prepLine: String? = null,
+    /** A prep task can be added (the event hasn't ended and has none open). */
+    val canPrep: Boolean = false,
 )
 
 /**
@@ -52,7 +60,7 @@ object EventDetails {
         "facetime.apple.com" to "Join FaceTime",
     )
 
-    fun build(e: CalendarEvent, nowMs: Long, calendar: LocalCalendar): EventDetailView {
+    fun build(e: CalendarEvent, nowMs: Long, calendar: LocalCalendar, marks: EventMarks = EventMarks.NONE): EventDetailView {
         fun hhmm(ms: Long) = LocalClock.formatMinute(calendar.minuteOfDay(ms))
         val today = calendar.epochDayOf(nowMs)
 
@@ -109,6 +117,7 @@ object EventDetails {
         val notes = e.description?.let { cleanNotes(it) }
         val join = e.joinUrl?.trim()?.takeIf { isHttps(it) }?.let { JoinLink(it, labelFor(it) ?: "Join call") }
             ?: findCallLink(location) ?: findCallLink(notes)
+        val prep = marks.prepTasks[e.id]
         val locationIsLink = location != null && (location.startsWith("https://") || location.startsWith("http://")) && !location.contains(' ')
 
         return EventDetailView(
@@ -124,7 +133,24 @@ object EventDetails {
             notes = notes,
             join = join,
             isFixture = e.isFixture,
+            hidden = marks.isHidden(e.id),
+            prepTaskId = prep?.id,
+            prepLine = prep?.let { prepLine(it, today, calendar) },
+            canPrep = status != "Ended" && (prep == null || prep.isDone),
         )
+    }
+
+    /** "Prep task at 13:30" · "Prep task at Wed 7 Oct 13:30" · "Prep task due 14:00" · "Prep task done". */
+    fun prepLine(t: Task, today: Long, calendar: LocalCalendar): String {
+        if (t.isDone) return "Prep task done"
+        fun at(ms: Long): String {
+            val d = calendar.epochDayOf(ms)
+            val time = LocalClock.formatMinute(calendar.minuteOfDay(ms))
+            return if (d == today) time else "${CivilDate.shortLabel(d)} $time"
+        }
+        t.scheduledAtMs?.let { return "Prep task at ${at(it)}" }
+        t.dueAtMs?.let { return "Prep task due ${at(it)}" }
+        return "Prep task added"
     }
 
     /** "45 min" · "1 h" · "1 h 30" · "26 h" (a timed event over midnight keeps counting hours). */

@@ -19,8 +19,10 @@ struct EventDetailSheet: View {
         // "In 25 min" moves on while the sheet is open.
         TimelineView(.periodic(from: .now, by: 30)) { _ in
             VStack(alignment: .leading, spacing: MekaSpace.s) {
+                // Reading the marks here re-renders the sheet when a prep task or hide lands (or syncs in).
+                let _ = model.eventMarks
                 if let e = model.openEvent, let d = model.eventDetail(e) {
-                    content(d)
+                    content(d, event: e)
                 } else {
                     Text("Event").font(MekaType.upNextTitle)
                 }
@@ -35,7 +37,7 @@ struct EventDetailSheet: View {
     }
 
     @ViewBuilder
-    private func content(_ d: EventDetailView) -> some View {
+    private func content(_ d: EventDetailView, event: CalendarEvent) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             Text(d.title).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -48,6 +50,23 @@ struct EventDetailSheet: View {
             }
         }
         .staggeredAppear(0)
+
+        // Calendar actions: MEKA-only, the real event is untouched.
+        HStack(spacing: MekaSpace.s) {
+            if d.canPrep {
+                Button("Prep task") { model.addPrepTask(event) }
+            }
+            Button(d.hidden ? "Show in my day" : "Hide from my day") {
+                if d.hidden { model.showEvent(d.id) } else { model.hideEvent(d.id, offerUndo: false) }
+            }
+            let note = [d.prepLine, d.hidden ? "Hidden from your day" : nil].compactMap { $0 }.joined(separator: " · ")
+            if !note.isEmpty {
+                Text(note).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .contentTransition(.opacity)
+            }
+        }
+        .controlSize(.small)
+        .staggeredAppear(1)
 
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.l) {
@@ -93,7 +112,7 @@ struct EventDetailSheet: View {
                     .staggeredAppear(4)
                 }
 
-                Text("Change it in your calendar; MEKA shows it here.")
+                Text("Change the event itself in your calendar. Prep tasks and hiding stay in MEKA.")
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .staggeredAppear(5)
             }

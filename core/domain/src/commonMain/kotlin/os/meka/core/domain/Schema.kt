@@ -30,11 +30,13 @@ object EntityTypes {
     const val INTERRUPTION_DAY = "interruption_day"
     /** One thing MEKA did on its own, with why and, for a change, what it was before (see [ActivityLog]). */
     const val AGENT_ACTION = "agent_action"
+    /** MEKA-only marks on a mirrored calendar event (hidden from my day); id = the event's id (see [EventActions]). */
+    const val EVENT_MARK = "event_mark"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
-        AGENT_ACTION,
+        AGENT_ACTION, EVENT_MARK,
     )
 }
 
@@ -83,6 +85,8 @@ object TaskFields {
     const val OCCURRENCE_DAY = "occurrenceDay"
     /** A snoozed occurrence waits until this local day (epoch day) before it shows again. */
     const val DEFERRED_TO_DAY = "deferredToDay"
+    /** A prep task's calendar event (calendar actions): the event it prepares for. */
+    const val EVENT_ID = "eventId"
 }
 
 object ChecklistFields {
@@ -209,6 +213,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.INTERRUPTION_DAY -> MergePolicy.Lww
         // Activity entries: written by MEKA when it acts; only the undo marks change afterwards.
         entityType == EntityTypes.AGENT_ACTION -> MergePolicy.Lww
+        // Event marks: a switch per event; the latest tap on any device wins.
+        entityType == EntityTypes.EVENT_MARK -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

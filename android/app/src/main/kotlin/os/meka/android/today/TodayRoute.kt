@@ -2,6 +2,11 @@ package os.meka.android.today
 
 import os.meka.android.calendar.EventDetailPane
 import os.meka.android.calendar.opensEvent
+import os.meka.android.calendar.EventActionHandlers
+import os.meka.android.calendar.EventUndoBar
+import os.meka.android.calendar.SwipeableEvent
+import os.meka.android.calendar.eventActionHandlers
+import os.meka.android.calendar.rememberEventUndo
 import os.meka.core.domain.CalendarEvent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -167,6 +172,9 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
     }
 
     val actions = todayActions(core, scope, { selectedId }) { selectedId = it }
+    // Calendar actions: swipe an event right for a prep task, left to hide it from my day; an undo bar rises.
+    val eventUndo = rememberEventUndo()
+    val eventHandlers = remember(core, scope, eventUndo) { eventActionHandlers(core, scope, eventUndo) }
 
     // Insets are applied once, by the app shell.
     MekaSharedLayout(Modifier.fillMaxSize()) {
@@ -192,7 +200,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
                         openSearch = { showSearch = true },
                         brief = brief, openBrief = { showBrief = true },
                         reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } },
-                        openEvent = { eventOpen = it })
+                        openEvent = { eventOpen = it }, eventHandlers = eventHandlers)
                 },
                 detail = { m -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, m) },
             )
@@ -220,6 +228,7 @@ fun TodayRoute(core: MekaCore, connect: ConnectHook? = null, openReview: () -> U
             MekaPane(visible = showSearch) {
                 SearchPane(core, onClose = { showSearch = false }, openItem = { item -> showSearch = false; openItem(item) })
             }
+            EventUndoBar(eventUndo, Modifier.align(Alignment.BottomCenter))
         }
     }
 }
@@ -308,6 +317,7 @@ private fun TodayPane(
     reviewCard: ReviewCard, openReviewCard: () -> Unit,
     openEvent: (CalendarEvent) -> Unit = {},
     openActivity: () -> Unit = {},
+    eventHandlers: EventActionHandlers? = null,
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
@@ -471,7 +481,9 @@ private fun TodayPane(
                 items(tl.rows, key = { "r-" + it.id }) { r ->
                     val m = Modifier.animateItem().appear(rememberAppearance(4, play))
                     when (r.kind) {
-                        TimelineKind.EVENT -> TimelineEventRow(r, past = false, modifier = m.opensEvent(r.event, openEvent))
+                        TimelineKind.EVENT -> SwipeableEvent(r.event, eventHandlers, m) { sm ->
+                            TimelineEventRow(r, past = false, modifier = sm.opensEvent(r.event, openEvent))
+                        }
                         TimelineKind.TASK -> r.task?.let { t ->
                             // The Up next task's title travels from its card, so its timeline row doesn't share it.
                             val motion = if (t.id == today.upNext?.id) RowMotion() else rowMotion(t.id)
