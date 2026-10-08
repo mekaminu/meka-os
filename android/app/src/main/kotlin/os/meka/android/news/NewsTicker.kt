@@ -113,21 +113,22 @@ private val STRIP_HEIGHT = 64.dp
  * dragging scrubs; tapping a story springs the News detail up on it, the match opens its own detail. In calm mode it
  * drifts [TickerRules.CALM_LOOPS] times each time it appears and then rests, with ▸ to set it going again (tick haptic).
  * It only moves while it is composed (on screen) and frames are drawn (the screen is on). Reduced motion: no drift,
- * one still card with ‹ › paging.
+ * one still card with ‹ › paging. The bedside clock (slice 4) runs it slower with [speedDpPerS].
  */
 @Composable
 fun NewsTickerStrip(
     core: MekaCore, ticker: NewsTicker, mode: TickerMode, modifier: Modifier = Modifier,
     openStory: (String) -> Unit, openMatch: (CalendarEvent) -> Unit,
+    speedDpPerS: Float = TickerRules.SPEED_DP_PER_S,
 ) {
     val list = remember(ticker) { cards(ticker) }
     if (list.isEmpty() || mode == TickerMode.OFF) return
     val open: (TickerCard) -> Unit = { c -> when (c) { is TickerCard.Match -> openMatch(c.m.event); is TickerCard.Story -> openStory(c.item.id) } }
-    if (Meka.reducedMotion) StillTicker(core, list, modifier, open) else DriftingTicker(core, list, mode, modifier, open)
+    if (Meka.reducedMotion) StillTicker(core, list, modifier, open) else DriftingTicker(core, list, mode, modifier, open, speedDpPerS)
 }
 
 @Composable
-private fun DriftingTicker(core: MekaCore, list: List<TickerCard>, mode: TickerMode, modifier: Modifier, open: (TickerCard) -> Unit) {
+private fun DriftingTicker(core: MekaCore, list: List<TickerCard>, mode: TickerMode, modifier: Modifier, open: (TickerCard) -> Unit, speedDpPerS: Float) {
     val density = LocalDensity.current.density
     val haptics = rememberMekaHaptics()
     val scroll = rememberScrollState()
@@ -158,7 +159,7 @@ private fun DriftingTicker(core: MekaCore, list: List<TickerCard>, mode: TickerM
             var last = withFrameNanos { it }
             while (isActive) {
                 val now = withFrameNanos { it }
-                val next = TickerRules.step(drift, (now - last) / 1_000_000L, loopPx / density)
+                val next = TickerRules.stepAt(drift, (now - last) / 1_000_000L, loopPx / density, speedDpPerS)
                 last = now
                 drift = next
                 scroll.scrollTo(loopPx + (next.offsetDp * density).roundToInt())

@@ -89,9 +89,12 @@ object TickerRules {
      * One frame of drift: [dtMs] at [SPEED_DP_PER_S] (a gap over [MAX_STEP_MS] counts as [MAX_STEP_MS]), wrapping at
      * [loopWidthDp] (the width of one set of cards) and counting the loop. Nothing moves before the width is known.
      */
-    fun step(drift: TickerDrift, dtMs: Long, loopWidthDp: Float): TickerDrift {
-        if (loopWidthDp <= 0f || dtMs <= 0L) return drift
-        val next = drift.offsetDp + SPEED_DP_PER_S * dtMs.coerceAtMost(MAX_STEP_MS) / 1000f
+    fun step(drift: TickerDrift, dtMs: Long, loopWidthDp: Float): TickerDrift = stepAt(drift, dtMs, loopWidthDp, SPEED_DP_PER_S)
+
+    /** [step] at another speed (the bedside strip drifts at [BedsideTickerRules.SPEED_DP_PER_S]). */
+    fun stepAt(drift: TickerDrift, dtMs: Long, loopWidthDp: Float, speedDpPerS: Float): TickerDrift {
+        if (loopWidthDp <= 0f || dtMs <= 0L || speedDpPerS <= 0f) return drift
+        val next = drift.offsetDp + speedDpPerS * dtMs.coerceAtMost(MAX_STEP_MS) / 1000f
         return if (next >= loopWidthDp) TickerDrift(next - loopWidthDp, drift.loops + 1) else drift.copy(offsetDp = next)
     }
 
@@ -116,6 +119,42 @@ object TickerRules {
     fun spoken(item: NewsItem): String {
         val lane = NewsTopics.byId(item.topic)?.label
         return listOfNotNull(lane, item.meta).joinToString(" · ") + ": " + item.title
+    }
+}
+
+/**
+ * The bedside clock's strip (build plan M1, news ticker slice 4; Fold only: the Mac has no hinge), non-AI and pure:
+ * Today's ticker under the half-folded Fold's clock, slower ([SPEED_DP_PER_S], half Today's) and dimmer ([ALPHA]) so it
+ * stays in the corner of the eye on the nightstand, with fewer stories ([MAX_ITEMS]).
+ *
+ * It follows Today's choice (Appearance → News ticker): Off hides it here too. It is gone in quiet hours (the clock is
+ * dimmed right down then, and nothing should move beside a sleeping person). While charging (the screen held on at the
+ * bedside) it keeps drifting; on battery it is calm (two loops, then it rests with ▸), so it never runs the battery down.
+ * Reduced motion: the still card with ‹ › paging, as on Today.
+ */
+object BedsideTickerRules {
+    /** Half Today's speed. */
+    const val SPEED_DP_PER_S = TickerRules.SPEED_DP_PER_S / 2
+    /** The strip's opacity under the clock (the clock's own lines stay as they are). */
+    const val ALPHA = 0.6f
+    /** At most this many stories (the match card comes on top). */
+    const val MAX_ITEMS = 6
+
+    /** Today's ticker cut to [MAX_ITEMS] stories, in the same order (the match first). */
+    fun ticker(today: NewsTicker): NewsTicker = today.copy(items = today.items.take(MAX_ITEMS))
+
+    /** Whether the strip is under the clock: Today's choice isn't Off, it isn't quiet hours, and there is something. */
+    fun shown(todayMode: TickerMode, quiet: Boolean, ticker: NewsTicker): Boolean =
+        !quiet && TickerRules.shown(todayMode, ticker)
+
+    /**
+     * How the strip moves at the bedside: Off stays Off; otherwise always moving while charging (the screen is held
+     * on), calm on battery whatever Today's choice.
+     */
+    fun mode(todayMode: TickerMode, charging: Boolean): TickerMode = when {
+        todayMode == TickerMode.OFF -> TickerMode.OFF
+        charging -> TickerMode.MOVING
+        else -> TickerMode.CALM
     }
 }
 

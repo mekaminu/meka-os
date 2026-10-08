@@ -6,8 +6,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,6 +35,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
@@ -64,12 +69,19 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.news.NewsPane
+import os.meka.android.news.NewsTickerStrip
+import os.meka.android.news.rememberTickerMode
 import os.meka.android.today.BriefPane
 import os.meka.android.today.ShutdownPane
 import os.meka.core.domain.BedsideOpens
+import os.meka.core.domain.BedsideTickerRules
 import os.meka.core.domain.BedsideView
 import os.meka.core.domain.FoldMode
 import os.meka.core.domain.FoldModeRules
+import os.meka.core.domain.NewsTicker
+import os.meka.core.domain.TickerMode
+import os.meka.core.domain.TickerRules
 import os.meka.core.facade.MekaCore
 
 /**
@@ -79,8 +91,12 @@ import os.meka.core.facade.MekaCore
  * the brief or the shutdown. In quiet hours the colours quieten and the screen dims right down; the screen stays on
  * only while charging. Opening the Fold flat goes back to the app where it was.
  *
+ * Under the section, Today's news strip drifts slower and dimmer (news ticker, slice 4; [BedsideTickerRules]): it keeps
+ * drifting on the charger and is calm on battery, follows Appearance → News ticker, and fades away in quiet hours; a
+ * story springs the News pane up on it (the match opens News itself).
+ *
  * Motion: the clock fades up and the lower lines stagger in; changed digits roll up each minute; dimming blends the
- * colours across. Reduced motion: cross-fades.
+ * colours across; the strip fades in and out. Reduced motion: cross-fades, the strip a still card with ‹ ›.
  */
 @Composable
 fun BedsideClock(core: MekaCore, fold: FoldState) {
@@ -113,6 +129,14 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
     }
 
     var open by remember { mutableStateOf<BedsideOpens?>(null) }
+    // The bedside news strip (slice 4): Today's ticker, cut short; "" = News itself, an id = that story; null = closed.
+    val newsPlace by core.newsPlace.collectAsState()
+    val ticker = remember(newsPlace) { BedsideTickerRules.ticker(TickerRules.ticker(newsPlace)) }
+    val todayMode = rememberTickerMode()
+    var newsOpen by remember { mutableStateOf<String?>(null) }
+    var newsShown by remember { mutableStateOf<String?>(null) }
+    if (newsOpen != null) newsShown = newsOpen
+    BackHandler(enabled = newsOpen != null) { newsOpen = null }
     val density = LocalDensity.current
     var topInWindow by remember { mutableIntStateOf(0) }
     var heightPx by remember { mutableIntStateOf(0) }
@@ -129,12 +153,46 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
         Column(Modifier.fillMaxSize()) {
             ClockHalf(v, Modifier.fillMaxWidth().height(upper).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
             Box(Modifier.height(gap))
-            DayHalf(v, Modifier.fillMaxWidth().weight(1f).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))) {
+            DayHalf(v, Modifier.fillMaxWidth().weight(1f).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))) {
                 open = it
             }
+            BedsideNews(
+                core, ticker, todayMode, v.dim, charging,
+                Modifier.fillMaxWidth().padding(bottom = MekaSpace.l)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)),
+            ) { id -> newsOpen = id }
         }
         MekaPane(visible = open == BedsideOpens.BRIEF) { BriefPane(core, onClose = { open = null }) }
         MekaPane(visible = open == BedsideOpens.SHUTDOWN) { ShutdownPane(core, onClose = { open = null }) }
+        MekaPane(visible = newsOpen != null) {
+            newsShown?.let { start ->
+                key(start) { NewsPane(core, onClose = { newsOpen = null }, backLabel = "‹ Clock", startStoryId = start.ifEmpty { null }) }
+            }
+        }
+    }
+}
+
+/**
+ * Today's news strip under the bedside clock (news ticker, slice 4): slower ([BedsideTickerRules.SPEED_DP_PER_S]) and
+ * dimmer ([BedsideTickerRules.ALPHA]); always drifting on the charger, calm on battery; Off in Appearance hides it, and
+ * it fades away when quiet hours start. [openNews] gets a story's id, or "" for the match (News leads with it).
+ */
+@Composable
+private fun BedsideNews(
+    core: MekaCore, ticker: NewsTicker, todayMode: TickerMode, quiet: Boolean, charging: Boolean, modifier: Modifier,
+    openNews: (String) -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    AnimatedVisibility(
+        visible = BedsideTickerRules.shown(todayMode, quiet, ticker),
+        enter = fadeIn(MekaMotion.themeBlend(reduced)), exit = fadeOut(MekaMotion.themeBlend(reduced)),
+        modifier = modifier,
+    ) {
+        NewsTickerStrip(
+            core, ticker, BedsideTickerRules.mode(todayMode, charging), Modifier.alpha(BedsideTickerRules.ALPHA),
+            openStory = { openNews(it) }, openMatch = { openNews("") },
+            speedDpPerS = BedsideTickerRules.SPEED_DP_PER_S,
+        )
     }
 }
 
