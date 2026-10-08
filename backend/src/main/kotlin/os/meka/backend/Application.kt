@@ -40,6 +40,7 @@ import io.ktor.server.routing.routing
 import os.meka.core.domain.EntityTypes
 import os.meka.core.sync.ServerOpStore
 import os.meka.core.sync.SyncService
+import os.meka.core.wire.AskCodec
 import os.meka.core.wire.WireCodec
 import os.meka.core.wire.WireFormatException
 import javax.sql.DataSource
@@ -264,6 +265,15 @@ fun Application.mekaSync(
                 call.device(devices, verifier, body, requireKey = true)
                 val status = withContext(Dispatchers.IO) { ai.statusJson() }
                 call.respondText(status.toString(), ContentType.Application.Json)
+            }
+            // Ask MEKA: a question with the device's picture of today; words and proposed actions back. Nothing is kept.
+            val askService = AskService(ai.provider)
+            post("/v1/ai/ask") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = AskCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { askService.ask(request) }
+                call.respondText(AskCodec.encodeResponse(answer), ContentType.Application.Json)
             }
         }
 

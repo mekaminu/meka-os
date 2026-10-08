@@ -16,6 +16,7 @@ import os.meka.core.sync.PushRequest
 import os.meka.core.sync.PushResponse
 import os.meka.core.sync.SyncTransport
 import os.meka.core.sync.TransportException
+import os.meka.core.wire.AskCodec
 import os.meka.core.wire.WireCodec
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.encoding.Base64
@@ -62,6 +63,18 @@ interface NewsImagesApi {
     suspend fun newsImage(key: String): ByteArray?
 }
 
+/** What MEKA's server said to a question (Ask MEKA, V1 AI layer): words and proposed actions, or why there are none. */
+sealed class AskReply {
+    data class Answered(val text: String, val actions: List<os.meka.core.domain.AskRawAction>) : AskReply()
+    /** [state]: off · over (the month's budget) · failed, with the server's [reason]. */
+    data class Unavailable(val state: String, val reason: String?) : AskReply()
+}
+
+/** Ask MEKA (V1 AI layer, slice 3), available once the device is connected. */
+interface AiApi {
+    suspend fun ask(question: String, context: os.meka.core.domain.AskContext): AskReply
+}
+
 /** Account management calls, available once the device is connected. */
 interface AccountsApi {
     /** [editing]: ask the provider for permission to change events too (calendar editing). */
@@ -83,7 +96,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -185,6 +198,27 @@ class HttpSyncTransport(
             // 404: a server without push (older, or not configured); 403: no signing key registered yet.
             resp.status.value == 404 || resp.status.value == 403 -> throw PushUnavailableException()
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/push/token")
+        }
+    }
+
+    override suspend fun ask(question: String, context: os.meka.core.domain.AskContext): AskReply {
+        val body = AskCodec.encodeRequest(
+            AskCodec.Request(question, context.dateIso, context.nowLine, context.items.map { AskCodec.Item(it.ref, it.kind.wire, it.line) }),
+        )
+        prepare() // the ask route requires the device's signing key on the server
+        val resp = send("/v1/ai/ask", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/ask")
+            // A server without the AI layer (older, or no key secret configured).
+            resp.status.value == 404 -> return AskReply.Unavailable(AskCodec.Response.OFF, null)
+            resp.status.value == 403 -> return AskReply.Unavailable(AskCodec.Response.FAILED, "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/ask")
+        }
+        val r = AskCodec.decodeResponse(resp.bodyAsText())
+        return if (r.state == AskCodec.Response.ANSWERED) {
+            AskReply.Answered(r.answer.orEmpty(), r.actions.map { os.meka.core.domain.AskRawAction(it.kind, it.ref, it.title, it.date, it.time, it.hours, it.minutes) })
+        } else {
+            AskReply.Unavailable(r.state, r.reason)
         }
     }
 

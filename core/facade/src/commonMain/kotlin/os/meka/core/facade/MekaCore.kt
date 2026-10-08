@@ -24,6 +24,14 @@ import kotlinx.datetime.offsetAt
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import os.meka.core.domain.CalendarAgenda
+import os.meka.core.policy.ActionRequest
+import os.meka.core.policy.ActionType
+import os.meka.core.policy.AutonomyLevel
+import os.meka.core.policy.PolicyConfig
+import os.meka.core.policy.PolicyDecision
+import os.meka.core.policy.PolicyDomain
+import os.meka.core.policy.PolicyEngine
+import os.meka.core.policy.Provenance
 import os.meka.core.domain.CalendarEvents
 import os.meka.core.domain.CalendarView
 import os.meka.core.domain.CivilDate
@@ -152,6 +160,7 @@ class MekaCore(
     private var releasesApi: ReleasesApi? = transport as? ReleasesApi
     private var pushApi: PushApi? = transport as? PushApi
     private var newsImagesApi: NewsImagesApi? = transport as? NewsImagesApi
+    private var aiApi: AiApi? = transport as? AiApi
 
     // Declared before Today: Today's timeline reads the booked sessions.
     private val _sessions = MutableStateFlow(os.meka.core.domain.SessionsView.EMPTY)
@@ -1015,7 +1024,7 @@ class MekaCore(
     suspend fun connect(transport: SyncTransport) = withContext(confined) {
         syncMutex.withLock { 
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
-            pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi
+            pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
         }
         startSync()
     }
@@ -1159,6 +1168,84 @@ class MekaCore(
     /** [newsImage] as base64, for the Mac (Swift turns it into `Data` without copying byte by byte). */
     suspend fun newsImageBase64(key: String): String? =
         newsImage(key)?.let { kotlin.io.encoding.Base64.encode(it) }
+
+    // ---- Ask MEKA (build plan V1, AI layer slice 3; ADR-006) ----
+
+    /**
+     * Asks MEKA [question] with a short picture of today ([os.meka.core.domain.AskRules.context]: tasks by handles
+     * that stay on this device, no ids or notes). The server asks its small model once, with no tools; what comes back
+     * is words and at most three cards, each checked here ([os.meka.core.domain.AskRules.card]) and by the policy
+     * engine as a suggestion. A card does nothing until Meka taps it ([doAsk]). Never throws for a missing answer:
+     * AI off, the month's budget spent, offline and failures come back as [os.meka.core.domain.AskOutcome.Unavailable].
+     */
+    suspend fun askMeka(question: String): os.meka.core.domain.AskOutcome {
+        val q = os.meka.core.domain.AskRules.question(question)
+            ?: return os.meka.core.domain.AskOutcome.Unavailable("Ask something first")
+        val api = aiApi ?: return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
+        val cal = ZoneCalendar(timeZone)
+        val context = onCore { os.meka.core.domain.AskRules.context(_today.value, nowMs(), cal) }
+        val reply = try { api.ask(q, context) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
+        }
+        return when (reply) {
+            is AskReply.Unavailable -> os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
+            is AskReply.Answered -> onCore {
+                val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
+                val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal)
+                os.meka.core.domain.AskOutcome.Answered(answer.copy(cards = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }))
+            }
+        }
+    }
+
+    /**
+     * Does what an Ask card proposes, on Meka's tap (his own action, like any button): adds, ticks off or moves a task,
+     * starts a fast, or sets a timer or alarm exactly as typing it would. Returns the undo bar's line. Throws
+     * [os.meka.core.domain.ValidationException] when it can't be done any more (the task is gone, already fasting).
+     */
+    suspend fun doAsk(card: os.meka.core.domain.AskCard): String = onCore {
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(nowMs())
+        when (val p = card.proposal) {
+            is os.meka.core.domain.AskProposal.AddTask -> {
+                val id = tasks.create(NewTask(p.title))
+                p.day?.let { d -> tasks.setWhen(id, d, p.minute); followBlocks(listOf(id)) }
+            }
+            is os.meka.core.domain.AskProposal.CompleteTask -> {
+                if (tasks.get(p.taskId)?.lifecycle?.isTerminal != false) throw os.meka.core.domain.ValidationException("That task isn't open any more")
+                tasks.complete(p.taskId)
+            }
+            is os.meka.core.domain.AskProposal.MoveTask -> {
+                if (tasks.get(p.taskId)?.lifecycle?.isTerminal != false) throw os.meka.core.domain.ValidationException("That task isn't open any more")
+                tasks.setWhen(p.taskId, p.day, p.minute); followBlocks(listOf(p.taskId))
+            }
+            is os.meka.core.domain.AskProposal.StartFast -> fasting.startExtended(p.hours, 0)
+            is os.meka.core.domain.AskProposal.Timer, is os.meka.core.domain.AskProposal.Alarm -> {
+                val q = os.meka.core.domain.QuickAlarmRules.parse(os.meka.core.domain.AskRules.captureLine(p), nowMs(), cal)
+                    ?: throw os.meka.core.domain.ValidationException("That can't be set")
+                alarms.setQuick(q) ?: throw os.meka.core.domain.ValidationException("That can't be set")
+            }
+        }
+        os.meka.core.domain.AskRules.doneLine(card.proposal, today)
+    }
+
+    /** ADR-006: a model's proposal is a suggestion the policy engine must allow; it can never run without a tap. */
+    private fun askAllowed(p: os.meka.core.domain.AskProposal, untrusted: Boolean): Boolean {
+        val (type, domain) = when (p) {
+            is os.meka.core.domain.AskProposal.AddTask -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+            is os.meka.core.domain.AskProposal.CompleteTask, is os.meka.core.domain.AskProposal.MoveTask -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
+            is os.meka.core.domain.AskProposal.StartFast -> ActionType.CREATE_TASK to PolicyDomain.HEALTH
+            is os.meka.core.domain.AskProposal.Timer, is os.meka.core.domain.AskProposal.Alarm -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+        }
+        val decision = PolicyEngine(PolicyConfig()).decide(
+            ActionRequest(
+                type, domain,
+                provenance = if (untrusted) Provenance.MODEL_FROM_UNTRUSTED else Provenance.MODEL_FROM_TRUSTED,
+                reversible = true,
+                requestedLevel = AutonomyLevel.SUGGEST,
+            ),
+        )
+        return decision !is PolicyDecision.Deny && decision !is PolicyDecision.Permit
+    }
 
     // ---- Self-updating phone app (build plan M1) ----
 
