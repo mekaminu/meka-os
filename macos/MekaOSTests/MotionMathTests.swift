@@ -134,4 +134,39 @@ final class MotionMathTests: XCTestCase {
         XCTAssertEqual(MotionMath.tickDraw(wasDone: false, done: true, reduced: true), .done)
         XCTAssertEqual(MotionMath.tickDraw(wasDone: true, done: false, reduced: true), .rest)
     }
+
+    @MainActor
+    func testTheDayRingDrawsItsMarkThenTheArcsAndNeedleThenCountsUp() {
+        let full = DayRingPlayback.full
+        XCTAssertEqual(MotionMath.dayRingMark(elapsed: 0, play: full), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingMark(elapsed: 0.3, play: full), 0.875, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingMark(elapsed: 0.6, play: full), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingArc(elapsed: 0.3, index: 0, play: full, expressive: true), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingArc(elapsed: 0.66, index: 0, play: full, expressive: true), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingArc(elapsed: 0.36, index: 1, play: full, expressive: true), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingArc(elapsed: 0.72, index: 1, play: full, expressive: true), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingArc(elapsed: 0.34, index: 1, play: full, expressive: false), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingNeedle(elapsed: 0.3, play: full), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingNeedle(elapsed: 1.02, play: full), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingCount(elapsed: 0.6, play: full, expressive: true), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingCount(elapsed: 1.5, play: full, expressive: true), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingCount(elapsed: 1.3, play: full, expressive: false), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingTotal(arcs: 3, play: full, expressive: true), 1.5, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingTotal(arcs: 3, play: full, expressive: false), 1.3, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingTotal(arcs: 20, play: full, expressive: true), 1.5, accuracy: 1e-9)
+    }
+
+    @MainActor
+    func testLaterOpensPlayTheDayRingQuicklyAndOffDrawsItAtOnce() {
+        XCTAssertEqual(MotionMath.dayRingMark(elapsed: 0, play: .quick), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingArc(elapsed: 0.15, index: 5, play: .quick, expressive: true), 0.875, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingNeedle(elapsed: 0.15, play: .quick), 0.875, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingCount(elapsed: 0.15, play: .quick, expressive: true), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingTotal(arcs: 9, play: .quick, expressive: true), 0.3, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingMark(elapsed: 0, play: .still), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingArc(elapsed: 0, index: 3, play: .still, expressive: true), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingNeedle(elapsed: 0, play: .still), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingCount(elapsed: 0, play: .still, expressive: true), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingTotal(arcs: 3, play: .still, expressive: true), 0, accuracy: 1e-9)
+    }
 }

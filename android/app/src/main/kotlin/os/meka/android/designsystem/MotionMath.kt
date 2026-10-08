@@ -1,5 +1,6 @@
 package os.meka.android.designsystem
 
+import os.meka.core.domain.DayRingPlay
 import kotlin.math.roundToInt
 
 /**
@@ -149,6 +150,55 @@ object MotionMath {
 
     /** How strongly the ring's glow shows at [breath]: never gone, so it reads as resting, not blinking. */
     fun breathGlow(breath: Float): Float = BREATH_MIN_GLOW + (1f - BREATH_MIN_GLOW) * breath.coerceIn(0f, 1f)
+
+    /**
+     * The opening moment's Day ring (motion pass 2, slice 7; catalogue "Opening moment"). [DayRingPlay.FULL] (the
+     * first open of the day): the brass mark (the ring's track) draws round over [MekaChoreography.dayRingMarkMs];
+     * halfway through, the arcs grow in one after another (the stagger apart, each over `dayRingArc`) and the now
+     * needle sweeps from midnight to now (`dayRingNeedle`); once the mark has closed the centre counts up
+     * ([countUpMs]). [DayRingPlay.QUICK]: everything within `dayRingQuick`. [DayRingPlay.STILL] (Off): drawn at once.
+     * Each returns 0 → 1 for [elapsedMs] since Today appeared.
+     */
+    fun dayRingMark(elapsedMs: Long, play: DayRingPlay): Float = when (play) {
+        DayRingPlay.STILL -> 1f
+        DayRingPlay.QUICK -> 1f
+        DayRingPlay.FULL -> easeOutCubic(elapsedMs.toFloat() / MekaChoreography.dayRingMarkMs)
+    }
+
+    /** How far arc [index] (clockwise order) has grown from its start. */
+    fun dayRingArc(elapsedMs: Long, index: Int, play: DayRingPlay, expressive: Boolean): Float = when (play) {
+        DayRingPlay.STILL -> 1f
+        DayRingPlay.QUICK -> easeOutCubic(elapsedMs.toFloat() / MekaChoreography.dayRingQuickMs)
+        DayRingPlay.FULL -> {
+            val begin = MekaChoreography.dayRingMarkMs / 2 + staggerDelayMs(index, false, expressive)
+            easeOutCubic((elapsedMs - begin).toFloat() / MekaChoreography.dayRingArcMs)
+        }
+    }
+
+    /** How far the now needle has swept from midnight (the top) towards now. */
+    fun dayRingNeedle(elapsedMs: Long, play: DayRingPlay): Float = when (play) {
+        DayRingPlay.STILL -> 1f
+        DayRingPlay.QUICK -> easeOutCubic(elapsedMs.toFloat() / MekaChoreography.dayRingQuickMs)
+        DayRingPlay.FULL -> easeOutCubic((elapsedMs - MekaChoreography.dayRingMarkMs / 2).toFloat() / MekaChoreography.dayRingNeedleMs)
+    }
+
+    /** The centre's count-up fraction (linear; [countUpValue] eases it). */
+    fun dayRingCount(elapsedMs: Long, play: DayRingPlay, expressive: Boolean): Float = when (play) {
+        DayRingPlay.STILL -> 1f
+        DayRingPlay.QUICK -> (elapsedMs.toFloat() / MekaChoreography.dayRingQuickMs).coerceIn(0f, 1f)
+        DayRingPlay.FULL -> ((elapsedMs - MekaChoreography.dayRingMarkMs).toFloat() / countUpMs(expressive)).coerceIn(0f, 1f)
+    }
+
+    /** When the whole opening has landed for a ring of [arcs] arcs, so the frame clock can stop. */
+    fun dayRingTotalMs(arcs: Int, play: DayRingPlay, expressive: Boolean): Long = when (play) {
+        DayRingPlay.STILL -> 0L
+        DayRingPlay.QUICK -> MekaChoreography.dayRingQuickMs.toLong()
+        DayRingPlay.FULL -> maxOf(
+            MekaChoreography.dayRingMarkMs / 2 + staggerSpanMs(arcs, false, expressive) + MekaChoreography.dayRingArcMs,
+            MekaChoreography.dayRingMarkMs / 2 + MekaChoreography.dayRingNeedleMs,
+            MekaChoreography.dayRingMarkMs + countUpMs(expressive),
+        ).toLong()
+    }
 
     /** The breathing ring's smallest size and faintest glow. */
     const val BREATH_MIN_SCALE = 0.92f

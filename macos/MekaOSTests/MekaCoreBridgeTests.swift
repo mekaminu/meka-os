@@ -311,5 +311,20 @@ final class MekaCoreBridgeTests: XCTestCase {
         try await core.undoSession(id: id)
         XCTAssertEqual(core.goalsView.value.habits.first { $0.id == id }?.doneToday, false)
     }
-}
 
+    /// The opening moment's Day ring (motion pass 2, slice 7): the core's ring reaches Swift with its words and play rule.
+    func testDayRingReachesSwift() {
+        XCTAssertEqual(DayRingRules.shared.line(freeMinutes: 225, toDo: 4, nowMinute: 600), "3 h 45 free · 4 to do")
+        XCTAssertEqual(DayRingRules.shared.freeLine(freeMinutes: 0, nowMinute: 1330), "Evening")
+        XCTAssertEqual(DayRingRules.shared.toDoLine(toDo: 0), "Nothing to do")
+        XCTAssertEqual(DayRingRules.shared.play(lastFullEpochDay: nil, todayEpochDay: 100, reduced: false), DayRingPlay.full)
+        XCTAssertEqual(DayRingRules.shared.play(lastFullEpochDay: KotlinLong(longLong: 100), todayEpochDay: 100, reduced: false), DayRingPlay.quick)
+        XCTAssertEqual(DayRingRules.shared.play(lastFullEpochDay: nil, todayEpochDay: 100, reduced: true), DayRingPlay.still)
+        let arc = DayArc(id: "e-x", kind: .event, startMinute: 600, endMinute: 660, past: false)
+        XCTAssertEqual(arc.startDegrees, 150, accuracy: 1e-4)
+        XCTAssertEqual(arc.sweepDegrees, 15, accuracy: 1e-4)
+        let ring = DayRing(arcs: [arc], nowMinute: 630, freeMinutes: 225, toDo: 4)
+        XCTAssertEqual(ring.line, "3 h 45 free · 4 to do")
+        XCTAssertEqual(ring.spokenLine, "Your day: 1 thing booked. Now 10:30. 3 h 45 free · 4 to do.")
+    }
+}

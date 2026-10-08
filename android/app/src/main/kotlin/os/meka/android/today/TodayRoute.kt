@@ -135,6 +135,7 @@ import os.meka.core.domain.GoalsView
 import kotlinx.coroutines.flow.StateFlow
 import os.meka.core.sync.SyncStatus
 import java.time.Instant
+import os.meka.core.domain.DayRingPlay
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -207,6 +208,14 @@ fun TodayRoute(
         }
     }
 
+    // The opening moment's Day ring: decided once per launch (in full the first time today on this phone, quickly
+    // after, at once with Motion → Off); once it has landed it stays still, so scrolling it away doesn't replay it.
+    val ringContext = LocalContext.current
+    val ringReduced = Meka.reducedMotion
+    var ringPlay by rememberSaveable {
+        mutableStateOf(DayRingOpen.claim(ringContext, LocalDate.now().toEpochDay(), ringReduced))
+    }
+
     val actions = todayActions(core, scope, { selectedId }) { selectedId = it }
     // Calendar actions: swipe an event right for a prep task, left to hide it from my day; an undo bar rises.
     val eventUndo = rememberEventUndo()
@@ -245,6 +254,7 @@ fun TodayRoute(
                 detailShare = if (twoPane) CommandCentreRules.sideShare(layout) else CommandCentreRules.SIDE_SHARE_TWO,
                 list = { m ->
                     TodayPane(today, sync, actions, m, connect, openPlan, !introPlayed, rowMotion,
+                        ringPlay = ringPlay, ringPlayed = { ringPlay = DayRingPlay.STILL },
                         listsNeedsYou = CommandCentreRules.todayListsNeedsYou(layout),
                         shutdown = shutdown, openShutdown = { showShutdown = true }, shutdownOpen = showShutdown,
                         openSearch = { showSearch = true },
@@ -396,6 +406,8 @@ private fun TodayPane(
     core: MekaCore? = null,
     openStory: (String) -> Unit = {},
     openMatch: (CalendarEvent) -> Unit = {},
+    ringPlay: DayRingPlay = DayRingPlay.STILL,
+    ringPlayed: () -> Unit = {},
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
@@ -445,6 +457,10 @@ private fun TodayPane(
                         NewsTickerStrip(core, ticker, tickerMode, Modifier.padding(top = MekaSpace.s), openStory = openStory, openMatch = openMatch)
                     }
                 }
+            }
+            // The opening moment (motion pass 2, slice 7): the Day ring under the greeting; not on the cover screen.
+            if (now == null && today.timeline.dateLabel.isNotEmpty()) item(key = "dayring") {
+                DayRingHero(today.dayRing, ringPlay, ringPlayed, Modifier.padding(bottom = MekaSpace.l))
             }
             // Motion pass 2: with the phone's animations off and nothing chosen in Appearance → Motion, a one-time card.
             motionCard?.let { card ->

@@ -124,6 +124,61 @@ enum MotionMath {
         return 1 - inv * inv * inv
     }
 
+    /// The opening moment's Day ring (motion pass 2, slice 7), number for number with the Fold. `.full` (the first open
+    /// of the day): the brass mark draws round over `dayRingMark`; halfway through, the arcs grow in one after another
+    /// (the stagger apart, each over `dayRingArc`) and the now needle sweeps from midnight to now (`dayRingNeedle`);
+    /// once the mark has closed the centre counts up. `.quick`: everything within `dayRingQuick`. `.still` (Off): at
+    /// once. Each returns 0 → 1 for `elapsed` seconds since Today appeared.
+    static func dayRingMark(elapsed: Double, play: DayRingPlayback) -> Double {
+        switch play {
+        case .still, .quick: 1
+        case .full: easeOutCubic(elapsed / MekaChoreography.dayRingMark)
+        }
+    }
+
+    /// How far arc `index` (clockwise order) has grown from its start.
+    static func dayRingArc(elapsed: Double, index: Int, play: DayRingPlayback, expressive: Bool) -> Double {
+        switch play {
+        case .still: 1
+        case .quick: easeOutCubic(elapsed / MekaChoreography.dayRingQuick)
+        case .full:
+            easeOutCubic((elapsed - MekaChoreography.dayRingMark / 2 - staggerDelay(index: index, reduced: false, expressive: expressive))
+                / MekaChoreography.dayRingArc)
+        }
+    }
+
+    /// How far the now needle has swept from midnight (the top) towards now.
+    static func dayRingNeedle(elapsed: Double, play: DayRingPlayback) -> Double {
+        switch play {
+        case .still: 1
+        case .quick: easeOutCubic(elapsed / MekaChoreography.dayRingQuick)
+        case .full: easeOutCubic((elapsed - MekaChoreography.dayRingMark / 2) / MekaChoreography.dayRingNeedle)
+        }
+    }
+
+    /// The centre's count-up fraction (linear; `countUpValue` eases it).
+    static func dayRingCount(elapsed: Double, play: DayRingPlayback, expressive: Bool) -> Double {
+        switch play {
+        case .still: 1
+        case .quick: min(max(elapsed / MekaChoreography.dayRingQuick, 0), 1)
+        case .full: min(max((elapsed - MekaChoreography.dayRingMark) / countUpDuration(expressive: expressive), 0), 1)
+        }
+    }
+
+    /// When the whole opening has landed for a ring of `arcs` arcs (seconds), so the timeline can pause.
+    static func dayRingTotal(arcs: Int, play: DayRingPlayback, expressive: Bool) -> Double {
+        switch play {
+        case .still: 0
+        case .quick: MekaChoreography.dayRingQuick
+        case .full:
+            max(
+                MekaChoreography.dayRingMark / 2 + staggerSpan(count: arcs, reduced: false, expressive: expressive) + MekaChoreography.dayRingArc,
+                MekaChoreography.dayRingMark / 2 + MekaChoreography.dayRingNeedle,
+                MekaChoreography.dayRingMark + countUpDuration(expressive: expressive)
+            )
+        }
+    }
+
     /// The number a count-up shows at `fraction` of the way from `from` to `to`. Lands exactly on `to`.
     static func countUpValue(from: Int, to: Int, fraction: Double) -> Int {
         if fraction >= 1 { return to }
@@ -133,6 +188,9 @@ enum MotionMath {
 
 /// What a staying tick does (`MotionMath.tickDraw`): at rest (an outline), draw the check in, or show it done at once.
 enum TickDraw: Equatable { case rest, draw, done }
+
+/// How the Day ring plays as Today opens (the core's `DayRingPlay`): in full, quickly, or drawn at once (Off).
+enum DayRingPlayback: Equatable { case full, quick, still }
 
 /// Fades an item up after `index × 40 ms` (Expressive: 60 ms apart, rising further and growing from 0.96). When `play`
 /// is false it is simply there. Motion → Off: cross-fade only.

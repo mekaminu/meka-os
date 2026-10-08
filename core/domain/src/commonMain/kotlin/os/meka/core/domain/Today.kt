@@ -17,6 +17,8 @@ data class Today(
      * time order (Up next's planned task included, Needs you not) with a now line and free gaps, finished events folded, and "Anytime today" for tasks with no time.
      */
     val timeline: DayTimeline = DayTimeline.EMPTY,
+    /** The Day ring at the top of Today (the opening moment): the day's arcs, the now needle, "3 h 45 free · 4 to do". */
+    val dayRing: DayRing = DayRing.EMPTY,
 ) {
     /** Timed events that have not ended yet: what's still ahead of you today. */
     fun upcomingEvents(nowMs: Long): List<CalendarEvent> = events.filter { !it.allDay && it.endAtMs > nowMs }
@@ -110,6 +112,15 @@ object TodayProjection {
             calendar = calendar,
             sessions = sessions,
         )
-        return Today(needs, upNext, yourDay, doneToday, todaysEvents, timeline)
+        val ring = DayRingRules.build(
+            planned = (needs.map { it.task } + listOfNotNull(upNext) + yourDay).filter { it.scheduledAtMs != null },
+            events = todaysEvents,
+            sessions = sessions,
+            toDo = needs.size + (if (upNext != null) 1 else 0) + yourDay.size,
+            nowMs = nowMs,
+            today = today,
+            calendar = calendar,
+        )
+        return Today(needs, upNext, yourDay, doneToday, todaysEvents, timeline, ring)
     }
 }

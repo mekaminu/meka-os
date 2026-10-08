@@ -13,6 +13,8 @@ struct TodayView: View {
     /// "3 earlier" unfolds the finished events in place.
     @State private var earlierOpen = false
     @State private var allDayOpen = false
+    /// The Day ring's opening: in full the first time today on this Mac, quickly after, at once with Motion → Off.
+    @State private var ringPlay: DayRingPlayback?
     private var play: Bool { !introPlayed }
     private static let sections = 6 // greeting, needs you, up next, your day (header), your day (rows), done
 
@@ -81,6 +83,11 @@ struct TodayView: View {
                     if let line = model.syncLine {
                         Text(line).font(MekaType.caption).foregroundStyle(palette.offline)
                             .transition(.opacity)
+                    }
+                    // The opening moment (motion pass 2, slice 7): the Day ring under the header.
+                    if let today = model.today, !today.timeline.dateLabel.isEmpty {
+                        DayRingView(ring: today.dayRing, play: ringPlay ?? .still, played: { ringPlay = .still }, palette: palette)
+                            .padding(.top, MekaSpace.s)
                     }
                     Spacer().frame(height: MekaSpace.l)
 
@@ -218,6 +225,9 @@ struct TodayView: View {
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: earlierOpen)
                 .animation(MekaMotion.complete(reduced: reduceMotion), value: allDayOpen)
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.timeline.allDayItems.map(\.event.id))
+            }
+            .onAppear {
+                if ringPlay == nil { ringPlay = DayRingOpen.claim(reduced: reduceMotion) }
             }
             .task {
                 guard !introPlayed else { return }

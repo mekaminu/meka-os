@@ -139,5 +139,9 @@ object MekaChoreography {
     const val syncSpinPeriodMs = 900
     const val sheetScrimOpacity = 0.5f
     const val checkDrawMs = 420
+    const val dayRingMarkMs = 600
+    const val dayRingArcMs = 360
+    const val dayRingNeedleMs = 720
+    const val dayRingQuickMs = 300
     const val emptyBreathPeriodMs = 4200
 }
