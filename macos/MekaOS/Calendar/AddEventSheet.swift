@@ -11,6 +11,10 @@ import SwiftUI
 /// own account: Save sends only what changed, the When rows are left out when its time can't change, notes only where
 /// MEKA can write them, and "Delete from Google" sits quietly under Save; Cancel goes back to the detail.
 ///
+/// Natural typing (slice 2d-ii): when adding, the title's trailing when-words ("Dentist Fri 3pm") fill the day, the
+/// start, a length or all day as Meka types; "Saves as “Dentist”" fades in under the summary with "Keep “Fri 3pm” in
+/// the title" for when the words were meant literally.
+///
 /// Motion (catalogue "Add event"): the system sheet scale-fades in; rows stagger in; chips blend their colour with a
 /// tick haptic; the digits cross-fade; Add gives a light haptic and the sheet drops away as the undo bar rises.
 /// Reduce Motion: cross-fades.
@@ -65,13 +69,27 @@ struct AddEventSheet: View {
             .staggeredAppear(0)
 
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            field("Title", text: Binding(get: { f.title }, set: { set(form?.withTitle(text: $0)) }))
+            field("Title", text: Binding(get: { f.title }, set: { text in
+                set(editing == nil ? form?.typeTitle(text: text) : form?.withTitle(text: text))
+            }))
                 .font(MekaType.itemTitle)
                 .focused($titleFocused)
             Text(v.summary).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+            if let line = v.typedLine {
+                HStack(spacing: MekaSpace.s) {
+                    Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                        .contentTransition(.opacity)
+                    if let keep = v.keepWordsLabel {
+                        Button(keep) { MekaHaptics.tick(); set(form?.keepTypedWords()) }
+                            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+                    }
+                }
+                .transition(.opacity)
+            }
         }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.typedLine)
         .padding(.top, MekaSpace.m)
         .staggeredAppear(1)
 

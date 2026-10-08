@@ -2,9 +2,12 @@ package os.meka.android.calendar
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -74,6 +77,10 @@ import os.meka.core.facade.MekaCore
  * change, notes only where MEKA can write them, and "Delete from Google" sits quietly under Save. Both raise the undo
  * bar for five seconds before anything is sent.
  *
+ * Natural typing (slice 2d-ii): when adding, the title's trailing when-words ("Dentist Fri 3pm") fill the day, the
+ * start, a length or all day as Meka types (the chips blend and the digits cross-fade as usual); "Saves as “Dentist”"
+ * unfolds under the summary with "Keep “Fri 3pm” in the title" for when the words were meant literally.
+ *
  * Motion (catalogue "Add event"): the pane springs up from the bottom; rows stagger in 40 ms apart; chips blend their
  * colour with a tick haptic; ‹ › tick and the digits cross-fade; Add gives a light haptic, the pane drops away and the
  * undo bar rises. Reduced motion: cross-fades.
@@ -125,10 +132,33 @@ fun AddEventPane(
         )
         Column(Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(1))) {
             FormField(
-                f.title, "Title", { set(f.withTitle(it)) }, singleLine = true,
+                f.title, "Title", { set(if (editing != null) f.withTitle(it) else f.typeTitle(it)) }, singleLine = true,
                 style = MekaType.itemTitle, modifier = Modifier.focusRequester(focus),
             )
             FadeLine(v.summary) { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs)) }
+            val reduced = Meka.reducedMotion
+            AnimatedVisibility(
+                v.typedLine != null,
+                enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+                exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+            ) {
+                // Held while it folds away, so the words don't vanish before the row does.
+                var shown by remember { mutableStateOf(v.typedLine to v.keepWordsLabel) }
+                if (v.typedLine != null) shown = v.typedLine to v.keepWordsLabel
+                Row(Modifier.padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f, fill = false)) {
+                        FadeLine(shown.first.orEmpty()) { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1) }
+                    }
+                    shown.second?.let { keep ->
+                        Text(
+                            keep, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
+                            modifier = Modifier.padding(start = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) { haptics.tick(); set(f.keepTypedWords()) }
+                                .padding(vertical = MekaSpace.xxs),
+                        )
+                    }
+                }
+            }
         }
 
         Label("When", Modifier.appear(rememberAppearance(2)))

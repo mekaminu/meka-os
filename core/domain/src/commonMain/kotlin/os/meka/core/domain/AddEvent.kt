@@ -37,12 +37,37 @@ data class AddEventForm(
     val notes: String,
     val today: Long,
     val nowMinute: Int,
+    /** Slice 2d-ii: the when-words read from the end of the title ("Fri 3pm"), taken out when it's saved. */
+    val typed: TypedWhen? = null,
+    /** Meka chose "Keep … in the title": nothing more is read until the title is cleared. */
+    val keepWords: Boolean = false,
 ) {
     val isAllDay: Boolean get() = minute == null
     /** For Swift: the start, or -1 for all day. */
     val minuteOrNone: Int get() = minute ?: -1
 
-    fun withTitle(text: String): AddEventForm = copy(title = text.take(CalendarEditRules.MAX_TITLE))
+    fun withTitle(text: String): AddEventForm = copy(title = text.take(CalendarEditRules.MAX_TITLE), typed = null)
+
+    /**
+     * Adding (slice 2d-ii): the title as Meka types it, with its trailing when-words ("Dentist Fri 3pm") filling the
+     * day, the start, a length or all day ([EventTypingRules]). The same words typed again (an edit earlier in the
+     * title) leave any choice made since alone; new words fill the fields afresh; words that stop reading as a time
+     * leave the fields as they are and the title whole.
+     */
+    fun typeTitle(text: String): AddEventForm {
+        val t = text.take(CalendarEditRules.MAX_TITLE)
+        if (t.isBlank()) return copy(title = t, typed = null, keepWords = false)
+        if (keepWords) return copy(title = t, typed = null)
+        val p = EventTypingRules.parse(t, today, nowMinute) ?: return copy(title = t, typed = null)
+        if (p.words.equals(typed?.words, ignoreCase = true)) return copy(title = t, typed = p)
+        return EventTypingRules.apply(copy(title = t, typed = p), p)
+    }
+
+    /** "Keep “Fri 3pm” in the title": the words stay in the title (the fields keep what they were set to). */
+    fun keepTypedWords(): AddEventForm = copy(typed = null, keepWords = true)
+
+    /** The title the event is saved with. */
+    val savedTitle: String get() = typed?.title ?: title
     fun withLocation(text: String): AddEventForm = copy(location = text.take(CalendarEditRules.MAX_LOCATION))
     fun withNotes(text: String): AddEventForm = copy(notes = text.take(CalendarEditRules.MAX_NOTES))
     fun withAccount(key: String): AddEventForm = copy(accountKey = key)
@@ -87,6 +112,10 @@ data class AddEventView(
     val notesEditable: Boolean = true,
     /** Editing an event: "Delete from Google" (a quiet line under Save); null when adding. */
     val deleteLabel: String? = null,
+    /** Natural typing (slice 2d-ii): "Saves as “Dentist”" while when-words are read from the title, else null. */
+    val typedLine: String? = null,
+    /** "Keep “Fri 3pm” in the title", beside [typedLine]. */
+    val keepWordsLabel: String? = null,
 )
 
 object AddEventRules {
@@ -139,7 +168,7 @@ object AddEventRules {
             s to s + form.lengthMin * MINUTE_MS
         }
         return CalendarEditRules.clean(
-            EventDraft(form.title, start, end, minute == null, form.location.ifBlank { null }, form.notes.ifBlank { null }),
+            EventDraft(form.savedTitle, start, end, minute == null, form.location.ifBlank { null }, form.notes.ifBlank { null }),
         )
     }
 
@@ -177,6 +206,8 @@ object AddEventRules {
             canAdd = account != null && draft.title.isNotBlank() && problem == null,
             addLabel = "Add to ${account?.let { CalendarEditRules.providerName(it.provider) } ?: "your calendar"}",
             notesNote = if (account?.provider == "microsoft") "Outlook keeps these notes; MEKA can't change them later" else null,
+            typedLine = form.typed?.let(EventTypingRules::titleLine),
+            keepWordsLabel = form.typed?.let(EventTypingRules::keepLabel),
         )
     }
 
