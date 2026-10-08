@@ -150,4 +150,12 @@ class NeedsYouStackTest {
         assertTrue(stack(dev = fold).isEmpty)
         assertTrue(stack(dev = mac).isEmpty)
     }
+
+    @Test
+    fun theEmptyStateSaysNothingNeedsYouAndWhatLandsHere() {
+        // Matches the home-screen widget's words, so the Fold says the same thing everywhere.
+        assertEquals(HomeWidgetRules.NOTHING_NEEDS_YOU, NeedsYouStackRules.EMPTY_LINE)
+        assertEquals("Approvals, replies and decisions land here.", NeedsYouStackRules.EMPTY_CAPTION)
+        assertFalse(NeedsYouStackRules.EMPTY_LINE.endsWith("."))
+    }
 }

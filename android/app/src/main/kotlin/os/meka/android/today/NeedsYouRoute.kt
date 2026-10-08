@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,6 +19,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.BreathingRing
 import os.meka.android.designsystem.Meka
@@ -137,8 +139,8 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
 }
 
 /**
- * The Needs you list: its title, the after-work card, then the stack (or "Nothing is waiting on you."). The tab shows
- * it with the big title; the command centre with a smaller heading that carries the count.
+ * The Needs you list: its title, the after-work card, then the stack (or "Nothing needs you" beside the breathing
+ * check ring). The tab shows it with the big title; the command centre with a smaller heading that carries the count.
  */
 @Composable
 internal fun NeedsYouColumn(
@@ -165,11 +167,20 @@ internal fun NeedsYouColumn(
         }
         if (cards.isEmpty()) {
             item(key = "clear") {
-                // Full screen: the brass ring breathes beside it (catalogue "Empty states"); the compact column stays quiet.
-                Row(Modifier.animateItem().appear(rememberAppearance(1, play)), verticalAlignment = Alignment.CenterVertically) {
-                    if (!compact) BreathingRing(Modifier.padding(end = MekaSpace.s))
-                    Text("Nothing is waiting on you.", style = if (compact) MekaType.itemMeta else MekaType.upNextTitle,
-                        color = Meka.colors.textSecondary)
+                // Full screen: the breathing check ring beside a light line and what lands here (catalogue "Empty
+                // states"; Fold review 2026-10-08, item 7); the compact column stays quiet, one line.
+                if (compact) {
+                    Text(NeedsYouStackRules.EMPTY_LINE, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                        modifier = Modifier.animateItem().appear(rememberAppearance(1, play)))
+                } else {
+                    Row(Modifier.animateItem().appear(rememberAppearance(1, play)).semantics(mergeDescendants = true) { },
+                        verticalAlignment = Alignment.CenterVertically) {
+                        BreathingRing(Modifier.padding(end = MekaSpace.m), check = true)
+                        Column {
+                            Text(NeedsYouStackRules.EMPTY_LINE, style = MekaType.body, color = Meka.colors.textPrimary)
+                            Text(NeedsYouStackRules.EMPTY_CAPTION, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                        }
+                    }
                 }
             }
         } else {

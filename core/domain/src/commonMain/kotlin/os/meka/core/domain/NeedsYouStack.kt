@@ -65,6 +65,13 @@ data class NeedsYouStack(val cards: List<DecisionCard>) {
 object NeedsYouStackRules {
     const val LISTS_ID = "lists"
 
+    /**
+     * The empty state (Fold review 2026-10-08, item 7): a light line beside the breathing check ring, not a bold grey
+     * sentence beside an empty circle (which read like an unticked task), and a caption saying what lands here.
+     */
+    const val EMPTY_LINE = "Nothing needs you"
+    const val EMPTY_CAPTION = "Approvals, replies and decisions land here."
+
     /** Today's Needs you (conflicts, overdue, due today unscheduled, in that order), then the lists card. */
     fun build(today: Today, listsDueLine: String?, nowMs: Long, calendar: LocalCalendar): NeedsYouStack {
         val todayDay = calendar.epochDayOf(nowMs)

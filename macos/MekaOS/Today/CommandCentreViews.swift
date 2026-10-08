@@ -57,7 +57,7 @@ struct CommandNeedsYouView: View {
                 SectionLabel(CommandCentreRules.shared.needsYouHeading(count: Int32(model.needsYouCards.count)), palette)
                     .staggeredAppear(0)
                 if model.needsYouCards.isEmpty {
-                    Text("Nothing is waiting on you.")
+                    Text(NeedsYouStackRules.shared.EMPTY_LINE)
                         .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                         .staggeredAppear(1)
                 } else {

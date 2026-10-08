@@ -124,12 +124,18 @@ struct NeedsYouView: View {
                         .padding(.bottom, MekaSpace.s)
                         .staggeredAppear(1)
                     if model.needsYouCards.isEmpty {
-                        // The brass ring breathes beside it (catalogue "Empty states"); Off: still.
-                        HStack(spacing: MekaSpace.s) {
-                            BreathingRingView(palette: palette)
-                            Text("Nothing is waiting on you.")
-                                .font(MekaType.upNextTitle).foregroundStyle(palette.textSecondary)
+                        // The breathing check ring beside a light line and what lands here (catalogue "Empty
+                        // states"; Fold review 2026-10-08, item 7); Off: still.
+                        HStack(spacing: MekaSpace.m) {
+                            BreathingRingView(palette: palette, check: true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(NeedsYouStackRules.shared.EMPTY_LINE)
+                                    .font(MekaType.body).foregroundStyle(palette.textPrimary)
+                                Text(NeedsYouStackRules.shared.EMPTY_CAPTION)
+                                    .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                            }
                         }
+                        .accessibilityElement(children: .combine)
                         .staggeredAppear(1)
                     } else {
                         NeedsYouStackView(palette: palette).staggeredAppear(1)

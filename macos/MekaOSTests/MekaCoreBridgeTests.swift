@@ -330,4 +330,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(ring.line, "3 h 45 free · 4 to do")
         XCTAssertEqual(ring.spokenLine, "Your day: 1 thing booked. Now 10:30. 3 h 45 free · 4 to do.")
     }
+
+    func testNeedsYouEmptyStateReachesSwift() {
+        XCTAssertEqual(NeedsYouStackRules.shared.EMPTY_LINE, "Nothing needs you")
+        XCTAssertEqual(NeedsYouStackRules.shared.EMPTY_CAPTION, "Approvals, replies and decisions land here.")
+    }
 }

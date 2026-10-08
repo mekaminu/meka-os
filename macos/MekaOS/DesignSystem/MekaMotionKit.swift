@@ -473,9 +473,12 @@ private struct CheckMark: Shape {
 /// The breathing ring beside an empty state (motion pass 2, slice 5; catalogue "Empty states"), like the Fold's
 /// `BreathingRing`: MEKA's brass ring with a soft glow, slowly breathing in and out (`MotionMath.breath`), so
 /// "You're clear." feels at rest rather than blank. Motion → Off: held still. Decorative: hidden from VoiceOver.
+/// `check` draws the completion check inside, so an empty Needs you reads as "all done" rather than an empty circle
+/// that looks like an unticked task (Fold review 2026-10-08, item 7).
 struct BreathingRingView: View {
     let palette: MekaPalette
     var size: CGFloat = 26
+    var check: Bool = false
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var began = Date()
 
@@ -486,6 +489,11 @@ struct BreathingRingView: View {
             ZStack {
                 Circle().fill(palette.accent.opacity(0.18 * glow))
                 Circle().strokeBorder(palette.accent.opacity(0.55 + 0.45 * glow), lineWidth: 1.5)
+                if check {
+                    CheckMark()
+                        .stroke(palette.accent.opacity(0.7 + 0.3 * glow),
+                                style: StrokeStyle(lineWidth: 1.75, lineCap: .round, lineJoin: .round))
+                }
             }
             .scaleEffect(MotionMath.breathScale(b))
         }
