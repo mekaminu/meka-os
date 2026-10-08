@@ -310,4 +310,101 @@ class SessionsTest {
         assertNull(NotifyRules.actionFromName("SNOOZE"))
         assertEquals("Didn't go", NotifyRules.actionLabel(NoticeAction.DIDNT_GO))
     }
+
+    // ---- Slice 2b-ii: Today's timeline and the "now" card ----
+
+    private fun todayWith(v: SessionsView, now: Long, events: List<CalendarEvent> = emptyList(), tasks: List<Task> = emptyList()): Today {
+        val day = DayWindow(at(mon, 0), at(mon + 1, 0), 0)
+        return TodayProjection.project(tasks, now, day, events, cal, v.todayBlocks(mon, now))
+    }
+
+    private fun task(id: String, scheduled: Long? = null) =
+        Task(id, id, null, Lifecycle.ACTIVE, null, scheduled, 20, 0, null, null, 0, null, false)
+
+    @Test
+    fun todaysSessionSitsInTheTimelineAndTakesItsTimeFromTheGaps() {
+        val h = listOf(gym(rotation = listOf("Push", "Pull", "Legs")))
+        val v = book(h, now = at(mon, 15))
+        val tl = todayWith(v, at(mon, 15), events = listOf(ev("call", at(mon, 19, 30), at(mon, 20)))).timeline
+        assertEquals(listOf("now", "gap-s-gym", "s-gym", "gap-e-call", "e-call"), tl.rows.map { it.id })
+        val row = tl.rows.single { it.kind == TimelineKind.SESSION }
+        assertEquals("17:45–18:45", row.time)
+        assertEquals("Gym · Push", row.title)
+        assertEquals("Leave by 17:30", row.detail)
+        assertEquals("gym", row.session?.habitId)
+        assertEquals("2 h 45 free", tl.rows.first { it.id == "gap-s-gym" }.title)
+        assertEquals("45 min free", tl.rows.first { it.id == "gap-e-call" }.title) // from 18:45, not 15:00
+        assertTrue(tl.hasEventsAhead)
+        // On now: marked running; once over (or answered) it leaves the timeline.
+        val on = todayWith(book(h, now = at(mon, 18)), at(mon, 18)).timeline.rows.single { it.kind == TimelineKind.SESSION }
+        assertTrue(on.running)
+        assertEquals("Now · until 18:45", on.detail)
+        val over = todayWith(book(h, now = at(mon, 19)), at(mon, 19))
+        assertTrue(over.timeline.rows.none { it.kind == TimelineKind.SESSION })
+        assertEquals(Today.CLEAR, over.clearLine)
+        val went = todayWith(book(listOf(gym(done = setOf(mon))), now = at(mon, 15)), at(mon, 15))
+        assertTrue(went.timeline.rows.isEmpty())
+        // A session ahead isn't "You're clear.".
+        assertNull(todayWith(v, at(mon, 15)).clearLine)
+    }
+
+    private fun nowCard(h: List<SessionHabit>, now: Long, events: List<CalendarEvent> = emptyList(), tasks: List<Task> = emptyList()): NowView {
+        val v = book(h, now = now, events = events)
+        return CoverNowRules.now(todayWith(v, now, events, tasks), now, cal, v.cards)
+    }
+
+    @Test
+    fun theNowCardTakesTheSessionLikeAnEvent() {
+        val h = listOf(gym(rotation = listOf("Push", "Pull", "Legs")))
+        // Starting soon: before the Up next task.
+        val soon = nowCard(h, at(mon, 17, 33), tasks = listOf(task("invoice")))
+        assertEquals(NowKind.SESSION, soon.kind)
+        assertEquals("In 12 min", soon.label)
+        assertTrue(soon.lit)
+        assertEquals("Gym · Push", soon.title)
+        assertEquals("17:45–18:45 · Leave by 17:30", soon.line)
+        assertTrue(soon.actions.isEmpty())
+        assertEquals("Then: invoice", soon.thenLine)
+        // Within the hour but the task comes first; "Then" names the session.
+        val task = nowCard(h, at(mon, 17), tasks = listOf(task("invoice")))
+        assertEquals(NowKind.TASK, task.kind)
+        assertEquals("Then: Gym · Push at 17:45", task.thenLine)
+        // No task: the session within the hour.
+        assertEquals("In 45 min", nowCard(h, at(mon, 17)).label)
+        // Just started, then on: Went and Didn't go (an early finish).
+        val on = nowCard(h, at(mon, 17, 50), tasks = listOf(task("invoice")))
+        assertEquals(NowKind.SESSION, on.kind)
+        assertEquals("Now · ends 18:45", on.label)
+        assertEquals(listOf(NowAction.WENT, NowAction.DIDNT_GO), on.actions)
+        assertEquals(NowKind.TASK, nowCard(h, at(mon, 18, 10), tasks = listOf(task("invoice"))).kind)
+        assertEquals(NowKind.SESSION, nowCard(h, at(mon, 18, 10)).kind)
+        // Over: "Did you go?" leads for an hour, lit; then waits behind the task, quiet, until answered.
+        val ask = nowCard(h, at(mon, 19), tasks = listOf(task("invoice")))
+        assertEquals("Did you go?", ask.label)
+        assertTrue(ask.lit)
+        assertEquals("17:45–18:45", ask.line)
+        assertEquals("gym", ask.session?.habitId)
+        assertEquals(NowKind.TASK, nowCard(h, at(mon, 20), tasks = listOf(task("invoice"))).kind)
+        val late = nowCard(h, at(mon, 20))
+        assertEquals("Did you go?", late.label)
+        assertTrue(!late.lit)
+        assertEquals(NowKind.CLEAR, nowCard(listOf(gym(done = setOf(mon))), at(mon, 20)).kind)
+    }
+
+    @Test
+    fun anEventBeforeTheSessionComesFirstAndTheWidgetCountsDownToEither() {
+        val h = listOf(gym())
+        // A call at 17:20 (inside work's buffer, so the session stays at 17:45): ten minutes before, the call leads.
+        val call = ev("call", at(mon, 17, 20), at(mon, 17, 30))
+        val first = nowCard(h, at(mon, 17, 10), events = listOf(call))
+        assertEquals(NowKind.EVENT_SOON, first.kind)
+        assertEquals("call", first.title)
+        val v = book(h, now = at(mon, 17, 35))
+        val today = todayWith(v, at(mon, 17, 35))
+        val now = CoverNowRules.now(today, at(mon, 17, 35), cal, v.cards)
+        val w = HomeWidgetRules.view(now, today, 0, NeedsYouStack.EMPTY, FastingView.EMPTY, at(mon, 17, 35), cal)
+        assertEquals(HomeWidgetRules.STARTS_IN, w.next.label)
+        assertEquals(at(mon, 17, 45), w.next.countdownToMs)
+        assertEquals(at(mon, 17, 45), w.nextChangeMs) // it starts
+    }
 }

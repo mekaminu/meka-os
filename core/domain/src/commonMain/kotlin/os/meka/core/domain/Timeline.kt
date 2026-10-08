@@ -1,27 +1,40 @@
 package os.meka.core.domain
 
 /** What a row of Today's timeline is. */
-enum class TimelineKind { EVENT, TASK, GAP, NOW }
+enum class TimelineKind {
+    EVENT, TASK, GAP, NOW,
+
+    /** A booked session (the Gym, [SessionRules]) still to come or on now; Today's session card answers it. */
+    SESSION,
+}
 
 /**
  * One row of Today's timeline (calendar redesign, slice 1). Events and planned tasks share one list in time order,
  * with a "now" line and the free gaps between things.
  */
 data class TimelineRow(
-    /** Stable across re-projections: "e-<event>", "t-<task>", "gap-<the row after it>" (stable while now moves), "now". */
+    /**
+     * Stable across re-projections: "e-<event>", "t-<task>", "s-<habit>" (a booked session), "gap-<the row after it>"
+     * (stable while now moves), "now".
+     */
     val id: String,
     val kind: TimelineKind,
     /** "09:30–10:00" · "Until 10:00" (started before today) · "14:00" (a planned task) · "11:00" (a gap) · "14:32" (now). */
     val time: String,
     /** The event or task title; "1 h 30 free" for a gap; "Now" for the now line. */
     val title: String,
-    /** "Camp Nou · Outlook" for an event; "30 min · 1/3 · ↻ Every weekday" for a task; null when there's nothing to say. */
+    /**
+     * "Camp Nou · Outlook" for an event; "30 min · 1/3 · ↻ Every weekday" for a task; "Leave by 17:30" or
+     * "Now · until 18:45" for a session; null when there's nothing to say.
+     */
     val detail: String?,
     val task: Task?,
     val event: CalendarEvent?,
     /** An event happening right now. */
     val running: Boolean,
     val startMs: Long,
+    /** The booked session, for a [TimelineKind.SESSION] row. */
+    val session: BookedSession? = null,
 )
 
 /** The next event within the hour, shown in Up next: "Call with Tunde in 25 min". */
@@ -71,8 +84,8 @@ data class DayTimeline(
     /** The group's label, shown once above its rows: "All day", or "All day · Timestripe" when they share a calendar. */
     val allDayLabel: String = AllDayRules.LABEL,
 ) {
-    /** Timed events still to come (or running) today. */
-    val hasEventsAhead: Boolean get() = rows.any { it.kind == TimelineKind.EVENT }
+    /** Timed events (or booked sessions) still to come or running today. */
+    val hasEventsAhead: Boolean get() = rows.any { it.kind == TimelineKind.EVENT || it.kind == TimelineKind.SESSION }
 
     /** Nothing timed, nothing all-day, nothing ended: the timeline section can be left out. */
     val hasTimedOrAllDay: Boolean get() = allDay.isNotEmpty() || earlier.isNotEmpty() || rows.isNotEmpty()
@@ -92,6 +105,9 @@ data class DayTimeline(
  * - From now on, a free stretch of at least [MIN_GAP_MIN] minutes between things shows as "1 h 30 free" (rounded down
  *   to 5 minutes so it doesn't tick every minute). A planned task with no estimate takes [DEFAULT_TASK_MIN] minutes.
  * - The next event starting within [UP_NEXT_WINDOW_MIN] minutes is offered to Up next.
+ * - Today's booked sessions still to come or on now (the Gym, [SessionRules]) sit in time order like events, "Gym · Push"
+ *   with "Leave by 17:30" (or "Now · until 18:45"), and take their time out of the free gaps. Once a session is over
+ *   (or answered) it leaves the timeline: Today's session card asks "Did you go?".
  */
 object TimelineRules {
     const val MIN_GAP_MIN = 30
@@ -106,12 +122,14 @@ object TimelineRules {
         nowMs: Long,
         today: DayWindow,
         calendar: LocalCalendar,
+        sessions: List<BookedSession> = emptyList(),
     ): DayTimeline {
         fun hhmm(ms: Long) = LocalClock.formatMinute(calendar.minuteOfDay(ms))
 
         val dayEvents = events.filter { it.overlaps(today) }
         val allDay = dayEvents.filter { it.allDay }.sortedBy { it.title }
 
+        /** [isEvent]: an event or session, which folds once ended, comes first at the same minute and takes time from gaps. */
         data class Item(val row: TimelineRow, val start: Long, val end: Long, val isEvent: Boolean)
         val items = buildList {
             dayEvents.filter { !it.allDay }.forEach { e ->
@@ -126,6 +144,15 @@ object TimelineRules {
                 val detail = taskDetail(t, today.epochDay)
                 val end = start + (t.estimateMinutes ?: DEFAULT_TASK_MIN) * MIN_MS
                 add(Item(TimelineRow("t-" + t.id, TimelineKind.TASK, hhmm(start), t.title, detail, t, null, false, start), start, end, false))
+            }
+            sessions.filter { it.startMs in today && it.endMs > nowMs }.forEach { s ->
+                val running = s.startMs <= nowMs
+                val title = listOfNotNull(s.title, s.label).joinToString(" · ")
+                val detail = if (running) "Now · until ${hhmm(s.endMs)}"
+                else "Leave by ${hhmm(s.startMs - SessionRules.BUFFER_MIN * MIN_MS)}"
+                val row = TimelineRow("s-" + s.habitId, TimelineKind.SESSION, "${hhmm(s.startMs)}–${hhmm(s.endMs)}", title, detail,
+                    null, null, running, s.startMs, s)
+                add(Item(row, s.startMs, s.endMs, true))
             }
         }.sortedWith(compareBy<Item> { it.start }.thenBy { !it.isEvent }.thenBy { it.row.title })
 

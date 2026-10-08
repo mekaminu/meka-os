@@ -758,4 +758,32 @@ class MekaCoreTest {
         a.tick()
         assertEquals(null, a.answerSessionNotice(ask.key, os.meka.core.domain.NoticeAction.WENT))
     }
+
+    @Test
+    fun theSessionSitsInTodaysTimelineAndTheNowCardAsksDidYouGo() = runTest {
+        // Monday 21 Sep 2026, 15:13 in London; work until 17:30.
+        val a = core("android")
+        val id = a.addGym()
+        val row = a.today.value.timeline.rows.single { it.kind == os.meka.core.domain.TimelineKind.SESSION }
+        assertEquals("s-$id", row.id)
+        assertEquals("17:45–18:45", row.time)
+        assertEquals("Gym", row.title)
+        assertEquals("Leave by 17:30", row.detail)
+        assertEquals(null, a.today.value.clearLine, "a session ahead isn't \"You're clear.\"")
+        now += 2 * 3_600_000L + 25 * 60_000L // 17:38: seven minutes to go
+        a.tick()
+        val soon = a.coverNow()
+        assertEquals(os.meka.core.domain.NowKind.SESSION, soon.kind)
+        assertEquals("In 7 min", soon.label)
+        assertEquals("17:45–18:45 · Leave by 17:30", soon.line)
+        assertEquals(os.meka.core.domain.HomeWidgetRules.STARTS_IN, a.homeWidgets().next.label)
+        now += 95 * 60_000L // 19:13: over, so it leaves the timeline and the card asks
+        a.tick()
+        assertTrue(a.today.value.timeline.rows.none { it.kind == os.meka.core.domain.TimelineKind.SESSION })
+        val ask = a.coverNow()
+        assertEquals("Did you go?", ask.label)
+        assertEquals(listOf(os.meka.core.domain.NowAction.WENT, os.meka.core.domain.NowAction.DIDNT_GO), ask.actions)
+        a.sessionWent(ask.session!!.habitId, null)
+        assertEquals(os.meka.core.domain.NowKind.CLEAR, a.coverNow().kind)
+    }
 }

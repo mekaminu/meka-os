@@ -11,6 +11,9 @@ enum class NowKind {
     /** Today's Up next task. */
     TASK,
 
+    /** A booked session (the Gym): starting soon, on now, or over and asking "Did you go?". */
+    SESSION,
+
     /** Nothing up next and nothing on in the hour. */
     CLEAR,
 }
@@ -34,6 +37,12 @@ enum class NowAction {
 
     /** Opens the task's detail. */
     OPEN_TASK,
+
+    /** Answers a booked session "Went" ([NowView.session]), as from Today's session card. */
+    WENT,
+
+    /** Answers a booked session "Didn't go": it's rebooked, never nagged. */
+    DIDNT_GO,
 }
 
 /**
@@ -62,6 +71,8 @@ data class NowView(
     val thenTask: Task?,
     /** "3 need you" · "1 needs you"; null when nothing does. Opens the Needs you tab. */
     val needsYouLine: String?,
+    /** The booked session, for [NowKind.SESSION]: [NowAction.WENT] and [NowAction.DIDNT_GO] answer it. */
+    val session: SessionCard? = null,
 ) {
     /** For Swift: whether an action is offered. */
     fun offers(action: NowAction): Boolean = action in actions
@@ -70,27 +81,32 @@ data class NowView(
 /**
  * The "now" card's rules, non-AI and pure (nothing stored, read from Today).
  *
- * What it shows, first match wins:
- * 1. an event starting within [SOON_MIN] minutes (time to go or join): "In 12 min";
- * 2. an event that started within the last [JUST_STARTED_MIN] minutes (you may be late): "Now · ends 15:30";
- * 3. the Up next task: "Up next";
- * 4. the next event within the hour (Today's Up next event): "In 40 min";
- * 5. an event still running: "Now · ends 17:00" (the latest to start, when two overlap);
- * 6. clear: "You're clear" · "Nothing else planned today".
+ * What it shows, first match wins (a booked session, the Gym, counts like an event: whichever starts first):
+ * 1. an event or session starting within [SOON_MIN] minutes (time to go or join): "In 12 min";
+ * 2. an event or session that started within the last [JUST_STARTED_MIN] minutes (you may be late): "Now · ends 15:30";
+ * 3. a session that ended within [ASK_FRESH_MIN] minutes and isn't answered: "Did you go?" (Went · Didn't go);
+ * 4. the Up next task: "Up next";
+ * 5. the next event or session within the hour (Today's Up next event): "In 40 min";
+ * 6. an event still running: "Now · ends 17:00" (the latest to start, when two overlap), else a session on now;
+ * 7. a session still asking "Did you go?" (until it's answered or the day ends), not lit;
+ * 8. clear: "You're clear" · "Nothing else planned today".
  *
  * Actions: an event offers Join (its call link) or else Maps (its place), then Open; a task offers Done, Tomorrow and
- * Open. "Then" names the other of the Up next task and the next event, so the second thing is never lost.
+ * Open; a session on now or over offers Went and Didn't go (one booked for later has nothing to tap yet). "Then" names
+ * the other of the Up next task and the next event (or session), so the second thing is never lost.
  * Hidden events never show: Today's timeline already leaves them out.
  */
 object CoverNowRules {
     const val SOON_MIN = 15
     const val JUST_STARTED_MIN = 10
+    /** A session's "Did you go?" leads the card for this long after it ends; then it waits behind the task. */
+    const val ASK_FRESH_MIN = 60
     const val MAX_ACTIONS = 3
     const val CLEAR_LABEL = "You're clear"
     const val NOTHING = "Nothing else planned today"
     private const val MIN_MS = 60_000L
 
-    fun now(today: Today, nowMs: Long, cal: LocalCalendar): NowView {
+    fun now(today: Today, nowMs: Long, cal: LocalCalendar, sessions: List<SessionCard> = emptyList()): NowView {
         fun hhmm(ms: Long) = LocalClock.formatMinute(cal.minuteOfDay(ms))
         val tl = today.timeline
         val nextEvent = tl.nextEvent
@@ -99,14 +115,58 @@ object CoverNowRules {
         val task = today.upNext
         val needs = today.needsYou.size.takeIf { it > 0 }?.let { if (it == 1) "1 needs you" else "$it need you" }
 
+        val timed = sessions.filter { it.startMs != null && it.endMs != null }
+        val sessionNext = timed.filter { it.status == SessionStatus.BOOKED && it.startMs!! - nowMs <= TimelineRules.UP_NEXT_WINDOW_MIN * MIN_MS }
+            .minByOrNull { it.startMs!! }
+        val sessionOn = timed.filter { it.status == SessionStatus.NOW }.minByOrNull { it.startMs!! }
+        val sessionAsk = timed.filter { it.status == SessionStatus.ASK }.maxByOrNull { it.endMs!! }
+        /** The session starts before the next event (or there's none within the hour). */
+        val sessionFirst = sessionNext != null && (nextEvent == null || sessionNext.startMs!! < nextEvent.event.startAtMs)
+
         val justStarted = running?.takeIf { nowMs - it.startAtMs <= JUST_STARTED_MIN * MIN_MS }
+        val sessionJustStarted = sessionOn?.takeIf { nowMs - it.startMs!! <= JUST_STARTED_MIN * MIN_MS }
+        val soonMs = SOON_MIN * MIN_MS
+        val session: SessionCard? = when {
+            sessionFirst && sessionNext!!.startMs!! - nowMs <= soonMs -> sessionNext
+            nextEvent != null && nextEvent.minutes <= SOON_MIN -> null
+            justStarted != null -> null
+            sessionJustStarted != null -> sessionJustStarted
+            sessionAsk != null && nowMs - sessionAsk.endMs!! <= ASK_FRESH_MIN * MIN_MS -> sessionAsk
+            task != null -> null
+            sessionFirst -> sessionNext
+            nextEvent != null -> null
+            running != null -> null
+            else -> sessionOn ?: sessionAsk
+        }
         val kind = when {
+            session != null -> NowKind.SESSION
             nextEvent != null && nextEvent.minutes <= SOON_MIN -> NowKind.EVENT_SOON
             justStarted != null -> NowKind.EVENT_RUNNING
             task != null -> NowKind.TASK
             nextEvent != null -> NowKind.EVENT_SOON
             running != null -> NowKind.EVENT_RUNNING
             else -> NowKind.CLEAR
+        }
+
+        fun sessionView(c: SessionCard): NowView {
+            val start = c.startMs!!
+            val end = c.endMs!!
+            val span = "${hhmm(start)}–${hhmm(end)}"
+            val (label, lit, line) = when (c.status) {
+                SessionStatus.BOOKED -> Triple(
+                    "In ${TimelineRules.inLabel(((start - nowMs + MIN_MS - 1) / MIN_MS).toInt().coerceAtLeast(1))}", true,
+                    "$span · Leave by ${hhmm(start - SessionRules.BUFFER_MIN * MIN_MS)}",
+                )
+                SessionStatus.NOW -> Triple("Now · ends ${hhmm(end)}", true, span)
+                else -> Triple("Did you go?", nowMs - end <= ASK_FRESH_MIN * MIN_MS, span)
+            }
+            return NowView(
+                kind = NowKind.SESSION, label = label, lit = lit, title = c.heading, line = line, event = null, task = null,
+                join = null, mapsQuery = null,
+                actions = if (c.asks) listOf(NowAction.WENT, NowAction.DIDNT_GO) else emptyList(),
+                thenLine = task?.let { "Then: ${it.title}" }, thenEvent = null, thenTask = task, needsYouLine = needs,
+                session = c,
+            )
         }
 
         fun eventView(e: CalendarEvent, label: String): NowView {
@@ -126,6 +186,7 @@ object CoverNowRules {
         }
 
         return when (kind) {
+            NowKind.SESSION -> sessionView(session!!)
             NowKind.EVENT_SOON -> eventView(nextEvent!!.event, "In ${TimelineRules.inLabel(nextEvent.minutes)}")
             NowKind.EVENT_RUNNING -> {
                 val e = justStarted ?: running!!
@@ -137,8 +198,9 @@ object CoverNowRules {
                 val line = if (row != null) listOfNotNull("At ${row.time}", row.detail).joinToString(" · ")
                 else listOfNotNull("Anytime today", t.repeatMeta(cal.epochDayOf(nowMs))?.let { "↻ $it" }).joinToString(" · ")
                 // The next event (within the hour) or, failing that, the next timed thing after the task.
-                val thenEvent = nextEvent?.event ?: running
+                val thenEvent = if (sessionFirst) null else nextEvent?.event ?: running
                 val thenLine = when {
+                    sessionFirst -> "Then: ${sessionNext!!.heading} at ${hhmm(sessionNext.startMs!!)}"
                     nextEvent != null -> "Then: ${nextEvent.event.title} at ${hhmm(nextEvent.event.startAtMs)}"
                     running != null -> "Then: ${running.title} until ${hhmm(running.endAtMs)}"
                     else -> null

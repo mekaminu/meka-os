@@ -48,12 +48,16 @@ internal class NowHandlers(
     val openEvent: (CalendarEvent) -> Unit,
     /** Null where Needs you is already listed alongside (the Fold's Today), so the line isn't shown. */
     val openNeedsYou: (() -> Unit)?,
+    /** A booked session's "Went" and "Didn't go" (by habit id), as from Today's session card. */
+    val went: (String) -> Unit = {},
+    val didntGo: (String) -> Unit = {},
 )
 
 /**
  * The "now" card (Fold modes, slice 3): on the closed Fold's cover screen it heads Today in place of Up next. One thing
- * (an event starting or just started, Up next, or clear) with its one-tap actions: Join or Maps and Open for an event;
- * Done, Tomorrow and Open for a task. Under it, "Then: …" and "3 need you ›".
+ * (an event or booked session starting or just started, a session asking "Did you go?", Up next, or clear) with its
+ * one-tap actions: Join or Maps and Open for an event; Done, Tomorrow and Open for a task; Went and Didn't go for a
+ * session on now or over. Under it, "Then: …" and "3 need you ›".
  *
  * Motion: when the thing changes, the content cross-slides like Up next (the old one out left, the new one in from the
  * right); chips press in (0.97) and give a light haptic; Done and Tomorrow let the card slide on to what's next.
@@ -66,7 +70,7 @@ internal fun NowCard(now: NowView, handlers: NowHandlers, modifier: Modifier = M
     Column(modifier.fillMaxWidth()) {
         AnimatedContent(
             targetState = now,
-            contentKey = { "${it.kind}:${it.task?.id ?: it.event?.id ?: ""}" },
+            contentKey = { "${it.kind}:${it.task?.id ?: it.event?.id ?: it.session?.habitId ?: ""}" },
             transitionSpec = {
                 if (reduced) fadeIn(MekaMotion.replan(true)) togetherWith fadeOut(MekaMotion.replan(true))
                 else (slideInHorizontally(MekaMotion.replan(false)) { it / 4 } + fadeIn(MekaMotion.appear(false))) togetherWith
@@ -136,13 +140,15 @@ private fun NowChip(a: NowAction, v: NowView, handlers: NowHandlers) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed && !reduced) 0.97f else 1f, MekaMotion.complete(reduced), label = "chipPress")
-    val primary = a == NowAction.JOIN || a == NowAction.DONE || (a == NowAction.MAPS && v.join == null)
+    val primary = a == NowAction.JOIN || a == NowAction.DONE || a == NowAction.WENT || (a == NowAction.MAPS && v.join == null)
     val label = when (a) {
         NowAction.JOIN -> v.join?.label ?: "Join"
         NowAction.MAPS -> "Directions"
         NowAction.OPEN_EVENT, NowAction.OPEN_TASK -> "Open"
         NowAction.DONE -> "Done"
         NowAction.TOMORROW -> "Tomorrow"
+        NowAction.WENT -> "Went"
+        NowAction.DIDNT_GO -> "Didn't go"
     }
     Text(
         label, style = MekaType.caption,
@@ -150,7 +156,7 @@ private fun NowChip(a: NowAction, v: NowView, handlers: NowHandlers) {
         modifier = Modifier.scale(scale).clip(RoundedCornerShape(MekaRadius.pill))
             .background(if (primary) Meka.colors.accent else Meka.colors.background)
             .clickable(interactionSource = source, indication = null, role = Role.Button) {
-                haptics.light()
+                if (a == NowAction.DIDNT_GO) haptics.tick() else haptics.light()
                 when (a) {
                     NowAction.JOIN -> v.join?.let { runCatching { uri.openUri(it.url) } }
                     NowAction.MAPS -> v.mapsQuery?.let { runCatching { uri.openUri("geo:0,0?q=" + Uri.encode(it)) } }
@@ -158,6 +164,8 @@ private fun NowChip(a: NowAction, v: NowView, handlers: NowHandlers) {
                     NowAction.DONE -> v.task?.let { handlers.complete(it.id) }
                     NowAction.TOMORROW -> v.task?.let { handlers.tomorrow(it.id) }
                     NowAction.OPEN_TASK -> v.task?.let { handlers.openTask(it.id) }
+                    NowAction.WENT -> v.session?.let { handlers.went(it.habitId) }
+                    NowAction.DIDNT_GO -> v.session?.let { handlers.didntGo(it.habitId) }
                 }
             }
             .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),

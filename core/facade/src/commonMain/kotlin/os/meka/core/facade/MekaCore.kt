@@ -139,6 +139,14 @@ class MekaCore(
     private var pushApi: PushApi? = transport as? PushApi
     private var newsImagesApi: NewsImagesApi? = transport as? NewsImagesApi
 
+    // Declared before Today: Today's timeline reads the booked sessions.
+    private val _sessions = MutableStateFlow(os.meka.core.domain.SessionsView.EMPTY)
+    /**
+     * The Gym (booked habits, [os.meka.core.domain.SessionRules]): the week's sessions booked around the calendar and
+     * work, and today's card ("Today 17:45–18:45", "Did you go?", "Rebooked for Thu 17:45"). Moves with the clock.
+     */
+    val sessionsView: StateFlow<os.meka.core.domain.SessionsView> = _sessions.asStateFlow()
+
     private val _today = MutableStateFlow(project())
     val today: StateFlow<Today> = _today.asStateFlow()
 
@@ -159,13 +167,6 @@ class MekaCore(
     private val _goals = MutableStateFlow(GoalsView.EMPTY)
     /** Habits (pace, streaks, this week) and goals (progress). Synced; moves with the clock. */
     val goalsView: StateFlow<GoalsView> = _goals.asStateFlow()
-
-    private val _sessions = MutableStateFlow(os.meka.core.domain.SessionsView.EMPTY)
-    /**
-     * The Gym (booked habits, [os.meka.core.domain.SessionRules]): the week's sessions booked around the calendar and
-     * work, and today's card ("Today 17:45–18:45", "Did you go?", "Rebooked for Thu 17:45"). Moves with the clock.
-     */
-    val sessionsView: StateFlow<os.meka.core.domain.SessionsView> = _sessions.asStateFlow()
 
     private val _fasting = MutableStateFlow(FastingView.EMPTY)
     /** The running fast, the eating window and the last seven days. Synced; moves with the clock. */
@@ -638,12 +639,12 @@ class MekaCore(
         )
 
     /**
-     * The "now" card (Fold modes, slice 3): the one thing that matters now (an event starting or just started, Up
-     * next, or clear) with its one-tap actions, for the closed Fold's cover screen and the Mac's menu bar. Pure and
+     * The "now" card (Fold modes, slice 3): the one thing that matters now (an event or booked session starting or just
+     * started, a session asking "Did you go?", Up next, or clear) with its one-tap actions, for the closed Fold's cover screen and the Mac's menu bar. Pure and
      * cheap, read from the current Today (which refreshes every minute). Nothing is stored.
      */
     fun coverNow(): os.meka.core.domain.NowView =
-        os.meka.core.domain.CoverNowRules.now(_today.value, nowMs(), ZoneCalendar(timeZone))
+        os.meka.core.domain.CoverNowRules.now(_today.value, nowMs(), ZoneCalendar(timeZone), _sessions.value.cards)
 
     /**
      * What runs outside the app (Outside the app, slice 1): the next event's countdown from 30 minutes before it and a
@@ -661,7 +662,7 @@ class MekaCore(
         val cal = ZoneCalendar(timeZone)
         val today = _today.value
         return os.meka.core.domain.HomeWidgetRules.view(
-            os.meka.core.domain.CoverNowRules.now(today, nowMs(), cal), today, _lists.value.dueCount,
+            os.meka.core.domain.CoverNowRules.now(today, nowMs(), cal, _sessions.value.cards), today, _lists.value.dueCount,
             _needsYouStack.value, _fasting.value, nowMs(), cal,
         )
     }
@@ -844,18 +845,19 @@ class MekaCore(
         _eventMarks.value = marks
         val allEvents = events.all()
         val dayEvents = marks.visible(allEvents)
-        _today.value = project(all, dayEvents)
-        _lists.value = lists.view(all, renewals.view())
-        _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(_today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone))
-        _fasting.value = fasting.view()
         val workState = work.state(localClock(), todayEpochDay())
         val holidays = bankHolidays.calendar()
         val cal = ZoneCalendar(timeZone)
+        // Sessions first: Today's timeline shows today's booked sessions still to come.
         val sessionHabits = goals.sessionHabits()
         _sessions.value = if (sessionHabits.isEmpty()) os.meka.core.domain.SessionsView.EMPTY
         else os.meka.core.domain.SessionRules.book(sessionHabits, todayEpochDay(), nowMs(), cal) { day ->
             os.meka.core.domain.SessionRules.busyOn(day, dayEvents, workState.schedule, holidays, cal)
         }
+        _today.value = project(all, dayEvents)
+        _lists.value = lists.view(all, renewals.view())
+        _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(_today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone))
+        _fasting.value = fasting.view()
         _goals.value = goals.view(all).withSessions(_sessions.value)
         _workMode.value = workState
         val today = dayWindow(nowMs())
@@ -908,7 +910,8 @@ class MekaCore(
 
     private fun project(all: List<os.meka.core.domain.Task> = tasks.all(), dayEvents: List<os.meka.core.domain.CalendarEvent> = visibleEvents(all)): Today {
         val now = nowMs()
-        return TodayProjection.project(all, now, dayWindow(now), dayEvents, ZoneCalendar(timeZone))
+        val day = dayWindow(now)
+        return TodayProjection.project(all, now, day, dayEvents, ZoneCalendar(timeZone), _sessions.value.todayBlocks(day.epochDay, now))
     }
 
     /** Calendar events minus those hidden from my day. */

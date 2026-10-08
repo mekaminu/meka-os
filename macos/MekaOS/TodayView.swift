@@ -228,6 +228,7 @@ struct TodayView: View {
             if let t = r.task { TaskRow(task: t, reason: nil, palette: palette, time: r.time, timelineLine: r.detail) }
         case .gap: GapRow(row: r, palette: palette)
         case .now: NowLine(row: r, palette: palette)
+        case .session: SessionTimelineRow(row: r, palette: palette)
         default: EmptyView()
         }
     }

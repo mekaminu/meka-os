@@ -187,6 +187,32 @@ struct TimelineEventRow: View {
     }
 }
 
+/// A booked session (the Gym): time on the left, "Gym · Push" in the heavier item weight (a habit is something you act
+/// on), "Leave by 17:30" under it, or "Now · until 18:45" in the accent colour while it's on. Today's session card above
+/// answers it, so the row has no clicks of its own.
+struct SessionTimelineRow: View {
+    let row: TimelineRow
+    let palette: MekaPalette
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text(row.time).font(MekaType.itemMeta).monospacedDigit()
+                .foregroundStyle(palette.textSecondary)
+                .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.title).font(MekaType.itemTitle).tracking(MekaType.itemTitleTracking).foregroundStyle(palette.textPrimary)
+                if let line = row.detail {
+                    Text(line).font(MekaType.caption).foregroundStyle(row.running ? palette.accent : palette.textTertiary)
+                }
+            }
+            Spacer()
+        }
+        .padding(.vertical, MekaSpace.xs)
+        .padding(.horizontal, MekaSpace.xs)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// A free stretch: "1 h 30 free", quiet.
 struct GapRow: View {
     let row: TimelineRow

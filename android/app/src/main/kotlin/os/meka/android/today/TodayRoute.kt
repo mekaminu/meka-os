@@ -207,10 +207,14 @@ fun TodayRoute(
     val eventHandlers = remember(core, scope, eventUndo) { eventActionHandlers(core, scope, eventUndo) }
     val moves = rememberDecisionMoves(core, eventUndo, openTask = { selectedId = it }, openLists = openLists)
     // The cover screen's "now" card (Fold modes, slice 3): read from Today, which refreshes every minute.
-    val nowView = remember(today) { core.coverNow() }
+    // Also keyed on the booked sessions: answering "Did you go?" changes the card but not Today.
+    val sessions by core.sessionsView.collectAsState()
+    val nowView = remember(today, sessions) { core.coverNow() }
     val nowHandlers = NowHandlers(
         complete = actions.complete, tomorrow = actions.snooze, openTask = actions.select,
         openEvent = { eventOpen = it }, openNeedsYou = null, // Needs you is listed just above it on the cover screen
+        went = { id -> scope.launch { runCatching { core.sessionWent(id, null) } } },
+        didntGo = { id -> scope.launch { runCatching { core.sessionMissed(id) } } },
     )
 
     // Insets are applied once, by the app shell.
@@ -550,6 +554,7 @@ private fun TodayPane(
                         }
                         TimelineKind.GAP -> GapRow(r, m)
                         TimelineKind.NOW -> NowLine(r, m)
+                        TimelineKind.SESSION -> SessionTimelineRow(r, m)
                     }
                 }
                 item(key = "s-day") { Spacer(Modifier.height(MekaSpace.l)) }

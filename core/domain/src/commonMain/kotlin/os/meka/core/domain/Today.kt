@@ -71,6 +71,8 @@ object TodayProjection {
         today: DayWindow,
         events: List<CalendarEvent> = emptyList(),
         calendar: LocalCalendar = LocalCalendar.fixedOffset(today.utcOffsetMs),
+        /** Today's booked sessions still to come or on now ([SessionsView.todayBlocks]), for the timeline. */
+        sessions: List<BookedSession> = emptyList(),
     ): Today {
         val open = tasks.filter { (it.lifecycle == Lifecycle.ACTIVE || it.lifecycle == Lifecycle.INBOX) && !it.waitsForItsDay(today.epochDay) }
 
@@ -106,6 +108,7 @@ object TodayProjection {
             nowMs = nowMs,
             today = today,
             calendar = calendar,
+            sessions = sessions,
         )
         return Today(needs, upNext, yourDay, doneToday, todaysEvents, timeline)
     }

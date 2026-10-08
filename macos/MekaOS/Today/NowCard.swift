@@ -3,7 +3,8 @@ import AppKit
 import SwiftUI
 
 /// The "now" card in the menu-bar window (Fold modes, slice 3; the Mac's counterpart of the Fold's cover screen, which
-/// it has no hinge for): the one thing that matters now with its one-tap actions, above the capture field.
+/// it has no hinge for): the one thing that matters now with its one-tap actions, above the capture field. A booked
+/// session (the Gym) on now or over offers Went and Didn't go.
 /// Motion: when the thing changes, the content pushes in from the right; buttons press in (0.97) with a light haptic.
 /// Reduce Motion: cross-fades, no press scale.
 struct NowCard: View {
@@ -66,9 +67,10 @@ struct NowCard: View {
     }
 
     private func chip(_ a: NowAction, _ v: NowView) -> some View {
-        let primary = a == NowAction.join || a == NowAction.done || (a == NowAction.maps && v.join == nil)
+        let primary = a == NowAction.join || a == NowAction.done || a == NowAction.went || (a == NowAction.maps && v.join == nil)
         return Button {
-            MekaHaptics.light()
+            // Went and Didn't go give their own haptics (light / tick) in the model, as from Today's session card.
+            if a != NowAction.went && a != NowAction.didntGo { MekaHaptics.light() }
             switch a {
             case NowAction.join: if let s = v.join?.url, let url = URL(string: s) { openURL(url) }
             case NowAction.maps: if let q = v.mapsQuery, let url = EventDetailSheet.mapsURL(q) { openURL(url) }
@@ -76,6 +78,8 @@ struct NowCard: View {
             case NowAction.done: if let id = v.task?.id { model.complete(id) }
             case NowAction.tomorrow: if let id = v.task?.id { model.snooze(id) }
             case NowAction.openTask: if let id = v.task?.id { openTask(id) }
+            case NowAction.went: if let id = v.session?.habitId { model.sessionWent(id) }
+            case NowAction.didntGo: if let id = v.session?.habitId { model.sessionMissed(id) }
             default: break
             }
         } label: {
@@ -94,11 +98,13 @@ struct NowCard: View {
         case NowAction.maps: return "Directions"
         case NowAction.done: return "Done"
         case NowAction.tomorrow: return "Tomorrow"
+        case NowAction.went: return "Went"
+        case NowAction.didntGo: return "Didn't go"
         default: return "Open"
         }
     }
 
-    private static func key(_ v: NowView) -> String { "\(v.kind.name):\(v.task?.id ?? v.event?.id ?? "")" }
+    private static func key(_ v: NowView) -> String { "\(v.kind.name):\(v.task?.id ?? v.event?.id ?? v.session?.habitId ?? "")" }
 
     private func openTask(_ id: String) {
         bringForward {

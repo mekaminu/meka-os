@@ -818,6 +818,7 @@ final class CoreModel {
     /// The "now" card for the menu bar (Fold modes, slice 3): read from Today, so it follows Today's minute refresh.
     var coverNow: NowView? {
         _ = today // observed: the card redraws whenever Today does
+        _ = sessions // and when a booked session is answered ("Did you go?" changes the card, not Today)
         return core?.coverNow()
     }
 

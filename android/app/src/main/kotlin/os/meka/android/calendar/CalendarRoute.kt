@@ -276,6 +276,7 @@ private fun AgendaList(
                     TimelineKind.TASK -> TaskRow(e.row, m)
                     TimelineKind.NOW -> NowLine(e.row, m)
                     TimelineKind.GAP -> Unit // the agenda has no gaps; Today shows free time
+                    TimelineKind.SESSION -> Unit // booked sessions live on Today (and Goals), not in the agenda
                 }
             }
         }

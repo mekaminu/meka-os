@@ -83,14 +83,19 @@ object HomeWidgetRules {
         fun hhmm(ms: Long) = LocalClock.formatMinute(cal.minuteOfDay(ms))
 
         // Next up: an event that hasn't started counts down instead of saying "In 12 min" (which would go stale).
-        val notStarted = now.kind == NowKind.EVENT_SOON && now.event != null && now.event.startAtMs > nowMs
+        // A booked session (the Gym) counts down the same way.
+        val startsAt = when {
+            now.kind == NowKind.EVENT_SOON && now.event != null -> now.event.startAtMs
+            now.kind == NowKind.SESSION && now.session?.status == SessionStatus.BOOKED -> now.session?.startMs
+            else -> null
+        }?.takeIf { it > nowMs }
         val next = WidgetNext(
             kind = now.kind,
-            label = if (notStarted) STARTS_IN else now.label,
+            label = if (startsAt != null) STARTS_IN else now.label,
             lit = now.lit,
             title = now.title,
             line = now.line,
-            countdownToMs = if (notStarted) now.event!!.startAtMs else null,
+            countdownToMs = startsAt,
             thenLine = now.thenLine,
         )
 
@@ -133,7 +138,7 @@ object HomeWidgetRules {
             )
         }
 
-        // When the words change by themselves: each timed event coming into the hour, into the last quarter hour,
+        // When the words change by themselves: each timed event (and booked session) coming into the hour, into the last quarter hour,
         // starting, ten minutes in, and ending; the fast's goal; midnight; and never later than MAX_WAIT_MIN.
         val changes = buildList {
             today.timeline.rows
@@ -146,6 +151,15 @@ object HomeWidgetRules {
                     add(e.startAtMs + CoverNowRules.JUST_STARTED_MIN * MIN_MS)
                     add(e.endAtMs)
                 }
+            // Booked sessions: the same moments, and the "Did you go?" card stepping back after its hour.
+            today.timeline.rows.mapNotNull { it.session }.forEach { b ->
+                add(b.startMs - 60 * MIN_MS)
+                add(b.startMs - CoverNowRules.SOON_MIN * MIN_MS)
+                add(b.startMs)
+                add(b.startMs + CoverNowRules.JUST_STARTED_MIN * MIN_MS)
+                add(b.endMs)
+                add(b.endMs + CoverNowRules.ASK_FRESH_MIN * MIN_MS)
+            }
             f?.goalAtMs?.let { add(it) }
             add(cal.toEpochMs(cal.epochDayOf(nowMs) + 1, 0))
             add(nowMs + MAX_WAIT_MIN * MIN_MS)
