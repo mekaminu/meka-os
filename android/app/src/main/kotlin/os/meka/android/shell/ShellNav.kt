@@ -19,6 +19,13 @@ enum class ShellDestination(val label: String) {
     VAULT("Vault"),
 }
 
+/**
+ * The tab icons (motion pass 2: tab icons morph outline → filled with a spring), drawn by the app (no icon library):
+ * Today a sun on the horizon, Needs you a circle with "!", Calendar a calendar page, Ask a speech bubble. The Mac's
+ * sidebar uses the matching SF Symbols (sun.horizon, exclamationmark.circle, calendar, bubble.left).
+ */
+enum class TabGlyph { DAY, NEEDS, CALENDAR, ASK }
+
 enum class ShellLayout {
     /** Closed Fold: content above a bottom bar. */
     BOTTOM_BAR,
@@ -116,6 +123,15 @@ object ShellNav {
 
     /** Whether a More row's line is lit in the accent colour. */
     fun moreLit(item: MoreItem, listsDue: Int): Boolean = item == MoreItem.LISTS && listsDue > 0
+
+    /** A tab's icon; the places behind Ask aren't in the bar, so they have none. */
+    fun glyph(d: ShellDestination): TabGlyph? = when (d) {
+        ShellDestination.TODAY -> TabGlyph.DAY
+        ShellDestination.NEEDS_YOU -> TabGlyph.NEEDS
+        ShellDestination.CALENDAR -> TabGlyph.CALENDAR
+        ShellDestination.ASK -> TabGlyph.ASK
+        else -> null
+    }
 
     /** Badge text on Needs you: nothing at zero, the count up to 9, then "9+". */
     fun badge(count: Int): String? = when {

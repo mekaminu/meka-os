@@ -150,4 +150,5 @@ enum MekaChoreography {
     static let emptyBreathPeriod: Double = 4.200
     static let swipeArmDistance: CGFloat = 96
     static let swipeIconPopScale: CGFloat = 1.25
+    static let tabIconPopScale: CGFloat = 1.15
 }

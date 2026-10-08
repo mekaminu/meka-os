@@ -134,4 +134,11 @@ class ShellNavTest {
         assertEquals("Needs you", ShellNav.accessibilityLabel(ShellDestination.NEEDS_YOU, 0))
         assertEquals("Today", ShellNav.accessibilityLabel(ShellDestination.TODAY, 12))
     }
+
+    @Test
+    fun everyTabHasItsOwnIconAndThePlacesNone() {
+        val glyphs = ShellNav.TABS.map { ShellNav.glyph(it) }
+        assertEquals(listOf(TabGlyph.DAY, TabGlyph.NEEDS, TabGlyph.CALENDAR, TabGlyph.ASK), glyphs)
+        ShellDestination.entries.filter { it !in ShellNav.TABS }.forEach { assertNull(ShellNav.glyph(it)) }
+    }
 }

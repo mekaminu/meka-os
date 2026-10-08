@@ -251,11 +251,11 @@ private fun BottomBar(current: ShellDestination, needsYou: Int, go: (ShellDestin
     ) {
         val slot = maxWidth / items.size
         val x by animateDpAsState(slot * items.indexOf(lit), MekaMotion.replan(Meka.reducedMotion), label = "bar-pill")
-        Box(Modifier.offset(x = x).width(slot).height(44.dp).padding(horizontal = MekaSpace.xxs)
+        Box(Modifier.offset(x = x).width(slot).height(BAR_ITEM_HEIGHT).padding(horizontal = MekaSpace.xxs)
             .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
         Row(Modifier.fillMaxWidth()) {
             items.forEach { d ->
-                NavItem(d, d == lit, needsYou, Modifier.weight(1f).height(44.dp), go, fit = true)
+                NavItem(d, d == lit, needsYou, Modifier.weight(1f).height(BAR_ITEM_HEIGHT), go, fit = true)
             }
         }
     }
@@ -265,7 +265,7 @@ private fun BottomBar(current: ShellDestination, needsYou: Int, go: (ShellDestin
 @Composable
 private fun Rail(current: ShellDestination, needsYou: Int, go: (ShellDestination) -> Unit) {
     val items = ShellNav.destinations(ShellLayout.RAIL)
-    val rowHeight = 48.dp
+    val rowHeight = 60.dp
     Box(Modifier.width(112.dp).fillMaxHeight().background(Meka.colors.surface).padding(vertical = MekaSpace.xl, horizontal = MekaSpace.xs)) {
         val lit = ShellNav.barSelection(current)
         val y by animateDpAsState(rowHeight * items.indexOf(lit), MekaMotion.replan(Meka.reducedMotion), label = "rail-pill")
@@ -279,31 +279,39 @@ private fun Rail(current: ShellDestination, needsYou: Int, go: (ShellDestination
     }
 }
 
+/** A tab in the bar or rail: its icon over its label (the icon morphs outline → filled as it lights). */
+private val BAR_ITEM_HEIGHT = 56.dp
+
 @Composable
 private fun NavItem(d: ShellDestination, lit: Boolean, needsYou: Int, modifier: Modifier, go: (ShellDestination) -> Unit, fit: Boolean = false) {
     val color by animateColorAsState(if (lit) Meka.colors.textPrimary else Meka.colors.textTertiary, MekaMotion.appear(Meka.reducedMotion), label = "nav-text")
     // Calm badge: the count in the critical colour beside the label, no filled blob.
     val badge = if (d == ShellDestination.NEEDS_YOU) ShellNav.badge(needsYou) else null
-    Row(
+    val iconColor by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.textTertiary, MekaMotion.appear(Meka.reducedMotion), label = "nav-icon")
+    Column(
         modifier
             .clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(role = Role.Tab) { go(d) }
             .clearAndSetSemantics { contentDescription = ShellNav.accessibilityLabel(d, needsYou); selected = lit },
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        BasicText(
-            d.label, style = MekaType.caption.copy(color = color), maxLines = 1, softWrap = false,
-            // The tabs share the closed Fold's width: step down to 10 sp rather than clip "Needs you".
-            autoSize = if (fit) TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.caption.fontSize, stepSize = 0.5.sp) else null,
-            modifier = if (fit) Modifier.weight(1f, fill = false) else Modifier,
-        )
-        AnimatedVisibility(badge != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
+        ShellNav.glyph(d)?.let { TabIcon(it, lit, iconColor, knockout = Meka.colors.surfaceRaised) }
+        Spacer(Modifier.height(2.dp))
+        Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             BasicText(
-                badge.orEmpty(), maxLines = 1, softWrap = false,
-                style = MekaType.caption.copy(color = Meka.colors.critical, fontWeight = FontWeight.SemiBold),
-                modifier = Modifier.padding(start = 3.dp),
+                d.label, style = MekaType.caption.copy(color = color), maxLines = 1, softWrap = false,
+                // The tabs share the closed Fold's width: step down to 10 sp rather than clip "Needs you".
+                autoSize = if (fit) TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.caption.fontSize, stepSize = 0.5.sp) else null,
+                modifier = if (fit) Modifier.weight(1f, fill = false) else Modifier,
             )
+            AnimatedVisibility(badge != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
+                BasicText(
+                    badge.orEmpty(), maxLines = 1, softWrap = false,
+                    style = MekaType.caption.copy(color = Meka.colors.critical, fontWeight = FontWeight.SemiBold),
+                    modifier = Modifier.padding(start = 3.dp),
+                )
+            }
         }
     }
 }

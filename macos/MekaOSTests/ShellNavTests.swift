@@ -116,4 +116,10 @@ final class ShellNavTests: XCTestCase {
         XCTAssertNotNil(ShellNav.upcomingLine(.vault))
         for d in [ShellDestination.today, .needsYou, .calendar, .ask, .lists, .goals, .review] { XCTAssertNil(ShellNav.upcomingLine(d)) }
     }
+
+    @MainActor
+    func testTheTabsHaveTheIconsTheFoldDraws() {
+        // Outline symbols; the lit row shows the filled variant (sun on the horizon, "!", a calendar, a bubble).
+        XCTAssertEqual(ShellNav.tabs.map(\.symbol), ["sun.horizon", "exclamationmark.circle", "calendar", "bubble.left"])
+    }
 }

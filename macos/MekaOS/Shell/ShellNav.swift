@@ -24,13 +24,14 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
         }
     }
 
-    /// SF Symbol for the sidebar.
+    /// SF Symbol for the sidebar (the outline; the lit row shows its filled variant, the Fold's drawn tab icons
+    /// match the four tabs: a sun on the horizon, a circle with "!", a calendar, a speech bubble).
     var symbol: String {
         switch self {
         case .today: "sun.horizon"
         case .needsYou: "exclamationmark.circle"
         case .calendar: "calendar"
-        case .ask: "magnifyingglass"
+        case .ask: "bubble.left"
         case .lists: "list.bullet"
         case .goals: "target"
         case .review: "chart.bar"

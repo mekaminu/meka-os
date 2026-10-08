@@ -344,6 +344,28 @@ object MotionMath {
 
     const val CONTAINER_FADE_FROM = 0.2f
     const val CONTAINER_FADE_TO = 0.6f
+
+    /**
+     * Tab icons (motion pass 2, screen-level motion; catalogue "Switch section"): how filled a tab's icon is at
+     * [progress] of its morph (0 outline, 1 filled; the UI springs between them, clamped so the overshoot never
+     * over-fills).
+     */
+    fun tabFill(progress: Float): Float = progress.coerceIn(0f, 1f)
+
+    /**
+     * The icon's scale through the morph: it swells to [MekaChoreography.tabIconPopScale] halfway and settles back to
+     * full size at either end (a parabola, so lighting and unlighting both swell). Motion → Off: always full size.
+     */
+    fun tabIconScale(progress: Float, reduced: Boolean): Float {
+        if (reduced) return 1f
+        val p = progress.coerceIn(0f, 1f)
+        return 1f + (MekaChoreography.tabIconPopScale - 1f) * 4f * p * (1f - p)
+    }
+
+    /** How big the flood inside the outline is: it grows from [TAB_FILL_FROM] of the shape to all of it as it fills. */
+    fun tabFillGrow(progress: Float): Float = TAB_FILL_FROM + (1f - TAB_FILL_FROM) * tabFill(progress)
+
+    const val TAB_FILL_FROM = 0.5f
 }
 
 /** A rectangle by its edges, in pixels (kept free of Compose's Rect so [MotionMath] stays plain). */

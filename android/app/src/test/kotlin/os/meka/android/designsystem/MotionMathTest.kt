@@ -330,4 +330,23 @@ class MotionMathTest {
         assertEquals(1f, MotionMath.containerContentAlpha(0.6f))
         assertEquals(1f, MotionMath.containerContentAlpha(1.05f))
     }
+
+    @Test
+    fun tabIconsFillAndSwellAsTheyMorph() {
+        assertEquals(1.15f, MekaChoreography.tabIconPopScale)
+        // Fill follows the morph, clamped against the spring's overshoot.
+        assertEquals(0f, MotionMath.tabFill(-0.05f))
+        assertEquals(0.4f, MotionMath.tabFill(0.4f), 1e-6f)
+        assertEquals(1f, MotionMath.tabFill(1.1f))
+        // Full size at both ends, the full swell halfway (lighting or unlighting); Off: never swells.
+        assertEquals(1f, MotionMath.tabIconScale(0f, reduced = false), 1e-6f)
+        assertEquals(1.15f, MotionMath.tabIconScale(0.5f, reduced = false), 1e-6f)
+        assertEquals(1.1125f, MotionMath.tabIconScale(0.25f, reduced = false), 1e-6f)
+        assertEquals(1f, MotionMath.tabIconScale(1.08f, reduced = false), 1e-6f)
+        assertEquals(1f, MotionMath.tabIconScale(0.5f, reduced = true))
+        // The flood grows from half the shape to all of it.
+        assertEquals(0.5f, MotionMath.tabFillGrow(0f), 1e-6f)
+        assertEquals(0.75f, MotionMath.tabFillGrow(0.5f), 1e-6f)
+        assertEquals(1f, MotionMath.tabFillGrow(1.2f), 1e-6f)
+    }
 }

@@ -15,14 +15,15 @@ struct ShellView: View {
         NavigationSplitView {
             List(selection: selection) {
                 ForEach(ShellNav.destinations(.rail)) { d in
-                    Label(d.label, systemImage: d.symbol)
+                    Label { Text(d.label) } icon: { TabIconView(symbol: d.symbol, lit: model.destination == d) }
                         .badge(d == .needsYou ? ShellNav.badge(needsYouCount).map { Text($0) } : nil)
                         .accessibilityLabel(ShellNav.accessibilityLabel(d, needsYouCount: needsYouCount))
                         .tag(d as ShellDestination?)
                 }
                 Section("More") {
                     ForEach(ShellDestination.allCases.filter { ShellNav.parent($0) != nil }) { d in
-                        Label(d.label, systemImage: d.symbol).tag(d as ShellDestination?)
+                        Label { Text(d.label) } icon: { TabIconView(symbol: d.symbol, lit: model.destination == d) }
+                            .tag(d as ShellDestination?)
                     }
                 }
             }
@@ -100,6 +101,26 @@ struct ShellView: View {
         case .review: ReviewScreen()
         case .vault: VaultScreen(palette: palette)
         }
+    }
+}
+
+/// A sidebar row's icon (motion pass 2, screen-level motion; catalogue "Switch section"): the outline symbol while
+/// quiet, its filled variant when the row is lit (where the symbol has one), morphing with the system's replace
+/// transition and a small bounce, like the Fold's drawn tab icons swelling as they fill. Reduce Motion / Motion → Off:
+/// the fill cross-fades, no bounce. Decorative: the row's label is what VoiceOver reads.
+struct TabIconView: View {
+    let symbol: String
+    let lit: Bool
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Image(systemName: symbol)
+            .symbolVariant(lit ? .fill : .none)
+            .contentTransition(reduceMotion ? ContentTransition.opacity : ContentTransition.symbolEffect(.replace))
+            // Off: the value never changes, so it never bounces.
+            .symbolEffect(.bounce, value: reduceMotion ? false : lit)
+            .animation(MekaMotion.approve(reduced: reduceMotion), value: lit)
+            .accessibilityHidden(true)
     }
 }
 
