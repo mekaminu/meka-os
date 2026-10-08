@@ -46,6 +46,13 @@ enum class ActivityKind {
      * server; nothing to undo (nothing installs without his tap). Older apps skip entries of a kind they don't know.
      */
     PUBLISHED,
+    /**
+     * An edit Meka made to his Google/Outlook calendar from MEKA (calendar editing, slice 2d): added, changed, moved or
+     * deleted, and how it went. Not stored as an `agent_action`: each row is read from the synced `event_edit` itself
+     * (see [ActivityRules.calendarEditItem]), so it follows the edit as the server answers. Nothing to undo here (an edit
+     * is undone in its five seconds; after that it is changed again from the event).
+     */
+    CALENDAR,
 }
 
 /** One field MEKA changed: what it was, and what MEKA set. */
@@ -121,8 +128,8 @@ enum class UndoOutcome(val line: String) {
 object ActivityRules {
     const val DAYS_SHOWN = 30
     const val EMPTY_LINE =
-        "Nothing yet. When MEKA reminds you or sends a digest it shows here with why; once it does things for you, " +
-            "each one shows here too and can be undone."
+        "Nothing yet. When MEKA reminds you or sends a digest it shows here with why, as do the calendar edits you " +
+            "make in MEKA; once it does things for you, each one shows here too and can be undone."
 
     /** Entry id for a notice: one entry however many devices posted it (the key is stable per notice). */
     fun noticeId(key: String): String = "n" + fnv64("notice:$key")
@@ -164,6 +171,100 @@ object ActivityRules {
             ActivityFields.WHY to FieldValue.Text(why.take(MAX_LINE)),
             ActivityFields.SOURCE to FieldValue.Text(source),
         )
+    }
+
+    // ---- Calendar edits (slice 2d) ----
+
+    /** Row id for calendar edit [editId]: one per edit, on every device. */
+    fun calendarEditId(editId: String): String = "c$editId"
+
+    /**
+     * The Activity row for calendar edit [e], or null for an edit undone in its five seconds (nothing was sent).
+     * Summary: what happened ("Moved “Dentist” in Google", "Adding “Dentist” to Google", "Didn't delete “Standup” from
+     * Google · This cancels it for 4 people", "Couldn't move “Dentist” in Google · Reconnect Google in Calendars",
+     * "“Dentist” changed in Google meanwhile · open it to choose a version", "Kept Google's version of “Dentist”").
+     * Detail: what it changed ("Fri 9 Oct · 14:00–15:00 → 16:00–17:00 · Place: High St → Elm Rd", "Was “Dentist”").
+     * Why: Meka's own edit and the account that allows it.
+     */
+    fun calendarEditItem(e: EventEdit, nowMs: Long, cal: LocalCalendar): ActivityItem? {
+        val state = e.state(nowMs)
+        if (state == EventEditState.UNDONE) return null
+        val p = CalendarEditRules.providerName(e.provider)
+        val title = if (e.kind == EventEditKind.ADD || EventEditChange.TITLE in e.changes) e.draft?.title else e.base?.title
+        val t = "“${title.orEmpty().trim().ifEmpty { "Event" }.take(60)}”"
+        val verb = when {
+            e.kind == EventEditKind.ADD -> "add"
+            e.kind == EventEditKind.DELETE -> "delete"
+            e.isMove -> "move"
+            else -> "change"
+        }
+        val prep = when (e.kind) { EventEditKind.ADD -> "to"; EventEditKind.DELETE -> "from"; else -> "in" }
+        val summary = when (state) {
+            EventEditState.REFUSED -> "Didn't $verb $t $prep $p · ${e.detail ?: "$p didn't take the change"}"
+            EventEditState.FAILED -> "Couldn't $verb $t $prep $p" + (e.detail?.let { " · $it" } ?: "")
+            EventEditState.CLASH -> when (e.resolved) {
+                null -> "$t changed in $p meanwhile · open it to choose a version"
+                ClashChoice.THEIRS -> "Kept $p's version of $t"
+                ClashChoice.MINE -> "Kept your version of $t · sent again"
+            }
+            else -> CalendarEditRules.line(e, nowMs)
+        }
+        val why = (if (e.resends != null) "Your choice after a clash" else "Your edit in MEKA") + " · editing allowed for ${e.account}"
+        return ActivityItem(
+            id = calendarEditId(e.id),
+            atMs = e.createdAtMs,
+            kind = ActivityKind.CALENDAR,
+            summary = summary.take(MAX_LINE),
+            detail = calendarEditDetail(e, cal)?.take(MAX_LINE),
+            why = why.take(MAX_LINE),
+            source = "calendar_edit",
+            level = null,
+            changes = emptyList(),
+            undoneAtMs = null,
+            undoNote = null,
+        )
+    }
+
+    /** What [e] changes, in words (null when there's nothing to add to the summary). */
+    fun calendarEditDetail(e: EventEdit, cal: LocalCalendar): String? {
+        fun whenOf(d: EventDraft) = EventDetails.whenLine(d.startAtMs, d.endAtMs, d.allDay, cal)
+        fun short(s: String) = s.trim().let { if (it.length > 40) it.take(39).trimEnd() + "…" else it }
+        val parts = mutableListOf<String>()
+        when (e.kind) {
+            EventEditKind.ADD -> e.draft?.let { d ->
+                parts += whenOf(d)
+                d.location?.takeIf { it.isNotBlank() }?.let { parts += short(it) }
+            }
+            EventEditKind.DELETE -> e.base?.let { b ->
+                parts += whenOf(b)
+                val g = e.guests ?: 0
+                if (e.guestsOk && g > 0 && e.status == EventEditStatus.DONE) parts += if (g == 1) "its guest was told" else "its $g guests were told"
+            }
+            EventEditKind.CHANGE -> {
+                val base = e.base
+                val draft = e.draft
+                if (base != null && draft != null) {
+                    val after = CalendarEditRules.merged(base, draft, e.changes)
+                    if (EventEditChange.TIME in e.changes) {
+                        val a = whenOf(base)
+                        val b = whenOf(after)
+                        parts += if (" · " in a && " · " in b && a.substringBefore(" · ") == b.substringBefore(" · ")) "$a → ${b.substringAfter(" · ")}" else "$a → $b"
+                    }
+                    if (EventEditChange.TITLE in e.changes) parts += "Was “${short(base.title)}”"
+                    if (EventEditChange.LOCATION in e.changes) {
+                        val was = base.location?.takeIf { it.isNotBlank() }
+                        val now = after.location?.takeIf { it.isNotBlank() }
+                        parts += when {
+                            now == null -> "Place removed"
+                            was == null -> "Place: ${short(now)}"
+                            else -> "Place: ${short(was)} → ${short(now)}"
+                        }
+                    }
+                    if (EventEditChange.NOTES in e.changes) parts += "Notes changed"
+                }
+            }
+        }
+        return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
     }
 
     /** Longest summary, detail or why line kept in an entry. */
@@ -272,6 +373,7 @@ object ActivityRules {
             week.count { it.kind == ActivityKind.DIGEST }.takeIf { it > 0 }?.let { plural(it, "digest") },
             week.count { it.kind == ActivityKind.CHANGED }.takeIf { it > 0 }?.let { plural(it, "change") },
             week.count { it.kind == ActivityKind.PUBLISHED }.takeIf { it > 0 }?.let { plural(it, "phone build") },
+            week.count { it.kind == ActivityKind.CALENDAR }.takeIf { it > 0 }?.let { plural(it, "calendar edit") },
         )
         val weekLine = if (parts.isEmpty()) "Nothing this week" else "This week: " + parts.joinToString(" · ")
         return ActivityView(if (shown.isEmpty()) "" else weekLine, days, EMPTY_LINE)
@@ -308,7 +410,17 @@ class ActivityLog(
     private val nowMs: () -> Long,
     private val calendar: LocalCalendar = LocalCalendar.UTC,
 ) {
-    fun items(): List<ActivityItem> = replica.entities(EntityTypes.AGENT_ACTION).mapNotNull { s ->
+    /** Everything in the log: MEKA's own entries, then Meka's calendar edits (read from the edits themselves). */
+    fun items(): List<ActivityItem> = stored() + calendarEdits()
+
+    private fun calendarEdits(): List<ActivityItem> {
+        val now = nowMs()
+        return replica.entities(EntityTypes.EVENT_EDIT)
+            .mapNotNull { s -> CalendarEditRules.from(s.ref.entityId) { s[it] } }
+            .mapNotNull { ActivityRules.calendarEditItem(it, now, calendar) }
+    }
+
+    private fun stored(): List<ActivityItem> = replica.entities(EntityTypes.AGENT_ACTION).mapNotNull { s ->
         val kind = s[ActivityFields.KIND].textOrNull?.let { k -> ActivityKind.entries.firstOrNull { it.name == k } } ?: return@mapNotNull null
         ActivityItem(
             id = s.ref.entityId,
