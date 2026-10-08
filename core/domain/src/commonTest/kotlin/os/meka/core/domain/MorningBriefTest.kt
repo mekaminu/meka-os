@@ -81,6 +81,62 @@ class MorningBriefTest {
     }
 
     @Test
+    fun aNewDayOffersTheBriefAgainEvenWhenItWasReadAfterMidnight() {
+        // Fold review 2026-10-08: read late at night (00:30, the day's brief opened from More), the card must still
+        // rise in when the morning starts.
+        val d = today()
+        world.clock.nowMs = at(d, 0, 30)
+        ba.markSeen("Fold")
+        assertTrue(view().seenToday) // before the morning starts, that read still counts (the pane says Done)
+        assertFalse(view().offered)
+        world.clock.nowMs = at(d, 7, 0)
+        assertTrue(view().offered)
+        assertFalse(view().seenToday)
+        assertNull(view().readElsewhereLine)
+        // Read yesterday morning: today's card comes again; read this morning: it goes until tomorrow.
+        world.clock.nowMs = at(d, 7, 20)
+        ba.markSeen("Fold")
+        assertFalse(view().offered)
+        world.clock.nowMs = at(d + 1, 7, 5)
+        assertTrue(view().offered)
+        // A quiet-hours end of 06:30 moves the start, and with it what counts as this morning's read.
+        world.clock.nowMs = at(d + 1, 6, 40)
+        ba.markSeen("Fold")
+        assertFalse(view(quiet = QuietHours(true, 23 * 60, 6 * 60 + 30)).offered)
+        world.clock.nowMs = at(d + 1, 7, 5)
+        assertTrue(view().offered) // with the default 07:00 start, a 06:40 read was before the morning
+    }
+
+    @Test
+    fun readOnTheOtherDeviceTheCardBecomesASlimLineUntilNoon() {
+        brief(m).markSeen("Mac")
+        m.sync(); a.sync()
+        val v = view()
+        assertFalse(v.offered)
+        assertTrue(v.seenToday)
+        assertEquals("Brief read on your Mac", v.readElsewhereLine)
+        // Not on the device that read it.
+        assertNull(view(b = brief(m), t = tasks(m)).readElsewhereLine)
+        world.clock.nowMs = at(today(), 12, 0)
+        assertNull(view().readElsewhereLine)
+        // Read again on the Fold: the line goes.
+        world.clock.nowMs = at(today(), 9, 0)
+        ba.markSeen("Fold")
+        assertNull(view().readElsewhereLine)
+        assertEquals("Brief read on your other device", BriefRules.readElsewhereLine(""))
+        assertEquals("Brief read on your other device", BriefRules.readElsewhereLine(null))
+    }
+
+    @Test
+    fun anOldReadWithNoTimeStillCountsForItsDay() {
+        assertTrue(BriefRules.readThisMorning(5, null, 5, 1_000, 2_000))
+        assertFalse(BriefRules.readThisMorning(4, 1_500, 5, 1_000, 2_000))
+        assertFalse(BriefRules.readThisMorning(5, 500, 5, 1_000, 2_000))
+        assertTrue(BriefRules.readThisMorning(5, 500, 5, 1_000, 800))
+        assertTrue(BriefRules.readThisMorning(5, 1_000, 5, 1_000, 2_000))
+    }
+
+    @Test
     fun todayListsEventsAndPlannedTasksInTimeOrderThenTheRest() {
         val d = today()
         ta.create(NewTask("Write the report", scheduledAtMs = at(d, 14)))

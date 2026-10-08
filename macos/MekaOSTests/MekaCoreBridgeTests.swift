@@ -189,7 +189,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(v.waitingLine, "Waiting on 1 thing · 1 to chase today")
         XCTAssertEqual(v.waiting.first?.state, .due)
         XCTAssertFalse(v.seenToday)
-        try await core.briefSeen()
+        try await core.briefSeen(on: "Mac")
         XCTAssertTrue(core.briefView.value.seenToday)
         XCTAssertFalse(core.briefView.value.offered)
 

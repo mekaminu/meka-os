@@ -167,6 +167,26 @@ private struct HeadlineRow: View {
     }
 }
 
+/// "Brief read on your Fold · Open": the card's quiet stand-in once the brief was read on the other device.
+struct BriefReadLineView: View {
+    @Environment(CoreModel.self) private var model
+    let line: String
+    let palette: MekaPalette
+
+    var body: some View {
+        Button { model.showBrief = true } label: {
+            HStack(spacing: 0) {
+                Text(line + " · ").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text("Open").font(MekaType.caption).foregroundStyle(palette.accent)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(line + ". Open the morning brief")
+    }
+}
+
 /// The morning card in Today: "Morning brief" with the day in one line.
 struct BriefCard: View {
     @Environment(CoreModel.self) private var model

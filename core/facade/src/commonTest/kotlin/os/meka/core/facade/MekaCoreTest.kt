@@ -380,12 +380,29 @@ class MekaCoreTest {
         val posted = a.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
         assertEquals(listOf("Morning brief"), posted.post.map { it.title })
 
-        a.briefSeen()
+        a.briefSeen("Fold")
         assertTrue(a.briefView.value.seenToday)
         assertTrue(!a.briefView.value.offered)
         a.syncNow(); m.syncNow()
         assertTrue(m.briefView.value.seenToday)
         assertTrue(!m.briefView.value.offered)
+    }
+
+    @Test
+    fun readAfterMidnightTheBriefStillComesInTheMorningAndAReadOnTheMacIsALineOnTheFold() = runTest {
+        // Fold review 2026-10-08: no card at 07:14–07:58 BST. A read after midnight was last night's brief.
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 8, 0, 30).toInstant(london).toEpochMilliseconds() // Thu, BST
+        val a = core("android"); val m = core("mac")
+        a.briefSeen("Fold")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 8, 7, 14).toInstant(london).toEpochMilliseconds()
+        a.tick()
+        assertTrue(a.briefView.value.offered)
+        m.briefSeen("Mac")
+        m.syncNow(); a.syncNow(); a.tick()
+        assertTrue(!a.briefView.value.offered)
+        assertEquals("Brief read on your Mac", a.briefView.value.readElsewhereLine)
+        assertEquals(null, m.briefView.value.readElsewhereLine)
     }
 
     @Test
@@ -402,7 +419,7 @@ class MekaCoreTest {
         assertEquals("Alarm 06:30 · in 22 h 45", v.alarmLine)
         assertEquals(os.meka.core.domain.BedsideSection.MORNING, v.section)
         assertEquals(os.meka.core.domain.BedsideOpens.BRIEF, v.opens)
-        a.briefSeen()
+        a.briefSeen("Fold")
         val day = a.bedside(null)
         assertEquals(os.meka.core.domain.BedsideSection.DAY, day.section)
         assertEquals(listOf("Next: Post the letter"), day.lines)

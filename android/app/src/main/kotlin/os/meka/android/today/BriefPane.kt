@@ -180,7 +180,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit) {
                         closing = true
                         haptics.light()
                         scope.launch {
-                            runCatching { core.briefSeen() }
+                            runCatching { core.briefSeen("Fold") }
                             delay(GOT_IT_HOLD_MS)
                             onClose()
                         }
@@ -259,6 +259,20 @@ private fun BriefButton(label: String, filled: Boolean, modifier: Modifier = Mod
  * The morning card in Today: "Morning brief" with the day in one line. It rises in when the morning starts (the end
  * of quiet hours) and goes at noon or once read.
  */
+/** "Brief read on your Mac · Open": the card's quiet stand-in once the brief was read on the other device. */
+@Composable
+internal fun BriefReadLine(line: String, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClickLabel = "Open the morning brief") { onOpen() }
+            .padding(vertical = MekaSpace.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(" · ", style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text("Open", style = MekaType.caption, color = Meka.colors.accent)
+    }
+}
+
 @Composable
 internal fun BriefCard(v: MorningBriefView, onOpen: () -> Unit, modifier: Modifier = Modifier, titleModifier: Modifier = Modifier) {
     Column(

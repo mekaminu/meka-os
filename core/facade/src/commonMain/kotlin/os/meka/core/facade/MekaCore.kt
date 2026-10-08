@@ -513,8 +513,11 @@ class MekaCore(
 
     // ---- Morning brief ----
 
-    /** "Got it": the brief's card is put away on every device until tomorrow morning. */
-    suspend fun briefSeen() = onCore { brief.markSeen() }
+    /**
+     * "Got it": the brief's card is put away on every device until tomorrow morning. [on] names this device as its
+     * app calls it ("Mac", "Fold"), so the other one can say "Brief read on your Mac".
+     */
+    suspend fun briefSeen(on: String) = onCore { brief.markSeen(on) }
     /** Shows or hides a news topic in the brief and the News place ([os.meka.core.domain.NewsTopics]); synced. */
     suspend fun setNewsTopic(topicId: String, on: Boolean) = onCore { news.setTopic(topicId, on) }
 

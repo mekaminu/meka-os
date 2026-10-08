@@ -17,14 +17,19 @@ object BriefFields {
     /** Local epoch day the brief was last read ("Got it"). */
     const val SEEN_DAY = "briefSeenDay"
     const val SEEN_AT = "briefSeenAtMs"
+    /** The device that read it (its device id), so the other one can say "Brief read on your Mac". */
+    const val SEEN_BY = "briefSeenBy"
+    /** That device's name as its app gives it ("Mac", "Fold"); empty when unknown. */
+    const val SEEN_ON = "briefSeenOn"
 }
 
 /** Something on the radar or in Lists that needs you today: a renewal, a cancel-by date, a decision to review. */
 data class BriefLine(val id: String, val title: String, val detail: String?)
 
 data class MorningBriefView(
-    /** Show the "Morning brief" card in Today: it's the morning and it hasn't been read today. */
+    /** Show the "Morning brief" card in Today: it's the morning and it hasn't been read this morning. */
     val offered: Boolean,
+    /** Read since this morning's brief started (a read after midnight but before the start was last night's). */
     val seenToday: Boolean,
     /** Local minute of the day the brief starts today. */
     val startMinute: Int,
@@ -58,6 +63,11 @@ data class MorningBriefView(
     val headlines: List<BriefHeadline> = emptyList(),
     /** Every topic, with the ones the brief shows marked (synced). */
     val newsTopics: List<NewsTopicChoice> = emptyList(),
+    /**
+     * "Brief read on your Mac": in the morning, when the brief was read on the other device, Today shows this slim
+     * line (with Open) in the card's place until noon; null otherwise.
+     */
+    val readElsewhereLine: String? = null,
 ) {
     companion object {
         val EMPTY = MorningBriefView(
@@ -93,6 +103,19 @@ object BriefRules {
     fun startMinute(quiet: QuietHours): Int =
         if (quiet.enabled && quiet.startMinute != quiet.endMinute && quiet.endMinute in QUIET_END_RANGE) quiet.endMinute else DEFAULT_START_MIN
 
+    /**
+     * Whether a read at [seenAtMs] (on [seenDay]) puts away the brief of [epochDay], which starts at [startMs]. Once the
+     * morning has started ([nowMs] at or after [startMs]), only a read on that day at or after the start does: reading
+     * it at 00:30 (last night's, still open) leaves the morning's card to come. Before the start, any read that day
+     * counts (the pane says Done). An old read with no time recorded counts for its whole day.
+     */
+    fun readThisMorning(seenDay: Long?, seenAtMs: Long?, epochDay: Long, startMs: Long, nowMs: Long): Boolean =
+        seenDay == epochDay && (seenAtMs == null || seenAtMs >= startMs || nowMs < startMs)
+
+    /** "Brief read on your Mac"; "Brief read on your other device" when its name is unknown. */
+    fun readElsewhereLine(on: String?): String =
+        "Brief read on your " + (on?.trim()?.takeIf { it.isNotEmpty() && it.length <= 20 } ?: "other device")
+
     fun greeting(minute: Int): String = when {
         minute < 12 * 60 -> "Good morning"
         minute < 18 * 60 -> "Good afternoon"
@@ -121,12 +144,15 @@ class MorningBrief(
 ) {
     fun seenDay(): Long? = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(BriefFields.SEEN_DAY)?.longOrNull
 
-    /** "Got it": the card is put away on every device until tomorrow morning. */
-    fun markSeen() {
+    /** "Got it": the card is put away on every device until tomorrow morning. [on] names this device ("Mac", "Fold"). */
+    fun markSeen(on: String = "") {
         val now = nowMs()
         replica.commitLocal(
             EntityTypes.CONTEXT_MODE, ENTITY_ID,
-            mapOf(BriefFields.SEEN_DAY to calendar.epochDayOf(now).fv(), BriefFields.SEEN_AT to now.fv()),
+            mapOf(
+                BriefFields.SEEN_DAY to calendar.epochDayOf(now).fv(), BriefFields.SEEN_AT to now.fv(),
+                BriefFields.SEEN_BY to replica.deviceId.fv(), BriefFields.SEEN_ON to on.fv(),
+            ),
         )
     }
 
@@ -147,7 +173,13 @@ class MorningBrief(
         val now = nowMs()
         val minute = calendar.minuteOfDay(now)
         val start = BriefRules.startMinute(quiet)
-        val seenToday = seenDay() == today.epochDay
+        val mark = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)
+        val seenToday = BriefRules.readThisMorning(
+            mark?.get(BriefFields.SEEN_DAY)?.longOrNull, mark?.get(BriefFields.SEEN_AT)?.longOrNull,
+            today.epochDay, calendar.toEpochMs(today.epochDay, start), now,
+        )
+        val morning = minute >= start && minute < BriefRules.END_MIN
+        val readElsewhere = seenToday && morning && mark?.get(BriefFields.SEEN_BY)?.textOrNull.let { it != null && it != replica.deviceId }
 
         // Today: events of the day and what's left of it (planned, overdue, due, and the rest Today shows).
         val dayEvents = events.filter { it.overlaps(today) }
@@ -203,7 +235,7 @@ class MorningBrief(
         }
 
         return MorningBriefView(
-            offered = !seenToday && minute >= start && minute < BriefRules.END_MIN,
+            offered = !seenToday && morning,
             seenToday = seenToday,
             startMinute = start,
             greeting = BriefRules.greeting(minute),
@@ -223,6 +255,7 @@ class MorningBrief(
             cardLine = BriefRules.cardLine(daySummary, rows.isNotEmpty(), lists.chaseDue, attention.size),
             headlines = NewsRules.forBrief(headlines, newsTopics.filter { it.chosen }.map { it.id }, now),
             newsTopics = newsTopics,
+            readElsewhereLine = if (readElsewhere) BriefRules.readElsewhereLine(mark?.get(BriefFields.SEEN_ON)?.textOrNull) else null,
         )
     }
 

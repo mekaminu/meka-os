@@ -631,7 +631,7 @@ final class CoreModel {
     /// "Got it": the card is put away on the Fold too, until tomorrow morning.
     func briefSeen() async {
         guard let core else { return }
-        do { try await core.briefSeen() } catch { lastError = error.localizedDescription }
+        do { try await core.briefSeen(on: "Mac") } catch { lastError = error.localizedDescription }
     }
 
     /// A story's picture (images slice): the small JPEG the server made from the feed's picture, fetched from the

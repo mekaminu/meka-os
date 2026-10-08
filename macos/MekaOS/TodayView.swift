@@ -101,6 +101,12 @@ struct TodayView: View {
                             .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
                             .padding(.bottom, MekaSpace.l)
                             .staggeredAppear(1, play: play)
+                    } else if let line = model.brief?.readElsewhereLine {
+                        // Read on the Fold this morning: a slim line in the card's place until noon.
+                        BriefReadLineView(line: line, palette: palette)
+                            .transition(.opacity)
+                            .padding(.bottom, MekaSpace.l)
+                            .staggeredAppear(1, play: play)
                     }
 
                     // Weekly review: the card rises in on Sunday evening and stays through Monday until reviewed.

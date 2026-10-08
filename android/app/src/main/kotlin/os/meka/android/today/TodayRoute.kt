@@ -481,6 +481,11 @@ private fun TodayPane(
                     BriefCard(brief, openBrief, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)),
                         titleModifier = Modifier.sharedTitle(SharedMotion.paneKey(SharedMotion.BRIEF), !briefOpen))
                 }
+            } else if (brief.readElsewhereLine != null) {
+                // Read on the Mac this morning: a slim line in the card's place until noon (Fold review 2026-10-08).
+                item(key = "brief-read") {
+                    BriefReadLine(brief.readElsewhereLine!!, openBrief, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
+                }
             }
             // Weekly review: the card rises in on Sunday evening and stays through Monday until reviewed.
             if (reviewCard.offered) {
