@@ -116,6 +116,49 @@ internal fun WhenSection(task: Task, actions: TodayActions) {
     }
 }
 
+/**
+ * Remind me (Fold review 2026-10-08, item 8): the row says "Off" or when ("Today · 14:15") and unfolds in place like
+ * When into the chips still ahead (At 14:30 · 15 min before · 1 h before, or In 1 h · 13:00 · 18:00) and Off. The
+ * reminder is a heads-up through the notification governor (quiet hours apply; an exact alarm when allowed) and moves
+ * with the task's When. Chips blend their colour with a tick haptic; the label cross-fades.
+ */
+@Composable
+internal fun ReminderSection(task: Task, actions: TodayActions) {
+    val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    var open by rememberSaveable(task.id) { mutableStateOf(false) }
+    val v = actions.reminderOf(task)
+    if (v.choices.isEmpty() && !v.isSet) return
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+            .clickable(role = Role.Button) { open = !open }.padding(vertical = MekaSpace.s)
+            .semantics { contentDescription = "Remind me, ${v.label}" },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Remind me", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Spacer(Modifier.weight(1f))
+        FadeText(v.label) { Text(it, style = MekaType.itemMeta, color = if (v.isSet) Meka.colors.accent else Meka.colors.textSecondary) }
+    }
+    AnimatedVisibility(
+        visible = open,
+        enter = if (reduced) fadeIn(MekaMotion.expand(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.expand(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = MekaSpace.s).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            v.choices.forEach { c ->
+                WhenChip(c.label, c.selected) {
+                    haptics.tick()
+                    actions.setReminder(task.id, if (c.selected) null else c.atMs)
+                }
+            }
+            if (v.isSet) WhenChip("Off", false) { haptics.tick(); actions.setReminder(task.id, null) }
+        }
+    }
+}
+
 @Composable
 private fun FadeText(target: String, content: @Composable (String) -> Unit) {
     val reduced = Meka.reducedMotion

@@ -40,6 +40,8 @@ data class Task(
     val deferredToDay: Long? = null,
     /** The calendar event a prep task is for (calendar actions); null for other tasks. */
     val eventId: String? = null,
+    /** Remind me (task detail): when to remind, epoch ms; null for none (see [TaskReminderRules]). */
+    val remindAtMs: Long? = null,
 ) {
     val isDone: Boolean get() = lifecycle == Lifecycle.DONE
 
@@ -89,6 +91,7 @@ data class Task(
                 occurrenceDay = s[TaskFields.OCCURRENCE_DAY].longOrNull,
                 deferredToDay = s[TaskFields.DEFERRED_TO_DAY].longOrNull,
                 eventId = s[TaskFields.EVENT_ID].textOrNull,
+                remindAtMs = s[TaskFields.REMIND_AT].longOrNull,
             )
         }
     }
@@ -176,6 +179,7 @@ class Tasks(
             if (old[ActionableFields.COMPLETED_AT].longOrNull != null) fields[ActionableFields.COMPLETED_AT] = FieldValue.Null
             if (draft.scheduledAtMs == null && old[TaskFields.SCHEDULED_AT].longOrNull != null) fields[TaskFields.SCHEDULED_AT] = FieldValue.Null
             if (old[TaskFields.DEFERRED_TO_DAY].longOrNull != null) fields[TaskFields.DEFERRED_TO_DAY] = FieldValue.Null
+            if (old[TaskFields.REMIND_AT].longOrNull != null) fields[TaskFields.REMIND_AT] = FieldValue.Null
         }
         replica.commitLocal(EntityTypes.TASK, id, fields)
         return id
@@ -234,6 +238,7 @@ class Tasks(
         val from = t.showsFromDay ?: ownDay
         t.scheduledAtMs?.let { changes[TaskFields.SCHEDULED_AT] = shifted(it, from, day).fv() }
         t.dueAtMs?.let { changes[ActionableFields.DUE_AT] = shifted(it, from, day).fv() }
+        t.remindAtMs?.let { changes[TaskFields.REMIND_AT] = shifted(it, from, day).fv() }
         replica.commitLocal(EntityTypes.TASK, id, changes)
     }
 
@@ -283,6 +288,7 @@ class Tasks(
         val changes = linkedMapOf<String, FieldValue>(TaskFields.DEFERRED_TO_DAY to to.fv())
         t.scheduledAtMs?.let { changes[TaskFields.SCHEDULED_AT] = shifted(it, anchor, to).fv() }
         t.dueAtMs?.let { changes[ActionableFields.DUE_AT] = shifted(it, anchor, to).fv() }
+        t.remindAtMs?.let { changes[TaskFields.REMIND_AT] = shifted(it, anchor, to).fv() }
         replica.commitLocal(EntityTypes.TASK, id, changes)
     }
 
@@ -307,7 +313,30 @@ class Tasks(
         if (deferTo != t.deferredToDay) changes[TaskFields.DEFERRED_TO_DAY] = deferTo?.fv() ?: FieldValue.Null
         val at = minuteOfDay?.let { calendar.toEpochMs(day, it) }
         if (at != t.scheduledAtMs) changes[TaskFields.SCHEDULED_AT] = at?.fv() ?: FieldValue.Null
+        // A reminder moves with the task: by the same amount between two times ("15 min before" stays 15 min before),
+        // else to the same time of day on the new day.
+        t.remindAtMs?.let { r ->
+            val oldDay = TaskWhenRules.dayOf(t, today, calendar)
+            val oldAt = TaskWhenRules.minuteOf(t, today, calendar)?.let { calendar.toEpochMs(oldDay, it) }
+            val moved = if (oldAt != null && at != null) r + (at - oldAt) else shifted(r, oldDay, day)
+            if (moved != r) changes[TaskFields.REMIND_AT] = moved.fv()
+        }
         if (changes.isNotEmpty()) replica.commitLocal(EntityTypes.TASK, id, changes)
+    }
+
+    /**
+     * Remind me (task detail): a heads-up at [atMs] ([TaskReminderRules]); null turns it off. Must be in the future and
+     * at most two years ahead. Moves with the task's When, Tomorrow and its repeats.
+     */
+    fun setReminder(id: String, atMs: Long?) {
+        val t = get(id) ?: throw ValidationException("Task not found")
+        if (atMs != null) {
+            val now = nowMs()
+            if (atMs <= now) throw ValidationException("That time has gone")
+            if (atMs > now + TaskWhenRules.MAX_DAYS_AHEAD * CivilDate.DAY_MS + CivilDate.DAY_MS) throw ValidationException("That's too far ahead")
+        }
+        if (atMs == t.remindAtMs) return
+        replica.commitLocal(EntityTypes.TASK, id, mapOf(TaskFields.REMIND_AT to (atMs?.fv() ?: FieldValue.Null)))
     }
 
     /** Notes (task detail): any length up to 10,000 characters; blank clears them. */
@@ -354,6 +383,7 @@ class Tasks(
         t.goalId?.let { fields[ActionableFields.GOAL_ID] = it.fv() }
         t.scheduledAtMs?.let { fields[TaskFields.SCHEDULED_AT] = shifted(it, shown, next).fv() }
         t.dueAtMs?.let { fields[ActionableFields.DUE_AT] = shifted(it, shown, next).fv() }
+        t.remindAtMs?.let { fields[TaskFields.REMIND_AT] = shifted(it, shown, next).fv() }
         replica.entity(EntityTypes.TASK, t.id)?.get(ActionableFields.OWNER_PERSON_ID)?.textOrNull
             ?.let { fields[ActionableFields.OWNER_PERSON_ID] = it.fv() }
         replica.commitLocal(EntityTypes.TASK, nextId, fields)
@@ -413,6 +443,7 @@ class Tasks(
                 changes[TaskFields.DEFERRED_TO_DAY] = u.before.deferredToDay?.fv() ?: FieldValue.Null
                 changes[TaskFields.SCHEDULED_AT] = u.before.scheduledAtMs?.fv() ?: FieldValue.Null
                 changes[ActionableFields.DUE_AT] = u.before.dueAtMs?.fv() ?: FieldValue.Null
+                if (u.before.remindAtMs != u.after.remindAtMs) changes[TaskFields.REMIND_AT] = u.before.remindAtMs?.fv() ?: FieldValue.Null
             }
             else -> return false
         }

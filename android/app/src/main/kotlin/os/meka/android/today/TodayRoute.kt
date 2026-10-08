@@ -129,6 +129,7 @@ import os.meka.core.domain.ShutdownView
 import os.meka.core.domain.SomedayKind
 import os.meka.core.domain.Task
 import os.meka.core.domain.TaskWhenRules
+import os.meka.core.domain.TaskReminderView
 import os.meka.core.domain.TaskWhenView
 import os.meka.core.domain.Today
 import os.meka.core.facade.ConflictChoice
@@ -382,6 +383,8 @@ internal fun todayActions(
     whenOf = { t -> core.taskWhen(t) },
     setWhen = { id, day, minute -> scope.launch { runCatching { core.setWhen(id, day, minute) } } },
     setNotes = { id, notes -> scope.launch { runCatching { core.setNotes(id, notes) } } },
+    reminderOf = { t -> core.taskReminder(t) },
+    setReminder = { id, at -> scope.launch { runCatching { core.setReminder(id, at) } } },
 )
 
 data class TodayActions(
@@ -408,6 +411,10 @@ data class TodayActions(
     /** Puts the task on a local epoch day, at a minute of the day or with no time. */
     val setWhen: (String, Long, Int?) -> Unit,
     val setNotes: (String, String) -> Unit,
+    /** Remind me: the row as shown ("Off" or when) and the chips still ahead. */
+    val reminderOf: (Task) -> TaskReminderView,
+    /** Reminds at epoch ms (a heads-up through the governor); null turns it off. */
+    val setReminder: (String, Long?) -> Unit,
 )
 
 @Composable
@@ -841,15 +848,16 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
         // Entrance: the rows stagger in, 40 ms apart (Motion setting; Off: at once). Fresh for each task.
         key(task.id) {
             Column(Modifier.appear(rememberAppearance(0))) { WhenSection(task, actions) }
-            Column(Modifier.appear(rememberAppearance(1))) { RepeatSection(task, actions) }
-            Column(Modifier.appear(rememberAppearance(2))) { NotesSection(task, actions) }
-            Column(Modifier.appear(rememberAppearance(3))) { StepsSection(task, actions) }
-            Column(Modifier.appear(rememberAppearance(4))) { GoalSection(task, actions) }
+            Column(Modifier.appear(rememberAppearance(1))) { ReminderSection(task, actions) }
+            Column(Modifier.appear(rememberAppearance(2))) { RepeatSection(task, actions) }
+            Column(Modifier.appear(rememberAppearance(3))) { NotesSection(task, actions) }
+            Column(Modifier.appear(rememberAppearance(4))) { StepsSection(task, actions) }
+            Column(Modifier.appear(rememberAppearance(5))) { GoalSection(task, actions) }
         }
     }
 
     Spacer(Modifier.height(MekaSpace.m))
-    key(task.id) { Box(Modifier.appear(rememberAppearance(5))) { DetailActions(task, actions) } }
+    key(task.id) { Box(Modifier.appear(rememberAppearance(6))) { DetailActions(task, actions) } }
 }
 
 internal fun providerLabel(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Outlook"; "fixtures" -> "Fixtures"; "news" -> "Headlines"; "bank_holidays" -> "Bank holidays"; else -> p }

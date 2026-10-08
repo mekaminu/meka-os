@@ -310,6 +310,13 @@ class MekaCore(
         onCore { tasks.setWhen(taskId, day, minuteOfDay.takeIf { it >= 0 }) }
     /** The task's notes; blank clears them. */
     suspend fun setNotes(taskId: String, notes: String) = onCore { tasks.setNotes(taskId, notes) }
+    /** Remind me: the row as shown ("Off" or when) and the chips still ahead of now. */
+    fun taskReminder(task: os.meka.core.domain.Task): os.meka.core.domain.TaskReminderView =
+        os.meka.core.domain.TaskReminderRules.view(task, nowMs(), ZoneCalendar(timeZone))
+    /** Reminds about the task at [atMs] (a heads-up through the governor); null turns it off. */
+    suspend fun setReminder(taskId: String, atMs: Long?) = onCore { tasks.setReminder(taskId, atMs) }
+    /** For Swift: [setReminder] with -1 for off. */
+    suspend fun setReminderAt(taskId: String, atMs: Long) = onCore { tasks.setReminder(taskId, atMs.takeIf { it >= 0 }) }
 
     // ---- Repeating tasks and routines ----
 
@@ -896,7 +903,7 @@ class MekaCore(
         )
         _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars)
         _afterWork.value = held.summary()
-        _notifyPreview.value = Governor.preview(currentNotices(), notifySettings, nowMs(), ZoneCalendar(timeZone))
+        _notifyPreview.value = Governor.preview(currentNotices(all), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(
                 taskId = c.key.entityId,
@@ -923,10 +930,10 @@ class MekaCore(
     }
 
     /** Notices from the views as they stand (call after [refresh]). */
-    private fun currentNotices() =
+    private fun currentNotices(all: List<os.meka.core.domain.Task> = tasks.all()) =
         NoticeSources.collect(
             _lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card,
-            events.all(), _eventMarks.value, _sessions.value,
+            events.all(), _eventMarks.value, _sessions.value, all,
         )
 
     private fun project(all: List<os.meka.core.domain.Task> = tasks.all(), dayEvents: List<os.meka.core.domain.CalendarEvent> = visibleEvents(all)): Today {

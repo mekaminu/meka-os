@@ -91,6 +91,8 @@ object TaskFields {
     const val DEFERRED_TO_DAY = "deferredToDay"
     /** A prep task's calendar event (calendar actions): the event it prepares for. */
     const val EVENT_ID = "eventId"
+    /** Remind me (task detail): when to remind, epoch ms; Null for no reminder. Moves with the task's When. */
+    const val REMIND_AT = "remindAtMs"
 }
 
 object ChecklistFields {

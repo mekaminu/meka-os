@@ -58,6 +58,8 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     WEEKLY_REVIEW("Weekly review", NoticeTier.HEADS_UP),
     /** Remind me / Leave by on a calendar event (calendar actions); Meka sets each one. */
     EVENT_REMINDER("Event reminders", NoticeTier.HEADS_UP),
+    /** Remind me on a task (task detail); Meka sets each one. */
+    TASK_REMINDER("Task reminders", NoticeTier.HEADS_UP),
     /** A fixture's kick-off moved (the fixtures feed, seen by the server). */
     FIXTURE_MOVED("Kick-off changes", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
@@ -386,6 +388,7 @@ object Governor {
         NoticeSource.SHUTDOWN -> "time to shut down"
         NoticeSource.WEEKLY_REVIEW -> "your weekly review"
         NoticeSource.EVENT_REMINDER -> plural(n, "event reminder")
+        NoticeSource.TASK_REMINDER -> plural(n, "task reminder")
         NoticeSource.FIXTURE_MOVED -> plural(n, "kick-off") + " moved"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
@@ -416,6 +419,7 @@ object NoticeSources {
         events: List<CalendarEvent> = emptyList(),
         marks: EventMarks = EventMarks.NONE,
         sessions: SessionsView = SessionsView.EMPTY,
+        tasks: List<Task> = emptyList(),
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -514,6 +518,8 @@ object NoticeSources {
         out += FixtureMoves.notices(events, marks, nowMs, cal)
         // Booked sessions (Gym): time to go, then "Did you go?" once the slot is over.
         out += SessionRules.notices(sessions, cal)
+        // Remind me, set on tasks.
+        out += TaskReminderRules.notices(tasks, nowMs, cal)
         return out
     }
 }

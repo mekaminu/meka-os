@@ -106,6 +106,60 @@ struct WhenRow: View {
     }
 }
 
+/// Remind me (Fold review 2026-10-08, item 8): "Off" or when ("Today · 14:15") in the row; clicking unfolds the chips
+/// still ahead (At 14:30 · 15 min before · 1 h before, or In 1 h · 13:00 · 18:00) and Off, with the expand spring
+/// (Reduce Motion: fades). A heads-up through the notification governor; it moves with the task's When.
+struct ReminderRow: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let task: MekaTask
+    let palette: MekaPalette
+    @State private var open = false
+
+    var body: some View {
+        if let v = model.taskReminder(task), v.isSet || !v.choices.isEmpty {
+            VStack(alignment: .leading, spacing: MekaSpace.s) {
+                Button {
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open.toggle() }
+                } label: {
+                    HStack {
+                        Text("Remind me").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                        Spacer()
+                        Text(v.label).font(MekaType.itemMeta).foregroundStyle(v.isSet ? palette.accent : palette.textSecondary)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: v.label)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(MekaPressStyle())
+                .accessibilityLabel("Remind me, \(v.label)")
+
+                if open {
+                    HStack(spacing: MekaSpace.xs) {
+                        ForEach(v.choices, id: \.atMs) { c in
+                            chip(c.label, lit: c.selected) { model.setReminder(task.id, at: c.selected ? nil : c.atMs) }
+                        }
+                        if v.isSet { chip("Off", lit: false) { model.setReminder(task.id, at: nil) } }
+                    }
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                }
+            }
+        }
+    }
+
+    private func chip(_ label: String, lit: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label).font(MekaType.caption)
+                .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .background(Capsule().fill(lit ? palette.accent : palette.surfaceRaised))
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityAddTraits(lit ? .isSelected : [])
+    }
+}
+
 /// Notes: a multi-line editor, saved a moment after typing stops and when the detail closes; blank clears them.
 struct NotesEditor: View {
     @Environment(CoreModel.self) private var model

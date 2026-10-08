@@ -170,8 +170,9 @@ data class TaskTiming(
     val deferredToDay: Long?,
     val scheduledAtMs: Long?,
     val dueAtMs: Long?,
+    val remindAtMs: Long? = null,
 ) {
     companion object {
-        fun of(t: Task) = TaskTiming(t.lifecycle, t.deferredToDay, t.scheduledAtMs, t.dueAtMs)
+        fun of(t: Task) = TaskTiming(t.lifecycle, t.deferredToDay, t.scheduledAtMs, t.dueAtMs, t.remindAtMs)
     }
 }

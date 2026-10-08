@@ -646,13 +646,14 @@ private struct DetailContent: View {
                     // Entrance: the rows stagger in, 40 ms apart (fresh for each task: the detail is re-made per id).
                     VStack(alignment: .leading, spacing: MekaSpace.s) {
                         WhenRow(task: task, palette: palette).staggeredAppear(0)
-                        RepeatMenu(task: task, palette: palette).staggeredAppear(1)
-                        NotesEditor(task: task, palette: palette).staggeredAppear(2)
-                        StepsList(task: task, palette: palette).staggeredAppear(3)
-                        GoalMenu(task: task, palette: palette).staggeredAppear(4)
+                        ReminderRow(task: task, palette: palette).staggeredAppear(1)
+                        RepeatMenu(task: task, palette: palette).staggeredAppear(2)
+                        NotesEditor(task: task, palette: palette).staggeredAppear(3)
+                        StepsList(task: task, palette: palette).staggeredAppear(4)
+                        GoalMenu(task: task, palette: palette).staggeredAppear(5)
                     }
                 }
-                DetailActionPills(task: task, palette: palette).staggeredAppear(5)
+                DetailActionPills(task: task, palette: palette).staggeredAppear(6)
             } else {
                 Spacer()
                 Text("Select something to see it here.")

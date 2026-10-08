@@ -344,4 +344,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TaskWhenRules.shared.suggestedMinute(day: 101, today: 100, nowMinute: 600), 540)
         XCTAssertEqual(TaskWhenRules.shared.deletedLine(title: "Book dentist"), "Deleted “Book dentist”")
     }
+
+    /// Remind me in the task detail: the chip labels reach Swift.
+    func testTaskReminderRulesReachSwift() {
+        XCTAssertEqual(TaskReminderRules.shared.beforeLabel(minutes: 15), "15 min before")
+        XCTAssertEqual(TaskReminderRules.shared.beforeLabel(minutes: 60), "1 h before")
+    }
 }

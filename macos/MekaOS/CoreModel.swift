@@ -807,6 +807,16 @@ final class CoreModel {
     }
 
     func setNotes(_ id: String, _ notes: String) { run { try await $0.setNotes(taskId: id, notes: notes) } }
+
+    /// Remind me: "Off" or when, and the chips still ahead of now (pure, in the core).
+    func taskReminder(_ task: MekaTask) -> TaskReminderView? { core?.taskReminder(task: task) }
+
+    /// Reminds about the task at epoch ms (a heads-up through the governor); nil turns it off.
+    func setReminder(_ id: String, at ms: Int64?) {
+        MekaHaptics.tick()
+        let at = ms ?? -1
+        run { try await $0.setReminderAt(taskId: id, atMs: at) }
+    }
     func resolve(_ choice: ConflictChoice, with option: String) { run { try await $0.resolve(choice: choice, chosenOption: option) } }
     // MARK: Repeating tasks and routines
 
