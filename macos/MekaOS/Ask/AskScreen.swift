@@ -1,3 +1,4 @@
+@preconcurrency import MekaKit
 import SwiftUI
 
 /// ASK on the Mac (build plan M1, Four tabs, one front door): the front door to everything that isn't a tab. Until the
@@ -116,23 +117,45 @@ private struct MoreRow: View {
 /// segmented control in the row itself; every colour blends across (`themeBlend`) as the choice changes.
 private struct AppearanceRow: View {
     let palette: MekaPalette
+    @Environment(CoreModel.self) private var model
     @AppStorage(MekaAppearance.key) private var appearance = MekaAppearance.dark.rawValue
+    /// News ticker (news ticker, slice 2): how the strip at the foot of Today moves on this Mac.
+    @AppStorage(NewsTickerChoice.key) private var ticker = "calm"
     @State private var hovering = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(MoreItem.appearance.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
-                Text(MoreItem.appearance.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+        VStack(alignment: .leading, spacing: MekaSpace.s) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(MoreItem.appearance.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                    Text(MoreItem.appearance.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                }
+                Spacer()
+                Picker(MoreItem.appearance.label, selection: $appearance) {
+                    ForEach(MekaAppearance.allCases) { a in Text(a.label).tag(a.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
             }
-            Spacer()
-            Picker(MoreItem.appearance.label, selection: $appearance) {
-                ForEach(MekaAppearance.allCases) { a in Text(a.label).tag(a.rawValue) }
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("News ticker").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Text(NewsTickerChoice.mode(ticker).line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: ticker)
+                }
+                Spacer()
+                Button("Topics…") { model.showNews = true }
+                    .buttonStyle(.plain).font(MekaType.caption).foregroundStyle(palette.accent)
+                Picker("News ticker", selection: $ticker) {
+                    ForEach(NewsTickerChoice.all, id: \.id) { m in Text(m.label).tag(m.id) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
         }
         .padding(.horizontal, MekaSpace.m)
         .padding(.vertical, MekaSpace.s)

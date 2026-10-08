@@ -203,6 +203,10 @@ struct TodayView: View {
                 try? await Task.sleep(for: .seconds(MotionMath.staggerSpan(count: Self.sections, reduced: false) + 0.3))
                 introPlayed = true
             }
+            // News ticker (news ticker, slice 2): the drifting strip at the foot of Today; Appearance → News ticker.
+            NewsTickerStrip(palette: palette)
+                .padding(.horizontal, MekaSpace.m)
+                .padding(.top, MekaSpace.s)
             CaptureField(palette: palette)
                 .padding(MekaSpace.m)
         }

@@ -212,6 +212,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         let notAKey = try await core.newsImageBase64(key: "https://img.example/a.jpg")
         XCTAssertNil(notAKey)
         XCTAssertEqual(NewsRules.shared.tileInitial(source: "Mundo Deportivo"), "M")
+        // The news ticker (slice 2): nothing to show, so no strip; calm by default, rests after two loops.
+        let ticker = TickerRules.shared.ticker(place: place)
+        XCTAssertTrue(ticker.isEmpty)
+        XCTAssertFalse(TickerRules.shared.shown(mode: TickerMode.calm, ticker: ticker))
+        XCTAssertEqual(TickerRules.shared.mode(id: "nonsense"), TickerMode.calm)
+        XCTAssertEqual([TickerMode.calm, TickerMode.moving, TickerMode.off].map(\.label), ["Calm", "Always moving", "Off"])
+        XCTAssertFalse(TickerRules.shared.moving(mode: TickerMode.calm, reducedMotion: false, onScreen: true, held: false,
+                                                 loopsDone: TickerRules.shared.CALM_LOOPS, hasItems: true))
+        let d = TickerRules.shared.step(drift: TickerDrift(offsetDp: 99, loops: 0), dtMs: 50, loopWidthDp: 100)
+        XCTAssertEqual(d.loops, 1)
     }
 
     func testWeeklyReviewThroughTheBridge() async throws {

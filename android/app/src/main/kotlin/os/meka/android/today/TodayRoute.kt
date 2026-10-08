@@ -84,6 +84,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.news.NewsPane
+import os.meka.android.news.NewsTickerStrip
+import os.meka.android.news.rememberTickerMode
+import os.meka.core.domain.NewsTicker
+import os.meka.core.domain.TickerMode
+import os.meka.core.domain.TickerRules
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.MekaSharedLayout
@@ -156,6 +161,9 @@ fun TodayRoute(
     var newsShown by remember { mutableStateOf<String?>(null) }
     if (newsOpen != null) newsShown = newsOpen
     val newsPlace by core.newsPlace.collectAsState()
+    // The news ticker under the header (news ticker, slice 2): the per-device choice from Appearance.
+    val ticker = remember(newsPlace) { TickerRules.ticker(newsPlace) }
+    val tickerMode = rememberTickerMode()
     // An event's detail (calendar redesign, slice 3); the last one is kept while the pane leaves.
     var eventOpen by remember { mutableStateOf<CalendarEvent?>(null) }
     var eventShown by remember { mutableStateOf<CalendarEvent?>(null) }
@@ -227,7 +235,9 @@ fun TodayRoute(
                         brief = brief, openBrief = { showBrief = true }, briefOpen = showBrief,
                         reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } },
                         openEvent = { eventOpen = it }, eventHandlers = eventHandlers,
-                        now = if (twoPane) null else nowView, nowHandlers = nowHandlers)
+                        now = if (twoPane) null else nowView, nowHandlers = nowHandlers,
+                        ticker = ticker, tickerMode = tickerMode, core = core,
+                        openStory = { id -> newsOpen = id }, openMatch = { eventOpen = it })
                 },
                 detail = { m ->
                     CommandSide(
@@ -365,6 +375,11 @@ private fun TodayPane(
     /** The closed Fold's cover screen (Fold modes, slice 3): the "now" card heads Today in place of Up next. */
     now: NowView? = null,
     nowHandlers: NowHandlers? = null,
+    ticker: NewsTicker = NewsTicker.EMPTY,
+    tickerMode: TickerMode = TickerMode.OFF,
+    core: MekaCore? = null,
+    openStory: (String) -> Unit = {},
+    openMatch: (CalendarEvent) -> Unit = {},
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
@@ -401,6 +416,11 @@ private fun TodayPane(
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                                 .clickable(role = Role.Button) { openPlan() }.padding(vertical = MekaSpace.xxs),
                         )
+                    }
+                    // News ticker (news ticker, slice 2): one line of drifting cards under the header; calm by default
+                    // (two loops, then it rests). Off in Appearance hides it.
+                    if (core != null && TickerRules.shown(tickerMode, ticker)) {
+                        NewsTickerStrip(core, ticker, tickerMode, Modifier.padding(top = MekaSpace.s), openStory = openStory, openMatch = openMatch)
                     }
                 }
             }

@@ -1,7 +1,11 @@
 package os.meka.android.ask
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -29,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -46,6 +51,9 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.export.YourData
 import os.meka.android.news.NewsPane
+import os.meka.android.news.TickerChoice
+import os.meka.android.news.rememberTickerMode
+import os.meka.core.domain.TickerMode
 import os.meka.android.notify.NotificationsPane
 import os.meka.android.search.SearchPane
 import os.meka.android.shell.MoreItem
@@ -120,7 +128,7 @@ fun AskRoute(core: MekaCore, connected: Boolean, openPlace: (ShellDestination) -
             }
             itemsIndexed(items, key = { _, it -> it.name }) { i, item ->
                 if (ShellNav.unfoldsInPlace(item)) {
-                    AppearanceRow(appearanceOpen, Modifier.appear(rememberAppearance(3 + i))) { appearanceOpen = !appearanceOpen }
+                    AppearanceRow(appearanceOpen, Modifier.appear(rememberAppearance(3 + i)), openTopics = { pane = MoreItem.NEWS }) { appearanceOpen = !appearanceOpen }
                 } else {
                     MoreRow(item, ShellNav.moreLine(item, lists.dueCount, work.atWork), ShellNav.moreLit(item, lists.dueCount),
                         pane == item, Modifier.appear(rememberAppearance(3 + i))) {
@@ -177,8 +185,11 @@ private fun MoreRow(item: MoreItem, line: String, lit: Boolean, paneOpen: Boolea
  * (`themeBlend`). Reduced motion: the chips appear at once and colours cross-fade.
  */
 @Composable
-private fun AppearanceRow(open: Boolean, modifier: Modifier, toggle: () -> Unit) {
+private fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> Unit, toggle: () -> Unit) {
     val theme = Meka.theme
+    val context = LocalContext.current.applicationContext
+    val tickerMode = rememberTickerMode()
+    val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     Column(
         modifier.fillMaxWidth()
@@ -207,22 +218,52 @@ private fun AppearanceRow(open: Boolean, modifier: Modifier, toggle: () -> Unit)
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 ThemeChoice.entries.forEach { c ->
-                    val chosen = theme.choice == c
-                    val bg by animateColorAsState(
-                        if (chosen) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.themeBlend(Meka.reducedMotion), label = "chip-bg",
-                    )
-                    val fg by animateColorAsState(
-                        if (chosen) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.themeBlend(Meka.reducedMotion), label = "chip-fg",
-                    )
-                    Text(
-                        c.label, style = MekaType.caption, color = fg,
-                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-                            .clickable(role = Role.RadioButton) { if (!chosen) { haptics.tick(); theme.set(c) } }
-                            .semantics { selected = chosen }
-                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                    )
+                    Chip(c.label, theme.choice == c) { haptics.tick(); theme.set(c) }
                 }
+            }
+            // News ticker (news ticker, slice 2): how the strip under Today's header moves, on this device; Topics
+            // opens News (the topics and their sources).
+            Text("News ticker", style = MekaType.caption, color = Meka.colors.textSecondary,
+                modifier = Modifier.padding(start = MekaSpace.m, top = MekaSpace.xs))
+            Row(
+                Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs),
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                TickerMode.entries.forEach { m ->
+                    Chip(m.label, tickerMode == m) { haptics.tick(); TickerChoice.set(context, m) }
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs, bottom = MekaSpace.s),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AnimatedContent(
+                    targetState = tickerMode.line,
+                    transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                    label = "ticker-line", modifier = Modifier.weight(1f),
+                ) { line -> Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                Text("Topics ›", style = MekaType.caption, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = openTopics)
+                        .padding(MekaSpace.xxs))
             }
         }
     }
+}
+
+/** A choice chip: the chosen one's colour blends across (`themeBlend`). */
+@Composable
+private fun Chip(label: String, chosen: Boolean, choose: () -> Unit) {
+    val bg by animateColorAsState(
+        if (chosen) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.themeBlend(Meka.reducedMotion), label = "chip-bg",
+    )
+    val fg by animateColorAsState(
+        if (chosen) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.themeBlend(Meka.reducedMotion), label = "chip-fg",
+    )
+    Text(
+        label, style = MekaType.caption, color = fg,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+            .clickable(role = Role.RadioButton) { if (!chosen) choose() }
+            .semantics { selected = chosen }
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    )
 }
