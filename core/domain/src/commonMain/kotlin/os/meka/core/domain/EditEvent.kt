@@ -145,7 +145,9 @@ object EditEventRules {
      * done), or null. Undone ones say nothing.
      */
     fun note(eventId: String, edits: List<EventEdit>, nowMs: Long): EventEditNote? {
-        val e = edits.filter { it.eventId == eventId }.maxByOrNull { it.createdAtMs } ?: return null
+        // An undone edit never happened, so it doesn't hide an earlier one (two made in the same millisecond: the later id).
+        val e = edits.filter { it.eventId == eventId && !it.undone }
+            .maxWithOrNull(compareBy<EventEdit>({ it.createdAtMs }, { it.id })) ?: return null
         val line = EditLineRules.lines(listOf(e), nowMs).firstOrNull() ?: return null
         val anyway = needsGuestsOk(e, nowMs)
         return EventEditNote(

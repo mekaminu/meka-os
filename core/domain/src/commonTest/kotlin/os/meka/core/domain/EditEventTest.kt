@@ -161,6 +161,9 @@ class EditEventTest {
         // Undone: the detail says nothing.
         assertTrue(eMac.undo(id))
         assertNull(EditEventRules.note("ev1", eMac.all(), world.clock.nowMs))
+        // A delete made in the same millisecond: the undone move doesn't hide it.
+        val del = assertIs<EventEditResult.Made>(eMac.delete(e)).id
+        assertEquals(del, EditEventRules.note("ev1", eMac.all(), world.clock.nowMs)?.editId)
     }
 
     @Test
