@@ -151,12 +151,29 @@ fun Application.mekaSync(
         if (integrations != null) {
             // Starts connecting an account: returns the provider's sign-in URL for the app to open in a browser.
             post("/v1/integrations/{provider}/connect") {
-                val who = call.device(devices, verifier, call.boundedBody(), requireKey = true)
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
                 val provider = call.parameters["provider"].orEmpty()
-                when (val r = withContext(Dispatchers.IO) { integrations.start(who.householdId, provider) }) {
+                // Allow editing (calendar editing) asks for the write permission too; an empty body is read-only.
+                val editing = WireCodec.decodeConnectRequest(body)
+                when (val r = withContext(Dispatchers.IO) { integrations.start(who.householdId, provider, editing) }) {
                     is Integrations.StartResult.Url -> call.respondText(WireCodec.encodeConnectUrl(r.url), ContentType.Application.Json)
                     Integrations.StartResult.UnknownProvider -> call.respondText("unknown provider", status = HttpStatusCode.NotFound)
                     Integrations.StartResult.NotConfigured -> call.respondText("not configured", status = HttpStatusCode.Conflict)
+                }
+            }
+
+            // Stop editing on one account (calendar editing). Only giving editing up: allowing it needs the provider's consent.
+            post("/v1/integrations/{provider}/editing") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val change = WireCodec.decodeEditingChange(body)
+                if (change.editing) call.respondText("allow editing through connect", status = HttpStatusCode.BadRequest)
+                else {
+                    val provider = call.parameters["provider"].orEmpty()
+                    val found = withContext(Dispatchers.IO) { integrations.stopEditing(who.householdId, provider, change.email) }
+                    if (!found) call.respondText("no such account", status = HttpStatusCode.NotFound)
+                    else call.respondText(WireCodec.encodeAccounts(withContext(Dispatchers.IO) { integrations.accounts(who.householdId) }), ContentType.Application.Json)
                 }
             }
 
@@ -177,7 +194,7 @@ fun Application.mekaSync(
                 val page = when (result) {
                     is Integrations.CallbackResult.Connected -> {
                         background { runCatching { integrations.syncAccount(result.accountId) } }
-                        resultPage("Connected", "${providerName(result.provider)} (${result.email}) is connected. Your calendar will appear in MEKA OS within a minute. You can close this page.")
+                        resultPage("Connected", connectedText(result))
                     }
                     is Integrations.CallbackResult.Failed -> resultPage("Not connected", result.reason)
                 }
@@ -286,12 +303,24 @@ fun Application.mekaSync(
 
 private const val PRIVACY_TEXT =
     "MEKA OS is a private app used only by its owner's household. When you connect a Google or Microsoft account, " +
-        "MEKA OS reads your calendar events (read-only) so they can appear in your own MEKA OS apps. Event details are " +
+        "MEKA OS reads your calendar events so they can appear in your own MEKA OS apps. It changes your calendar only " +
+        "if you choose Allow editing for that account, and then only to add, move, edit or delete events you ask it to " +
+        "from your own MEKA OS apps; Stop editing turns that off at once. Event details are " +
         "stored encrypted in the owner's own cloud account and on the owner's devices, are never sold or shared with " +
         "anyone, and are not used for advertising or to train AI models. Sign-in tokens are encrypted with a key only " +
         "this service can use. You can disconnect at any time from your Google or Microsoft account settings, after " +
         "which no further data is read. Use of information received from Google APIs adheres to the Google API Services " +
         "User Data Policy, including the Limited Use requirements."
+
+/** What the browser says after a sign-in completed (calendar editing: whether editing is now on). */
+internal fun connectedText(r: Integrations.CallbackResult.Connected): String {
+    val who = "${providerName(r.provider)} (${r.email})"
+    return when {
+        r.canEdit -> "$who is connected, and MEKA OS may now add and change events in it when you do so in the app. You can close this page."
+        r.editingAsked -> "$who is connected, but read-only: editing wasn't allowed. To allow it, tap Allow editing again and keep the calendar permission ticked. You can close this page."
+        else -> "$who is connected. Your calendar will appear in MEKA OS within a minute. You can close this page."
+    }
+}
 
 private fun providerName(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Microsoft"; else -> p }
 
@@ -460,6 +489,7 @@ object Migrations {
     private val all = listOf(
         1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql", 4 to "/db/V4__event_mirror_end.sql",
         5 to "/db/V5__app_release.sql", 6 to "/db/V6__push_token.sql", 7 to "/db/V7__news_image.sql",
+        8 to "/db/V8__calendar_editing.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

@@ -56,17 +56,22 @@ class Integrations(
         object NotConfigured : StartResult()
     }
 
-    fun start(householdId: String, provider: String): StartResult {
+    /** [editing]: Allow editing (calendar editing): the provider is asked for its write scope as well. */
+    fun start(householdId: String, provider: String, editing: Boolean = false): StartResult {
         val p = providers[provider] ?: return StartResult.UnknownProvider
         val client = clients.get(provider) ?: return StartResult.NotConfigured
         val state = token(24)
         val verifier = token(48)
-        store.transaction { store.saveState(state, PendingConnect(householdId, provider, verifier, now())) }
-        return StartResult.Url(p.authorizeUrl(client, redirectUri(provider), state, challenge(verifier)))
+        store.transaction { store.saveState(state, PendingConnect(householdId, provider, verifier, now(), editing)) }
+        return StartResult.Url(p.authorizeUrl(client, redirectUri(provider), state, challenge(verifier), editing))
     }
 
     sealed class CallbackResult {
-        data class Connected(val provider: String, val email: String, val accountId: String) : CallbackResult()
+        data class Connected(
+            val provider: String, val email: String, val accountId: String,
+            /** Editing was asked for ([editingAsked]) and granted ([canEdit]); asked but not granted stays read-only. */
+            val canEdit: Boolean = false, val editingAsked: Boolean = false,
+        ) : CallbackResult()
         data class Failed(val reason: String) : CallbackResult()
     }
 
@@ -81,19 +86,29 @@ class Integrations(
         if (error != null || code.isNullOrBlank()) return CallbackResult.Failed("Sign-in was cancelled.")
         val p = providers.getValue(provider)
         val client = clients.get(provider) ?: return CallbackResult.Failed("This provider is not set up on the server yet.")
-        val tokens = p.exchangeCode(client, redirectUri(provider), code, pending.codeVerifier)
+        val tokens = p.exchangeCode(client, redirectUri(provider), code, pending.codeVerifier, pending.editing)
         val refresh = tokens.refreshToken ?: return CallbackResult.Failed("The provider did not grant offline access. Try connecting again.")
         if (tokens.scope != null && !tokens.scope.contains(p.requiredScope, ignoreCase = true)) {
             return CallbackResult.Failed("Calendar access wasn't allowed. Connect again and keep the calendar permission ticked.")
         }
+        // Editing only when it was asked for and the owner left the write permission ticked; never assumed.
+        val canEdit = pending.editing && grants(tokens.scope, p.writeScope)
         val email = p.accountEmail(tokens.accessToken).lowercase()
         val enc = cipher.encrypt(refresh.toByteArray(), context(pending.householdId, provider))
-        val id = store.transaction { store.upsertAccount(pending.householdId, provider, email, enc) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
-        return CallbackResult.Connected(provider, email, id)
+        val id = store.transaction { store.upsertAccount(pending.householdId, provider, email, enc, canEdit) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
+        return CallbackResult.Connected(provider, email, id, canEdit, pending.editing)
     }
 
     fun accounts(householdId: String): List<WireCodec.IntegrationAccount> =
-        store.accounts(householdId).map { WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs) }
+        store.accounts(householdId).map { WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs, it.canEdit) }
+
+    /**
+     * Stop editing on one account (calendar editing): from now on the server only reads it. Giving a permission up
+     * needs no consent; the provider's grant stays until the owner removes it there or reconnects read-only.
+     * Returns false for an unknown account or a provider that can't edit.
+     */
+    fun stopEditing(householdId: String, provider: String, email: String): Boolean =
+        provider in providers && store.transaction { store.stopEditing(householdId, provider, email.lowercase()) }
 
     /** Syncs every connected account; one account's failure never stops the others. */
     fun syncAll() {
@@ -126,7 +141,7 @@ class Integrations(
         val ctx = context(a.householdId, a.provider)
         try {
             val refresh = cipher.decrypt(a.refreshTokenEnc, ctx).decodeToString()
-            val tokens = p.refresh(client, refresh)
+            val tokens = p.refresh(client, refresh, a.canEdit)
             if (tokens.refreshToken != null && tokens.refreshToken != refresh) {
                 store.transaction { store.updateRefreshToken(a.id, cipher.encrypt(tokens.refreshToken.toByteArray(), ctx)) }
             }

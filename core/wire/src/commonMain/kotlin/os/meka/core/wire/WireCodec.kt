@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -141,7 +142,27 @@ object WireCodec {
     fun decodeEnrolResponse(s: String): String = parse(s) { o -> o.str("secret") }
 
     /** Connected calendar/email accounts (ADR-008). Tokens never cross the wire; this is display state only. */
-    data class IntegrationAccount(val provider: String, val email: String, val status: String, val lastSyncAtMs: Long?)
+    data class IntegrationAccount(
+        val provider: String, val email: String, val status: String, val lastSyncAtMs: Long?,
+        /** The owner allowed MEKA to add and change events in this account (calendar editing). Additive: absent = false. */
+        val canEdit: Boolean = false,
+    )
+
+    /**
+     * Starting a connection (calendar editing): [editing] asks the provider for permission to change events as well as
+     * read them. An empty body (older apps) is a read-only connection.
+     */
+    fun encodeConnectRequest(editing: Boolean): String = doc { put("editing", editing) }
+    fun decodeConnectRequest(s: String): Boolean =
+        if (s.isBlank()) false else parse(s) { o -> o["editing"]?.jsonPrimitive?.booleanOrNull ?: false }
+
+    /** Turning editing off for one account (no consent needed to give a permission up). */
+    data class EditingChange(val email: String, val editing: Boolean)
+    fun encodeEditingChange(c: EditingChange): String = doc { put("email", c.email); put("editing", c.editing) }
+    fun decodeEditingChange(s: String): EditingChange = parse(s) { o ->
+        EditingChange(o.str("email").also { if (it.length !in 3..320) throw WireFormatException("unexpected email") },
+            o["editing"]?.jsonPrimitive?.booleanOrNull ?: throw WireFormatException("missing 'editing'"))
+    }
 
     /** A device's public signing key (ADR-005): X.509 SPKI DER, base64. */
     fun encodeDeviceKey(publicKeyDerBase64: String): String = doc { put("pub", publicKeyDerBase64) }
@@ -157,6 +178,7 @@ object WireCodec {
             buildJsonObject {
                 put("provider", a.provider); put("email", a.email); put("status", a.status)
                 a.lastSyncAtMs?.let { put("lastSync", it) }
+                if (a.canEdit) put("edit", true)
             }
         }))
     }
@@ -164,7 +186,10 @@ object WireCodec {
     fun decodeAccounts(s: String): List<IntegrationAccount> = parse(s) { o ->
         o.getValue("accounts").jsonArray.map { e ->
             val a = e.jsonObject
-            IntegrationAccount(a.str("provider"), a.str("email"), a.str("status"), a["lastSync"]?.jsonPrimitive?.long)
+            IntegrationAccount(
+                a.str("provider"), a.str("email"), a.str("status"), a["lastSync"]?.jsonPrimitive?.long,
+                canEdit = a["edit"]?.jsonPrimitive?.booleanOrNull ?: false,
+            )
         }
     }
 

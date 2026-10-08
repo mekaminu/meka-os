@@ -430,4 +430,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TaskReminderRules.shared.beforeLabel(minutes: 15), "15 min before")
         XCTAssertEqual(TaskReminderRules.shared.beforeLabel(minutes: 60), "1 h before")
     }
+
+    /// Calendar editing, slice 1: the Calendars sheet's editing line and action reach Swift.
+    func testCalendarAccessRulesReachSwift() {
+        XCTAssertEqual(CalendarAccessRules.shared.action(provider: "google", canEdit: false, needsReconnect: false), .allowEditing)
+        XCTAssertEqual(CalendarAccessRules.shared.action(provider: "microsoft", canEdit: true, needsReconnect: false)?.label, "Stop editing")
+        XCTAssertNil(CalendarAccessRules.shared.action(provider: "fixtures", canEdit: false, needsReconnect: false))
+        XCTAssertEqual(CalendarAccessRules.shared.line(provider: "google", canEdit: false, needsReconnect: false), "Read-only · MEKA only reads this calendar")
+        XCTAssertTrue(CalendarAccessRules.shared.reconnectAsksEditing(canEdit: true))
+        let a = ConnectedAccount(provider: "google", email: "me@gmail.com", status: "ok", lastSyncAtMs: nil, canEdit: true)
+        XCTAssertEqual(a.editingAction, .stopEditing)
+    }
 }

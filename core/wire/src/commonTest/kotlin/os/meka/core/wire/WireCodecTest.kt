@@ -11,6 +11,7 @@ import os.meka.core.sync.SequencedOp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFailsWith
 
 class WireCodecTest {
     private fun op(v: FieldValue, base: List<String> = listOf("b1", "b2")) = Op(
@@ -74,9 +75,22 @@ class WireCodecTest {
         val accounts = listOf(
             WireCodec.IntegrationAccount("google", "me@gmail.com", "ok", 1_790_000_000_000L),
             WireCodec.IntegrationAccount("microsoft", "me@outlook.com", "needs_reconnect", null),
+            WireCodec.IntegrationAccount("google", "work@gmail.com", "ok", null, canEdit = true),
         )
         assertEquals(accounts, WireCodec.decodeAccounts(WireCodec.encodeAccounts(accounts)))
+        // An older server's list (no "edit") reads as read-only.
+        assertEquals(false, WireCodec.decodeAccounts("""{"w":${WireCodec.VERSION},"accounts":[{"provider":"google","email":"a@b.c","status":"ok"}]}""").single().canEdit)
         assertEquals("https://accounts.example/x?y=1", WireCodec.decodeConnectUrl(WireCodec.encodeConnectUrl("https://accounts.example/x?y=1")))
+    }
+
+    @Test
+    fun connectRequestsAskForEditingOnlyWhenSaidAndEditingChangesRoundTrip() {
+        assertEquals(true, WireCodec.decodeConnectRequest(WireCodec.encodeConnectRequest(true)))
+        assertEquals(false, WireCodec.decodeConnectRequest(WireCodec.encodeConnectRequest(false)))
+        assertEquals(false, WireCodec.decodeConnectRequest("")) // older apps send nothing: read-only
+        val off = WireCodec.EditingChange("me@gmail.com", editing = false)
+        assertEquals(off, WireCodec.decodeEditingChange(WireCodec.encodeEditingChange(off)))
+        assertFailsWith<WireFormatException> { WireCodec.decodeEditingChange("""{"w":${WireCodec.VERSION},"email":"me@gmail.com"}""") }
     }
 
     @Test

@@ -48,14 +48,22 @@ data class RemoteEvent(
 /** The refresh token was revoked or expired: the owner has to connect the account again. */
 class ReconnectRequired(message: String) : RuntimeException(message)
 
-/** A calendar provider (ADR-008). Read-only in M1: no scope that can change the owner's calendars is requested. */
+/**
+ * A calendar provider (ADR-008). Read-only unless the owner allows editing on the account (calendar editing): only
+ * then is the scope that can change events ([writeScope]) asked for, and only when it was granted may it be used.
+ */
 interface CalendarProvider {
     val id: String
     /** The scope without which the account is useless (checked against what the owner actually granted). */
     val requiredScope: String
-    fun authorizeUrl(client: OAuthClient, redirectUri: String, state: String, codeChallenge: String): String
-    fun exchangeCode(client: OAuthClient, redirectUri: String, code: String, verifier: String): TokenSet
-    fun refresh(client: OAuthClient, refreshToken: String): TokenSet
+    /** The scope that lets MEKA add, change and delete events (asked for only with Allow editing). */
+    val writeScope: String
+    /** [editing]: ask for [writeScope] as well. */
+    fun authorizeUrl(client: OAuthClient, redirectUri: String, state: String, codeChallenge: String, editing: Boolean = false): String
+    /** [editing]: the sign-in asked for [writeScope] too (Microsoft wants the same scopes when redeeming the code). */
+    fun exchangeCode(client: OAuthClient, redirectUri: String, code: String, verifier: String, editing: Boolean = false): TokenSet
+    /** [editing]: the account may edit, so the new access token should carry [writeScope] (Microsoft asks per refresh). */
+    fun refresh(client: OAuthClient, refreshToken: String, editing: Boolean = false): TokenSet
     fun accountEmail(accessToken: String): String
     fun events(accessToken: String, fromMs: Long, toMs: Long): List<RemoteEvent>
 }
@@ -107,6 +115,19 @@ private fun JsonObject.tokens(previousRefresh: String? = null) = TokenSet(
     expiresInSec = this["expires_in"]?.jsonPrimitive?.longOrNull ?: 3600,
     scope = this["scope"].str(),
 )
+/**
+ * Whether a granted scope string ("openid https://www.googleapis.com/auth/calendar.events …") holds [wanted] exactly:
+ * as a whole word, or a word ending in "/<wanted>" (Microsoft's "https://graph.microsoft.com/Calendars.ReadWrite").
+ * `calendar.events.readonly` doesn't count as `calendar.events`.
+ */
+internal fun grants(scope: String?, wanted: String): Boolean {
+    if (scope.isNullOrBlank()) return false
+    val short = wanted.substringAfterLast('/')
+    return scope.split(' ', ',').map { it.trim() }.filter { it.isNotEmpty() }.any {
+        it.equals(wanted, ignoreCase = true) || it.endsWith("/$short", ignoreCase = true) || it.equals(short, ignoreCase = true)
+    }
+}
+
 /** An https link or null: the only kind of link mirrored as a Join button. */
 internal fun httpsOrNull(url: String?): String? = url?.trim()?.takeIf { it.startsWith("https://") && it.none(Char::isWhitespace) }
 
@@ -166,22 +187,25 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
     constructor() : this(Http())
     override val id = "google"
     override val requiredScope = "https://www.googleapis.com/auth/calendar.readonly"
+    // calendar.events changes events but can't list calendars, so editing keeps calendar.readonly as well.
+    override val writeScope = "https://www.googleapis.com/auth/calendar.events"
     private val scopes = "openid email https://www.googleapis.com/auth/calendar.readonly"
 
-    override fun authorizeUrl(client: OAuthClient, redirectUri: String, state: String, codeChallenge: String) =
+    override fun authorizeUrl(client: OAuthClient, redirectUri: String, state: String, codeChallenge: String, editing: Boolean) =
         "https://accounts.google.com/o/oauth2/v2/auth?" + Http.query(mapOf(
             "client_id" to client.clientId, "redirect_uri" to redirectUri, "response_type" to "code",
-            "scope" to scopes, "access_type" to "offline", "prompt" to "consent select_account",
+            "scope" to if (editing) "$scopes $writeScope" else scopes, "access_type" to "offline", "prompt" to "consent select_account",
             "state" to state, "code_challenge" to codeChallenge, "code_challenge_method" to "S256",
         ))
 
-    override fun exchangeCode(client: OAuthClient, redirectUri: String, code: String, verifier: String) =
+    override fun exchangeCode(client: OAuthClient, redirectUri: String, code: String, verifier: String, editing: Boolean) =
         http.postForm("https://oauth2.googleapis.com/token", mapOf(
             "code" to code, "client_id" to client.clientId, "client_secret" to client.clientSecret,
             "redirect_uri" to redirectUri, "grant_type" to "authorization_code", "code_verifier" to verifier,
         )).tokens()
 
-    override fun refresh(client: OAuthClient, refreshToken: String) =
+    // Google's refreshed token carries every scope the owner granted; nothing to ask for.
+    override fun refresh(client: OAuthClient, refreshToken: String, editing: Boolean) =
         http.postForm("https://oauth2.googleapis.com/token", mapOf(
             "client_id" to client.clientId, "client_secret" to client.clientSecret,
             "refresh_token" to refreshToken, "grant_type" to "refresh_token",
@@ -237,27 +261,30 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
     constructor() : this(Http())
     override val id = "microsoft"
     override val requiredScope = "Calendars.Read"
+    override val writeScope = "Calendars.ReadWrite"
     // "consumers": personal Microsoft accounts (outlook.com/hotmail/live), which is what the owner uses.
     private val authority = "https://login.microsoftonline.com/consumers/oauth2/v2.0"
     private val scopes = "offline_access openid email User.Read Calendars.Read"
+    private val editScopes = "offline_access openid email User.Read Calendars.ReadWrite"
+    private fun scopes(editing: Boolean) = if (editing) editScopes else scopes
 
-    override fun authorizeUrl(client: OAuthClient, redirectUri: String, state: String, codeChallenge: String) =
+    override fun authorizeUrl(client: OAuthClient, redirectUri: String, state: String, codeChallenge: String, editing: Boolean) =
         "$authority/authorize?" + Http.query(mapOf(
             "client_id" to client.clientId, "response_type" to "code", "redirect_uri" to redirectUri,
-            "response_mode" to "query", "scope" to scopes, "state" to state, "prompt" to "select_account",
+            "response_mode" to "query", "scope" to scopes(editing), "state" to state, "prompt" to "select_account",
             "code_challenge" to codeChallenge, "code_challenge_method" to "S256",
         ))
 
-    override fun exchangeCode(client: OAuthClient, redirectUri: String, code: String, verifier: String) =
+    override fun exchangeCode(client: OAuthClient, redirectUri: String, code: String, verifier: String, editing: Boolean) =
         http.postForm("$authority/token", mapOf(
-            "client_id" to client.clientId, "client_secret" to client.clientSecret, "scope" to scopes, "code" to code,
+            "client_id" to client.clientId, "client_secret" to client.clientSecret, "scope" to scopes(editing), "code" to code,
             "redirect_uri" to redirectUri, "grant_type" to "authorization_code", "code_verifier" to verifier,
         )).tokens()
 
     // Microsoft rotates refresh tokens: the caller stores the new one every time.
-    override fun refresh(client: OAuthClient, refreshToken: String) =
+    override fun refresh(client: OAuthClient, refreshToken: String, editing: Boolean) =
         http.postForm("$authority/token", mapOf(
-            "client_id" to client.clientId, "client_secret" to client.clientSecret, "scope" to scopes,
+            "client_id" to client.clientId, "client_secret" to client.clientSecret, "scope" to scopes(editing),
             "refresh_token" to refreshToken, "grant_type" to "refresh_token",
         )).tokens(previousRefresh = refreshToken)
 

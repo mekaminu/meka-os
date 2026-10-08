@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
@@ -40,6 +41,8 @@ import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.CalendarAccessAction
+import os.meka.core.domain.CalendarAccessRules
 import os.meka.core.domain.CalendarChoice
 import os.meka.android.designsystem.SkeletonRows
 import os.meka.android.designsystem.appear
@@ -59,13 +62,15 @@ import os.meka.android.designsystem.sharedTitleInPane
 
 /**
  * Connected calendars. Connecting opens the provider's own sign-in page in the browser; MEKA OS never sees the
- * password, and the server keeps the resulting access (read-only) encrypted. The list refreshes whenever the app
+ * password, and the server keeps the resulting access encrypted. Each account is read-only until Meka taps Allow
+ * editing (calendar editing), which asks the provider for the write permission; Stop editing gives it up at once. The list refreshes whenever the app
  * comes back to the foreground, so it updates as soon as the owner returns from the browser.
  */
 @Composable
 fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
     var accounts by remember { mutableStateOf<List<ConnectedAccount>?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    var note by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val uri = LocalUriHandler.current
@@ -75,9 +80,10 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { accounts = core.connectedAccounts() }
     }
 
-    fun connect(provider: String) = scope.launch {
+    fun connect(provider: String, editing: Boolean = false) = scope.launch {
         message = null
-        when (val r = core.startConnect(provider)) {
+        note = if (editing) CalendarAccessRules.allowNote(provider) else null
+        when (val r = core.startConnect(provider, editing)) {
             is ConnectStart.OpenBrowser -> runCatching { uri.openUri(r.url) }.onFailure { message = "Couldn't open the browser." }
             ConnectStart.NotSetUp -> message = "${providerLabel(provider)} isn't set up on your server yet. Finish the registration steps, then try again."
             is ConnectStart.Failed -> message = r.reason
@@ -87,19 +93,35 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
     val onToday by core.calendarsOnToday.collectAsState()
     val haptics = rememberMekaHaptics()
 
+    fun stopEditing(a: ConnectedAccount) = scope.launch {
+        haptics.tick()
+        message = null
+        val now = core.stopCalendarEditing(a.provider, a.email)
+        if (now == null) message = "Couldn't reach your server. Editing is still on; try again."
+        else { accounts = now; note = CalendarAccessRules.stoppedLine(a.provider) }
+    }
+
     Column(Modifier.fillMaxSize().padding(MekaSpace.gutter).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
         Text("Calendars", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.CALENDARS)))
-        Text("Read-only. Events appear in Today on all your devices.", style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        Crossfade(CalendarAccessRules.header(accounts.orEmpty().any { it.canEdit }), animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "calendars-header") {
+            Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        }
         Spacer(Modifier.height(MekaSpace.m))
 
         when (val list = accounts) {
             null -> SkeletonRows(count = 2, rowHeight = 56.dp)
             else -> {
                 if (list.isEmpty()) Text("No calendars connected yet.", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
-                list.forEachIndexed { i, a -> AccountRow(a, Modifier.appear(rememberAppearance(i)), onReconnect = { connect(a.provider) }) }
+                list.forEachIndexed { i, a ->
+                    AccountRow(
+                        a, Modifier.appear(rememberAppearance(i)),
+                        onReconnect = { connect(a.provider, editing = CalendarAccessRules.reconnectAsksEditing(a.canEdit)) },
+                        onEditing = { if (a.canEdit) stopEditing(a) else { haptics.tick(); connect(a.provider, editing = true) } },
+                    )
+                }
             }
         }
         // On Today (all-day polish): a planning calendar can stay in the Calendar tab but off Today. Synced.
@@ -120,6 +142,7 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
         Spacer(Modifier.height(MekaSpace.l))
         ConnectButton("Connect Google Calendar") { connect("google") }
         ConnectButton("Connect Outlook Calendar") { connect("microsoft") }
+        note?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
         message?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical) }
         Text("Refresh", style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.padding(top = MekaSpace.m).clickable(role = Role.Button) { reload++ })
@@ -129,7 +152,7 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
 private val syncedFmt = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
-private fun AccountRow(a: ConnectedAccount, modifier: Modifier = Modifier, onReconnect: () -> Unit) {
+private fun AccountRow(a: ConnectedAccount, modifier: Modifier = Modifier, onReconnect: () -> Unit, onEditing: () -> Unit) {
     Row(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)) {
         Column(Modifier.weight(1f)) {
             Text(a.email, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
@@ -141,10 +164,24 @@ private fun AccountRow(a: ConnectedAccount, modifier: Modifier = Modifier, onRec
                 else -> "${providerLabel(a.provider)} · first sync in progress"
             }
             Text(status, style = MekaType.caption, color = if (a.needsReconnect) Meka.colors.critical else Meka.colors.textTertiary)
+            // Calendar editing: read-only or editing allowed; the line cross-fades as it changes.
+            a.editingLine?.let { line ->
+                Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "editing-line") {
+                    Text(it, style = MekaType.caption, color = if (a.canEdit) Meka.colors.accent else Meka.colors.textTertiary)
+                }
+            }
         }
         if (a.needsReconnect) {
             Text("Reconnect", style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clickable(role = Role.Button) { onReconnect() }.padding(start = MekaSpace.m))
+        }
+        a.editingAction?.let { action ->
+            Crossfade(action, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "editing-action") {
+                Text(it.label, style = MekaType.itemMeta,
+                    color = if (it == CalendarAccessAction.ALLOW_EDITING) Meka.colors.accent else Meka.colors.textSecondary,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { onEditing() }
+                        .padding(start = MekaSpace.m, top = MekaSpace.xxs, bottom = MekaSpace.xxs))
+            }
         }
     }
 }

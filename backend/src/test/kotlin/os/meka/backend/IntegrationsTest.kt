@@ -3,10 +3,14 @@ package os.meka.backend
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import os.meka.backend.integrations.CalendarProvider
+import os.meka.backend.integrations.GoogleCalendar
+import os.meka.backend.integrations.MicrosoftCalendar
+import os.meka.backend.integrations.grants
 import os.meka.backend.integrations.InMemoryIntegrationStore
 import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.OAuthClient
@@ -36,18 +40,24 @@ class IntegrationsTest {
     private class FakeProvider : CalendarProvider {
         override val id = "google"
         override val requiredScope = "calendar.readonly"
+        override val writeScope = "https://www.googleapis.com/auth/calendar.events"
         var grantedScope: String? = null
+        var askedEditing: Boolean? = null
+        var exchangedEditing: Boolean? = null
+        var refreshedEditing: Boolean? = null
         var events = listOf<RemoteEvent>()
         var lastVerifier: String? = null
         var refreshed = 0
-        override fun authorizeUrl(client: OAuthClient, redirectUri: String, state: String, codeChallenge: String) =
-            "https://accounts.example/auth?state=$state&challenge=$codeChallenge&redirect=$redirectUri"
-        override fun exchangeCode(client: OAuthClient, redirectUri: String, code: String, verifier: String): TokenSet {
-            lastVerifier = verifier; return TokenSet("access-1", "refresh-1", 3600, grantedScope)
+        override fun authorizeUrl(client: OAuthClient, redirectUri: String, state: String, codeChallenge: String, editing: Boolean): String {
+            askedEditing = editing
+            return "https://accounts.example/auth?state=$state&challenge=$codeChallenge&redirect=$redirectUri"
         }
-        override fun refresh(client: OAuthClient, refreshToken: String): TokenSet {
+        override fun exchangeCode(client: OAuthClient, redirectUri: String, code: String, verifier: String, editing: Boolean): TokenSet {
+            lastVerifier = verifier; exchangedEditing = editing; return TokenSet("access-1", "refresh-1", 3600, grantedScope)
+        }
+        override fun refresh(client: OAuthClient, refreshToken: String, editing: Boolean): TokenSet {
             check(refreshToken == "refresh-1") { "decrypted the wrong token" }
-            refreshed++; return TokenSet("access-2", null, 3600)
+            refreshed++; refreshedEditing = editing; return TokenSet("access-2", null, 3600)
         }
         override fun accountEmail(accessToken: String) = "Meka@Gmail.com"
         override fun events(accessToken: String, fromMs: Long, toMs: Long) = events
@@ -74,10 +84,86 @@ class IntegrationsTest {
 
     private fun stateOf(url: String) = URI(url).query.split("&").first { it.startsWith("state=") }.removePrefix("state=")
 
-    private fun connect(): String {
-        val url = assertIs<Integrations.StartResult.Url>(integrations.start("home", "google")).url
-        val r = assertIs<Integrations.CallbackResult.Connected>(integrations.callback("google", stateOf(url), "code-1", null))
-        return r.accountId
+    private fun connect(editing: Boolean = false): String = connected(editing).accountId
+
+    private fun connected(editing: Boolean = false): Integrations.CallbackResult.Connected {
+        val url = assertIs<Integrations.StartResult.Url>(integrations.start("home", "google", editing)).url
+        return assertIs<Integrations.CallbackResult.Connected>(integrations.callback("google", stateOf(url), "code-1", null))
+    }
+
+    @Test
+    fun allowEditingAsksForTheWriteScopeAndOnlyAGrantedOneLetsTheAccountEdit() {
+        val readOnly = "openid email https://www.googleapis.com/auth/calendar.readonly"
+        // A plain connect never asks to change anything.
+        provider.grantedScope = readOnly
+        val plain = connected()
+        assertEquals(false, provider.askedEditing)
+        assertEquals(false, plain.canEdit)
+        assertEquals(false, store.account(plain.accountId)!!.canEdit)
+        // Allow editing asks; the owner unticks the permission: still connected, read-only, and the page says so.
+        val unticked = connected(editing = true)
+        assertEquals(true, provider.askedEditing)
+        assertEquals(true, provider.exchangedEditing)
+        assertEquals(false, unticked.canEdit)
+        assertTrue(unticked.editingAsked)
+        assertTrue(connectedText(unticked).contains("read-only: editing wasn't allowed"))
+        // A look-alike scope isn't the write scope.
+        provider.grantedScope = "$readOnly https://www.googleapis.com/auth/calendar.events.readonly"
+        assertEquals(false, connected(editing = true).canEdit)
+        // Granted: the account may edit, the list says so, and refreshes ask for it.
+        provider.grantedScope = "$readOnly https://www.googleapis.com/auth/calendar.events"
+        val ok = connected(editing = true)
+        assertTrue(ok.canEdit)
+        assertEquals(ok.accountId, plain.accountId) // the same account, now editable
+        assertTrue(connectedText(ok).contains("may now add and change events"))
+        assertEquals(listOf(true), integrations.accounts("home").map { it.canEdit })
+        integrations.syncAccount(ok.accountId)
+        assertEquals(true, provider.refreshedEditing)
+        // Reconnecting read-only gives editing up (the token no longer carries it).
+        provider.grantedScope = readOnly
+        connected()
+        assertEquals(listOf(false), integrations.accounts("home").map { it.canEdit })
+    }
+
+    @Test
+    fun stopEditingTurnsItOffAtOnceAndOnlyForThatAccount() {
+        provider.grantedScope = "openid email https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events"
+        val acc = connect(editing = true)
+        assertTrue(store.account(acc)!!.canEdit)
+        assertEquals(false, integrations.stopEditing("home", "google", "someone@else.com"))
+        assertEquals(false, integrations.stopEditing("home", "fixtures", "meka@gmail.com"))
+        assertEquals(false, integrations.stopEditing("other", "google", "meka@gmail.com"))
+        assertTrue(store.account(acc)!!.canEdit)
+        assertTrue(integrations.stopEditing("home", "google", "Meka@Gmail.com"))
+        assertEquals(false, store.account(acc)!!.canEdit)
+        integrations.syncAccount(acc)
+        assertEquals(false, provider.refreshedEditing)
+    }
+
+    @Test
+    fun grantedScopesAreMatchedWordForWord() {
+        assertTrue(grants("openid https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.events"))
+        assertTrue(grants("https://graph.microsoft.com/Calendars.ReadWrite openid", "Calendars.ReadWrite"))
+        assertTrue(grants("Calendars.ReadWrite offline_access", "Calendars.ReadWrite"))
+        assertEquals(false, grants("https://www.googleapis.com/auth/calendar.events.readonly", "https://www.googleapis.com/auth/calendar.events"))
+        assertEquals(false, grants("https://graph.microsoft.com/Calendars.Read", "Calendars.ReadWrite"))
+        assertEquals(false, grants(null, "Calendars.ReadWrite"))
+        assertEquals(false, grants("", "Calendars.ReadWrite"))
+    }
+
+    @Test
+    fun theRealProvidersAskForTheWriteScopeOnlyWithAllowEditing() {
+        val client = OAuthClient("cid", "secret")
+        val g = GoogleCalendar()
+        val gRead = java.net.URLDecoder.decode(g.authorizeUrl(client, "https://meka.example/cb", "s", "c"), Charsets.UTF_8)
+        val gEdit = java.net.URLDecoder.decode(g.authorizeUrl(client, "https://meka.example/cb", "s", "c", editing = true), Charsets.UTF_8)
+        assertEquals(false, gRead.contains("calendar.events"))
+        assertTrue(gEdit.contains("auth/calendar.readonly https://www.googleapis.com/auth/calendar.events"))
+        val m = MicrosoftCalendar()
+        val mRead = java.net.URLDecoder.decode(m.authorizeUrl(client, "https://meka.example/cb", "s", "c"), Charsets.UTF_8)
+        val mEdit = java.net.URLDecoder.decode(m.authorizeUrl(client, "https://meka.example/cb", "s", "c", editing = true), Charsets.UTF_8)
+        assertTrue(mRead.contains("Calendars.Read") && !mRead.contains("Calendars.ReadWrite"))
+        assertTrue(mEdit.contains("Calendars.ReadWrite"))
     }
 
     private fun ev(id: String, title: String, startH: Long, allDay: Boolean = false) =
@@ -263,5 +349,50 @@ class IntegrationsTest {
         assertTrue(bad.contains("Not connected"))
         val list = client.post("/v1/integrations/list") { with(key) { signed(secret, "/v1/integrations/list", "") } }.bodyAsText()
         assertEquals(listOf("meka@gmail.com"), WireCodec.decodeAccounts(list).map { it.email })
+        // Allow editing over HTTP: the signed body asks for the write scope; Stop editing gives it up.
+        provider.grantedScope = "openid email calendar.readonly https://www.googleapis.com/auth/calendar.events"
+        val edit = WireCodec.encodeConnectRequest(true)
+        val r2 = client.post("/v1/integrations/google/connect") { with(key) { signed(secret, "/v1/integrations/google/connect", edit) } }
+        assertEquals(true, provider.askedEditing)
+        val page2 = client.get("/v1/oauth/google/callback?state=${stateOf(WireCodec.decodeConnectUrl(r2.bodyAsText()))}&code=abc").bodyAsText()
+        assertTrue(page2.contains("may now add and change events"), page2)
+        val listed = client.post("/v1/integrations/list") { with(key) { signed(secret, "/v1/integrations/list", "") } }.bodyAsText()
+        assertEquals(listOf(true), WireCodec.decodeAccounts(listed).map { it.canEdit })
+        val path = "/v1/integrations/google/editing"
+        val on = WireCodec.encodeEditingChange(WireCodec.EditingChange("meka@gmail.com", editing = true))
+        assertEquals(HttpStatusCode.BadRequest, client.post(path) { with(key) { signed(secret, path, on) } }.status)
+        val off = WireCodec.encodeEditingChange(WireCodec.EditingChange("meka@gmail.com", editing = false))
+        assertEquals(HttpStatusCode.Unauthorized, client.post(path) { header("Authorization", "Bearer $secret"); setBody(off) }.status)
+        val stranger = WireCodec.encodeEditingChange(WireCodec.EditingChange("nobody@gmail.com", editing = false))
+        assertEquals(HttpStatusCode.NotFound, client.post(path) { with(key) { signed(secret, path, stranger) } }.status)
+        val stopped = client.post(path) { with(key) { signed(secret, path, off) } }
+        assertEquals(HttpStatusCode.OK, stopped.status)
+        assertEquals(listOf(false), WireCodec.decodeAccounts(stopped.bodyAsText()).map { it.canEdit })
+    }
+
+    /** The store on Postgres (CI's service container); skipped when MEKA_TEST_DB_URL is unset. */
+    @Test
+    fun postgresStoreKeepsWhetherAnAccountMayEdit() {
+        val url = System.getenv("MEKA_TEST_DB_URL")?.takeIf { it.isNotBlank() } ?: return
+        com.zaxxer.hikari.HikariDataSource(com.zaxxer.hikari.HikariConfig().apply {
+            jdbcUrl = url; username = System.getenv("MEKA_TEST_DB_USER") ?: "postgres"
+            password = System.getenv("MEKA_TEST_DB_PASSWORD") ?: "postgres"; maximumPoolSize = 2
+        }).use { ds ->
+            Migrations.apply(ds)
+            PostgresDeviceRegistry(ds).enrol("edit-hh", "fold", "Fold")
+            ds.connection.use { c -> c.createStatement().execute("DELETE FROM integration_account WHERE household_id = 'edit-hh'") }
+            val pg = os.meka.backend.integrations.PostgresIntegrationStore(PostgresOpStore(ds))
+            pg.transaction { pg.saveState("edit-state", os.meka.backend.integrations.PendingConnect("edit-hh", "google", "v".repeat(40), now, editing = true)) }
+            assertEquals(true, pg.transaction { pg.takeState("edit-state") }!!.editing)
+            val id = pg.transaction { pg.upsertAccount("edit-hh", "google", "e@gmail.com", byteArrayOf(1), canEdit = true) { "accedit1" } }
+            assertEquals(true, pg.account(id)!!.canEdit)
+            assertEquals(false, pg.transaction { pg.stopEditing("edit-hh", "google", "x@gmail.com") })
+            assertTrue(pg.transaction { pg.stopEditing("edit-hh", "google", "e@gmail.com") })
+            assertEquals(false, pg.account(id)!!.canEdit)
+            pg.transaction { pg.upsertAccount("edit-hh", "google", "e@gmail.com", byteArrayOf(2), canEdit = true) { "accedit2" } }
+            assertEquals(true, pg.accounts("edit-hh").single().canEdit)
+            pg.transaction { pg.upsertAccount("edit-hh", "google", "e@gmail.com", byteArrayOf(3)) { "accedit3" } }
+            assertEquals(false, pg.accounts("edit-hh").single().canEdit) // a read-only reconnect gives it up
+        }
     }
 }

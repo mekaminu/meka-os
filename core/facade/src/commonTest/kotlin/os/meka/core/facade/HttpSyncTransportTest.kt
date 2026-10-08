@@ -63,8 +63,13 @@ class HttpSyncTransportTest {
         val t = HttpSyncTransport(client(), "https://meka.example", RecordingKey()) { "s".repeat(64) }
         t.prepare(); t.prepare()
         assertEquals(1, requests.count { it.url.encodedPath == "/v1/devices/key" })
-        assertEquals(ConnectStart.NotSetUp, t.startConnect("google"))
+        assertEquals(ConnectStart.NotSetUp, t.startConnect("google", editing = false))
         assertTrue(requests.last().url.encodedPath.endsWith("/connect"))
+        assertEquals(false, WireCodec.decodeConnectRequest((requests.last().body as TextContent).text))
+        // Allow editing asks for it in the (signed) body.
+        t.startConnect("google", editing = true)
+        assertEquals(true, WireCodec.decodeConnectRequest((requests.last().body as TextContent).text))
+        assertTrue(requests.last().headers[RequestSigning.HEADER_SIGNATURE] != null)
     }
 
     @Test

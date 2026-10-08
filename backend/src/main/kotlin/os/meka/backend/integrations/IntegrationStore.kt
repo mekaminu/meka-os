@@ -11,7 +11,11 @@ import os.meka.backend.PostgresOpStore
 import java.sql.Connection
 import java.sql.Timestamp
 
-data class PendingConnect(val householdId: String, val provider: String, val codeVerifier: String, val createdAtMs: Long)
+data class PendingConnect(
+    val householdId: String, val provider: String, val codeVerifier: String, val createdAtMs: Long,
+    /** The owner tapped Allow editing (or reconnected an account that could edit): the write scope was asked for. */
+    val editing: Boolean = false,
+)
 
 data class AccountRow(
     val id: String,
@@ -21,6 +25,8 @@ data class AccountRow(
     val refreshTokenEnc: ByteArray,
     val status: String,
     val lastSyncAtMs: Long?,
+    /** The provider granted the write scope and the owner hasn't stopped editing (calendar editing). */
+    val canEdit: Boolean = false,
 )
 
 /** What the server last wrote for one mirrored event: per field, the op id and an encoded value. */
@@ -40,8 +46,13 @@ interface IntegrationStore {
     fun saveState(state: String, p: PendingConnect)
     /** Removes and returns a pending handshake (single use). */
     fun takeState(state: String): PendingConnect?
-    /** Inserts or updates by (household, provider, email); returns the account id. */
-    fun upsertAccount(householdId: String, provider: String, email: String, refreshTokenEnc: ByteArray, newId: () -> String): String
+    /**
+     * Inserts or updates by (household, provider, email); returns the account id. [canEdit] is what this sign-in
+     * granted, so a read-only reconnect also turns editing off.
+     */
+    fun upsertAccount(householdId: String, provider: String, email: String, refreshTokenEnc: ByteArray, canEdit: Boolean = false, newId: () -> String): String
+    /** Stop editing: the account goes back to read-only. Returns false when there's no such account. */
+    fun stopEditing(householdId: String, provider: String, email: String): Boolean
     fun account(id: String): AccountRow?
     fun accounts(householdId: String): List<AccountRow>
     fun syncableAccounts(): List<AccountRow>
@@ -74,11 +85,16 @@ class InMemoryIntegrationStore(private val knownHouseholds: List<String> = empty
     @Synchronized override fun <T> transaction(block: () -> T): T = block()
     @Synchronized override fun saveState(state: String, p: PendingConnect) { states[state] = p }
     @Synchronized override fun takeState(state: String) = states.remove(state)
-    @Synchronized override fun upsertAccount(householdId: String, provider: String, email: String, refreshTokenEnc: ByteArray, newId: () -> String): String {
+    @Synchronized override fun upsertAccount(householdId: String, provider: String, email: String, refreshTokenEnc: ByteArray, canEdit: Boolean, newId: () -> String): String {
         val existing = accounts.values.firstOrNull { it.householdId == householdId && it.provider == provider && it.email == email }
         val id = existing?.id ?: newId()
-        accounts[id] = AccountRow(id, householdId, provider, email, refreshTokenEnc, "ok", existing?.lastSyncAtMs)
+        accounts[id] = AccountRow(id, householdId, provider, email, refreshTokenEnc, "ok", existing?.lastSyncAtMs, canEdit)
         return id
+    }
+    @Synchronized override fun stopEditing(householdId: String, provider: String, email: String): Boolean {
+        val a = accounts.values.firstOrNull { it.householdId == householdId && it.provider == provider && it.email == email } ?: return false
+        accounts[a.id] = a.copy(canEdit = false)
+        return true
     }
     @Synchronized override fun account(id: String) = accounts[id]
     @Synchronized override fun accounts(householdId: String) = accounts.values.filter { it.householdId == householdId }
@@ -100,42 +116,44 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
 
     override fun saveState(state: String, p: PendingConnect) = c { c ->
         c.prepareStatement("DELETE FROM oauth_state WHERE created_at < now() - interval '1 hour'").use { it.executeUpdate() }
-        c.prepareStatement("INSERT INTO oauth_state(state, household_id, provider, code_verifier) VALUES (?,?,?,?)").use {
+        c.prepareStatement("INSERT INTO oauth_state(state, household_id, provider, code_verifier, editing) VALUES (?,?,?,?,?)").use {
             it.setString(1, state); it.setString(2, p.householdId); it.setString(3, p.provider); it.setString(4, p.codeVerifier)
+            it.setBoolean(5, p.editing)
             it.executeUpdate()
         }
         Unit
     }
 
     override fun takeState(state: String): PendingConnect? = c { c ->
-        c.prepareStatement("DELETE FROM oauth_state WHERE state = ? RETURNING household_id, provider, code_verifier, created_at").use { st ->
+        c.prepareStatement("DELETE FROM oauth_state WHERE state = ? RETURNING household_id, provider, code_verifier, created_at, editing").use { st ->
             st.setString(1, state)
             st.executeQuery().use { rs ->
-                if (rs.next()) PendingConnect(rs.getString(1), rs.getString(2), rs.getString(3), rs.getTimestamp(4).time) else null
+                if (rs.next()) PendingConnect(rs.getString(1), rs.getString(2), rs.getString(3), rs.getTimestamp(4).time, rs.getBoolean(5)) else null
             }
         }
     }
 
-    override fun upsertAccount(householdId: String, provider: String, email: String, refreshTokenEnc: ByteArray, newId: () -> String): String = c { c ->
+    override fun upsertAccount(householdId: String, provider: String, email: String, refreshTokenEnc: ByteArray, canEdit: Boolean, newId: () -> String): String = c { c ->
         c.prepareStatement(
-            """INSERT INTO integration_account(id, household_id, provider, email, refresh_token_enc) VALUES (?,?,?,?,?)
+            """INSERT INTO integration_account(id, household_id, provider, email, refresh_token_enc, can_edit) VALUES (?,?,?,?,?,?)
                ON CONFLICT (household_id, provider, email) DO UPDATE SET refresh_token_enc = EXCLUDED.refresh_token_enc,
-                 status = 'ok', last_error = NULL, updated_at = now()
+                 can_edit = EXCLUDED.can_edit, status = 'ok', last_error = NULL, updated_at = now()
                RETURNING id""",
         ).use { st ->
             st.setString(1, newId()); st.setString(2, householdId); st.setString(3, provider); st.setString(4, email); st.setBytes(5, refreshTokenEnc)
+            st.setBoolean(6, canEdit)
             st.executeQuery().use { rs -> rs.next(); rs.getString(1) }
         }
     }
 
     private fun query(sql: String, vararg args: String): List<AccountRow> = c { c ->
-        c.prepareStatement("SELECT id, household_id, provider, email, refresh_token_enc, status, last_sync_at FROM integration_account $sql").use { st ->
+        c.prepareStatement("SELECT id, household_id, provider, email, refresh_token_enc, status, last_sync_at, can_edit FROM integration_account $sql").use { st ->
             args.forEachIndexed { i, a -> st.setString(i + 1, a) }
             st.executeQuery().use { rs ->
                 buildList {
                     while (rs.next()) add(AccountRow(
                         rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getBytes(5), rs.getString(6),
-                        rs.getTimestamp(7)?.time,
+                        rs.getTimestamp(7)?.time, rs.getBoolean(8),
                     ))
                 }
             }
@@ -159,6 +177,13 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
 
     override fun updateRefreshToken(id: String, enc: ByteArray) =
         update("UPDATE integration_account SET refresh_token_enc = ?, updated_at = now() WHERE id = ?") { it.setBytes(1, enc); it.setString(2, id) }
+
+    override fun stopEditing(householdId: String, provider: String, email: String): Boolean = c { c ->
+        c.prepareStatement("UPDATE integration_account SET can_edit = false, updated_at = now() WHERE household_id = ? AND provider = ? AND email = ?").use {
+            it.setString(1, householdId); it.setString(2, provider); it.setString(3, email)
+            it.executeUpdate() > 0
+        }
+    }
 
     override fun markSynced(id: String, atMs: Long) =
         update("UPDATE integration_account SET status = 'ok', last_error = NULL, last_sync_at = ? WHERE id = ?") {

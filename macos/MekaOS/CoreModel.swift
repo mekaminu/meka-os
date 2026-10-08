@@ -110,6 +110,8 @@ final class CoreModel {
     private(set) var landing: Set<String> = []
     private(set) var accounts: [ConnectedAccount]? = nil
     var calendarsMessage: String?
+    /// A quiet line under the accounts (calendar editing: what Allow editing will ask, or that editing is off now).
+    var calendarsNote: String?
     private var identity: DeviceIdentity?
     /// Created lazily so a Mac that never connects never touches the Secure Enclave.
     @ObservationIgnored private lazy var deviceKey = MacDeviceKey()
@@ -439,11 +441,13 @@ final class CoreModel {
     }
 
     /// Opens the provider's sign-in page in the default browser; the server finishes the connection.
-    func connectCalendar(_ provider: String) async {
+    /// `editing`: Allow editing (calendar editing) asks the provider for the write permission too.
+    func connectCalendar(_ provider: String, editing: Bool = false) async {
         guard let core else { return }
         calendarsMessage = nil
+        calendarsNote = editing ? CalendarAccessRules.shared.allowNote(provider: provider) : nil
         do {
-            switch onEnum(of: try await core.startConnect(provider: provider)) {
+            switch onEnum(of: try await core.startConnect(provider: provider, editing: editing)) {
             case .openBrowser(let o):
                 if let url = URL(string: o.url) { NSWorkspace.shared.open(url) }
             case .notSetUp:
@@ -453,6 +457,19 @@ final class CoreModel {
             }
         } catch {
             calendarsMessage = error.localizedDescription
+        }
+    }
+
+    /// Stop editing on one account: the server only reads it from now on.
+    func stopCalendarEditing(provider: String, email: String) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        calendarsMessage = nil
+        if let now = try? await core.stopCalendarEditing(provider: provider, email: email) {
+            accounts = now
+            calendarsNote = CalendarAccessRules.shared.stoppedLine(provider: provider)
+        } else {
+            calendarsMessage = "Couldn't reach your server. Editing is still on; try again."
         }
     }
 

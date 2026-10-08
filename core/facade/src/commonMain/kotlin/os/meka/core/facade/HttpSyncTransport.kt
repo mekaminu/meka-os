@@ -24,8 +24,16 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 /** Connected calendar/email accounts as the apps show them. Tokens never leave the server. */
-data class ConnectedAccount(val provider: String, val email: String, val status: String, val lastSyncAtMs: Long?) {
+data class ConnectedAccount(
+    val provider: String, val email: String, val status: String, val lastSyncAtMs: Long?,
+    /** MEKA may add and change events here (calendar editing; the owner allowed it). */
+    val canEdit: Boolean = false,
+) {
     val needsReconnect: Boolean get() = status == "needs_reconnect"
+    /** The line about editing under the account, or null (feeds, or the reconnect line says enough). */
+    val editingLine: String? get() = os.meka.core.domain.CalendarAccessRules.line(provider, canEdit, needsReconnect)
+    /** Allow editing · Stop editing · none. */
+    val editingAction: os.meka.core.domain.CalendarAccessAction? get() = os.meka.core.domain.CalendarAccessRules.action(provider, canEdit, needsReconnect)
 }
 
 sealed class ConnectStart {
@@ -56,8 +64,11 @@ interface NewsImagesApi {
 
 /** Account management calls, available once the device is connected. */
 interface AccountsApi {
-    suspend fun startConnect(provider: String): ConnectStart
+    /** [editing]: ask the provider for permission to change events too (calendar editing). */
+    suspend fun startConnect(provider: String, editing: Boolean): ConnectStart
     suspend fun accounts(): List<ConnectedAccount>
+    /** Gives up editing on one account; returns the accounts as they are now. */
+    suspend fun stopEditing(provider: String, email: String): List<ConnectedAccount>
 }
 
 /**
@@ -98,10 +109,10 @@ class HttpSyncTransport(
     override suspend fun awaitChanges(request: PullRequest): Boolean =
         WireCodec.decodePullResponse(post("/v1/sync/wait", WireCodec.encodePullRequest(request))).ops.isNotEmpty()
 
-    override suspend fun startConnect(provider: String): ConnectStart {
+    override suspend fun startConnect(provider: String, editing: Boolean): ConnectStart {
         prepare() // connecting accounts requires the device's signing key on the server
         val resp = try {
-            send("/v1/integrations/$provider/connect", "")
+            send("/v1/integrations/$provider/connect", WireCodec.encodeConnectRequest(editing))
         } catch (e: TransportException) {
             return ConnectStart.Failed("Couldn't reach the server")
         }
@@ -113,7 +124,13 @@ class HttpSyncTransport(
     }
 
     override suspend fun accounts(): List<ConnectedAccount> =
-        WireCodec.decodeAccounts(post("/v1/integrations/list", "")).map { ConnectedAccount(it.provider, it.email, it.status, it.lastSyncAtMs) }
+        WireCodec.decodeAccounts(post("/v1/integrations/list", "")).map(::account)
+
+    override suspend fun stopEditing(provider: String, email: String): List<ConnectedAccount> =
+        WireCodec.decodeAccounts(post("/v1/integrations/$provider/editing", WireCodec.encodeEditingChange(WireCodec.EditingChange(email, editing = false))))
+            .map(::account)
+
+    private fun account(a: WireCodec.IntegrationAccount) = ConnectedAccount(a.provider, a.email, a.status, a.lastSyncAtMs, a.canEdit)
 
     override suspend fun latestRelease(platform: String): AppRelease? {
         prepare() // release routes require the device's signing key on the server

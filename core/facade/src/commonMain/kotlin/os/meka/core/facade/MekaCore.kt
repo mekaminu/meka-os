@@ -836,8 +836,21 @@ class MekaCore(
     val isConnected: Boolean get() = syncClient != null
 
     /** Begins connecting a calendar account ("google" | "microsoft"); the app opens the returned URL in a browser. */
-    suspend fun startConnect(provider: String): ConnectStart =
-        accountsApi?.startConnect(provider) ?: ConnectStart.Failed("Connect this device to your server first.")
+    suspend fun startConnect(provider: String): ConnectStart = startConnect(provider, editing = false)
+
+    /**
+     * Calendar editing: [editing] asks the provider for permission to add and change events as well (Allow editing,
+     * or Reconnect on an account that had it). The server records whether it was actually granted.
+     */
+    suspend fun startConnect(provider: String, editing: Boolean): ConnectStart =
+        accountsApi?.startConnect(provider, editing) ?: ConnectStart.Failed("Connect this device to your server first.")
+
+    /**
+     * Stop editing on one account: the server stops changing it at once. Returns the accounts as they are now, or null
+     * when it couldn't be reached (nothing changed; the screen says so).
+     */
+    suspend fun stopCalendarEditing(provider: String, email: String): List<ConnectedAccount>? =
+        try { accountsApi?.stopEditing(provider, email) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
 
     /** Accounts connected for this household, for the Calendars screen. Empty when offline or not connected. */
     suspend fun connectedAccounts(): List<ConnectedAccount> =

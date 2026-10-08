@@ -372,13 +372,15 @@ struct TaskRow: View {
 struct CalendarsSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
             Text("Calendars").font(MekaType.upNextTitle)
-            Text("Read-only. Events appear in Today on all your devices.")
+            Text(CalendarAccessRules.shared.header(anyEditable: (model.accounts ?? []).contains { $0.canEdit }))
                 .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                .contentTransition(.opacity)
             if let accounts = model.accounts {
                 if accounts.isEmpty {
                     Text("No calendars connected yet.").font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
@@ -389,10 +391,31 @@ struct CalendarsSheet: View {
                             Text(a.email).font(MekaType.itemTitle)
                             Text(status(a)).font(MekaType.caption)
                                 .foregroundStyle(a.needsReconnect ? palette.critical : palette.textTertiary)
+                            // Calendar editing: read-only or editing allowed; the line cross-fades as it changes.
+                            if let line = a.editingLine {
+                                Text(line).font(MekaType.caption)
+                                    .foregroundStyle(a.canEdit ? palette.accent : palette.textTertiary)
+                                    .contentTransition(.opacity)
+                            }
                         }
                         Spacer()
+                        let provider = a.provider, email = a.email, canEdit = a.canEdit
                         if a.needsReconnect {
-                            Button("Reconnect") { Task { await model.connectCalendar(a.provider) } }
+                            Button("Reconnect") {
+                                Task { await model.connectCalendar(provider, editing: CalendarAccessRules.shared.reconnectAsksEditing(canEdit: canEdit)) }
+                            }
+                        }
+                        if let action = a.editingAction {
+                            Button(action.label) {
+                                if canEdit {
+                                    Task { await model.stopCalendarEditing(provider: provider, email: email) }
+                                } else {
+                                    MekaHaptics.tick()
+                                    Task { await model.connectCalendar(provider, editing: true) }
+                                }
+                            }
+                            .buttonStyle(MekaPressStyle())
+                            .foregroundStyle(canEdit ? palette.textSecondary : palette.accent)
                         }
                     }
                     .padding(MekaSpace.m)
@@ -429,6 +452,9 @@ struct CalendarsSheet: View {
                 Button("Connect Google Calendar") { Task { await model.connectCalendar("google") } }
                 Button("Connect Outlook Calendar") { Task { await model.connectCalendar("microsoft") } }
             }
+            if let note = model.calendarsNote {
+                Text(note).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
             if let message = model.calendarsMessage {
                 Text(message).font(MekaType.caption).foregroundStyle(palette.critical)
             }
@@ -440,6 +466,9 @@ struct CalendarsSheet: View {
         }
         .padding(MekaSpace.l)
         .frame(width: 460)
+        // Calendar editing: the header and each account's editing line cross-fade as editing turns on or off.
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.accounts?.map(\.canEdit) ?? [])
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.calendarsNote)
         .task { await model.loadAccounts() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.loadAccounts() }
