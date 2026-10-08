@@ -139,4 +139,5 @@ object MekaChoreography {
     const val syncSpinPeriodMs = 900
     const val sheetScrimOpacity = 0.5f
     const val checkDrawMs = 420
+    const val emptyBreathPeriodMs = 4200
 }

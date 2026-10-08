@@ -88,6 +88,25 @@ enum MotionMath {
         easeOutCubic((fraction - checkStrokeStart) / (1 - checkStrokeStart))
     }
 
+    /// Empty states (motion pass 2, slice 5): how far into a breath the brass ring is `elapsed` seconds after it
+    /// appeared, 0 (out) → 1 (in) → 0 over `emptyBreathPeriod`, a smooth cosine. Motion → Off: held still, fully in.
+    static func breath(elapsed: Double, reduced: Bool) -> Double {
+        if reduced { return 1 }
+        let period = MekaChoreography.emptyBreathPeriod
+        let phase = max(elapsed, 0).truncatingRemainder(dividingBy: period) / period
+        return min(max(0.5 - 0.5 * cos(2 * Double.pi * phase), 0), 1)
+    }
+
+    /// The breathing ring's smallest size and faintest glow (the same as the Fold's).
+    static let breathMinScale: Double = 0.92
+    static let breathMinGlow: Double = 0.35
+
+    /// The ring's size at `breath` (0…1): from `breathMinScale` out to full size in.
+    static func breathScale(_ breath: Double) -> Double { breathMinScale + (1 - breathMinScale) * min(max(breath, 0), 1) }
+
+    /// How strongly the ring's glow shows at `breath`: never gone, so it reads as resting, not blinking.
+    static func breathGlow(_ breath: Double) -> Double { breathMinGlow + (1 - breathMinGlow) * min(max(breath, 0), 1) }
+
     /// Ease-out cubic: fast start, gentle landing.
     static func easeOutCubic(_ fraction: Double) -> Double {
         let f = min(max(fraction, 0), 1)
@@ -318,5 +337,30 @@ private struct CheckMark: Shape {
         p.addLine(to: CGPoint(x: rect.minX + rect.width * 0.44, y: rect.minY + rect.height * 0.66))
         p.addLine(to: CGPoint(x: rect.minX + rect.width * 0.71, y: rect.minY + rect.height * 0.38))
         return p
+    }
+}
+
+/// The breathing ring beside an empty state (motion pass 2, slice 5; catalogue "Empty states"), like the Fold's
+/// `BreathingRing`: MEKA's brass ring with a soft glow, slowly breathing in and out (`MotionMath.breath`), so
+/// "You're clear." feels at rest rather than blank. Motion → Off: held still. Decorative: hidden from VoiceOver.
+struct BreathingRingView: View {
+    let palette: MekaPalette
+    var size: CGFloat = 26
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var began = Date()
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
+            let b = MotionMath.breath(elapsed: context.date.timeIntervalSince(began), reduced: reduceMotion)
+            let glow = MotionMath.breathGlow(b)
+            ZStack {
+                Circle().fill(palette.accent.opacity(0.18 * glow))
+                Circle().strokeBorder(palette.accent.opacity(0.55 + 0.45 * glow), lineWidth: 1.5)
+            }
+            .scaleEffect(MotionMath.breathScale(b))
+        }
+        .frame(width: size, height: size)
+        .onAppear { began = Date() }
+        .accessibilityHidden(true)
     }
 }

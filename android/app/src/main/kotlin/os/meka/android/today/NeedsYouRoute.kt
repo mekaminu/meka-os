@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
@@ -18,6 +19,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import os.meka.android.designsystem.BreathingRing
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.MekaSharedLayout
@@ -161,8 +163,12 @@ internal fun NeedsYouColumn(
         }
         if (cards.isEmpty()) {
             item(key = "clear") {
-                Text("Nothing is waiting on you.", style = if (compact) MekaType.itemMeta else MekaType.upNextTitle,
-                    color = Meka.colors.textSecondary, modifier = Modifier.animateItem().appear(rememberAppearance(1, play)))
+                // Full screen: the brass ring breathes beside it (catalogue "Empty states"); the compact column stays quiet.
+                Row(Modifier.animateItem().appear(rememberAppearance(1, play)), verticalAlignment = Alignment.CenterVertically) {
+                    if (!compact) BreathingRing(Modifier.padding(end = MekaSpace.s))
+                    Text("Nothing is waiting on you.", style = if (compact) MekaType.itemMeta else MekaType.upNextTitle,
+                        color = Meka.colors.textSecondary)
+                }
             }
         } else {
             item(key = "stack") {

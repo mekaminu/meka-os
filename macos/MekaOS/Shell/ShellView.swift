@@ -124,9 +124,13 @@ struct NeedsYouView: View {
                         .padding(.bottom, MekaSpace.s)
                         .staggeredAppear(1)
                     if model.needsYouCards.isEmpty {
-                        Text("Nothing is waiting on you.")
-                            .font(MekaType.upNextTitle).foregroundStyle(palette.textSecondary)
-                            .staggeredAppear(1)
+                        // The brass ring breathes beside it (catalogue "Empty states"); Off: still.
+                        HStack(spacing: MekaSpace.s) {
+                            BreathingRingView(palette: palette)
+                            Text("Nothing is waiting on you.")
+                                .font(MekaType.upNextTitle).foregroundStyle(palette.textSecondary)
+                        }
+                        .staggeredAppear(1)
                     } else {
                         NeedsYouStackView(palette: palette).staggeredAppear(1)
                     }

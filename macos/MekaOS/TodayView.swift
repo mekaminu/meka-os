@@ -123,10 +123,14 @@ struct TodayView: View {
                         // "You're clear." only when nothing at all is left today; "Nothing else timed today" beside
                         // all-day items (Today clarity).
                         if let line = today.clearLine {
-                            Text(line)
-                                .font(today.isAllClear ? MekaType.upNextTitle : MekaType.body)
-                                .foregroundStyle(palette.textSecondary)
-                                .staggeredAppear(1, play: play)
+                            // All clear: the brass ring breathes beside it (catalogue "Empty states"); Off: still.
+                            HStack(spacing: MekaSpace.s) {
+                                if today.isAllClear { BreathingRingView(palette: palette) }
+                                Text(line)
+                                    .font(today.isAllClear ? MekaType.upNextTitle : MekaType.body)
+                                    .foregroundStyle(palette.textSecondary)
+                            }
+                            .staggeredAppear(1, play: play)
                         }
                         // The Needs you column beside Today lists them (never shown twice).
                         if !today.needsYou.isEmpty && CommandCentreRules.shared.todayListsNeedsYou(layout: CommandCentreRules.shared.layout(contentWidthDp: Float(width))) {

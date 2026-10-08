@@ -100,4 +100,23 @@ final class MotionMathTests: XCTestCase {
         XCTAssertEqual(MotionMath.checkStroke(1.2), 1) // never past done
         XCTAssertEqual(MotionMath.checkRingDegrees(1.2), 360, accuracy: 1e-9)
     }
+
+    @MainActor
+    func testAnEmptyStateRingBreathesSlowlyInAndOutAndHoldsStillWhenOff() {
+        let period = MekaChoreography.emptyBreathPeriod
+        XCTAssertEqual(period, 4.2, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.breath(elapsed: 0, reduced: false), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.breath(elapsed: period / 2, reduced: false), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.breath(elapsed: period, reduced: false), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.breath(elapsed: period / 4, reduced: false), 0.5, accuracy: 1e-6)
+        XCTAssertEqual(MotionMath.breath(elapsed: period * 1.25, reduced: false),
+                       MotionMath.breath(elapsed: period / 4, reduced: false), accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.breath(elapsed: -1, reduced: false), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.breath(elapsed: 1.3, reduced: true), 1)
+        XCTAssertEqual(MotionMath.breathScale(0), MotionMath.breathMinScale, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.breathScale(1), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.breathScale(1.3), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.breathGlow(0), MotionMath.breathMinGlow, accuracy: 1e-9)
+        XCTAssertGreaterThan(MotionMath.breathGlow(0), 0)
+    }
 }

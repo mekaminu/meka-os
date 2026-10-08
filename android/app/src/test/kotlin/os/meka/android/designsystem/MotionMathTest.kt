@@ -146,4 +146,28 @@ class MotionMathTest {
         assertEquals(1f, MotionMath.checkStroke(1.2f))
         assertEquals(360f, MotionMath.checkRingDegrees(1.2f))
     }
+
+    @Test
+    fun anEmptyStateRingBreathesSlowlyInAndOutAndHoldsStillWhenOff() {
+        val period = MekaChoreography.emptyBreathPeriodMs.toLong()
+        assertEquals(4200L, period)
+        // Out at the start, fully in half way, out again after one breath; smooth and repeating.
+        assertEquals(0f, MotionMath.breath(0, reduced = false), 1e-6f)
+        assertEquals(1f, MotionMath.breath(period / 2, reduced = false), 1e-6f)
+        assertEquals(0f, MotionMath.breath(period, reduced = false), 1e-6f)
+        assertEquals(MotionMath.breath(period / 4, false), MotionMath.breath(period + period / 4, false), 1e-6f)
+        assertEquals(0.5f, MotionMath.breath(period / 4, reduced = false), 1e-3f)
+        assertEquals(0f, MotionMath.breath(-50, reduced = false), 1e-6f) // a clock before it appeared is "out"
+        // Off: still and fully shown.
+        assertEquals(1f, MotionMath.breath(0, reduced = true))
+        assertEquals(1f, MotionMath.breath(period / 3, reduced = true))
+        // Size and glow: from a little smaller and faint to full; never vanishes, never grows past full.
+        assertEquals(MotionMath.BREATH_MIN_SCALE, MotionMath.breathScale(0f), 1e-6f)
+        assertEquals(1f, MotionMath.breathScale(1f), 1e-6f)
+        assertEquals(1f, MotionMath.breathScale(1.3f), 1e-6f)
+        assertTrue(MotionMath.BREATH_MIN_SCALE in 0.85f..0.97f)
+        assertEquals(MotionMath.BREATH_MIN_GLOW, MotionMath.breathGlow(0f), 1e-6f)
+        assertEquals(1f, MotionMath.breathGlow(1f), 1e-6f)
+        assertTrue(MotionMath.breathGlow(0f) > 0f)
+    }
 }

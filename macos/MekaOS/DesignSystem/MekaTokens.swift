@@ -126,4 +126,5 @@ enum MekaChoreography {
     static let syncSpinPeriod: Double = 0.900
     static let sheetScrimOpacity: CGFloat = 0.5
     static let checkDraw: Double = 0.420
+    static let emptyBreathPeriod: Double = 4.200
 }

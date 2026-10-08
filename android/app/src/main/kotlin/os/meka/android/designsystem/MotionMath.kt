@@ -120,6 +120,28 @@ object MotionMath {
     fun checkStroke(fraction: Float): Float =
         easeOutCubic((fraction - CHECK_STROKE_START) / (1f - CHECK_STROKE_START))
 
+    /**
+     * Empty states (motion pass 2, slice 5; catalogue "Empty states"): how far into a breath the brass ring is
+     * [elapsedMs] after it appeared, 0 (out) → 1 (in) → 0 over [MekaChoreography.emptyBreathPeriodMs], a smooth cosine.
+     * Motion → Off: held still, fully in.
+     */
+    fun breath(elapsedMs: Long, reduced: Boolean): Float {
+        if (reduced) return 1f
+        val period = MekaChoreography.emptyBreathPeriodMs
+        val phase = (elapsedMs.coerceAtLeast(0L) % period).toFloat() / period
+        return (0.5f - 0.5f * kotlin.math.cos(2f * kotlin.math.PI.toFloat() * phase)).coerceIn(0f, 1f)
+    }
+
+    /** The ring's size at [breath] (0 → 1): from [BREATH_MIN_SCALE] out to full size in. */
+    fun breathScale(breath: Float): Float = BREATH_MIN_SCALE + (1f - BREATH_MIN_SCALE) * breath.coerceIn(0f, 1f)
+
+    /** How strongly the ring's glow shows at [breath]: never gone, so it reads as resting, not blinking. */
+    fun breathGlow(breath: Float): Float = BREATH_MIN_GLOW + (1f - BREATH_MIN_GLOW) * breath.coerceIn(0f, 1f)
+
+    /** The breathing ring's smallest size and faintest glow. */
+    const val BREATH_MIN_SCALE = 0.92f
+    const val BREATH_MIN_GLOW = 0.35f
+
     /** Where the ring has closed (fraction of the draw). */
     const val CHECK_RING_END = 0.5f
     /** Where the fill starts flooding in, just before the ring closes. */

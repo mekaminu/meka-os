@@ -91,6 +91,7 @@ import os.meka.android.news.rememberTickerMode
 import os.meka.core.domain.NewsTicker
 import os.meka.core.domain.TickerMode
 import os.meka.core.domain.TickerRules
+import os.meka.android.designsystem.BreathingRing
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.PullToSyncBox
@@ -492,8 +493,11 @@ private fun TodayPane(
             // "You're clear." only when nothing at all is left today; "Nothing else timed today" beside all-day items.
             today.clearLine?.let { line ->
                 item(key = "clear") {
-                    Text(line, style = if (today.isAllClear) MekaType.upNextTitle else MekaType.body, color = Meka.colors.textSecondary,
-                        modifier = Modifier.animateItem().appear(rememberAppearance(1, play)))
+                    // All clear: the brass ring breathes beside it (catalogue "Empty states"); Off: still.
+                    Row(Modifier.animateItem().appear(rememberAppearance(1, play)), verticalAlignment = Alignment.CenterVertically) {
+                        if (today.isAllClear) BreathingRing(Modifier.padding(end = MekaSpace.s))
+                        Text(line, style = if (today.isAllClear) MekaType.upNextTitle else MekaType.body, color = Meka.colors.textSecondary)
+                    }
                 }
             }
             if (listsNeedsYou && today.needsYou.isNotEmpty()) {
