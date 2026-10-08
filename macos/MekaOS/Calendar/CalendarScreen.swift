@@ -274,7 +274,7 @@ private struct AgendaTaskRow: View {
             Text(row.time).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textSecondary)
                 .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
-                Text(row.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let d = row.detail { Text(d).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
             }
             Spacer()

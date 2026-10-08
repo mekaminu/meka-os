@@ -693,7 +693,7 @@ internal fun TaskRow(
         CompleteButton(t, actions.complete)
         Spacer(Modifier.width(MekaSpace.m))
         Column(Modifier.weight(1f)) {
-            Text(t.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary,
+            Text(t.title, style = MekaType.body, color = Meka.colors.textPrimary,
                 modifier = if (motion.shareTitle) Modifier.sharedTitle(SharedMotion.taskKey(t.id), motion.titleVisible) else Modifier)
             val line = when (reason) {
                 NeedsYouReason.CONFLICT -> "Edited on two devices — choose a version"

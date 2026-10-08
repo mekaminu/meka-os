@@ -315,7 +315,7 @@ struct TaskRow: View {
             }
             CompleteButton(task: task, palette: palette)
             VStack(alignment: .leading, spacing: 2) {
-                Text(task.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                Text(task.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let line = subtitle {
                     Text(line).font(MekaType.itemMeta).foregroundStyle(isAlert ? palette.critical : palette.textSecondary)
                 }

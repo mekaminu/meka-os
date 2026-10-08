@@ -90,8 +90,8 @@ internal fun TimelineEventRow(r: TimelineRow, past: Boolean, modifier: Modifier 
 }
 
 /**
- * A booked session (the Gym): time on the left, "Gym · Push" in the heavier item weight (a habit is something you act
- * on), "Leave by 17:30" under it, or "Now · until 18:45" in the accent colour while it's on. Today's session card above
+ * A booked session (the Gym): time on the left, "Gym · Push" in the body weight like a task row (Fold review
+ * 2026-10-08: only Up next's title is bold), "Leave by 17:30" under it, or "Now · until 18:45" in the accent colour while it's on. Today's session card above
  * answers it, so the row has no taps of its own.
  */
 @Composable
@@ -103,7 +103,7 @@ internal fun SessionTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
     ) {
         TimeColumn(r.time, past = false)
         Column(Modifier.weight(1f)) {
-            Text(r.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+            Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary)
             r.detail?.let { Text(it, style = MekaType.caption, color = if (r.running) Meka.colors.accent else Meka.colors.textTertiary) }
         }
     }

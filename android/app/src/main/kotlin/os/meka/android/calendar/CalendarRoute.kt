@@ -349,13 +349,13 @@ private fun HiddenRow(event: CalendarEvent, modifier: Modifier, onOpen: () -> Un
     }
 }
 
-/** A planned task: something to act on, so the item title weight. Shown only; it's ticked in Today. */
+/** A planned task in the body weight like Today's task rows (Fold review 2026-10-08). Shown only; it's ticked in Today. */
 @Composable
 private fun TaskRow(r: TimelineRow, modifier: Modifier) {
     Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
         TimeColumn(r.time, past = false)
         Column(Modifier.weight(1f)) {
-            Text(r.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+            Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary)
             r.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         }
     }
