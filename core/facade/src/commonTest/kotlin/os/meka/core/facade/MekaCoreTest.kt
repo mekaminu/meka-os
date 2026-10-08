@@ -1018,6 +1018,42 @@ class MekaCoreTest {
     }
 
     @Test
+    fun aTasksBlockFollowsItWhileStillInItsFiveSecondsAndUndoAfterDeleteBringsItBack() = runTest {
+        val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
+        val fold = core("android", server)
+        val taskId = fold.addTask("Write report")
+        fold.refreshCalendarAccounts()
+        fold.setPlanToCalendar(true)
+        val plan = fold.planDay()
+        val applied = fold.applyPlan(plan)
+        assertEquals(1, applied.editIds.size)
+        val start = plan.placements.single().startMs
+
+        // Moved inside the five seconds: the first add is taken back and one add goes where the task is now.
+        fold.schedule(taskId, start + 3_600_000L)
+        assertFalse(fold.undoPlanBlocks(applied.editIds))
+        assertEquals(listOf("Adding “Write report” to Google"), fold.calendarEditLines.value.map { it.text })
+        val calendarRows = { fold.activityView.value.days.flatMap { it.rows }.filter { it.kind == os.meka.core.domain.ActivityKind.CALENDAR } }
+        assertEquals(1, calendarRows().size)
+        assertTrue(fold.today.value.events.none { it.title == "Write report" })
+
+        // Plan again: the block moves with it rather than a second one being added.
+        val again = fold.applyPlan(fold.planDay())
+        assertTrue(again.editIds.isEmpty())
+        assertEquals(1, fold.calendarEditLines.value.size)
+
+        // Deleted: nothing will be sent; Undo (restore) brings the block back.
+        fold.delete(taskId)
+        assertTrue(fold.calendarEditLines.value.isEmpty())
+        fold.restore(taskId)
+        assertEquals(listOf("Adding “Write report” to Google"), fold.calendarEditLines.value.map { it.text })
+
+        // Done leaves it where it is.
+        fold.complete(taskId)
+        assertEquals(1, fold.calendarEditLines.value.size)
+    }
+
+    @Test
     fun theEventDetailOffersEditAndDeleteOnlyWhereEditingIsAllowed() = runTest {
         val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
         val fold = core("android", server)

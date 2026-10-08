@@ -80,17 +80,20 @@ object PlanCalendarRules {
         "Adding $count ${if (count == 1) "block" else "blocks"} to ${CalendarEditRules.providerName(provider)}"
 
     /**
-     * [events] without the blocks Plan my day added for tasks: the provisional event of such an add, and the mirrored
-     * event it became (same account, title and time). Undone adds sent nothing, so they hide nothing.
+     * [events] without the blocks Plan my day added for tasks: the provisional event of such an add, the mirrored
+     * event it became (same account, title and time), and an event a block's follow-up moved (slice 2f: a change or
+     * delete made for a task names its event). Undone edits sent nothing, so they hide nothing.
      */
     fun withoutTaskBlocks(events: List<CalendarEvent>, edits: List<EventEdit>): List<CalendarEvent> {
-        val blocks = edits.filter { it.forTask != null && it.kind == EventEditKind.ADD && !it.undone && it.draft != null }
-        if (blocks.isEmpty()) return events
+        val forTasks = edits.filter { it.forTask != null && !it.undone }
+        if (forTasks.isEmpty()) return events
+        val blocks = forTasks.filter { it.kind == EventEditKind.ADD && it.draft != null }
         val ids = blocks.mapTo(HashSet()) { it.id }
+        val followed = forTasks.mapNotNullTo(HashSet()) { e -> e.eventId.takeIf { e.kind != EventEditKind.ADD } }
         return events.filterNot { e ->
             val pending = PendingEditRules.editIdOf(e.id)
             if (pending != null) pending in ids
-            else blocks.any { b ->
+            else e.id in followed || blocks.any { b ->
                 val d = b.draft!!
                 b.status != EventEditStatus.REFUSED && b.status != EventEditStatus.FAILED &&
                     e.provider == b.provider && e.account == b.account && !e.allDay &&
@@ -98,6 +101,99 @@ object PlanCalendarRules {
             }
         }
     }
+
+    // ---- Slice 2f: a block keeps in step with its task ----
+
+    /**
+     * Where [taskId]'s block stands: the latest edit made for it (undone, refused and failed ones don't count) and the
+     * calendar event it is now in [events] (the mirror with Meka's edits laid over, **before** [withoutTaskBlocks]),
+     * or null while it can't be found (on its way, or changed in the provider since). Null when the task never had one.
+     */
+    fun blockOf(taskId: String, events: List<CalendarEvent>, edits: List<EventEdit>): TaskBlock? {
+        val latest = edits.filter {
+            it.forTask == taskId && !it.undone && it.status != EventEditStatus.REFUSED && it.status != EventEditStatus.FAILED
+        }.maxWithOrNull(compareBy<EventEdit>({ it.createdAtMs }, { it.id })) ?: return null
+        val event = when (latest.kind) {
+            EventEditKind.DELETE -> null
+            EventEditKind.CHANGE -> events.firstOrNull { it.id == latest.eventId }
+            EventEditKind.ADD -> {
+                val d = latest.draft
+                events.firstOrNull { it.id == PendingEditRules.PROVISIONAL_PREFIX + latest.id }
+                    ?: events.firstOrNull { e ->
+                        d != null && !e.isProvisional && e.provider == latest.provider && e.account == latest.account && !e.allDay &&
+                            e.startAtMs == d.startAtMs && e.endAtMs == d.endAtMs && e.title.trim() == d.title.trim()
+                    }
+            }
+        }
+        return TaskBlock(taskId, latest.provider, latest.account, latest, event)
+    }
+
+    /**
+     * What the block should do now that its task changed: moving the task (When, Tomorrow, Plan again, carrying it
+     * over) moves the block to its new start, keeping its length; Done leaves it where it was; Someday, Skip, Delete
+     * or no time any more removes it; a block removed that way comes back when the task is planned again with the
+     * setting on ([settingOn]), e.g. Undo after Delete. Nothing is done while a clash waits for Meka's choice.
+     */
+    fun follow(task: Task?, block: TaskBlock?, settingOn: Boolean): BlockStep {
+        if (block == null || task?.lifecycle == Lifecycle.DONE) return BlockStep.None
+        if (block.latest.status == EventEditStatus.CLASH) return BlockStep.None
+        val start = task?.takeIf { !it.lifecycle.isTerminal && it.lifecycle != Lifecycle.SOMEDAY }?.scheduledAtMs
+        if (block.removed) {
+            val was = block.latest.base ?: return BlockStep.None
+            if (task == null || start == null || !settingOn) return BlockStep.None
+            val length = (was.endAtMs - was.startAtMs).takeIf { it > 0 } ?: DEFAULT_LENGTH_MS
+            return BlockStep.Add(
+                block.provider, block.account,
+                EventDraft(task.title.trim().ifEmpty { "Task" }, start, start + length, allDay = false, notes = NOTE),
+            )
+        }
+        val ev = block.event
+        return when {
+            start == null -> if (ev == null || ev.isProvisional) BlockStep.OnItsWay(onItsWayLine(block)) else BlockStep.Remove(ev)
+            ev != null && ev.startAtMs == start -> BlockStep.None
+            ev == null || ev.isProvisional -> BlockStep.OnItsWay(onItsWayLine(block))
+            else -> BlockStep.Move(ev, start)
+        }
+    }
+
+    /** The draft a follow-up move writes: the block as it is, starting at [startAtMs], the same length. */
+    fun moved(event: CalendarEvent, startAtMs: Long): EventDraft =
+        CalendarEditRules.draftOf(event).copy(startAtMs = startAtMs, endAtMs = startAtMs + (event.endAtMs - event.startAtMs))
+
+    /** "The block is still on its way to Google · change it there once it shows" (said, nothing sent). */
+    fun onItsWayLine(block: TaskBlock): String {
+        val p = CalendarEditRules.providerName(block.provider)
+        return "The block is still on its way to $p · change it there once it shows"
+    }
+
+    /** A re-added block's length when the old one's is unknown. */
+    const val DEFAULT_LENGTH_MS = 30 * 60_000L
+}
+
+/** A task's block in a calendar (see [PlanCalendarRules.blockOf]). */
+data class TaskBlock(
+    val taskId: String,
+    val provider: String,
+    val account: String,
+    /** The latest edit made for the task (its add, a follow-up move or its removal). */
+    val latest: EventEdit,
+    /** The event it is now; null when removed, or not to be found yet. */
+    val event: CalendarEvent?,
+) {
+    val removed: Boolean get() = latest.kind == EventEditKind.DELETE
+}
+
+/** What a task's block does after the task changed ([PlanCalendarRules.follow]). */
+sealed class BlockStep {
+    data object None : BlockStep()
+    /** Move it to start at [startAtMs] (same length). */
+    data class Move(val event: CalendarEvent, val startAtMs: Long) : BlockStep()
+    /** Take it out of the calendar. */
+    data class Remove(val event: CalendarEvent) : BlockStep()
+    /** Add it again (it was removed with the task, and the task is planned again). */
+    data class Add(val provider: String, val account: String, val draft: EventDraft) : BlockStep()
+    /** It should follow, but the provider doesn't have it yet, so nothing can be sent. */
+    data class OnItsWay(val line: String) : BlockStep()
 }
 
 /** The synced setting (`context_mode/plan`). */

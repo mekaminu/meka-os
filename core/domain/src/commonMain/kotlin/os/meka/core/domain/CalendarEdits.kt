@@ -384,26 +384,29 @@ class CalendarEdits(
         return EventEditResult.Made(write(EventEditKind.ADD, provider, account, null, emptySet(), d, null, false, forTask = forTask))
     }
 
-    /** Changes [event] to [draft] (only what differs is sent). */
-    fun change(event: CalendarEvent, draft: EventDraft): EventEditResult {
+    /** Changes [event] to [draft] (only what differs is sent); [forTask] when it keeps a task's block in step. */
+    fun change(event: CalendarEvent, draft: EventDraft, forTask: String? = null): EventEditResult {
         guard(event)?.let { return it }
         val base = CalendarEditRules.draftOf(event)
         val d = CalendarEditRules.clean(draft)
         val changes = CalendarEditRules.changes(base, d, event.provider)
         if (changes.isEmpty()) return EventEditResult.Refused("Nothing changed")
         CalendarEditRules.problem(CalendarEditRules.merged(base, d, changes), nowMs())?.let { return EventEditResult.Refused(it) }
-        return EventEditResult.Made(write(EventEditKind.CHANGE, event.provider, event.account!!, event.id, changes, d, base, false))
+        return EventEditResult.Made(write(EventEditKind.CHANGE, event.provider, event.account!!, event.id, changes, d, base, false, forTask = forTask))
     }
 
     /** Moves [event] to start at [startAtMs], keeping its length. */
     fun move(event: CalendarEvent, startAtMs: Long): EventEditResult =
         change(event, CalendarEditRules.draftOf(event).copy(startAtMs = startAtMs, endAtMs = startAtMs + (event.endAtMs - event.startAtMs)))
 
-    /** Deletes [event]; [guestsOk] when Meka confirmed it cancels the event for its guests. */
-    fun delete(event: CalendarEvent, guestsOk: Boolean = false): EventEditResult {
+    /**
+     * Deletes [event]; [guestsOk] when Meka confirmed it cancels the event for its guests; [forTask] when a task's
+     * block goes with its task.
+     */
+    fun delete(event: CalendarEvent, guestsOk: Boolean = false, forTask: String? = null): EventEditResult {
         guard(event)?.let { return it }
         return EventEditResult.Made(
-            write(EventEditKind.DELETE, event.provider, event.account!!, event.id, emptySet(), null, CalendarEditRules.draftOf(event), guestsOk),
+            write(EventEditKind.DELETE, event.provider, event.account!!, event.id, emptySet(), null, CalendarEditRules.draftOf(event), guestsOk, forTask = forTask),
         )
     }
 

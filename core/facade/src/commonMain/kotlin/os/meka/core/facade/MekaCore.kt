@@ -344,9 +344,12 @@ class MekaCore(
     suspend fun complete(taskId: String) = onCore { tasks.complete(taskId) }
     suspend fun reopen(taskId: String) = onCore { tasks.reopen(taskId) }
     suspend fun rename(taskId: String, title: String) = onCore { tasks.edit(taskId, TaskEdit(title = title)) }
-    suspend fun schedule(taskId: String, atMs: Long?) =
-        onCore { tasks.edit(taskId, if (atMs == null) TaskEdit(clearScheduledAt = true) else TaskEdit(scheduledAtMs = atMs)) }
-    suspend fun delete(taskId: String) = onCore { tasks.delete(taskId) }
+    suspend fun schedule(taskId: String, atMs: Long?) = onCore {
+        tasks.edit(taskId, if (atMs == null) TaskEdit(clearScheduledAt = true) else TaskEdit(scheduledAtMs = atMs))
+        followBlocks(listOf(taskId))
+        Unit
+    }
+    suspend fun delete(taskId: String) = onCore { tasks.delete(taskId); followBlocks(listOf(taskId)); Unit }
 
     /**
      * A suggested plan for the rest of today (DayPlanner v1), making room first for habits that are behind or due,
@@ -368,15 +371,22 @@ class MekaCore(
      */
     suspend fun applyPlan(plan: DayPlanner.Plan): os.meka.core.domain.PlanApplied = onCore {
         plan.placements.forEach { tasks.edit(it.task.id, TaskEdit(scheduledAtMs = it.startMs)) }
+        // Plan again (slice 2f): a task that already has a block moves it rather than adding a second one.
+        val edits = calendarEdits.all()
+        val overlaid = os.meka.core.domain.PendingEditRules.apply(events.all(), edits, nowMs())
+        val (followed, fresh) = plan.placements.partition { p ->
+            os.meka.core.domain.PlanCalendarRules.blockOf(p.task.id, overlaid, edits)?.removed == false
+        }
+        followBlocks(followed.map { it.task.id })
         val target = os.meka.core.domain.PlanCalendarRules.target(
             _editAccounts.value, os.meka.core.domain.AddEventRules.lastUsedKey(calendarEdits.all()),
         )
-        if (!planCalendar.on() || target == null || plan.placements.isEmpty()) {
+        if (!planCalendar.on() || target == null || fresh.isEmpty()) {
             os.meka.core.domain.PlanApplied(emptyList(), null)
         } else {
             val made = mutableListOf<String>()
             val refused = mutableListOf<String>()
-            for (p in plan.placements) {
+            for (p in fresh) {
                 when (val r = calendarEdits.add(target.provider, target.email, os.meka.core.domain.PlanCalendarRules.draft(p), forTask = p.task.id)) {
                     is os.meka.core.domain.EventEditResult.Made -> made += r.id
                     is os.meka.core.domain.EventEditResult.Refused -> refused += "${p.task.title}: ${r.reason}"
@@ -403,7 +413,63 @@ class MekaCore(
         onCore { planCalendar.set(on) }
         return planCalendarSetting()
     }
-    suspend fun restore(taskId: String) = onCore { tasks.restore(taskId) }
+    suspend fun restore(taskId: String) = onCore { tasks.restore(taskId); followBlocks(listOf(taskId)); Unit }
+
+    /** Blocks whose add was taken back inside its five seconds because the task went (Delete, Someday): see [followBlocks]. */
+    private val takenBackAdds = HashMap<String, os.meka.core.domain.EventEdit>()
+
+    /**
+     * Slice 2f: keeps the calendar blocks of [taskIds] (from Plan my day's "Also add the blocks") in step after Meka
+     * changed those tasks here ([os.meka.core.domain.PlanCalendarRules.follow]): each step is an ordinary calendar edit
+     * with its five seconds, made for the task. An edit for the block still inside its five seconds is taken back
+     * first and worked out afresh, so Google only gets where the task ended up (a quick Undo sends nothing at all).
+     * Only Meka's own changes on this device lead here, never a sync, so two devices never both follow.
+     * Returns the lines of blocks that couldn't follow yet (still on their way to the calendar).
+     */
+    private fun followBlocks(taskIds: Collection<String>): List<String> {
+        val lines = mutableListOf<String>()
+        for (id in taskIds.distinct()) {
+            var takenBack: os.meka.core.domain.EventEdit? = null
+            var guard = 0
+            while (true) {
+                val edits = calendarEdits.all()
+                val overlaid = os.meka.core.domain.PendingEditRules.apply(events.all(), edits, nowMs())
+                val block = os.meka.core.domain.PlanCalendarRules.blockOf(id, overlaid, edits)
+                val task = tasks.get(id)
+                if (block == null) {
+                    // Its add was still inside its five seconds: add it afresh where the task is now. Taken back for a
+                    // delete or Someday, it is kept in mind for this session, so the undo bar's Undo brings it back.
+                    val add = takenBack?.takeIf { it.kind == os.meka.core.domain.EventEditKind.ADD } ?: takenBackAdds[id]
+                    val start = task?.takeIf { !it.lifecycle.isTerminal && it.lifecycle != os.meka.core.domain.Lifecycle.SOMEDAY }?.scheduledAtMs
+                    val d = add?.draft
+                    if (add != null && d != null && start != null && task != null) {
+                        takenBackAdds.remove(id)
+                        calendarEdits.add(add.provider, add.account, d.copy(title = task.title.trim().ifEmpty { d.title }, startAtMs = start, endAtMs = start + (d.endAtMs - d.startAtMs)), forTask = id)
+                    } else if (add != null) {
+                        takenBackAdds[id] = add
+                    }
+                    break
+                }
+                // A removal still in its five seconds comes back with Undo even with the setting off.
+                val waiting = block.latest.state(nowMs()) == os.meka.core.domain.EventEditState.WAITING
+                val step = os.meka.core.domain.PlanCalendarRules.follow(task, block, planCalendar.on() || waiting)
+                if (step is os.meka.core.domain.BlockStep.None) break
+                if (waiting && guard++ < 4) {
+                    if (calendarEdits.undo(block.latest.id)) { takenBack = block.latest; continue }
+                }
+                when (step) {
+                    is os.meka.core.domain.BlockStep.Move ->
+                        calendarEdits.change(step.event, os.meka.core.domain.PlanCalendarRules.moved(step.event, step.startAtMs), forTask = id)
+                    is os.meka.core.domain.BlockStep.Remove -> calendarEdits.delete(step.event, forTask = id)
+                    is os.meka.core.domain.BlockStep.Add -> calendarEdits.add(step.provider, step.account, step.draft, forTask = id)
+                    is os.meka.core.domain.BlockStep.OnItsWay -> lines += step.line
+                    os.meka.core.domain.BlockStep.None -> Unit
+                }
+                break
+            }
+        }
+        return lines
+    }
 
     // ---- Task detail: When and Notes (Fold review 2026-10-08, item 8) ----
 
@@ -411,10 +477,14 @@ class MekaCore(
     fun taskWhen(task: os.meka.core.domain.Task): os.meka.core.domain.TaskWhenView =
         os.meka.core.domain.TaskWhenRules.view(task, nowMs(), ZoneCalendar(timeZone))
     /** Puts the task on local [day] (today or later) at [minuteOfDay], or with no time when null. */
-    suspend fun setWhen(taskId: String, day: Long, minuteOfDay: Int?) = onCore { tasks.setWhen(taskId, day, minuteOfDay) }
+    suspend fun setWhen(taskId: String, day: Long, minuteOfDay: Int?) = onCore {
+        tasks.setWhen(taskId, day, minuteOfDay)
+        followBlocks(listOf(taskId))
+        Unit
+    }
     /** For Swift: [setWhen] with -1 for no time. */
     suspend fun setWhenMinute(taskId: String, day: Long, minuteOfDay: Int) =
-        onCore { tasks.setWhen(taskId, day, minuteOfDay.takeIf { it >= 0 }) }
+        onCore { tasks.setWhen(taskId, day, minuteOfDay.takeIf { it >= 0 }); followBlocks(listOf(taskId)); Unit }
     /** The task's notes; blank clears them. */
     suspend fun setNotes(taskId: String, notes: String) = onCore { tasks.setNotes(taskId, notes) }
     /** Remind me: the row as shown ("Off" or when) and the chips still ahead of now. */
@@ -432,9 +502,9 @@ class MekaCore(
     /** Sets a repeat from [repeatChoices] (its `rule`); null stops the task repeating. */
     suspend fun setRepeat(taskId: String, rule: String?) = onCore { tasks.setRepeatRule(taskId, rule) }
     /** Skips this occurrence of a repeating task; the next one is queued for its day. */
-    suspend fun skipOccurrence(taskId: String) = onCore { tasks.skipOccurrence(taskId) }
+    suspend fun skipOccurrence(taskId: String) = onCore { tasks.skipOccurrence(taskId); followBlocks(listOf(taskId)); Unit }
     /** Moves just this occurrence (or a one-off task) out of Today for [days] days. */
-    suspend fun snooze(taskId: String, days: Int = 1) = onCore { tasks.snoozeOccurrence(taskId, days) }
+    suspend fun snooze(taskId: String, days: Int = 1) = onCore { tasks.snoozeOccurrence(taskId, days); followBlocks(listOf(taskId)); Unit }
 
     /**
      * Done or Tomorrow from the Needs you stack ([os.meka.core.domain.DecisionEffect.COMPLETE_TASK] /
@@ -442,10 +512,11 @@ class MekaCore(
      * (the task was already done, or the effect is one the app handles: opening or setting aside).
      */
     suspend fun decide(taskId: String, effect: os.meka.core.domain.DecisionEffect): os.meka.core.domain.DecisionUndo? =
-        onCore { tasks.decide(taskId, effect) }
+        onCore { tasks.decide(taskId, effect).also { followBlocks(listOf(taskId)) } }
 
     /** Undo for [decide]: puts the task back only while it is still as the move left it. */
-    suspend fun undoDecision(undo: os.meka.core.domain.DecisionUndo): Boolean = onCore { tasks.undoDecision(undo) }
+    suspend fun undoDecision(undo: os.meka.core.domain.DecisionUndo): Boolean =
+        onCore { tasks.undoDecision(undo).also { followBlocks(listOf(undo.taskId)) } }
 
     /** Steps: a repeating task with steps is a routine, and each new occurrence brings them back unticked. */
     suspend fun addStep(taskId: String, text: String): String = onCore { tasks.addChecklistItem(taskId, text) }
@@ -517,7 +588,7 @@ class MekaCore(
 
     suspend fun addSomeday(title: String, kind: SomedayKind): String = onCore { lists.addSomeday(title, kind) }
     /** Moves an open, non-repeating task to Someday (out of Today and the planner). */
-    suspend fun moveToSomeday(taskId: String, kind: SomedayKind) = onCore { lists.moveToSomeday(taskId, kind) }
+    suspend fun moveToSomeday(taskId: String, kind: SomedayKind) = onCore { lists.moveToSomeday(taskId, kind); followBlocks(listOf(taskId)); Unit }
     suspend fun setSomedayKind(taskId: String, kind: SomedayKind) = onCore { lists.setSomedayKind(taskId, kind) }
     /** "Do it now": back into Today. */
     suspend fun promoteSomeday(taskId: String) = onCore { lists.promote(taskId) }
@@ -644,9 +715,14 @@ class MekaCore(
     // ---- Evening shutdown ----
 
     /** Carries one item over to tomorrow (the same "Tomorrow" as in the task detail). */
-    suspend fun carryOver(taskId: String) = onCore { tasks.snoozeOccurrence(taskId, 1) }
+    suspend fun carryOver(taskId: String) = onCore { tasks.snoozeOccurrence(taskId, 1); followBlocks(listOf(taskId)); Unit }
     /** "Move the rest to tomorrow": everything still left from today waits for tomorrow. */
-    suspend fun carryAllToTomorrow() = onCore { shutdown.carryAllToTomorrow(dayWindow(nowMs())); Unit }
+    suspend fun carryAllToTomorrow() = onCore {
+        val left = os.meka.core.domain.ShutdownRules.left(tasks.all(), dayWindow(nowMs())).map { it.id }
+        shutdown.carryAllToTomorrow(dayWindow(nowMs()))
+        followBlocks(left)
+        Unit
+    }
     /** Calls it a day: the shutdown card is put away on every device until tomorrow evening. */
     suspend fun shutDown() = onCore { shutdown.shutDown() }
 
