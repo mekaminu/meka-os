@@ -1,5 +1,7 @@
 package os.meka.android.today
 
+import os.meka.android.designsystem.ContainerOrigins
+import os.meka.android.designsystem.LocalContainerOrigins
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,7 +78,10 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
     }
     val moves = rememberDecisionMoves(core, undo, openTask = { selectedId = it }, openLists = openLists)
 
+    // Where the top card sits, so Open grows the task's detail out of it on the closed Fold (container transform).
+    val origins = remember { ContainerOrigins() }
     MekaSharedLayout(Modifier.fillMaxSize()) {
+      CompositionLocalProvider(LocalContainerOrigins provides origins) {
         BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
             val twoPane = maxWidth >= 600.dp
             val list: @Composable (Modifier) -> Unit = { m ->
@@ -89,7 +95,7 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
             )
             var shown by remember { mutableStateOf<Task?>(null) }
             if (selected != null) shown = selected
-            MekaPane(visible = selected != null && !twoPane) {
+            MekaPane(visible = selected != null && !twoPane, origin = { origins[shown?.id] }) {
                 shown?.let { s ->
                     DetailPane(s, conflicts.filter { it.taskId == s.id }, actions, Modifier.fillMaxSize(), onClose = { selectedId = null })
                 }
@@ -97,6 +103,7 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
             MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
             EventUndoBar(undo, Modifier.align(Alignment.BottomCenter))
         }
+      }
     }
 }
 

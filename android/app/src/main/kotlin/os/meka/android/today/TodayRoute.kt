@@ -60,6 +60,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -100,6 +101,9 @@ import os.meka.android.designsystem.PullToSyncBox
 import os.meka.android.designsystem.rememberPullToSync
 import os.meka.android.designsystem.MekaSharedLayout
 import os.meka.android.designsystem.rememberPaneMorph
+import os.meka.android.designsystem.ContainerOrigins
+import os.meka.android.designsystem.LocalContainerOrigins
+import os.meka.android.designsystem.containerOrigin
 import os.meka.android.designsystem.sharedTitle
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.SharedMotion
@@ -238,7 +242,10 @@ fun TodayRoute(
     )
 
     // Insets are applied once, by the app shell.
+    // Where each task row sits, so its detail grows out of it on the closed Fold (container transform).
+    val origins = remember { ContainerOrigins() }
     MekaSharedLayout(Modifier.fillMaxSize()) {
+      CompositionLocalProvider(LocalContainerOrigins provides origins) {
         BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
             val layout = CommandCentreRules.layout(maxWidth.value)
             val twoPane = layout != CommandLayout.SINGLE
@@ -287,7 +294,7 @@ fun TodayRoute(
             // Closed Fold: detail springs up over Today. The last task is kept so it stays visible while leaving.
             var shown by remember { mutableStateOf<Task?>(null) }
             if (selected != null) shown = selected
-            MekaPane(visible = selected != null && !twoPane) {
+            MekaPane(visible = selected != null && !twoPane, origin = { origins[shown?.id] }) {
                 shown?.let { s ->
                     DetailPane(s, conflicts.filter { it.taskId == s.id }, actions, Modifier.fillMaxSize(), onClose = { selectedId = null })
                 }
@@ -312,6 +319,7 @@ fun TodayRoute(
             }
             EventUndoBar(eventUndo, Modifier.align(Alignment.BottomCenter))
         }
+      }
     }
 }
 
@@ -688,6 +696,7 @@ private fun UpNextCard(t: Task, actions: TodayActions, rowMotion: (String) -> Ro
     ) { task ->
         Row(
             Modifier
+                .containerOrigin(task.id)
                 .fillMaxWidth()
                 .clickable { actions.select(task.id) }
                 .padding(MekaSpace.l),
@@ -715,7 +724,7 @@ internal fun TaskRow(
         if (motion.landed) Meka.colors.surfaceRaised else Color.Transparent, MekaMotion.appear(Meka.reducedMotion), label = "landed",
     )
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(glow).clickable { actions.select(t.id) }
+        modifier.containerOrigin(t.id).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(glow).clickable { actions.select(t.id) }
             .padding(vertical = MekaSpace.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -1,6 +1,18 @@
 package os.meka.android.designsystem
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -151,12 +163,27 @@ fun SkeletonRows(count: Int = 3, modifier: Modifier = Modifier, rowHeight: andro
  * via [sharedTitleInPane].
  */
 @Composable
-fun MekaPane(visible: Boolean, content: @Composable () -> Unit) {
+fun MekaPane(visible: Boolean, content: @Composable () -> Unit) = MekaPane(visible, origin = null, content = content)
+
+/**
+ * [MekaPane] that can grow out of the row it was opened from (motion pass 2, list → detail container transform):
+ * [origin] gives that row's bounds in root pixels (asked once as the pane opens, again as it closes, so it shrinks back
+ * into wherever the row now is, or where it was if it has gone). The container's edges and corners travel from the
+ * row's to the sheet's on the expand spring while the screen behind dims, and the content fades in once the container
+ * has grown past row size ([MotionMath.containerContentAlpha]). No row (null), or reduced motion: the sheet as before.
+ */
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+fun MekaPane(visible: Boolean, origin: (() -> Bounds?)?, content: @Composable () -> Unit) {
     val reduced = Meka.reducedMotion
     // The pane's own enter/exit lives on its two layers below; this only keeps them composed while they animate.
     AnimatedVisibility(visible = visible, enter = EnterTransition.None, exit = ExitTransition.None) {
         // Shared titles inside ride this pane's enter/exit (see MekaShared.kt).
         CompositionLocalProvider(LocalPaneScope provides this) {
+            // Where the row was when the pane opened; refreshed as it closes (the row may have moved or gone).
+            val opened = remember { if (reduced) null else origin?.invoke() }
+            val closing = transition.targetState == EnterExitState.PostExit
+            val row = remember(closing) { if (closing) origin?.invoke() ?: opened else opened }
             Box(Modifier.fillMaxSize()) {
                 Box(
                     Modifier.fillMaxSize()
@@ -165,20 +192,67 @@ fun MekaPane(visible: Boolean, content: @Composable () -> Unit) {
                         .pointerInput(Unit) { detectTapGestures { } }
                         .clearAndSetSemantics { },
                 )
-                Box(
-                    Modifier.fillMaxSize().padding(top = MekaSpace.xs)
-                        .animateEnterExit(
-                            enter = if (reduced) fadeIn(MekaMotion.expand(true)) else
-                                slideInVertically(MekaMotion.expand(false)) { it / 3 } + fadeIn(MekaMotion.appear(false)),
-                            exit = if (reduced) fadeOut(MekaMotion.expand(true)) else
-                                slideOutVertically(MekaMotion.expand(false)) { it / 3 } + fadeOut(MekaMotion.appear(false)),
-                        )
-                        .clip(RoundedCornerShape(topStart = MekaRadius.l, topEnd = MekaRadius.l))
-                        .background(Meka.colors.background),
-                ) { content() }
+                if (opened != null) {
+                    ContainerSheet(this@AnimatedVisibility, row ?: opened, content)
+                } else {
+                    Box(
+                        Modifier.fillMaxSize().padding(top = MekaSpace.xs)
+                            .animateEnterExit(
+                                enter = if (reduced) fadeIn(MekaMotion.expand(true)) else
+                                    slideInVertically(MekaMotion.expand(false)) { it / 3 } + fadeIn(MekaMotion.appear(false)),
+                                exit = if (reduced) fadeOut(MekaMotion.expand(true)) else
+                                    slideOutVertically(MekaMotion.expand(false)) { it / 3 } + fadeOut(MekaMotion.appear(false)),
+                            )
+                            .clip(RoundedCornerShape(topStart = MekaRadius.l, topEnd = MekaRadius.l))
+                            .background(Meka.colors.background),
+                    ) { content() }
+                }
             }
         }
     }
+}
+
+/** The sheet of a [MekaPane] growing out of [row] (root pixels): its clip travels from the row's bounds to its own. */
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+private fun ContainerSheet(scope: AnimatedVisibilityScope, row: Bounds, content: @Composable () -> Unit) {
+    val progress by scope.transition.animateFloat(
+        transitionSpec = { MekaMotion.expand(false) }, label = "container",
+    ) { if (it == EnterExitState.Visible) 1f else 0f }
+    // Where the sheet sits in the root, so the row can be put in its coordinates; written on placement, read on draw.
+    val at = remember { floatArrayOf(0f, 0f) }
+    val density = LocalDensity.current
+    val rowRadius = with(density) { MekaRadius.m.toPx() }
+    val sheetRadius = with(density) { MekaRadius.l.toPx() }
+    Box(
+        Modifier.fillMaxSize().padding(top = MekaSpace.xs)
+            .onPlaced { c -> val p = c.positionInRoot(); at[0] = p.x; at[1] = p.y }
+            .graphicsLayer {
+                val p = progress
+                val full = Bounds(0f, 0f, size.width, size.height)
+                val from = MotionMath.containerOrigin(row, Bounds(at[0], at[1], at[0] + size.width, at[1] + size.height)) ?: full
+                val b = MotionMath.containerBounds(from, full, p)
+                val top = MotionMath.containerCorner(rowRadius, sheetRadius, p)
+                val bottom = MotionMath.containerCorner(rowRadius, 0f, p)
+                shape = BoundsShape(b, top, bottom)
+                clip = true
+            }
+            .background(Meka.colors.background),
+    ) {
+        Box(Modifier.fillMaxSize().graphicsLayer { alpha = MotionMath.containerContentAlpha(progress) }) { content() }
+    }
+}
+
+/** A rounded rectangle at [b] inside the layer, [top] and [bottom] corner radii in pixels. */
+private class BoundsShape(private val b: Bounds, private val top: Float, private val bottom: Float) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
+        Outline.Rounded(
+            RoundRect(
+                b.left, b.top, b.right, b.bottom,
+                topLeftCornerRadius = CornerRadius(top), topRightCornerRadius = CornerRadius(top),
+                bottomRightCornerRadius = CornerRadius(bottom), bottomLeftCornerRadius = CornerRadius(bottom),
+            ),
+        )
 }
 
 /** Haptics named for what happened, so every screen feels the same (catalogue: light on complete, medium on approve). */

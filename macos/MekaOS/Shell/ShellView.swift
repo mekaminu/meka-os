@@ -145,7 +145,7 @@ struct NeedsYouView: View {
                 .padding(.vertical, MekaSpace.xl)
             }
             .frame(minWidth: 380, idealWidth: 520)
-            DetailView(task: model.selected, palette: palette)
+            DetailView(task: model.selected, palette: palette, growsFromRow: true)
                 .frame(minWidth: 280, idealWidth: 360)
         }
         .background(palette.background)

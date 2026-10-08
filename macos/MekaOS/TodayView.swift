@@ -294,6 +294,8 @@ struct TaskRow: View {
     let task: MekaTask
     let reason: NeedsYouReason?
     let palette: MekaPalette
+    /// Where the row is on screen, so its detail can grow out of it.
+    @State private var frame: CGRect = .zero
 
     /// On the timeline: the time column on the left and the core's line ("30 min · ↻ Every weekday") under the title.
     let time: String?
@@ -340,7 +342,8 @@ struct TaskRow: View {
             .animation(MekaMotion.appear(reduced: reduceMotion), value: landed)
         }
         .contentShape(Rectangle())
-        .onTapGesture { model.select(task.id, reduced: reduceMotion) }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
+        .onTapGesture { model.select(task.id, reduced: reduceMotion, origin: frame) }
         .transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .scale(scale: 0.96))))
     }
 
@@ -527,6 +530,7 @@ private struct UpNextCard: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let task: MekaTask
     let palette: MekaPalette
+    @State private var frame: CGRect = .zero
 
     var body: some View {
         HStack {
@@ -536,7 +540,8 @@ private struct UpNextCard: View {
         }
         .padding(MekaSpace.l)
         .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surfaceRaised))
-        .onTapGesture { model.select(task.id, reduced: reduceMotion) }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
+        .onTapGesture { model.select(task.id, reduced: reduceMotion, origin: frame) }
         .mekaHoverLift()
     }
 }
@@ -594,25 +599,78 @@ private struct CaptureField: View {
 /// The detail beside a list. Selecting another task slides the new one across from the trailing edge (cross-fade
 /// with Reduce Motion); each task gets its own fresh title field.
 struct DetailView: View {
+    @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let task: MekaTask?
     let palette: MekaPalette
+    /// Whether a task opened from a row grows out of it (the list beside it); off for search's own detail.
+    let growsFromRow: Bool
+    /// Container transform (motion pass 2): the row it grew out of (global frame), the detail's own frame and how far
+    /// it has grown (0 = row-sized, 1 = the whole detail).
+    @State private var origin: CGRect?
+    @State private var bounds: CGRect = .zero
+    @State private var grown: Double = 1
 
-    init(task: MekaTask?, palette: MekaPalette) {
+    init(task: MekaTask?, palette: MekaPalette, growsFromRow: Bool = false) {
         self.task = task
         self.palette = palette
+        self.growsFromRow = growsFromRow
+    }
+
+    /// Grows out of a row when one was tapped (the content then fades in); otherwise pushes across as before.
+    private var contentTransition: AnyTransition {
+        if reduceMotion { return .opacity }
+        if growsFromRow && model.selectionOrigin != nil { return .opacity }
+        return AnyTransition.push(from: .trailing).combined(with: .opacity)
     }
 
     var body: some View {
         ZStack {
             DetailContent(task: task, palette: palette)
                 .id(task?.id ?? "")
-                .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.push(from: .trailing).combined(with: .opacity))
+                .transition(contentTransition)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .clipped()
         .padding(MekaSpace.gutter)
         .background(palette.surface)
+        .clipShape(ContainerShape(from: origin.flatMap { MotionMath.containerOrigin(row: $0, pane: bounds) },
+                                  progress: grown, rowRadius: MekaRadius.m))
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { bounds = $0 }
+        .onChange(of: task?.id, initial: true) { _, id in grow(id) }
+    }
+
+    /// A task just opened from a row: start row-sized and grow on the expand spring; anything else: shown whole.
+    private func grow(_ id: String?) {
+        guard growsFromRow, id != nil, !reduceMotion, let row = model.selectionOrigin else {
+            origin = nil
+            grown = 1
+            return
+        }
+        model.selectionOrigin = nil
+        origin = row
+        grown = 0
+        withAnimation(MekaMotion.expand(reduced: false)) { grown = 1 }
+    }
+}
+
+/// The detail's clip while it grows out of a row: a rounded rectangle travelling from the row's frame (`from`, in
+/// the detail's own coordinates) to the whole detail. No row: the whole detail.
+private struct ContainerShape: Shape {
+    var from: CGRect?
+    var progress: Double
+    let rowRadius: CGFloat
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        guard let from else { return Path(rect) }
+        let bounds = MotionMath.containerBounds(from: from, to: rect, progress: progress)
+        let corner = MotionMath.containerCorner(from: rowRadius, to: 0, progress: progress)
+        return Path(roundedRect: bounds, cornerRadius: corner)
     }
 }
 

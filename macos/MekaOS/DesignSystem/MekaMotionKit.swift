@@ -261,6 +261,42 @@ enum MotionMath {
 
     /// How strongly Needs you's card takes on the colour of the move it leans to.
     static func swipeWash(_ progress: Double) -> Double { swipeWashMax * min(max(progress, 0), 1) }
+
+    // List → detail container transform (motion pass 2, screen-level motion). Matches the Fold's
+    // MotionMath.container* number for number.
+
+    static let containerFadeFrom: Double = 0.2
+    static let containerFadeTo: Double = 0.6
+
+    /// Where the tapped row sits relative to the detail (both in the same, global, coordinates), clamped to the
+    /// detail's height. Nil without a row or when none of it shows: the detail then pushes across as before.
+    static func containerOrigin(row: CGRect?, pane: CGRect) -> CGRect? {
+        guard let row else { return nil }
+        let h = pane.height
+        let top = min(max(row.minY - pane.minY, 0), h)
+        let bottom = min(max(row.maxY - pane.minY, 0), h)
+        if bottom - top < 1 || row.width < 1 { return nil }
+        return CGRect(x: row.minX - pane.minX, y: top, width: row.width, height: bottom - top)
+    }
+
+    /// The container at `progress` of the expand spring, edge by edge from the row to the detail (clamped 0…1).
+    static func containerBounds(from: CGRect, to: CGRect, progress: Double) -> CGRect {
+        let p = CGFloat(min(max(progress, 0), 1))
+        func lerp(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * p }
+        let left = lerp(from.minX, to.minX), top = lerp(from.minY, to.minY)
+        let right = lerp(from.maxX, to.maxX), bottom = lerp(from.maxY, to.maxY)
+        return CGRect(x: left, y: top, width: right - left, height: bottom - top)
+    }
+
+    /// A corner of the container: the row's rounding easing into the detail's.
+    static func containerCorner(from: CGFloat, to: CGFloat, progress: Double) -> CGFloat {
+        from + (to - from) * CGFloat(min(max(progress, 0), 1))
+    }
+
+    /// The detail's content: hidden while the container is row-sized, fading in from 20 % to 60 % of the way.
+    static func containerContentAlpha(_ progress: Double) -> Double {
+        min(max((progress - containerFadeFrom) / (containerFadeTo - containerFadeFrom), 0), 1)
+    }
 }
 
 /// What a staying tick does (`MotionMath.tickDraw`): at rest (an outline), draw the check in, or show it done at once.

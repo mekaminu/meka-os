@@ -23,7 +23,7 @@ struct CommandSideView: View {
                             .padding(.horizontal, MekaSpace.gutter)
                             .padding(.top, MekaSpace.s)
                     }
-                    DetailView(task: model.selected, palette: palette)
+                    DetailView(task: model.selected, palette: palette, growsFromRow: true)
                 }
                 .transition(.opacity)
             } else if column == CommandColumn.needsYou {

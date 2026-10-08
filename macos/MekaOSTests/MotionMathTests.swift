@@ -236,4 +236,32 @@ final class MotionMathTests: XCTestCase {
         XCTAssertEqual(MotionMath.swipeWash(0.5), 0.09, accuracy: 1e-9)
         XCTAssertEqual(MotionMath.swipeWash(2), 0.18, accuracy: 1e-9)
     }
+
+    @MainActor
+    func testTheDetailGrowsOutOfTheTappedRow() {
+        let pane = CGRect(x: 0, y: 100, width: 400, height: 800)
+        XCTAssertEqual(MotionMath.containerOrigin(row: CGRect(x: 16, y: 300, width: 368, height: 60), pane: pane),
+                       CGRect(x: 16, y: 200, width: 368, height: 60))
+        // Half scrolled off the top: grows from the part that shows.
+        XCTAssertEqual(MotionMath.containerOrigin(row: CGRect(x: 16, y: 80, width: 368, height: 40), pane: pane),
+                       CGRect(x: 16, y: 0, width: 368, height: 20))
+        // A row in the list beside the detail keeps its place to the left.
+        XCTAssertEqual(MotionMath.containerOrigin(row: CGRect(x: 20, y: 300, width: 300, height: 40), pane: CGRect(x: 400, y: 100, width: 400, height: 800)),
+                       CGRect(x: -380, y: 200, width: 300, height: 40))
+        XCTAssertNil(MotionMath.containerOrigin(row: nil, pane: pane))
+        XCTAssertNil(MotionMath.containerOrigin(row: CGRect(x: 16, y: 20, width: 368, height: 70), pane: pane))
+        XCTAssertNil(MotionMath.containerOrigin(row: CGRect(x: 16, y: 300, width: 0, height: 60), pane: pane))
+        let from = CGRect(x: 16, y: 200, width: 368, height: 60)
+        let to = CGRect(x: 0, y: 0, width: 400, height: 800)
+        XCTAssertEqual(MotionMath.containerBounds(from: from, to: to, progress: 0), from)
+        XCTAssertEqual(MotionMath.containerBounds(from: from, to: to, progress: 0.5), CGRect(x: 8, y: 100, width: 384, height: 430))
+        XCTAssertEqual(MotionMath.containerBounds(from: from, to: to, progress: 1.08), to)
+        XCTAssertEqual(MotionMath.containerBounds(from: from, to: to, progress: -0.1), from)
+        XCTAssertEqual(MotionMath.containerCorner(from: 8, to: 16, progress: 0.5), 12, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.containerCorner(from: 8, to: 0, progress: 1), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.containerContentAlpha(0.2), 0)
+        XCTAssertEqual(MotionMath.containerContentAlpha(0.4), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.containerContentAlpha(0.6), 1)
+        XCTAssertEqual(MotionMath.containerContentAlpha(1.05), 1)
+    }
 }

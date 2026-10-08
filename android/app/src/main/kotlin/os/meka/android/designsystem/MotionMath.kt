@@ -306,7 +306,48 @@ object MotionMath {
     const val SWIPE_ICON_FROM = 0.6f
     const val SWIPE_ICON_FADE = 0.4f
     const val SWIPE_WASH_MAX = 0.18f
+
+    /**
+     * List → detail container transform (motion pass 2, screen-level motion; catalogue "Task detail"): where the
+     * tapped row sits inside the pane, [row] and [pane] both in the same (root) coordinates. Clamped to the pane's
+     * height, so a row half scrolled off grows from its visible part. Null when there is no row (opened from search,
+     * a notification, the cover screen) or none of it shows: then the pane springs up as a sheet as before.
+     */
+    fun containerOrigin(row: Bounds?, pane: Bounds): Bounds? {
+        if (row == null) return null
+        val h = pane.bottom - pane.top
+        val top = (row.top - pane.top).coerceIn(0f, h)
+        val bottom = (row.bottom - pane.top).coerceIn(0f, h)
+        if (bottom - top < 1f || row.right - row.left < 1f) return null
+        return Bounds(row.left - pane.left, top, row.right - pane.left, bottom)
+    }
+
+    /**
+     * The container's bounds at [progress] of the expand spring: from the row's bounds to the pane's, edge by edge.
+     * Clamped to 0…1, so the spring's overshoot never grows the container past the pane.
+     */
+    fun containerBounds(from: Bounds, to: Bounds, progress: Float): Bounds {
+        val p = progress.coerceIn(0f, 1f)
+        fun lerp(a: Float, b: Float) = a + (b - a) * p
+        return Bounds(lerp(from.left, to.left), lerp(from.top, to.top), lerp(from.right, to.right), lerp(from.bottom, to.bottom))
+    }
+
+    /** A corner of the container: the row's rounding ([fromDp]) easing into the pane's ([toDp]). */
+    fun containerCorner(fromDp: Float, toDp: Float, progress: Float): Float = fromDp + (toDp - fromDp) * progress.coerceIn(0f, 1f)
+
+    /**
+     * The detail's content inside the growing container: hidden while it is still row-sized, fading in from
+     * [CONTAINER_FADE_FROM] to [CONTAINER_FADE_TO] of the way (and out the same way as it shrinks back).
+     */
+    fun containerContentAlpha(progress: Float): Float =
+        ((progress - CONTAINER_FADE_FROM) / (CONTAINER_FADE_TO - CONTAINER_FADE_FROM)).coerceIn(0f, 1f)
+
+    const val CONTAINER_FADE_FROM = 0.2f
+    const val CONTAINER_FADE_TO = 0.6f
 }
+
+/** A rectangle by its edges, in pixels (kept free of Compose's Rect so [MotionMath] stays plain). */
+data class Bounds(val left: Float, val top: Float, val right: Float, val bottom: Float)
 
 /** What a staying tick does ([MotionMath.tickDraw]): at rest (an outline), draw the check in, or show it done at once. */
 enum class TickDraw { REST, DRAW, DONE }

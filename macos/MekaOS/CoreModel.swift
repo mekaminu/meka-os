@@ -90,6 +90,8 @@ final class CoreModel {
     private(set) var exportOutcome: String?
     private(set) var exportSaved = false
     var selectedID: String?
+    /// The global frame of the row a task was just opened from, until the detail grows out of it.
+    var selectionOrigin: CGRect?
     /// The shell's current destination and which way the last switch moved (for the push transition).
     private(set) var destination: ShellDestination = .today
     private(set) var lastDirection = 0
@@ -408,8 +410,10 @@ final class CoreModel {
         if landing == placed { landing = [] }
     }
 
-    /// Selects a task from a list: the highlight glides to the row and the detail slides across.
-    func select(_ id: String, reduced: Bool) {
+    /// Selects a task from a list: the highlight glides to the row and the detail slides across, or, given the
+    /// tapped row's global frame (`origin`), grows out of it (container transform; the detail takes it once).
+    func select(_ id: String, reduced: Bool, origin: CGRect? = nil) {
+        if id != selectedID { selectionOrigin = reduced ? nil : origin }
         withAnimation(MekaMotion.expand(reduced: reduced)) { selectedID = id }
     }
 

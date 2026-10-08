@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import os.meka.android.designsystem.containerOrigin
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -172,6 +173,8 @@ private fun TopCard(card: DecisionCard, widthPx: Float, onMove: (DecisionMove, B
         DecisionCardFace(
             card, armed = armed ?: preview(x, y), progress = progress,
             modifier = Modifier
+                // Open grows the task's detail out of the card (closed Fold).
+                .then(card.taskId?.let { Modifier.containerOrigin(it) } ?: Modifier)
                 .graphicsLayer {
                     translationX = x
                     translationY = y

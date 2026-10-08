@@ -4,6 +4,7 @@ import os.meka.core.domain.DayRingPlay
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MotionMathTest {
@@ -300,5 +301,33 @@ class MotionMathTest {
         assertEquals(0f, MotionMath.swipeWash(0f))
         assertEquals(0.09f, MotionMath.swipeWash(0.5f), 1e-6f)
         assertEquals(0.18f, MotionMath.swipeWash(2f), 1e-6f)
+    }
+
+    @Test
+    fun theDetailGrowsOutOfTheTappedRow() {
+        val pane = Bounds(0f, 100f, 400f, 900f)
+        // The row, relative to the pane.
+        assertEquals(Bounds(16f, 200f, 384f, 260f), MotionMath.containerOrigin(Bounds(16f, 300f, 384f, 360f), pane))
+        // Half scrolled off the top: grows from the part that shows.
+        assertEquals(Bounds(16f, 0f, 384f, 20f), MotionMath.containerOrigin(Bounds(16f, 80f, 384f, 120f), pane))
+        // No row (search, a notification) or none of it shows: the sheet springs up as before.
+        assertNull(MotionMath.containerOrigin(null, pane))
+        assertNull(MotionMath.containerOrigin(Bounds(16f, 20f, 384f, 90f), pane))
+        assertNull(MotionMath.containerOrigin(Bounds(16f, 300f, 16f, 360f), pane))
+        // Edge by edge from the row to the pane; the spring's overshoot never grows it past the pane.
+        val from = Bounds(16f, 200f, 384f, 260f)
+        val to = Bounds(0f, 0f, 400f, 800f)
+        assertEquals(from, MotionMath.containerBounds(from, to, 0f))
+        assertEquals(Bounds(8f, 100f, 392f, 530f), MotionMath.containerBounds(from, to, 0.5f))
+        assertEquals(to, MotionMath.containerBounds(from, to, 1.08f))
+        assertEquals(from, MotionMath.containerBounds(from, to, -0.1f))
+        // Corners ease from the row's rounding to the pane's.
+        assertEquals(12f, MotionMath.containerCorner(8f, 16f, 0.5f), 1e-6f)
+        assertEquals(0f, MotionMath.containerCorner(8f, 0f, 1f), 1e-6f)
+        // The content stays hidden while it is row-sized, then fades in between 20 % and 60 %.
+        assertEquals(0f, MotionMath.containerContentAlpha(0.2f))
+        assertEquals(0.5f, MotionMath.containerContentAlpha(0.4f), 1e-6f)
+        assertEquals(1f, MotionMath.containerContentAlpha(0.6f))
+        assertEquals(1f, MotionMath.containerContentAlpha(1.05f))
     }
 }
