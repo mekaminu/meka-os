@@ -13,6 +13,8 @@ object EventMarkFields {
     const val REMIND_MIN = "remindMin"
     /** Leave by: how many minutes it takes to get there (Int; null: no leave-by reminder). */
     const val TRAVEL_MIN = "travelMin"
+    /** Leave by rings as an alarm instead of a heads-up (Bool; Alarms, slice 3, [LeaveAlarmRules]). */
+    const val LEAVE_ALARM = "leaveAlarm"
 }
 
 /** What MEKA knows about events beyond the provider's mirror: which are hidden and which have a prep task. */
@@ -26,6 +28,8 @@ data class EventMarks(
     val travel: Map<String, Int> = emptyMap(),
     /** Calendars hidden from Today: key ([CalendarRules.key]) → name (see [CalendarRules]). */
     val hiddenCalendars: Map<String, String> = emptyMap(),
+    /** Events whose leave-by rings as an alarm ([LeaveAlarmRules]). */
+    val leaveAlarms: Set<String> = emptySet(),
 ) {
     fun isHidden(eventId: String) = eventId in hidden
 
@@ -40,6 +44,9 @@ data class EventMarks(
 
     /** For Swift: the travel minutes, or 0 for none. */
     fun travelOf(eventId: String): Int = travel[eventId] ?: 0
+
+    /** For Swift: whether the event's leave-by rings as an alarm. */
+    fun leaveRingsOf(eventId: String): Boolean = eventId in leaveAlarms
 
     /** The events that count for the day: everything not hidden, one by one or by its calendar. */
     fun visible(events: List<CalendarEvent>): List<CalendarEvent> =
@@ -86,7 +93,8 @@ class EventActions(
                 val key = c[CalendarMarkFields.KEY].textOrNull ?: return@mapNotNull null
                 key to (c[CalendarMarkFields.LABEL].textOrNull ?: "")
             }.toMap()
-        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars)
+        val leaveAlarms = entities.filter { it[EventMarkFields.LEAVE_ALARM].boolOrNull == true }.map { it.ref.entityId }.toSet()
+        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars, leaveAlarms)
     }
 
     /**
@@ -115,6 +123,16 @@ class EventActions(
 
     /** A leave-by reminder [travelMinutes] before [eventId] starts (how long it takes to get there); null (or 0) turns it off. */
     fun setLeaveBy(eventId: String, travelMinutes: Int?) = setMinutes(eventId, EventMarkFields.TRAVEL_MIN, travelMinutes)
+
+    /**
+     * Ring as an alarm (Alarms, slice 3): [eventId]'s leave-by rings like the wake alarm instead of posting a heads-up.
+     * It only rings while a travel time is set and the event has a place; the switch is kept either way. Last tap wins.
+     */
+    fun setLeaveAlarm(eventId: String, on: Boolean) {
+        val current = replica.entity(EntityTypes.EVENT_MARK, eventId)?.get(EventMarkFields.LEAVE_ALARM)?.boolOrNull ?: false
+        if (current == on) return
+        replica.commitLocal(EntityTypes.EVENT_MARK, eventId, mapOf(EventMarkFields.LEAVE_ALARM to on.fv()))
+    }
 
     private fun setMinutes(eventId: String, field: String, minutes: Int?) {
         val m = minutes?.takeIf { it != 0 }
@@ -247,7 +265,8 @@ object ReminderRules {
                 )
             }
             val travel = marks.travel[e.id]
-            if (travel != null && place != null) {
+            // Ring as an alarm: the alarm rings instead ([LeaveAlarmRules]), so no heads-up as well.
+            if (travel != null && place != null && !LeaveAlarmRules.rings(e, marks)) {
                 out += Notice(
                     key = "event:${e.id}:${e.startAtMs}:leave:$travel", source = NoticeSource.EVENT_REMINDER, tier = NoticeTier.HEADS_UP,
                     title = "Leave now for ${e.title}",
@@ -276,10 +295,14 @@ object ReminderRules {
         val parts = mutableListOf<String>()
         marks.reminders[e.id]?.let { parts += "Reminder ${EventDetails.durationLabel(it * MIN_MS)} before" }
         marks.travel[e.id]?.takeIf { !e.allDay }?.let {
-            parts += "Leave by ${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs - it * MIN_MS))} · ${EventDetails.durationLabel(it * MIN_MS)} away"
+            parts += "Leave by ${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs - it * MIN_MS))} · ${EventDetails.durationLabel(it * MIN_MS)} away" +
+                if (LeaveAlarmRules.rings(e, marks)) " · $ALARM_WORD" else ""
         }
         return parts.joinToString(" · ").ifEmpty { null }
     }
+
+    /** Added to the leave-by line when it rings as an alarm: "Leave by 13:30 · 30 min away · alarm". */
+    const val ALARM_WORD = "alarm"
 
     /** "10 min before" for a menu item. */
     fun choiceLabel(minutes: Int): String = "${EventDetails.durationLabel(minutes * MIN_MS)} before"

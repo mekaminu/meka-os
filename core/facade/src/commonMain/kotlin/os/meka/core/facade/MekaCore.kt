@@ -133,7 +133,10 @@ class MekaCore(
     private val activity = os.meka.core.domain.ActivityLog(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val eventActions = os.meka.core.domain.EventActions(replica, tasks, nowMs, ZoneCalendar(timeZone))
     private val held = os.meka.core.domain.HeldMessages(replica, nowMs)
-    private val alarms = os.meka.core.domain.Alarms(replica, nowMs, ZoneCalendar(timeZone))
+    // Leave-by alarms are worked out from the calendar on every read (Alarms, slice 3).
+    private val alarms = os.meka.core.domain.Alarms(replica, nowMs, ZoneCalendar(timeZone)) {
+        os.meka.core.domain.LeaveAlarmRules.alarms(events.all(), eventActions.marks(), nowMs(), ZoneCalendar(timeZone))
+    }
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
     private var releasesApi: ReleasesApi? = transport as? ReleasesApi
@@ -427,6 +430,11 @@ class MekaCore(
     suspend fun setEventReminder(eventId: String, minutes: Int) = onCore { eventActions.setReminder(eventId, minutes) }
     /** Leave by: a heads-up [travelMinutes] before the event starts (how long it takes to get there); 0 turns it off. */
     suspend fun setEventLeaveBy(eventId: String, travelMinutes: Int) = onCore { eventActions.setLeaveBy(eventId, travelMinutes) }
+    /**
+     * Ring as an alarm (Alarms, slice 3): the event's leave-by rings like the wake alarm (full screen on the Fold, a
+     * notification with Snooze / Dismiss on the Mac) instead of a heads-up. Synced; last tap wins.
+     */
+    suspend fun setEventLeaveAlarm(eventId: String, on: Boolean) = onCore { eventActions.setLeaveAlarm(eventId, on) }
 
     // ---- Lists: Waiting for · Someday · Decisions ----
 

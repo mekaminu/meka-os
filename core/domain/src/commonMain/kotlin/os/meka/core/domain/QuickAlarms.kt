@@ -190,7 +190,7 @@ object QuickAlarmRules {
 
     /** The quick alarms and timers still on (or ringing now), soonest first. */
     fun items(alarms: List<Alarm>, nowMs: Long, cal: LocalCalendar): List<QuickAlarmItem> = alarms
-        .filter { it.kind != AlarmKind.WAKE && !it.off && it.dismissedAtMs == null && it.ringAtMs + AlarmRules.RING_FOR_MS > nowMs }
+        .filter { (it.kind == AlarmKind.ALARM || it.kind == AlarmKind.TIMER) && !it.off && it.dismissedAtMs == null && it.ringAtMs + AlarmRules.RING_FOR_MS > nowMs }
         .sortedWith(compareBy<Alarm> { it.ringAtMs }.thenBy { it.id })
         .map { item(it, nowMs, cal) }
 

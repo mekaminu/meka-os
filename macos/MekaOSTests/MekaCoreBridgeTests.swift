@@ -77,6 +77,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         if case .taskAdded = onEnum(of: task) {} else { XCTFail("expected a task") }
     }
 
+    func testLeaveByRingsAsAnAlarmThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "leave-\(UUID().uuidString).db", deviceKey: nil
+        )
+        try await core.setEventLeaveBy(eventId: "ev2", travelMinutes: 30)
+        try await core.setEventLeaveAlarm(eventId: "ev2", on: true)
+        XCTAssertTrue(core.eventMarks.value.leaveRingsOf(eventId: "ev2"))
+        XCTAssertEqual(core.eventMarks.value.travelOf(eventId: "ev2"), 30)
+        XCTAssertEqual(LeaveAlarmRules.shared.SWITCH_LABEL, "Ring as an alarm")
+        XCTAssertEqual(LeaveAlarmRules.shared.id(eventId: "ev2", startAtMs: 1_000, travelMin: 30), "leave.eev2.s1000.t30")
+        try await core.setEventLeaveAlarm(eventId: "ev2", on: false)
+        XCTAssertFalse(core.eventMarks.value.leaveRingsOf(eventId: "ev2"))
+    }
+
     func testRepeatingTaskThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

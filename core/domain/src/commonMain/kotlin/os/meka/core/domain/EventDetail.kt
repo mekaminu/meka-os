@@ -47,6 +47,8 @@ data class EventDetailView(
     val reminderLine: String? = null,
     /** The real event in Google Calendar or Outlook on the web (calendar actions, slice 3); null when unknown. */
     val openIn: OpenLink? = null,
+    /** Ring as an alarm is on for Leave by (Alarms, slice 3); the switch shows while a travel time is set. */
+    val leaveAlarm: Boolean = false,
 )
 
 /**
@@ -158,6 +160,7 @@ object EventDetails {
             travelChoices = ReminderRules.travelChoices(e, nowMs),
             reminderLine = if (e.startAtMs > nowMs) ReminderRules.line(e, marks, calendar) else null,
             openIn = openLink(e),
+            leaveAlarm = e.id in marks.leaveAlarms,
         )
     }
 

@@ -51,9 +51,10 @@ object AlarmSettingsFields {
 
 /**
  * WAKE: the smart wake alarm (slice 1). ALARM and TIMER: quick alarms and timers typed into capture ("alarm 6:30",
- * "timer 20 min"; slice 2, [QuickAlarmRules]).
+ * "timer 20 min"; slice 2, [QuickAlarmRules]). LEAVE: a leave-by that rings as an alarm (slice 3, [LeaveAlarmRules]);
+ * derived from the event and its Leave by, stored only once it is snoozed or dismissed.
  */
-enum class AlarmKind { WAKE, ALARM, TIMER }
+enum class AlarmKind { WAKE, ALARM, TIMER, LEAVE }
 
 data class Alarm(
     val id: String,
@@ -263,11 +264,13 @@ object AlarmRules {
                 AlarmKind.WAKE -> TITLE
                 AlarmKind.ALARM -> QuickAlarmRules.ALARM_TITLE
                 AlarmKind.TIMER -> QuickAlarmRules.TIMER_TITLE
+                AlarmKind.LEAVE -> LeaveAlarmRules.TITLE
             },
             line = note ?: when (a.kind) {
                 AlarmKind.WAKE -> "Good morning"
                 AlarmKind.ALARM -> QuickAlarmRules.ALARM_TITLE
                 AlarmKind.TIMER -> QuickAlarmRules.TIMES_UP
+                AlarmKind.LEAVE -> LeaveAlarmRules.TITLE
             },
             snoozed = a.snoozedUntilMs != null,
             snoozeLine = null, // [ringIn] fills it in with the local time
@@ -298,15 +301,43 @@ object AlarmRules {
     }
 }
 
-/** Reads and writes the synced alarms. */
+/**
+ * Reads and writes the synced alarms. [derived] gives the leave-by alarms worked out from the calendar right now
+ * ([LeaveAlarmRules.alarms]): one rings until it is snoozed or dismissed, which stores it under its own id; a stored
+ * leave-by whose event moved, lost its place or its alarm is left out (it no longer matches anything derived).
+ */
 class Alarms(
     private val replica: Replica,
     private val nowMs: () -> Long,
     private val calendar: LocalCalendar = LocalCalendar.UTC,
+    private val derived: () -> List<Alarm> = { emptyList() },
 ) {
-    fun all(): List<Alarm> = replica.entities(EntityTypes.ALARM).mapNotNull { AlarmRules.from(it, calendar) }
+    fun all(): List<Alarm> {
+        val stored = replica.entities(EntityTypes.ALARM).mapNotNull { AlarmRules.from(it, calendar) }
+        val leave = derived()
+        if (leave.isEmpty()) return stored.filter { it.kind != AlarmKind.LEAVE }
+        val leaveIds = leave.mapTo(HashSet()) { it.id }
+        val storedIds = stored.mapTo(HashSet()) { it.id }
+        return stored.filter { it.kind != AlarmKind.LEAVE || it.id in leaveIds } + leave.filter { it.id !in storedIds }
+    }
 
     fun alarm(id: String): Alarm? = replica.entity(EntityTypes.ALARM, id)?.let { AlarmRules.from(it, calendar) }
+        ?.takeIf { it.kind != AlarmKind.LEAVE || derived().any { d -> d.id == id } }
+        ?: derived().firstOrNull { it.id == id }
+
+    /** A derived leave-by is written out in full the first time it changes (snooze, dismiss), so every device sees it. */
+    private fun commit(a: Alarm, change: Map<String, os.meka.core.sync.FieldValue>) {
+        val fields = if (a.kind == AlarmKind.LEAVE && replica.entity(EntityTypes.ALARM, a.id) == null) mapOf(
+            AlarmFields.KIND to a.kind.name.fv(),
+            AlarmFields.DAY to a.epochDay.fv(),
+            AlarmFields.MINUTE to a.minute.fv(),
+            AlarmFields.AT_MS to a.atMs.fv(),
+            AlarmFields.OFF to false.fv(),
+            AlarmFields.NOTE to a.note.fv(),
+            AlarmFields.SET_AT to nowMs().fv(),
+        ) + change else change
+        replica.commitLocal(EntityTypes.ALARM, a.id, fields)
+    }
 
     fun bufferMin(): Int = replica.entity(EntityTypes.CONTEXT_MODE, SETTINGS_ID)?.get(AlarmSettingsFields.WAKE_BUFFER)?.longOrNull?.toInt()
         ?.takeIf { AlarmRules.validBuffer(it) } ?: AlarmRules.DEFAULT_BUFFER_MIN
@@ -356,7 +387,7 @@ class Alarms(
         val a = alarm(id) ?: return null
         val now = nowMs()
         if (a.off || a.dismissedAtMs != null || now < a.ringAtMs - 60_000L || now >= a.ringAtMs + AlarmRules.RING_FOR_MS) return null
-        replica.commitLocal(EntityTypes.ALARM, id, mapOf(AlarmFields.SNOOZED_UNTIL to (now + AlarmRules.SNOOZE_MIN * 60_000L).fv()))
+        commit(a, mapOf(AlarmFields.SNOOZED_UNTIL to (now + AlarmRules.SNOOZE_MIN * 60_000L).fv()))
         return alarm(id)?.let { AlarmRules.ringIn(it, calendar) }
     }
 
@@ -364,7 +395,7 @@ class Alarms(
     fun dismiss(id: String): Boolean {
         val a = alarm(id) ?: return false
         if (a.dismissedAtMs != null) return false
-        replica.commitLocal(EntityTypes.ALARM, id, mapOf(AlarmFields.DISMISSED_AT to nowMs().fv()))
+        commit(a, mapOf(AlarmFields.DISMISSED_AT to nowMs().fv()))
         return true
     }
 
@@ -404,7 +435,7 @@ class Alarms(
     fun cancel(id: String): Boolean {
         val a = alarm(id) ?: return false
         if (a.off || a.dismissedAtMs != null) return false
-        replica.commitLocal(EntityTypes.ALARM, id, mapOf(AlarmFields.OFF to true.fv()))
+        commit(a, mapOf(AlarmFields.OFF to true.fv()))
         return true
     }
 

@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.platform.LocalContext
 import os.meka.android.MekaApplication
 import os.meka.core.domain.ReminderRules
+import os.meka.core.domain.LeaveAlarmRules
+import androidx.compose.foundation.selection.toggleable
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -136,6 +138,18 @@ fun EventDetailPane(core: MekaCore, event: CalendarEvent, onClose: () -> Unit) {
                 scope.launch { runCatching { core.setEventLeaveBy(event.id, m) } }
             }
         }
+        // Alarms, slice 3: once a travel time is set, Leave by can ring like the wake alarm instead of a heads-up.
+        val reducedMotion = Meka.reducedMotion
+        androidx.compose.animation.AnimatedVisibility(
+            visible = d.travelMin != 0,
+            enter = if (reducedMotion) fadeIn(MekaMotion.appear(true)) else androidx.compose.animation.expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reducedMotion) fadeOut(MekaMotion.appear(true)) else androidx.compose.animation.shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            LeaveAlarmSwitch(d.leaveAlarm) { on ->
+                haptics.tick()
+                scope.launch { runCatching { core.setEventLeaveAlarm(event.id, on) } }
+            }
+        }
         val context = LocalContext.current
         val exact = remember(tick, marks) { (context.applicationContext as? MekaApplication)?.governor?.exactAllowed() ?: true }
         if ((d.remindMin != 0 || d.travelMin != 0) && !exact) {
@@ -245,6 +259,43 @@ private fun ReminderChips(label: String, choices: List<Int>, current: Int, text:
                         .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                 )
             }
+        }
+    }
+}
+
+/**
+ * "Ring as an alarm" for Leave by (Alarms, slice 3): an On/Off pill whose colour blends (like the reminder chips), with
+ * the line under it cross-fading between what each choice does. The screen reader hears it as a switch.
+ */
+@Composable
+private fun LeaveAlarmSwitch(on: Boolean, onChange: (Boolean) -> Unit) {
+    val reduced = Meka.reducedMotion
+    val bg by androidx.compose.animation.animateColorAsState(
+        if (on) Meka.colors.accent else Meka.colors.background, MekaMotion.themeBlend(reduced), label = "leave-alarm",
+    )
+    Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.m)) {
+        Row(
+            Modifier.fillMaxWidth().toggleable(value = on, role = Role.Switch) { onChange(it) },
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(LeaveAlarmRules.SWITCH_LABEL, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(
+                if (on) "On" else "Off", style = MekaType.itemMeta, color = if (on) Meka.colors.onAccent else Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+                    .border(1.dp, Meka.colors.accent.copy(alpha = 0.6f), RoundedCornerShape(MekaRadius.pill))
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            )
+        }
+        AnimatedContent(
+            targetState = on,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "leave-alarm-line",
+        ) { now ->
+            Text(
+                if (now) "Rings full screen when it's time to go · Snooze or slide to dismiss" else "A heads-up when it's time to go",
+                style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs),
+            )
         }
     }
 }

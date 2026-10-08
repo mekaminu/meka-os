@@ -13,6 +13,7 @@ struct EventDetailSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
 
     var body: some View {
@@ -102,6 +103,27 @@ struct EventDetailSheet: View {
             .controlSize(.small)
             .staggeredAppear(1)
         }
+        // Alarms, slice 3: once a travel time is set, Leave by can ring as an alarm (a notification with Snooze /
+        // Dismiss here; full screen on the Fold) instead of a heads-up. Unfolds with the expand spring.
+        Group {
+            if d.travelMin != 0 {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Toggle(LeaveAlarmRules.shared.SWITCH_LABEL, isOn: Binding(
+                        get: { d.leaveAlarm },
+                        set: { model.setEventLeaveAlarm(d.id, $0) }
+                    ))
+                    .toggleStyle(.switch)
+                    Text(d.leaveAlarm ? "Rings when it's time to go · Snooze or Dismiss" : "A heads-up when it's time to go")
+                        .font(MekaType.caption)
+                        .foregroundStyle(palette.textSecondary)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: d.leaveAlarm)
+                }
+                .controlSize(.small)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: d.travelMin != 0)
 
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.l) {

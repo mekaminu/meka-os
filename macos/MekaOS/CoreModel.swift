@@ -1033,6 +1033,12 @@ final class CoreModel {
         offerEventUndo(minutes == 0 ? "Leave-by reminder off" : "Leave-by reminder · " + ReminderRules.shared.travelLabel(minutes: minutes), .leaveBy(eventID, before))
     }
 
+    /// Ring as an alarm (Alarms, slice 3): the event's leave-by rings like the wake alarm instead of a heads-up.
+    func setEventLeaveAlarm(_ eventID: String, _ on: Bool) {
+        MekaHaptics.tick()
+        run { try await $0.setEventLeaveAlarm(eventId: eventID, on: on) }
+    }
+
     private static func nowMs() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
 
     func undoEventAction() {
