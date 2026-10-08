@@ -182,6 +182,8 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
   4. **Safety unchanged:** nothing destructive or sent without a spoken/tapped yes; every change has Undo; other people's speech reads as Meka's, so the confirmation is the real guard — speaker recognition is not built now (no reliable public on-device speaker-ID API, poor in noise; revisit in V2 as an optional extra check).
   5. **"Hey MEKA" wake word** stays a later option (battery, false triggers).
 
+- [~] Day ring hidden on the closed Fold (Meka, 2026-10-09 00:04: "I don't see anything"). Root cause: Today hid the ring whenever the single-pane now card was shown (`now == null` guard), i.e. on the closed Fold — the screen Meka uses — so none of the ring's motion was ever visible to him. Fixed interactively (ring on every screen, 168 dp closed); **not compiled locally**: next run checks CI for it, makes sure the closed-Fold layout reads well (ring, tiles, now card, Up next not crowded), adds a UI test "Today on a 412 dp-wide screen shows the Day ring", and from now on every motion item is checked on the closed-Fold width as well as open.
+
 ## Milestones
 
 ### M0 · Foundation — done
