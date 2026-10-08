@@ -45,17 +45,19 @@ fun SwipeGlyphIcon(glyph: SwipeGlyph, color: Color, modifier: Modifier = Modifie
         val w = this.size.minDimension
         val stroke = Stroke(1.75.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         fun p(x: Float, y: Float) = Offset(w * x, w * y)
-        fun DrawScope.line(vararg pts: Offset) {
+        fun DrawScope.line(vararg xy: Float) {
+            // Pairs of fractions (x, y) of the icon's size; Offset is a value class, so it can't be a vararg.
+            val pts = xy.toList().chunked(2) { p(it[0], it[1]) }
             val path = Path().apply { moveTo(pts[0].x, pts[0].y); pts.drop(1).forEach { lineTo(it.x, it.y) } }
             drawPath(path, color, style = stroke)
         }
         when (glyph) {
-            SwipeGlyph.ADD -> { line(p(0.5f, 0.18f), p(0.5f, 0.82f)); line(p(0.18f, 0.5f), p(0.82f, 0.5f)) }
-            SwipeGlyph.CHECK -> line(p(0.2f, 0.52f), p(0.41f, 0.72f), p(0.8f, 0.3f))
-            SwipeGlyph.OPEN -> { line(p(0.5f, 0.82f), p(0.5f, 0.2f)); line(p(0.26f, 0.44f), p(0.5f, 0.2f), p(0.74f, 0.44f)) }
+            SwipeGlyph.ADD -> { line(0.5f, 0.18f, 0.5f, 0.82f); line(0.18f, 0.5f, 0.82f, 0.5f) }
+            SwipeGlyph.CHECK -> line(0.2f, 0.52f, 0.41f, 0.72f, 0.8f, 0.3f)
+            SwipeGlyph.OPEN -> { line(0.5f, 0.82f, 0.5f, 0.2f); line(0.26f, 0.44f, 0.5f, 0.2f, 0.74f, 0.44f) }
             SwipeGlyph.LATER -> {
                 drawCircle(color, radius = w * 0.36f, center = p(0.5f, 0.5f), style = stroke)
-                line(p(0.5f, 0.3f), p(0.5f, 0.5f), p(0.64f, 0.6f))
+                line(0.5f, 0.3f, 0.5f, 0.5f, 0.64f, 0.6f)
             }
             SwipeGlyph.HIDE -> {
                 val eye = Path().apply {
@@ -65,7 +67,7 @@ fun SwipeGlyphIcon(glyph: SwipeGlyph, color: Color, modifier: Modifier = Modifie
                 }
                 drawPath(eye, color, style = stroke)
                 drawCircle(color, radius = w * 0.1f, center = p(0.5f, 0.5f), style = stroke)
-                line(p(0.18f, 0.82f), p(0.82f, 0.18f))
+                line(0.18f, 0.82f, 0.82f, 0.18f)
             }
         }
     }
