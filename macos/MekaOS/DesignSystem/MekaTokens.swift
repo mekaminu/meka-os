@@ -91,12 +91,18 @@ enum MekaRadius {
     static let pill: CGFloat = 999
 }
 
+/// Appearance → Motion (motion pass 2): Expressive uses the bouncier springs. Set on the main thread by the app
+/// (MotionSetting.swift); read when an animation is made.
+enum MotionStyle {
+    nonisolated(unsafe) static var expressive = true
+}
+
 /// Semantic motion. Reduced = short ease, callers drop translation.
 enum MekaMotion {
-    static func complete(reduced: Bool) -> Animation { reduced ? .easeOut(duration: 0.120) : .spring(response: 0.307, dampingFraction: 0.82) }
+    static func complete(reduced: Bool, expressive: Bool = MotionStyle.expressive) -> Animation { reduced ? .easeOut(duration: 0.120) : .spring(response: 0.307, dampingFraction: expressive ? 0.75 : 0.82) }
     static func replan(reduced: Bool) -> Animation { reduced ? .easeOut(duration: 0.140) : .spring(response: 0.363, dampingFraction: 0.9) }
     static func expand(reduced: Bool) -> Animation { reduced ? .easeOut(duration: 0.120) : .spring(response: 0.322, dampingFraction: 0.86) }
-    static func approve(reduced: Bool) -> Animation { reduced ? .easeOut(duration: 0.100) : .spring(response: 0.281, dampingFraction: 0.7) }
+    static func approve(reduced: Bool, expressive: Bool = MotionStyle.expressive) -> Animation { reduced ? .easeOut(duration: 0.100) : .spring(response: 0.281, dampingFraction: expressive ? 0.62 : 0.7) }
     static func syncPulse(reduced: Bool) -> Animation { reduced ? .easeOut(duration: 0.000) : .spring(response: 0.574, dampingFraction: 1) }
     static func appear(reduced: Bool) -> Animation { reduced ? .easeOut(duration: 0.120) : .spring(response: 0.336, dampingFraction: 0.9) }
     static func themeBlend(reduced: Bool) -> Animation { reduced ? .easeOut(duration: 0.000) : .spring(response: 0.444, dampingFraction: 1) }
@@ -109,4 +115,8 @@ enum MekaChoreography {
     static let riseDistance: CGFloat = 12
     static let countUp: Double = 0.700
     static let shimmerPeriod: Double = 1.200
+    static let expressiveStaggerStep: Double = 0.060
+    static let expressiveRiseDistance: CGFloat = 28
+    static let expressiveCountUp: Double = 0.900
+    static let expressiveEntryScale: CGFloat = 0.96
 }

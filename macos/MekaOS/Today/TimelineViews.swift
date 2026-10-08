@@ -37,7 +37,7 @@ extension View {
 /// untouched. Reduce Motion: no lift, the buttons fade.
 struct EventActionsModifier: ViewModifier {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
     let event: CalendarEvent?
     let palette: MekaPalette
@@ -134,7 +134,7 @@ extension View {
 /// The calendar-action undo bar: rises from the bottom with the message and Undo; goes after 5 seconds.
 struct EventUndoBar: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
 
     var body: some View {
@@ -232,7 +232,7 @@ struct GapRow: View {
 
 /// The now line: a breathing accent dot, the time, and a hairline across.
 struct NowLine: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let row: TimelineRow
     let palette: MekaPalette
     @State private var dim = false

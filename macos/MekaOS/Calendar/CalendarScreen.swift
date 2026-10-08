@@ -13,7 +13,7 @@ import SwiftUI
 struct CalendarScreen: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
     /// The week strip on screen, and which way it last moved (for the push).
     @State private var week = 0
@@ -135,7 +135,7 @@ struct CalendarScreen: View {
 
 /// A day pill: the letter, the date (accent for today), up to three busy dots. Lit with a soft fill.
 private struct DayPillView: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let day: DayPill
     let lit: Bool
     let palette: MekaPalette

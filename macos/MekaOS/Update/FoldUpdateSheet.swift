@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 struct FoldUpdateSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
 
     var body: some View {

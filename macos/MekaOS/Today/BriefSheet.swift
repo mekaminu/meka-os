@@ -9,7 +9,7 @@ import SwiftUI
 struct BriefSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
     let palette: MekaPalette
     @State private var closing = false

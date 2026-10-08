@@ -91,10 +91,15 @@ object MekaRadius {
     val pill = 999.dp
 }
 
-/** Semantic motion. Pass reducedMotion from the system setting; reduced = short tween, callers drop translation. */
+/** Appearance → Motion (motion pass 2): Expressive uses the bouncier springs. Set by MekaTheme; read when a spec is made. */
+object MotionStyle {
+    @Volatile var expressive: Boolean = true
+}
+
+/** Semantic motion. Pass reducedMotion from the Motion setting; reduced = short tween, callers drop translation. */
 object MekaMotion {
-    fun <T> complete(reducedMotion: Boolean): FiniteAnimationSpec<T> =
-        if (reducedMotion) tween(120) else spring(dampingRatio = 0.82f, stiffness = 420f)
+    fun <T> complete(reducedMotion: Boolean, expressive: Boolean = MotionStyle.expressive): FiniteAnimationSpec<T> =
+        if (reducedMotion) tween(120) else spring(dampingRatio = if (expressive) 0.75f else 0.82f, stiffness = 420f)
     const val completeDurationMs = 280
     fun <T> replan(reducedMotion: Boolean): FiniteAnimationSpec<T> =
         if (reducedMotion) tween(140) else spring(dampingRatio = 0.9f, stiffness = 300f)
@@ -102,8 +107,8 @@ object MekaMotion {
     fun <T> expand(reducedMotion: Boolean): FiniteAnimationSpec<T> =
         if (reducedMotion) tween(120) else spring(dampingRatio = 0.86f, stiffness = 380f)
     const val expandDurationMs = 300
-    fun <T> approve(reducedMotion: Boolean): FiniteAnimationSpec<T> =
-        if (reducedMotion) tween(100) else spring(dampingRatio = 0.7f, stiffness = 500f)
+    fun <T> approve(reducedMotion: Boolean, expressive: Boolean = MotionStyle.expressive): FiniteAnimationSpec<T> =
+        if (reducedMotion) tween(100) else spring(dampingRatio = if (expressive) 0.62f else 0.7f, stiffness = 500f)
     const val approveDurationMs = 240
     fun <T> syncPulse(reducedMotion: Boolean): FiniteAnimationSpec<T> =
         if (reducedMotion) tween(0) else spring(dampingRatio = 1f, stiffness = 120f)
@@ -123,4 +128,8 @@ object MekaChoreography {
     const val riseDistanceDp = 12
     const val countUpMs = 700
     const val shimmerPeriodMs = 1200
+    const val expressiveStaggerStepMs = 60
+    const val expressiveRiseDistanceDp = 28
+    const val expressiveCountUpMs = 900
+    const val expressiveEntryScale = 0.96f
 }

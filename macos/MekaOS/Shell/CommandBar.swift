@@ -9,7 +9,7 @@ import SwiftUI
 /// highlight glides between rows. Reduce Motion: cross-fades.
 struct CommandBarOverlay: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     @AppStorage(MekaAppearance.key) private var appearance = MekaAppearance.dark.rawValue
     let palette: MekaPalette
     @State private var query = ""

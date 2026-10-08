@@ -7,7 +7,7 @@ import SwiftUI
 struct TodayView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     /// App open: greeting fades up, then each section 40 ms apart. Plays once; later arrivals use row transitions.
     @State private var introPlayed = false
     /// "3 earlier" unfolds the finished events in place.
@@ -78,6 +78,10 @@ struct TodayView: View {
                             .transition(.opacity)
                     }
                     Spacer().frame(height: MekaSpace.l)
+
+                    // Motion pass 2: with Reduce Motion on and nothing chosen in Appearance → Motion, a one-time card.
+                    MotionSystemCardView(palette: palette)
+                        .staggeredAppear(1, play: play)
 
                     // Morning brief: the card rises in when the morning starts and goes at noon or once read.
                     if let b = model.brief, b.offered {
@@ -208,7 +212,7 @@ struct TodayView: View {
             }
             .task {
                 guard !introPlayed else { return }
-                try? await Task.sleep(for: .seconds(MotionMath.staggerSpan(count: Self.sections, reduced: false) + 0.3))
+                try? await Task.sleep(for: .seconds(MotionMath.staggerSpan(count: Self.sections, reduced: false, expressive: true) + 0.3))
                 introPlayed = true
             }
             // News ticker (news ticker, slice 2): the drifting strip at the foot of Today; Appearance → News ticker.
@@ -257,7 +261,7 @@ struct SectionLabel: View {
 struct TaskRow: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.selectionNamespace) private var selectionNamespace
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let task: MekaTask
     let reason: NeedsYouReason?
     let palette: MekaPalette
@@ -491,7 +495,7 @@ private struct PlanSheet: View {
 
 private struct UpNextCard: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let task: MekaTask
     let palette: MekaPalette
 
@@ -510,7 +514,7 @@ private struct UpNextCard: View {
 /// Completion motion: ring fills → check → row leaves (brief §3). Also used by the evening shutdown.
 struct CompleteButton: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let task: MekaTask
     let palette: MekaPalette
     @State private var pressed = false
@@ -562,7 +566,7 @@ private struct CaptureField: View {
 /// The detail beside a list. Selecting another task slides the new one across from the trailing edge (cross-fade
 /// with Reduce Motion); each task gets its own fresh title field.
 struct DetailView: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let task: MekaTask?
     let palette: MekaPalette
 

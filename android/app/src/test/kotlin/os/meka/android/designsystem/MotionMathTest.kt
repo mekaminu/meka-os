@@ -25,6 +25,23 @@ class MotionMathTest {
     }
 
     @Test
+    fun expressiveSpacesWiderRisesFurtherAndGrowsFromNinetySixPercent() {
+        assertEquals(60, MotionMath.staggerDelayMs(1, reduced = false, expressive = true))
+        assertEquals(180, MotionMath.staggerDelayMs(3, reduced = false, expressive = true))
+        assertEquals(480, MotionMath.staggerSpanMs(30, reduced = false, expressive = true))
+        assertEquals(0, MotionMath.staggerDelayMs(3, reduced = true, expressive = true))
+        assertEquals(28, MotionMath.riseDistanceDp(expressive = true))
+        assertEquals(12, MotionMath.riseDistanceDp(expressive = false))
+        assertEquals(900, MotionMath.countUpMs(expressive = true))
+        assertEquals(700, MotionMath.countUpMs(expressive = false))
+        assertTrue(kotlin.math.abs(MotionMath.entryScale(0f, expressive = true, reduced = false) - 0.96f) < 1e-6f)
+        assertTrue(kotlin.math.abs(MotionMath.entryScale(0.5f, expressive = true, reduced = false) - 0.98f) < 1e-6f)
+        assertEquals(1f, MotionMath.entryScale(1.05f, expressive = true, reduced = false)) // overshoot never grows past full
+        assertEquals(1f, MotionMath.entryScale(0f, expressive = false, reduced = false)) // Subtle never scales
+        assertEquals(1f, MotionMath.entryScale(0f, expressive = true, reduced = true)) // Off never scales
+    }
+
+    @Test
     fun countUpStartsAtFromLandsOnToAndNeverGoesBackwards() {
         assertEquals(0, MotionMath.countUpValue(0, 135, 0f))
         assertEquals(135, MotionMath.countUpValue(0, 135, 1f))

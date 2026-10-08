@@ -6,7 +6,7 @@ import SwiftUI
 /// Needs you's place; Close brings Needs you back. Reduce Motion: cross-fades (the default here anyway).
 struct CommandSideView: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let column: CommandColumn
     let palette: MekaPalette
 
@@ -77,7 +77,7 @@ struct CommandNeedsYouView: View {
 /// each lane (click opens the News sheet on that story), "Open News ›". Left out when there's nothing to show.
 struct ComingUpColumnView: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let shared: Bool
     let palette: MekaPalette
 

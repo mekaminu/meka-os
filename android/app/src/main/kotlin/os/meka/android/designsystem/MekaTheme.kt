@@ -6,6 +6,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -13,9 +15,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
+import os.meka.core.domain.MotionCard
+import os.meka.core.domain.MotionChoice
+import os.meka.core.domain.MotionRules
 
 val LocalMekaColors = staticCompositionLocalOf { MekaDarkColors }
 val LocalReducedMotion = staticCompositionLocalOf { false }
+val LocalExpressiveMotion = staticCompositionLocalOf { false }
+val LocalMotionControl = staticCompositionLocalOf { MotionControl(null, false) {} }
 val LocalThemeControl = staticCompositionLocalOf { ThemeControl(ThemeChoice.DARK, false) {} }
 
 /** The owner's appearance choice. Dark is the default: it is the look MEKA OS is designed around. */
@@ -37,15 +44,53 @@ enum class ThemeChoice(val label: String) {
 class ThemeControl(val choice: ThemeChoice, val isDark: Boolean, val set: (ThemeChoice) -> Unit)
 
 /**
- * Reads the system "Remove animations" setting (animator duration scale = 0) to honour reduced motion.
+ * Appearance → Motion on this phone (motion pass 2): Expressive · Subtle · Off, kept like the theme. [stored] is null
+ * until Meka chooses; [systemOff] is the phone's "Remove animations" (animator duration scale 0), which only decides
+ * while nothing is chosen (`MotionRules`).
+ */
+class MotionControl(val stored: MotionChoice?, val systemOff: Boolean, val set: (MotionChoice) -> Unit) {
+    val effective: MotionChoice get() = MotionRules.effective(stored, systemOff)
+    val line: String get() = MotionRules.line(stored, systemOff, mac = false)
+    /** Today's one-time card, while the phone's animations are off and nothing is chosen. */
+    val card: MotionCard? get() = MotionRules.systemCard(stored, systemOff, mac = false)
+}
+
+/** The stored Motion choice, shared by every composition in the process so a change shows everywhere at once. */
+object MotionPrefs {
+    private const val PREFS = "meka_ui"
+    private const val KEY = "motion"
+    private var loaded: MutableState<MotionChoice?>? = null
+
+    fun state(context: Context): MutableState<MotionChoice?> = loaded ?: mutableStateOf(
+        MotionRules.choice(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)),
+    ).also { loaded = it }
+
+    fun set(context: Context, choice: MotionChoice) {
+        state(context).value = choice
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, choice.id).apply()
+    }
+
+    /** The phone's "Remove animations": animator duration scale 0. */
+    fun systemOff(context: Context): Boolean =
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+}
+
+/**
+ * Follows MEKA's own Motion setting (Appearance → Motion), not the phone's animator scale: the activity's recomposer
+ * plays animations at full speed (MotionClock.kt) and Off means cross-fades only. With nothing chosen, the phone's
+ * "Remove animations" keeps MEKA still and Today offers a one-time card.
  * Switching theme blends every colour across instead of snapping.
  */
 @Composable
 fun MekaTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
-    val reduced = remember {
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-    }
+    val systemOff = remember { MotionPrefs.systemOff(context) }
+    val stored by MotionPrefs.state(context.applicationContext)
+    val motion = MotionControl(stored, systemOff) { MotionPrefs.set(context.applicationContext, it) }
+    val reduced = MotionRules.reduced(stored, systemOff)
+    val expressive = MotionRules.expressive(stored, systemOff)
+    // The bouncier complete/approve springs read this when a spec is made (generated MekaMotion).
+    SideEffect { MotionStyle.expressive = expressive }
     var choice by remember { mutableStateOf(ThemeChoice.load(context)) }
     val dark = when (choice) {
         ThemeChoice.DARK -> true
@@ -58,6 +103,8 @@ fun MekaTheme(content: @Composable () -> Unit) {
     CompositionLocalProvider(
         LocalMekaColors provides colors,
         LocalReducedMotion provides reduced,
+        LocalExpressiveMotion provides expressive,
+        LocalMotionControl provides motion,
         LocalThemeControl provides control,
         content = content,
     )
@@ -87,5 +134,8 @@ private fun blend(a: MekaColors, b: MekaColors, t: Float): MekaColors = when (t)
 object Meka {
     val colors: MekaColors @Composable get() = LocalMekaColors.current
     val reducedMotion: Boolean @Composable get() = LocalReducedMotion.current
+    /** Appearance → Motion → Expressive: bigger entrances and bouncier springs. */
+    val expressiveMotion: Boolean @Composable get() = LocalExpressiveMotion.current
+    val motion: MotionControl @Composable get() = LocalMotionControl.current
     val theme: ThemeControl @Composable get() = LocalThemeControl.current
 }

@@ -54,31 +54,41 @@ private val EaseOutCubic = Easing { MotionMath.easeOutCubic(it) }
 
 /** Progress of one appearing item: 0 = hidden and lowered, 1 = in place. */
 @Stable
-class Appearance internal constructor(internal val progress: Animatable<Float, AnimationVector1D>, internal val reduced: Boolean, internal val risePx: Float)
+class Appearance internal constructor(
+    internal val progress: Animatable<Float, AnimationVector1D>,
+    internal val reduced: Boolean,
+    internal val risePx: Float,
+    internal val expressive: Boolean,
+)
 
 /**
- * Item [index] of a staggered group: fades up after `index × 40 ms`. When [play] is false (the intro already
- * played, or the item arrived later) it is simply there. Reduced motion: a short cross-fade, no rise, no stagger.
+ * Item [index] of a staggered group: fades up after `index × 40 ms` (Expressive: 60 ms apart, rising further and
+ * growing from 0.96). When [play] is false (the intro already played, or the item arrived later) it is simply there.
+ * Reduced motion (Motion → Off): a short cross-fade, no rise, no stagger.
  */
 @Composable
 fun rememberAppearance(index: Int, play: Boolean = true): Appearance {
     val reduced = Meka.reducedMotion
-    val risePx = with(LocalDensity.current) { MekaChoreography.riseDistanceDp.dp.toPx() }
+    val expressive = Meka.expressiveMotion
+    val risePx = with(LocalDensity.current) { MotionMath.riseDistanceDp(expressive).dp.toPx() }
     val progress = remember { Animatable(if (play) 0f else 1f) }
     LaunchedEffect(Unit) {
         if (progress.value < 1f) {
-            delay(MotionMath.staggerDelayMs(index, reduced).toLong())
+            delay(MotionMath.staggerDelayMs(index, reduced, expressive).toLong())
             progress.animateTo(1f, MekaMotion.appear(reduced))
         }
     }
-    return remember(progress, reduced, risePx) { Appearance(progress, reduced, risePx) }
+    return remember(progress, reduced, risePx, expressive) { Appearance(progress, reduced, risePx, expressive) }
 }
 
-/** Applies an [Appearance]: alpha and rise, drawn in the graphics layer so layout never jumps. */
+/** Applies an [Appearance]: alpha, rise and (Expressive) scale, drawn in the graphics layer so layout never jumps. */
 fun Modifier.appear(a: Appearance): Modifier = graphicsLayer {
     val p = a.progress.value
     alpha = p.coerceIn(0f, 1f)
     translationY = MotionMath.riseOffset(p, a.risePx, a.reduced)
+    val s = MotionMath.entryScale(p, a.expressive, a.reduced)
+    scaleX = s
+    scaleY = s
 }
 
 /**
@@ -88,10 +98,11 @@ fun Modifier.appear(a: Appearance): Modifier = graphicsLayer {
 @Composable
 fun CountUpText(value: Int, style: TextStyle, color: Color, modifier: Modifier = Modifier, format: (Int) -> String = { it.toString() }) {
     val reduced = Meka.reducedMotion
+    val countUpMs = MotionMath.countUpMs(Meka.expressiveMotion)
     val shown = remember { Animatable(if (reduced) value.toFloat() else 0f) }
     LaunchedEffect(value, reduced) {
         if (reduced) shown.snapTo(value.toFloat())
-        else shown.animateTo(value.toFloat(), tween(MekaChoreography.countUpMs, easing = EaseOutCubic))
+        else shown.animateTo(value.toFloat(), tween(countUpMs, easing = EaseOutCubic))
     }
     val n = if (shown.value == value.toFloat()) value else shown.value.toInt()
     Text(format(n), style = style, color = color, modifier = modifier.semantics { contentDescription = format(value) })

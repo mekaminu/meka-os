@@ -17,7 +17,7 @@ enum NewsTickerChoice {
 /// untrusted (ADR-006): text only.
 struct NewsTickerStrip: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     @AppStorage(NewsTickerChoice.key) private var modeId = "calm"
     let palette: MekaPalette
 

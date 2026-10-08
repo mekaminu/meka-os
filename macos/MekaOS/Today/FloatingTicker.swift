@@ -76,14 +76,14 @@ final class FloatingTicker {
     }
 
     private func show(_ model: CoreModel) {
-        let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let reduced = MotionSetting.reduced
         if panel == nil {
             let p = FloatingTickerPanel()
             let root = FloatingTickerView(
                 open: { [weak self] card in self?.open(card) },
                 dragChanged: { [weak self] in self?.dragChanged() },
                 dragEnded: { [weak self] in self?.dragEnded() }
-            ).environment(model)
+            ).environment(model).mekaMotion()
             p.contentView = NSHostingView(rootView: root)
             panel = p
         }
@@ -136,7 +136,7 @@ final class FloatingTicker {
         guard let panel, let visible = visibleRect(panel.screen) else { return }
         let f = FloatingTickerRules.shared.frame(visible: visible, placement: placement)
         let rect = NSRect(x: f.x, y: f.y, width: f.width, height: f.height)
-        if animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        if animated && !MotionSetting.reduced {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.32
                 ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1.0)
@@ -219,7 +219,7 @@ final class FloatingTickerPanel: NSPanel {
 /// rounded surface in MEKA's palette, following the app's appearance (colours blend on a change).
 struct FloatingTickerView: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var systemScheme
     @AppStorage(MekaAppearance.key) private var appearance = MekaAppearance.dark.rawValue
     let open: (TickerCardItem) -> Void

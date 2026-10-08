@@ -7,7 +7,7 @@ import SwiftUI
 struct WorkSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
 
     @State private var days: Set<Int> = [1, 2, 3, 4, 5]

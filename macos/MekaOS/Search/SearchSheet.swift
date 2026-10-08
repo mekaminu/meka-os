@@ -10,7 +10,7 @@ import SwiftUI
 struct SearchSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     @State private var query = ""
     @State private var chosen: String?
@@ -112,7 +112,7 @@ private struct SearchRow: View {
     let palette: MekaPalette
     let onTap: () -> Void
     let onReopen: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var hovering = false
 
     private var tappable: Bool { hit.kind == .done || hit.target == .task || SearchNav.destination(hit.target) != nil }

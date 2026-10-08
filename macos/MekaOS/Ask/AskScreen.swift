@@ -8,7 +8,7 @@ import SwiftUI
 struct AskScreen: View {
     let palette: MekaPalette
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView {
@@ -85,7 +85,7 @@ private struct MoreRow: View {
     let palette: MekaPalette
     let action: () -> Void
     @State private var hovering = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
@@ -123,8 +123,11 @@ private struct AppearanceRow: View {
     @AppStorage(NewsTickerChoice.key) private var ticker = "calm"
     /// The floating ticker (slice 2b): the same strip over every app, also in View → Floating Ticker.
     @AppStorage(FloatingTicker.enabledKey) private var floating = false
+    /// Motion (motion pass 2): MEKA's own motion on this Mac; "" until chosen (then Reduce Motion decides).
+    @AppStorage(MotionSetting.key) private var motion = ""
     @State private var hovering = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduce
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.s) {
@@ -140,6 +143,23 @@ private struct AppearanceRow: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
+            }
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Motion").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Text(MotionRules.shared.line(stored: MotionSetting.stored(motion), systemOff: systemReduce, mac: true))
+                        .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: motion)
+                }
+                Spacer()
+                Picker("Motion", selection: $motion) {
+                    ForEach(MotionSetting.all, id: \.id) { m in Text(m.label).tag(m.id) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .onChange(of: motion) { MekaHaptics.tick() }
             }
             HStack {
                 VStack(alignment: .leading, spacing: 2) {

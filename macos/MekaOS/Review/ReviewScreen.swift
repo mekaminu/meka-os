@@ -10,7 +10,7 @@ import SwiftUI
 struct ReviewScreen: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
     @State private var direction = 0
 
@@ -224,7 +224,7 @@ private struct HabitWeekRow: View {
 
 /// A goal with a bar that fills on appear.
 private struct GoalWeekRow: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let goal: ReviewGoal
     let palette: MekaPalette
     @State private var shown: Double = 0
@@ -257,7 +257,7 @@ private struct GoalWeekRow: View {
 /// device. It rises in like the other cards; tapping it opens Review on that week.
 struct ReviewCardView: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let card: ReviewCard
     let palette: MekaPalette
 

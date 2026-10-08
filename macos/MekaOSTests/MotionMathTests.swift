@@ -13,6 +13,31 @@ final class MotionMathTests: XCTestCase {
     }
 
     @MainActor
+    func testExpressiveSpacesWiderRisesFurtherAndGrowsFromNinetySixPercent() {
+        XCTAssertEqual(MotionMath.staggerDelay(index: 1, reduced: false, expressive: true), 0.060, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.staggerDelay(index: 3, reduced: false, expressive: true), 0.180, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.staggerSpan(count: 30, reduced: false, expressive: true), 0.480, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.staggerDelay(index: 3, reduced: true, expressive: true), 0)
+        XCTAssertEqual(MotionMath.riseDistance(expressive: true), 28)
+        XCTAssertEqual(MotionMath.riseDistance(expressive: false), 12)
+        XCTAssertEqual(MotionMath.countUpDuration(expressive: true), 0.900, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.countUpDuration(expressive: false), 0.700, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.entryScale(expressive: true, reduced: false), 0.96, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.entryScale(expressive: false, reduced: false), 1)
+        XCTAssertEqual(MotionMath.entryScale(expressive: true, reduced: true), 1)
+    }
+
+    @MainActor
+    func testTheMotionSettingFollowsMekasChoiceThenReduceMotion() {
+        XCTAssertEqual(MotionSetting.effective("", systemReduce: false), .expressive)
+        XCTAssertEqual(MotionSetting.effective("", systemReduce: true), .off)
+        XCTAssertEqual(MotionSetting.effective("subtle", systemReduce: true), .subtle)
+        XCTAssertEqual(MotionSetting.effective("expressive", systemReduce: true), .expressive)
+        XCTAssertNil(MotionSetting.stored(""))
+        XCTAssertEqual(MotionSetting.all.map(\.label), ["Expressive", "Subtle", "Off"])
+    }
+
+    @MainActor
     func testReduceMotionHasNoStagger() {
         XCTAssertEqual(MotionMath.staggerDelay(index: 5, reduced: true), 0)
     }

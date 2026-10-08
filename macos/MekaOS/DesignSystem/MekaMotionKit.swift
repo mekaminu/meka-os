@@ -6,15 +6,32 @@ import SwiftUI
 // The arithmetic matches android/.../designsystem/MotionMath.kt number for number.
 
 enum MotionMath {
-    /// Delay before item `index` of a staggered group appears, in seconds. Capped; zero when reduced.
-    static func staggerDelay(index: Int, reduced: Bool) -> Double {
+    /// Delay before item `index` of a staggered group appears, in seconds. Capped; zero when reduced. Expressive
+    /// (Appearance → Motion) spaces items wider apart.
+    static func staggerDelay(index: Int, reduced: Bool, expressive: Bool = false) -> Double {
         if reduced || index <= 0 { return 0 }
-        return Double(min(index, MekaChoreography.staggerMaxSteps)) * MekaChoreography.staggerStep
+        let step = expressive ? MekaChoreography.expressiveStaggerStep : MekaChoreography.staggerStep
+        return Double(min(index, MekaChoreography.staggerMaxSteps)) * step
     }
 
     /// Time a staggered group of `count` items takes to start appearing, in seconds.
-    static func staggerSpan(count: Int, reduced: Bool) -> Double {
-        count <= 0 ? 0 : staggerDelay(index: count - 1, reduced: reduced)
+    static func staggerSpan(count: Int, reduced: Bool, expressive: Bool = false) -> Double {
+        count <= 0 ? 0 : staggerDelay(index: count - 1, reduced: reduced, expressive: expressive)
+    }
+
+    /// How far (pt) an appearing item rises from: further in Expressive.
+    static func riseDistance(expressive: Bool) -> CGFloat {
+        expressive ? MekaChoreography.expressiveRiseDistance : MekaChoreography.riseDistance
+    }
+
+    /// How long a count-up runs, in seconds: longer in Expressive.
+    static func countUpDuration(expressive: Bool) -> Double {
+        expressive ? MekaChoreography.expressiveCountUp : MekaChoreography.countUp
+    }
+
+    /// Scale an appearing item starts from: Expressive grows it from 0.96; Subtle and reduced motion never scale.
+    static func entryScale(expressive: Bool, reduced: Bool) -> CGFloat {
+        reduced || !expressive ? 1 : MekaChoreography.expressiveEntryScale
     }
 
     /// Ease-out cubic: fast start, gentle landing.
@@ -31,9 +48,11 @@ enum MotionMath {
     }
 }
 
-/// Fades an item up after `index × 40 ms`. When `play` is false it is simply there. Reduce Motion: cross-fade only.
+/// Fades an item up after `index × 40 ms` (Expressive: 60 ms apart, rising further and growing from 0.96). When `play`
+/// is false it is simply there. Motion → Off: cross-fade only.
 private struct StaggeredAppear: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.mekaExpressiveMotion) private var expressive
     let index: Int
     let play: Bool
     @State private var shown = false
@@ -42,10 +61,12 @@ private struct StaggeredAppear: ViewModifier {
         let visible = shown || !play
         content
             .opacity(visible ? 1 : 0)
-            .offset(y: visible || reduceMotion ? 0 : MekaChoreography.riseDistance)
+            .scaleEffect(visible ? 1 : MotionMath.entryScale(expressive: expressive, reduced: reduceMotion))
+            .offset(y: visible || reduceMotion ? 0 : MotionMath.riseDistance(expressive: expressive))
             .onAppear {
                 guard play, !shown else { return }
-                withAnimation(MekaMotion.appear(reduced: reduceMotion).delay(MotionMath.staggerDelay(index: index, reduced: reduceMotion))) {
+                let delay = MotionMath.staggerDelay(index: index, reduced: reduceMotion, expressive: expressive)
+                withAnimation(MekaMotion.appear(reduced: reduceMotion).delay(delay)) {
                     shown = true
                 }
             }
@@ -61,7 +82,8 @@ extension View {
 
 /// A number that counts up to `value` when it first appears and rolls to new values after. Reduce Motion: no count.
 struct CountUpText: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.mekaExpressiveMotion) private var expressive
     let value: Int
     let format: (Int) -> String
     @State private var from = 0
@@ -85,7 +107,7 @@ struct CountUpText: View {
 
     private func shown(at date: Date) -> Int {
         guard let start else { return target }
-        let fraction = date.timeIntervalSince(start) / MekaChoreography.countUp
+        let fraction = date.timeIntervalSince(start) / MotionMath.countUpDuration(expressive: expressive)
         return MotionMath.countUpValue(from: from, to: target, fraction: fraction)
     }
 
@@ -94,8 +116,9 @@ struct CountUpText: View {
         guard !reduceMotion, old != new else { start = nil; return }
         from = old
         start = .now
+        let duration = MotionMath.countUpDuration(expressive: expressive)
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(MekaChoreography.countUp))
+            try? await Task.sleep(for: .seconds(duration))
             if target == new { start = nil }
         }
     }
@@ -103,7 +126,7 @@ struct CountUpText: View {
 
 /// Skeleton rows with a slow shimmer: the catalogue's loading state (never a spinner on its own).
 struct SkeletonRows: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let count: Int
     let rowHeight: CGFloat
     let palette: MekaPalette
@@ -141,7 +164,7 @@ struct SkeletonRows: View {
 /// scale-fades in (Four tabs, slice 3; the Mac's simpler stand-in for the Fold's travelling titles, rule 7).
 /// Reduce Motion: a brief dim instead.
 struct MekaPressStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label

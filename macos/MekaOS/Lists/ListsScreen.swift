@@ -23,7 +23,7 @@ enum ListTab: Int, CaseIterable, Identifiable {
 struct ListsScreen: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
 
     @State private var tab: ListTab = .waiting
@@ -194,7 +194,7 @@ struct ListsScreen: View {
 
 /// A list row: title and meta; clicking unfolds the actions in place.
 struct ListRowView<Details: View>: View {
-    @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Environment(\.mekaReduceMotion) var reduceMotion
     let title: String
     let meta: String?
     let due: Bool

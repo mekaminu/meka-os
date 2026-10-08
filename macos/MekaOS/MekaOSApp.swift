@@ -14,6 +14,8 @@ struct MekaOSApp: App {
         WindowGroup("Meka", id: "today") {
             ShellView()
                 .environment(model)
+                // Appearance → Motion (motion pass 2): MEKA's own motion, not Reduce Motion, once chosen.
+                .mekaMotion()
                 .frame(minWidth: 760, minHeight: 560)
                 .task {
                     await model.start()
@@ -30,7 +32,7 @@ struct MekaOSApp: App {
                 // News widget opens mekaos://news?story=<id>.
                 .onOpenURL { model.handle(url: $0) }
                 .preferredColorScheme((MekaAppearance(rawValue: appearance) ?? .dark).scheme)
-                .animation(MekaMotion.themeBlend(reduced: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion), value: appearance)
+                .animation(MekaMotion.themeBlend(reduced: MotionSetting.reduced), value: appearance)
         }
         .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .commands {
@@ -60,7 +62,7 @@ struct MekaOSApp: App {
             }
             CommandMenu("Go") {
                 ForEach(ShellDestination.allCases) { d in
-                    Button(d.label) { model.go(to: d, reduced: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) }
+                    Button(d.label) { model.go(to: d, reduced: MotionSetting.reduced) }
                         .keyboardShortcut(KeyEquivalent(Character("\(d.rawValue + 1)")), modifiers: .command)
                 }
             }
@@ -81,6 +83,7 @@ struct MekaOSApp: App {
         // running fast (Outside the app).
         MenuBarExtra {
             QuickCaptureMenu().environment(model)
+                .mekaMotion()
                 .preferredColorScheme((MekaAppearance(rawValue: appearance) ?? .dark).scheme)
         } label: {
             MenuBarStatusLabel(model: model)

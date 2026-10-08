@@ -196,7 +196,8 @@ fun TodayRoute(
     var introPlayed by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         if (!introPlayed) {
-            delay((MotionMath.staggerSpanMs(TODAY_SECTIONS, false) + MekaMotion.appearDurationMs).toLong())
+            // The longest (Expressive) span, so the intro never ends before its last section has started.
+            delay((MotionMath.staggerSpanMs(TODAY_SECTIONS, false, expressive = true) + MekaMotion.appearDurationMs).toLong())
             introPlayed = true
         }
     }
@@ -397,6 +398,9 @@ private fun TodayPane(
     var allDayOpen by rememberSaveable { mutableStateOf(false) }
     val updater = (LocalContext.current.applicationContext as? MekaApplication)?.updater
     val update by remember(updater) { updater?.state ?: MutableStateFlow<UpdateState>(UpdateState.None) }.collectAsState()
+    val motion = Meka.motion
+    // Not on the closed Fold's cover screen: the card waits for the main screen.
+    val motionCard = if (now == null) motion.card else null
     Column(modifier.imePadding()) {
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -432,6 +436,12 @@ private fun TodayPane(
                     if (core != null && TickerRules.shown(tickerMode, ticker)) {
                         NewsTickerStrip(core, ticker, tickerMode, Modifier.padding(top = MekaSpace.s), openStory = openStory, openMatch = openMatch)
                     }
+                }
+            }
+            // Motion pass 2: with the phone's animations off and nothing chosen in Appearance → Motion, a one-time card.
+            motionCard?.let { card ->
+                item(key = "motion") {
+                    MotionSystemCard(card, motion, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
                 }
             }
             // Self-updating phone app: the card rises in when the Mac has published a newer build.

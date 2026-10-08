@@ -8,6 +8,7 @@ import androidx.activity.SystemBarStyle
 import androidx.compose.runtime.LaunchedEffect
 import os.meka.android.designsystem.Meka
 import androidx.activity.compose.setContent
+import os.meka.android.designsystem.mekaRecomposer
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -27,7 +28,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val app = application as MekaApplication
         handleOpen(intent)
-        setContent {
+        // MEKA follows its own Motion setting, not the phone's animator scale (MotionClock.kt).
+        setContent(parent = mekaRecomposer()) {
             MekaTheme {
                 // Status-bar icons follow MEKA's own theme, not the phone's.
                 val dark = Meka.theme.isDark

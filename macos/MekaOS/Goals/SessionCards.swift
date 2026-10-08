@@ -21,7 +21,7 @@ struct SessionCardsView: View {
 
 private struct SessionCardView: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
     let card: SessionCard
     let palette: MekaPalette

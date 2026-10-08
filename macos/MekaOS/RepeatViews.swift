@@ -62,7 +62,7 @@ struct StepsList: View {
 
 private struct StepRow: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let step: ChecklistItem
     let palette: MekaPalette
 

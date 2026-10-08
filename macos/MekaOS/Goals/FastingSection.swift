@@ -14,7 +14,7 @@ import SwiftUI
 /// 12 hours … ten days on, the core's line saying the goal or why not (it cross-fades), and Start.
 struct FastingSection: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     /// The fast whose "you did it" burst has already played here.
     @AppStorage("meka.fastBurst") private var burstFastId = ""
@@ -149,7 +149,7 @@ struct FastingSection: View {
 
 /// The ring: sweeps with the clock, glows softly at the goal; the timer in the middle.
 private struct FastRing: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let current: FastNow?
     let palette: MekaPalette
     /// 0 → 1 while the "you did it" burst plays; 0 otherwise.
@@ -227,7 +227,7 @@ private struct BurstShape: Shape {
 
 /// The last seven days: one bar per day (the longest fast that ended then), filling on appear.
 private struct WeekBars: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let view: FastingView
     let palette: MekaPalette
     @State private var shown = false
@@ -268,7 +268,7 @@ private struct WeekBars: View {
 /// Fasting v2's history: the streak, a twelve-week heat strip (hours fasted each day; weeks fade in left to right
 /// 40 ms apart) and every fast, planned against actual, behind a disclosure. Reduce Motion: shown at once.
 private struct FastingHistorySection: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let history: FastingHistory
     let palette: MekaPalette
     @State private var shown = false
@@ -337,7 +337,7 @@ private struct FastingHistorySection: View {
 /// A custom "until" end on the Mac: any day and time from 12 hours to ten days on, checked by the core as it changes
 /// ("Goal 4 d 18 h · starts now"). Start is enabled only when it's valid.
 struct FastUntilPicker: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     let start: (Int64) -> Void
     @State private var date: Date

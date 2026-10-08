@@ -7,7 +7,7 @@ import SwiftUI
 /// select the task beside the stack. Two cards peek out behind. Reduced motion: no tilt or flight, cross-fades.
 struct NeedsYouStackView: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     /// The Needs you tab takes the keyboard on appear; the command centre beside Today doesn't (click a card first).
     var autofocus: Bool = true
@@ -155,7 +155,7 @@ private struct DecisionCardFace: View {
     let armed: DecisionMove?
     let progress: Double
     let palette: MekaPalette
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.s) {

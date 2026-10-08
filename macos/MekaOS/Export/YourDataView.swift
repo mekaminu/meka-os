@@ -7,7 +7,7 @@ import SwiftUI
 /// (spring) with a light haptic. Reduce Motion: cross-fades.
 struct YourDataSection: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     /// Index the section's stagger starts at (the Vault's title comes first).
     var firstIndex = 0

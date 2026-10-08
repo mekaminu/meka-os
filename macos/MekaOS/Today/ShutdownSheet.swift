@@ -8,7 +8,7 @@ import SwiftUI
 struct ShutdownSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     @State private var closing = false
 
@@ -182,7 +182,7 @@ struct ShutdownCard: View {
 /// cross-fades as tomorrow changes (only ever a fade, so reduced motion is the same). Clicking opens the shutdown sheet.
 struct TomorrowGlanceView: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let doneLine: String?
     let glance: String?
     let palette: MekaPalette

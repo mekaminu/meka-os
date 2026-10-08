@@ -7,7 +7,7 @@ import SwiftUI
 struct GoalsScreen: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
 
     @State private var open: String?
@@ -91,7 +91,7 @@ struct GoalsScreen: View {
 /// A habit: tick circle, title, pace, this week's dots and a rolling streak. Clicking the text unfolds its settings.
 private struct HabitRowView: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let habit: HabitItem
     let goals: [GoalItem]
     let expanded: Bool
@@ -214,7 +214,7 @@ private struct HabitRowView: View {
 /// address says so; Remove clears it. The line under the field cross-fades as it changes.
 private struct AppLinkField: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let habit: HabitItem
     let palette: MekaPalette
     @State private var text = ""
@@ -257,7 +257,7 @@ private struct AppLinkField: View {
 /// A goal: title, target, a bar that fills on appear, and how progress is counted.
 private struct GoalRowView: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let goal: GoalItem
     let expanded: Bool
     let palette: MekaPalette

@@ -66,6 +66,7 @@ import os.meka.android.shell.ShellDestination
 import os.meka.android.shell.ShellNav
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.MotionChoice
 import os.meka.android.today.BriefPane
 import os.meka.android.today.CalendarsPane
 import os.meka.android.today.ShutdownPane
@@ -182,7 +183,8 @@ private fun MoreRow(item: MoreItem, line: String, lit: Boolean, paneOpen: Boolea
 /**
  * Appearance (Today clarity, slice 2: the theme moved here from Today's header). The row unfolds Dark · Light · Auto
  * in place; the chosen chip's colour blends across with a tick haptic and every colour on screen blends with it
- * (`themeBlend`). Reduced motion: the chips appear at once and colours cross-fade.
+ * (`themeBlend`). Motion (motion pass 2): Expressive · Subtle · Off, the line under it cross-fades. Reduced motion:
+ * the chips appear at once and colours cross-fade.
  */
 @Composable
 private fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> Unit, toggle: () -> Unit) {
@@ -221,6 +223,23 @@ private fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> U
                     Chip(c.label, theme.choice == c) { haptics.tick(); theme.set(c) }
                 }
             }
+            // Motion (motion pass 2): MEKA's own motion on this phone, whatever the phone's animator scale says.
+            val motion = Meka.motion
+            Text("Motion", style = MekaType.caption, color = Meka.colors.textSecondary,
+                modifier = Modifier.padding(start = MekaSpace.m, top = MekaSpace.xs))
+            Row(
+                Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs),
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                MotionChoice.entries.forEach { m ->
+                    Chip(m.label, motion.stored == m) { haptics.tick(); motion.set(m) }
+                }
+            }
+            AnimatedContent(
+                targetState = motion.line,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "motion-line", modifier = Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs),
+            ) { line -> Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) }
             // News ticker (news ticker, slice 2): how the strip under Today's header moves, on this device; Topics
             // opens News (the topics and their sources).
             Text("News ticker", style = MekaType.caption, color = Meka.colors.textSecondary,

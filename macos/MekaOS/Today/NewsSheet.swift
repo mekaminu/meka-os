@@ -17,7 +17,7 @@ import SwiftUI
 struct NewsSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
     let palette: MekaPalette
     @State private var openId: String?
@@ -218,7 +218,7 @@ private struct StoryRow: View {
 /// the row already says the title and source.
 struct NewsThumb: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let item: NewsItem
     let palette: MekaPalette
     var corner: CGFloat = MekaRadius.s

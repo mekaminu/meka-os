@@ -68,14 +68,22 @@ function kotlin() {
   }
   s += '}\n\nobject MekaSpace {\n' + entries(t.space).map(([k, v]) => `    val ${k} = ${v.$value}.dp`).join('\n') + '\n}\n\n';
   s += 'object MekaRadius {\n' + entries(t.radius).map(([k, v]) => `    val ${k} = ${v.$value}.dp`).join('\n') + '\n}\n\n';
-  s += '/** Semantic motion. Pass reducedMotion from the system setting; reduced = short tween, callers drop translation. */\nobject MekaMotion {\n';
+  s += '/** Appearance → Motion (motion pass 2): Expressive uses the bouncier springs. Set by MekaTheme; read when a spec is made. */\nobject MotionStyle {\n    @Volatile var expressive: Boolean = true\n}\n\n';
+  s += '/** Semantic motion. Pass reducedMotion from the Motion setting; reduced = short tween, callers drop translation. */\nobject MekaMotion {\n';
   for (const [k, v] of entries(t.motion)) {
-    s += `    fun <T> ${k}(reducedMotion: Boolean): FiniteAnimationSpec<T> =\n        if (reducedMotion) tween(${v.reducedDuration}) else spring(dampingRatio = ${v.spring.damping}f, stiffness = ${v.spring.stiffness}f)\n`;
+    if (v.expressiveDamping !== undefined) {
+      s += `    fun <T> ${k}(reducedMotion: Boolean, expressive: Boolean = MotionStyle.expressive): FiniteAnimationSpec<T> =\n        if (reducedMotion) tween(${v.reducedDuration}) else spring(dampingRatio = if (expressive) ${v.expressiveDamping}f else ${v.spring.damping}f, stiffness = ${v.spring.stiffness}f)\n`;
+    } else {
+      s += `    fun <T> ${k}(reducedMotion: Boolean): FiniteAnimationSpec<T> =\n        if (reducedMotion) tween(${v.reducedDuration}) else spring(dampingRatio = ${v.spring.damping}f, stiffness = ${v.spring.stiffness}f)\n`;
+    }
     s += `    const val ${k}DurationMs = ${v.duration}\n`;
   }
   s += '}\n';
   s += '\n/** Sequencing for motion (stagger, rise, count-up, shimmer). Values in ms unless the name says otherwise. */\nobject MekaChoreography {\n';
-  for (const [k, v] of entries(t.choreography)) s += `    const val ${k}${k === 'staggerMaxSteps' ? '' : k === 'riseDistance' ? 'Dp' : 'Ms'} = ${v.$value}\n`;
+  for (const [k, v] of entries(t.choreography)) {
+    if (/scale$/i.test(k)) s += `    const val ${k} = ${v.$value}f\n`;
+    else s += `    const val ${k}${k === 'staggerMaxSteps' ? '' : /riseDistance$/i.test(k) ? 'Dp' : 'Ms'} = ${v.$value}\n`;
+  }
   s += '}\n';
   return s;
 }
@@ -96,17 +104,22 @@ function swift() {
   }
   s += '}\n\nenum MekaSpace {\n' + entries(t.space).map(([k, v]) => `    static let ${k}: CGFloat = ${v.$value}`).join('\n') + '\n}\n\n';
   s += 'enum MekaRadius {\n' + entries(t.radius).map(([k, v]) => `    static let ${k}: CGFloat = ${v.$value}`).join('\n') + '\n}\n\n';
+  s += '/// Appearance → Motion (motion pass 2): Expressive uses the bouncier springs. Set on the main thread by the app\n/// (MotionSetting.swift); read when an animation is made.\nenum MotionStyle {\n    nonisolated(unsafe) static var expressive = true\n}\n\n';
   s += '/// Semantic motion. Reduced = short ease, callers drop translation.\nenum MekaMotion {\n';
   for (const [k, v] of entries(t.motion)) {
     // SwiftUI spring(response:dampingFraction:): response ≈ 2π/sqrt(stiffness) for unit mass.
     const response = (2 * Math.PI / Math.sqrt(v.spring.stiffness)).toFixed(3);
-    s += `    static func ${k}(reduced: Bool) -> Animation { reduced ? .easeOut(duration: ${(v.reducedDuration / 1000).toFixed(3)}) : .spring(response: ${response}, dampingFraction: ${v.spring.damping}) }\n`;
+    if (v.expressiveDamping !== undefined) {
+      s += `    static func ${k}(reduced: Bool, expressive: Bool = MotionStyle.expressive) -> Animation { reduced ? .easeOut(duration: ${(v.reducedDuration / 1000).toFixed(3)}) : .spring(response: ${response}, dampingFraction: expressive ? ${v.expressiveDamping} : ${v.spring.damping}) }\n`;
+    } else {
+      s += `    static func ${k}(reduced: Bool) -> Animation { reduced ? .easeOut(duration: ${(v.reducedDuration / 1000).toFixed(3)}) : .spring(response: ${response}, dampingFraction: ${v.spring.damping}) }\n`;
+    }
   }
   s += '}\n';
   s += '\n/// Sequencing for motion (stagger, rise, count-up, shimmer). Durations in seconds; distances in points.\nenum MekaChoreography {\n';
   for (const [k, v] of entries(t.choreography)) {
     if (k === 'staggerMaxSteps') s += `    static let ${k} = ${v.$value}\n`;
-    else if (k === 'riseDistance') s += `    static let ${k}: CGFloat = ${v.$value}\n`;
+    else if (/riseDistance$/i.test(k) || /scale$/i.test(k)) s += `    static let ${k}: CGFloat = ${v.$value}\n`;
     else s += `    static let ${k}: Double = ${(v.$value / 1000).toFixed(3)}\n`;
   }
   s += '}\n';

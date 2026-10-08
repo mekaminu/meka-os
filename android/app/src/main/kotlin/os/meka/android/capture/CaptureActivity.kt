@@ -8,6 +8,7 @@ import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import os.meka.android.designsystem.mekaRecomposer
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -91,7 +92,8 @@ class CaptureActivity : ComponentActivity() {
         if (request == null) { finish(); return }
         enableEdgeToEdge()
         val core = (application as MekaApplication).core
-        setContent {
+        // MEKA follows its own Motion setting, not the phone's animator scale (MotionClock.kt).
+        setContent(parent = mekaRecomposer()) {
             MekaTheme {
                 CaptureSheet(
                     request = request,

@@ -10,7 +10,7 @@ import SwiftUI
 struct NowCard: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
     @Environment(\.openWindow) private var openWindow
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
