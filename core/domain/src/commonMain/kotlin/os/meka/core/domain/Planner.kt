@@ -11,6 +11,9 @@ package os.meka.core.domain
  * when it has space (else the first gap that fits), so a busy day doesn't quietly crowd them out. Habit blocks are
  * part of the suggestion only: Apply schedules tasks, and a habit is ticked when it's done.
  *
+ * Booked sessions (the Gym, see [SessionRules]) are already in the week at a set time: they are kept free like events
+ * and shown among the habit blocks.
+ *
  * Meals from the fasting tracker (see [Fasting.plannerMeals]: breaking a fast, the last meal before the eating window
  * closes) are kept free like events, so nothing is planned over them. They are shown, not applied.
  */
@@ -69,6 +72,7 @@ object DayPlanner {
         prefs: Prefs = Prefs(),
         habits: List<PlannerHabit> = emptyList(),
         meals: List<MealBlock> = emptyList(),
+        sessions: List<HabitPlacement> = emptyList(),
     ): Plan {
         val g = prefs.granularityMin * MIN
         val windowStart = maxOf(day.startMs + prefs.dayStartMin * MIN, ceilTo(nowMs, day.startMs, g))
@@ -81,10 +85,11 @@ object DayPlanner {
             Slot(e.startAtMs - lead * MIN, e.endAtMs + prefs.bufferMin * MIN)
         }
         val todaysMeals = meals.filter { it.endMs > it.startMs && it.endMs > day.startMs && it.startMs < day.endMs }.sortedBy { it.startMs }
-        var free = subtract(Slot(windowStart, windowEnd), busy + todaysMeals.map { Slot(it.startMs, it.endMs) })
+        val todaysSessions = sessions.filter { it.endMs > maxOf(nowMs, day.startMs) && it.startMs < day.endMs }.sortedBy { it.startMs }
+        var free = subtract(Slot(windowStart, windowEnd), busy + todaysMeals.map { Slot(it.startMs, it.endMs) } + todaysSessions.map { Slot(it.startMs, it.endMs) })
 
-        // Habits first (behind before due), each in its part of the day if there's room there.
-        val habitPlacements = mutableListOf<HabitPlacement>()
+        // Booked sessions are fixed; then habits (behind before due), each in its part of the day if there's room there.
+        val habitPlacements = todaysSessions.toMutableList()
         val habitsUnplaced = mutableListOf<PlannerHabit>()
         for (h in habits.sortedBy { if (it.behind) 0 else 1 }) {
             val need = h.minutes.coerceAtLeast(prefs.granularityMin) * MIN

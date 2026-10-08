@@ -35,6 +35,17 @@ struct GoalsScreen: View {
                     HabitRowView(habit: h, goals: model.goals?.goals ?? [], expanded: open == h.id, palette: palette) { toggle(h.id) }
                 }
                 AddHabitRow(palette: palette).padding(.top, MekaSpace.s)
+                // The Gym: one click adds it with its sessions booked (offered until a booked habit exists).
+                if !(model.goals?.habits ?? []).contains(where: { $0.booked }) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Button("Add Gym") { model.addGym() }
+                            .buttonStyle(.plain).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                        Text("Three times a week, evenings, an hour: MEKA books the sessions around your calendar and work, and rebooks a missed one.")
+                            .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    }
+                    .padding(.top, MekaSpace.s)
+                    .transition(.opacity)
+                }
 
                 SectionLabel("Goals", palette).padding(.top, MekaSpace.xl).staggeredAppear(3)
                 let goals = model.goals?.goals ?? []
@@ -111,6 +122,10 @@ private struct HabitRowView: View {
                             .foregroundStyle(habit.doneToday ? palette.textSecondary : palette.textPrimary)
                         Text(habit.meta).font(MekaType.itemMeta)
                             .foregroundStyle(habit.pace == .behind ? palette.accent : palette.textSecondary)
+                        // A booked habit's week: "Booked Today 17:45 · Thu 17:45".
+                        if let line = habit.sessionLine {
+                            Text(line).font(MekaType.caption).foregroundStyle(palette.accent).contentTransition(.opacity)
+                        }
                         HStack(spacing: MekaSpace.s) {
                             HStack(spacing: 3) {
                                 ForEach(Array(habit.week.enumerated()), id: \.offset) { _, on in
@@ -165,6 +180,20 @@ private struct HabitRowView: View {
                     }
                     Button("Delete", role: .destructive) { model.deleteHabit(habit.id) }
                         .buttonStyle(.plain).font(MekaType.itemTitle).foregroundStyle(palette.critical)
+                }
+                .padding(.leading, 22 + MekaSpace.m)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                HStack(spacing: MekaSpace.l) {
+                    Toggle("Book my sessions", isOn: Binding(get: { habit.booked }, set: { model.setHabitBooked(habit.id, $0) }))
+                        .toggleStyle(.switch).font(MekaType.body).fixedSize()
+                    if habit.booked {
+                        Menu(habit.rotationLabel) {
+                            ForEach(Array(SessionRules.shared.ROTATIONS.enumerated()), id: \.offset) { i, r in
+                                Button(SessionRules.shared.rotationLabel(r: r)) { model.setHabitRotation(habit.id, i) }
+                            }
+                        }
+                        .menuStyle(.button).fixedSize()
+                    }
                 }
                 .padding(.leading, 22 + MekaSpace.m)
                 .transition(.opacity.combined(with: .move(edge: .top)))

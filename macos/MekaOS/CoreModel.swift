@@ -25,6 +25,8 @@ final class CoreModel {
     private(set) var needsYouSetAside: [String] = []
     /// Habits (pace, streaks) and goals (progress). Synced with the Fold.
     private(set) var goals: GoalsView?
+    /// The Gym (booked habits): the week's sessions booked around the calendar and work, and today's card.
+    private(set) var sessions: SessionsView?
     /// The running fast, the eating window and the last seven days. Synced with the Fold.
     private(set) var fasting: FastingView?
     /// Evening shutdown: done today, left from today, tomorrow at a glance. Synced with the Fold.
@@ -152,6 +154,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await f in core.fastingView { self?.fasting = f }
+        })
+        observers.append(Task { [weak self] in
+            for await s in core.sessionsView { self?.sessions = s }
         })
         observers.append(Task { [weak self] in
             for await s in core.shutdownView { self?.shutdown = s }
@@ -692,6 +697,26 @@ final class CoreModel {
     func setHabitMinutes(_ id: String, _ minutes: Int32) { run { try await $0.setHabitMinutes(id: id, minutes: minutes) } }
     func setHabitGoal(_ id: String, _ goalID: String?) { run { try await $0.setHabitGoal(id: id, goalId: goalID) } }
     func deleteHabit(_ id: String) { run { try await $0.deleteHabit(id: id) } }
+
+    // MARK: The Gym (booked habits)
+
+    /// Adds "Gym" (three times a week, evenings, an hour) with its sessions booked into the week.
+    func addGym() { MekaHaptics.light(); run { _ = try await $0.addGym() } }
+    /// "Book my sessions" on or off.
+    func setHabitBooked(_ id: String, _ on: Bool) { MekaHaptics.tick(); run { try await $0.setHabitBooked(id: id, on: on) } }
+    /// The rotation preset at `index` in `SessionRules.ROTATIONS` (0: none).
+    func setHabitRotation(_ id: String, _ index: Int) { MekaHaptics.tick(); run { try await $0.setHabitRotation(id: id, index: Int32(index)) } }
+    /// "Went": today ticked with the session's label (light haptic; the check pops).
+    func sessionWent(_ id: String) { MekaHaptics.light(); run { try await $0.sessionWent(id: id, note: nil) } }
+    /// "Didn't go": rebooked on another day this week if there's room.
+    func sessionMissed(_ id: String) { MekaHaptics.tick(); run { try await $0.sessionMissed(id: id) } }
+    func setSessionNote(_ id: String, _ note: String) {
+        let n = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { return }
+        run { try await $0.setSessionNote(id: id, note: n) }
+    }
+    /// Undo for Went / Didn't go.
+    func undoSession(_ id: String) { MekaHaptics.tick(); run { try await $0.undoSession(id: id) } }
 
     func addGoal(_ title: String, target: String?, horizonIndex: Int) {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)

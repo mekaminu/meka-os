@@ -699,4 +699,35 @@ class MekaCoreTest {
         now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 18, 1).toInstant(london).toEpochMilliseconds()
         assertEquals(null, m.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL).digest, "chases and the shutdown nudge are app-only now")
     }
+
+    @Test
+    fun theGymIsBookedAfterWorkAsksDidYouGoAndRebooksOnTheOtherDevice() = runTest {
+        // Monday 21 Sep 2026, 15:13 in London; work Mon–Fri 09:00–17:30 by default.
+        val a = core("android"); val m = core("mac")
+        val id = a.addGym()
+        val card = a.sessionsView.value.cards.single()
+        assertEquals("Gym", card.heading)
+        assertEquals("Today 17:45–18:45", card.line)
+        assertEquals("Booked Today 17:45 · Wed 17:45 · Fri 17:45", a.goalsView.value.habits.single().sessionLine)
+        // The planner keeps the session free and shows it; the Gym isn't placed again as a flexible habit.
+        assertEquals(listOf("Gym"), a.planDay().habits.map { it.title })
+        a.setHabitRotation(id, 1)
+        assertEquals("Gym · Push", a.sessionsView.value.cards.single().heading)
+
+        a.syncNow(); m.syncNow()
+        now += 4 * 3_600_000L // 19:13: the slot is over
+        m.tick()
+        assertEquals("Did you go? · 17:45–18:45", m.sessionsView.value.cards.single().line)
+        m.sessionMissed(id)
+        assertEquals("Rebooked for Tue 17:45 · Push", m.sessionsView.value.cards.single().next)
+        m.syncNow(); a.syncNow()
+        assertEquals("Not today · no worries", a.sessionsView.value.cards.single().line)
+        a.undoSession(id)
+        a.sessionWent(id, "felt strong")
+        val went = a.sessionsView.value.cards.single()
+        assertEquals("Went · 1 of 3 this week", went.line)
+        assertEquals("felt strong", went.note)
+        assertEquals("Next: Wed 17:45 · Pull", went.next)
+        assertTrue(a.goalsView.value.habits.single().doneToday)
+    }
 }

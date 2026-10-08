@@ -157,6 +157,10 @@ object HabitFields {
     const val PREFERRED_TIMING = "preferredTiming"
     /** How long one go takes, so the planner can make room for it. */
     const val MINUTES = "minutes"
+    /** Gym (2026-10-08, additive, LWW): MEKA books this habit's sessions into the week around the calendar ([SessionRules]). */
+    const val BOOK_SLOTS = "bookSlots"
+    /** Gym (additive, LWW): the rotating labels, "Push|Pull|Legs"; absent or empty for none. */
+    const val ROTATION = "rotation"
 }
 
 /** One habit on one local day. Id `<habitId>.d<epochDay>` so two devices ticking the same day write one entity. */
@@ -165,6 +169,12 @@ object HabitCompletionFields {
     const val DAY = "day"
     const val DONE = "done"
     const val AT = "atMs"
+    /** Gym (additive, LWW): "Didn't go" on a booked session; the session is rebooked on another day. Done wins over it. */
+    const val MISSED = "missed"
+    /** Gym (additive, LWW): the rotation label the session was ("Push"). */
+    const val LABEL = "label"
+    /** Gym (additive, LWW): an optional one-line note ("5 km", "push day"). */
+    const val NOTE = "note"
 }
 
 /** A fast. `endedAtMs` is Null while it runs. All LWW: a fast has one author at a time. */

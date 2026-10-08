@@ -507,6 +507,10 @@ private fun TodayPane(
                 item(key = "upnext") { UpNextCard(t, actions, rowMotion, Modifier.animateItem().appear(rememberAppearance(2, play))) }
                 item(key = "s-next") { Spacer(Modifier.height(MekaSpace.l)) }
             }
+            // The Gym (booked habits): today's session, "Did you go?" once it's over, or where it was rebooked.
+            if (core != null) item(key = "session") {
+                os.meka.android.goals.SessionCards(core, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(2, play)))
+            }
             // One timeline under "Today": the "All day" group first (one row each, at most 3 then "+2 more"), finished
             // events folded, events and planned tasks in time order with the now line and free gaps; then tasks with no time.
             val tl = today.timeline

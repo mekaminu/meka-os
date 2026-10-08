@@ -282,4 +282,26 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NotifyRules.shared.deviceFromName(name: nil, fallback: .off), .off)
         XCTAssertEqual(Int(NotifyRules.shared.deviceCount), 3)
     }
+
+    func testGymThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "gym-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let id = try await core.addGym()
+        let habit = core.goalsView.value.habits.first { $0.id == id }
+        XCTAssertEqual(habit?.booked, true)
+        XCTAssertEqual(habit?.rotationLabel, "No rotation")
+        try await core.setHabitRotation(id: id, index: 1)
+        XCTAssertEqual(core.goalsView.value.habits.first { $0.id == id }?.rotation, ["Push", "Pull", "Legs"])
+        XCTAssertEqual(SessionRules.shared.ROTATIONS.count, 4)
+        XCTAssertEqual(SessionRules.shared.rotationLabel(r: ["Upper", "Lower"]), "Upper · Lower")
+        // Went and Undo work whatever today's card says (the booking depends on the clock and calendar).
+        try await core.sessionWent(id: id, note: "5 km")
+        XCTAssertEqual(core.goalsView.value.habits.first { $0.id == id }?.doneToday, true)
+        try await core.undoSession(id: id)
+        XCTAssertEqual(core.goalsView.value.habits.first { $0.id == id }?.doneToday, false)
+    }
 }
+

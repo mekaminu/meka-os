@@ -145,6 +145,13 @@ struct TodayView: View {
                                 .staggeredAppear(2, play: play)
                             Spacer().frame(height: MekaSpace.l)
                         }
+                        // The Gym (booked habits): today's session, "Did you go?" once it's over, or where it was rebooked.
+                        if !(model.sessions?.cards ?? []).isEmpty {
+                            SessionCardsView(palette: palette)
+                                .padding(.bottom, MekaSpace.l)
+                                .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
+                                .staggeredAppear(2, play: play)
+                        }
                         // One timeline under "Today": the All day group first (one row each, at most 3 then "+2
                         // more"), finished events folded, events and planned tasks in time order with the now line
                         // and free gaps; then tasks with no time.
@@ -193,6 +200,7 @@ struct TodayView: View {
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.shutdown?.offered)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.brief?.offered)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.review?.card.offered)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: model.sessions?.cards.map(\.habitId) ?? [])
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.timeline.rows.map(\.id))
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: earlierOpen)
                 .animation(MekaMotion.complete(reduced: reduceMotion), value: allDayOpen)

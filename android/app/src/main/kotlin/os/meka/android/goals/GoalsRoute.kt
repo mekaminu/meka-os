@@ -80,6 +80,7 @@ import os.meka.core.domain.GoalRules
 import os.meka.core.domain.HabitItem
 import os.meka.core.domain.HabitPace
 import os.meka.core.domain.HabitTiming
+import os.meka.core.domain.SessionRules
 import os.meka.core.facade.MekaCore
 import os.meka.android.designsystem.LocalPlaceTitleKey
 import os.meka.android.designsystem.sharedPlace
@@ -141,10 +142,22 @@ fun GoalsRoute(core: MekaCore) {
                 },
                 link = { goalId -> act { core.setHabitGoal(h.id, goalId) } },
                 delete = { open = null; act { core.deleteHabit(h.id) } },
+                book = { on -> haptics.tick(); act { core.setHabitBooked(h.id, on) } },
+                rotate = { i -> haptics.tick(); act { core.setHabitRotation(h.id, i) } },
             )
         }
         item(key = "add-habit") {
             AddHabit { title, perWeek, timing -> act { core.addHabit(title, perWeek, timing, GoalRules.DEFAULT_MINUTES, null) } }
+        }
+        // The Gym: one tap adds it with its sessions booked around the calendar (offered until a booked habit exists).
+        if (view.habits.none { it.booked }) item(key = "add-gym") {
+            Column(Modifier.animateItem().padding(top = MekaSpace.s)) {
+                Action("Add Gym") { haptics.light(); act { open = core.addGym() } }
+                Text(
+                    "Three times a week, evenings, an hour: MEKA books the sessions around your calendar and work, and rebooks a missed one.",
+                    style = MekaType.caption, color = Meka.colors.textTertiary,
+                )
+            }
         }
 
         item(key = "goals-label") { SectionLabel("Goals", Modifier.padding(top = MekaSpace.xl).appear(rememberAppearance(3))) }
@@ -178,6 +191,7 @@ fun GoalsRoute(core: MekaCore) {
 private fun HabitRow(
     h: HabitItem, goals: List<GoalItem>, expanded: Boolean, onToggle: () -> Unit, modifier: Modifier,
     tick: () -> Unit, edit: (Int?, HabitTiming?, Int?) -> Unit, link: (String?) -> Unit, delete: () -> Unit,
+    book: (Boolean) -> Unit, rotate: (Int) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     val bg by animateColorAsState(if (expanded) Meka.colors.surface else Color.Transparent, MekaMotion.appear(reduced), label = "habit-bg")
@@ -190,6 +204,8 @@ private fun HabitRow(
             ) {
                 Text(h.title, style = MekaType.itemTitle, color = if (h.doneToday) Meka.colors.textSecondary else Meka.colors.textPrimary)
                 Text(h.meta, style = MekaType.itemMeta, color = if (h.pace == HabitPace.BEHIND) Meka.colors.accent else Meka.colors.textSecondary)
+                // A booked habit's week: "Booked Today 17:45 · Thu 17:45".
+                h.sessionLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
                 Row(Modifier.padding(top = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
                     WeekDots(h.week)
                     if (h.streak >= 2) {
@@ -208,6 +224,14 @@ private fun HabitRow(
                 Chips("How often", GoalRules.TARGET_CHOICES.map { it.label to (it.perWeek == h.targetPerWeek) }) { i -> edit(GoalRules.TARGET_CHOICES[i].perWeek, null, null) }
                 Chips("When", GoalRules.TIMINGS.map { GoalRules.timingLabel(it) to (it == h.timing) }) { i -> edit(null, GoalRules.TIMINGS[i], null) }
                 Chips("How long", GoalRules.MINUTE_CHOICES.map { "$it min" to (it == h.minutes) }) { i -> edit(null, null, GoalRules.MINUTE_CHOICES[i]) }
+                Chips("Book my sessions", listOf("On" to h.booked, "Off" to !h.booked)) { i -> book(i == 0) }
+                if (h.booked) {
+                    Chips("Rotation", SessionRules.ROTATIONS.map { SessionRules.rotationLabel(it) to (it == h.rotation) }) { i -> rotate(i) }
+                    Text(
+                        "Booked around your calendar and work, a rest day between when there's room. Missed ones are rebooked.",
+                        style = MekaType.caption, color = Meka.colors.textTertiary,
+                    )
+                }
                 if (goals.isNotEmpty()) {
                     val options = listOf<GoalItem?>(null) + goals
                     Chips("Towards", options.map { (it?.title ?: "No goal") to (it?.id == h.goalId) }) { i -> link(options[i]?.id) }

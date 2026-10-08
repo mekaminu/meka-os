@@ -47,8 +47,16 @@ data class HabitItem(
     /** "12-day streak", "3-week streak"; null below 2. */
     val streakLine: String?,
     val hasConflict: Boolean,
+    /** Gym: MEKA books this habit's sessions into the week ([SessionRules]); the planner then doesn't place it. */
+    val booked: Boolean = false,
+    /** Gym: the rotating labels (Push · Pull · Legs); empty for none. */
+    val rotation: List<String> = emptyList(),
+    /** Gym: "Booked Thu 17:45 · Sat 10:00", "Week done", "No room left this week" (set from [SessionsView]). */
+    val sessionLine: String? = null,
 ) {
     val needsRoomToday: Boolean get() = pace == HabitPace.BEHIND || pace == HabitPace.DUE
+    /** "Push · Pull · Legs", "No rotation". */
+    val rotationLabel: String get() = SessionRules.rotationLabel(rotation)
 }
 
 data class GoalItem(
@@ -90,6 +98,10 @@ data class GoalsView(
         return parts.joinToString(" · ").ifEmpty { "All habits on track" }
     }
 
+    /** The habits with each booked one's week line from [sessions]. */
+    fun withSessions(sessions: SessionsView): GoalsView =
+        if (sessions.lines.isEmpty()) this else copy(habits = habits.map { h -> sessions.lines[h.id]?.let { h.copy(sessionLine = it) } ?: h })
+
     companion object {
         val EMPTY = GoalsView(emptyList(), emptyList(), 0)
     }
@@ -105,7 +117,7 @@ object GoalRules {
     )
     val TIMINGS: List<HabitTiming> = enumValues<HabitTiming>().toList()
     val HORIZONS: List<GoalHorizon> = enumValues<GoalHorizon>().toList()
-    val MINUTE_CHOICES = listOf(5, 10, 15, 30, 45, 60)
+    val MINUTE_CHOICES = listOf(5, 10, 15, 30, 45, 60, 90)
     const val DEFAULT_MINUTES = 15
 
     /** Index-based access for Swift, which then never needs to name the cases. */
@@ -275,6 +287,65 @@ class Goals(
         )
     }
 
+    /** Gym: MEKA books (or stops booking) this habit's sessions into the week. */
+    fun setHabitBooked(id: String, on: Boolean) {
+        requireHabit(id)
+        replica.commitLocal(EntityTypes.HABIT, id, mapOf(HabitFields.BOOK_SLOTS to on.fv()))
+    }
+
+    /** Gym: the rotating labels ([SessionRules.ROTATIONS]); empty for none. Labels are trimmed, at most 7 of 24 characters. */
+    fun setHabitRotation(id: String, labels: List<String>) {
+        requireHabit(id)
+        val clean = SessionRules.cleanRotation(labels)
+        replica.commitLocal(EntityTypes.HABIT, id, mapOf(HabitFields.ROTATION to (clean.takeIf { it.isNotEmpty() }?.joinToString("|")?.fv() ?: FieldValue.Null)))
+    }
+
+    /**
+     * Gym: "Went" ([went] = true: today is ticked with the session's [label] and an optional one-line [note]) or
+     * "Didn't go" (today is marked missed and the session is rebooked on another day, never nagged).
+     */
+    fun answerSession(id: String, went: Boolean, label: String?, note: String?) {
+        requireHabit(id)
+        val day = today()
+        val fields = linkedMapOf<String, FieldValue>(
+            HabitCompletionFields.HABIT_ID to id.fv(),
+            HabitCompletionFields.DAY to day.fv(),
+            HabitCompletionFields.DONE to went.fv(),
+            HabitCompletionFields.MISSED to (!went).fv(),
+            HabitCompletionFields.AT to nowMs().fv(),
+        )
+        if (went) {
+            label?.trim()?.takeIf { it.isNotEmpty() }?.let { fields[HabitCompletionFields.LABEL] = it.take(SessionRules.MAX_LABEL).fv() }
+            SessionRules.cleanNote(note)?.let { fields[HabitCompletionFields.NOTE] = it.fv() }
+        }
+        replica.commitLocal(EntityTypes.HABIT_COMPLETION, completionId(id, day), fields)
+    }
+
+    /** Gym: the note on today's session (blank clears it). */
+    fun setSessionNote(id: String, note: String?) {
+        requireHabit(id)
+        replica.commitLocal(
+            EntityTypes.HABIT_COMPLETION, completionId(id, today()),
+            mapOf(HabitCompletionFields.NOTE to (SessionRules.cleanNote(note)?.fv() ?: FieldValue.Null)),
+        )
+    }
+
+    /** Gym: Undo for [answerSession]: today is neither went nor missed again. */
+    fun clearSessionAnswer(id: String) {
+        requireHabit(id)
+        val day = today()
+        replica.commitLocal(
+            EntityTypes.HABIT_COMPLETION, completionId(id, day),
+            linkedMapOf(
+                HabitCompletionFields.HABIT_ID to id.fv(),
+                HabitCompletionFields.DAY to day.fv(),
+                HabitCompletionFields.DONE to false.fv(),
+                HabitCompletionFields.MISSED to false.fv(),
+                HabitCompletionFields.AT to nowMs().fv(),
+            ),
+        )
+    }
+
     fun deleteHabit(id: String) {
         requireHabit(id)
         replica.commitLocal(EntityTypes.HABIT, id, mapOf(ActionableFields.DELETED to true.fv()))
@@ -378,6 +449,8 @@ class Goals(
                 meta = GoalRules.habitMeta(pace, doneWeek, weekTarget, target),
                 streakLine = GoalRules.streakLine(streak, unit),
                 hasConflict = replica.conflictsFor(EntityTypes.HABIT, id).isNotEmpty(),
+                booked = s[HabitFields.BOOK_SLOTS].boolOrNull == true,
+                rotation = SessionRules.decodeRotation(s[HabitFields.ROTATION].textOrNull),
             )
         }.sortedWith(
             compareBy<HabitItem> { paceOrder(it.pace) }
@@ -440,8 +513,34 @@ class Goals(
 
     /** Habits the planner should make room for today: behind first, then due. */
     fun plannerHabits(): List<PlannerHabit> =
-        habits().filter { it.needsRoomToday }
+        habits().filter { it.needsRoomToday && !it.booked } // booked ones come as fixed sessions (see [SessionRules])
             .map { PlannerHabit(it.id, it.title, it.minutes, it.timing, it.pace == HabitPace.BEHIND) }
+
+    /** Gym: every booked habit with what [SessionRules.book] needs (ticks, missed days, the last label, notes). */
+    fun sessionHabits(): List<SessionHabit> {
+        val booked = habits().filter { it.booked }
+        if (booked.isEmpty()) return emptyList()
+        val created = booked.associate { h -> h.id to (replica.entity(EntityTypes.HABIT, h.id)?.get(ActionableFields.CREATED_AT)?.longOrNull ?: 0L) }
+        val byHabit = replica.entities(EntityTypes.HABIT_COMPLETION).groupBy { it[HabitCompletionFields.HABIT_ID].textOrNull }
+        return booked.map { h ->
+            val rows = byHabit[h.id].orEmpty().mapNotNull { s -> s[HabitCompletionFields.DAY].longOrNull?.let { it to s } }
+            val done = rows.filter { it.second[HabitCompletionFields.DONE].boolOrNull == true }
+            val lastLabel = done.filter { it.second[HabitCompletionFields.LABEL].textOrNull != null }.maxByOrNull { it.first }
+                ?.second?.get(HabitCompletionFields.LABEL)?.textOrNull
+            val today = done.firstOrNull { it.first == today() }?.second
+            SessionHabit(
+                id = h.id, title = h.title, perWeek = h.targetPerWeek, timing = h.timing, minutes = h.minutes,
+                createdAtMs = created[h.id] ?: 0L,
+                doneDays = done.map { it.first }.toSet(),
+                missedDays = rows.filter { it.second[HabitCompletionFields.DONE].boolOrNull != true && it.second[HabitCompletionFields.MISSED].boolOrNull == true }
+                    .map { it.first }.toSet(),
+                rotation = h.rotation,
+                lastLabel = lastLabel,
+                todayLabel = today?.get(HabitCompletionFields.LABEL)?.textOrNull,
+                todayNote = today?.get(HabitCompletionFields.NOTE)?.textOrNull,
+            )
+        }
+    }
 
     // ---- Helpers ----
 

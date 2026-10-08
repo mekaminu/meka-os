@@ -160,6 +160,13 @@ class MekaCore(
     /** Habits (pace, streaks, this week) and goals (progress). Synced; moves with the clock. */
     val goalsView: StateFlow<GoalsView> = _goals.asStateFlow()
 
+    private val _sessions = MutableStateFlow(os.meka.core.domain.SessionsView.EMPTY)
+    /**
+     * The Gym (booked habits, [os.meka.core.domain.SessionRules]): the week's sessions booked around the calendar and
+     * work, and today's card ("Today 17:45–18:45", "Did you go?", "Rebooked for Thu 17:45"). Moves with the clock.
+     */
+    val sessionsView: StateFlow<os.meka.core.domain.SessionsView> = _sessions.asStateFlow()
+
     private val _fasting = MutableStateFlow(FastingView.EMPTY)
     /** The running fast, the eating window and the last seven days. Synced; moves with the clock. */
     val fastingView: StateFlow<FastingView> = _fasting.asStateFlow()
@@ -279,7 +286,9 @@ class MekaCore(
         val now = nowMs()
         val day = dayWindow(now)
         val all = tasks.all()
-        DayPlanner.plan(all, visibleEvents(all), now, day, habits = goals.plannerHabits(), meals = fasting.plannerMeals(day))
+        val sessions = _sessions.value.todayBlocks(day.epochDay, now)
+            .map { DayPlanner.HabitPlacement(it.habitId, listOfNotNull(it.title, it.label).joinToString(" · "), it.startMs, it.endMs, behind = false) }
+        DayPlanner.plan(all, visibleEvents(all), now, day, habits = goals.plannerHabits(), meals = fasting.plannerMeals(day), sessions = sessions)
     }
 
     /** Schedules each planned task at its suggested time; everything syncs like a manual edit. */
@@ -424,6 +433,30 @@ class MekaCore(
     suspend fun setHabitDone(id: String, done: Boolean) = onCore { goals.setHabitDone(id, done) }
     suspend fun setHabitGoal(id: String, goalId: String?) = onCore { goals.setHabitGoal(id, goalId) }
     suspend fun deleteHabit(id: String) = onCore { goals.deleteHabit(id) }
+
+    // ---- The Gym (booked habits) ----
+
+    /** Adds "Gym": three times a week, evenings, an hour, its sessions booked into the week. Returns its id. */
+    suspend fun addGym(): String = onCore {
+        val id = goals.addHabit("Gym", perWeek = 3, timing = HabitTiming.EVENING, minutes = 60)
+        goals.setHabitBooked(id, true)
+        id
+    }
+    /** "Book my sessions": MEKA books the habit's sessions into the week around the calendar and work. */
+    suspend fun setHabitBooked(id: String, on: Boolean) = onCore { goals.setHabitBooked(id, on) }
+    /** The rotation preset at [index] in [os.meka.core.domain.SessionRules.ROTATIONS] (0: none). */
+    suspend fun setHabitRotation(id: String, index: Int) = onCore { goals.setHabitRotation(id, os.meka.core.domain.SessionRules.rotationAt(index)) }
+    /** "Went": today ticked with the session's label and an optional one-line note. */
+    suspend fun sessionWent(id: String, note: String?) = onCore {
+        val label = _sessions.value.cards.firstOrNull { it.habitId == id }?.label
+        goals.answerSession(id, went = true, label = label, note = note)
+    }
+    /** "Didn't go": the session is rebooked on another day this week, if there's room. */
+    suspend fun sessionMissed(id: String) = onCore { goals.answerSession(id, went = false, label = null, note = null) }
+    /** The note on today's session (blank clears it). */
+    suspend fun setSessionNote(id: String, note: String?) = onCore { goals.setSessionNote(id, note) }
+    /** Undo for Went / Didn't go. */
+    suspend fun undoSession(id: String) = onCore { goals.clearSessionAnswer(id) }
 
     suspend fun addGoal(title: String, target: String?, horizon: GoalHorizon): String = onCore { goals.addGoal(title, target, horizon) }
     suspend fun editGoal(id: String, title: String?, target: String?, horizon: GoalHorizon?) = onCore { goals.editGoal(id, title, target, horizon) }
@@ -803,10 +836,16 @@ class MekaCore(
         _today.value = project(all, dayEvents)
         _lists.value = lists.view(all, renewals.view())
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(_today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone))
-        _goals.value = goals.view(all)
         _fasting.value = fasting.view()
         val workState = work.state(localClock(), todayEpochDay())
         val holidays = bankHolidays.calendar()
+        val cal = ZoneCalendar(timeZone)
+        val sessionHabits = goals.sessionHabits()
+        _sessions.value = if (sessionHabits.isEmpty()) os.meka.core.domain.SessionsView.EMPTY
+        else os.meka.core.domain.SessionRules.book(sessionHabits, todayEpochDay(), nowMs(), cal) { day ->
+            os.meka.core.domain.SessionRules.busyOn(day, dayEvents, workState.schedule, holidays, cal)
+        }
+        _goals.value = goals.view(all).withSessions(_sessions.value)
         _workMode.value = workState
         val today = dayWindow(nowMs())
         _shutdown.value = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), holidays)
