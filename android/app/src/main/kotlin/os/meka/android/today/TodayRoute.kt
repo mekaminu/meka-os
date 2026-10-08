@@ -12,6 +12,7 @@ import os.meka.core.domain.CommandLayout
 import os.meka.android.calendar.EventDetailPane
 import os.meka.android.calendar.opensEvent
 import os.meka.android.calendar.EventActionHandlers
+import os.meka.android.calendar.EventUndo
 import os.meka.android.calendar.EventUndoBar
 import os.meka.android.calendar.SwipeableEvent
 import os.meka.android.calendar.eventActionHandlers
@@ -127,6 +128,8 @@ import os.meka.core.domain.MorningBriefView
 import os.meka.core.domain.ShutdownView
 import os.meka.core.domain.SomedayKind
 import os.meka.core.domain.Task
+import os.meka.core.domain.TaskWhenRules
+import os.meka.core.domain.TaskWhenView
 import os.meka.core.domain.Today
 import os.meka.core.facade.ConflictChoice
 import os.meka.core.facade.MekaCore
@@ -217,9 +220,9 @@ fun TodayRoute(
         mutableStateOf(DayRingOpen.claim(ringContext, LocalDate.now().toEpochDay(), ringReduced))
     }
 
-    val actions = todayActions(core, scope, { selectedId }) { selectedId = it }
     // Calendar actions: swipe an event right for a prep task, left to hide it from my day; an undo bar rises.
     val eventUndo = rememberEventUndo()
+    val actions = todayActions(core, scope, { selectedId }, { selectedId = it }, eventUndo)
     val eventHandlers = remember(core, scope, eventUndo) { eventActionHandlers(core, scope, eventUndo) }
     val moves = rememberDecisionMoves(core, eventUndo, openTask = { selectedId = it }, openLists = openLists)
     // The cover screen's "now" card (Fold modes, slice 3): read from Today, which refreshes every minute.
@@ -348,12 +351,23 @@ private const val TODAY_SECTIONS = 6
 data class ConnectHook(val defaultUrl: String, val connect: suspend (url: String, code: String) -> String?)
 
 /** The commands every task list (Today, Needs you) offers, wired to [core]. Selection is owned by the caller. */
-internal fun todayActions(core: MekaCore, scope: CoroutineScope, selected: () -> String?, setSelected: (String?) -> Unit) = TodayActions(
+internal fun todayActions(
+    core: MekaCore, scope: CoroutineScope, selected: () -> String?, setSelected: (String?) -> Unit,
+    /** The screen's undo bar: Delete in the detail offers Undo there (no dialog). */
+    undo: EventUndo? = null,
+) = TodayActions(
     add = { title -> scope.launch { runCatching { core.capture(title, null) } } },
     complete = { id -> scope.launch { core.complete(id); if (selected() == id) setSelected(null) } },
     select = { id -> setSelected(id) },
     rename = { id, t -> scope.launch { runCatching { core.rename(id, t) } } },
-    delete = { id -> scope.launch { core.delete(id); setSelected(null) } },
+    delete = { id ->
+        scope.launch {
+            val title = core.today.value.let { t -> (t.needsYou.map { it.task } + listOfNotNull(t.upNext) + t.yourDay) }.firstOrNull { it.id == id }?.title
+            runCatching { core.delete(id) }
+            setSelected(null)
+            if (undo != null && title != null) undo.show(TaskWhenRules.deletedLine(title)) { core.restore(id) }
+        }
+    },
     resolve = { c, v -> scope.launch { core.resolve(c, v) } },
     repeatChoices = { id -> core.repeatChoices(id) },
     setRepeat = { id, rule -> scope.launch { runCatching { core.setRepeat(id, rule) } } },
@@ -365,6 +379,9 @@ internal fun todayActions(core: MekaCore, scope: CoroutineScope, selected: () ->
     someday = { id -> scope.launch { runCatching { core.moveToSomeday(id, SomedayKind.IDEA) }; if (selected() == id) setSelected(null) } },
     goals = core.goalsView,
     setGoal = { id, goalId -> scope.launch { runCatching { core.setTaskGoal(id, goalId) } } },
+    whenOf = { t -> core.taskWhen(t) },
+    setWhen = { id, day, minute -> scope.launch { runCatching { core.setWhen(id, day, minute) } } },
+    setNotes = { id, notes -> scope.launch { runCatching { core.setNotes(id, notes) } } },
 )
 
 data class TodayActions(
@@ -386,6 +403,11 @@ data class TodayActions(
     /** Open goals, for linking a task to one (its progress then counts the task). */
     val goals: StateFlow<GoalsView>,
     val setGoal: (String, String?) -> Unit,
+    /** When: the row as shown (day, optional time, chips). */
+    val whenOf: (Task) -> TaskWhenView,
+    /** Puts the task on a local epoch day, at a minute of the day or with no time. */
+    val setWhen: (String, Long, Int?) -> Unit,
+    val setNotes: (String, String) -> Unit,
 )
 
 @Composable
@@ -816,13 +838,18 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
         }
 
         Spacer(Modifier.height(MekaSpace.l))
-        RepeatSection(task, actions)
-        StepsSection(task, actions)
-        GoalSection(task, actions)
+        // Entrance: the rows stagger in, 40 ms apart (Motion setting; Off: at once). Fresh for each task.
+        key(task.id) {
+            Column(Modifier.appear(rememberAppearance(0))) { WhenSection(task, actions) }
+            Column(Modifier.appear(rememberAppearance(1))) { RepeatSection(task, actions) }
+            Column(Modifier.appear(rememberAppearance(2))) { NotesSection(task, actions) }
+            Column(Modifier.appear(rememberAppearance(3))) { StepsSection(task, actions) }
+            Column(Modifier.appear(rememberAppearance(4))) { GoalSection(task, actions) }
+        }
     }
 
     Spacer(Modifier.height(MekaSpace.m))
-    DetailActions(task, actions)
+    key(task.id) { Box(Modifier.appear(rememberAppearance(5))) { DetailActions(task, actions) } }
 }
 
 internal fun providerLabel(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Outlook"; "fixtures" -> "Fixtures"; "news" -> "Headlines"; "bank_holidays" -> "Bank holidays"; else -> p }

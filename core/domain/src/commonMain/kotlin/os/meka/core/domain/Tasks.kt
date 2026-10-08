@@ -287,6 +287,39 @@ class Tasks(
     }
 
     /**
+     * When (task detail): puts [id] on local [day] (today or later), at [minuteOfDay] or with no time. A time plans it
+     * on that day's timeline; no time leaves it under Anytime. A later day keeps it out of Today until then (the same
+     * snooze as Tomorrow); today brings a snoozed one back. A repeating occurrence keeps its place in the series.
+     * The due date (a deadline) is left alone.
+     */
+    fun setWhen(id: String, day: Long, minuteOfDay: Int?) {
+        val t = get(id) ?: throw ValidationException("Task not found")
+        if (t.lifecycle.isTerminal) return
+        val today = calendar.epochDayOf(nowMs())
+        if (day < today) throw ValidationException("Pick today or a later day")
+        if (day > today + TaskWhenRules.MAX_DAYS_AHEAD) throw ValidationException("That's too far ahead")
+        if (minuteOfDay != null && minuteOfDay !in 0 until 24 * 60) throw ValidationException("That isn't a time of day")
+        val changes = linkedMapOf<String, FieldValue>()
+        // Shown from: its occurrence day (or today) unless snoozed to another; a day that is already where it shows
+        // from needs no snooze, and today never moves an overdue occurrence's "since" day.
+        val base = t.occurrenceDay ?: today
+        val deferTo = if ((day == today && base <= today) || day == base) null else day
+        if (deferTo != t.deferredToDay) changes[TaskFields.DEFERRED_TO_DAY] = deferTo?.fv() ?: FieldValue.Null
+        val at = minuteOfDay?.let { calendar.toEpochMs(day, it) }
+        if (at != t.scheduledAtMs) changes[TaskFields.SCHEDULED_AT] = at?.fv() ?: FieldValue.Null
+        if (changes.isNotEmpty()) replica.commitLocal(EntityTypes.TASK, id, changes)
+    }
+
+    /** Notes (task detail): any length up to 10,000 characters; blank clears them. */
+    fun setNotes(id: String, notes: String) {
+        val t = get(id) ?: throw ValidationException("Task not found")
+        val text = notes.trimEnd().takeIf { it.isNotBlank() }
+        if (text != null && text.length > MAX_NOTES) throw ValidationException("Notes are too long")
+        if (text == t.notes?.takeIf { it.isNotBlank() }) return
+        replica.commitLocal(EntityTypes.TASK, id, mapOf(ActionableFields.NOTES to (text?.fv() ?: FieldValue.Null)))
+    }
+
+    /**
      * Creates the occurrence after [t] (if [t] repeats with a rule this version understands). Missed occurrences are
      * not back-filled: the next one is the first on or after today. Its id is derived from the series and day, so two
      * devices completing the same occurrence offline write the same task, and completing again after a reopen
@@ -470,6 +503,7 @@ class Tasks(
     companion object {
         /** Upper bound on occurrences skipped while catching up (a daily task untouched for ~27 years). */
         private const val MAX_CATCH_UP = 10_000
+        const val MAX_NOTES = 10_000
 
         /** Deterministic id of a series' occurrence on a local day. */
         fun occurrenceId(seriesId: String, epochDay: Long) = "$seriesId.d$epochDay"

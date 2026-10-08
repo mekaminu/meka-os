@@ -643,26 +643,16 @@ private struct DetailContent: View {
                     }
                 }
                 ScrollView {
+                    // Entrance: the rows stagger in, 40 ms apart (fresh for each task: the detail is re-made per id).
                     VStack(alignment: .leading, spacing: MekaSpace.s) {
-                        RepeatMenu(task: task, palette: palette)
-                        StepsList(task: task, palette: palette)
-                        GoalMenu(task: task, palette: palette)
+                        WhenRow(task: task, palette: palette).staggeredAppear(0)
+                        RepeatMenu(task: task, palette: palette).staggeredAppear(1)
+                        NotesEditor(task: task, palette: palette).staggeredAppear(2)
+                        StepsList(task: task, palette: palette).staggeredAppear(3)
+                        GoalMenu(task: task, palette: palette).staggeredAppear(4)
                     }
                 }
-                HStack(spacing: MekaSpace.l) {
-                    Button("Done") { model.complete(task.id) } // ⌘↩ lives in the Today menu
-                    if task.isRepeating {
-                        Button("Skip") { model.skip(task.id) }
-                    }
-                    Button("Tomorrow") { model.snooze(task.id) }
-                    if !task.isRepeating {
-                        Button("Someday") { model.moveToSomeday(task.id) }
-                    }
-                    Button("Delete", role: .destructive) { model.delete(task.id) }
-                }
-                .buttonStyle(MekaPressStyle())
-                .font(MekaType.itemTitle)
-                .foregroundStyle(palette.accent)
+                DetailActionPills(task: task, palette: palette).staggeredAppear(5)
             } else {
                 Spacer()
                 Text("Select something to see it here.")

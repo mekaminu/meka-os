@@ -64,10 +64,10 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
     val conflicts by core.conflicts.collectAsState()
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val actions = todayActions(core, scope, { selectedId }) { selectedId = it }
+    val undo = rememberEventUndo()
+    val actions = todayActions(core, scope, { selectedId }, { selectedId = it }, undo)
     val selected = today.needsYou.map { it.task }.firstOrNull { it.id == selectedId }
     var showAfterWork by rememberSaveable { mutableStateOf(false) }
-    val undo = rememberEventUndo()
     val app = LocalContext.current.applicationContext as MekaApplication
     val openAfterWork by app.openAfterWork.collectAsState()
     LaunchedEffect(openAfterWork) {

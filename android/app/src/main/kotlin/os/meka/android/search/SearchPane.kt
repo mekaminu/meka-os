@@ -154,7 +154,7 @@ fun SearchPane(core: MekaCore, onClose: () -> Unit, openItem: (OpenItem) -> Unit
         }
 
         // An open task's detail springs up over the results; it follows edits (and closes when the task leaves).
-        val actions = todayActions(core, scope, { selectedId }) { selectedId = it }
+        val actions = todayActions(core, scope, { selectedId }, { selectedId = it })
         val selected = v.hits.firstOrNull { it.id == selectedId && it.target == SearchTarget.TASK }?.task
         var shown by remember { mutableStateOf(selected) }
         if (selected != null) shown = selected

@@ -298,6 +298,19 @@ class MekaCore(
     }
     suspend fun restore(taskId: String) = onCore { tasks.restore(taskId) }
 
+    // ---- Task detail: When and Notes (Fold review 2026-10-08, item 8) ----
+
+    /** The When row for [task]: its day, optional time, the chips and where "Add a time" starts. Pure. */
+    fun taskWhen(task: os.meka.core.domain.Task): os.meka.core.domain.TaskWhenView =
+        os.meka.core.domain.TaskWhenRules.view(task, nowMs(), ZoneCalendar(timeZone))
+    /** Puts the task on local [day] (today or later) at [minuteOfDay], or with no time when null. */
+    suspend fun setWhen(taskId: String, day: Long, minuteOfDay: Int?) = onCore { tasks.setWhen(taskId, day, minuteOfDay) }
+    /** For Swift: [setWhen] with -1 for no time. */
+    suspend fun setWhenMinute(taskId: String, day: Long, minuteOfDay: Int) =
+        onCore { tasks.setWhen(taskId, day, minuteOfDay.takeIf { it >= 0 }) }
+    /** The task's notes; blank clears them. */
+    suspend fun setNotes(taskId: String, notes: String) = onCore { tasks.setNotes(taskId, notes) }
+
     // ---- Repeating tasks and routines ----
 
     /** The Repeat picker for a task: "Doesn't repeat" and the presets for its day, the current one selected. */

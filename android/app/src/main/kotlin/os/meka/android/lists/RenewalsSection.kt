@@ -184,7 +184,7 @@ private fun ChipRow(label: String?, chips: @Composable () -> Unit) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DayPickerDialog(initialDay: Long, onPick: (Long) -> Unit, onDismiss: () -> Unit) {
+internal fun DayPickerDialog(initialDay: Long, onPick: (Long) -> Unit, onDismiss: () -> Unit) {
     val c = Meka.colors
     val base = if (c.background.luminance() < 0.5f) darkColorScheme() else lightColorScheme()
     val scheme = base.copy(

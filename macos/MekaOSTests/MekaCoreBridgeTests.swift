@@ -335,4 +335,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NeedsYouStackRules.shared.EMPTY_LINE, "Nothing needs you")
         XCTAssertEqual(NeedsYouStackRules.shared.EMPTY_CAPTION, "Approvals, replies and decisions land here.")
     }
+
+    /// The task detail's When row (Fold review 2026-10-08, item 8): labels, steps and the undo line reach Swift.
+    func testTaskWhenRulesReachSwift() {
+        XCTAssertEqual(TaskWhenRules.shared.label(day: 100, minute: KotlinInt(int: 870), today: 100), "Today · 14:30")
+        XCTAssertEqual(TaskWhenRules.shared.label(day: 101, minute: nil, today: 100), "Tomorrow")
+        XCTAssertEqual(TaskWhenRules.shared.step(minute: 540, steps: 1), 555)
+        XCTAssertEqual(TaskWhenRules.shared.suggestedMinute(day: 101, today: 100, nowMinute: 600), 540)
+        XCTAssertEqual(TaskWhenRules.shared.deletedLine(title: "Book dentist"), "Deleted “Book dentist”")
+    }
 }

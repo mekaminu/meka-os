@@ -786,7 +786,27 @@ final class CoreModel {
     }
 
     func rename(_ id: String, to title: String) { run { try await $0.rename(taskId: id, title: title) } }
-    func delete(_ id: String) { selectedID = nil; run { try await $0.delete(taskId: id) } }
+    /// Delete gives an undo bar ("Deleted “Buy milk”" · Undo), not a dialog.
+    func delete(_ id: String) {
+        let title = allTasks.first { $0.id == id }?.title
+        selectedID = nil
+        run { try await $0.delete(taskId: id) }
+        if let title { offerEventUndo(TaskWhenRules.shared.deletedLine(title: title), .restoreTask(id)) }
+    }
+
+    // MARK: Task detail: When and Notes (Fold review 2026-10-08, item 8)
+
+    /// The When row for a task: its day, optional time, chips and where "Add a time" starts (pure, in the core).
+    func taskWhen(_ task: MekaTask) -> TaskWhenView? { core?.taskWhen(task: task) }
+
+    /// Puts the task on a local epoch day, at minutes past midnight or with no time (nil).
+    func setWhen(_ id: String, day: Int64, minute: Int?) {
+        MekaHaptics.tick()
+        let m = Int32(minute ?? -1)
+        run { try await $0.setWhenMinute(taskId: id, day: day, minuteOfDay: m) }
+    }
+
+    func setNotes(_ id: String, _ notes: String) { run { try await $0.setNotes(taskId: id, notes: notes) } }
     func resolve(_ choice: ConflictChoice, with option: String) { run { try await $0.resolve(choice: choice, chosenOption: option) } }
     // MARK: Repeating tasks and routines
 
@@ -951,6 +971,7 @@ final class CoreModel {
         MekaHaptics.light()
         switch action {
         case .deleteTask(let id): run { try await $0.delete(taskId: id) }
+        case .restoreTask(let id): run { try await $0.restore(taskId: id) }
         case .showEvent(let id): run { try await $0.showEvent(eventId: id) }
         case .unmakeTask(let id): run { try await $0.undoAllDayTask(eventId: id) }
         case .showCalendar(let key): run { try await $0.showCalendarOnToday(calendarKey: key) }
@@ -1063,6 +1084,8 @@ final class CoreModel {
 struct EventUndoOffer: Identifiable, Equatable {
     enum Action: Equatable {
         case deleteTask(String)
+        /// Delete in the task detail: the task comes back.
+        case restoreTask(String)
         case showEvent(String)
         /// "Make it a task" on an all-day entry: the task goes, the entry comes back.
         case unmakeTask(String)
