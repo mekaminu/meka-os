@@ -1,4 +1,5 @@
 @preconcurrency import MekaKit
+import AppKit
 import SwiftUI
 
 /// Ask MEKA on the Mac (build plan V1, AI layer slice 3b): the field asks MEKA in your own words (Return asks), with
@@ -7,6 +8,12 @@ import SwiftUI
 /// a look. Asking shows the question, a thinking shimmer, then the answer's lines fading in one after another and up
 /// to three cards rising under them; a card does nothing until clicked (light haptic), then leaves and the shell's
 /// undo bar rises with what it did and Undo (which brings the card back). Reduced motion: cross-fades.
+///
+/// Talk to MEKA (V1 voice slice 3): the mic beside the field (or ⌥Space) starts a spoken conversation (`TalkController`;
+/// macOS asks for the microphone and speech recognition the first time). The orb's panel unfolds under the field with
+/// the expand spring: what it's doing, the live transcript and what MEKA said; answers show here as typed ones, and a
+/// spoken yes folds the cards away with one undo bar. Clicking the orb while MEKA speaks interrupts it; otherwise it
+/// ends. It stops when Ask leaves the screen or MEKA isn't the app in front.
 struct AskMekaSection: View {
     let palette: MekaPalette
     @Environment(CoreModel.self) private var model
@@ -18,6 +25,7 @@ struct AskMekaSection: View {
     @State private var replyN = 0
     @State private var done: Set<Int> = []
     @FocusState private var focused: Bool
+    @State private var talk = TalkController()
 
     private var canAsk: Bool { model.aiStatus?.canAsk ?? true }
 
@@ -38,6 +46,13 @@ struct AskMekaSection: View {
                     .padding(.horizontal, MekaSpace.l)
                     .frame(minHeight: 44)
                     .background(palette.surfaceRaised, in: Capsule())
+                    // The mic: starts talking (or ends it), the orb's resting look.
+                    Button(action: toggleTalk) {
+                        VoiceOrbView(phase: .ended, level: 0, palette: palette, size: 44)
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .help("Talk to MEKA (⌥Space)")
+                    .accessibilityLabel(talk.active ? "Stop talking to MEKA" : "Talk to MEKA")
                     Button("Ask", action: ask)
                         .buttonStyle(MekaPressStyle())
                         .font(MekaType.itemMeta)
@@ -76,15 +91,28 @@ struct AskMekaSection: View {
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.aiStatus?.line)
                 .padding(.leading, MekaSpace.xxs)
+            if talk.active || talk.problem != nil {
+                TalkPanel(talk: talk, palette: palette) { MekaHaptics.tick(); talk.tapOrb() }
+                    .padding(.top, MekaSpace.s)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
             conversation
                 .padding(.top, MekaSpace.s)
                 .padding(.bottom, MekaSpace.l)
                 .accessibilityElement(children: .contain)
         }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: talk.active || talk.problem != nil)
         .task { await model.refreshAiStatus() }
         .onChange(of: model.askUndone) { _, u in
-            if let u { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { _ = done.remove(u.card) } }
+            if let u { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { done.subtract(u.cards) } }
         }
+        .onAppear {
+            wireTalk()
+            takeTalkRequest()
+        }
+        .onChange(of: model.talkRequested) { _, asked in if asked { takeTalkRequest() } }
+        .onDisappear { talk.stop() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in talk.stop() }
     }
 
     private var sendable: Bool { AskRules.shared.question(text: text) != nil && thinking == nil }
@@ -146,13 +174,102 @@ struct AskMekaSection: View {
         }
     }
 
+    private func wireTalk() {
+        talk.attach(model)
+        talk.onAnswer = { q, out in
+            let r: AskReplyView = switch onEnum(of: out) {
+            case .answered(let a): AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil)
+            case .unavailable(let u): AskReplyView(lines: [], cards: [], unavailable: u.line)
+            }
+            withAnimation(MekaMotion.appear(reduced: reduceMotion)) {
+                question = q
+                reply = r
+                replyN += 1
+                done = []
+                thinking = nil
+            }
+        }
+        talk.indicesOf = { cards in
+            let shown = reply?.cards ?? []
+            return cards.compactMap { c in shown.firstIndex(of: c) }
+        }
+        talk.onDid = { indices in
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) { done.formUnion(indices) }
+        }
+    }
+
+    /// ⌥Space: start talking, or end the conversation that's running.
+    private func takeTalkRequest() {
+        guard model.talkRequested else { return }
+        model.talkRequested = false
+        toggleTalk()
+    }
+
+    private func toggleTalk() {
+        if talk.active {
+            MekaHaptics.tick()
+            talk.stop()
+        } else {
+            guard canAsk else { return }
+            focused = false
+            MekaHaptics.light()
+            talk.start()
+        }
+    }
+
     private func tap(_ index: Int, _ card: AskCard) {
+        talk.cardTapped(card)
         withAnimation(MekaMotion.expand(reduced: reduceMotion)) { _ = done.insert(index) }
         Task {
             if !(await model.doAsk(card, index: index)) {
                 withAnimation(MekaMotion.expand(reduced: reduceMotion)) { _ = done.remove(index) }
             }
         }
+    }
+}
+
+/// The orb (click: interrupt while MEKA speaks, else end), its line, the live transcript and MEKA's words; or why it
+/// can't listen.
+private struct TalkPanel: View {
+    let talk: TalkController
+    let palette: MekaPalette
+    let onOrb: () -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    private var line: String { talk.problem?.macLine ?? TalkOrb.shared.label(phase: talk.phase, mac: true) }
+
+    var body: some View {
+        VStack(spacing: MekaSpace.xs) {
+            Button(action: onOrb) {
+                VoiceOrbView(phase: talk.phase, level: talk.level, palette: palette)
+            }
+            .buttonStyle(MekaPressStyle())
+            .disabled(!talk.active)
+            .accessibilityLabel("MEKA, \(TalkOrb.shared.label(phase: talk.phase, mac: true))")
+            Text(line)
+                .font(MekaType.caption)
+                .foregroundStyle(talk.problem != nil ? palette.accent : palette.textTertiary)
+                .multilineTextAlignment(.center)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+            if !talk.heard.isEmpty && talk.problem == nil {
+                Text(talk.heard)
+                    .font(MekaType.body)
+                    .foregroundStyle(talk.phase == .listening ? palette.textSecondary : palette.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(4)
+            }
+            if !talk.said.isEmpty && talk.phase == .speaking {
+                Text(talk.said)
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.accent)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(4)
+                    .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
     }
 }
 

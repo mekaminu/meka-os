@@ -217,4 +217,40 @@ class TalkTest {
         assertTrue(TalkProblem.NO_ON_DEVICE.line.contains("nothing is sent away"))
         assertTrue(TalkProblem.NO_PERMISSION.line.contains("microphone"))
     }
+
+    @Test
+    fun theMacSaysClickAndWhereToLookAndMeasuresItsOwnMicrophone() {
+        assertEquals("Click to interrupt", TalkOrb.label(TalkPhase.SPEAKING, mac = true))
+        assertEquals("Click the mic to talk", TalkOrb.label(TalkPhase.ENDED, mac = true))
+        assertEquals("Listening…", TalkOrb.label(TalkPhase.LISTENING, mac = true))
+        TalkProblem.entries.forEach { p ->
+            assertTrue(p.macLine.isNotBlank())
+            assertTrue("This phone" !in p.macLine && "Tap" !in p.macLine && "Apps →" !in p.macLine, p.name)
+        }
+        assertTrue(TalkProblem.NO_ON_DEVICE.macLine.contains("nothing is sent away"))
+        assertTrue(TalkProblem.NO_PERMISSION.macLine.contains("System Settings"))
+        // The Mac's level comes from its own buffers in dB full scale.
+        assertEquals(0f, TalkOrb.levelDbfs(-160f))
+        assertEquals(0f, TalkOrb.levelDbfs(-50f))
+        near(0.5f, TalkOrb.levelDbfs(-32f))
+        assertEquals(1f, TalkOrb.levelDbfs(-3f))
+        assertEquals(0f, TalkOrb.levelDbfs(Float.NaN))
+        assertEquals(-160f, TalkOrb.dbfs(0f))
+        near(0f, TalkOrb.dbfs(1f))
+        near(-20f, TalkOrb.dbfs(0.1f))
+    }
+
+    @Test
+    fun theMacEndsAQuestionAfterAPauseAndGivesUpOnSilence() {
+        val t0 = 1_000_000L
+        assertEquals(ListenStep.KEEP, TalkEndpoint.step(t0, false, t0, t0 + 3_000))
+        assertEquals(ListenStep.SILENCE, TalkEndpoint.step(t0, false, t0, t0 + TalkEndpoint.NOTHING_MS))
+        // Words came at 2 s: still talking at 3 s, done once 1.5 s pass with nothing new.
+        assertEquals(ListenStep.KEEP, TalkEndpoint.step(t0, true, t0 + 2_000, t0 + 3_000))
+        assertEquals(ListenStep.FINISH, TalkEndpoint.step(t0, true, t0 + 2_000, t0 + 3_500))
+        // Once words came, a long wait is never silence: it's the end of the question.
+        assertEquals(ListenStep.FINISH, TalkEndpoint.step(t0, true, t0 + 2_000, t0 + 20_000))
+        // Talking on and on stops at the recogniser's limit.
+        assertEquals(ListenStep.FINISH, TalkEndpoint.step(t0, true, t0 + 55_000, t0 + TalkEndpoint.LONGEST_MS))
+    }
 }

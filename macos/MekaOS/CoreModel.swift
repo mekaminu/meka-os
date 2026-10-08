@@ -898,6 +898,37 @@ final class CoreModel {
         }
     }
 
+    // MARK: Talk to MEKA (V1 voice, slice 3)
+
+    /// ⌥Space (the Talk to MEKA command): Ask comes forward and the conversation starts, or ends if one is running.
+    /// Ask's section takes the request (sets it back to false) when it is on screen.
+    var talkRequested = false
+
+    func requestTalk(reduced: Bool) {
+        go(to: .ask, reduced: reduced)
+        talkRequested = true
+    }
+
+    /// One spoken question with the conversation so far: only the question and the history cross into the core, once.
+    /// Nil when not connected (the conversation says so and ends).
+    func talk(_ question: String, history: [TalkTurn]) async -> AskOutcome? {
+        guard let core else { return nil }
+        let out = try? await core.talk(question: question, history: history)
+        await refreshAiStatus()
+        return out
+    }
+
+    /// A spoken yes: does the cards exactly as clicking them would (`MekaCore.doTalk`), then one undo bar takes them
+    /// all back. The cards cross into the core once; `indices` are their places in the answer on screen.
+    func doTalk(_ cards: [AskCard], indices: [Int]) async -> TalkDid? {
+        guard let core else { return nil }
+        guard let did = try? await core.doTalk(cards: cards) else { return nil }
+        if !did.done.isEmpty { MekaHaptics.light() }
+        let undos = did.undos
+        offerEventUndo(did.barLine, undos.isEmpty ? nil : .talk(undos, indices))
+        return did
+    }
+
     // MARK: Weekly review
 
     /// Shows the week `offset` weeks from this one (0 this week, -1 last week, back to -12); a tick haptic.
@@ -1262,8 +1293,11 @@ final class CoreModel {
         case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
         case .ask(let done, let card):
             guard let undo = done.undo else { break }
-            askUndone = AskUndone(n: (askUndone?.n ?? 0) + 1, card: card)
+            askUndone = AskUndone(n: (askUndone?.n ?? 0) + 1, cards: [card])
             run { _ = try await $0.undoAsk(undo: undo) }
+        case .talk(let undos, let cards):
+            askUndone = AskUndone(n: (askUndone?.n ?? 0) + 1, cards: Set(cards))
+            run { _ = try await $0.undoTalk(undos: undos) }
         }
     }
 
@@ -1391,10 +1425,10 @@ struct AskReplyView {
     let unavailable: String?
 }
 
-/// An Ask card taken back with Undo: `n` counts, `card` is its place in the answer.
+/// Ask cards taken back with Undo: `n` counts, `cards` are their places in the answer.
 struct AskUndone: Equatable {
     let n: Int
-    let card: Int
+    let cards: Set<Int>
 }
 
 /// What the calendar-action undo bar offers.
@@ -1422,6 +1456,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case planBlocks([String])
         /// An Ask card (V1 AI layer, slice 3b): what it did is taken back; the Int is the card's place in the answer.
         case ask(AskDone, Int)
+        /// A spoken yes (Talk to MEKA): everything it did is taken back, newest first; the Ints are the cards' places.
+        case talk([AskUndo], [Int])
     }
 
     let id = UUID()

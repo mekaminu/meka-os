@@ -387,13 +387,26 @@ object TalkFlow {
  */
 data class VoiceCandidate(val name: String, val language: String, val quality: Int, val needsNetwork: Boolean = false, val installed: Boolean = true)
 
-/** Why MEKA can't listen, said on screen (not aloud) and the conversation ends. */
-enum class TalkProblem(val line: String) {
-    NO_PERMISSION("MEKA needs the microphone to hear you. Allow it when asked, or in Settings → Apps → Meka → Permissions."),
-    NO_ON_DEVICE("This phone can't recognise speech on the device, so MEKA won't listen: nothing is sent away to be transcribed."),
-    LANGUAGE_MISSING("This phone is fetching English for speech on the device. Try again in a minute."),
-    BUSY("The microphone is busy. Try again in a moment."),
-    FAILED("Couldn't hear that. Tap the mic to try again."),
+/**
+ * Why MEKA can't listen, said on screen (not aloud) and the conversation ends: [line] on the Fold, [macLine] on the Mac
+ * (System Settings, Dictation's on-device English, "click").
+ */
+enum class TalkProblem(val line: String, val macLine: String) {
+    NO_PERMISSION(
+        "MEKA needs the microphone to hear you. Allow it when asked, or in Settings → Apps → Meka → Permissions.",
+        "MEKA needs the microphone and speech recognition to hear you. Allow both in System Settings → Privacy & Security.",
+    ),
+    NO_ON_DEVICE(
+        "This phone can't recognise speech on the device, so MEKA won't listen: nothing is sent away to be transcribed.",
+        "This Mac can't recognise English on the device yet, so MEKA won't listen: nothing is sent away to be transcribed. " +
+            "Turning on Dictation in System Settings → Keyboard fetches it.",
+    ),
+    LANGUAGE_MISSING(
+        "This phone is fetching English for speech on the device. Try again in a minute.",
+        "This Mac is fetching English for speech on the device. Try again in a minute.",
+    ),
+    BUSY("The microphone is busy. Try again in a moment.", "The microphone is busy. Try again in a moment."),
+    FAILED("Couldn't hear that. Tap the mic to try again.", "Couldn't hear that. Click the mic to try again."),
 }
 
 object TalkVoice {
@@ -452,11 +465,61 @@ object TalkOrb {
     }
 
     /** What the orb says under it (and to screen readers). */
-    fun label(phase: TalkPhase): String = when (phase) {
-        TalkPhase.LISTENING -> "Listening…"
-        TalkPhase.THINKING -> "Thinking…"
-        TalkPhase.DOING -> "Doing it…"
-        TalkPhase.SPEAKING -> "Tap to interrupt"
-        TalkPhase.ENDED -> "Tap the mic to talk"
+    fun label(phase: TalkPhase): String = label(phase, mac = false)
+
+    /** The same, worded for the Mac when [mac] ("Click to interrupt"). */
+    fun label(phase: TalkPhase, mac: Boolean): String {
+        val press = if (mac) "Click" else "Tap"
+        return when (phase) {
+            TalkPhase.LISTENING -> "Listening…"
+            TalkPhase.THINKING -> "Thinking…"
+            TalkPhase.DOING -> "Doing it…"
+            TalkPhase.SPEAKING -> "$press to interrupt"
+            TalkPhase.ENDED -> "$press the mic to talk"
+        }
+    }
+
+    /**
+     * The Mac's microphone level: the recogniser there reports none, so the app measures each audio buffer's loudness
+     * in dB full scale (0 is the loudest a sample can be) and this reads it as 0 (quiet room) … 1 (speaking up close).
+     */
+    const val QUIET_DBFS = -50f
+    const val LOUD_DBFS = -14f
+
+    fun levelDbfs(db: Float): Float =
+        if (db.isNaN()) 0f else ((db - QUIET_DBFS) / (LOUD_DBFS - QUIET_DBFS)).coerceIn(0f, 1f)
+
+    /** A buffer's RMS ([rms], 0 … 1 linear) in dB full scale, never below -160 (silence). */
+    fun dbfs(rms: Float): Float = if (rms <= 1e-8f || rms.isNaN()) -160f else (20.0 * kotlin.math.log10(rms.toDouble())).toFloat().coerceAtLeast(-160f)
+}
+
+/** What the Mac does with the microphone at each moment while listening ([TalkEndpoint.step]). */
+enum class ListenStep {
+    /** Keep listening. */
+    KEEP,
+    /** Meka has stopped talking: take what was heard as the question. */
+    FINISH,
+    /** Nothing was said: the conversation ends quietly (as [TalkFlow.silence]). */
+    SILENCE,
+}
+
+/**
+ * When a spoken question is over, for the Mac (non-AI, pure): Android's recogniser decides that itself, the Mac's
+ * doesn't, so the app asks this a few times a second. Nothing heard for [NOTHING_MS] is silence; once words came, a
+ * pause of [PAUSE_MS] (no new words) ends the question, and a question is never longer than [LONGEST_MS] (the on-device
+ * recogniser's own limit is about a minute).
+ */
+object TalkEndpoint {
+    const val PAUSE_MS = 1_500L
+    const val NOTHING_MS = 8_000L
+    const val LONGEST_MS = 55_000L
+    /** How often the Mac asks. */
+    const val TICK_MS = 100L
+
+    /** [startedMs] when listening began, [lastWordsMs] when the transcript last changed (ignored until [heardAnything]). */
+    fun step(startedMs: Long, heardAnything: Boolean, lastWordsMs: Long, nowMs: Long): ListenStep = when {
+        !heardAnything -> if (nowMs - startedMs >= NOTHING_MS) ListenStep.SILENCE else ListenStep.KEEP
+        nowMs - lastWordsMs >= PAUSE_MS || nowMs - startedMs >= LONGEST_MS -> ListenStep.FINISH
+        else -> ListenStep.KEEP
     }
 }

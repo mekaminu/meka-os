@@ -59,6 +59,9 @@ struct MekaOSApp: App {
                     .keyboardShortcut("f", modifiers: .command)
                 Button("Command Bar…") { model.showCommandBar.toggle() }
                     .keyboardShortcut("k", modifiers: .command)
+                // Talk to MEKA (V1 voice slice 3): Ask comes forward and the conversation starts (again: it ends).
+                Button("Talk to MEKA") { model.requestTalk(reduced: MotionSetting.reduced) }
+                    .keyboardShortcut(.space, modifiers: .option)
             }
             CommandMenu("Go") {
                 ForEach(ShellDestination.allCases) { d in

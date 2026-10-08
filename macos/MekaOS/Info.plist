@@ -16,6 +16,10 @@
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
     <key>MekaSyncURL</key>
     <string>$(MEKA_SYNC_URL)</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>MEKA listens while you talk to it. Your voice is turned into words on this Mac and never recorded or sent away.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>MEKA turns what you say into words on this Mac only, so you can talk to it. Nothing is sent to Apple or kept.</string>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>

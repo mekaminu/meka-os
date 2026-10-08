@@ -496,4 +496,38 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(back.boolValue)
         XCTAssertNil(core.today.value.upNext)
     }
+
+    /// V1 voice, slice 3: the Mac's talk rules, the flow's effects and a spoken yes with one undo reach Swift.
+    func testTalkToMekaOnTheMac() async throws {
+        XCTAssertEqual(TalkOrb.shared.label(phase: .speaking, mac: true), "Click to interrupt")
+        XCTAssertTrue(TalkProblem.noOnDevice.macLine.contains("nothing is sent away"))
+        XCTAssertEqual(TalkOrb.shared.levelDbfs(db: -50), 0)
+        XCTAssertEqual(TalkOrb.shared.levelDbfs(db: -3), 1)
+        XCTAssertEqual(TalkEndpoint.shared.step(startedMs: 0, heardAnything: false, lastWordsMs: 0, nowMs: 9_000), .silence)
+        XCTAssertEqual(TalkEndpoint.shared.step(startedMs: 0, heardAnything: true, lastWordsMs: 2_000, nowMs: 3_000), .keep)
+        XCTAssertEqual(TalkEndpoint.shared.step(startedMs: 0, heardAnything: true, lastWordsMs: 2_000, nowMs: 3_600), .finish)
+        // The Mac's voice qualities: default 1, enhanced 2, premium 3; British first.
+        let best = TalkVoice.shared.best(voices: [
+            VoiceCandidate(name: "us.premium", language: "en-US", quality: 3, needsNetwork: false, installed: true),
+            VoiceCandidate(name: "gb.enhanced", language: "en-GB", quality: 2, needsNetwork: false, installed: true),
+            VoiceCandidate(name: "gb.default", language: "en-GB", quality: 1, needsNetwork: false, installed: true),
+        ])
+        XCTAssertEqual(best?.name, "gb.enhanced")
+        let start = TalkFlow.shared.start()
+        XCTAssertEqual(start.session.phase, .listening)
+        XCTAssertTrue(start.effects.first is TalkEffectListen)
+
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "talk-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let card = AskRules.shared.cardOf(p: AskProposalAddTask(title: "Milk", day: nil, minute: nil), today: 0)
+        let did = try await core.doTalk(cards: [card])
+        XCTAssertEqual(did.barLine, "Added “Milk”")
+        XCTAssertEqual(core.today.value.upNext?.title, "Milk")
+        let back = try await core.undoTalk(undos: did.undos)
+        XCTAssertTrue(back.boolValue)
+        XCTAssertNil(core.today.value.upNext)
+    }
 }

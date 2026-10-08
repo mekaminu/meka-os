@@ -40,6 +40,9 @@ targets:
         LSApplicationCategoryType: public.app-category.productivity
         NSHumanReadableCopyright: ""
         MekaSyncURL: $(MEKA_SYNC_URL)
+        # Talk to MEKA (V1 voice slice 3): speech is recognised on the Mac only; nothing is recorded or sent away.
+        NSMicrophoneUsageDescription: MEKA listens while you talk to it. Your voice is turned into words on this Mac and never recorded or sent away.
+        NSSpeechRecognitionUsageDescription: MEKA turns what you say into words on this Mac only, so you can talk to it. Nothing is sent to Apple or kept.
         # Self-updating phone app: tools/publish-fold.sh opens mekaos://publish-fold-update?apk=… (FoldUpdateSheet).
         CFBundleURLTypes:
           - CFBundleURLName: os.meka.mac.publish
@@ -57,6 +60,8 @@ targets:
       properties:
         # Not sandboxed for Developer ID (ADR-010), but only sandbox-compatible APIs are used.
         com.apple.security.network.client: true
+        # Talk to MEKA: the hardened runtime needs this for the microphone.
+        com.apple.security.device.audio-input: true
     dependencies:
       - framework: ../core/facade/build/XCFrameworks/release/MekaKit.xcframework
         embed: false
