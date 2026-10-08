@@ -73,14 +73,21 @@ object MotionPrefs {
     }
 
     /** The phone's "Remove animations": animator duration scale 0. */
-    fun systemOff(context: Context): Boolean =
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    fun systemOff(context: Context): Boolean = animatorScale(context) == 0f
+
+    /** Developer options → Animator duration scale (1 when never changed; 0 is "Remove animations"). */
+    fun animatorScale(context: Context): Float =
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+
+    /** The phone's power saving (Samsung's included). Reported in Motion check; it never stills MEKA. */
+    fun powerSave(context: Context): Boolean =
+        (context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager)?.isPowerSaveMode == true
 }
 
 /**
  * Follows MEKA's own Motion setting (Appearance → Motion), not the phone's animator scale: the activity's recomposer
- * plays animations at full speed (MotionClock.kt) and Off means cross-fades only. With nothing chosen, the phone's
- * "Remove animations" keeps MEKA still and Today offers a one-time card.
+ * plays animations at full speed (MotionClock.kt) and Off means cross-fades only. With nothing chosen MEKA plays
+ * Expressive whatever the phone's "Remove animations" says (Meka, 2026-10-08); only an explicit Off keeps it still.
  * Switching theme blends every colour across instead of snapping. Every clickable presses in while held
  * ([MekaPressIndication]).
  */

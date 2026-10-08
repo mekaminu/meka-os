@@ -65,7 +65,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -214,7 +217,9 @@ fun TodayRoute(
     // App open: greeting fades up, then each section 40 ms apart. Plays once per launch (not again on fold/unfold);
     // anything arriving later uses animateItem.
     var introPlayed by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
+    // Appearance → Play the opening bumps this: Today's list is rebuilt so its stagger plays again.
+    var openings by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(openings) {
         if (!introPlayed) {
             // The longest (Expressive) span, so the intro never ends before its last section has started.
             delay((MotionMath.staggerSpanMs(TODAY_SECTIONS, false, expressive = true) + MekaMotion.appearDurationMs).toLong())
@@ -228,6 +233,24 @@ fun TodayRoute(
     val ringReduced = Meka.reducedMotion
     var ringPlay by rememberSaveable {
         mutableStateOf(DayRingOpen.claim(ringContext, LocalDate.now().toEpochDay(), ringReduced))
+    }
+    // The first open of a new day plays in full even when MEKA stayed in memory overnight: claimed on every resume,
+    // not only at launch (Meka, 2026-10-08: he never saw it).
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (DayRingOpen.claim(ringContext, LocalDate.now().toEpochDay(), ringReduced) == DayRingPlay.FULL) {
+            ringPlay = DayRingPlay.FULL
+        }
+    }
+    // Appearance → Play the opening: the Day ring, its tiles, the greeting and Today's stagger play again on demand.
+    val replayApp = ringContext.applicationContext as? MekaApplication
+    val replay = replayApp?.playOpening?.collectAsState()?.value ?: false
+    LaunchedEffect(replay) {
+        if (replay) {
+            replayApp?.playOpening?.value = false
+            ringPlay = if (ringReduced) DayRingPlay.STILL else DayRingPlay.FULL
+            introPlayed = false
+            openings++
+        }
     }
 
     // Calendar actions: swipe an event right for a prep task, left to hide it from my day; an undo bar rises.
@@ -270,7 +293,7 @@ fun TodayRoute(
                 twoPane,
                 detailShare = if (twoPane) CommandCentreRules.sideShare(layout) else CommandCentreRules.SIDE_SHARE_TWO,
                 list = { m ->
-                    TodayPane(today, sync, actions, m, connect, openPlan, !introPlayed, rowMotion,
+                    key(openings) { TodayPane(today, sync, actions, m, connect, openPlan, !introPlayed, rowMotion,
                         ringPlay = ringPlay, ringPlayed = { ringPlay = DayRingPlay.STILL },
                         listsNeedsYou = CommandCentreRules.todayListsNeedsYou(layout),
                         shutdown = shutdown, openShutdown = { showShutdown = true }, shutdownOpen = showShutdown,
@@ -280,7 +303,7 @@ fun TodayRoute(
                         openEvent = { eventOpen = it }, eventHandlers = eventHandlers,
                         now = if (twoPane) null else nowView, nowHandlers = nowHandlers,
                         ticker = ticker, tickerMode = tickerMode, core = core,
-                        openStory = { id -> newsOpen = id }, openMatch = { eventOpen = it })
+                        openStory = { id -> newsOpen = id }, openMatch = { eventOpen = it }) }
                 },
                 detail = { m ->
                     CommandSide(

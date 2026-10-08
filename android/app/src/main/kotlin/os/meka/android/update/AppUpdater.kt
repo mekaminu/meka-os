@@ -51,6 +51,11 @@ class AppUpdater(private val app: MekaApplication) {
     @Volatile private var pendingPrompt: Intent? = null
 
     val installedCode: Long by lazy { app.packageManager.getPackageInfo(app.packageName, 0).longVersionCode }
+    val installedName: String by lazy { app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "0.1.$installedCode" }
+
+    /** The newest published build's number once asked (null until then, or offline): Appearance's build line. */
+    private val _latestCode = MutableStateFlow<Long?>(null)
+    val latestCode: StateFlow<Long?> = _latestCode.asStateFlow()
 
     /** Looks for a newer build at most every [CHECK_EVERY_MS] unless [force]d. Offline: leaves the card as it is. */
     suspend fun check(force: Boolean = false) {
@@ -59,6 +64,7 @@ class AppUpdater(private val app: MekaApplication) {
         if (_state.value is UpdateState.Downloading || _state.value is UpdateState.Confirming) return
         lastCheckMs = now
         val latest = app.core.latestRelease() ?: return
+        _latestCode.value = latest.versionCode
         val offer = AppUpdateRules.offer(latest.build, installedCode, prefs.getLong(KEY_LATER, -1).takeIf { it > 0 })
         val current = _state.value
         _state.value = when {

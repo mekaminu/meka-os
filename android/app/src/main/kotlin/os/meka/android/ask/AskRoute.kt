@@ -24,6 +24,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +72,12 @@ import os.meka.android.shell.ShellNav
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.MotionChoice
+import os.meka.core.domain.MotionCheckRules
+import os.meka.core.domain.MotionRules
+import os.meka.core.domain.AppUpdateRules
+import os.meka.android.MekaApplication
+import os.meka.android.designsystem.MotionControl
+import os.meka.android.designsystem.MotionPrefs
 import os.meka.android.today.BriefPane
 import os.meka.android.today.CalendarsPane
 import os.meka.android.today.ShutdownPane
@@ -87,7 +95,11 @@ import os.meka.core.facade.MekaCore
  * travels into the title of what it opens (and back). Reduced motion cross-fades.
  */
 @Composable
-fun AskRoute(core: MekaCore, connected: Boolean, openPlace: (ShellDestination) -> Unit, openItem: (OpenItem) -> Unit) {
+fun AskRoute(
+    core: MekaCore, connected: Boolean, openPlace: (ShellDestination) -> Unit, openItem: (OpenItem) -> Unit,
+    /** Appearance → Play the opening: back to Today, which replays its opening. */
+    playOpening: () -> Unit = {},
+) {
     val lists by core.listsView.collectAsState()
     val work by core.workMode.collectAsState()
     // Appearance unfolds its three choices in its own row.
@@ -126,7 +138,7 @@ fun AskRoute(core: MekaCore, connected: Boolean, openPlace: (ShellDestination) -
                 itemsIndexed(section.items, key = { _, it -> it.name }) { i, item ->
                     val step = ShellNav.moreRowStep(s, i)
                     if (ShellNav.unfoldsInPlace(item)) {
-                        AppearanceRow(appearanceOpen, Modifier.appear(rememberAppearance(step)), openTopics = { pane = MoreItem.NEWS }) { appearanceOpen = !appearanceOpen }
+                        AppearanceRow(appearanceOpen, Modifier.appear(rememberAppearance(step)), openTopics = { pane = MoreItem.NEWS }, playOpening = playOpening) { appearanceOpen = !appearanceOpen }
                     } else {
                         MoreRow(item, ShellNav.moreLine(item, lists.dueCount, work.atWork), ShellNav.moreLit(item, lists.dueCount),
                             pane == item, Modifier.appear(rememberAppearance(step))) {
@@ -187,7 +199,7 @@ private fun MoreRow(item: MoreItem, line: String, lit: Boolean, paneOpen: Boolea
  * the chips appear at once and colours cross-fade.
  */
 @Composable
-private fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> Unit, toggle: () -> Unit) {
+private fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> Unit, playOpening: () -> Unit, toggle: () -> Unit) {
     val theme = Meka.theme
     val context = LocalContext.current.applicationContext
     val tickerMode = rememberTickerMode()
@@ -232,7 +244,8 @@ private fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> U
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 MotionChoice.entries.forEach { m ->
-                    Chip(m.label, motion.stored == m) { haptics.tick(); motion.set(m) }
+                    // Nothing chosen shows Expressive lit: it is what plays (Meka, 2026-10-08).
+                    Chip(m.label, MotionRules.lit(motion.stored) == m) { haptics.tick(); motion.set(m) }
                 }
             }
             AnimatedContent(
@@ -240,6 +253,7 @@ private fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> U
                 transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
                 label = "motion-line", modifier = Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs),
             ) { line -> Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            MotionCheckSection(motion, playOpening)
             // News ticker (news ticker, slice 2): how the strip under Today's header moves, on this device; Topics
             // opens News (the topics and their sources).
             Text("News ticker", style = MekaType.caption, color = Meka.colors.textSecondary,
@@ -265,7 +279,65 @@ private fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> U
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = openTopics)
                         .padding(MekaSpace.xxs))
             }
+            // The build on this phone (Meka, 2026-10-08), so we can tell whether it has the latest motion work.
+            val app = context as? MekaApplication
+            if (app != null) {
+                val latest by app.updater.latestCode.collectAsState()
+                LaunchedEffect(Unit) { runCatching { app.updater.check() } }
+                AnimatedContent(
+                    targetState = AppUpdateRules.versionLine(app.updater.installedName, app.updater.installedCode, latest),
+                    transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                    label = "build-line", modifier = Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.s),
+                ) { line -> Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            }
         }
+    }
+}
+
+/**
+ * Motion check (Meka, 2026-10-08: "the animation is something I have not seen work"): what MEKA sees on this phone
+ * (its own Motion choice, the phone's animator scale, power saving) and the result; when animations are off the
+ * result is lit and a tap turns MEKA's own Expressive motion on. "Play the opening" goes back to Today and replays
+ * its opening. The values are read each time Appearance unfolds; the result cross-fades as the choice changes.
+ */
+@Composable
+private fun MotionCheckSection(motion: MotionControl, playOpening: () -> Unit) {
+    val context = LocalContext.current.applicationContext
+    val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    val scale = remember { MotionPrefs.animatorScale(context) }
+    val saving = remember { MotionPrefs.powerSave(context) }
+    val check = MotionCheckRules.phone(motion.stored, scale, saving)
+    Text("Motion check", style = MekaType.caption, color = Meka.colors.textSecondary,
+        modifier = Modifier.padding(start = MekaSpace.m, top = MekaSpace.xs))
+    check.rows.forEach { row ->
+        Row(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.m, vertical = 1.dp)) {
+            Text(row.label, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+            Text(row.value, style = MekaType.caption, color = Meka.colors.textSecondary)
+        }
+    }
+    val fix = check.fix
+    AnimatedContent(
+        targetState = check.result,
+        transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+        label = "motion-check", modifier = Modifier.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
+    ) { line ->
+        Text(
+            line, style = MekaType.caption,
+            color = if (fix != null) Meka.colors.accent else Meka.colors.textPrimary,
+            modifier = if (fix != null) Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                .clickable(role = Role.Button) { haptics.tick(); motion.set(fix) } else Modifier,
+        )
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(MotionCheckRules.PLAY_OPENING_LINE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+        Text(MotionCheckRules.PLAY_OPENING, style = MekaType.caption, color = Meka.colors.onAccent,
+            modifier = Modifier.padding(start = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+                .clickable(role = Role.Button) { haptics.light(); playOpening() }
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
     }
 }
 

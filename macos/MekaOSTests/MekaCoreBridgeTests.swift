@@ -416,6 +416,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NeedsYouStackRules.shared.EMPTY_CAPTION, "Approvals, replies and decisions land here.")
     }
 
+    /// Can't see the animations (2026-10-08): the Motion check and the build line reach Swift.
+    func testMotionCheckReachesSwift() {
+        let off = MotionCheckRules.shared.mac(stored: nil, reduceMotion: true, lowPower: false)
+        XCTAssertEqual(off.rows.map(\.label), ["MEKA Motion", "Reduce Motion", "Low Power Mode"])
+        XCTAssertEqual(off.result, "Animations off because the Mac's Reduce Motion is on — click to use MEKA's own setting")
+        XCTAssertEqual(off.fix?.id, "expressive")
+        let on = MotionCheckRules.shared.mac(stored: .expressive, reduceMotion: false, lowPower: false)
+        XCTAssertEqual(on.result, "Animations on · Expressive")
+        XCTAssertNil(on.fix)
+        XCTAssertEqual(MotionCheckRules.shared.PLAY_OPENING, "Play the opening")
+        XCTAssertEqual(AppUpdateRules.shared.versionLine(versionName: "0.1.0", versionCode: 1, latestCode: nil), "MEKA 0.1.0 · build 1")
+    }
+
     /// The task detail's When row (Fold review 2026-10-08, item 8): labels, steps and the undo line reach Swift.
     func testTaskWhenRulesReachSwift() {
         XCTAssertEqual(TaskWhenRules.shared.label(day: 100, minute: KotlinInt(int: 870), today: 100), "Today · 14:30")

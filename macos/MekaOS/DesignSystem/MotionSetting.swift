@@ -3,8 +3,8 @@ import AppKit
 import SwiftUI
 
 /// Appearance → Motion on this Mac (build plan M1, motion pass 2): Expressive · Subtle · Off, kept like the theme.
-/// MEKA follows this, not macOS's Reduce Motion, except while nothing is chosen: then Reduce Motion keeps MEKA still and
-/// Today offers a one-time card (`MotionRules` in core decides). Views read the result from the environment
+/// MEKA follows this, not macOS's Reduce Motion; with nothing chosen it plays Expressive (Meka, 2026-10-08), and only
+/// an explicit Off keeps it still (`MotionRules` in core decides). Views read the result from the environment
 /// (`mekaReduceMotion`, `mekaExpressiveMotion`), set once at each root with `.mekaMotion()`.
 enum MotionSetting {
     static let key = "meka.motion"

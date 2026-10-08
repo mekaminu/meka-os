@@ -139,7 +139,9 @@ private struct AppearanceRow: View {
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: motion)
                 }
                 Spacer()
-                Picker("Motion", selection: $motion) {
+                // Nothing chosen shows Expressive selected: it is what plays (Meka, 2026-10-08).
+                Picker("Motion", selection: Binding(get: { MotionRules.shared.lit(stored: MotionSetting.stored(motion)).id },
+                                                     set: { motion = $0 })) {
                     ForEach(MotionSetting.all, id: \.id) { m in Text(m.label).tag(m.id) }
                 }
                 .pickerStyle(.segmented)
@@ -147,6 +149,7 @@ private struct AppearanceRow: View {
                 .fixedSize()
                 .onChange(of: motion) { MekaHaptics.tick() }
             }
+            MotionCheckView(motion: $motion, palette: palette)
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("News ticker").font(MekaType.caption).foregroundStyle(palette.textSecondary)
@@ -181,11 +184,71 @@ private struct AppearanceRow: View {
                         FloatingTicker.shared.refresh()
                     }
             }
+            // The build on this Mac (Meka, 2026-10-08), so we can tell which build is running.
+            Text(AppUpdateRules.shared.versionLine(versionName: MacBuild.version, versionCode: MacBuild.number, latestCode: nil))
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
         }
         .padding(.horizontal, MekaSpace.m)
         .padding(.vertical, MekaSpace.s)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .offset(y: hovering && !reduceMotion ? -2 : 0)
         .onHover { h in withAnimation(MekaMotion.appear(reduced: reduceMotion)) { hovering = h } }
+    }
+}
+
+/// This Mac app's version and build number (Info.plist).
+enum MacBuild {
+    static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0" }
+    static var number: Int64 { Int64(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") ?? 1 }
+}
+
+/// Motion check (Meka, 2026-10-08: "the animation is something I have not seen work"): what MEKA sees on this Mac (its
+/// own Motion choice, Reduce Motion, Low Power Mode) and the result; when animations are off the result is lit and a
+/// click turns MEKA's own Expressive motion on. "Play the opening" goes back to Today and replays its opening.
+private struct MotionCheckView: View {
+    @Binding var motion: String
+    let palette: MekaPalette
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduce
+
+    var body: some View {
+        let check = MotionCheckRules.shared.mac(
+            stored: MotionSetting.stored(motion), reduceMotion: systemReduce,
+            lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled
+        )
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Motion check").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            ForEach(check.rows, id: \.label) { row in
+                HStack {
+                    Text(row.label).foregroundStyle(palette.textTertiary)
+                    Spacer()
+                    Text(row.value).foregroundStyle(palette.textSecondary)
+                }
+                .font(MekaType.caption)
+            }
+            HStack {
+                if let fix = check.fix {
+                    Button(check.result) {
+                        MekaHaptics.tick()
+                        motion = fix.id
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption).foregroundStyle(palette.accent)
+                } else {
+                    Text(check.result).font(MekaType.caption).foregroundStyle(palette.textPrimary)
+                }
+                Spacer()
+                Button(MotionCheckRules.shared.PLAY_OPENING) {
+                    MekaHaptics.light()
+                    model.playOpening(reduced: reduceMotion)
+                }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.caption).foregroundStyle(palette.accent)
+                .help(MotionCheckRules.shared.PLAY_OPENING_LINE)
+            }
+            .contentTransition(.opacity)
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: check.result)
+        }
     }
 }

@@ -39,6 +39,8 @@ final class CoreModel {
     /// Morning brief: today at a glance, waiting on, what needs you on your lists. "Got it" syncs with the Fold.
     private(set) var brief: MorningBriefView?
     var showBrief = false
+    /// Appearance → Play the opening: Today replays its opening (Day ring, tiles, greeting, stagger), then clears it.
+    var openingRequested = false
     /// News (Ask → More → News): the chosen topics as lanes, Barça first, then AI. Topics sync with the Fold.
     private(set) var newsPlace: NewsPlace?
     var showNews = false
@@ -369,6 +371,12 @@ final class CoreModel {
         lastDirection = ShellNav.direction(from: destination, to: d)
         MekaHaptics.tick()
         withAnimation(MekaMotion.replan(reduced: reduced)) { destination = d }
+    }
+
+    /// Appearance → Play the opening: back to Today, which replays its opening.
+    func playOpening(reduced: Bool) {
+        openingRequested = true
+        go(to: .today, reduced: reduced)
     }
 
     // MARK: Command bar

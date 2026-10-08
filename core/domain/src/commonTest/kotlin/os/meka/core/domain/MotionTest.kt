@@ -3,7 +3,6 @@ package os.meka.core.domain
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -17,12 +16,15 @@ class MotionTest {
     }
 
     @Test
-    fun withNothingChosenTheDevicesAnimationsOffKeepMekaStill() {
-        assertEquals(MotionChoice.OFF, MotionRules.effective(null, systemOff = true))
-        assertTrue(MotionRules.reduced(null, true))
-        assertFalse(MotionRules.expressive(null, true))
-        assertEquals("Off · following your phone's Remove animations", MotionRules.line(null, true, mac = false))
-        assertEquals("Off · following Reduce Motion", MotionRules.line(null, true, mac = true))
+    fun withNothingChosenTheDevicesAnimationsOffNoLongerStillMeka() {
+        // Meka, 2026-10-08 20:58: no choice + animator scale 0 kept MEKA still; now Expressive plays, its chip lit.
+        assertEquals(MotionChoice.EXPRESSIVE, MotionRules.effective(null, systemOff = true))
+        assertFalse(MotionRules.reduced(null, true))
+        assertTrue(MotionRules.expressive(null, true))
+        assertEquals("Bigger entrances and bouncier springs", MotionRules.line(null, true, mac = false))
+        assertEquals("Bigger entrances and bouncier springs", MotionRules.line(null, true, mac = true))
+        assertEquals(MotionChoice.EXPRESSIVE, MotionRules.lit(null))
+        assertEquals(MotionChoice.OFF, MotionRules.lit(MotionChoice.OFF))
     }
 
     @Test
@@ -51,12 +53,9 @@ class MotionTest {
     }
 
     @Test
-    fun theCardShowsOnceOnlyWhileTheDeviceIsStillAndNothingIsChosen() {
-        val phone = assertNotNull(MotionRules.systemCard(null, systemOff = true, mac = false))
-        assertEquals("Your phone's animations are off", phone.title)
-        assertEquals("Turn on motion", phone.turnOn)
-        assertEquals("Keep it still", phone.keepStill)
-        assertEquals("Reduce Motion is on", MotionRules.systemCard(null, true, mac = true)?.title)
+    fun theCardIsRetiredNowThatTheDeviceNeverStillsMeka() {
+        assertNull(MotionRules.systemCard(null, systemOff = true, mac = false))
+        assertNull(MotionRules.systemCard(null, true, mac = true))
         assertNull(MotionRules.systemCard(null, systemOff = false, mac = false))
         // Either button makes a choice, so the card doesn't come back.
         assertNull(MotionRules.systemCard(MotionRules.CARD_TURN_ON, true, mac = false))

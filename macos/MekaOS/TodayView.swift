@@ -15,6 +15,8 @@ struct TodayView: View {
     @State private var allDayOpen = false
     /// The Day ring's opening: in full the first time today on this Mac, quickly after, at once with Motion → Off.
     @State private var ringPlay: DayRingPlayback?
+    /// Appearance → Play the opening bumps this: Today's column is rebuilt so its stagger plays again.
+    @State private var openings = 0
     private var play: Bool { !introPlayed }
     private static let sections = 6 // greeting, needs you, up next, your day (header), your day (rows), done
 
@@ -241,10 +243,18 @@ struct TodayView: View {
             // The foot fades into the ticker and capture field rather than cutting a row in half (Fold review item
             // 4); the xl bottom padding is more than the fade, so the last row still scrolls fully clear.
             .footFade()
+            .id(openings)
             .onAppear {
                 if ringPlay == nil { ringPlay = DayRingOpen.claim(reduced: reduceMotion) }
+                takeOpeningRequest()
             }
-            .task {
+            .onChange(of: model.openingRequested) { takeOpeningRequest() }
+            // The first open of a new day plays in full even when MEKA stayed open overnight: claimed each time the
+            // app comes forward, not only at launch (Meka, 2026-10-08: he never saw it).
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                if DayRingOpen.claim(reduced: reduceMotion) == .full { ringPlay = .full }
+            }
+            .task(id: openings) {
                 guard !introPlayed else { return }
                 try? await Task.sleep(for: .seconds(MotionMath.staggerSpan(count: Self.sections, reduced: false, expressive: true) + 0.3))
                 introPlayed = true
@@ -256,6 +266,15 @@ struct TodayView: View {
             CaptureField(palette: palette)
                 .padding(MekaSpace.m)
         }
+    }
+
+    /// Appearance → Play the opening: the Day ring, its tiles, the greeting and the stagger play again.
+    private func takeOpeningRequest() {
+        guard model.openingRequested else { return }
+        model.openingRequested = false
+        ringPlay = reduceMotion ? .still : .full
+        introPlayed = false
+        openings += 1
     }
 
     @ViewBuilder

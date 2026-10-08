@@ -37,6 +37,20 @@ object AppUpdateRules {
     /** "MEKA 0.1.412 · build 412 · 24.3 MB" (what the Mac shows before publishing). */
     fun summary(b: Build): String = "MEKA ${b.versionName} · build ${b.versionCode} · ${sizeLabel(b.sizeBytes)}"
 
+    /**
+     * Appearance's build line (Meka, 2026-10-08, so we can tell whether the phone has the motion builds):
+     * "MEKA 0.1.412 · build 412 · up to date", "… · update ready (build 415)", or just the build while the newest
+     * published build isn't known yet ([latestCode] null: offline, or not checked).
+     */
+    fun versionLine(versionName: String, versionCode: Long, latestCode: Long?): String {
+        val head = "MEKA $versionName · build $versionCode"
+        return when {
+            latestCode == null -> head
+            latestCode > versionCode -> "$head · update ready (build $latestCode)"
+            else -> "$head · up to date"
+        }
+    }
+
     /** Decimal megabytes, as Android and macOS show file sizes: "850 KB", "9.9 MB", "24.3 MB", "120 MB". */
     fun sizeLabel(bytes: Long): String = when {
         bytes < 999_500 -> "${maxOf(1, (bytes + 500) / 1000)} KB"

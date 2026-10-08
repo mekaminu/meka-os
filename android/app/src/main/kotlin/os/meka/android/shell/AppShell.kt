@@ -221,7 +221,10 @@ private fun Destination(
         )
         ShellDestination.NEEDS_YOU -> NeedsYouRoute(core, openLists = { go(ShellDestination.LISTS) })
         ShellDestination.CALENDAR -> CalendarRoute(core)
-        ShellDestination.ASK -> AskRoute(core, connected = connect == null, openPlace = { openPlace(it, PlaceVia.MORE) }, openItem = openItem)
+        ShellDestination.ASK -> AskRoute(
+            core, connected = connect == null, openPlace = { openPlace(it, PlaceVia.MORE) }, openItem = openItem,
+            playOpening = { app.playOpening.value = true; go(ShellDestination.TODAY) },
+        )
         ShellDestination.LISTS -> BehindAsk(go) { ListsRoute(core) }
         ShellDestination.GOALS -> BehindAsk(go) { GoalsRoute(core) }
         ShellDestination.REVIEW -> BehindAsk(go) { ReviewRoute(core) }

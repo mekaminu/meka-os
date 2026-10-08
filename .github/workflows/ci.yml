@@ -52,7 +52,7 @@ jobs:
         with: { distribution: temurin, java-version: "21" }
       - uses: gradle/actions/setup-gradle@v4
       - name: Build, unit test, lint
-        run: tools/ci-run.sh ./gradlew :android:app:assembleDebug :android:app:testDebugUnitTest :android:app:lintDebug
+        run: tools/ci-run.sh ./gradlew :android:app:assembleDebug :android:app:testDebugUnitTest :android:app:compileDebugAndroidTestKotlin :android:app:lintDebug
 
   tokens-and-infra:
     runs-on: ubuntu-latest
