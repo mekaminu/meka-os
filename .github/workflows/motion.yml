@@ -1,0 +1,52 @@
+name: motion
+
+# Can't see the animations (2026-10-08): runs the Fold app's instrumentation tests (androidTest) on an Android
+# emulator, where MotionClockTest proves each kind of animation moves through MEKA's recomposer at the phone's 1×
+# scale and with "Remove animations" on, and DayRingMotionTest plays the opening. An emulator run costs ~15 Linux
+# minutes, so it runs only when the motion code or these tests change, weekly, and on manual dispatch (rule 10).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android/app/src/androidTest/**"
+      - "android/app/src/main/kotlin/os/meka/android/designsystem/**"
+      - "android/app/src/main/kotlin/os/meka/android/MainActivity.kt"
+      - ".github/workflows/motion.yml"
+      - "tools/motion-test.sh"
+  schedule:
+    - cron: "41 4 * * 0" # weekly (Sunday)
+  workflow_dispatch:
+
+concurrency:
+  group: motion-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: "21" }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build the app and its tests
+        run: tools/ci-run.sh ./gradlew :android:app:assembleDebug :android:app:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Instrumentation tests on an API 34 emulator (animations left on; the tests set the scale)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          # tools/motion-test.sh republishes the samples and any failure as an annotation (readable through the API).
+          script: tools/motion-test.sh
