@@ -178,6 +178,12 @@ struct TodayView: View {
                                 .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
                                 .staggeredAppear(2, play: play)
                         }
+                        // Quick alarms and timers typed into capture ("alarm 6:30", "timer 20 min"), each with ✕.
+                        if !model.quickAlarms.isEmpty {
+                            QuickAlarmRowsView(palette: palette)
+                                .padding(.bottom, MekaSpace.l)
+                                .staggeredAppear(2, play: play)
+                        }
                         // One timeline under "Today": the All day group first (one row each, at most 3 then "+2
                         // more"), finished events folded, events and planned tasks in time order with the now line
                         // and free gaps; then tasks with no time.
@@ -591,7 +597,7 @@ private struct CaptureField: View {
             .padding(.horizontal, MekaSpace.l)
             .padding(.vertical, MekaSpace.m)
             .background(Capsule().fill(palette.surfaceRaised))
-            .onSubmit { model.capture(text); text = "" }
+            .onSubmit { model.captureTyped(text); text = "" }
             .onChange(of: model.focusCapture) { focused = true }
     }
 }
@@ -734,7 +740,7 @@ struct QuickCaptureMenu: View {
             NowCard()
             TextField("Capture anything…", text: $text)
                 .textFieldStyle(.roundedBorder)
-                .onSubmit { model.capture(text); text = "" }
+                .onSubmit { model.captureTyped(text); text = "" }
                 .padding(MekaSpace.m)
                 .frame(width: 320)
         }

@@ -439,6 +439,37 @@ class MekaCoreTest {
     }
 
     @Test
+    fun typedAlarmsAndTimersAreSetFromCaptureAndSharedTextStaysATask() = runTest {
+        // Alarms, slice 2: Thursday afternoon, BST.
+        val london = TimeZone.of("Europe/London")
+        fun at(d: Int, h: Int, m: Int) = kotlinx.datetime.LocalDateTime(2026, 10, d, h, m).toInstant(london).toEpochMilliseconds()
+        now = at(8, 14, 32)
+        val a = core("android"); val m = core("mac")
+
+        val timer = a.captureTyped("timer 20 min pasta") as os.meka.core.domain.CaptureOutcome.AlarmSet
+        assertEquals("Timer set · 20 min · ends 14:52 · pasta", timer.line)
+        assertEquals(at(8, 14, 52), a.nextAlarm.value?.ringAtMs)
+        assertEquals("20 min · ends 14:52 · 20 min left", a.quickAlarms.value.single().detail)
+        val alarm = a.captureTyped("alarm 6:30") as os.meka.core.domain.CaptureOutcome.AlarmSet
+        assertEquals("Alarm set for 06:30 tomorrow", alarm.line)
+        // Not tasks.
+        assertTrue(a.today.value.yourDay.isEmpty() && a.today.value.upNext == null)
+
+        a.syncNow(); m.syncNow()
+        assertEquals(listOf("pasta", "Alarm"), m.quickAlarms.value.map { it.title })
+        assertEquals(at(9, 6, 30), m.quickAlarms.value[1].ringAtMs)
+        assertTrue(m.cancelAlarm(alarm.alarmId))
+        m.syncNow(); a.syncNow()
+        assertEquals(listOf("pasta"), a.quickAlarms.value.map { it.title })
+
+        // Anything else is a task; shared text never sets an alarm.
+        assertTrue(a.captureTyped("Book dentist") is os.meka.core.domain.CaptureOutcome.TaskAdded)
+        assertTrue(a.capture("timer 5 min", null) != null)
+        assertEquals(1, a.quickAlarms.value.size)
+        assertTrue(a.captureTyped("  ") is os.meka.core.domain.CaptureOutcome.Empty)
+    }
+
+    @Test
     fun readAfterMidnightTheBriefStillComesInTheMorningAndAReadOnTheMacIsALineOnTheFold() = runTest {
         // Fold review 2026-10-08: no card at 07:14–07:58 BST. A read after midnight was last night's brief.
         val london = TimeZone.of("Europe/London")

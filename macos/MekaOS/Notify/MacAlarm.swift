@@ -23,6 +23,9 @@ enum MacAlarm {
         key.hasPrefix(keyPrefix) ? String(key.dropFirst(keyPrefix.count)) : nil
     }
 
+    /// The wake alarm's id is `wake.d<day>` (`AlarmRules.wakeId`); quick alarms and timers don't open the brief.
+    nonisolated static func opensBrief(alarmID: String) -> Bool { alarmID.hasPrefix("wake.") }
+
     static func schedule(_ ring: AlarmRing?) async {
         // Plain values first: nothing Kotlin crosses an await.
         let id = ring?.id

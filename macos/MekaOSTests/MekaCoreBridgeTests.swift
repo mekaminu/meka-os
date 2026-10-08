@@ -54,6 +54,29 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(core.nextAlarm.value)
     }
 
+    func testQuickTimerFromCaptureThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "timer-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let outcome = try await core.captureTyped(text: "timer 20 min pasta")
+        guard case .alarmSet(let set) = onEnum(of: outcome) else { return XCTFail("expected a timer") }
+        let alarmID = set.alarmId
+        XCTAssertTrue(set.line.hasPrefix("Timer set · 20 min · ends "))
+        XCTAssertEqual(core.quickAlarms.value.map(\.title), ["pasta"])
+        XCTAssertEqual(core.quickAlarms.value.first?.kind, .timer)
+        XCTAssertEqual(core.nextAlarm.value?.timeLabel, "20 min")
+        XCTAssertEqual(core.nextAlarm.value?.opensBrief, false)
+        XCTAssertTrue(alarmID.hasPrefix("timer."))
+        let cancelled = try await core.cancelAlarm(id: alarmID)
+        XCTAssertTrue(cancelled.boolValue)
+        XCTAssertTrue(core.quickAlarms.value.isEmpty)
+        // Anything else is a task.
+        let task = try await core.captureTyped(text: "Book dentist")
+        if case .taskAdded = onEnum(of: task) {} else { XCTFail("expected a task") }
+    }
+
     func testRepeatingTaskThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

@@ -34,6 +34,13 @@ object AlarmFields {
     /** What it's for, when it was set: "Standup at 08:00". Shown on the ringing screen. */
     const val NOTE = "note"
     const val SET_AT = "setAtMs"
+    /**
+     * The exact moment it rings (epoch ms), for a timer (Alarms, slice 2): `day`/`minute` then hold its local day and
+     * minute too, so a reader that doesn't know this field still rings it within the minute.
+     */
+    const val AT_MS = "atMs"
+    /** A timer's length in seconds ("20 min"); null for alarms. */
+    const val LENGTH_SEC = "lengthSec"
 }
 
 /** The alarm settings (one `context_mode` entity, id [Alarms.SETTINGS_ID]). LWW. */
@@ -42,7 +49,11 @@ object AlarmSettingsFields {
     const val WAKE_BUFFER = "wakeBufferMin"
 }
 
-enum class AlarmKind { WAKE }
+/**
+ * WAKE: the smart wake alarm (slice 1). ALARM and TIMER: quick alarms and timers typed into capture ("alarm 6:30",
+ * "timer 20 min"; slice 2, [QuickAlarmRules]).
+ */
+enum class AlarmKind { WAKE, ALARM, TIMER }
 
 data class Alarm(
     val id: String,
@@ -55,6 +66,8 @@ data class Alarm(
     val snoozedUntilMs: Long?,
     val dismissedAtMs: Long?,
     val note: String?,
+    /** A timer's length in seconds; null for alarms. */
+    val lengthSec: Int? = null,
 ) {
     /** The next time it rings: after a snooze, the snooze's end. */
     val ringAtMs: Long get() = snoozedUntilMs ?: atMs
@@ -123,7 +136,11 @@ data class AlarmRing(
     val snoozed: Boolean,
     /** "Snoozed until 06:54" while snoozed, else null. */
     val snoozeLine: String?,
-)
+    val kind: AlarmKind = AlarmKind.WAKE,
+) {
+    /** Dismissing the wake alarm brings up the morning brief; a quick alarm or a timer just stops. */
+    val opensBrief: Boolean get() = kind == AlarmKind.WAKE
+}
 
 object AlarmRules {
     const val SNOOZE_MIN = 9
@@ -235,15 +252,28 @@ object AlarmRules {
         .minWithOrNull(compareBy<Alarm> { it.ringAtMs }.thenBy { it.id })
         ?.let { ring(it) }
 
-    fun ring(a: Alarm): AlarmRing = AlarmRing(
-        id = a.id,
-        ringAtMs = a.ringAtMs,
-        timeLabel = LocalClock.formatMinute(a.minute),
-        title = TITLE,
-        line = a.note?.trim()?.takeIf { it.isNotEmpty() } ?: "Good morning",
-        snoozed = a.snoozedUntilMs != null,
-        snoozeLine = null, // [ringIn] fills it in with the local time
-    )
+    fun ring(a: Alarm): AlarmRing {
+        val note = a.note?.trim()?.takeIf { it.isNotEmpty() }
+        return AlarmRing(
+            id = a.id,
+            ringAtMs = a.ringAtMs,
+            // A timer shows its length ("20 min"); an alarm the time it was set for.
+            timeLabel = if (a.kind == AlarmKind.TIMER && a.lengthSec != null) QuickAlarmRules.length(a.lengthSec) else LocalClock.formatMinute(a.minute),
+            title = when (a.kind) {
+                AlarmKind.WAKE -> TITLE
+                AlarmKind.ALARM -> QuickAlarmRules.ALARM_TITLE
+                AlarmKind.TIMER -> QuickAlarmRules.TIMER_TITLE
+            },
+            line = note ?: when (a.kind) {
+                AlarmKind.WAKE -> "Good morning"
+                AlarmKind.ALARM -> QuickAlarmRules.ALARM_TITLE
+                AlarmKind.TIMER -> QuickAlarmRules.TIMES_UP
+            },
+            snoozed = a.snoozedUntilMs != null,
+            snoozeLine = null, // [ringIn] fills it in with the local time
+            kind = a.kind,
+        )
+    }
 
     /** [ring] with the snooze line in local time. */
     fun ringIn(a: Alarm, cal: LocalCalendar): AlarmRing =
@@ -258,11 +288,12 @@ object AlarmRules {
             kind = kind,
             epochDay = day,
             minute = minute,
-            atMs = cal.toEpochMs(day, minute),
+            atMs = e[AlarmFields.AT_MS].longOrNull ?: cal.toEpochMs(day, minute),
             off = e[AlarmFields.OFF].boolOrNull == true,
             snoozedUntilMs = e[AlarmFields.SNOOZED_UNTIL].longOrNull,
             dismissedAtMs = e[AlarmFields.DISMISSED_AT].longOrNull,
             note = e[AlarmFields.NOTE].textOrNull,
+            lengthSec = e[AlarmFields.LENGTH_SEC].longOrNull?.toInt()?.takeIf { it > 0 },
         )
     }
 }
@@ -336,6 +367,49 @@ class Alarms(
         replica.commitLocal(EntityTypes.ALARM, id, mapOf(AlarmFields.DISMISSED_AT to nowMs().fv()))
         return true
     }
+
+    /**
+     * Sets a quick alarm or timer typed into capture (slice 2). An alarm for the same minute is one alarm on every
+     * device (id from its day and minute), so setting it twice or on both devices rings once. Returns its id, or null
+     * for a moment already gone.
+     */
+    fun setQuick(q: QuickAlarmRequest): String? {
+        val now = nowMs()
+        if (q.atMs <= now) return null
+        val day = calendar.epochDayOf(q.atMs)
+        val minute = calendar.minuteOfDay(q.atMs)
+        val id = when (q.kind) {
+            AlarmKind.TIMER -> "timer.t$now.s${q.lengthSec ?: 0}"
+            else -> "alarm.d$day.m$minute"
+        }
+        replica.commitLocal(
+            EntityTypes.ALARM, id,
+            mapOf(
+                AlarmFields.KIND to q.kind.name.fv(),
+                AlarmFields.DAY to day.fv(),
+                AlarmFields.MINUTE to minute.fv(),
+                AlarmFields.AT_MS to (if (q.kind == AlarmKind.TIMER) q.atMs else null).fv(),
+                AlarmFields.LENGTH_SEC to q.lengthSec?.toLong().fv(),
+                AlarmFields.OFF to false.fv(),
+                AlarmFields.SNOOZED_UNTIL to (null as Long?).fv(),
+                AlarmFields.DISMISSED_AT to (null as Long?).fv(),
+                AlarmFields.NOTE to q.label?.trim()?.take(NOTE_MAX).fv(),
+                AlarmFields.SET_AT to now.fv(),
+            ),
+        )
+        return id
+    }
+
+    /** Cancels a quick alarm or timer (or turns any alarm off) on every device. False when it's already off or gone. */
+    fun cancel(id: String): Boolean {
+        val a = alarm(id) ?: return false
+        if (a.off || a.dismissedAtMs != null) return false
+        replica.commitLocal(EntityTypes.ALARM, id, mapOf(AlarmFields.OFF to true.fv()))
+        return true
+    }
+
+    /** The quick alarms and timers still to ring (or ringing), soonest first, for Today. */
+    fun quickItems(): List<QuickAlarmItem> = QuickAlarmRules.items(all(), nowMs(), calendar)
 
     fun wakeView(events: List<CalendarEvent>, work: WorkHours): WakeView {
         val day = wakeDay()

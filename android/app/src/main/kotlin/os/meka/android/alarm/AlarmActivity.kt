@@ -118,8 +118,14 @@ class AlarmActivity : ComponentActivity() {
 
     private fun dismiss(id: String) {
         val app = application as MekaApplication
+        // Only the wake alarm brings up the brief; a quick alarm or a timer just stops (Alarms, slice 2).
+        val opensBrief = app.core.nextAlarm.value?.takeIf { it.id == id }?.opensBrief ?: true
         background { app.core.dismissAlarm(id) }
         AlarmRingService.stop(this)
+        if (!opensBrief) {
+            finish()
+            return
+        }
         val brief = Intent(this, MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_BRIEF)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)

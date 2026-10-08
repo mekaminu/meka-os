@@ -192,6 +192,13 @@ class MekaCore(
      */
     val nextAlarm: StateFlow<os.meka.core.domain.AlarmRing?> = _nextAlarm.asStateFlow()
 
+    private val _quickAlarms = MutableStateFlow<List<os.meka.core.domain.QuickAlarmItem>>(emptyList())
+    /**
+     * Quick alarms and timers typed into capture (Alarms, slice 2) still to ring or ringing, soonest first, for Today's
+     * slim rows ("Pasta" · "20 min · ends 14:52 · 18 min left" with a cancel ✕). Synced; moves with the minute.
+     */
+    val quickAlarms: StateFlow<List<os.meka.core.domain.QuickAlarmItem>> = _quickAlarms.asStateFlow()
+
     private val _brief = MutableStateFlow(MorningBriefView.EMPTY)
     /**
      * Morning brief: today at a glance, what you're waiting on, what needs you on your lists, habits and a running
@@ -288,6 +295,27 @@ class MekaCore(
         val draft = QuickCapture.draft(text, subject) ?: return null
         return onCore { tasks.create(NewTask(draft.title, notes = draft.notes)) }
     }
+    /**
+     * What Meka types into MEKA's own capture field (Today's capture bar, the Mac's capture field, menu bar and command
+     * bar): "alarm 6:30" or "timer 20 min" sets a quick alarm or timer (Alarms, slice 2, [QuickAlarmRules]); anything
+     * else is captured as a task like [capture]. Never used for shared text (share sheet, Services), which is untrusted
+     * and only ever becomes a task.
+     */
+    suspend fun captureTyped(text: String): os.meka.core.domain.CaptureOutcome {
+        val cal = ZoneCalendar(timeZone)
+        val q = os.meka.core.domain.QuickAlarmRules.parse(text, nowMs(), cal)
+        if (q != null) {
+            return onCore {
+                val id = alarms.setQuick(q)
+                if (id == null) os.meka.core.domain.CaptureOutcome.Empty
+                else os.meka.core.domain.CaptureOutcome.AlarmSet(id, q.kind, os.meka.core.domain.QuickAlarmRules.setLine(q, nowMs(), cal))
+            }
+        }
+        val id = capture(text, null) ?: return os.meka.core.domain.CaptureOutcome.Empty
+        return os.meka.core.domain.CaptureOutcome.TaskAdded(id)
+    }
+    /** Cancels a quick alarm or timer on every device (Today's ✕, or Undo after setting it). */
+    suspend fun cancelAlarm(id: String): Boolean = onCore { alarms.cancel(id) }
     suspend fun complete(taskId: String) = onCore { tasks.complete(taskId) }
     suspend fun reopen(taskId: String) = onCore { tasks.reopen(taskId) }
     suspend fun rename(taskId: String, title: String) = onCore { tasks.edit(taskId, TaskEdit(title = title)) }
@@ -940,6 +968,7 @@ class MekaCore(
         _shutdown.value = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), holidays)
         _wake.value = alarms.wakeView(dayEvents, os.meka.core.domain.WorkHours.of(workState, holidays, todayEpochDay()))
         _nextAlarm.value = alarms.next()
+        _quickAlarms.value = alarms.quickItems()
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,

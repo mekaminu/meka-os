@@ -34,6 +34,8 @@ final class CoreModel {
     var showShutdown = false
     /// The smart wake alarm (Alarms, slice 1): the next morning's suggested time and the alarm if set. Synced with the Fold.
     private(set) var wake: WakeView?
+    /// Quick alarms and timers typed into capture (Alarms, slice 2), soonest first. Synced with the Fold.
+    private(set) var quickAlarms: [QuickAlarmItem] = []
     /// Morning brief: today at a glance, waiting on, what needs you on your lists. "Got it" syncs with the Fold.
     private(set) var brief: MorningBriefView?
     var showBrief = false
@@ -167,6 +169,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await w in core.wakeView { self?.wake = w }
+        })
+        observers.append(Task { [weak self] in
+            for await q in core.quickAlarms { self?.quickAlarms = q }
         })
         // The next alarm as a scheduled notification (the Fold rings it full screen).
         observers.append(Task {
@@ -380,7 +385,7 @@ final class CoreModel {
         case .yourData: showYourData = true
         case .calendars: showCalendars = true
         case .searchFor: searchSeed = row.text; showSearch = true
-        case .addTask: if let text = row.text { MekaHaptics.light(); capture(text) }
+        case .addTask: if let text = row.text { MekaHaptics.light(); captureTyped(text) }
         default: break
         }
     }
@@ -761,7 +766,8 @@ final class CoreModel {
                 run { _ = try await $0.snoozeAlarm(id: alarm) }
             } else if a.action == MacAlarm.dismissAction {
                 run { _ = try await $0.dismissAlarm(id: alarm) }
-                showBrief = true
+                // Only the wake alarm brings up the brief; a quick alarm or a timer just stops (Alarms, slice 2).
+                if MacAlarm.opensBrief(alarmID: alarm) { showBrief = true }
             }
             return
         }
@@ -810,6 +816,28 @@ final class CoreModel {
     func capture(_ text: String, subject: String? = nil) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || subject != nil else { return }
         run { _ = try await $0.capture(text: text, subject: subject) }
+    }
+
+    /// Typed into MEKA's own capture field (Today, the menu bar, the command bar): "alarm 6:30" or "timer 20 min" sets
+    /// a quick alarm or timer (Alarms, slice 2) with Undo on the bar; anything else is a task. Shared text (Services)
+    /// goes through `capture` and only ever becomes a task. Only a string crosses to the core.
+    func captureTyped(_ text: String) {
+        guard let core, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        Task {
+            do {
+                let outcome = try await core.captureTyped(text: text)
+                if case .alarmSet(let set) = onEnum(of: outcome) {
+                    MekaHaptics.light()
+                    offerEventUndo(set.line, .cancelAlarm(set.alarmId))
+                }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// The ✕ on a quick alarm or timer: cancelled on every device.
+    func cancelAlarm(_ id: String) {
+        MekaHaptics.tick()
+        run { _ = try await $0.cancelAlarm(id: id) }
     }
 
     func complete(_ id: String) {
@@ -1016,6 +1044,7 @@ final class CoreModel {
         case .restoreTask(let id): run { try await $0.restore(taskId: id) }
         case .showEvent(let id): run { try await $0.showEvent(eventId: id) }
         case .unmakeTask(let id): run { try await $0.undoAllDayTask(eventId: id) }
+        case .cancelAlarm(let id): run { _ = try await $0.cancelAlarm(id: id) }
         case .showCalendar(let key): run { try await $0.showCalendarOnToday(calendarKey: key) }
         case .reminder(let id, let m): run { try await $0.setEventReminder(eventId: id, minutes: m) }
         case .leaveBy(let id, let m): run { try await $0.setEventLeaveBy(eventId: id, travelMinutes: m) }
@@ -1131,6 +1160,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case showEvent(String)
         /// "Make it a task" on an all-day entry: the task goes, the entry comes back.
         case unmakeTask(String)
+        /// "alarm 6:30" / "timer 20 min" typed into capture: Undo cancels it.
+        case cancelAlarm(String)
         /// "Hide <calendar> from Today": the calendar (by key) is back on Today.
         case showCalendar(String)
         case reminder(String, Int32)

@@ -370,7 +370,16 @@ internal fun todayActions(
     /** The screen's undo bar: Delete in the detail offers Undo there (no dialog). */
     undo: EventUndo? = null,
 ) = TodayActions(
-    add = { title -> scope.launch { runCatching { core.capture(title, null) } } },
+    // Typed into MEKA's own capture bar: "alarm 6:30" / "timer 20 min" set an alarm or timer (Alarms, slice 2), with
+    // Undo on the bar; anything else is a task.
+    add = { title ->
+        scope.launch {
+            val outcome = runCatching { core.captureTyped(title) }.getOrNull()
+            if (outcome is os.meka.core.domain.CaptureOutcome.AlarmSet && undo != null) {
+                undo.show(outcome.line) { core.cancelAlarm(outcome.alarmId) }
+            }
+        }
+    },
     complete = { id -> scope.launch { core.complete(id); if (selected() == id) setSelected(null) } },
     select = { id -> setSelected(id) },
     rename = { id, t -> scope.launch { runCatching { core.rename(id, t) } } },
@@ -602,6 +611,10 @@ private fun TodayPane(
             // The Gym (booked habits): today's session, "Did you go?" once it's over, or where it was rebooked.
             if (core != null) item(key = "session") {
                 os.meka.android.goals.SessionCards(core, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(2, play)))
+            }
+            // Quick alarms and timers typed into capture ("alarm 6:30", "timer 20 min"), each with a cancel ✕.
+            if (core != null) item(key = "quick-alarms") {
+                QuickAlarmRows(core, Modifier.animateItem().appear(rememberAppearance(2, play)))
             }
             // One timeline under "Today": the "All day" group first (one row each, at most 3 then "+2 more"), finished
             // events folded, events and planned tasks in time order with the now line and free gaps; then tasks with no time.
