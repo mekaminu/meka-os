@@ -629,6 +629,13 @@ class MekaCore(
     fun newsWidget(): os.meka.core.domain.NewsWidgetView =
         os.meka.core.domain.NewsWidgetRules.view(os.meka.core.domain.TickerRules.ticker(_newsPlace.value), nowMs())
 
+    /**
+     * The Mac's desktop News widget (news ticker slice 3b): the top three stories still (the match, then Barça and AI),
+     * read from the current News place. Pure and cheap; the Mac writes it beside the widget, which says the lines itself.
+     */
+    fun deskNewsWidget(): os.meka.core.domain.DeskNewsView =
+        os.meka.core.domain.DeskNewsWidgetRules.view(os.meka.core.domain.TickerRules.ticker(_newsPlace.value))
+
     suspend fun resolve(choice: ConflictChoice, chosenOption: String) = onCore {
         tasks.resolveConflict(choice.conflict, FieldValue.Text(chosenOption))
     }

@@ -241,7 +241,14 @@ final class CoreModel {
 
     /// mekaos://publish-fold-update?apk=/path/to/app-debug.apk
     func handle(url: URL) {
-        guard url.scheme == "mekaos", url.host == "publish-fold-update" else { return }
+        guard url.scheme == "mekaos" else { return }
+        // The desktop News widget (news ticker slice 3b): mekaos://news?story=<id> opens News on that story.
+        if url.host == "news" {
+            newsStoryId = DeskNewsLink.storyId(url)
+            showNews = true
+            return
+        }
+        guard url.host == "publish-fold-update" else { return }
         let apk = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "apk" }?.value
         prepareFoldUpdate(path: apk)
     }
@@ -628,6 +635,16 @@ final class CoreModel {
         guard let b64 = try? await core.newsImageBase64(key: key), let data = Data(base64Encoded: b64) else { return nil }
         return NSImage(data: data)
     }
+
+    /// A story's picture as the server's JPEG bytes (for the desktop widget's file); nil when there is none or offline.
+    func newsImageData(_ key: String) async -> Data? {
+        guard let core else { return nil }
+        guard let b64 = try? await core.newsImageBase64(key: key) else { return nil }
+        return Data(base64Encoded: b64)
+    }
+
+    /// The Mac's desktop News widget (news ticker slice 3b): the top three stories still, from the current News place.
+    func deskNewsWidget() -> DeskNewsView? { core?.deskNewsWidget() }
 
     /// Shows or hides a news topic's headlines in the brief; synced with the Fold.
     func setNewsTopic(_ id: String, on: Bool) { MekaHaptics.tick(); run { try await $0.setNewsTopic(topicId: id, on: on) } }

@@ -32,6 +32,7 @@ targets:
     platform: macOS
     sources:
       - path: MekaOS
+      - path: NewsWidgetShared   # also compiled into the widget (DeskNewsSnapshot)
     info:
       path: MekaOS/Info.plist
       properties:
@@ -60,6 +61,8 @@ targets:
       - framework: ../core/facade/build/XCFrameworks/release/MekaKit.xcframework
         embed: false
       - package: SQLCipher   # dynamic, embedded and signed with the app; must be the only sqlite3 the app links
+      # The desktop News widget (news ticker slice 3b), embedded in Contents/PlugIns.
+      - target: MekaNewsWidget
     preBuildScripts:
       - name: Build MekaKit XCFramework
         basedOnDependencyAnalysis: false
@@ -70,6 +73,34 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: os.meka.mac
         # No -lsqlite3: MekaKit's sqlite3_* calls bind to SQLCipher (spike S6). MekaCoreBridgeTests checks it.
+  # The Mac's desktop News widget (build plan M1, news ticker slice 3b). Sandboxed, as WidgetKit requires; it never
+  # links the core: it reads only the snapshot MEKA writes to ~/Library/Application Support/MekaOS/NewsWidget/ (a
+  # read-only sandbox exception for that one folder; no app group, which needs the Apple Developer Program).
+  MekaNewsWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: NewsWidget
+      - path: NewsWidgetShared
+      - path: MekaOS/DesignSystem/MekaTokens.swift
+    info:
+      path: NewsWidget/Info.plist
+      properties:
+        CFBundleDisplayName: MEKA News
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: NewsWidget/NewsWidget.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.temporary-exception.files.home-relative-path.read-only:
+          - /Library/Application Support/MekaOS/NewsWidget/
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: os.meka.mac.news-widget
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated   # WidgetKit's provider runs off the main actor
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks"
   MekaOSTests:
     type: bundle.unit-test
     platform: macOS

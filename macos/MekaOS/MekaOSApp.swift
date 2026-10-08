@@ -18,11 +18,14 @@ struct MekaOSApp: App {
                 .task {
                     await model.start()
                     FloatingTicker.shared.attach(model)
+                    // The desktop News widget (news ticker slice 3b) reads what this writes.
+                    DeskNewsWidgetWriter.shared.attach(model)
                     // Services captures that arrived while the core was starting go in now.
                     let model = model
                     CaptureInbox.shared.attach { text, subject in model.capture(text, subject: subject) }
                 }
-                // tools/publish-fold.sh hands over the APK it built: mekaos://publish-fold-update?apk=…
+                // tools/publish-fold.sh hands over the APK it built: mekaos://publish-fold-update?apk=…; the desktop
+                // News widget opens mekaos://news?story=<id>.
                 .onOpenURL { model.handle(url: $0) }
                 .preferredColorScheme((MekaAppearance(rawValue: appearance) ?? .dark).scheme)
                 .animation(MekaMotion.themeBlend(reduced: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion), value: appearance)

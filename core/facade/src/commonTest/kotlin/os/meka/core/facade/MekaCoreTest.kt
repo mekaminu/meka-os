@@ -460,6 +460,15 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theMacsDesktopNewsWidgetSaysWhereToChooseTopicsUntilNewsArrives() = runTest {
+        val m = core("mac")
+        val w = m.deskNewsWidget()
+        assertEquals(true, w.isEmpty)
+        assertEquals("No news yet", w.emptyTitle)
+        assertEquals("Choose topics in MEKA · Ask › More › News", w.emptyLine)
+    }
+
+    @Test
     fun theCalendarTabShowsAPlannedTaskOnItsDayOnBothDevices() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 10, 6, 10, 0).toInstant(london).toEpochMilliseconds() // Tue 6 Oct

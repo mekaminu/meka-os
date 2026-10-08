@@ -83,3 +83,86 @@ object NewsWidgetRules {
         if (v.isEmpty) "News. ${v.emptyTitle}. ${v.emptyLine}"
         else "News, ${v.cards.size} ${if (v.cards.size == 1) "story" else "stories"}. ${v.cards.first().spoken}"
 }
+
+/**
+ * One card of the Mac's desktop News widget (news ticker slice 3b). Mac desktop widgets can't animate, so the widget
+ * shows the top [DeskNewsWidgetRules.MAX_CARDS] stories still: today's match first, then Barça and AI in turn, then the
+ * other lanes if there are fewer. The widget runs in its own sandboxed process without the core, so a card carries what
+ * it needs to say its line itself as time moves on ([source] and [publishedAtMs] → "Sport · 2 h ago", the same words as
+ * [NewsRules.age]); the match's line is fixed when written and the card is dropped after [untilMs].
+ */
+data class DeskNewsCard(
+    /** The story's id, or [NewsWidgetRules.MATCH_ID]. */
+    val id: String,
+    /** "Barça", "AI" … or "MATCHDAY" / "ON NOW". */
+    val label: String,
+    val title: String,
+    /** The publisher ("Sport"); empty for the match. */
+    val source: String,
+    /** When the story was published; 0 for the match. */
+    val publishedAtMs: Long,
+    /** The match's "21:00 · in 3 h"; null for a story (its line is [source] and its age). */
+    val fixedLine: String?,
+    /** The picture the app saves beside the widget's file; null → the tile. */
+    val imageKey: String?,
+    val tileInitial: String,
+    val isBarca: Boolean,
+    /** What clicking opens in MEKA: `mekaos://news?story=<id>`, or `mekaos://news` for the match. */
+    val openUrl: String,
+    /** After this the card isn't shown (the match's final whistle); [Long.MAX_VALUE] for a story. */
+    val untilMs: Long,
+) {
+    val isMatch: Boolean get() = id == NewsWidgetRules.MATCH_ID
+}
+
+/** What the desktop widget shows: up to three cards, or [emptyTitle]/[emptyLine]. */
+data class DeskNewsView(val cards: List<DeskNewsCard>, val emptyTitle: String, val emptyLine: String) {
+    val isEmpty: Boolean get() = cards.isEmpty()
+}
+
+object DeskNewsWidgetRules {
+    /** Three stories: the medium widget's rows (the small one shows the first). */
+    const val MAX_CARDS = 3
+    /** The widget looks again this often (the plan's 30 minutes) besides when MEKA writes new stories. */
+    const val REFRESH_MS = 30 * 60_000L
+    /** The widget's links: MEKA opens News (on [STORY_PARAM] when given). */
+    const val OPEN_URL = "mekaos://news"
+    const val STORY_PARAM = "story"
+
+    /** The widget from Today's ticker: the match, then Barça and AI in the ticker's turn, then the rest; at most three. */
+    fun view(ticker: NewsTicker): DeskNewsView {
+        val cards = ArrayList<DeskNewsCard>()
+        ticker.matchday?.let { m ->
+            val label = if (m.live) "ON NOW" else "MATCHDAY"
+            val line = m.line.removePrefix(m.title).removePrefix(" · ").ifEmpty { m.line }
+            cards += DeskNewsCard(
+                NewsWidgetRules.MATCH_ID, label, m.title, "", 0L, line, null, "⚽", true, OPEN_URL, m.event.endAtMs,
+            )
+        }
+        val first = ticker.items.filter { it.topic == NewsTopics.BARCA.id || it.topic == NewsTopics.AI.id }
+        val rest = ticker.items.filter { it !in first }
+        (first + rest).forEach { item ->
+            if (cards.size >= MAX_CARDS) return@forEach
+            cards += DeskNewsCard(
+                item.id, NewsTopics.byId(item.topic)?.label ?: "News", item.title, item.source, item.publishedAtMs, null,
+                item.imageKey, item.tileInitial, item.topic == NewsTopics.BARCA.id, openUrl(item.id), Long.MAX_VALUE,
+            )
+        }
+        return DeskNewsView(cards, NewsWidgetRules.EMPTY_TITLE, NewsWidgetRules.EMPTY_LINE)
+    }
+
+    /** "mekaos://news?story=<id>" (story ids are the server's keys, but anything not plain is left out). */
+    fun openUrl(storyId: String): String =
+        if (storyId.isNotEmpty() && storyId.all { it.isLetterOrDigit() || it == '-' || it == '_' }) "$OPEN_URL?$STORY_PARAM=$storyId"
+        else OPEN_URL
+
+    /** The card's line at [nowMs]: the match's fixed line, or "Sport · 2 h ago" (the widget says the same in Swift). */
+    fun line(card: DeskNewsCard, nowMs: Long): String =
+        card.fixedLine ?: listOf(card.source, NewsRules.age(card.publishedAtMs, nowMs)).filter { it.isNotEmpty() }.joinToString(" · ")
+
+    /** The cards still to show at [nowMs] (the match goes at its final whistle). */
+    fun showing(view: DeskNewsView, nowMs: Long): List<DeskNewsCard> = view.cards.filter { nowMs < it.untilMs }
+
+    /** What a screen reader says for a card: "Barça · Sport · 2 h ago: Pedri returns". */
+    fun spoken(card: DeskNewsCard, nowMs: Long): String = "${card.label} · ${line(card, nowMs)}: ${card.title}"
+}

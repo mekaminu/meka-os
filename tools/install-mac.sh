@@ -44,11 +44,21 @@ if [ -z "$DEV_ID" ] && security find-identity -p codesigning 2>/dev/null | grep 
     security import "$TMPCER" -k "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 || true
   DEV_ID=$(dev_id)
 fi
+# Inside out, each part with its own entitlements: the embedded frameworks, then the desktop News widget (sandboxed,
+# with its read-only exception; `--deep` would give it the app's entitlements and macOS wouldn't load it), then the app.
+sign_all() {
+  local id="$1"; shift
+  local f
+  for f in "$APP"/Contents/Frameworks/*; do [ -e "$f" ] && codesign --force "$@" --sign "$id" "$f"; done
+  local widget="$APP/Contents/PlugIns/MekaNewsWidget.appex"
+  [ -d "$widget" ] && codesign --force "$@" --entitlements macos/NewsWidget/NewsWidget.entitlements --sign "$id" "$widget"
+  codesign --force "$@" --entitlements macos/MekaOS/MekaOS.entitlements --sign "$id" "$APP"
+}
 if [ -n "$DEV_ID" ]; then
-  codesign --force --deep --options runtime --entitlements macos/MekaOS/MekaOS.entitlements --sign "$DEV_ID" "$APP"
+  sign_all "$DEV_ID" --options runtime
   echo "Signed with $DEV_ID."
 else
-  codesign --force --deep --sign - "$APP"
+  sign_all -
   echo "No Apple Development certificate found, so this build is signed ad hoc. That's fine on a Mac with a Secure"
   echo "Enclave: MEKA keeps its keys in enclave-sealed files, so macOS only asks for the login keychain password once,"
   echo "to move keys from an earlier build. (A Mac without one keeps using the Keychain and asks after each rebuild.)"
@@ -58,4 +68,8 @@ mkdir -p "$HOME/Applications"
 rm -rf "$HOME/Applications/MekaOS.app"
 cp -R "$APP" "$HOME/Applications/"
 open "$HOME/Applications/MekaOS.app"
+# Let macOS know about the desktop News widget in the new build (it shows under Edit Widgets… → MEKA).
+LSREG=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+[ -x "$LSREG" ] && "$LSREG" -f "$HOME/Applications/MekaOS.app" >/dev/null 2>&1 || true
+pluginkit -a "$HOME/Applications/MekaOS.app/Contents/PlugIns/MekaNewsWidget.appex" >/dev/null 2>&1 || true
 echo "Installed to ~/Applications/MekaOS.app and opened it."

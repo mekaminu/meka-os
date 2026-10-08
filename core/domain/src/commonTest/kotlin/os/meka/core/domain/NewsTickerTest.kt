@@ -256,3 +256,81 @@ class NewsWidgetTest {
         assertEquals("News, 1 story. AI · Mundo Deportivo · 2 h ago: Story a1", NewsWidgetRules.spoken(a))
     }
 }
+
+class DeskNewsWidgetTest {
+    private fun item(id: String, topic: String, source: String = "Sport", publishedAtMs: Long = 0L, image: String? = null) =
+        NewsItem(id, "Story $id", null, source, topic, "$source · 2 h ago", null, publishedAtMs, image)
+    private fun lane(topic: String, vararg ids: String) = NewsLane(topic, NewsTopics.byId(topic)!!.label, "From Sport", ids.map { item(it, topic) })
+    private fun match(live: Boolean) = NewsMatchday(
+        "espn-1", "Barça v Real Madrid", if (live) "Barça v Real Madrid · on now" else "Barça v Real Madrid · 21:00 · in 3 h", live,
+        CalendarEvent("espn-1", "Barça v Real Madrid", 1_000L, 7_200_000L, false, null, "fixtures", null, "Fixtures"),
+    )
+
+    @Test
+    fun threeStoriesStillBarcaAndAiBeforeTheRest() {
+        val place = NewsPlace(listOf(lane("barca", "b1", "b2"), lane("ai", "a1"), lane("top", "t1")), emptyList(), null)
+        val v = DeskNewsWidgetRules.view(TickerRules.ticker(place))
+        // The ticker's turn is b1, a1, t1, b2: the top-stories one waits behind Barça and AI.
+        assertEquals(listOf("b1", "a1", "b2"), v.cards.map { it.id })
+        assertEquals(listOf("Barça", "AI", "Barça"), v.cards.map { it.label })
+        assertEquals(listOf(true, false, true), v.cards.map { it.isBarca })
+        assertEquals("mekaos://news?story=b1", v.cards.first().openUrl)
+        assertEquals("S", v.cards.first().tileInitial)
+        assertEquals(Long.MAX_VALUE, v.cards.first().untilMs)
+        assertFalse(v.isEmpty)
+    }
+
+    @Test
+    fun otherLanesFillInWhenBarcaAndAiRunShort() {
+        val place = NewsPlace(listOf(lane("ai", "a1"), lane("top", "t1", "t2"), lane("world", "w1")), emptyList(), null)
+        assertEquals(listOf("a1", "t1", "w1"), DeskNewsWidgetRules.view(TickerRules.ticker(place)).cards.map { it.id })
+    }
+
+    @Test
+    fun theMatchLeadsOpensNewsAndGoesAtTheFinalWhistle() {
+        val place = NewsPlace(listOf(lane("barca", "b1", "b2", "b3")), emptyList(), null, match(false))
+        val v = DeskNewsWidgetRules.view(TickerRules.ticker(place))
+        assertEquals(listOf("match", "b1", "b2"), v.cards.map { it.id })
+        val m = v.cards.first()
+        assertTrue(m.isMatch)
+        assertEquals("MATCHDAY", m.label)
+        assertEquals("21:00 · in 3 h", DeskNewsWidgetRules.line(m, 0L))
+        assertEquals("mekaos://news", m.openUrl)
+        assertNull(m.imageKey)
+        assertEquals(7_200_000L, m.untilMs)
+        assertEquals(3, DeskNewsWidgetRules.showing(v, 7_199_999L).size)
+        assertEquals(listOf("b1", "b2"), DeskNewsWidgetRules.showing(v, 7_200_000L).map { it.id })
+        val live = DeskNewsWidgetRules.view(TickerRules.ticker(NewsPlace(emptyList(), emptyList(), null, match(true)))).cards.single()
+        assertEquals("ON NOW", live.label)
+        assertEquals("ON NOW · on now: Barça v Real Madrid", DeskNewsWidgetRules.spoken(live, 0L))
+    }
+
+    @Test
+    fun aStorysLineMovesOnWithTimeLikeTheRestOfNews() {
+        val hour = 3_600_000L
+        val v = DeskNewsWidgetRules.view(NewsTicker(null, listOf(item("x", "ai", "The Verge", 10 * hour, "0123456789abcdef0123456789abcdef"))))
+        val c = v.cards.single()
+        assertEquals("0123456789abcdef0123456789abcdef", c.imageKey)
+        assertEquals("The Verge · just now", DeskNewsWidgetRules.line(c, 10 * hour + 60_000L))
+        assertEquals("The Verge · 25 min ago", DeskNewsWidgetRules.line(c, 10 * hour + 25 * 60_000L))
+        assertEquals("The Verge · 2 h ago", DeskNewsWidgetRules.line(c, 12 * hour + 59 * 60_000L))
+        assertEquals("The Verge · yesterday", DeskNewsWidgetRules.line(c, 40 * hour))
+        assertEquals("AI · The Verge · 2 h ago: Story x", DeskNewsWidgetRules.spoken(c, 12 * hour))
+    }
+
+    @Test
+    fun onlyPlainStoryIdsGoIntoTheLink() {
+        assertEquals("mekaos://news?story=ab12-x_9", DeskNewsWidgetRules.openUrl("ab12-x_9"))
+        assertEquals("mekaos://news", DeskNewsWidgetRules.openUrl("a&b=c"))
+        assertEquals("mekaos://news", DeskNewsWidgetRules.openUrl(""))
+    }
+
+    @Test
+    fun nothingToShowSaysWhereToChooseTopics() {
+        val v = DeskNewsWidgetRules.view(TickerRules.ticker(NewsPlace.EMPTY))
+        assertTrue(v.isEmpty)
+        assertEquals("No news yet", v.emptyTitle)
+        assertEquals("Choose topics in MEKA · Ask › More › News", v.emptyLine)
+        assertEquals(30 * 60_000L, DeskNewsWidgetRules.REFRESH_MS)
+    }
+}
