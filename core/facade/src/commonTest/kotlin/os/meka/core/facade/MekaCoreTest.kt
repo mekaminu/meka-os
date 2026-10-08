@@ -1138,6 +1138,7 @@ class MekaCoreTest {
             os.meka.core.domain.EventEditFields.STATUS_AT to os.meka.core.sync.FieldValue.Int64(now),
         ))
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        now += 3 * 60_000L // past the two minutes "Added … to Google" stays
         fold.rename(taskId, "Write the Q3 report")
         assertTrue(fold.calendarEditLines.value.isEmpty())
 
