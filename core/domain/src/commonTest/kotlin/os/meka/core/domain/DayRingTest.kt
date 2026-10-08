@@ -2,6 +2,7 @@ package os.meka.core.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -122,5 +123,22 @@ class DayRingTest {
         assertEquals(DayRingPlay.QUICK, DayRingRules.play(100, 100, reduced = false))
         assertEquals(DayRingPlay.STILL, DayRingRules.play(null, 100, reduced = true))
         assertEquals(DayRingPlay.STILL, DayRingRules.play(100, 100, reduced = true))
+    }
+
+    @Test
+    fun everyReturnToTodayAfterAWhileDrawsTheRingInAgain() {
+        val away = DayRingRules.RETURN_REPLAY_MS
+        // Back after a while, the same day: the ring draws in again (with Today's stagger).
+        assertEquals(DayRingPlay.QUICK, DayRingRules.onReturn(100, 100, away, reduced = false))
+        assertEquals(DayRingPlay.QUICK, DayRingRules.onReturn(100, 100, 3_600_000L, reduced = false))
+        // A fingerprint prompt or a glance at a notification: Today stays as it was.
+        assertNull(DayRingRules.onReturn(100, 100, away - 1, reduced = false))
+        assertNull(DayRingRules.onReturn(100, 100, 0L, reduced = false))
+        // The first return on a new day plays in full, however short the gap (MEKA left open overnight).
+        assertEquals(DayRingPlay.FULL, DayRingRules.onReturn(99, 100, 2_000L, reduced = false))
+        assertEquals(DayRingPlay.FULL, DayRingRules.onReturn(null, 100, away, reduced = false))
+        // Motion → Off: nothing replays.
+        assertNull(DayRingRules.onReturn(99, 100, away, reduced = true))
+        assertNull(DayRingRules.onReturn(100, 100, away * 10, reduced = true))
     }
 }

@@ -394,6 +394,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(DayRingRules.shared.play(lastFullEpochDay: nil, todayEpochDay: 100, reduced: false), DayRingPlay.full)
         XCTAssertEqual(DayRingRules.shared.play(lastFullEpochDay: KotlinLong(longLong: 100), todayEpochDay: 100, reduced: false), DayRingPlay.quick)
         XCTAssertEqual(DayRingRules.shared.play(lastFullEpochDay: nil, todayEpochDay: 100, reduced: true), DayRingPlay.still)
+        // Living Today, slice 2: back to Today after 15 s or more draws the ring in again; a new day plays in full.
+        XCTAssertEqual(DayRingRules.shared.onReturn(lastFullEpochDay: KotlinLong(longLong: 100), todayEpochDay: 100, awayMs: 15_000, reduced: false), DayRingPlay.quick)
+        XCTAssertNil(DayRingRules.shared.onReturn(lastFullEpochDay: KotlinLong(longLong: 100), todayEpochDay: 100, awayMs: 14_999, reduced: false))
+        XCTAssertEqual(DayRingRules.shared.onReturn(lastFullEpochDay: KotlinLong(longLong: 99), todayEpochDay: 100, awayMs: 1_000, reduced: false), DayRingPlay.full)
+        XCTAssertNil(DayRingRules.shared.onReturn(lastFullEpochDay: nil, todayEpochDay: 100, awayMs: 60_000, reduced: true))
         let arc = DayArc(id: "e-x", kind: .event, startMinute: 600, endMinute: 660, past: false)
         XCTAssertEqual(arc.startDegrees, 150, accuracy: 1e-4)
         XCTAssertEqual(arc.sweepDegrees, 15, accuracy: 1e-4)

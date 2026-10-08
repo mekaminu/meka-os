@@ -125,14 +125,19 @@ enum MotionMath {
     }
 
     /// The opening moment's Day ring (motion pass 2, slice 7), number for number with the Fold. `.full` (the first open
-    /// of the day): the brass mark draws round over `dayRingMark`; halfway through, the arcs grow in one after another
-    /// (the stagger apart, each over `dayRingArc`) and the now needle sweeps from midnight to now (`dayRingNeedle`);
-    /// once the mark has closed the centre counts up. `.quick`: everything within `dayRingQuick`. `.still` (Off): at
-    /// once. Each returns 0 → 1 for `elapsed` seconds since Today appeared.
-    static func dayRingMark(elapsed: Double, play: DayRingPlayback) -> Double {
+    /// of the day): the brass mark draws round over `dayRingMarkDuration`, the hour marks fading in one by one behind it
+    /// (`dayRingHour`); halfway through, the arcs grow in one after another (the stagger apart, each over
+    /// `dayRingArcDuration`) and the now needle sweeps from midnight to now (`dayRingNeedleDuration`); once the mark has
+    /// closed the centre counts up. Expressive runs the three `expressiveDayRingScale` times longer (Living Today,
+    /// slice 2). `.quick` (later opens and every return to Today after a while): the mark, hour marks and needle draw
+    /// round together over `dayRingQuickDuration` (0.9 s Expressive, 0.5 s Subtle), the arcs and tiles growing over its
+    /// last three quarters as the centre counts up. `.still` (Off): at once. Each returns 0 → 1 for `elapsed` seconds
+    /// since Today appeared.
+    static func dayRingMark(elapsed: Double, play: DayRingPlayback, expressive: Bool = false) -> Double {
         switch play {
-        case .still, .quick: 1
-        case .full: easeOutCubic(elapsed / MekaChoreography.dayRingMark)
+        case .still: 1
+        case .quick: easeOutCubic(elapsed / dayRingQuickDuration(expressive: expressive))
+        case .full: easeOutCubic(elapsed / dayRingMarkDuration(expressive: expressive))
         }
     }
 
@@ -140,19 +145,32 @@ enum MotionMath {
     static func dayRingArc(elapsed: Double, index: Int, play: DayRingPlayback, expressive: Bool) -> Double {
         switch play {
         case .still: 1
-        case .quick: easeOutCubic(elapsed / MekaChoreography.dayRingQuick)
+        case .quick: quickLate(elapsed: elapsed, expressive: expressive)
         case .full:
-            easeOutCubic((elapsed - MekaChoreography.dayRingMark / 2 - staggerDelay(index: index, reduced: false, expressive: expressive))
-                / MekaChoreography.dayRingArc)
+            easeOutCubic((elapsed - dayRingMarkDuration(expressive: expressive) / 2
+                    - staggerDelay(index: index, reduced: false, expressive: expressive))
+                / dayRingArcDuration(expressive: expressive))
         }
     }
 
     /// How far the now needle has swept from midnight (the top) towards now.
-    static func dayRingNeedle(elapsed: Double, play: DayRingPlayback) -> Double {
+    static func dayRingNeedle(elapsed: Double, play: DayRingPlayback, expressive: Bool = false) -> Double {
         switch play {
         case .still: 1
-        case .quick: easeOutCubic(elapsed / MekaChoreography.dayRingQuick)
-        case .full: easeOutCubic((elapsed - MekaChoreography.dayRingMark / 2) / MekaChoreography.dayRingNeedle)
+        case .quick: easeOutCubic(elapsed / dayRingQuickDuration(expressive: expressive))
+        case .full:
+            easeOutCubic((elapsed - dayRingMarkDuration(expressive: expressive) / 2) / dayRingNeedleDuration(expressive: expressive))
+        }
+    }
+
+    /// How strongly hour mark `hour` (0–23, midnight at the top) shows: in full each fades in as the drawing mark
+    /// reaches it, one after another round the dial (over `dayRingHourFade` hours of the dial); in the quick draw they
+    /// all come up together with the mark (`mark` is `dayRingMark`'s value); Off: shown.
+    static func dayRingHour(mark: Double, hour: Int, play: DayRingPlayback) -> Double {
+        switch play {
+        case .still: 1
+        case .quick: min(max(mark, 0), 1)
+        case .full: min(max((mark * 24 - Double(hour)) / dayRingHourFade, 0), 1)
         }
     }
 
@@ -160,8 +178,8 @@ enum MotionMath {
     static func dayRingCount(elapsed: Double, play: DayRingPlayback, expressive: Bool) -> Double {
         switch play {
         case .still: 1
-        case .quick: min(max(elapsed / MekaChoreography.dayRingQuick, 0), 1)
-        case .full: min(max((elapsed - MekaChoreography.dayRingMark) / countUpDuration(expressive: expressive), 0), 1)
+        case .quick: min(max(elapsed / dayRingQuickDuration(expressive: expressive), 0), 1)
+        case .full: min(max((elapsed - dayRingMarkDuration(expressive: expressive)) / countUpDuration(expressive: expressive), 0), 1)
         }
     }
 
@@ -169,31 +187,66 @@ enum MotionMath {
     /// can pause.
     static func dayRingTotal(arcs: Int, play: DayRingPlayback, expressive: Bool, tiles: Int = 0) -> Double {
         switch play {
-        case .still: 0
-        case .quick: MekaChoreography.dayRingQuick
+        case .still: return 0
+        case .quick: return dayRingQuickDuration(expressive: expressive)
         case .full:
-            max(
-                MekaChoreography.dayRingMark / 2 + staggerSpan(count: arcs, reduced: false, expressive: expressive) + MekaChoreography.dayRingArc,
-                MekaChoreography.dayRingMark / 2 + MekaChoreography.dayRingNeedle,
-                MekaChoreography.dayRingMark + countUpDuration(expressive: expressive),
-                tiles > 0
-                    ? MekaChoreography.dayRingMark + staggerSpan(count: tiles, reduced: false, expressive: expressive) + MekaChoreography.dayRingArc
-                    : 0
+            let mark = dayRingMarkDuration(expressive: expressive)
+            let arc = dayRingArcDuration(expressive: expressive)
+            return max(
+                mark / 2 + staggerSpan(count: arcs, reduced: false, expressive: expressive) + arc,
+                mark / 2 + dayRingNeedleDuration(expressive: expressive),
+                mark + countUpDuration(expressive: expressive),
+                tiles > 0 ? mark + staggerSpan(count: tiles, reduced: false, expressive: expressive) + arc : 0
             )
         }
     }
 
     /// The live tiles under the Day ring (the opening moment, part 2), number for number with the Fold: `.full` — once
-    /// the mark has closed, tile `index` fades and rises in (the stagger apart, each over `dayRingArc`) while its number
-    /// counts up with the centre; `.quick` within `dayRingQuick`; `.still` at once.
+    /// the mark has closed, tile `index` fades and rises in (the stagger apart, each over `dayRingArcDuration`) while
+    /// its number counts up with the centre; `.quick` over the quick draw's last three quarters; `.still` at once.
     static func dayTile(elapsed: Double, index: Int, play: DayRingPlayback, expressive: Bool) -> Double {
         switch play {
         case .still: 1
-        case .quick: easeOutCubic(elapsed / MekaChoreography.dayRingQuick)
+        case .quick: quickLate(elapsed: elapsed, expressive: expressive)
         case .full:
-            easeOutCubic((elapsed - MekaChoreography.dayRingMark - staggerDelay(index: index, reduced: false, expressive: expressive))
-                / MekaChoreography.dayRingArc)
+            easeOutCubic((elapsed - dayRingMarkDuration(expressive: expressive)
+                    - staggerDelay(index: index, reduced: false, expressive: expressive))
+                / dayRingArcDuration(expressive: expressive))
         }
+    }
+
+    /// The first open's mark: 0.6 s, Expressive 0.84 s.
+    static func dayRingMarkDuration(expressive: Bool) -> Double {
+        expressiveRing(MekaChoreography.dayRingMark, expressive: expressive)
+    }
+
+    /// Each arc's growth in the first open: 0.36 s, Expressive 0.504 s.
+    static func dayRingArcDuration(expressive: Bool) -> Double {
+        expressiveRing(MekaChoreography.dayRingArc, expressive: expressive)
+    }
+
+    /// The first open's needle sweep: 0.72 s, Expressive 1.008 s.
+    static func dayRingNeedleDuration(expressive: Bool) -> Double {
+        expressiveRing(MekaChoreography.dayRingNeedle, expressive: expressive)
+    }
+
+    /// The quick draw (later opens, returns to Today): 0.5 s Subtle, 0.9 s Expressive.
+    static func dayRingQuickDuration(expressive: Bool) -> Double {
+        expressive ? MekaChoreography.expressiveDayRingQuick : MekaChoreography.dayRingQuick
+    }
+
+    /// How many hours of the dial each hour mark takes to fade in behind the drawing mark (first open).
+    static let dayRingHourFade: Double = 1.5
+
+    private static func expressiveRing(_ seconds: Double, expressive: Bool) -> Double {
+        // Rounded to the millisecond, like the Fold's whole-millisecond durations.
+        expressive ? (seconds * Double(MekaChoreography.expressiveDayRingScale) * 1000).rounded() / 1000 : seconds
+    }
+
+    /// The quick draw's arcs and tiles: they grow over its last three quarters, after the mark has begun.
+    private static func quickLate(elapsed: Double, expressive: Bool) -> Double {
+        let d = dayRingQuickDuration(expressive: expressive)
+        return easeOutCubic((elapsed - d / 4) / (d * 3 / 4))
     }
 
     /// The greeting's letters on the first open of the day (`.full`): letter `index` fades in `greetingLetter` after

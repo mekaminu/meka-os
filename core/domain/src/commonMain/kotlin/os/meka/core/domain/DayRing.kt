@@ -66,7 +66,10 @@ enum class DayRingPlay {
     /** The first open of the day: the brass mark draws itself (~600 ms), the arcs draw in, the needle sweeps, the centre counts up. */
     FULL,
 
-    /** Later opens: the same, all in about 300 ms. */
+    /**
+     * Later opens (and every return to Today after [DayRingRules.RETURN_REPLAY_MS] away): the mark, arcs, needle and
+     * count-up draw in together, about 900 ms in Expressive and 500 ms in Subtle (Living Today, slice 2).
+     */
     QUICK,
 
     /** Motion → Off: drawn at once. */
@@ -185,6 +188,28 @@ object DayRingRules {
         reduced -> DayRingPlay.STILL
         lastFullEpochDay == todayEpochDay -> DayRingPlay.QUICK
         else -> DayRingPlay.FULL
+    }
+
+    /**
+     * How long MEKA must have been away (another app in front, the screen off, the window behind another) before
+     * coming back to Today plays the opening again (Living Today, slice 2: "every open is a moment"). Shorter trips —
+     * a fingerprint prompt, a permission dialog, a glance at a notification — leave Today as it was.
+     */
+    const val RETURN_REPLAY_MS = 15_000L
+
+    /**
+     * What coming back to Today plays after [awayMs] away: the first return on a new day plays in full whatever the
+     * gap, a return after [RETURN_REPLAY_MS] or more draws the ring in again ([DayRingPlay.QUICK]) with Today's
+     * stagger, and a shorter trip plays nothing (null: Today stays as it was). Motion → Off: null, nothing replays.
+     */
+    fun onReturn(lastFullEpochDay: Long?, todayEpochDay: Long, awayMs: Long, reduced: Boolean): DayRingPlay? {
+        if (reduced) return null
+        val play = play(lastFullEpochDay, todayEpochDay, reduced = false)
+        return when {
+            play == DayRingPlay.FULL -> DayRingPlay.FULL
+            awayMs >= RETURN_REPLAY_MS -> DayRingPlay.QUICK
+            else -> null
+        }
     }
 }
 

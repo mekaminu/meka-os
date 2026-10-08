@@ -153,67 +153,111 @@ object MotionMath {
 
     /**
      * The opening moment's Day ring (motion pass 2, slice 7; catalogue "Opening moment"). [DayRingPlay.FULL] (the
-     * first open of the day): the brass mark (the ring's track) draws round over [MekaChoreography.dayRingMarkMs];
-     * halfway through, the arcs grow in one after another (the stagger apart, each over `dayRingArc`) and the now
-     * needle sweeps from midnight to now (`dayRingNeedle`); once the mark has closed the centre counts up
-     * ([countUpMs]). [DayRingPlay.QUICK]: everything within `dayRingQuick`. [DayRingPlay.STILL] (Off): drawn at once.
+     * first open of the day): the brass mark (the ring's track) draws round over [dayRingMarkMs], the hour marks
+     * fading in one by one behind it ([dayRingHour]); halfway through, the arcs grow in one after another (the stagger
+     * apart, each over [dayRingArcMs]) and the now needle sweeps from midnight to now ([dayRingNeedleMs]); once the
+     * mark has closed the centre counts up ([countUpMs]). Expressive runs the three
+     * [MekaChoreography.expressiveDayRingScale] times longer (Living Today, slice 2: "Expressive must be obvious").
+     * [DayRingPlay.QUICK] (later opens and every return to Today after a while): the mark, hour marks and needle draw
+     * round together over [dayRingQuickMs] (900 ms Expressive, 500 ms Subtle), the arcs and tiles growing over its last
+     * three quarters as the centre counts up. [DayRingPlay.STILL] (Off): drawn at once.
      * Each returns 0 → 1 for [elapsedMs] since Today appeared.
      */
-    fun dayRingMark(elapsedMs: Long, play: DayRingPlay): Float = when (play) {
+    fun dayRingMark(elapsedMs: Long, play: DayRingPlay, expressive: Boolean = false): Float = when (play) {
         DayRingPlay.STILL -> 1f
-        DayRingPlay.QUICK -> 1f
-        DayRingPlay.FULL -> easeOutCubic(elapsedMs.toFloat() / MekaChoreography.dayRingMarkMs)
+        DayRingPlay.QUICK -> easeOutCubic(elapsedMs.toFloat() / dayRingQuickMs(expressive))
+        DayRingPlay.FULL -> easeOutCubic(elapsedMs.toFloat() / dayRingMarkMs(expressive))
     }
 
     /** How far arc [index] (clockwise order) has grown from its start. */
     fun dayRingArc(elapsedMs: Long, index: Int, play: DayRingPlay, expressive: Boolean): Float = when (play) {
         DayRingPlay.STILL -> 1f
-        DayRingPlay.QUICK -> easeOutCubic(elapsedMs.toFloat() / MekaChoreography.dayRingQuickMs)
+        DayRingPlay.QUICK -> quickLate(elapsedMs, expressive)
         DayRingPlay.FULL -> {
-            val begin = MekaChoreography.dayRingMarkMs / 2 + staggerDelayMs(index, false, expressive)
-            easeOutCubic((elapsedMs - begin).toFloat() / MekaChoreography.dayRingArcMs)
+            val begin = dayRingMarkMs(expressive) / 2 + staggerDelayMs(index, false, expressive)
+            easeOutCubic((elapsedMs - begin).toFloat() / dayRingArcMs(expressive))
         }
     }
 
     /** How far the now needle has swept from midnight (the top) towards now. */
-    fun dayRingNeedle(elapsedMs: Long, play: DayRingPlay): Float = when (play) {
+    fun dayRingNeedle(elapsedMs: Long, play: DayRingPlay, expressive: Boolean = false): Float = when (play) {
         DayRingPlay.STILL -> 1f
-        DayRingPlay.QUICK -> easeOutCubic(elapsedMs.toFloat() / MekaChoreography.dayRingQuickMs)
-        DayRingPlay.FULL -> easeOutCubic((elapsedMs - MekaChoreography.dayRingMarkMs / 2).toFloat() / MekaChoreography.dayRingNeedleMs)
+        DayRingPlay.QUICK -> easeOutCubic(elapsedMs.toFloat() / dayRingQuickMs(expressive))
+        DayRingPlay.FULL -> easeOutCubic((elapsedMs - dayRingMarkMs(expressive) / 2).toFloat() / dayRingNeedleMs(expressive))
+    }
+
+    /**
+     * How strongly hour mark [hour] (0–23, midnight at the top) shows: in full each fades in as the drawing mark
+     * reaches it, one after another round the dial (over [DAY_RING_HOUR_FADE] hours of the dial); in the quick draw
+     * they all come up together with the mark ([mark] is [dayRingMark]'s value); Off: shown.
+     */
+    fun dayRingHour(mark: Float, hour: Int, play: DayRingPlay): Float = when (play) {
+        DayRingPlay.STILL -> 1f
+        DayRingPlay.QUICK -> mark.coerceIn(0f, 1f)
+        DayRingPlay.FULL -> ((mark * 24f - hour) / DAY_RING_HOUR_FADE).coerceIn(0f, 1f)
     }
 
     /** The centre's count-up fraction (linear; [countUpValue] eases it). */
     fun dayRingCount(elapsedMs: Long, play: DayRingPlay, expressive: Boolean): Float = when (play) {
         DayRingPlay.STILL -> 1f
-        DayRingPlay.QUICK -> (elapsedMs.toFloat() / MekaChoreography.dayRingQuickMs).coerceIn(0f, 1f)
-        DayRingPlay.FULL -> ((elapsedMs - MekaChoreography.dayRingMarkMs).toFloat() / countUpMs(expressive)).coerceIn(0f, 1f)
+        DayRingPlay.QUICK -> (elapsedMs.toFloat() / dayRingQuickMs(expressive)).coerceIn(0f, 1f)
+        DayRingPlay.FULL -> ((elapsedMs - dayRingMarkMs(expressive)).toFloat() / countUpMs(expressive)).coerceIn(0f, 1f)
     }
 
     /** When the whole opening has landed for a ring of [arcs] arcs and [tiles] live tiles, so the frame clock can stop. */
     fun dayRingTotalMs(arcs: Int, play: DayRingPlay, expressive: Boolean, tiles: Int = 0): Long = when (play) {
         DayRingPlay.STILL -> 0L
-        DayRingPlay.QUICK -> MekaChoreography.dayRingQuickMs.toLong()
-        DayRingPlay.FULL -> maxOf(
-            MekaChoreography.dayRingMarkMs / 2 + staggerSpanMs(arcs, false, expressive) + MekaChoreography.dayRingArcMs,
-            MekaChoreography.dayRingMarkMs / 2 + MekaChoreography.dayRingNeedleMs,
-            MekaChoreography.dayRingMarkMs + countUpMs(expressive),
-            if (tiles > 0) MekaChoreography.dayRingMarkMs + staggerSpanMs(tiles, false, expressive) + MekaChoreography.dayRingArcMs else 0,
-        ).toLong()
+        DayRingPlay.QUICK -> dayRingQuickMs(expressive).toLong()
+        DayRingPlay.FULL -> {
+            val mark = dayRingMarkMs(expressive)
+            val arc = dayRingArcMs(expressive)
+            maxOf(
+                mark / 2 + staggerSpanMs(arcs, false, expressive) + arc,
+                mark / 2 + dayRingNeedleMs(expressive),
+                mark + countUpMs(expressive),
+                if (tiles > 0) mark + staggerSpanMs(tiles, false, expressive) + arc else 0,
+            ).toLong()
+        }
     }
 
     /**
      * The live tiles under the Day ring (the opening moment, part 2): [DayRingPlay.FULL] — once the mark has closed,
-     * tile [index] fades and rises in (the stagger apart, each over `dayRingArc`) while its number counts up with the
-     * centre ([dayRingCount]); [DayRingPlay.QUICK] within `dayRingQuick`; [DayRingPlay.STILL] shown at once.
+     * tile [index] fades and rises in (the stagger apart, each over [dayRingArcMs]) while its number counts up with the
+     * centre ([dayRingCount]); [DayRingPlay.QUICK] over the quick draw's last three quarters; [DayRingPlay.STILL] shown at once.
      */
     fun dayTile(elapsedMs: Long, index: Int, play: DayRingPlay, expressive: Boolean): Float = when (play) {
         DayRingPlay.STILL -> 1f
-        DayRingPlay.QUICK -> easeOutCubic(elapsedMs.toFloat() / MekaChoreography.dayRingQuickMs)
+        DayRingPlay.QUICK -> quickLate(elapsedMs, expressive)
         DayRingPlay.FULL -> {
-            val begin = MekaChoreography.dayRingMarkMs + staggerDelayMs(index, false, expressive)
-            easeOutCubic((elapsedMs - begin).toFloat() / MekaChoreography.dayRingArcMs)
+            val begin = dayRingMarkMs(expressive) + staggerDelayMs(index, false, expressive)
+            easeOutCubic((elapsedMs - begin).toFloat() / dayRingArcMs(expressive))
         }
     }
+
+    /** The first open's mark: 600 ms, Expressive 840 ms. */
+    fun dayRingMarkMs(expressive: Boolean): Int = expressiveRing(MekaChoreography.dayRingMarkMs, expressive)
+
+    /** Each arc's growth in the first open: 360 ms, Expressive 504 ms. */
+    fun dayRingArcMs(expressive: Boolean): Int = expressiveRing(MekaChoreography.dayRingArcMs, expressive)
+
+    /** The first open's needle sweep: 720 ms, Expressive 1008 ms. */
+    fun dayRingNeedleMs(expressive: Boolean): Int = expressiveRing(MekaChoreography.dayRingNeedleMs, expressive)
+
+    /** The quick draw (later opens, returns to Today): 500 ms Subtle, 900 ms Expressive. */
+    fun dayRingQuickMs(expressive: Boolean): Int =
+        if (expressive) MekaChoreography.expressiveDayRingQuickMs else MekaChoreography.dayRingQuickMs
+
+    private fun expressiveRing(ms: Int, expressive: Boolean): Int =
+        if (expressive) (ms * MekaChoreography.expressiveDayRingScale).roundToInt() else ms
+
+    /** The quick draw's arcs and tiles: they grow over its last three quarters, after the mark has begun. */
+    private fun quickLate(elapsedMs: Long, expressive: Boolean): Float {
+        val d = dayRingQuickMs(expressive).toFloat()
+        return easeOutCubic((elapsedMs - d / 4f) / (d * 3f / 4f))
+    }
+
+    /** How many hours of the dial each hour mark takes to fade in behind the drawing mark (first open). */
+    const val DAY_RING_HOUR_FADE = 1.5f
 
     /**
      * The greeting's letters on the first open of the day ([DayRingPlay.FULL]): letter [index] fades in

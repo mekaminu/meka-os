@@ -191,42 +191,68 @@ class MotionMathTest {
     @Test
     fun theDayRingDrawsItsMarkThenTheArcsAndNeedleThenCountsUp() {
         val full = DayRingPlay.FULL
-        // The mark draws round over 600 ms.
+        // Subtle: the mark draws round over 600 ms.
         assertEquals(0f, MotionMath.dayRingMark(0, full), 1e-6f)
         assertEquals(0.875f, MotionMath.dayRingMark(300, full), 1e-6f)
         assertEquals(1f, MotionMath.dayRingMark(600, full), 1e-6f)
-        // Arcs start as the mark is halfway, one stagger step apart (Expressive 60 ms, Subtle 40 ms), each over 360 ms.
-        assertEquals(0f, MotionMath.dayRingArc(300, 0, full, expressive = true), 1e-6f)
-        assertEquals(1f, MotionMath.dayRingArc(660, 0, full, expressive = true), 1e-6f)
-        assertEquals(0f, MotionMath.dayRingArc(360, 1, full, expressive = true), 1e-6f)
-        assertEquals(1f, MotionMath.dayRingArc(720, 1, full, expressive = true), 1e-6f)
+        // Expressive runs it 1.4 times longer: 840 ms (Living Today, slice 2).
+        assertEquals(0.875f, MotionMath.dayRingMark(420, full, expressive = true), 1e-6f)
+        assertEquals(1f, MotionMath.dayRingMark(840, full, expressive = true), 1e-6f)
+        assertEquals(840, MotionMath.dayRingMarkMs(true))
+        assertEquals(504, MotionMath.dayRingArcMs(true))
+        assertEquals(1008, MotionMath.dayRingNeedleMs(true))
+        // Arcs start as the mark is halfway, one stagger step apart (Expressive 60 ms over 504 ms; Subtle 40 ms over 360 ms).
+        assertEquals(0f, MotionMath.dayRingArc(420, 0, full, expressive = true), 1e-6f)
+        assertEquals(1f, MotionMath.dayRingArc(924, 0, full, expressive = true), 1e-6f)
+        assertEquals(0f, MotionMath.dayRingArc(480, 1, full, expressive = true), 1e-6f)
+        assertEquals(1f, MotionMath.dayRingArc(984, 1, full, expressive = true), 1e-6f)
         assertEquals(0f, MotionMath.dayRingArc(340, 1, full, expressive = false), 1e-6f)
-        // The needle sweeps from midnight to now over 720 ms from the same moment.
+        assertEquals(1f, MotionMath.dayRingArc(700, 1, full, expressive = false), 1e-6f)
+        // The needle sweeps from midnight to now from the same moment (Subtle 720 ms, Expressive 1008 ms).
         assertEquals(0f, MotionMath.dayRingNeedle(300, full), 1e-6f)
         assertEquals(1f, MotionMath.dayRingNeedle(1020, full), 1e-6f)
+        assertEquals(0f, MotionMath.dayRingNeedle(420, full, expressive = true), 1e-6f)
+        assertEquals(1f, MotionMath.dayRingNeedle(1428, full, expressive = true), 1e-6f)
         // The centre counts up once the mark has closed.
-        assertEquals(0f, MotionMath.dayRingCount(600, full, expressive = true), 1e-6f)
-        assertEquals(1f, MotionMath.dayRingCount(1500, full, expressive = true), 1e-6f)
+        assertEquals(0f, MotionMath.dayRingCount(840, full, expressive = true), 1e-6f)
+        assertEquals(1f, MotionMath.dayRingCount(1740, full, expressive = true), 1e-6f)
         assertEquals(1f, MotionMath.dayRingCount(1300, full, expressive = false), 1e-6f)
-        // It has landed when the last of them has.
-        assertEquals(1500L, MotionMath.dayRingTotalMs(3, full, expressive = true))
+        // It has landed when the last of them has: well over the 900 ms Meka asked for in Expressive.
+        assertEquals(1740L, MotionMath.dayRingTotalMs(3, full, expressive = true))
         assertEquals(1300L, MotionMath.dayRingTotalMs(3, full, expressive = false))
-        assertEquals(1500L, MotionMath.dayRingTotalMs(20, full, expressive = true))
+        assertEquals(1740L, MotionMath.dayRingTotalMs(20, full, expressive = true))
+    }
+
+    @Test
+    fun theHourMarksFadeInOneByOneBehindTheMarkOnTheFirstOpen() {
+        val full = DayRingPlay.FULL
+        // Halfway round (noon at the bottom): the morning's marks are up, 11 is fading in, noon hasn't begun.
+        assertEquals(1f, MotionMath.dayRingHour(0.5f, 0, full), 1e-6f)
+        assertEquals(1f, MotionMath.dayRingHour(0.5f, 10, full), 1e-6f)
+        assertEquals(2f / 3f, MotionMath.dayRingHour(0.5f, 11, full), 1e-5f)
+        assertEquals(0f, MotionMath.dayRingHour(0.5f, 12, full), 1e-6f)
+        assertEquals(0f, MotionMath.dayRingHour(0.5f, 23, full), 1e-6f)
+        assertEquals(1f, MotionMath.dayRingHour(1f, 23, full), 1e-6f)
+        // The quick draw brings them up together with the mark; Off shows them.
+        assertEquals(0.4f, MotionMath.dayRingHour(0.4f, 20, DayRingPlay.QUICK), 1e-6f)
+        assertEquals(0.4f, MotionMath.dayRingHour(0.4f, 1, DayRingPlay.QUICK), 1e-6f)
+        assertEquals(1f, MotionMath.dayRingHour(0f, 17, DayRingPlay.STILL), 1e-6f)
     }
 
     @Test
     fun theLiveTilesRiseInAsTheMarkClosesAndTheGreetingSpellsItself() {
         val full = DayRingPlay.FULL
-        // Tiles: once the mark has closed (600 ms), one stagger step apart, each over 360 ms.
-        assertEquals(0f, MotionMath.dayTile(600, 0, full, expressive = true), 1e-6f)
-        assertEquals(1f, MotionMath.dayTile(960, 0, full, expressive = true), 1e-6f)
-        assertEquals(0f, MotionMath.dayTile(780, 3, full, expressive = true), 1e-6f)
-        assertEquals(1f, MotionMath.dayTile(1140, 3, full, expressive = true), 1e-6f)
+        // Tiles: once the mark has closed (Expressive 840 ms), one stagger step apart, each over 504 ms.
+        assertEquals(0f, MotionMath.dayTile(840, 0, full, expressive = true), 1e-6f)
+        assertEquals(1f, MotionMath.dayTile(1344, 0, full, expressive = true), 1e-6f)
+        assertEquals(0f, MotionMath.dayTile(1020, 3, full, expressive = true), 1e-6f)
+        assertEquals(1f, MotionMath.dayTile(1524, 3, full, expressive = true), 1e-6f)
         assertEquals(0f, MotionMath.dayTile(720, 3, full, expressive = false), 1e-6f)
-        assertEquals(0.875f, MotionMath.dayTile(150, 2, DayRingPlay.QUICK, expressive = true), 1e-6f)
+        assertEquals(0f, MotionMath.dayTile(225, 2, DayRingPlay.QUICK, expressive = true), 1e-6f)
+        assertEquals(1f, MotionMath.dayTile(900, 2, DayRingPlay.QUICK, expressive = true), 1e-6f)
         assertEquals(1f, MotionMath.dayTile(0, 2, DayRingPlay.STILL, expressive = true), 1e-6f)
         // Four tiles land within the count-up, so the ring's total is unchanged.
-        assertEquals(1500L, MotionMath.dayRingTotalMs(3, full, expressive = true, tiles = 4))
+        assertEquals(1740L, MotionMath.dayRingTotalMs(3, full, expressive = true, tiles = 4))
         assertEquals(1300L, MotionMath.dayRingTotalMs(3, full, expressive = false, tiles = 4))
         // Greeting letters: 28 ms apart, each over 260 ms; only on the first open of the day.
         assertEquals(0f, MotionMath.greetingLetter(0, 0, full), 1e-6f)
@@ -241,13 +267,21 @@ class MotionMathTest {
     }
 
     @Test
-    fun laterOpensPlayTheDayRingQuicklyAndOffDrawsItAtOnce() {
+    fun laterOpensDrawTheDayRingInAndOffDrawsItAtOnce() {
         val quick = DayRingPlay.QUICK
-        assertEquals(1f, MotionMath.dayRingMark(0, quick), 1e-6f)
-        assertEquals(0.875f, MotionMath.dayRingArc(150, 5, quick, expressive = true), 1e-6f)
-        assertEquals(0.875f, MotionMath.dayRingNeedle(150, quick), 1e-6f)
-        assertEquals(0.5f, MotionMath.dayRingCount(150, quick, expressive = true), 1e-6f)
-        assertEquals(300L, MotionMath.dayRingTotalMs(9, quick, expressive = true))
+        // Expressive: the mark and needle draw round over 900 ms; arcs grow over its last three quarters; the centre counts.
+        assertEquals(0f, MotionMath.dayRingMark(0, quick, expressive = true), 1e-6f)
+        assertEquals(0.875f, MotionMath.dayRingMark(450, quick, expressive = true), 1e-6f)
+        assertEquals(0.875f, MotionMath.dayRingNeedle(450, quick, expressive = true), 1e-6f)
+        assertEquals(0f, MotionMath.dayRingArc(225, 5, quick, expressive = true), 1e-6f)
+        assertEquals(1f, MotionMath.dayRingArc(900, 5, quick, expressive = true), 1e-6f)
+        assertEquals(0.5f, MotionMath.dayRingCount(450, quick, expressive = true), 1e-6f)
+        assertEquals(900L, MotionMath.dayRingTotalMs(9, quick, expressive = true))
+        // Subtle: 500 ms.
+        assertEquals(0.875f, MotionMath.dayRingMark(250, quick), 1e-6f)
+        assertEquals(0f, MotionMath.dayRingArc(125, 0, quick, expressive = false), 1e-6f)
+        assertEquals(1f, MotionMath.dayRingArc(500, 0, quick, expressive = false), 1e-6f)
+        assertEquals(500L, MotionMath.dayRingTotalMs(9, quick, expressive = false))
         val still = DayRingPlay.STILL
         assertEquals(1f, MotionMath.dayRingMark(0, still), 1e-6f)
         assertEquals(1f, MotionMath.dayRingArc(0, 3, still, expressive = true), 1e-6f)

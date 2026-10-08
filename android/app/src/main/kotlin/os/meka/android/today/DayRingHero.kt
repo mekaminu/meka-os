@@ -93,8 +93,8 @@ fun DayRingHero(
         onPlayed()
     }
     val colors = Meka.colors
-    val mark = MotionMath.dayRingMark(elapsed, play)
-    val needle = MotionMath.dayRingNeedle(elapsed, play)
+    val mark = MotionMath.dayRingMark(elapsed, play, expressive)
+    val needle = MotionMath.dayRingNeedle(elapsed, play, expressive)
     val count = MotionMath.dayRingCount(elapsed, play, expressive)
     val free = MotionMath.countUpValue(0, ring.freeMinutes, count)
     val toDo = MotionMath.countUpValue(0, ring.toDo, count)
@@ -112,16 +112,24 @@ fun DayRingHero(
                 val radius = arcSize.width / 2
                 // The mark: the dial's track, drawing itself round from the top.
                 drawArc(colors.textTertiary.copy(alpha = 0.28f), -90f, 360f * mark, false, topLeft, arcSize, style = Stroke(1.5.dp.toPx()))
-                // Quarter ticks (00 · 06 · 12 · 18) once the mark has passed them.
-                for (q in 0 until 4) {
-                    if (mark < q / 4f) continue
-                    val a = Math.toRadians(q * 90.0 - 90.0)
-                    val outer = radius + 4.dp.toPx()
-                    val inner = radius - 4.dp.toPx()
-                    drawLine(colors.textTertiary.copy(alpha = 0.5f),
-                        Offset(center.x + (cos(a) * inner).toFloat(), center.y + (sin(a) * inner).toFloat()),
-                        Offset(center.x + (cos(a) * outer).toFloat(), center.y + (sin(a) * outer).toFloat()),
-                        strokeWidth = 1.dp.toPx())
+                // The hour marks: a tick at 00 · 06 · 12 · 18, a fine dot just inside the track at every other hour. On
+                // the first open they fade in one by one behind the drawing mark; the quick draw brings them up with it.
+                for (h in 0 until 24) {
+                    val show = MotionMath.dayRingHour(mark, h, play)
+                    if (show <= 0f) continue
+                    val a = Math.toRadians(h * 15.0 - 90.0)
+                    if (h % 6 == 0) {
+                        val outer = radius + 4.dp.toPx()
+                        val inner = radius - 4.dp.toPx()
+                        drawLine(colors.textTertiary.copy(alpha = 0.5f * show),
+                            Offset(center.x + (cos(a) * inner).toFloat(), center.y + (sin(a) * inner).toFloat()),
+                            Offset(center.x + (cos(a) * outer).toFloat(), center.y + (sin(a) * outer).toFloat()),
+                            strokeWidth = 1.dp.toPx())
+                    } else {
+                        val r = radius - stroke / 2 - 3.dp.toPx()
+                        drawCircle(colors.textTertiary.copy(alpha = 0.4f * show), radius = 0.9.dp.toPx(),
+                            center = Offset(center.x + (cos(a) * r).toFloat(), center.y + (sin(a) * r).toFloat()))
+                    }
                 }
                 // The day's arcs, growing clockwise from their starts.
                 ring.arcs.forEachIndexed { i, arc ->
@@ -343,6 +351,19 @@ object DayRingOpen {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val last = if (prefs.contains(KEY)) prefs.getLong(KEY, 0L) else null
         val play = DayRingRules.play(last, todayEpochDay, reduced)
+        if (play == DayRingPlay.FULL) prefs.edit().putLong(KEY, todayEpochDay).apply()
+        return play
+    }
+
+    /**
+     * What coming back to Today after [awayMs] away plays ([DayRingRules.onReturn]): null for a short trip (Today stays
+     * as it was), else the quick draw-in, or the full opening on a new day (marked at once, like [claim]).
+     */
+    @Synchronized
+    fun onReturn(context: Context, todayEpochDay: Long, awayMs: Long, reduced: Boolean): DayRingPlay? {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val last = if (prefs.contains(KEY)) prefs.getLong(KEY, 0L) else null
+        val play = DayRingRules.onReturn(last, todayEpochDay, awayMs, reduced)
         if (play == DayRingPlay.FULL) prefs.edit().putLong(KEY, todayEpochDay).apply()
         return play
     }

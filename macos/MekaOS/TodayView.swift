@@ -15,6 +15,8 @@ struct TodayView: View {
     @State private var allDayOpen = false
     /// The Day ring's opening: in full the first time today on this Mac, quickly after, at once with Motion → Off.
     @State private var ringPlay: DayRingPlayback?
+    /// When MEKA last went behind another app (Living Today: a return after a while replays the opening).
+    @State private var resignedAt: Date?
     /// Appearance → Play the opening bumps this: Today's column is rebuilt so its stagger plays again.
     @State private var openings = 0
     private var play: Bool { !introPlayed }
@@ -249,10 +251,20 @@ struct TodayView: View {
                 takeOpeningRequest()
             }
             .onChange(of: model.openingRequested) { takeOpeningRequest() }
-            // The first open of a new day plays in full even when MEKA stayed open overnight: claimed each time the
-            // app comes forward, not only at launch (Meka, 2026-10-08: he never saw it).
+            // Every open is a moment (Living Today, slice 2): coming back to MEKA after a while draws the ring in
+            // again and replays Today's stagger; the first return on a new day plays the full opening even when MEKA
+            // stayed open overnight. A quick switch away and back leaves Today as it was.
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+                resignedAt = Date()
+            }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                if DayRingOpen.claim(reduced: reduceMotion) == .full { ringPlay = .full }
+                let away = resignedAt.map { Date().timeIntervalSince($0) } ?? 0
+                guard let back = DayRingOpen.onReturn(away: away, reduced: reduceMotion) else { return }
+                ringPlay = back
+                if resignedAt != nil {
+                    introPlayed = false
+                    openings += 1
+                }
             }
             .task(id: openings) {
                 guard !introPlayed else { return }

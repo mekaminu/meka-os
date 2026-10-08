@@ -144,7 +144,9 @@ enum MekaChoreography {
     static let dayRingMark: Double = 0.600
     static let dayRingArc: Double = 0.360
     static let dayRingNeedle: Double = 0.720
-    static let dayRingQuick: Double = 0.300
+    static let dayRingQuick: Double = 0.500
+    static let expressiveDayRingQuick: Double = 0.900
+    static let expressiveDayRingScale: CGFloat = 1.4
     static let greetingLetter: Double = 0.028
     static let greetingLetterFade: Double = 0.260
     static let emptyBreathPeriod: Double = 4.200

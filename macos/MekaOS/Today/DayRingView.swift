@@ -49,8 +49,8 @@ struct DayRingView: View {
     }
 
     private func dial(elapsed: Double) -> some View {
-        let mark = MotionMath.dayRingMark(elapsed: elapsed, play: play)
-        let needle = MotionMath.dayRingNeedle(elapsed: elapsed, play: play)
+        let mark = MotionMath.dayRingMark(elapsed: elapsed, play: play, expressive: expressive)
+        let needle = MotionMath.dayRingNeedle(elapsed: elapsed, play: play, expressive: expressive)
         let count = MotionMath.dayRingCount(elapsed: elapsed, play: play, expressive: expressive)
         let free = MotionMath.countUpValue(from: 0, to: Int(ring.freeMinutes), fraction: count)
         let toDo = MotionMath.countUpValue(from: 0, to: Int(ring.toDo), fraction: count)
@@ -73,12 +73,21 @@ struct DayRingView: View {
                 if mark > 0 {
                     ctx.stroke(arcPath(from: 0, sweep: 360 * mark), with: .color(palette.textTertiary.opacity(0.28)), lineWidth: 1.5)
                 }
-                // Quarter ticks (00 · 06 · 12 · 18) once the mark has passed them.
-                for q in 0..<4 where mark >= Double(q) / 4 {
-                    var tick = Path()
-                    tick.move(to: point(Double(q) * 90, radius - 4))
-                    tick.addLine(to: point(Double(q) * 90, radius + 4))
-                    ctx.stroke(tick, with: .color(palette.textTertiary.opacity(0.5)), lineWidth: 1)
+                // The hour marks: a tick at 00 · 06 · 12 · 18, a fine dot just inside the track at every other hour. On
+                // the first open they fade in one by one behind the drawing mark; the quick draw brings them up with it.
+                for h in 0..<24 {
+                    let show = MotionMath.dayRingHour(mark: mark, hour: h, play: play)
+                    guard show > 0 else { continue }
+                    if h % 6 == 0 {
+                        var tick = Path()
+                        tick.move(to: point(Double(h) * 15, radius - 4))
+                        tick.addLine(to: point(Double(h) * 15, radius + 4))
+                        ctx.stroke(tick, with: .color(palette.textTertiary.opacity(0.5 * show)), lineWidth: 1)
+                    } else {
+                        let p = point(Double(h) * 15, radius - stroke / 2 - 3)
+                        ctx.fill(Path(ellipseIn: CGRect(x: p.x - 0.9, y: p.y - 0.9, width: 1.8, height: 1.8)),
+                                 with: .color(palette.textTertiary.opacity(0.4 * show)))
+                    }
                 }
                 // The day's arcs, growing clockwise from their starts.
                 for (i, arc) in arcs.enumerated() {
@@ -291,6 +300,24 @@ enum DayRingOpen {
             return .full
         case .quick: return .quick
         default: return .still
+        }
+    }
+
+    /// What coming back to Today after `away` seconds plays (the core's `DayRingRules.onReturn`): nil for a short trip
+    /// (Today stays as it was), else the quick draw-in, or the full opening on a new day (marked at once, like `claim`).
+    static func onReturn(away: TimeInterval, reduced: Bool, now: Date = Date(), defaults: UserDefaults = .standard) -> DayRingPlayback? {
+        let today = Int64((now.timeIntervalSince1970 + Double(TimeZone.current.secondsFromGMT(for: now))) / 86_400.0)
+        let last: KotlinLong? = defaults.object(forKey: key) == nil ? nil : KotlinLong(longLong: Int64(defaults.integer(forKey: key)))
+        let awayMs = Int64(max(away, 0) * 1000)
+        guard let play = DayRingRules.shared.onReturn(lastFullEpochDay: last, todayEpochDay: today, awayMs: awayMs, reduced: reduced) else {
+            return nil
+        }
+        switch play {
+        case .full:
+            defaults.set(Int(today), forKey: key)
+            return .full
+        case .quick: return .quick
+        default: return nil
         }
     }
 }

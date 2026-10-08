@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import os.meka.android.work.AfterWorkHost
 import os.meka.core.domain.CommandCentreRules
@@ -72,6 +73,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -237,10 +239,19 @@ fun TodayRoute(
     var ringPlay by rememberSaveable {
         mutableStateOf(DayRingOpen.claim(ringContext, LocalDate.now().toEpochDay(), ringReduced))
     }
-    // The first open of a new day plays in full even when MEKA stayed in memory overnight: claimed on every resume,
-    // not only at launch (Meka, 2026-10-08: he never saw it).
+    // Every open is a moment (Living Today, slice 2): coming back to Today after a while (another app, the screen
+    // off) draws the ring in again and replays Today's stagger; the first return on a new day plays the full opening
+    // even when MEKA stayed in memory overnight. A fingerprint prompt or a quick glance elsewhere leaves Today as it was.
+    var pausedAt by remember { mutableLongStateOf(0L) }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { pausedAt = SystemClock.elapsedRealtime() }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        if (DayRingOpen.claim(ringContext, LocalDate.now().toEpochDay(), ringReduced) == DayRingPlay.FULL) {
+        val away = if (pausedAt == 0L) 0L else SystemClock.elapsedRealtime() - pausedAt
+        val back = DayRingOpen.onReturn(ringContext, LocalDate.now().toEpochDay(), away, ringReduced)
+        if (back != null && pausedAt != 0L) {
+            ringPlay = back
+            introPlayed = false
+            openings++
+        } else if (back == DayRingPlay.FULL) {
             ringPlay = DayRingPlay.FULL
         }
     }
