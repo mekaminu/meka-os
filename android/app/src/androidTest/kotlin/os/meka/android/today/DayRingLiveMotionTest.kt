@@ -75,7 +75,17 @@ class DayRingLiveMotionTest {
             val deadline = SystemClock.uptimeMillis() + 10_000
             while (last.get() == null && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(5)
             assertTrue("the live layer never drew", last.get() != null)
-            SystemClock.sleep(300) // past the hand's fade-in
+            // Past the hand's fade-in, and only once frames are flowing steadily: a cold emulator can stall for most of
+            // a second just after the first draw (motion run 4: one frame in the first 0.6 s, then 10), which says
+            // nothing about the ring. A layer that stops drawing still fails below.
+            SystemClock.sleep(500)
+            val warm = SystemClock.uptimeMillis() + 5_000
+            var flowing = 0
+            while (flowing < 3 && SystemClock.uptimeMillis() < warm) {
+                val before = frames.get()
+                SystemClock.sleep(200)
+                flowing = if (frames.get() - before >= 6) flowing + 1 else 0
+            }
             val f0 = frames.get()
             val t0 = SystemClock.uptimeMillis()
             val samples = listOf(0L, 600L, 1200L).map { at ->
