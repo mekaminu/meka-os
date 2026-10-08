@@ -443,6 +443,17 @@ final class MekaCoreBridgeTests: XCTestCase {
     }
 
     /// Calendar editing, slice 2b: the Add event sheet's form steps and view reach Swift.
+    func testPlanCalendarRulesReachSwift() {
+        let google = EditAccount(provider: "google", email: "me@gmail.com")
+        let off = PlanCalendarRules.shared.setting(on: false, accounts: [google], lastUsedKey: nil)
+        XCTAssertTrue(off.available)
+        XCTAssertFalse(off.on)
+        XCTAssertEqual(off.label, "Also add the blocks to Google")
+        XCTAssertEqual(PlanCalendarRules.shared.setting(on: true, accounts: [google], lastUsedKey: nil).accountLabel, "Google · me@gmail.com")
+        XCTAssertFalse(PlanCalendarRules.shared.setting(on: true, accounts: [], lastUsedKey: nil).available)
+        XCTAssertEqual(PlanCalendarRules.shared.line(count: 3, provider: "google"), "Adding 3 blocks to Google")
+    }
+
     func testAddEventRulesReachSwift() {
         let google = EditAccount(provider: "google", email: "me@gmail.com")
         XCTAssertEqual(google.key, "google|me@gmail.com")

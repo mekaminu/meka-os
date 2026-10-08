@@ -148,9 +148,9 @@ object AddEventRules {
         )
     }
 
-    /** The account Meka last added an event to (the remembered default). */
+    /** The account Meka last added an event to (the remembered default); Plan my day's blocks don't count. */
     fun lastUsedKey(edits: List<EventEdit>): String? =
-        edits.filter { it.kind == EventEditKind.ADD && !it.undone }.maxByOrNull { it.createdAtMs }?.let { accountKey(it.provider, it.account) }
+        edits.filter { it.kind == EventEditKind.ADD && !it.undone && it.forTask == null }.maxByOrNull { it.createdAtMs }?.let { accountKey(it.provider, it.account) }
 
     /** The form's account, if it can still edit. */
     fun account(form: AddEventForm, accounts: List<EditAccount>): EditAccount? = accounts.firstOrNull { it.key == form.accountKey }

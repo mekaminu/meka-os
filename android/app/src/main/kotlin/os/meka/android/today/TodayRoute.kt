@@ -305,7 +305,7 @@ fun TodayRoute(
                 }
             }
             MekaPane(visible = showPlan) {
-                PlanPane(core, landing = landing, onApplying = { landing = it }, onClose = { showPlan = false })
+                PlanPane(core, landing = landing, onApplying = { landing = it }, undo = eventUndo, onClose = { showPlan = false })
             }
             MekaPane(visible = showShutdown) { ShutdownPane(core, onClose = { showShutdown = false }) }
             MekaPane(visible = showBrief) { BriefPane(core, onClose = { showBrief = false }) }

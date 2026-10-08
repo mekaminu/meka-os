@@ -976,6 +976,48 @@ class MekaCoreTest {
     }
 
     @Test
+    fun planMyDayCanAlsoPutItsBlocksInGoogleOnlyWhenTurnedOnAndShowsEachTaskOnce() = runTest {
+        val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
+        val fold = core("android", server)
+        val mac = core("mac")
+        val taskId = fold.addTask("Write report")
+
+        // Off by default: Apply plans the task in MEKA only, nothing goes to a calendar.
+        fold.refreshCalendarAccounts()
+        val off = fold.planCalendarSetting()
+        assertTrue(off.available)
+        assertFalse(off.on)
+        assertEquals("Also add the blocks to Google", off.label)
+        assertEquals("Apply plans the tasks in MEKA only", off.line)
+        val first = fold.applyPlan(fold.planDay())
+        assertTrue(first.editIds.isEmpty())
+        assertNull(first.line)
+        assertTrue(fold.calendarEditLines.value.isEmpty())
+
+        // On (synced): the next Apply adds one block per task, with Undo.
+        fold.schedule(taskId, null)
+        val on = fold.setPlanToCalendar(true)
+        assertTrue(on.on)
+        assertEquals("Google · meka@gmail.com", on.accountLabel)
+        val plan = fold.planDay()
+        val applied = fold.applyPlan(plan)
+        assertEquals(1, applied.editIds.size)
+        assertEquals("Adding 1 block to Google", applied.line)
+        assertEquals(listOf("Adding “Write report” to Google"), fold.calendarEditLines.value.map { it.text })
+        // The task stands for that time: its block isn't a second row on Today or in the Calendar tab.
+        assertTrue(fold.today.value.events.none { it.title == "Write report" })
+        assertEquals(1, fold.calendarView.value.sections.flatMap { it.rows + it.ended }.count { it.title == "Write report" })
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertTrue(mac.today.value.events.none { it.title == "Write report" })
+        assertTrue(mac.planCalendarSetting().on)
+        // Undo takes the blocks back; the task stays planned.
+        assertTrue(fold.undoPlanBlocks(applied.editIds))
+        assertTrue(fold.calendarEditLines.value.isEmpty())
+        assertTrue(fold.planDay().placements.none { it.task.id == taskId })
+        assertEquals(1, plan.placements.size)
+    }
+
+    @Test
     fun theEventDetailOffersEditAndDeleteOnlyWhereEditingIsAllowed() = runTest {
         val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
         val fold = core("android", server)

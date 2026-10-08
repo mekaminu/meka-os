@@ -209,7 +209,11 @@ object ActivityRules {
             }
             else -> CalendarEditRules.line(e, nowMs)
         }
-        val why = (if (e.resends != null) "Your choice after a clash" else "Your edit in MEKA") + " · editing allowed for ${e.account}"
+        val why = when {
+            e.resends != null -> "Your choice after a clash"
+            e.forTask != null -> "Plan my day · Apply, with “Also add the blocks” on"
+            else -> "Your edit in MEKA"
+        } + " · editing allowed for ${e.account}"
         return ActivityItem(
             id = calendarEditId(e.id),
             atMs = e.createdAtMs,

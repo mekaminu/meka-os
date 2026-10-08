@@ -532,6 +532,9 @@ private struct PlanSheet: View {
                     }
                     CountUpText(Int(plan.freeMinutesLeft)) { "\($0 / 60) h \($0 % 60) min still free." }
                         .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    if !plan.isEmpty, let c = model.planCalendar, c.available {
+                        PlanCalendarToggle(setting: c, palette: palette) { model.setPlanToCalendar($0) }
+                    }
                 }
             } else {
                 SkeletonRows(count: 4, palette: palette)
@@ -810,5 +813,25 @@ private struct ConnectSheet: View {
         .padding(MekaSpace.l)
         .frame(width: 420)
         .onAppear { url = model.defaultServerURL }
+    }
+}
+
+/// "Also add the blocks to Google" in Plan my day (calendar editing slice 2e): a switch, with the line under it
+/// cross-fading between what Apply will do.
+private struct PlanCalendarToggle: View {
+    let setting: PlanCalendarSetting
+    let palette: MekaPalette
+    let onChange: (Bool) -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Toggle(setting.label, isOn: Binding(get: { setting.on }, set: { onChange($0) }))
+                .toggleStyle(.switch).tint(palette.accent).font(MekaType.body)
+            Text(setting.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .id(setting.line).transition(.opacity)
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: setting.line)
+        .padding(.top, MekaSpace.s)
     }
 }

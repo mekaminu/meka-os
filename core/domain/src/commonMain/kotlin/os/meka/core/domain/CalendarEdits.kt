@@ -65,6 +65,8 @@ object EventEditFields {
     const val RESOLVED_AT = "resolvedAtMs"
     /** On a "Keep mine" resend: the clashed edit it answers. */
     const val RESENDS = "resends"
+    /** On an add from Plan my day (slice 2e): the task the block was made for (see [PlanCalendarRules]). */
+    const val FOR_TASK = "forTask"
 
     // Written by the server only.
     /** [EventEditStatus] name. */
@@ -140,6 +142,8 @@ data class EventEdit(
     val resolvedAtMs: Long? = null,
     /** A "Keep mine" resend: the clashed edit it answers. */
     val resends: String? = null,
+    /** An add from Plan my day: the task whose block it is. */
+    val forTask: String? = null,
 ) {
     fun state(nowMs: Long): EventEditState = when {
         status != null -> EventEditState.valueOf(status.name)
@@ -331,6 +335,7 @@ object CalendarEditRules {
             resolved = f(EventEditFields.RESOLVED).textOrNull?.let { r -> ClashChoice.entries.firstOrNull { it.name == r } },
             resolvedAtMs = f(EventEditFields.RESOLVED_AT).longOrNull,
             resends = f(EventEditFields.RESENDS).textOrNull?.ifEmpty { null },
+            forTask = f(EventEditFields.FOR_TASK).textOrNull?.ifEmpty { null },
         )
     }
 
@@ -370,13 +375,13 @@ class CalendarEdits(
         return all().filter { it.state(now) in OPEN && !(it.status == EventEditStatus.CLASH && it.resolved != null) }
     }
 
-    /** Adds an event to [account]'s main calendar. */
-    fun add(provider: String, account: String, draft: EventDraft): EventEditResult {
+    /** Adds an event to [account]'s main calendar; [forTask] when it is a task's block from Plan my day. */
+    fun add(provider: String, account: String, draft: EventDraft, forTask: String? = null): EventEditResult {
         if (provider !in CalendarEditRules.WRITABLE) return EventEditResult.Refused("MEKA can't add events there")
         if (!canEdit(provider, account)) return refusedNotAllowed(provider, account)
         val d = CalendarEditRules.clean(draft)
         CalendarEditRules.problem(d, nowMs())?.let { return EventEditResult.Refused(it) }
-        return EventEditResult.Made(write(EventEditKind.ADD, provider, account, null, emptySet(), d, null, false))
+        return EventEditResult.Made(write(EventEditKind.ADD, provider, account, null, emptySet(), d, null, false, forTask = forTask))
     }
 
     /** Changes [event] to [draft] (only what differs is sent). */
@@ -474,7 +479,7 @@ class CalendarEdits(
 
     private fun write(
         kind: EventEditKind, provider: String, account: String, eventId: String?, changes: Set<EventEditChange>,
-        draft: EventDraft?, base: EventDraft?, guestsOk: Boolean, resends: String? = null,
+        draft: EventDraft?, base: EventDraft?, guestsOk: Boolean, resends: String? = null, forTask: String? = null,
     ): String {
         val id = ids()
         val now = nowMs()
@@ -508,6 +513,7 @@ class CalendarEdits(
         }
         if (guestsOk) fields[EventEditFields.GUESTS_OK] = true.fv()
         resends?.let { fields[EventEditFields.RESENDS] = it.fv() }
+        forTask?.let { fields[EventEditFields.FOR_TASK] = it.fv() }
         replica.commitLocal(EntityTypes.EVENT_EDIT, id, fields)
         return id
     }

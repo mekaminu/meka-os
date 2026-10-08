@@ -145,6 +145,8 @@ class MekaCore(
     private val calendarEdits = os.meka.core.domain.CalendarEdits(replica, nowMs, ids::next) { p, a ->
         _editAccounts.value.any { it.provider == p && it.email == a }
     }
+    /** Plan my day's "Also add the blocks to Google" (calendar editing slice 2e), synced, off by default. */
+    private val planCalendar = os.meka.core.domain.PlanCalendar(replica)
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
     private var releasesApi: ReleasesApi? = transport as? ReleasesApi
@@ -359,9 +361,47 @@ class MekaCore(
         DayPlanner.plan(all, visibleEvents(all), now, day, habits = goals.plannerHabits(), meals = fasting.plannerMeals(day), sessions = sessions)
     }
 
-    /** Schedules each planned task at its suggested time; everything syncs like a manual edit. */
-    suspend fun applyPlan(plan: DayPlanner.Plan) = onCore {
+    /**
+     * Schedules each planned task at its suggested time; everything syncs like a manual edit. With "Also add the
+     * blocks" on (slice 2e) and an account that allows editing, each task's block is also added to that calendar as an
+     * ordinary add with five seconds' Undo ([undoPlanBlocks]); the result names those adds and the undo bar's line.
+     */
+    suspend fun applyPlan(plan: DayPlanner.Plan): os.meka.core.domain.PlanApplied = onCore {
         plan.placements.forEach { tasks.edit(it.task.id, TaskEdit(scheduledAtMs = it.startMs)) }
+        val target = os.meka.core.domain.PlanCalendarRules.target(
+            _editAccounts.value, os.meka.core.domain.AddEventRules.lastUsedKey(calendarEdits.all()),
+        )
+        if (!planCalendar.on() || target == null || plan.placements.isEmpty()) {
+            os.meka.core.domain.PlanApplied(emptyList(), null)
+        } else {
+            val made = mutableListOf<String>()
+            val refused = mutableListOf<String>()
+            for (p in plan.placements) {
+                when (val r = calendarEdits.add(target.provider, target.email, os.meka.core.domain.PlanCalendarRules.draft(p), forTask = p.task.id)) {
+                    is os.meka.core.domain.EventEditResult.Made -> made += r.id
+                    is os.meka.core.domain.EventEditResult.Refused -> refused += "${p.task.title}: ${r.reason}"
+                }
+            }
+            os.meka.core.domain.PlanApplied(
+                made, made.takeIf { it.isNotEmpty() }?.let { os.meka.core.domain.PlanCalendarRules.line(it.size, target.provider) }, refused,
+            )
+        }
+    }
+
+    /** Undo on "Adding 3 blocks to Google": the blocks inside their five seconds are taken back; the tasks stay planned. */
+    suspend fun undoPlanBlocks(editIds: List<String>): Boolean = onCore { editIds.map { calendarEdits.undo(it) }.any { it } }
+
+    /** Plan my day's "Also add the blocks to Google" as shown (read the accounts first: [refreshCalendarAccounts]). */
+    suspend fun planCalendarSetting(): os.meka.core.domain.PlanCalendarSetting = onCore {
+        os.meka.core.domain.PlanCalendarRules.setting(
+            planCalendar.on(), _editAccounts.value, os.meka.core.domain.AddEventRules.lastUsedKey(calendarEdits.all()),
+        )
+    }
+
+    /** Turns "Also add the blocks" on or off (synced; off by default). */
+    suspend fun setPlanToCalendar(on: Boolean): os.meka.core.domain.PlanCalendarSetting {
+        onCore { planCalendar.set(on) }
+        return planCalendarSetting()
     }
     suspend fun restore(taskId: String) = onCore { tasks.restore(taskId) }
 
@@ -1175,8 +1215,13 @@ class MekaCore(
      * The mirrored events with Meka's own calendar edits laid over (slice 2c-ii, [os.meka.core.domain.PendingEditRules]):
      * an add, move, change or delete shows everywhere as soon as it's made, before Google answers.
      */
-    private fun currentEvents(): List<os.meka.core.domain.CalendarEvent> =
-        os.meka.core.domain.PendingEditRules.apply(events.all(), calendarEdits.all(), nowMs())
+    private fun currentEvents(): List<os.meka.core.domain.CalendarEvent> {
+        val edits = calendarEdits.all()
+        // Plan my day's blocks (slice 2e): the task stands for that time, so its block isn't shown twice.
+        return os.meka.core.domain.PlanCalendarRules.withoutTaskBlocks(
+            os.meka.core.domain.PendingEditRules.apply(events.all(), edits, nowMs()), edits,
+        )
+    }
 
     /** Calendar events minus those hidden from my day. */
     private fun visibleEvents(all: List<os.meka.core.domain.Task>) = eventActions.marks(all).visible(currentEvents())

@@ -1,6 +1,14 @@
 package os.meka.android.today
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -27,7 +35,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import os.meka.android.calendar.EventUndo
 import os.meka.android.designsystem.CountUpText
+import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.SkeletonRows
 import os.meka.android.designsystem.appear
@@ -39,6 +49,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.core.domain.DayPlanner
+import os.meka.core.domain.PlanCalendarSetting
 import os.meka.core.facade.MekaCore
 import java.time.Instant
 import java.time.ZoneId
@@ -54,13 +65,24 @@ private data class PlanRow(val startMs: Long, val time: String, val title: Strin
  * "Plan my day": a suggested timeline of tasks fitted around calendar events and fixtures. Nothing changes until
  * the owner taps Apply (autonomy level 1: suggest). On Apply, [onApplying] names the tasks being placed; their block
  * titles then fly into their rows in Today as the pane closes (see [landing]).
+ *
+ * Calendar editing slice 2e: where an account allows editing, "Also add the blocks to Google" (off by default, synced)
+ * makes Apply add each task's block to that calendar too; [undo] then offers "Adding 3 blocks to Google · Undo".
  */
 @Composable
-fun PlanPane(core: MekaCore, landing: Set<String> = emptySet(), onApplying: (Set<String>) -> Unit = {}, onClose: () -> Unit) {
+fun PlanPane(
+    core: MekaCore, landing: Set<String> = emptySet(), onApplying: (Set<String>) -> Unit = {}, undo: EventUndo? = null,
+    onClose: () -> Unit,
+) {
     var plan by remember { mutableStateOf<DayPlanner.Plan?>(null) }
+    var toCalendar by remember { mutableStateOf(PlanCalendarSetting.OFF) }
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     LaunchedEffect(Unit) { plan = core.planDay() }
+    LaunchedEffect(Unit) {
+        runCatching { core.refreshCalendarAccounts() }
+        toCalendar = core.planCalendarSetting()
+    }
 
     Column(Modifier.fillMaxSize().padding(MekaSpace.gutter).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
@@ -115,6 +137,13 @@ fun PlanPane(core: MekaCore, landing: Set<String> = emptySet(), onApplying: (Set
         }
         CountUpText(p.freeMinutesLeft, style = MekaType.caption, color = Meka.colors.textTertiary) { "${it / 60} h ${it % 60} min still free." }
         Spacer(Modifier.height(MekaSpace.m))
+        if (!p.isEmpty && toCalendar.available) {
+            PlanCalendarSwitch(toCalendar) { on ->
+                haptics.tick()
+                toCalendar = toCalendar.copy(on = on)
+                scope.launch { toCalendar = core.setPlanToCalendar(on) }
+            }
+        }
         if (!p.isEmpty) {
             Text(
                 "Apply plan", style = MekaType.itemTitle, color = Meka.colors.onAccent,
@@ -122,10 +151,47 @@ fun PlanPane(core: MekaCore, landing: Set<String> = emptySet(), onApplying: (Set
                     .clickable(role = Role.Button) {
                         haptics.light()
                         onApplying(p.placements.map { it.task.id }.toSet())
-                        scope.launch { core.applyPlan(p); onClose() }
+                        scope.launch {
+                            val applied = core.applyPlan(p)
+                            onClose()
+                            val line = applied.line
+                            if (line != null && undo != null) undo.show(line) { core.undoPlanBlocks(applied.editIds) }
+                        }
                     }
                     .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
             )
+        }
+    }
+}
+
+/**
+ * "Also add the blocks to Google": an On/Off pill whose colour blends (like Ring as an alarm), with the line under it
+ * cross-fading between what Apply will do. The screen reader hears it as a switch.
+ */
+@Composable
+private fun PlanCalendarSwitch(s: PlanCalendarSetting, onChange: (Boolean) -> Unit) {
+    val reduced = Meka.reducedMotion
+    val bg by animateColorAsState(if (s.on) Meka.colors.accent else Meka.colors.background, MekaMotion.themeBlend(reduced), label = "plan-calendar")
+    Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.s)) {
+        Row(
+            Modifier.fillMaxWidth().toggleable(value = s.on, role = Role.Switch) { onChange(it) },
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(s.label, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            Text(
+                if (s.on) "On" else "Off", style = MekaType.itemMeta, color = if (s.on) Meka.colors.onAccent else Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+                    .border(1.dp, Meka.colors.accent.copy(alpha = 0.6f), RoundedCornerShape(MekaRadius.pill))
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            )
+        }
+        AnimatedContent(
+            targetState = s.line,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "plan-calendar-line",
+        ) { line ->
+            Text(line, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
         }
     }
 }

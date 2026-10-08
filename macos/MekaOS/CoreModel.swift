@@ -112,6 +112,8 @@ final class CoreModel {
     var showCalendars = false
     var showPlan = false
     private(set) var plan: DayPlanner.Plan?
+    /// Plan my day's "Also add the blocks to Google" (calendar editing slice 2e); nil until read.
+    private(set) var planCalendar: PlanCalendarSetting?
     /// Tasks Plan Apply just sent into Today; their rows are softly lit for a moment once the sheet has gone.
     private(set) var landing: Set<String> = []
     private(set) var accounts: [ConnectedAccount]? = nil
@@ -426,12 +428,24 @@ final class CoreModel {
     func loadPlan() async {
         guard let core else { return }
         plan = try? await core.planDay()
+        _ = try? await core.refreshCalendarAccounts()
+        planCalendar = try? await core.planCalendarSetting()
+    }
+
+    /// "Also add the blocks to Google": synced, off by default.
+    func setPlanToCalendar(_ on: Bool) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task { planCalendar = try? await core.setPlanToCalendar(on: on) }
     }
 
     func applyPlan() async {
         guard let core, let plan else { return }
-        try? await core.applyPlan(plan: plan)
         let placed = Set(plan.placements.map { $0.task.id })
+        // The plan is handed to the core once; only the result's ids and line come back.
+        if let applied = try? await core.applyPlan(plan: plan), let line = applied.line {
+            offerEventUndo(line, .planBlocks(applied.editIds))
+        }
         landing = placed
         showPlan = false
         try? await Task.sleep(for: .seconds(SharedMotion.landedSeconds))
@@ -1196,6 +1210,7 @@ final class CoreModel {
         case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
+        case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
         }
     }
 
@@ -1318,6 +1333,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case unsetAside(String)
         /// Add event (calendar editing): taken back inside the five seconds, so nothing is sent.
         case eventEdit(String)
+        /// Plan my day's blocks on their way to the calendar (slice 2e): taken back; the tasks stay planned.
+        case planBlocks([String])
     }
 
     let id = UUID()
