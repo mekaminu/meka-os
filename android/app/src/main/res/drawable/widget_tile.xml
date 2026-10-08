@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- News widget: the tile behind a story's picture (the source's initial while it loads or when there is none). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/widget_tile" />
+    <corners android:radius="10dp" />
+</shape>

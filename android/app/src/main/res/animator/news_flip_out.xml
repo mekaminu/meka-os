@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- News widget: the old card drifts off to the left and fades. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android" android:ordering="together">
+    <objectAnimator android:duration="350" android:interpolator="@android:interpolator/accelerate_cubic"
+        android:propertyName="translationX" android:valueFrom="0" android:valueTo="-72" android:valueType="floatType" />
+    <objectAnimator android:duration="350" android:interpolator="@android:interpolator/accelerate_cubic"
+        android:propertyName="alpha" android:valueFrom="1" android:valueTo="0" android:valueType="floatType" />
+</set>

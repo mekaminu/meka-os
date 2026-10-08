@@ -117,6 +117,37 @@
             android:name=".widgets.HomeWidgetAlarmReceiver"
             android:exported="false" />
 
+        <!-- News widget (news ticker slice 3a): picture headlines the launcher flips through every 5 s, 4x1 and 4x2.
+             The cards come from NewsWidgetService (bound only by the system's widget host). -->
+        <receiver
+            android:name=".widgets.NewsStripWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_news_strip_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/news_strip_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.NewsCardWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_news_card_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/news_card_widget_info" />
+        </receiver>
+        <service
+            android:name=".widgets.NewsWidgetService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+        <receiver
+            android:name=".widgets.NewsWidgetPageReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".widgets.NewsWidgetAlarmReceiver"
+            android:exported="false" />
+
         <!-- Work mode (build plan M1): official notification access only; Meka grants it in Settings.
              Reads WhatsApp, SMS and missed calls during work hours; never replies or marks anything read. -->
         <service

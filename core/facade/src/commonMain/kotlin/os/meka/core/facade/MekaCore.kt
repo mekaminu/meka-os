@@ -622,6 +622,13 @@ class MekaCore(
         )
     }
 
+    /**
+     * The Fold's News home-screen widget (news ticker slice 3a): Today's ticker as flipping cards, read from the current
+     * News place. Pure and cheap; [os.meka.core.domain.NewsWidgetView.nextChangeMs] says when to look again.
+     */
+    fun newsWidget(): os.meka.core.domain.NewsWidgetView =
+        os.meka.core.domain.NewsWidgetRules.view(os.meka.core.domain.TickerRules.ticker(_newsPlace.value), nowMs())
+
     suspend fun resolve(choice: ConflictChoice, chosenOption: String) = onCore {
         tasks.resolveConflict(choice.conflict, FieldValue.Text(chosenOption))
     }

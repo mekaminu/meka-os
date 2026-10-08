@@ -160,6 +160,12 @@ fun TodayRoute(
     var newsOpen by rememberSaveable { mutableStateOf<String?>(null) }
     var newsShown by remember { mutableStateOf<String?>(null) }
     if (newsOpen != null) newsShown = newsOpen
+    // The News home-screen widget (slice 3a): a tapped story springs the News pane up over Today on it.
+    val widgetApp = LocalContext.current.applicationContext as? MekaApplication
+    val widgetStory = widgetApp?.openNewsStory?.collectAsState()?.value
+    LaunchedEffect(widgetStory) {
+        if (widgetStory != null) { newsOpen = widgetStory; widgetApp?.openNewsStory?.value = null }
+    }
     val newsPlace by core.newsPlace.collectAsState()
     // The news ticker under the header (news ticker, slice 2): the per-device choice from Appearance.
     val ticker = remember(newsPlace) { TickerRules.ticker(newsPlace) }

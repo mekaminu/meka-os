@@ -183,3 +183,76 @@ class FloatingTickerTest {
         assertEquals(0.5, FloatingTickerRules.dropped(TickerRect(0.0, 0.0, 0.0, 0.0), start).centre)
     }
 }
+
+class NewsWidgetTest {
+    private fun item(id: String, topic: String, image: String? = null) =
+        NewsItem(id, "Story $id", null, "Mundo Deportivo", topic, "Mundo Deportivo · 2 h ago", null, 0L, image)
+    private fun lane(topic: String, vararg ids: String) = NewsLane(topic, NewsTopics.byId(topic)!!.label, "From Sport", ids.map { item(it, topic) })
+    private fun match(live: Boolean) = NewsMatchday(
+        "espn-1", "Barça v Real Madrid", if (live) "Barça v Real Madrid · on now" else "Barça v Real Madrid · 21:00 · in 3 h", live,
+        CalendarEvent("espn-1", "Barça v Real Madrid", 0L, 7_200_000L, false, null, "fixtures", null, "Fixtures"),
+    )
+
+    @Test
+    fun theWidgetFlipsThroughTheTickersStoriesInItsOrder() {
+        val place = NewsPlace(listOf(lane("barca", "b1", "b2"), lane("ai", "a1"), lane("top", "t1")), emptyList(), null)
+        val v = NewsWidgetRules.view(TickerRules.ticker(place), 1_000L)
+        assertEquals(listOf("b1", "a1", "t1", "b2"), v.cards.map { it.id })
+        assertEquals(listOf("Barça", "AI", "Top stories", "Barça"), v.cards.map { it.label })
+        assertEquals(listOf(true, false, false, true), v.cards.map { it.isBarca })
+        assertEquals("b1", v.cards.first().openStoryId)
+        assertEquals("Mundo Deportivo · 2 h ago", v.cards.first().line)
+        assertEquals("M", v.cards.first().tileInitial)
+        assertEquals("Barça · Mundo Deportivo · 2 h ago: Story b1", v.cards.first().spoken)
+        assertEquals(1_000L + NewsWidgetRules.REFRESH_MS, v.nextChangeMs)
+        assertEquals(5_000, NewsWidgetRules.FLIP_INTERVAL_MS)
+    }
+
+    @Test
+    fun theMatchLeadsAndOpensNews() {
+        val place = NewsPlace(listOf(lane("barca", "b1")), emptyList(), null, match(false))
+        val v = NewsWidgetRules.view(TickerRules.ticker(place), 0L)
+        val m = v.cards.first()
+        assertTrue(m.isMatch)
+        assertEquals("MATCHDAY", m.label)
+        assertEquals("Barça v Real Madrid", m.title)
+        assertEquals("21:00 · in 3 h", m.line)
+        assertNull(m.openStoryId)
+        assertNull(m.imageKey)
+        assertTrue(m.isBarca)
+        val live = NewsWidgetRules.view(TickerRules.ticker(NewsPlace(emptyList(), emptyList(), null, match(true))), 0L).cards.single()
+        assertEquals("ON NOW", live.label)
+        assertEquals("on now", live.line)
+    }
+
+    @Test
+    fun atMostEightCardsAndPicturesTravelAsKeysOnly() {
+        val many = (1..10).map { "b$it" }.toTypedArray()
+        val place = NewsPlace(listOf(lane("barca", *many)), emptyList(), null, match(false))
+        val v = NewsWidgetRules.view(TickerRules.ticker(place), 0L)
+        assertEquals(NewsWidgetRules.MAX_CARDS, v.cards.size)
+        assertEquals("match", v.cards.first().id)
+        val pic = NewsWidgetRules.view(NewsTicker(null, listOf(item("x", "ai", "0123456789abcdef0123456789abcdef"))), 0L)
+        assertEquals("0123456789abcdef0123456789abcdef", pic.cards.single().imageKey)
+    }
+
+    @Test
+    fun nothingToShowSaysWhereToChooseTopicsAndRestsTheClock() {
+        val v = NewsWidgetRules.view(TickerRules.ticker(NewsPlace.EMPTY), 0L)
+        assertTrue(v.isEmpty)
+        assertEquals("No news yet", v.emptyTitle)
+        assertEquals(Long.MAX_VALUE, v.nextChangeMs)
+        assertEquals("News. No news yet. Choose topics in MEKA · Ask › More › News", NewsWidgetRules.spoken(v))
+    }
+
+    @Test
+    fun onlyWhatItSaysRedrawsIt() {
+        val place = NewsPlace(listOf(lane("ai", "a1")), emptyList(), null)
+        val a = NewsWidgetRules.view(TickerRules.ticker(place), 0L)
+        val b = NewsWidgetRules.view(TickerRules.ticker(place), 60_000L)
+        assertEquals(NewsWidgetRules.signature(a), NewsWidgetRules.signature(b))
+        val c = NewsWidgetRules.view(TickerRules.ticker(NewsPlace(listOf(lane("ai", "a2")), emptyList(), null)), 0L)
+        assertTrue(NewsWidgetRules.signature(a) != NewsWidgetRules.signature(c))
+        assertEquals("News, 1 story. AI · Mundo Deportivo · 2 h ago: Story a1", NewsWidgetRules.spoken(a))
+    }
+}

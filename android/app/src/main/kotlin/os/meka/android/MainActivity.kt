@@ -61,6 +61,8 @@ class MainActivity : ComponentActivity() {
         val app = application as MekaApplication
         when {
             open == OPEN_AFTER_WORK -> app.openAfterWork.value = true
+            // The News widget: Today with News on the story ("" = News itself, which leads with the match).
+            open.startsWith(OPEN_NEWS_PREFIX) -> app.openNewsStory.value = open.removePrefix(OPEN_NEWS_PREFIX)
             open.startsWith(OPEN_DESTINATION_PREFIX) ->
                 ShellDestination.entries.firstOrNull { it.name == open.removePrefix(OPEN_DESTINATION_PREFIX) }?.let { app.openDestination.value = it }
         }
@@ -88,5 +90,7 @@ class MainActivity : ComponentActivity() {
         const val OPEN_AFTER_WORK = "after_work"
         /** "dest:LISTS" opens Lists. */
         const val OPEN_DESTINATION_PREFIX = "dest:"
+        /** "news:<story id>" opens News over Today on that story; "news:" opens News. */
+        const val OPEN_NEWS_PREFIX = "news:"
     }
 }

@@ -16,6 +16,8 @@ import os.meka.android.push.PushTokens
 import os.meka.android.shell.ShellDestination
 import os.meka.android.update.AppUpdater
 import os.meka.android.widgets.HomeWidgetUpdater
+import os.meka.android.widgets.NewsWidgetRouting
+import os.meka.android.widgets.NewsWidgetUpdater
 import os.meka.android.widgets.WidgetRouting
 import os.meka.android.work.AfterWorkNudger
 import os.meka.android.work.CaptureStore
@@ -56,6 +58,7 @@ class MekaApplication : Application() {
     val ongoing: OngoingNotifier by lazy { OngoingNotifier(this, this) }
     /** Home-screen widgets: Next up, Needs you and Fast. */
     val widgets: HomeWidgetUpdater by lazy { HomeWidgetUpdater(this, this) }
+    val newsWidgets: NewsWidgetUpdater by lazy { NewsWidgetUpdater(this, this) }
     /** Self-updating phone app: newer builds the Mac published, offered in Today. */
     val updater: AppUpdater by lazy { AppUpdater(this) }
     /** Set by tapping a MEKA notification: the shell opens this destination. */
@@ -66,6 +69,8 @@ class MekaApplication : Application() {
     @Volatile var isOnScreen: Boolean = false
     /** Set by the nudge's tap: the shell opens Needs you with the after-work summary. */
     val openAfterWork = MutableStateFlow(false)
+    /** The News widget's tap: the story to open News on over Today ("" = News itself); null once handled. */
+    val openNewsStory = MutableStateFlow<String?>(null)
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     /** Hardware-held signing key; created on first use (ADR-005). */
     private val deviceKey by lazy { AndroidDeviceKey() }
@@ -124,6 +129,13 @@ class MekaApplication : Application() {
                 .map { WidgetRouting.signature(core.homeWidgets()) }
                 .distinctUntilChanged()
                 .collect { runCatching { widgets.run() } }
+        }
+        // The News widget when its stories change (the launcher flips the cards itself), and once at process start.
+        appScope.launch {
+            core.newsPlace
+                .map { NewsWidgetRouting.signature(core.newsWidget()) }
+                .distinctUntilChanged()
+                .collect { runCatching { newsWidgets.run() } }
         }
     }
 

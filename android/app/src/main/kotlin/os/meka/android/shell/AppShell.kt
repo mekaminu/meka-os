@@ -116,6 +116,13 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     val app = LocalContext.current.applicationContext as MekaApplication
     val openAfterWork by app.openAfterWork.collectAsState()
     LaunchedEffect(openAfterWork) { if (openAfterWork) current = ShellDestination.NEEDS_YOU }
+    // The News widget's tap lands on Today, which then opens News on the story.
+    val openNewsStory by app.openNewsStory.collectAsState()
+    LaunchedEffect(openNewsStory) {
+        if (openNewsStory != null && current != ShellDestination.TODAY) {
+            arrival = SharedMotion.arrivalAfterGo(ShellDestination.TODAY, arrival); current = ShellDestination.TODAY
+        }
+    }
     // Tapping a MEKA notification lands where it belongs (a digest on Needs you, a cancel-by date on Lists…).
     val openDestination by app.openDestination.collectAsState()
     LaunchedEffect(openDestination) {
