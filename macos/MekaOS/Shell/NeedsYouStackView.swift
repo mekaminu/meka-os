@@ -149,7 +149,9 @@ struct NeedsYouStackView: View {
     }
 }
 
-/// One card: why (lit when urgent), the title, the hint; the label of the move it leans to fades in and pops.
+/// One card: why (lit when urgent), the title, the hint. As it leans to a move the card takes on that move's colour
+/// (the accent for Done, grey for the others; `MotionMath.swipeWash`) and the move's chip fades in with its icon
+/// growing; at the threshold the chip pops and the icon pops further (catalogue "Swipe actions").
 private struct DecisionCardFace: View {
     let card: DecisionCard
     let armed: DecisionMove?
@@ -166,22 +168,48 @@ private struct DecisionCardFace: View {
         }
         .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
         .padding(MekaSpace.l)
-        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.l))
+        .background {
+            RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surfaceRaised)
+                .overlay(RoundedRectangle(cornerRadius: MekaRadius.l).fill(leanColor.opacity(armed == nil ? 0 : MotionMath.swipeWash(progress))))
+        }
         .overlay(alignment: alignment) {
             if let armed, progress > 0 {
                 let yes = armed == .yes
-                Text(card.label(move: armed))
-                    .font(MekaType.itemTitle)
-                    .foregroundStyle(yes ? palette.onAccent : palette.textPrimary)
-                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                    .background(yes ? palette.accent : palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-                    .scaleEffect(progress >= 1 && !reduceMotion ? 1.15 : 1)
-                    .opacity(progress)
-                    .padding(MekaSpace.m)
-                    .animation(MekaMotion.approve(reduced: reduceMotion), value: progress >= 1)
+                let ink = yes ? palette.onAccent : palette.textPrimary
+                HStack(spacing: MekaSpace.xs) {
+                    Image(systemName: symbol(armed))
+                        .font(.system(size: 14, weight: .semibold))
+                        .scaleEffect(MotionMath.swipeIconScale(progress, armed: progress >= 1, reduced: reduceMotion))
+                        .animation(MekaMotion.approve(reduced: reduceMotion), value: progress >= 1)
+                        .accessibilityHidden(true)
+                    Text(card.label(move: armed)).font(MekaType.itemTitle)
+                }
+                .foregroundStyle(ink)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .background(yes ? palette.accent : palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                .scaleEffect(progress >= 1 && !reduceMotion ? 1.15 : 1)
+                .opacity(progress)
+                .padding(MekaSpace.m)
+                .animation(MekaMotion.approve(reduced: reduceMotion), value: progress >= 1)
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var leanColor: Color {
+        switch armed {
+        case .yes: palette.accent
+        case .open: palette.textPrimary
+        default: palette.textSecondary
+        }
+    }
+
+    private func symbol(_ move: DecisionMove) -> String {
+        switch move {
+        case .yes: "checkmark"
+        case .later: "clock"
+        default: "arrow.up"
+        }
     }
 
     private var alignment: Alignment {

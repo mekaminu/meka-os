@@ -268,4 +268,37 @@ class MotionMathTest {
         assertTrue(MotionMath.footClear(MekaSpace.xl.value))
         assertFalse(MotionMath.footClear(MekaSpace.s.value))
     }
+
+    @Test
+    fun swipeColourDeepensAndIconPopsAtTheArmPoint() {
+        assertEquals(96, MekaChoreography.swipeArmDistanceDp)
+        assertEquals(1.25f, MekaChoreography.swipeIconPopScale)
+        // Progress: 0 at rest, half way at 48 dp either way, capped at 1 past the arm point.
+        assertEquals(0f, MotionMath.swipeProgress(0f))
+        assertEquals(0.5f, MotionMath.swipeProgress(48f), 1e-6f)
+        assertEquals(0.5f, MotionMath.swipeProgress(-48f), 1e-6f)
+        assertEquals(1f, MotionMath.swipeProgress(300f))
+        // Armed only at the arm distance, either way.
+        assertEquals(0, MotionMath.swipeArmed(95.9f))
+        assertEquals(1, MotionMath.swipeArmed(96f))
+        assertEquals(-1, MotionMath.swipeArmed(-120f))
+        // The colour: nothing at rest, a light wash once it moves, full at the arm point.
+        assertEquals(0f, MotionMath.swipeTint(0f))
+        assertEquals(0.3f, MotionMath.swipeTint(0.0001f), 1e-3f)
+        assertEquals(0.65f, MotionMath.swipeTint(0.5f), 1e-6f)
+        assertEquals(1f, MotionMath.swipeTint(1f), 1e-6f)
+        // The icon grows 0.6 → 1 with the swipe and pops to 1.25 when armed; Off: always full size.
+        assertEquals(0.6f, MotionMath.swipeIconScale(0f, armed = false, reduced = false), 1e-6f)
+        assertEquals(0.8f, MotionMath.swipeIconScale(0.5f, armed = false, reduced = false), 1e-6f)
+        assertEquals(1.25f, MotionMath.swipeIconScale(1f, armed = true, reduced = false), 1e-6f)
+        assertEquals(1f, MotionMath.swipeIconScale(1f, armed = true, reduced = true))
+        assertEquals(1f, MotionMath.swipeIconScale(0.2f, armed = false, reduced = true))
+        // Icon and label fade in over the first 40 % of the way.
+        assertEquals(0.5f, MotionMath.swipeIconAlpha(0.2f), 1e-6f)
+        assertEquals(1f, MotionMath.swipeIconAlpha(0.6f))
+        // Needs you's card takes on at most 18 % of the move's colour.
+        assertEquals(0f, MotionMath.swipeWash(0f))
+        assertEquals(0.09f, MotionMath.swipeWash(0.5f), 1e-6f)
+        assertEquals(0.18f, MotionMath.swipeWash(2f), 1e-6f)
+    }
 }

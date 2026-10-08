@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -45,6 +46,9 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.MotionMath
+import os.meka.android.designsystem.SwipeActionIcon
+import os.meka.android.designsystem.SwipeGlyph
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.DecisionCard
 import os.meka.core.domain.DecisionEffect
@@ -228,13 +232,24 @@ private fun preview(x: Float, y: Float): DecisionMove? = when {
     else -> null
 }
 
-/** One card: why (lit when urgent), the title, the hint; the label of the move it leans to fades in and pops. */
+/**
+ * One card: why (lit when urgent), the title, the hint. As it leans to a move the card takes on that move's colour
+ * (the accent for Done, grey for Tomorrow/Later and Open; [MotionMath.swipeWash]) and the move's chip fades in with
+ * its icon growing; at the threshold the chip pops and the icon pops further (catalogue "Swipe actions").
+ */
 @Composable
 private fun DecisionCardFace(card: DecisionCard, armed: DecisionMove?, progress: Float, modifier: Modifier = Modifier) {
     val reduced = Meka.reducedMotion
+    val leanColor = when (armed) {
+        DecisionMove.YES -> Meka.colors.accent
+        DecisionMove.LATER -> Meka.colors.textSecondary
+        DecisionMove.OPEN -> Meka.colors.textPrimary
+        null -> Meka.colors.surfaceRaised
+    }
+    val face = lerp(Meka.colors.surfaceRaised, leanColor, if (armed == null) 0f else MotionMath.swipeWash(progress))
     Box(
         modifier.fillMaxWidth().heightIn(min = 196.dp).clip(RoundedCornerShape(MekaRadius.l))
-            .background(Meka.colors.surfaceRaised).padding(MekaSpace.l),
+            .background(face).padding(MekaSpace.l),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
             Text(card.why, style = MekaType.itemMeta, color = if (card.urgent) Meka.colors.critical else Meka.colors.accent)
@@ -244,10 +259,10 @@ private fun DecisionCardFace(card: DecisionCard, armed: DecisionMove?, progress:
         if (armed != null && progress > 0f) {
             val pop by animateFloatAsState(if (progress >= 1f && !reduced) 1.15f else 1f, MekaMotion.approve(reduced), label = "stack-pop")
             val yes = armed == DecisionMove.YES
-            Text(
-                card.label(armed),
-                style = MekaType.itemTitle,
-                color = if (yes) Meka.colors.onAccent else Meka.colors.textPrimary,
+            val ink = if (yes) Meka.colors.onAccent else Meka.colors.textPrimary
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .align(
                         when (armed) {
@@ -260,7 +275,17 @@ private fun DecisionCardFace(card: DecisionCard, armed: DecisionMove?, progress:
                     .clip(RoundedCornerShape(MekaRadius.m))
                     .background(if (yes) Meka.colors.accent else Meka.colors.background)
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-            )
+            ) {
+                SwipeActionIcon(
+                    when (armed) {
+                        DecisionMove.YES -> SwipeGlyph.CHECK
+                        DecisionMove.LATER -> SwipeGlyph.LATER
+                        DecisionMove.OPEN -> SwipeGlyph.OPEN
+                    },
+                    ink, progress, armed = progress >= 1f,
+                )
+                Text(card.label(armed), style = MekaType.itemTitle, color = ink)
+            }
         }
     }
 }

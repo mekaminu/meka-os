@@ -161,4 +161,6 @@ object MekaChoreography {
     const val greetingLetterMs = 28
     const val greetingLetterFadeMs = 260
     const val emptyBreathPeriodMs = 4200
+    const val swipeArmDistanceDp = 96
+    const val swipeIconPopScale = 1.25f
 }

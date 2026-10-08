@@ -2,7 +2,6 @@ package os.meka.android.calendar
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -37,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
@@ -52,7 +50,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaChoreography
 import os.meka.android.designsystem.MekaMotion
+import os.meka.android.designsystem.MotionMath
+import os.meka.android.designsystem.SwipeBackdrop
+import os.meka.android.designsystem.SwipeGlyph
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
@@ -175,9 +177,10 @@ fun eventActionHandlers(core: MekaCore, scope: CoroutineScope, undo: EventUndo) 
 )
 
 /**
- * An event row that swipes: right reveals "Prep task" in the accent colour, left reveals "Hide from my day". Past the
- * threshold the label pops, a light haptic marks it, and letting go does it; the row springs back either way. Screen
- * readers get both as custom actions. Reduced motion: no pop, a quick tween back.
+ * An event row that swipes: right reveals "Prep task" (a plus) in the accent colour, left reveals "Hide from my day"
+ * (an eye, struck through) in grey. The colour deepens and the icon grows as it goes; past the threshold the icon pops,
+ * a tick haptic marks it, and letting go does it with a light haptic; the row springs back either way. Screen readers
+ * get both as custom actions. Reduced motion: no pop, a quick tween back.
  */
 @Composable
 fun SwipeableEvent(
@@ -196,7 +199,7 @@ fun SwipeableEvent(
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     var dx by remember(event.id) { mutableFloatStateOf(0f) }
-    val threshold = with(LocalDensity.current) { 96.dp.toPx() }
+    val threshold = with(LocalDensity.current) { MekaChoreography.swipeArmDistanceDp.dp.toPx() }
     var armed by remember(event.id) { mutableIntStateOf(0) } // -1 hide, 1 prep, 0 neither
     val context = LocalContext.current
     val nudge = with(LocalDensity.current) { 48.dp.toPx() }
@@ -225,23 +228,18 @@ fun SwipeableEvent(
         val max = constraints.maxWidth.toFloat().coerceAtLeast(threshold * 1.5f)
         val x = dx
         val side = if (x > 0) 1 else if (x < 0) -1 else 0
-        // What's behind the row: the colour shows as soon as it moves; the label pops at the threshold.
-        if (side != 0) {
-            val pop by animateFloatAsState(if (armed != 0) 1.15f else 1f, MekaMotion.approve(reduced), label = "swipe-pop")
-            Box(
-                Modifier.matchParentSize().clip(RoundedCornerShape(MekaRadius.m))
-                    .background(if (side > 0) Meka.colors.accent else Meka.colors.surfaceRaised)
-                    .padding(horizontal = MekaSpace.l),
-                contentAlignment = if (side > 0) Alignment.CenterStart else Alignment.CenterEnd,
-            ) {
-                Text(
-                    if (side > 0) "Prep task" else "Hide from my day",
-                    style = MekaType.itemMeta,
-                    color = if (side > 0) Meka.colors.onAccent else Meka.colors.textSecondary,
-                    modifier = Modifier.graphicsLayer { scaleX = pop; scaleY = pop },
-                )
-            }
-        }
+        // What's behind the row (catalogue "Swipe actions"): the colour washes in as soon as it moves and deepens to
+        // full at the threshold; the icon and label fade in, the icon growing with the swipe and popping when armed.
+        val progress = MotionMath.swipeProgress(with(LocalDensity.current) { x.toDp().value })
+        SwipeBackdrop(
+            side = side,
+            progress = progress,
+            armed = armed != 0,
+            glyph = if (side > 0) SwipeGlyph.ADD else SwipeGlyph.HIDE,
+            label = if (side > 0) "Prep task" else "Hide from my day",
+            fill = if (side > 0) Meka.colors.accent else Meka.colors.textSecondary,
+            content = if (side > 0) Meka.colors.onAccent else Meka.colors.background,
+        )
         content(
             Modifier
                 .offset { IntOffset(x.roundToInt(), 0) }

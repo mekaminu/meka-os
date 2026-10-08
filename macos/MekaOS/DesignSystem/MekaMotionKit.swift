@@ -227,6 +227,40 @@ enum MotionMath {
 
     /// True when the list's bottom padding keeps the last row out of the fade once scrolled to the end.
     static func footClear(bottomPadding: CGFloat) -> Bool { bottomPadding >= footFade }
+
+    /// Swipe actions (motion pass 2, feedback motion): how far a drag of `dx` points is towards arming, 0…1 at
+    /// `MekaChoreography.swipeArmDistance`. Matches the Fold's MotionMath.swipe* number for number.
+    static func swipeProgress(dx: CGFloat) -> Double { Double(min(abs(dx) / MekaChoreography.swipeArmDistance, 1)) }
+
+    /// Which way a drag of `dx` is armed: 1 (right), -1 (left), or 0 short of the arm distance.
+    static func swipeArmed(dx: CGFloat) -> Int {
+        if dx >= MekaChoreography.swipeArmDistance { return 1 }
+        if dx <= -MekaChoreography.swipeArmDistance { return -1 }
+        return 0
+    }
+
+    static let swipeMinTint: Double = 0.3
+    static let swipeIconFrom: Double = 0.6
+    static let swipeIconFade: Double = 0.4
+    static let swipeWashMax: Double = 0.18
+
+    /// Opacity of the action's colour: nothing at rest, a light wash once it moves, the full colour at the arm point.
+    static func swipeTint(_ progress: Double) -> Double {
+        progress <= 0 ? 0 : swipeMinTint + (1 - swipeMinTint) * min(max(progress, 0), 1)
+    }
+
+    /// Scale of the action's icon: grows with the drag, pops to `swipeIconPopScale` once armed; Off: full size.
+    static func swipeIconScale(_ progress: Double, armed: Bool, reduced: Bool) -> Double {
+        if reduced { return 1 }
+        if armed { return Double(MekaChoreography.swipeIconPopScale) }
+        return swipeIconFrom + (1 - swipeIconFrom) * min(max(progress, 0), 1)
+    }
+
+    /// Opacity of the action's icon and label: fades in over the first `swipeIconFade` of the way.
+    static func swipeIconAlpha(_ progress: Double) -> Double { min(max(progress / swipeIconFade, 0), 1) }
+
+    /// How strongly Needs you's card takes on the colour of the move it leans to.
+    static func swipeWash(_ progress: Double) -> Double { swipeWashMax * min(max(progress, 0), 1) }
 }
 
 /// What a staying tick does (`MotionMath.tickDraw`): at rest (an outline), draw the check in, or show it done at once.

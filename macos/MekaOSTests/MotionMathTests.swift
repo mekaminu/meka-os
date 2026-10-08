@@ -209,4 +209,31 @@ final class MotionMathTests: XCTestCase {
         XCTAssertEqual(MekaPalette.light.calendarTone(3), MekaPalette.light.calendar3)
         XCTAssertEqual(MekaPalette.dark.calendarTone(9), MekaPalette.dark.calendar5)
     }
+
+    @MainActor
+    func testSwipeColourDeepensAndIconPopsAtTheArmPoint() {
+        XCTAssertEqual(MekaChoreography.swipeArmDistance, 96)
+        XCTAssertEqual(MekaChoreography.swipeIconPopScale, 1.25)
+        XCTAssertEqual(MotionMath.swipeProgress(dx: 0), 0)
+        XCTAssertEqual(MotionMath.swipeProgress(dx: 48), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.swipeProgress(dx: -48), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.swipeProgress(dx: 300), 1)
+        XCTAssertEqual(MotionMath.swipeArmed(dx: 95.9), 0)
+        XCTAssertEqual(MotionMath.swipeArmed(dx: 96), 1)
+        XCTAssertEqual(MotionMath.swipeArmed(dx: -120), -1)
+        XCTAssertEqual(MotionMath.swipeTint(0), 0)
+        XCTAssertEqual(MotionMath.swipeTint(0.0001), 0.3, accuracy: 1e-3)
+        XCTAssertEqual(MotionMath.swipeTint(0.5), 0.65, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.swipeTint(1), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.swipeIconScale(0, armed: false, reduced: false), 0.6, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.swipeIconScale(0.5, armed: false, reduced: false), 0.8, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.swipeIconScale(1, armed: true, reduced: false), 1.25, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.swipeIconScale(1, armed: true, reduced: true), 1)
+        XCTAssertEqual(MotionMath.swipeIconScale(0.2, armed: false, reduced: true), 1)
+        XCTAssertEqual(MotionMath.swipeIconAlpha(0.2), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.swipeIconAlpha(0.6), 1)
+        XCTAssertEqual(MotionMath.swipeWash(0), 0)
+        XCTAssertEqual(MotionMath.swipeWash(0.5), 0.09, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.swipeWash(2), 0.18, accuracy: 1e-9)
+    }
 }

@@ -265,6 +265,47 @@ object MotionMath {
      * can stay on all the time and the last row still scrolls fully clear of the bar.
      */
     fun footClear(bottomPaddingDp: Float): Boolean = bottomPaddingDp >= FOOT_FADE_DP
+
+    /**
+     * Swipe actions (motion pass 2, feedback motion; catalogue "Swipe actions"): how far a row (or Needs you's card)
+     * swiped [dxDp] sideways is towards arming, 0 → 1 at [MekaChoreography.swipeArmDistanceDp].
+     */
+    fun swipeProgress(dxDp: Float): Float = (kotlin.math.abs(dxDp) / MekaChoreography.swipeArmDistanceDp).coerceIn(0f, 1f)
+
+    /** Which way a swipe of [dxDp] is armed: 1 (right), -1 (left), or 0 short of [MekaChoreography.swipeArmDistanceDp]. */
+    fun swipeArmed(dxDp: Float): Int = when {
+        dxDp >= MekaChoreography.swipeArmDistanceDp -> 1
+        dxDp <= -MekaChoreography.swipeArmDistanceDp -> -1
+        else -> 0
+    }
+
+    /**
+     * Opacity of the action's colour behind the row: nothing at rest, a [SWIPE_MIN_TINT] wash as soon as it moves,
+     * deepening to the full colour at the arm point. The same with Motion → Off (colour, not movement).
+     */
+    fun swipeTint(progress: Float): Float =
+        if (progress <= 0f) 0f else SWIPE_MIN_TINT + (1f - SWIPE_MIN_TINT) * progress.coerceIn(0f, 1f)
+
+    /**
+     * Scale of the action's icon: grows from [SWIPE_ICON_FROM] with the swipe, then pops to
+     * [MekaChoreography.swipeIconPopScale] once armed (the UI springs between them). Motion → Off: full size, no pop.
+     */
+    fun swipeIconScale(progress: Float, armed: Boolean, reduced: Boolean): Float = when {
+        reduced -> 1f
+        armed -> MekaChoreography.swipeIconPopScale
+        else -> SWIPE_ICON_FROM + (1f - SWIPE_ICON_FROM) * progress.coerceIn(0f, 1f)
+    }
+
+    /** Opacity of the action's icon and label: fades in over the first [SWIPE_ICON_FADE] of the way. */
+    fun swipeIconAlpha(progress: Float): Float = (progress / SWIPE_ICON_FADE).coerceIn(0f, 1f)
+
+    /** How strongly Needs you's card takes on the colour of the move it leans to: up to [SWIPE_WASH_MAX] at the arm point. */
+    fun swipeWash(progress: Float): Float = SWIPE_WASH_MAX * progress.coerceIn(0f, 1f)
+
+    const val SWIPE_MIN_TINT = 0.3f
+    const val SWIPE_ICON_FROM = 0.6f
+    const val SWIPE_ICON_FADE = 0.4f
+    const val SWIPE_WASH_MAX = 0.18f
 }
 
 /** What a staying tick does ([MotionMath.tickDraw]): at rest (an outline), draw the check in, or show it done at once. */

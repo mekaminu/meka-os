@@ -32,9 +32,10 @@ extension View {
     func opensEvent(_ event: CalendarEvent?) -> some View { modifier(OpensEvent(event: event)) }
 }
 
-/// Calendar actions on an event row (matching the Fold's swipes): Prep task and Hide from my day, in the row's
-/// context menu and as small buttons while the pointer is over it (the row lifts 2 pt). MEKA-only: the real calendar is
-/// untouched. Reduce Motion: no lift, the buttons fade.
+/// Calendar actions on an event row (matching the Fold's swipes): Prep task (+) and Hide from my day (an eye, struck
+/// through), in the row's context menu and as small buttons that pop in (the approve spring, from the swipe icon's
+/// starting size) while the pointer is over it (the row lifts 2 pt). MEKA-only: the real calendar is untouched.
+/// Reduce Motion: no lift, the buttons fade.
 struct EventActionsModifier: ViewModifier {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -50,10 +51,11 @@ struct EventActionsModifier: ViewModifier {
                 .overlay(alignment: .trailing) {
                     if hovering {
                         HStack(spacing: MekaSpace.xs) {
-                            Button("Prep task") { model.addPrepTask(e) }
-                            Button("Hide") { model.hideEvent(e.id) }
+                            Button { model.addPrepTask(e) } label: { Label("Prep task", systemImage: "plus") }
+                            Button { model.hideEvent(e.id) } label: { Label("Hide", systemImage: "eye.slash") }
                                 .help("Hide from my day (MEKA only; your calendar is unchanged)")
                         }
+                        .labelStyle(.titleAndIcon)
                         .buttonStyle(.borderless)
                         .font(MekaType.caption)
                         .foregroundStyle(palette.accent)
@@ -61,12 +63,14 @@ struct EventActionsModifier: ViewModifier {
                         .padding(.vertical, MekaSpace.xxs)
                         .background(palette.surfaceRaised, in: Capsule())
                         .padding(.trailing, MekaSpace.xs)
-                        .transition(.opacity)
+                        // The swipe actions' pop (catalogue "Swipe actions"): the pill springs in from the icons'
+                        // starting size. Reduce Motion: it fades.
+                        .transition(reduceMotion ? .opacity : .scale(scale: MotionMath.swipeIconFrom, anchor: .trailing).combined(with: .opacity))
                     }
                 }
                 .offset(y: hovering && !reduceMotion ? -2 : 0)
                 .onHover { h in
-                    withAnimation(MekaMotion.appear(reduced: reduceMotion)) { hovering = h }
+                    withAnimation(h ? MekaMotion.approve(reduced: reduceMotion) : MekaMotion.appear(reduced: reduceMotion)) { hovering = h }
                 }
                 .contextMenu {
                     reminderMenus(e)
