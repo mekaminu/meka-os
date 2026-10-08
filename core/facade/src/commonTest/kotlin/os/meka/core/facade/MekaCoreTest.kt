@@ -1008,4 +1008,30 @@ class MekaCoreTest {
         assertEquals(del, mac.eventDetail(dentist).edit?.editId)
         assertIs<os.meka.core.domain.EventEditResult.Refused>(mac.deleteEvent(dentist, guestsOk = false)) // the Mac hasn't read its accounts
     }
+
+    @Test
+    fun anAddedEventShowsInTodayAndTheCalendarOnBothDevicesBeforeGoogleAnswers() = runTest {
+        val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
+        val fold = core("android", server)
+        val mac = core("mac")
+        fold.refreshCalendarAccounts()
+        val id = assertIs<os.meka.core.domain.EventEditResult.Made>(fold.addEvent(fold.addEventForm(-1).withTitle("Dentist"))).id
+        fun shown(c: MekaCore) = c.calendarView.value.sections.flatMap { it.rows }.mapNotNull { it.event }.filter { it.isProvisional }
+        fun onToday(c: MekaCore) = c.today.value.timeline.rows.mapNotNull { it.event }.filter { it.isProvisional }
+        assertEquals(listOf("Dentist"), shown(fold).map { it.title })
+        assertEquals(listOf(id), onToday(fold).map { it.pendingEditId })
+        val detail = fold.eventDetail(shown(fold).single())
+        assertTrue(detail.provisional)
+        assertFalse(detail.editable)
+        assertEquals("Adding “Dentist” to Google", detail.edit?.text)
+
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(listOf("Dentist"), shown(mac).map { it.title })
+
+        // Undone inside the five seconds: gone from both.
+        assertTrue(fold.undoEventEdit(id))
+        assertTrue(shown(fold).isEmpty() && onToday(fold).isEmpty())
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertTrue(shown(mac).isEmpty())
+    }
 }

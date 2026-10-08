@@ -67,26 +67,29 @@ struct EventDetailSheet: View {
         }
         .staggeredAppear(0)
 
-        // Calendar actions: MEKA-only, the real event is untouched.
-        HStack(spacing: MekaSpace.s) {
-            if d.canPrep {
-                Button("Prep task") { model.addPrepTask(event) }
+        // Calendar actions: MEKA-only, the real event is untouched. An event just added in MEKA has none until Google
+        // has it (its line below says "Adding “Dentist” to Google").
+        if !d.provisional {
+            HStack(spacing: MekaSpace.s) {
+                if d.canPrep {
+                    Button("Prep task") { model.addPrepTask(event) }
+                }
+                Button(d.hidden ? "Show in my day" : "Hide from my day") {
+                    if d.hidden { model.showEvent(d.id) } else { model.hideEvent(d.id, offerUndo: false) }
+                }
+                // Calendar editing: changes the real event (after five seconds' Undo); not while an edit is on its way.
+                if d.editable && !(d.edit?.waiting ?? false) {
+                    Button("Edit") { MekaHaptics.tick(); editing = true }
+                }
+                let note = [d.prepLine, d.reminderLine, d.hidden ? "Hidden from your day" : nil].compactMap { $0 }.joined(separator: " · ")
+                if !note.isEmpty {
+                    Text(note).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .contentTransition(.opacity)
+                }
             }
-            Button(d.hidden ? "Show in my day" : "Hide from my day") {
-                if d.hidden { model.showEvent(d.id) } else { model.hideEvent(d.id, offerUndo: false) }
-            }
-            // Calendar editing: changes the real event (after five seconds' Undo); not while an edit is on its way.
-            if d.editable && !(d.edit?.waiting ?? false) {
-                Button("Edit") { MekaHaptics.tick(); editing = true }
-            }
-            let note = [d.prepLine, d.reminderLine, d.hidden ? "Hidden from your day" : nil].compactMap { $0 }.joined(separator: " · ")
-            if !note.isEmpty {
-                Text(note).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .contentTransition(.opacity)
-            }
+            .controlSize(.small)
+            .staggeredAppear(1)
         }
-        .controlSize(.small)
-        .staggeredAppear(1)
 
         if let note = d.edit {
             HStack(spacing: MekaSpace.s) {

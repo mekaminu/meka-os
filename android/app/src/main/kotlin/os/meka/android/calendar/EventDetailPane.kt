@@ -154,8 +154,9 @@ private fun DetailContent(
             }
         }
 
-        // Calendar actions: MEKA-only, the real event is untouched.
-        Row(
+        // Calendar actions: MEKA-only, the real event is untouched. An event just added in MEKA has none until Google
+        // has it (its line below says "Adding “Dentist” to Google").
+        if (!d.provisional) Row(
             Modifier.fillMaxWidth().padding(bottom = MekaSpace.l).appear(rememberAppearance(1)),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
             verticalAlignment = Alignment.CenterVertically,

@@ -129,12 +129,16 @@ class EventActions(
      * It only rings while a travel time is set and the event has a place; the switch is kept either way. Last tap wins.
      */
     fun setLeaveAlarm(eventId: String, on: Boolean) {
+        // An event added in MEKA that isn't in the mirror yet gets no marks (its id goes when the real one lands).
+        if (PendingEditRules.isProvisional(eventId)) return
         val current = replica.entity(EntityTypes.EVENT_MARK, eventId)?.get(EventMarkFields.LEAVE_ALARM)?.boolOrNull ?: false
         if (current == on) return
         replica.commitLocal(EntityTypes.EVENT_MARK, eventId, mapOf(EventMarkFields.LEAVE_ALARM to on.fv()))
     }
 
     private fun setMinutes(eventId: String, field: String, minutes: Int?) {
+        // An event added in MEKA that isn't in the mirror yet gets no marks (its id goes when the real one lands).
+        if (PendingEditRules.isProvisional(eventId)) return
         val m = minutes?.takeIf { it != 0 }
         require(m == null || m in 1..ReminderRules.MAX_MIN) { "minutes must be 1..${ReminderRules.MAX_MIN}" }
         val current = replica.entity(EntityTypes.EVENT_MARK, eventId)?.get(field)?.longOrNull?.toInt()
@@ -183,6 +187,8 @@ class EventActions(
     fun show(eventId: String) = setHidden(eventId, false)
 
     private fun setHidden(eventId: String, hidden: Boolean) {
+        // An event added in MEKA that isn't in the mirror yet gets no marks (its id goes when the real one lands).
+        if (PendingEditRules.isProvisional(eventId)) return
         val current = replica.entity(EntityTypes.EVENT_MARK, eventId)?.get(EventMarkFields.HIDDEN)?.boolOrNull ?: false
         if (current == hidden) return
         replica.commitLocal(

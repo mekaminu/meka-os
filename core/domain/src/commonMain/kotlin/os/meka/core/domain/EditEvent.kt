@@ -146,7 +146,9 @@ object EditEventRules {
      */
     fun note(eventId: String, edits: List<EventEdit>, nowMs: Long): EventEditNote? {
         // An undone edit never happened, so it doesn't hide an earlier one (two made in the same millisecond: the later id).
-        val e = edits.filter { it.eventId == eventId && !it.undone }
+        // A provisional event (slice 2c-ii) is its add's own edit.
+        val addId = PendingEditRules.editIdOf(eventId)
+        val e = edits.filter { (it.eventId == eventId || (addId != null && it.id == addId)) && !it.undone }
             .maxWithOrNull(compareBy<EventEdit>({ it.createdAtMs }, { it.id })) ?: return null
         val line = EditLineRules.lines(listOf(e), nowMs).firstOrNull() ?: return null
         val anyway = needsGuestsOk(e, nowMs)

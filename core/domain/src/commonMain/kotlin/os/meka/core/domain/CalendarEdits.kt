@@ -167,7 +167,8 @@ object CalendarEditRules {
 
     /** Whether MEKA may offer editing on [event]: a Google/Outlook event of an account where editing is allowed. */
     fun editable(event: CalendarEvent, canEdit: (provider: String, account: String) -> Boolean): Boolean =
-        event.provider in WRITABLE && !event.isFixture && event.account != null && canEdit(event.provider, event.account)
+        event.provider in WRITABLE && !event.isFixture && !event.isProvisional && event.account != null &&
+            canEdit(event.provider, event.account)
 
     /** The draft cleaned up (trimmed, blanks to null), or null when it can't be written ([problem] says why). */
     fun clean(d: EventDraft): EventDraft = d.copy(
@@ -381,6 +382,8 @@ class CalendarEdits(
             return EventEditResult.Refused("MEKA can't change this calendar")
         }
         if (!canEdit(event.provider, event.account)) return refusedNotAllowed(event.provider, event.account)
+        // Added in MEKA and not in the mirror yet (slice 2c-ii): there's no event in the provider to change.
+        if (event.isProvisional) return EventEditResult.Refused("Wait until ${CalendarEditRules.providerName(event.provider)} has it")
         return null
     }
 

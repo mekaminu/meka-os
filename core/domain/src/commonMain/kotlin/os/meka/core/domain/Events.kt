@@ -57,7 +57,15 @@ data class CalendarEvent(
     /** A fixture's previous kick-off and when the move was seen (see [EventFields.MOVED_FROM]). */
     val movedFromMs: Long? = null,
     val movedAtMs: Long? = null,
+    /**
+     * Calendar editing (slice 2c-ii): Meka's own edit of this event is still on its way to the provider, and this is
+     * the event as that edit leaves it ([PendingEditRules]); null for the mirror as it is. Never stored.
+     */
+    val pendingEditId: String? = null,
 ) {
+    /** An event Meka added in MEKA that isn't in the mirror yet ([PendingEditRules.PROVISIONAL_PREFIX]). */
+    val isProvisional: Boolean get() = PendingEditRules.isProvisional(id)
+
     /** From the fixtures feed (FC Barcelona), marked in the Calendar tab. */
     val isFixture: Boolean get() = provider == "fixtures"
 

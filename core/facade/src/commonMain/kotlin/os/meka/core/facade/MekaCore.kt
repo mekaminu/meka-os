@@ -135,7 +135,7 @@ class MekaCore(
     private val held = os.meka.core.domain.HeldMessages(replica, nowMs)
     // Leave-by alarms are worked out from the calendar on every read (Alarms, slice 3).
     private val alarms = os.meka.core.domain.Alarms(replica, nowMs, ZoneCalendar(timeZone)) {
-        os.meka.core.domain.LeaveAlarmRules.alarms(events.all(), eventActions.marks(), nowMs(), ZoneCalendar(timeZone))
+        os.meka.core.domain.LeaveAlarmRules.alarms(currentEvents(), eventActions.marks(), nowMs(), ZoneCalendar(timeZone))
     }
     /**
      * Calendar editing: the accounts where editing is allowed, as the server last listed them ([connectedAccounts]);
@@ -1070,7 +1070,7 @@ class MekaCore(
         val all = tasks.all()
         val marks = eventActions.marks(all)
         _eventMarks.value = marks
-        val allEvents = events.all()
+        val allEvents = currentEvents()
         val dayEvents = marks.visible(allEvents)
         val workState = work.state(localClock(), todayEpochDay())
         val holidays = bankHolidays.calendar()
@@ -1136,7 +1136,7 @@ class MekaCore(
         if (os.meka.core.domain.SearchRules.tokens(searchQuery).isEmpty()) return SearchView(searchQuery, emptyList(), 0)
         val sources = SearchSources(
             tasks = all,
-            events = events.all(),
+            events = currentEvents(),
             waiting = _lists.value.waiting,
             decisions = lists.decisionItems(includeSuperseded = true),
             renewals = _lists.value.renewals.all,
@@ -1150,7 +1150,7 @@ class MekaCore(
     private fun currentNotices(all: List<os.meka.core.domain.Task> = tasks.all()) =
         NoticeSources.collect(
             _lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card,
-            events.all(), _eventMarks.value, _sessions.value, all,
+            currentEvents(), _eventMarks.value, _sessions.value, all,
         )
 
     private fun project(all: List<os.meka.core.domain.Task> = tasks.all(), dayEvents: List<os.meka.core.domain.CalendarEvent> = visibleEvents(all)): Today {
@@ -1162,8 +1162,15 @@ class MekaCore(
         )
     }
 
+    /**
+     * The mirrored events with Meka's own calendar edits laid over (slice 2c-ii, [os.meka.core.domain.PendingEditRules]):
+     * an add, move, change or delete shows everywhere as soon as it's made, before Google answers.
+     */
+    private fun currentEvents(): List<os.meka.core.domain.CalendarEvent> =
+        os.meka.core.domain.PendingEditRules.apply(events.all(), calendarEdits.all(), nowMs())
+
     /** Calendar events minus those hidden from my day. */
-    private fun visibleEvents(all: List<os.meka.core.domain.Task>) = eventActions.marks(all).visible(events.all())
+    private fun visibleEvents(all: List<os.meka.core.domain.Task>) = eventActions.marks(all).visible(currentEvents())
 
     private fun localClock(): LocalClock {
         val t = Instant.fromEpochMilliseconds(nowMs()).toLocalDateTime(timeZone())

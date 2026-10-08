@@ -53,6 +53,11 @@ data class EventDetailView(
     val editable: Boolean = false,
     /** The event's own latest edit ("Moving “Dentist” in Google", a refusal, Delete anyway); null when none. */
     val edit: EventEditNote? = null,
+    /**
+     * An event added in MEKA that Google hasn't confirmed yet (slice 2c-ii): the pane shows it with its line
+     * ("Adding “Dentist” to Google") and no actions until the real event lands.
+     */
+    val provisional: Boolean = false,
 )
 
 /**
@@ -157,14 +162,16 @@ object EventDetails {
             hidden = marks.isHidden(e.id),
             prepTaskId = prep?.id,
             prepLine = prep?.let { prepLine(it, today, calendar) },
-            canPrep = status != "Ended" && (prep == null || prep.isDone),
+            // A provisional event (added in MEKA, not yet in the mirror) has no MEKA actions until the real one lands.
+            canPrep = !e.isProvisional && status != "Ended" && (prep == null || prep.isDone),
             remindMin = marks.reminderOf(e.id),
             travelMin = marks.travelOf(e.id),
-            remindChoices = ReminderRules.remindChoices(e, nowMs),
-            travelChoices = ReminderRules.travelChoices(e, nowMs),
+            remindChoices = if (e.isProvisional) emptyList() else ReminderRules.remindChoices(e, nowMs),
+            travelChoices = if (e.isProvisional) emptyList() else ReminderRules.travelChoices(e, nowMs),
             reminderLine = if (e.startAtMs > nowMs) ReminderRules.line(e, marks, calendar) else null,
             openIn = openLink(e),
             leaveAlarm = e.id in marks.leaveAlarms,
+            provisional = e.isProvisional,
         )
     }
 
