@@ -224,4 +224,63 @@ class SessionsTest {
         assertEquals(listOf(session), plan.habits)
         assertEquals(at(mon, 19), plan.placements.single().startMs) // 17:45 would run into the session
     }
+
+    private fun sessionNotices(v: SessionsView) = NoticeSources.collect(
+        ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, Today(emptyList(), null, emptyList(), emptyList()), at(mon, 8), cal, sessions = v,
+    ).filter { it.source == NoticeSource.SESSION_LEAVE || it.source == NoticeSource.SESSION_ASK }
+
+    @Test
+    fun aBookedSessionSaysTimeToGoThenAsksDidYouGo() {
+        val ns = sessionNotices(book(listOf(gym(rotation = listOf("Push", "Pull", "Legs")))))
+        val leave = ns.single { it.source == NoticeSource.SESSION_LEAVE }
+        assertEquals("Gym · Push at 17:45", leave.title)
+        assertEquals("Leave by 17:30 · until 18:45", leave.text)
+        assertEquals(at(mon, 17, 15), leave.atMs)
+        assertEquals(at(mon, 17, 45), leave.expiresAtMs) // stale once it starts
+        assertEquals(NoticeTarget.TODAY, leave.target)
+        val ask = ns.single { it.source == NoticeSource.SESSION_ASK }
+        assertEquals("Did you go? · Gym · Push", ask.title)
+        assertEquals("17:45–18:45 · Went or Didn't go in Today", ask.text)
+        assertEquals(at(mon, 18, 45), ask.atMs)
+        assertEquals(at(mon + 1, 0), ask.expiresAtMs)
+        // Only today's session: Wednesday's and Friday's come on their own days.
+        assertEquals(2, ns.size)
+    }
+
+    @Test
+    fun answeringTakesTheNoticesAwayAndAMovedSessionGetsAFreshOne() {
+        assertTrue(sessionNotices(book(listOf(gym(done = setOf(mon))), now = at(mon, 19))).isEmpty())
+        assertTrue(sessionNotices(book(listOf(gym(missed = setOf(mon))), now = at(mon, 19))).isEmpty())
+        val before = sessionNotices(book(listOf(gym()))).single { it.source == NoticeSource.SESSION_LEAVE }
+        val moved = sessionNotices(book(listOf(gym()), events = listOf(ev("drinks", at(mon, 18), at(mon, 19)))))
+            .single { it.source == NoticeSource.SESSION_LEAVE }
+        assertTrue(before.key != moved.key)
+        assertEquals("Gym at 19:15", moved.title)
+        // The ask keeps one key a day, so it never comes twice.
+        val asks = listOf(book(listOf(gym()), now = at(mon, 19)), book(listOf(gym()), now = at(mon, 20)))
+            .map { v -> sessionNotices(v).single { it.source == NoticeSource.SESSION_ASK }.key }
+        assertEquals(1, asks.distinct().size)
+    }
+
+    @Test
+    fun theGovernorPostsEachOnceAndNeverLate() {
+        val v = book(listOf(gym()))
+        val ns = sessionNotices(v)
+        val settings = NotificationSettings.DEFAULT
+        val r1 = Governor.evaluate(ns, settings, DeviceAlerts.ALL, GovernorState(), at(mon, 17, 16), cal)
+        assertEquals(listOf("Gym at 17:45"), r1.post.map { it.title })
+        val r2 = Governor.evaluate(ns, settings, DeviceAlerts.ALL, r1.state, at(mon, 17, 20), cal)
+        assertTrue(r2.post.isEmpty())
+        assertEquals(at(mon, 18), r2.nextWakeMs) // the evening digest, then the ask at 18:45
+        // Missed the leave window entirely (phone off): it is stale at the start and never posts late.
+        val late = Governor.evaluate(ns, settings, DeviceAlerts.ALL, GovernorState(), at(mon, 18), cal)
+        assertTrue(late.post.isEmpty())
+        val digest = Governor.evaluate(ns, settings, DeviceAlerts.ALL, r2.state, at(mon, 18), cal)
+        assertNull(digest.digest) // nothing for the evening digest yet
+        val r3 = Governor.evaluate(ns, settings, DeviceAlerts.ALL, digest.state, at(mon, 18, 46), cal)
+        assertEquals(listOf("Did you go? · Gym"), r3.post.map { it.title })
+        // A user can lower either source.
+        val lowered = settings.copy(tiers = mapOf(NoticeSource.SESSION_LEAVE to NoticeTier.SILENT))
+        assertTrue(Governor.evaluate(ns, lowered, DeviceAlerts.ALL, GovernorState(), at(mon, 17, 16), cal).post.isEmpty())
+    }
 }

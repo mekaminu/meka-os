@@ -892,7 +892,7 @@ class MekaCore(
     private fun currentNotices() =
         NoticeSources.collect(
             _lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card,
-            events.all(), _eventMarks.value,
+            events.all(), _eventMarks.value, _sessions.value,
         )
 
     private fun project(all: List<os.meka.core.domain.Task> = tasks.all(), dayEvents: List<os.meka.core.domain.CalendarEvent> = visibleEvents(all)): Today {

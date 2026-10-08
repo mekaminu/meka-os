@@ -284,4 +284,38 @@ object SessionRules {
             lines,
         )
     }
+
+    /** The "time to go" heads-up comes this long before a session (leave by [BUFFER_MIN] before it starts). */
+    const val LEAVE_NOTICE_MIN = 30
+
+    /**
+     * Today's notices for booked sessions, through the governor (build plan Gym slice 2): half an hour before an
+     * unanswered session "Gym · Push at 17:45" · "Leave by 17:30 · until 18:45" (stale once it starts), and when its slot
+     * is over "Did you go? · Gym · Push" · "17:45–18:45 · Went or Didn't go in Today" (standing until the day ends).
+     * Answering (Went / Didn't go) takes both away; a session moved by a new meeting gets a fresh "time to go". Never a
+     * nag: one of each per session, and a missed one is rebooked, not chased.
+     */
+    fun notices(view: SessionsView, cal: LocalCalendar): List<Notice> {
+        val out = mutableListOf<Notice>()
+        val min = 60_000L
+        fun hhmm(ms: Long) = LocalClock.formatMinute(cal.minuteOfDay(ms))
+        for (c in view.cards) {
+            if (c.answered) continue
+            val start = c.startMs ?: continue
+            val end = c.endMs ?: continue
+            val day = cal.epochDayOf(start)
+            out += Notice(
+                key = "session:${c.habitId}:$day:leave:$start", source = NoticeSource.SESSION_LEAVE, tier = NoticeTier.HEADS_UP,
+                title = "${c.heading} at ${hhmm(start)}", text = "Leave by ${hhmm(start - BUFFER_MIN * min)} · until ${hhmm(end)}",
+                atMs = start - LEAVE_NOTICE_MIN * min, target = NoticeTarget.TODAY, expiresAtMs = start,
+                precision = NoticePrecision.CLOCK,
+            )
+            out += Notice(
+                key = "session:${c.habitId}:$day:ask", source = NoticeSource.SESSION_ASK, tier = NoticeTier.HEADS_UP,
+                title = "Did you go? · ${c.heading}", text = "${hhmm(start)}–${hhmm(end)} · Went or Didn't go in Today",
+                atMs = end, target = NoticeTarget.TODAY, expiresAtMs = cal.toEpochMs(day + 1, 0),
+            )
+        }
+        return out
+    }
 }

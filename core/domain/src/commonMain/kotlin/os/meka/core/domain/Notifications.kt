@@ -40,6 +40,10 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     FAST_GOAL("Fasting goal reached", NoticeTier.HEADS_UP),
     /** Once a day during an extended fast (Fasting v2): "5-day fast · Day 3 of 5". */
     FAST_CHECK_IN("Fasting check-ins", NoticeTier.HEADS_UP),
+    /** Half an hour before a booked session (Gym): "Gym · Push at 17:45" · "Leave by 17:30". */
+    SESSION_LEAVE("Time to go (booked sessions)", NoticeTier.HEADS_UP),
+    /** When a booked session's slot is over and it isn't answered: "Did you go?". */
+    SESSION_ASK("Did you go? (booked sessions)", NoticeTier.HEADS_UP),
     BRIEF("Morning brief", NoticeTier.HEADS_UP),
     SHUTDOWN("Time to shut down the day", NoticeTier.HEADS_UP),
     WEEKLY_REVIEW("Weekly review", NoticeTier.HEADS_UP),
@@ -365,6 +369,8 @@ object Governor {
         NoticeSource.RENEWAL_CANCEL_BY -> "$n to cancel or keep"
         NoticeSource.FAST_GOAL -> "fasting goal reached"
         NoticeSource.FAST_CHECK_IN -> "a fasting check-in"
+        NoticeSource.SESSION_LEAVE -> plural(n, "session") + " to go to"
+        NoticeSource.SESSION_ASK -> if (n == 1) "did you go?" else "$n sessions to answer"
         NoticeSource.BRIEF -> "your morning brief"
         NoticeSource.SHUTDOWN -> "time to shut down"
         NoticeSource.WEEKLY_REVIEW -> "your weekly review"
@@ -398,6 +404,7 @@ object NoticeSources {
         review: ReviewCard = ReviewCard.NONE,
         events: List<CalendarEvent> = emptyList(),
         marks: EventMarks = EventMarks.NONE,
+        sessions: SessionsView = SessionsView.EMPTY,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -494,6 +501,8 @@ object NoticeSources {
         // Remind me and Leave by, set on calendar events.
         out += ReminderRules.notices(events, marks, nowMs, cal)
         out += FixtureMoves.notices(events, marks, nowMs, cal)
+        // Booked sessions (Gym): time to go, then "Did you go?" once the slot is over.
+        out += SessionRules.notices(sessions, cal)
         return out
     }
 }
