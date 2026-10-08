@@ -447,6 +447,8 @@ class MekaCore(
     suspend fun setHabitBooked(id: String, on: Boolean) = onCore { goals.setHabitBooked(id, on) }
     /** The rotation preset at [index] in [os.meka.core.domain.SessionRules.ROTATIONS] (0: none). */
     suspend fun setHabitRotation(id: String, index: Int) = onCore { goals.setHabitRotation(id, os.meka.core.domain.SessionRules.rotationAt(index)) }
+    /** The workout app's link ("hevy.com"), opened from Today's card; blank clears it. False when it isn't a web address. */
+    suspend fun setHabitAppLink(id: String, link: String?): Boolean = onCore { goals.setHabitAppLink(id, link) }
     /** "Went": today ticked with the session's label and an optional one-line note. */
     suspend fun sessionWent(id: String, note: String?) = onCore {
         val label = _sessions.value.cards.firstOrNull { it.habitId == id }?.label

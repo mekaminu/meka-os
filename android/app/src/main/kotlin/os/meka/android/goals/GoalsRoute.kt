@@ -144,6 +144,7 @@ fun GoalsRoute(core: MekaCore) {
                 delete = { open = null; act { core.deleteHabit(h.id) } },
                 book = { on -> haptics.tick(); act { core.setHabitBooked(h.id, on) } },
                 rotate = { i -> haptics.tick(); act { core.setHabitRotation(h.id, i) } },
+                appLink = { link, done -> act { done(core.setHabitAppLink(h.id, link)) } },
             )
         }
         item(key = "add-habit") {
@@ -191,7 +192,7 @@ fun GoalsRoute(core: MekaCore) {
 private fun HabitRow(
     h: HabitItem, goals: List<GoalItem>, expanded: Boolean, onToggle: () -> Unit, modifier: Modifier,
     tick: () -> Unit, edit: (Int?, HabitTiming?, Int?) -> Unit, link: (String?) -> Unit, delete: () -> Unit,
-    book: (Boolean) -> Unit, rotate: (Int) -> Unit,
+    book: (Boolean) -> Unit, rotate: (Int) -> Unit, appLink: (String, (Boolean) -> Unit) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     val bg by animateColorAsState(if (expanded) Meka.colors.surface else Color.Transparent, MekaMotion.appear(reduced), label = "habit-bg")
@@ -227,6 +228,7 @@ private fun HabitRow(
                 Chips("Book my sessions", listOf("On" to h.booked, "Off" to !h.booked)) { i -> book(i == 0) }
                 if (h.booked) {
                     Chips("Rotation", SessionRules.ROTATIONS.map { SessionRules.rotationLabel(it) to (it == h.rotation) }) { i -> rotate(i) }
+                    AppLinkField(h.appLink, h.appName, appLink)
                     Text(
                         "Booked around your calendar and work, a rest day between when there's room. Missed ones are rebooked.",
                         style = MekaType.caption, color = Meka.colors.textTertiary,
@@ -238,6 +240,38 @@ private fun HabitRow(
                 }
                 Action("Delete", critical = true) { delete() }
             }
+        }
+    }
+}
+
+/**
+ * Gym: the workout app's link ("hevy.com"), so Today's card can open it. Done saves it; a link that isn't a web address
+ * says so; Remove clears it. The line under the field cross-fades as it changes.
+ */
+@Composable
+private fun AppLinkField(current: String?, name: String?, save: (String, (Boolean) -> Unit) -> Unit) {
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    var text by rememberSaveable(current) { mutableStateOf(current.orEmpty()) }
+    var bad by rememberSaveable(current) { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Text("Workout app", style = MekaType.caption, color = Meka.colors.textTertiary)
+        Field("Link to your workout app · hevy.com (optional)", text, { text = it.take(SessionRules.MAX_LINK); bad = false }) {
+            save(text) { ok -> bad = !ok; if (ok) haptics.light() else haptics.tick() }
+        }
+        val line = when {
+            bad -> "That isn't a web address · try hevy.com"
+            name != null -> "Today's card opens $name"
+            else -> "Today's card can open the app you log workouts in"
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AnimatedContent(
+                targetState = line,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "app-link-line",
+                modifier = Modifier.weight(1f),
+            ) { l -> Text(l, style = MekaType.caption, color = if (bad) Meka.colors.critical else Meka.colors.textTertiary) }
+            if (current != null) Action("Remove") { haptics.tick(); save("") { } }
         }
     }
 }

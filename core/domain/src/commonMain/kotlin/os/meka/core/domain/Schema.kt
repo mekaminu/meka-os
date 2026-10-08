@@ -161,6 +161,8 @@ object HabitFields {
     const val BOOK_SLOTS = "bookSlots"
     /** Gym (additive, LWW): the rotating labels, "Push|Pull|Legs"; absent or empty for none. */
     const val ROTATION = "rotation"
+    /** Gym (2026-10-08, additive, LWW): a link to the workout app ("https://hevy.com"), opened from Today's card; http(s) only. */
+    const val APP_LINK = "appLink"
 }
 
 /** One habit on one local day. Id `<habitId>.d<epochDay>` so two devices ticking the same day write one entity. */

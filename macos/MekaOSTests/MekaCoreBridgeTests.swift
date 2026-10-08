@@ -297,6 +297,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(core.goalsView.value.habits.first { $0.id == id }?.rotation, ["Push", "Pull", "Legs"])
         XCTAssertEqual(SessionRules.shared.ROTATIONS.count, 4)
         XCTAssertEqual(SessionRules.shared.rotationLabel(r: ["Upper", "Lower"]), "Upper · Lower")
+        // The workout app's link: cleaned, named, refused when it isn't a web address.
+        let saved = try await core.setHabitAppLink(id: id, link: "hevy.com")
+        XCTAssertTrue(saved.boolValue)
+        XCTAssertEqual(core.goalsView.value.habits.first { $0.id == id }?.appLink, "https://hevy.com")
+        XCTAssertEqual(core.goalsView.value.habits.first { $0.id == id }?.appName, "Hevy")
+        let refused = try await core.setHabitAppLink(id: id, link: "javascript:alert(1)")
+        XCTAssertFalse(refused.boolValue)
+        XCTAssertEqual(SessionRules.shared.appName(link: "https://www.strava.com"), "Strava")
         // Went and Undo work whatever today's card says (the booking depends on the clock and calendar).
         try await core.sessionWent(id: id, note: "5 km")
         XCTAssertEqual(core.goalsView.value.habits.first { $0.id == id }?.doneToday, true)

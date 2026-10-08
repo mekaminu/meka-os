@@ -53,7 +53,11 @@ data class HabitItem(
     val rotation: List<String> = emptyList(),
     /** Gym: "Booked Thu 17:45 · Sat 10:00", "Week done", "No room left this week" (set from [SessionsView]). */
     val sessionLine: String? = null,
+    /** Gym: the workout app's link, opened from Today's card ([SessionRules.cleanAppLink]); null for none. */
+    val appLink: String? = null,
 ) {
+    /** "Hevy"; null without a link. */
+    val appName: String? get() = appLink?.let { SessionRules.appName(it) }
     val needsRoomToday: Boolean get() = pace == HabitPace.BEHIND || pace == HabitPace.DUE
     /** "Push · Pull · Legs", "No rotation". */
     val rotationLabel: String get() = SessionRules.rotationLabel(rotation)
@@ -301,6 +305,19 @@ class Goals(
     }
 
     /**
+     * Gym: the workout app's link ([SessionRules.cleanAppLink]); blank clears it. Returns false (nothing written) when it
+     * isn't an http(s) address.
+     */
+    fun setHabitAppLink(id: String, link: String?): Boolean {
+        requireHabit(id)
+        val blank = link.isNullOrBlank()
+        val clean = SessionRules.cleanAppLink(link)
+        if (!blank && clean == null) return false
+        replica.commitLocal(EntityTypes.HABIT, id, mapOf(HabitFields.APP_LINK to (clean?.fv() ?: FieldValue.Null)))
+        return true
+    }
+
+    /**
      * Gym: "Went" ([went] = true: today is ticked with the session's [label] and an optional one-line [note]) or
      * "Didn't go" (today is marked missed and the session is rebooked on another day, never nagged).
      */
@@ -451,6 +468,7 @@ class Goals(
                 hasConflict = replica.conflictsFor(EntityTypes.HABIT, id).isNotEmpty(),
                 booked = s[HabitFields.BOOK_SLOTS].boolOrNull == true,
                 rotation = SessionRules.decodeRotation(s[HabitFields.ROTATION].textOrNull),
+                appLink = SessionRules.cleanAppLink(s[HabitFields.APP_LINK].textOrNull),
             )
         }.sortedWith(
             compareBy<HabitItem> { paceOrder(it.pace) }
@@ -535,6 +553,7 @@ class Goals(
                 missedDays = rows.filter { it.second[HabitCompletionFields.DONE].boolOrNull != true && it.second[HabitCompletionFields.MISSED].boolOrNull == true }
                     .map { it.first }.toSet(),
                 rotation = h.rotation,
+                appLink = h.appLink,
                 lastLabel = lastLabel,
                 todayLabel = today?.get(HabitCompletionFields.LABEL)?.textOrNull,
                 todayNote = today?.get(HabitCompletionFields.NOTE)?.textOrNull,

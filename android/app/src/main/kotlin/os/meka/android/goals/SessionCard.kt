@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -107,17 +108,32 @@ private fun SessionCardTile(core: MekaCore, card: SessionCard) {
                 }
             }
         }
+        val context = LocalContext.current
         Row(Modifier.padding(top = MekaSpace.s), horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) {
             if (card.asks) {
                 Action("Went") { haptics.light(); act { core.sessionWent(card.habitId, null) } }
                 Action("Didn't go") { haptics.tick(); act { core.sessionMissed(card.habitId) } }
             }
             if (card.answered) Action("Undo") { haptics.tick(); act { core.undoSession(card.habitId) } }
+            // The workout app ("Open Hevy ↗"): its link opens the app when it's installed, else the browser.
+            val l = card.appLink
+            val label = card.openLabel
+            if (l != null && label != null) {
+                Action("$label ↗") { haptics.light(); openAppLink(context, l) }
+            }
         }
         AnimatedVisibility(card.status == SessionStatus.WENT && card.note == null, enter = unfold(), exit = fold()) {
             NoteField { note -> act { core.setSessionNote(card.habitId, note) } }
         }
     }
+}
+
+/** Opens the workout app's link (an app that claims the address opens; else the browser). Nothing happens if neither can. */
+private fun openAppLink(context: android.content.Context, link: String) {
+    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link))
+        .addCategory(android.content.Intent.CATEGORY_BROWSABLE)
+        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
 }
 
 /** The check pops in with a spring (reduced motion: shown at once). */

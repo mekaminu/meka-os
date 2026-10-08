@@ -36,6 +36,8 @@ data class SessionHabit(
     /** Today's answer, when "Went": its label and note. */
     val todayLabel: String? = null,
     val todayNote: String? = null,
+    /** The workout app's link ([SessionRules.cleanAppLink]), opened from the card; null for none. */
+    val appLink: String? = null,
 )
 
 /** One session booked in the week. */
@@ -82,7 +84,13 @@ data class SessionCard(
     val endMs: Long?,
     /** What a screen reader says. */
     val spoken: String,
+    /** The workout app's link, offered as "Open Hevy" while the session is ahead, on or just done; null for none. */
+    val appLink: String? = null,
+    /** "Hevy" ([SessionRules.appName]); null without a link. */
+    val appName: String? = null,
 ) {
+    /** "Open Hevy"; null without a link. */
+    val openLabel: String? get() = appName?.let { "Open $it" }
     /** Went / Didn't go are offered: once the slot is over (and while it's on, for an early finish). */
     val asks: Boolean get() = status == SessionStatus.ASK || status == SessionStatus.NOW
     /** Undo is offered for today's answer. */
@@ -133,6 +141,51 @@ object SessionRules {
 
     fun cleanRotation(labels: List<String>): List<String> =
         labels.map { it.trim().replace('|', '/').take(MAX_LABEL) }.filter { it.isNotEmpty() }.take(MAX_LABELS)
+
+    const val MAX_LINK = 300
+
+    /**
+     * The workout app's link as typed ("hevy.com", "https://www.strava.com/dashboard"): trimmed, https added when there's
+     * no scheme, and kept only when it's an http(s) address with a real host (a dot, letters, digits and dashes), no
+     * login part, no spaces and at most [MAX_LINK] characters; null otherwise. Synced values are checked again on read.
+     */
+    fun cleanAppLink(raw: String?): String? {
+        val t = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (t.length > MAX_LINK || t.any { it.isWhitespace() || it.code < 32 }) return null
+        val sep = t.indexOf("://")
+        val scheme = if (sep < 0) "https" else t.substring(0, sep).lowercase()
+        if (scheme != "https" && scheme != "http") return null
+        val rest = if (sep < 0) t else t.substring(sep + 3)
+        val end = rest.indexOfFirst { it == '/' || it == '?' || it == '#' }.let { if (it < 0) rest.length else it }
+        val authority = rest.substring(0, end)
+        if ('@' in authority) return null
+        val host = authority.substringBefore(':').lowercase()
+        val port = authority.substringAfter(':', "")
+        if (port.isNotEmpty() && (port.length > 5 || port.any { !it.isDigit() })) return null
+        if (':' in authority && port.isEmpty()) return null
+        val labels = host.split('.')
+        if (labels.size < 2 || labels.any { l -> l.isEmpty() || l.startsWith('-') || l.endsWith('-') || l.any { !(it in 'a'..'z' || it in '0'..'9' || it == '-') } }) return null
+        if (labels.last().all { it.isDigit() }) return null
+        val out = "$scheme://$host" + (if (port.isEmpty()) "" else ":$port") + rest.substring(end)
+        return out.takeIf { it.length <= MAX_LINK }
+    }
+
+    /** The app's name from its link: "hevy.com" → "Hevy", "connect.garmin.com" → "Garmin", "strava.app.link" → "Strava". */
+    fun appName(link: String): String {
+        val host = link.substringAfter("://").substringBefore('/').substringBefore('?').substringBefore('#').substringBefore(':').lowercase()
+        val labels = host.split('.').filter { it.isNotEmpty() }
+        val name = when {
+            labels.size >= 3 && labels.takeLast(2).joinToString(".") in LINK_SERVICES -> labels.first()
+            labels.size >= 3 && labels[labels.size - 2].length <= 3 && labels.last().length == 2 &&
+                labels[labels.size - 2] in setOf("co", "com", "org", "net", "ac") -> labels[labels.size - 3]
+            labels.size >= 2 -> labels[labels.size - 2]
+            else -> labels.firstOrNull() ?: "app"
+        }
+        return name.replaceFirstChar { it.uppercaseChar() }
+    }
+
+    /** Deep-link services whose first label names the app ("strava.app.link"). */
+    private val LINK_SERVICES = setOf("app.link", "page.link", "onelink.me", "test-app.link")
 
     /** One line, trimmed, at most [MAX_NOTE] characters; null when blank. */
     fun cleanNote(note: String?): String? =
@@ -298,7 +351,8 @@ object SessionRules {
                 }
                 else -> null
             }
-            card?.let { cards += it }
+            val app = h.appLink?.let { cleanAppLink(it) }
+            card?.let { c -> cards += if (app == null || c.status == SessionStatus.MISSED) c else c.copy(appLink = app, appName = appName(app)) }
         }
         return SessionsView(
             cards.sortedWith(compareBy<SessionCard> { it.startMs ?: Long.MAX_VALUE }.thenBy { it.habitId }),

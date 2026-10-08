@@ -197,11 +197,60 @@ private struct HabitRowView: View {
                 }
                 .padding(.leading, 22 + MekaSpace.m)
                 .transition(.opacity.combined(with: .move(edge: .top)))
+                if habit.booked {
+                    AppLinkField(habit: habit, palette: palette)
+                        .padding(.leading, 22 + MekaSpace.m)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
         }
         .padding(MekaSpace.s)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(expanded ? palette.surface : .clear))
         .transition(.opacity)
+    }
+}
+
+/// Gym: the workout app's link ("hevy.com"), so Today's card can open it. Return saves it; a link that isn't a web
+/// address says so; Remove clears it. The line under the field cross-fades as it changes.
+private struct AppLinkField: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let habit: HabitItem
+    let palette: MekaPalette
+    @State private var text = ""
+    @State private var bad = false
+
+    private var line: String {
+        if bad { return "That isn't a web address · try hevy.com" }
+        if let name = habit.appName { return "Today's card opens \(name)" }
+        return "Today's card can open the app you log workouts in"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: MekaSpace.m) {
+                TextField("Workout app link · hevy.com (optional)", text: $text)
+                    .textFieldStyle(.roundedBorder).font(MekaType.body).frame(maxWidth: 320)
+                    .onSubmit { save(text) }
+                    .onChange(of: text) { bad = false }
+                if habit.appLink != nil {
+                    Button("Remove") { save("") }
+                        .buttonStyle(.plain).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                }
+            }
+            Text(line).font(MekaType.caption).foregroundStyle(bad ? palette.critical : palette.textTertiary)
+                .id(line).transition(.opacity)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+        .onAppear { text = habit.appLink ?? "" }
+        .onChange(of: habit.appLink) { text = habit.appLink ?? "" }
+    }
+
+    private func save(_ link: String) {
+        let id = habit.id
+        let value = String(link.prefix(Int(SessionRules.shared.MAX_LINK)))
+        guard !value.trimmingCharacters(in: .whitespaces).isEmpty || habit.appLink != nil else { return }
+        Task { bad = !(await model.setHabitAppLink(id, value)) }
     }
 }
 

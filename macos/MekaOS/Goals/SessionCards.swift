@@ -22,6 +22,7 @@ struct SessionCardsView: View {
 private struct SessionCardView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openURL) private var openURL
     let card: SessionCard
     let palette: MekaPalette
     @State private var note = ""
@@ -70,6 +71,11 @@ private struct SessionCardView: View {
                 }
                 if card.answered {
                     Button("Undo") { model.undoSession(card.habitId) }
+                }
+                // The workout app ("Open Hevy ↗"): its link opens in the app that claims it, else the browser.
+                if let label = card.openLabel, let link = card.appLink, let url = URL(string: link) {
+                    Button("\(label) ↗") { MekaHaptics.light(); openURL(url) }
+                        .accessibilityHint("Opens \(card.appName ?? "the app") outside MEKA")
                 }
             }
             .buttonStyle(.plain).font(MekaType.itemTitle).foregroundStyle(palette.accent)

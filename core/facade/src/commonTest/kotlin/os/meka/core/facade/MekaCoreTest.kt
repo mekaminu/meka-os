@@ -713,8 +713,14 @@ class MekaCoreTest {
         assertEquals(listOf("Gym"), a.planDay().habits.map { it.title })
         a.setHabitRotation(id, 1)
         assertEquals("Gym · Push", a.sessionsView.value.cards.single().heading)
+        // The workout app opens from the card (both devices); a link that isn't a web address is refused.
+        assertTrue(a.setHabitAppLink(id, "hevy.com"))
+        assertTrue(!a.setHabitAppLink(id, "intent://x"))
+        assertEquals("Open Hevy", a.sessionsView.value.cards.single().openLabel)
+        assertEquals("https://hevy.com", a.goalsView.value.habits.single().appLink)
 
         a.syncNow(); m.syncNow()
+        assertEquals("https://hevy.com", m.sessionsView.value.cards.single().appLink)
         now += 4 * 3_600_000L // 19:13: the slot is over
         m.tick()
         assertEquals("Did you go? · 17:45–18:45", m.sessionsView.value.cards.single().line)

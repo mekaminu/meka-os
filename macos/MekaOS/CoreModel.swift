@@ -706,6 +706,18 @@ final class CoreModel {
     func setHabitBooked(_ id: String, _ on: Bool) { MekaHaptics.tick(); run { try await $0.setHabitBooked(id: id, on: on) } }
     /// The rotation preset at `index` in `SessionRules.ROTATIONS` (0: none).
     func setHabitRotation(_ id: String, _ index: Int) { MekaHaptics.tick(); run { try await $0.setHabitRotation(id: id, index: Int32(index)) } }
+    /// The workout app's link ("hevy.com"), opened from Today's card; blank clears it. False when it isn't a web address.
+    func setHabitAppLink(_ id: String, _ link: String) async -> Bool {
+        guard let core else { return false }
+        do {
+            let ok = try await core.setHabitAppLink(id: id, link: link).boolValue
+            if ok { MekaHaptics.light() } else { MekaHaptics.tick() }
+            return ok
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
     /// "Went": today ticked with the session's label (light haptic; the check pops).
     func sessionWent(_ id: String) { MekaHaptics.light(); run { try await $0.sessionWent(id: id, note: nil) } }
     /// "Didn't go": rebooked on another day this week if there's room.

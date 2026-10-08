@@ -16,7 +16,8 @@ class SessionsTest {
         perWeek: Int = 3, timing: HabitTiming = HabitTiming.EVENING, minutes: Int = 60,
         done: Set<Long> = emptySet(), missed: Set<Long> = emptySet(), rotation: List<String> = emptyList(), lastLabel: String? = null,
         created: Long = at(mon - 14, 12), id: String = "gym", title: String = "Gym", todayLabel: String? = null, todayNote: String? = null,
-    ) = SessionHabit(id, title, perWeek, timing, minutes, created, done, missed, rotation, lastLabel, todayLabel, todayNote)
+        appLink: String? = null,
+    ) = SessionHabit(id, title, perWeek, timing, minutes, created, done, missed, rotation, lastLabel, todayLabel, todayNote, appLink)
 
     private fun ev(id: String, from: Long, to: Long, provider: String = "google") =
         CalendarEvent(id, id, from, to, false, null, provider, null, null)
@@ -37,6 +38,42 @@ class SessionsTest {
         assertEquals(SessionStatus.BOOKED, card.status)
         assertEquals("Today 17:45–18:45", card.line)
         assertEquals("Next: Wed 17:45", card.next)
+    }
+
+    @Test
+    fun theWorkoutAppsLinkIsCleanedAndNamed() {
+        assertEquals("https://hevy.com", SessionRules.cleanAppLink("  hevy.com "))
+        assertEquals("https://www.strava.com/dashboard?x=1", SessionRules.cleanAppLink("HTTPS://WWW.Strava.com/dashboard?x=1"))
+        assertEquals("http://gym.example.co.uk:8080/app", SessionRules.cleanAppLink("http://gym.example.co.uk:8080/app"))
+        listOf(
+            "", "   ", "hevy", "javascript:alert(1)", "intent://x", "file:///etc/passwd", "strava://feed", "https://user@evil.com",
+            "https://hevy .com", "https://-bad.com", "https://hevy..com", "https://1.2.3.4", "https://hevy.com:abc", "https://hevy.com:",
+            "https://" + "a".repeat(300) + ".com",
+        ).forEach { assertNull(SessionRules.cleanAppLink(it), it) }
+        assertEquals("Hevy", SessionRules.appName("https://hevy.com"))
+        assertEquals("Strava", SessionRules.appName("https://www.strava.com/dashboard"))
+        assertEquals("Garmin", SessionRules.appName("https://connect.garmin.com/modern"))
+        assertEquals("Strava", SessionRules.appName("https://strava.app.link/abc"))
+        assertEquals("Puregym", SessionRules.appName("https://www.puregym.co.uk:443/members"))
+    }
+
+    @Test
+    fun theCardOffersTheAppWhileTheSessionIsAheadOnOrDoneButNotAfterDidntGo() {
+        val h = listOf(gym(appLink = "https://hevy.com"))
+        listOf(at(mon, 8), at(mon, 18), at(mon, 20)).forEach { now ->
+            val c = book(h, now = now).cards.single()
+            assertEquals("https://hevy.com", c.appLink)
+            assertEquals("Open Hevy", c.openLabel)
+        }
+        val went = book(listOf(gym(done = setOf(mon), appLink = "https://hevy.com")), now = at(mon, 20)).cards.single()
+        assertEquals(SessionStatus.WENT, went.status)
+        assertEquals("Open Hevy", went.openLabel)
+        val missed = book(listOf(gym(missed = setOf(mon), appLink = "https://hevy.com")), now = at(mon, 20)).cards.single()
+        assertEquals(SessionStatus.MISSED, missed.status)
+        assertNull(missed.openLabel)
+        // No link, or one that isn't a web address (a synced value is checked again): nothing to open.
+        assertNull(book(listOf(gym())).cards.single().openLabel)
+        assertNull(book(listOf(gym(appLink = "javascript:alert(1)"))).cards.single().appLink)
     }
 
     @Test
@@ -237,6 +274,17 @@ class SessionsTest {
         assertTrue(gm.habits().single().booked)
         assertEquals(listOf("Push", "Pull", "Legs"), gm.habits().single().rotation)
         assertTrue(gm.plannerHabits().isEmpty()) // booked habits come as fixed sessions
+        // The workout app's link, set on the Fold, opens from the Mac's card; a bad one writes nothing; blank clears it.
+        assertTrue(gf.setHabitAppLink(id, "hevy.com"))
+        sync2(fold, mac)
+        assertEquals("https://hevy.com", gm.habits().single().appLink)
+        assertEquals("Hevy", gm.habits().single().appName)
+        assertEquals("https://hevy.com", gm.sessionHabits().single().appLink)
+        assertTrue(!gm.setHabitAppLink(id, "javascript:alert(1)"))
+        assertEquals("https://hevy.com", gm.habits().single().appLink)
+        assertTrue(gm.setHabitAppLink(id, " ")); sync2(fold, mac)
+        assertNull(gf.habits().single().appLink)
+        assertTrue(gf.setHabitAppLink(id, "https://www.strava.com")); sync2(fold, mac)
 
         world.clock.nowMs = at(mon, 19)
         
