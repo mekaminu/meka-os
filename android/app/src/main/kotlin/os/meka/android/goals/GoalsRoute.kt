@@ -4,9 +4,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -15,7 +12,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -40,22 +36,21 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import os.meka.android.MekaApplication
 import os.meka.android.shell.SearchNav
 import os.meka.android.shell.ShellDestination
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
@@ -65,6 +60,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import os.meka.android.designsystem.TickRing
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -276,25 +272,15 @@ private fun AppLinkField(current: String?, name: String?, save: (String, (Boolea
     }
 }
 
-/** The tick: the circle pops with a spring and fills (reduced motion: colour only). */
+/** The tick: the ring sweeps round, fills and draws the check, and the circle pops ([TickRing]; Off: at once). */
 @Composable
 private fun TickCircle(done: Boolean, title: String, onClick: () -> Unit) {
-    val reduced = Meka.reducedMotion
-    val pop by animateFloatAsState(
-        if (done) 1f else 0.9f,
-        if (reduced) MekaMotion.appear(true) else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "habit-pop",
-    )
-    val fill by animateColorAsState(if (done) Meka.colors.accent else Meka.colors.background, MekaMotion.complete(reduced), label = "habit-fill")
-    Box(
-        Modifier.size(28.dp).scale(if (reduced) 1f else pop).clip(CircleShape).background(fill)
-            .border(1.5.dp, if (done) Meka.colors.accent else Meka.colors.textTertiary, CircleShape)
+    TickRing(
+        done,
+        Modifier.size(28.dp).clip(CircleShape)
             .semantics { contentDescription = (if (done) "Untick " else "Tick ") + title + " for today" }
             .clickable(role = Role.Checkbox) { onClick() },
-        contentAlignment = Alignment.Center,
-    ) {
-        if (done) Text("✓", color = Meka.colors.onAccent, style = MekaType.caption)
-    }
+    )
 }
 
 /** Monday to Sunday: a filled dot where ticked. */

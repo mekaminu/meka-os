@@ -102,16 +102,9 @@ private struct HabitRowView: View {
         VStack(alignment: .leading, spacing: MekaSpace.s) {
             HStack(alignment: .top, spacing: MekaSpace.m) {
                 Button { model.setHabitDone(habit.id, !habit.doneToday) } label: {
-                    ZStack {
-                        Circle().strokeBorder(habit.doneToday ? palette.accent : palette.textTertiary, lineWidth: 1.5)
-                        if habit.doneToday {
-                            Circle().fill(palette.accent)
-                            Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(palette.onAccent)
-                        }
-                    }
-                    .frame(width: 22, height: 22)
-                    .scaleEffect(habit.doneToday || reduceMotion ? 1 : 0.9)
-                    .animation(reduceMotion ? MekaMotion.appear(reduced: true) : .spring(response: 0.28, dampingFraction: 0.5), value: habit.doneToday)
+                    TickRingView(done: habit.doneToday, palette: palette)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(MekaPressStyle())
                 .accessibilityLabel((habit.doneToday ? "Untick " : "Tick ") + habit.title + " for today")

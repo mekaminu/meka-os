@@ -170,4 +170,19 @@ class MotionMathTest {
         assertEquals(1f, MotionMath.breathGlow(1f), 1e-6f)
         assertTrue(MotionMath.breathGlow(0f) > 0f)
     }
+
+    @Test
+    fun aStayingTickDrawsOnlyWhenItTurnsDoneHere() {
+        // Ticked on this screen: the check draws.
+        assertEquals(TickDraw.DRAW, MotionMath.tickDraw(wasDone = false, done = true, reduced = false))
+        // Already done when it appears (or ticked elsewhere before the screen opened): done at once, no replay.
+        assertEquals(TickDraw.DONE, MotionMath.tickDraw(wasDone = null, done = true, reduced = false))
+        assertEquals(TickDraw.DONE, MotionMath.tickDraw(wasDone = true, done = true, reduced = false))
+        // Unticked, or never ticked: back to the outline at once.
+        assertEquals(TickDraw.REST, MotionMath.tickDraw(wasDone = true, done = false, reduced = false))
+        assertEquals(TickDraw.REST, MotionMath.tickDraw(wasDone = null, done = false, reduced = false))
+        // Off: never draws.
+        assertEquals(TickDraw.DONE, MotionMath.tickDraw(wasDone = false, done = true, reduced = true))
+        assertEquals(TickDraw.REST, MotionMath.tickDraw(wasDone = true, done = false, reduced = true))
+    }
 }

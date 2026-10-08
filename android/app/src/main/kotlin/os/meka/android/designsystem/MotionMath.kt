@@ -121,6 +121,18 @@ object MotionMath {
         easeOutCubic((fraction - CHECK_STROKE_START) / (1f - CHECK_STROKE_START))
 
     /**
+     * A tick that stays ticked (motion pass 2, slice 6: a habit, a routine step, Went on the Gym card): what the check
+     * does when [done] is seen, given what it was before ([wasDone], null the first time it is shown). Only a change to
+     * done draws ([checkDrawMs]); something already done when it appears (or ticked on the other device before this
+     * screen opened) shows done at once, and unticking returns to rest at once. Motion → Off: never draws.
+     */
+    fun tickDraw(wasDone: Boolean?, done: Boolean, reduced: Boolean): TickDraw = when {
+        !done -> TickDraw.REST
+        wasDone != false || reduced -> TickDraw.DONE
+        else -> TickDraw.DRAW
+    }
+
+    /**
      * Empty states (motion pass 2, slice 5; catalogue "Empty states"): how far into a breath the brass ring is
      * [elapsedMs] after it appeared, 0 (out) → 1 (in) → 0 over [MekaChoreography.emptyBreathPeriodMs], a smooth cosine.
      * Motion → Off: held still, fully in.
@@ -155,3 +167,6 @@ object MotionMath {
     /** The brass ring's longest arc, so the turning gap reads as motion. */
     const val RING_ARC_DEGREES = 300f
 }
+
+/** What a staying tick does ([MotionMath.tickDraw]): at rest (an outline), draw the check in, or show it done at once. */
+enum class TickDraw { REST, DRAW, DONE }

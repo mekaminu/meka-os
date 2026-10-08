@@ -119,4 +119,19 @@ final class MotionMathTests: XCTestCase {
         XCTAssertEqual(MotionMath.breathGlow(0), MotionMath.breathMinGlow, accuracy: 1e-9)
         XCTAssertGreaterThan(MotionMath.breathGlow(0), 0)
     }
+
+    @MainActor
+    func testAStayingTickDrawsOnlyWhenItTurnsDoneHere() {
+        // Ticked on this screen: the check draws.
+        XCTAssertEqual(MotionMath.tickDraw(wasDone: false, done: true, reduced: false), .draw)
+        // Already done when it appears (or ticked elsewhere before the screen opened): done at once, no replay.
+        XCTAssertEqual(MotionMath.tickDraw(wasDone: nil, done: true, reduced: false), .done)
+        XCTAssertEqual(MotionMath.tickDraw(wasDone: true, done: true, reduced: false), .done)
+        // Unticked, or never ticked: back to the outline at once.
+        XCTAssertEqual(MotionMath.tickDraw(wasDone: true, done: false, reduced: false), .rest)
+        XCTAssertEqual(MotionMath.tickDraw(wasDone: nil, done: false, reduced: false), .rest)
+        // Off: never draws.
+        XCTAssertEqual(MotionMath.tickDraw(wasDone: false, done: true, reduced: true), .done)
+        XCTAssertEqual(MotionMath.tickDraw(wasDone: true, done: false, reduced: true), .rest)
+    }
 }

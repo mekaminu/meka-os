@@ -2,15 +2,11 @@ package os.meka.android.today
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,8 +24,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -38,17 +35,16 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import os.meka.android.designsystem.TickRing
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -105,7 +101,7 @@ internal fun RepeatSection(task: Task, actions: TodayActions) {
 
 /**
  * Steps. A repeating task with steps is a routine: every new occurrence brings its steps back unticked.
- * Motion: a tick pops with a spring (reduced motion: colour only); light haptic.
+ * Motion: a tick draws its check like completing a task and pops with a spring ([TickRing]; Off: at once); light haptic.
  */
 @Composable
 internal fun StepsSection(task: Task, actions: TodayActions) {
@@ -129,24 +125,14 @@ internal fun StepsSection(task: Task, actions: TodayActions) {
 
 @Composable
 private fun StepRow(step: ChecklistItem, actions: TodayActions) {
-    val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
-    val pop by animateFloatAsState(
-        if (step.checked && !reduced) 1f else 0.9f,
-        if (reduced) MekaMotion.appear(true) else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "step-pop",
-    )
-    val fill by animateColorAsState(if (step.checked) Meka.colors.accent else Meka.colors.background, MekaMotion.complete(reduced), label = "step-fill")
     Row(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(22.dp).scale(if (reduced) 1f else pop).clip(CircleShape).background(fill)
-                .border(1.5.dp, if (step.checked) Meka.colors.accent else Meka.colors.textTertiary, CircleShape)
+        TickRing(
+            step.checked,
+            Modifier.size(22.dp).clip(CircleShape)
                 .semantics { contentDescription = (if (step.checked) "Untick " else "Tick ") + step.text }
                 .clickable(role = Role.Checkbox) { haptics.light(); actions.setStepDone(step.id, !step.checked) },
-            contentAlignment = Alignment.Center,
-        ) {
-            if (step.checked) Text("✓", color = Meka.colors.onAccent, style = MekaType.caption)
-        }
+        )
         Spacer(Modifier.width(MekaSpace.m))
         Text(
             step.text, style = MekaType.body,

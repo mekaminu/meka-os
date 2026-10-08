@@ -88,6 +88,16 @@ enum MotionMath {
         easeOutCubic((fraction - checkStrokeStart) / (1 - checkStrokeStart))
     }
 
+    /// A tick that stays ticked (motion pass 2, slice 6: a habit, a routine step, Went on the Gym card): what the check
+    /// does when `done` is seen, given what it was before (`wasDone`, nil the first time it is shown). Only a change to
+    /// done draws; something already done when it appears shows done at once; unticking returns to rest at once.
+    /// Motion → Off: never draws. The same as the Fold's `MotionMath.tickDraw`.
+    static func tickDraw(wasDone: Bool?, done: Bool, reduced: Bool) -> TickDraw {
+        if !done { return .rest }
+        if wasDone != false || reduced { return .done }
+        return .draw
+    }
+
     /// Empty states (motion pass 2, slice 5): how far into a breath the brass ring is `elapsed` seconds after it
     /// appeared, 0 (out) → 1 (in) → 0 over `emptyBreathPeriod`, a smooth cosine. Motion → Off: held still, fully in.
     static func breath(elapsed: Double, reduced: Bool) -> Double {
@@ -120,6 +130,9 @@ enum MotionMath {
         return Int((Double(from) + Double(to - from) * easeOutCubic(fraction)).rounded())
     }
 }
+
+/// What a staying tick does (`MotionMath.tickDraw`): at rest (an outline), draw the check in, or show it done at once.
+enum TickDraw: Equatable { case rest, draw, done }
 
 /// Fades an item up after `index × 40 ms` (Expressive: 60 ms apart, rising further and growing from 0.96). When `play`
 /// is false it is simply there. Motion → Off: cross-fade only.
@@ -301,10 +314,12 @@ struct CheckRingView: View {
     let palette: MekaPalette
     /// When the draw started; nil = at rest.
     let began: Date?
+    /// Shown done and still (a tick that stays ticked once its draw is over), whatever `began` says.
+    var done: Bool = false
     @Environment(\.mekaReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: nil, paused: began == nil || reduceMotion)) { context in
+        TimelineView(.animation(minimumInterval: nil, paused: done || began == nil || reduceMotion)) { context in
             let f = fraction(at: context.date)
             ZStack {
                 Circle().strokeBorder(palette.textTertiary, lineWidth: 1.5)
@@ -322,10 +337,45 @@ struct CheckRingView: View {
     }
 
     private func fraction(at now: Date) -> Double {
+        if done { return 1 }
         guard let began else { return 0 }
         let total = MotionMath.checkDraw(reduced: reduceMotion)
         if total <= 0 { return 1 }
         return min(max(now.timeIntervalSince(began) / total, 0), 1)
+    }
+}
+
+/// A tick that stays ticked (motion pass 2, slice 6; catalogue "Habit tick", "Repeat and steps", "Gym"), like the
+/// Fold's `TickRing`: the same ring-and-check draw as completing a task, played when `done` turns true while it is on
+/// screen (`MotionMath.tickDraw`), and the circle pops with a spring (0.9 → 1). Already done when it appears: shown
+/// done at once. Unticked: back to the outline at once. Motion → Off: no draw, no pop. Once the draw lands the ring's
+/// timeline pauses, so a ticked habit costs nothing while it sits there.
+struct TickRingView: View {
+    let done: Bool
+    let palette: MekaPalette
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var seen: Bool?
+    @State private var began: Date?
+    @State private var drawing = 0
+
+    var body: some View {
+        CheckRingView(palette: palette, began: began, done: done && began == nil)
+            .scaleEffect(done || reduceMotion ? 1 : 0.9)
+            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.5), value: done)
+            .onAppear { seen = done }
+            .onChange(of: done) { _, now in
+                let step = MotionMath.tickDraw(wasDone: seen, done: now, reduced: reduceMotion)
+                seen = now
+                drawing += 1
+                guard step == .draw else { began = nil; return }
+                began = Date()
+                let mine = drawing
+                let wait = Int(MotionMath.checkDraw(reduced: false) * 1000) + 50
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(wait))
+                    if drawing == mine { began = nil }
+                }
+            }
     }
 }
 

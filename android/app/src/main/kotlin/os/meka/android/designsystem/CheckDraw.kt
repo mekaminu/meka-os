@@ -1,9 +1,18 @@
 package os.meka.android.designsystem
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -51,4 +60,39 @@ fun CheckRing(fraction: Float, rest: Color, accent: Color, onAccent: Color, modi
             drawPath(part, onAccent, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
     }
+}
+
+/**
+ * A tick that stays ticked (motion pass 2, slice 6; catalogue "Habit tick", "Repeat and steps", "Gym"): the same
+ * ring-and-check draw as completing a task, played when [done] turns true on this screen ([MotionMath.tickDraw]); the
+ * circle also pops with a spring (0.9 → 1). Already done when it appears: shown done at once. Unticked: back to the
+ * outline at once. Motion → Off: no draw, no pop. Callers put the click and screen-reader label on [modifier].
+ */
+@Composable
+fun TickRing(done: Boolean, modifier: Modifier = Modifier) {
+    val reduced = Meka.reducedMotion
+    val draw = remember { Animatable(if (done) 1f else 0f) }
+    val seen = remember { arrayOfNulls<Boolean>(1) }
+    LaunchedEffect(done) {
+        val step = MotionMath.tickDraw(seen[0], done, reduced)
+        seen[0] = done
+        when (step) {
+            TickDraw.REST -> draw.snapTo(0f)
+            TickDraw.DONE -> draw.snapTo(1f)
+            TickDraw.DRAW -> {
+                draw.snapTo(0f)
+                draw.animateTo(1f, tween(MotionMath.checkDrawMs(false), easing = LinearEasing))
+            }
+        }
+    }
+    val pop by animateFloatAsState(
+        if (done || reduced) 1f else 0.9f,
+        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "tick-pop",
+    )
+    CheckRing(
+        fraction = draw.value,
+        rest = Meka.colors.textTertiary, accent = Meka.colors.accent, onAccent = Meka.colors.onAccent,
+        modifier = modifier.scale(pop),
+    )
 }

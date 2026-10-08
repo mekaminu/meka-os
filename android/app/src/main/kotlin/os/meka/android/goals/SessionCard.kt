@@ -2,9 +2,6 @@ package os.meka.android.goals
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -20,31 +17,29 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import os.meka.android.designsystem.TickRing
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -136,20 +131,12 @@ private fun openAppLink(context: android.content.Context, link: String) {
     runCatching { context.startActivity(intent) }
 }
 
-/** The check pops in with a spring (reduced motion: shown at once). */
+/** Went: the check draws itself in and pops (like a habit tick, [TickRing]); Motion → Off: shown at once. */
 @Composable
 private fun WentCheck() {
-    val reduced = Meka.reducedMotion
-    var shown by rememberSaveable { mutableStateOf(reduced) }
-    val pop by animateFloatAsState(
-        if (shown) 1f else 0.4f,
-        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "went-pop",
-    )
+    var shown by rememberSaveable { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(Unit) { shown = true }
-    Box(
-        Modifier.size(28.dp).scale(if (reduced) 1f else pop).clip(CircleShape).background(Meka.colors.accent),
-        contentAlignment = Alignment.Center,
-    ) { Text("✓", color = Meka.colors.onAccent, style = MekaType.caption) }
+    TickRing(shown, Modifier.size(28.dp))
 }
 
 /** "Add a note (optional)": one line, Done saves it. */

@@ -71,16 +71,9 @@ private struct StepRow: View {
             Button {
                 model.setStepDone(step.id, !step.checked)
             } label: {
-                ZStack {
-                    Circle().strokeBorder(step.checked ? palette.accent : palette.textTertiary, lineWidth: 1.5)
-                    if step.checked {
-                        Circle().fill(palette.accent)
-                        Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(palette.onAccent)
-                    }
-                }
-                .frame(width: 18, height: 18)
-                .scaleEffect(step.checked || reduceMotion ? 1 : 0.9)
-                .animation(reduceMotion ? MekaMotion.appear(reduced: true) : .spring(response: 0.28, dampingFraction: 0.5), value: step.checked)
+                TickRingView(done: step.checked, palette: palette)
+                    .frame(width: 18, height: 18)
+                    .contentShape(Circle())
             }
             .buttonStyle(MekaPressStyle())
             .accessibilityLabel((step.checked ? "Untick " : "Tick ") + step.text)

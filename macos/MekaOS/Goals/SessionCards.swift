@@ -35,17 +35,12 @@ private struct SessionCardView: View {
         VStack(alignment: .leading, spacing: MekaSpace.s) {
             HStack(alignment: .center, spacing: MekaSpace.m) {
                 if went {
-                    ZStack {
-                        Circle().fill(palette.accent)
-                        Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(palette.onAccent)
-                    }
-                    .frame(width: 22, height: 22)
-                    .scaleEffect(popped || reduceMotion ? 1 : 0.4)
-                    .onAppear {
-                        withAnimation(reduceMotion ? MekaMotion.appear(reduced: true) : .spring(response: 0.3, dampingFraction: 0.5)) { popped = true }
-                    }
-                    .onDisappear { popped = false }
-                    .accessibilityHidden(true)
+                    // Went: the check draws itself in and pops, like a habit tick (Off: shown at once).
+                    TickRingView(done: popped, palette: palette)
+                        .frame(width: 22, height: 22)
+                        .onAppear { popped = true }
+                        .onDisappear { popped = false }
+                        .accessibilityHidden(true)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(card.heading).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
