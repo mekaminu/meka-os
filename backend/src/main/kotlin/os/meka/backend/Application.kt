@@ -463,6 +463,7 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         holidays = listOf(GovUkBankHolidays()).associateBy { it.id },
         images = images,
         onChanged = onChanged,
+        ownKeys = OwnKeyReminders(opStore, onWritten = onChanged),
     )
 }
 

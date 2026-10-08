@@ -1,5 +1,6 @@
 package os.meka.backend.integrations
 
+import os.meka.backend.OwnKeyReminders
 import os.meka.backend.Secrets
 import os.meka.core.domain.BankHoliday
 import os.meka.core.domain.BankHolidayFields
@@ -43,6 +44,8 @@ class Integrations(
      * devices: a moved event's reminders re-arm and a moved kick-off is announced within seconds of the poll.
      */
     private val onChanged: (householdId: String) -> Unit = {},
+    /** MEKA's own keys that run out, put on each household's renewals radar once (Outlook calendar item). */
+    private val ownKeys: OwnKeyReminders? = null,
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -131,6 +134,7 @@ class Integrations(
                 store.transaction { store.upsertAccount(hh, id, label, ByteArray(0)) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
             }
         }
+        ownKeys?.let { k -> for (hh in store.households()) runCatching { k.ensure(hh) } }
     }
 
     private val accountLocks = java.util.concurrent.ConcurrentHashMap<String, Any>()
