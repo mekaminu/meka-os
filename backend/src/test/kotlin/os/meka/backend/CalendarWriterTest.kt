@@ -185,7 +185,49 @@ class CalendarWriterTest {
         sync()
         val e = edits.edit(id)!!
         assertEquals(EventEditState.CLASH, e.state(now))
-        assertEquals(EventDraft("Dentist", dentist.startMs - hour, dentist.endMs - hour, false), e.theirs)
+        assertEquals(EventDraft("Dentist", dentist.startMs - hour, dentist.endMs - hour, false, "High St", null), e.theirs)
+    }
+
+    @Test
+    fun keepMineSendsTheEditAgainAgainstTheirVersionAndKeepTheirsSendsNothing() {
+        val ev = mirrored()
+        val theirs = EventDraft("Dentist", dentist.startMs - hour, dentist.endMs - hour, false, "Elm Rd", "Bring the form")
+        provider.copies["cal1/dent"] = mine(theirs)
+        val id = made(edits.move(ev, ev.startAtMs + 2 * hour))
+        sync()
+        now += 10_000
+        writer.sweep()
+        sync()
+        // Their place and notes come back with the clash, so the resend is checked against all of their version.
+        assertEquals(theirs, edits.edit(id)!!.theirs)
+
+        val again = made(edits.keepMine(id))
+        sync()
+        now += 10_000
+        writer.sweep()
+        sync()
+        assertEquals(EventEditState.DONE, state(again))
+        val (remote, draft, changes) = provider.updated.single()
+        assertEquals("cal1/dent", remote)
+        assertEquals(setOf(EventEditChange.TIME), changes)
+        assertEquals(dentist.startMs + 2 * hour, draft.startAtMs)
+        // Their other changes are kept, not overwritten with what MEKA saw.
+        assertEquals("Elm Rd", draft.location)
+        assertEquals("Bring the form", draft.notes)
+
+        // Another clash, kept as theirs: nothing more is sent.
+        provider.copies["cal1/dent"] = mine(theirs.copy(title = "Dentist (moved)"))
+        val renamed = made(edits.change(ev, CalendarEditRules.draftOf(ev).copy(title = "Dentist check-up")))
+        sync()
+        now += 10_000
+        writer.sweep()
+        sync()
+        assertEquals(EventEditState.CLASH, state(renamed))
+        assertTrue(edits.keepTheirs(renamed))
+        sync()
+        now += hour
+        writer.sweep()
+        assertEquals(1, provider.updated.size)
     }
 
     @Test

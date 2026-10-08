@@ -220,7 +220,13 @@ object EditLineRules {
             when (e.state(nowMs)) {
                 EventEditState.WAITING, EventEditState.SENDING -> true
                 EventEditState.DONE -> nowMs - (e.statusAtMs ?: e.createdAtMs) <= DONE_SHOWN_MS
-                EventEditState.CLASH, EventEditState.REFUSED, EventEditState.FAILED -> nowMs - (e.statusAtMs ?: e.createdAtMs) <= 86_400_000L
+                // An answered clash: "Keep mine" has its own edit's line; "Keep theirs" says so as briefly as a done edit.
+                EventEditState.CLASH -> when (e.resolved) {
+                    null -> nowMs - (e.statusAtMs ?: e.createdAtMs) <= 86_400_000L
+                    ClashChoice.THEIRS -> nowMs - (e.resolvedAtMs ?: 0L) <= DONE_SHOWN_MS
+                    ClashChoice.MINE -> false
+                }
+                EventEditState.REFUSED, EventEditState.FAILED -> nowMs - (e.statusAtMs ?: e.createdAtMs) <= 86_400_000L
                 EventEditState.UNDONE -> false
             }
         }
@@ -229,9 +235,14 @@ object EditLineRules {
         .map { e ->
             val s = e.state(nowMs)
             // A delete held back for its guests names the event and says where to confirm it (slice 2c).
-            val text = if (EditEventRules.needsGuestsOk(e, nowMs)) {
-                "“${e.base?.title.orEmpty().trim().ifEmpty { "Event" }.take(60)}” · ${CalendarEditRules.line(e, nowMs)} · open it to delete anyway"
-            } else CalendarEditRules.line(e, nowMs)
-            EditLine(e.id, text, s, s == EventEditState.CLASH || s == EventEditState.REFUSED || s == EventEditState.FAILED)
+            val text = when {
+                EditEventRules.needsGuestsOk(e, nowMs) ->
+                    "“${e.base?.title.orEmpty().trim().ifEmpty { "Event" }.take(60)}” · ${CalendarEditRules.line(e, nowMs)} · open it to delete anyway"
+                // The chooser is in the event's detail (slice 2c-iii).
+                e.needsChoice -> CalendarEditRules.line(e, nowMs).removeSuffix(" · choose a version") + " · open it to choose a version"
+                else -> CalendarEditRules.line(e, nowMs)
+            }
+            val lit = e.needsChoice || s == EventEditState.REFUSED || s == EventEditState.FAILED
+            EditLine(e.id, text, s, lit)
         }
 }

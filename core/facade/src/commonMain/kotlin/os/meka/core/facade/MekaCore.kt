@@ -419,7 +419,7 @@ class MekaCore(
     fun eventDetail(event: os.meka.core.domain.CalendarEvent): os.meka.core.domain.EventDetailView =
         os.meka.core.domain.EventDetails.build(event, nowMs(), ZoneCalendar(timeZone), _eventMarks.value).copy(
             editable = canEditEvent(event),
-            edit = os.meka.core.domain.EditEventRules.note(event.id, _editsSeen.value, nowMs()),
+            edit = os.meka.core.domain.EditEventRules.note(event.id, _editsSeen.value, nowMs(), ZoneCalendar(timeZone)),
         )
 
     /** Whether MEKA may change [event] in its calendar (a Google/Outlook account where editing is allowed). */
@@ -960,6 +960,15 @@ class MekaCore(
      */
     suspend fun deleteEvent(event: os.meka.core.domain.CalendarEvent, guestsOk: Boolean): os.meka.core.domain.EventEditResult =
         onCore { calendarEdits.delete(event, guestsOk) }
+
+    /**
+     * Clash chooser (slice 2c-iii), Keep mine: the clashed edit [clashId] is sent again against Google's version, with
+     * five seconds' Undo (undoing it asks the clash again). Refused in words.
+     */
+    suspend fun keepMyVersion(clashId: String): os.meka.core.domain.EventEditResult = onCore { calendarEdits.keepMine(clashId) }
+
+    /** Clash chooser, Keep theirs: nothing is sent and Google's version stays. False when it was already answered. */
+    suspend fun keepTheirVersion(clashId: String): Boolean = onCore { calendarEdits.keepTheirs(clashId) }
 
     /** The undo bar's line for a delete ("Deleting “Dentist” from Google"). */
     fun deletingLine(event: os.meka.core.domain.CalendarEvent): String = os.meka.core.domain.EditEventRules.deletingLine(event)

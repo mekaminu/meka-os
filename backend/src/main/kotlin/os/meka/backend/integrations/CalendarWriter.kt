@@ -230,6 +230,9 @@ class CalendarWriter internal constructor(
             fields[EventEditFields.THEIR_START] = t.startAtMs.fv()
             fields[EventEditFields.THEIR_END] = t.endAtMs.fv()
             fields[EventEditFields.THEIR_ALL_DAY] = t.allDay.fv()
+            // "" when they have none, so a device can tell "none" from a clash written before these were kept.
+            fields[EventEditFields.THEIR_LOCATION] = (t.location?.trim()?.take(CalendarEditRules.MAX_LOCATION) ?: "").fv()
+            fields[EventEditFields.THEIR_NOTES] = (t.notes?.trim()?.take(CalendarEditRules.MAX_NOTES) ?: "").fv()
         }
         var appended = false
         for ((field, value) in fields) {

@@ -199,6 +199,31 @@ private fun DetailContent(
                         }.padding(vertical = MekaSpace.xs),
                     )
                 }
+                // Clash chooser (slice 2c-iii): both versions of what the edit touched; Meka chooses, never MEKA.
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = note.clash != null,
+                    enter = if (reducedNote) fadeIn(MekaMotion.appear(true)) else androidx.compose.animation.expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+                    exit = if (reducedNote) fadeOut(MekaMotion.appear(true)) else androidx.compose.animation.shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+                ) {
+                    note.clash?.let { c ->
+                        ClashChooser(c, canKeepMine = d.editable,
+                            onKeepMine = {
+                                haptics.light()
+                                scope.launch {
+                                    val r = runCatching { core.keepMyVersion(c.editId) }.getOrNull()
+                                    if (r is os.meka.core.domain.EventEditResult.Made) {
+                                        onClose()
+                                        undo?.show(core.eventEditLine(r.id) ?: "Sending your version") { core.undoEventEdit(r.id) }
+                                    }
+                                }
+                            },
+                            onKeepTheirs = {
+                                haptics.tick()
+                                scope.launch { runCatching { core.keepTheirVersion(c.editId) } }
+                            },
+                        )
+                    }
+                }
             }
         }
         // Remind me / Leave by: a heads-up through the notification governor (quiet hours apply).
@@ -378,6 +403,39 @@ private fun LeaveAlarmSwitch(on: Boolean, onChange: (Boolean) -> Unit) {
 }
 
 /** A quiet outlined pill button for the event's actions. */
+/**
+ * The clash chooser: "It changed in Google after you edited it", then per thing the edit touched its label over Yours
+ * and Google's side by side, and Keep mine · Keep Google's (pills, press-in). Unfolds with the expand spring.
+ */
+@Composable
+private fun ClashChooser(
+    c: os.meka.core.domain.EventClashView, canKeepMine: Boolean, onKeepMine: () -> Unit, onKeepTheirs: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = MekaSpace.s)
+            .clip(RoundedCornerShape(MekaRadius.card))
+            .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.card))
+            .padding(MekaSpace.m),
+    ) {
+        Text(c.explain, style = MekaType.caption, color = Meka.colors.textSecondary)
+        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.s), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+            Text(c.mineLabel.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.accent, modifier = Modifier.weight(1f))
+            Text(c.theirsLabel.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+        }
+        c.rows.forEach { r ->
+            Text(r.label, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.s))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+                Text(r.mine, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                Text(r.theirs, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+            }
+        }
+        Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            if (canKeepMine) ActionChip(c.keepMineLabel, onKeepMine)
+            ActionChip(c.keepTheirsLabel, onKeepTheirs)
+        }
+    }
+}
+
 @Composable
 private fun ActionChip(label: String, onTap: () -> Unit) {
     Text(

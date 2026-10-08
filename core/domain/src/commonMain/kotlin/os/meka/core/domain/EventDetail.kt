@@ -86,6 +86,23 @@ object EventDetails {
         "facetime.apple.com" to "Join FaceTime",
     )
 
+    /** "Fri 9 Oct · 14:00–15:00" · "Sat 10 Oct – Mon 12 Oct · All day" (the detail's when line, for any times). */
+    fun whenLine(startAtMs: Long, endAtMs: Long, allDay: Boolean, calendar: LocalCalendar): String {
+        fun hhmm(ms: Long) = LocalClock.formatMinute(calendar.minuteOfDay(ms))
+        if (allDay) {
+            val first = startAtMs.floorDiv(CivilDate.DAY_MS)
+            val last = maxOf(first, endAtMs.floorDiv(CivilDate.DAY_MS) - 1)
+            return "${CalendarAgenda.spanLabel(first, last)} · All day"
+        }
+        val startDay = calendar.epochDayOf(startAtMs)
+        val endDay = if (endAtMs > startAtMs) calendar.epochDayOf(endAtMs - 1) else startDay
+        return when {
+            endAtMs <= startAtMs -> "${CivilDate.shortLabel(startDay)} · ${hhmm(startAtMs)}"
+            startDay == endDay -> "${CivilDate.shortLabel(startDay)} · ${hhmm(startAtMs)}–${hhmm(endAtMs)}"
+            else -> "${CivilDate.shortLabel(startDay)} ${hhmm(startAtMs)} – ${CivilDate.shortLabel(endDay)} ${hhmm(endAtMs)}"
+        }
+    }
+
     fun build(e: CalendarEvent, nowMs: Long, calendar: LocalCalendar, marks: EventMarks = EventMarks.NONE): EventDetailView {
         fun hhmm(ms: Long) = LocalClock.formatMinute(calendar.minuteOfDay(ms))
         val today = calendar.epochDayOf(nowMs)

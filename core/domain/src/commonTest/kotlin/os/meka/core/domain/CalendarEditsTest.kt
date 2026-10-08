@@ -220,7 +220,8 @@ class CalendarEditsTest {
         sync()
         val clash = assertNotNull(eMac.edit(id))
         assertEquals(EventEditState.CLASH, clash.state(world.clock.nowMs))
-        assertEquals(EventDraft("Dentist", at(13), at(14), false), clash.theirs)
+        // A clash written without their place and notes (before slice 2c-iii) falls back to what MEKA saw.
+        assertEquals(EventDraft("Dentist", at(13), at(14), false, "High St Surgery", null), clash.theirs)
         assertEquals("“Dentist” changed in Google meanwhile · choose a version", CalendarEditRules.line(clash, world.clock.nowMs))
 
         val other = made(eFold.add("google", "meka@gmail.com", EventDraft("Gym", at(18), at(19), false)))

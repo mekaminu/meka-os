@@ -57,6 +57,14 @@ object EventEditFields {
     const val SEND_AFTER = "sendAfterMs"
     /** Undone within the window: never sent. */
     const val UNDONE = "undone"
+    /**
+     * Meka's answer to a clash (slice 2c-iii): [ClashChoice] name, or "" when taken back (the resend was undone).
+     * Written by a device on the clashed edit.
+     */
+    const val RESOLVED = "resolved"
+    const val RESOLVED_AT = "resolvedAtMs"
+    /** On a "Keep mine" resend: the clashed edit it answers. */
+    const val RESENDS = "resends"
 
     // Written by the server only.
     /** [EventEditStatus] name. */
@@ -69,6 +77,9 @@ object EventEditFields {
     const val THEIR_START = "theirStartAtMs"
     const val THEIR_END = "theirEndAtMs"
     const val THEIR_ALL_DAY = "theirAllDay"
+    /** On a clash (slice 2c-iii): the provider's place and notes, so "Keep mine" can be checked against all of it. */
+    const val THEIR_LOCATION = "theirLocation"
+    const val THEIR_NOTES = "theirNotes"
     /** How many other people are invited (when the server looked). */
     const val GUESTS = "guests"
 }
@@ -80,6 +91,9 @@ enum class EventEditChange { TITLE, TIME, LOCATION, NOTES }
 
 /** The outcome the server writes. */
 enum class EventEditStatus { DONE, CLASH, REFUSED, FAILED }
+
+/** Meka's answer to a clash: send his version against theirs, or keep the provider's. */
+enum class ClashChoice { MINE, THEIRS }
 
 /** Where an edit stands, as the apps show it. */
 enum class EventEditState {
@@ -121,6 +135,11 @@ data class EventEdit(
     /** On a clash, the provider's version. */
     val theirs: EventDraft?,
     val guests: Int?,
+    /** Meka's answer to a clash (null: not answered). */
+    val resolved: ClashChoice? = null,
+    val resolvedAtMs: Long? = null,
+    /** A "Keep mine" resend: the clashed edit it answers. */
+    val resends: String? = null,
 ) {
     fun state(nowMs: Long): EventEditState = when {
         status != null -> EventEditState.valueOf(status.name)
@@ -128,6 +147,9 @@ data class EventEdit(
         nowMs < sendAfterMs -> EventEditState.WAITING
         else -> EventEditState.SENDING
     }
+
+    /** A clash Meka hasn't answered yet: the detail offers Keep mine · Keep theirs. */
+    val needsChoice: Boolean get() = status == EventEditStatus.CLASH && resolved == null
 
     /** Only a move: a change of time and nothing else. */
     val isMove: Boolean get() = kind == EventEditKind.CHANGE && changes == setOf(EventEditChange.TIME)
@@ -251,7 +273,11 @@ object CalendarEditRules {
                 e.isMove -> "Moved $t in $p"
                 else -> "Changed $t in $p"
             }
-            EventEditState.CLASH -> "$t changed in $p meanwhile · choose a version"
+            EventEditState.CLASH -> when (e.resolved) {
+                null -> "$t changed in $p meanwhile · choose a version"
+                ClashChoice.THEIRS -> "Kept $p's version of $t"
+                ClashChoice.MINE -> "Sending your version of $t to $p"
+            }
             EventEditState.REFUSED -> e.detail ?: "$p didn't take the change"
             EventEditState.FAILED -> "Couldn't send to $p" + (e.detail?.let { " · $it" } ?: "")
             EventEditState.UNDONE -> "Undone"
@@ -281,8 +307,12 @@ object CalendarEditRules {
         ) else null
         val tStart = f(EventEditFields.THEIR_START).longOrNull
         val tEnd = f(EventEditFields.THEIR_END).longOrNull
+        // Place and notes came with clashes from slice 2c-iii on; an older clash falls back to what MEKA saw.
         val theirs = if (tStart != null && tEnd != null) EventDraft(
             f(EventEditFields.THEIR_TITLE).textOrNull.orEmpty(), tStart, tEnd, f(EventEditFields.THEIR_ALL_DAY).boolOrNull ?: false,
+            // Written as "" when they have none.
+            location = f(EventEditFields.THEIR_LOCATION).let { if (it == FieldValue.Null) base?.location else it.textOrNull?.ifEmpty { null } },
+            notes = f(EventEditFields.THEIR_NOTES).let { if (it == FieldValue.Null) base?.notes else it.textOrNull?.ifEmpty { null } },
         ) else null
         val created = f(EventEditFields.CREATED_AT).longOrNull ?: 0L
         return EventEdit(
@@ -298,6 +328,9 @@ object CalendarEditRules {
             detail = f(EventEditFields.DETAIL).textOrNull,
             theirs = theirs,
             guests = f(EventEditFields.GUESTS).longOrNull?.toInt(),
+            resolved = f(EventEditFields.RESOLVED).textOrNull?.let { r -> ClashChoice.entries.firstOrNull { it.name == r } },
+            resolvedAtMs = f(EventEditFields.RESOLVED_AT).longOrNull,
+            resends = f(EventEditFields.RESENDS).textOrNull?.ifEmpty { null },
         )
     }
 
@@ -334,7 +367,7 @@ class CalendarEdits(
     /** Edits still waiting, sending, or needing Meka (a clash or a refusal). */
     fun open(): List<EventEdit> {
         val now = nowMs()
-        return all().filter { it.state(now) in OPEN }
+        return all().filter { it.state(now) in OPEN && !(it.status == EventEditStatus.CLASH && it.resolved != null) }
     }
 
     /** Adds an event to [account]'s main calendar. */
@@ -369,12 +402,61 @@ class CalendarEdits(
         )
     }
 
-    /** Takes an edit back inside its undo window. Returns false once it's past (it may already be on its way). */
+    /**
+     * Takes an edit back inside its undo window. Returns false once it's past (it may already be on its way). Undoing
+     * a "Keep mine" resend asks the clash again.
+     */
     fun undo(id: String): Boolean {
         val e = edit(id) ?: return false
         if (e.state(nowMs()) != EventEditState.WAITING) return false
         replica.commitLocal(EntityTypes.EVENT_EDIT, id, mapOf(EventEditFields.UNDONE to true.fv()))
+        e.resends?.let { replica.commitLocal(EntityTypes.EVENT_EDIT, it, mapOf(EventEditFields.RESOLVED to "".fv())) }
         return true
+    }
+
+    /**
+     * Clash chooser (slice 2c-iii), **Keep mine**: the clashed edit is sent again, now checked against the provider's
+     * version (their copy becomes its base), with only what still differs from theirs; it waits five seconds for Undo
+     * like any edit. A delete deletes their version (its guests guard still applies). When their copy already reads
+     * as Meka's, nothing is sent and the clash is put away.
+     */
+    fun keepMine(clashId: String): EventEditResult {
+        val e = edit(clashId) ?: return EventEditResult.Refused("That change isn't there any more")
+        if (!e.needsChoice) return EventEditResult.Refused("Already chosen")
+        val theirs = e.theirs ?: return EventEditResult.Refused("MEKA didn't get their version · change it again")
+        if (!canEdit(e.provider, e.account)) return refusedNotAllowed(e.provider, e.account)
+        val newId = when (e.kind) {
+            EventEditKind.ADD -> return EventEditResult.Refused("Already chosen")
+            EventEditKind.DELETE -> write(EventEditKind.DELETE, e.provider, e.account, e.eventId, emptySet(), null, theirs, e.guestsOk, resends = e.id)
+            EventEditKind.CHANGE -> {
+                val draft = e.draft ?: return EventEditResult.Refused("That change isn't there any more")
+                val mine = CalendarEditRules.merged(theirs, draft, e.changes)
+                val changes = CalendarEditRules.changes(theirs, mine, e.provider)
+                if (changes.isEmpty()) {
+                    resolve(e.id, ClashChoice.THEIRS)
+                    return EventEditResult.Refused("${CalendarEditRules.providerName(e.provider)} already has your version")
+                }
+                CalendarEditRules.problem(mine, nowMs())?.let { return EventEditResult.Refused(it) }
+                write(EventEditKind.CHANGE, e.provider, e.account, e.eventId, changes, draft, theirs, false, resends = e.id)
+            }
+        }
+        resolve(e.id, ClashChoice.MINE)
+        return EventEditResult.Made(newId)
+    }
+
+    /** Clash chooser, **Keep theirs**: nothing is sent; the provider's version stays. False when already answered. */
+    fun keepTheirs(clashId: String): Boolean {
+        val e = edit(clashId) ?: return false
+        if (!e.needsChoice) return false
+        resolve(e.id, ClashChoice.THEIRS)
+        return true
+    }
+
+    private fun resolve(id: String, choice: ClashChoice) {
+        replica.commitLocal(
+            EntityTypes.EVENT_EDIT, id,
+            mapOf(EventEditFields.RESOLVED to choice.name.fv(), EventEditFields.RESOLVED_AT to nowMs().fv()),
+        )
     }
 
     private fun guard(event: CalendarEvent): EventEditResult? {
@@ -392,7 +474,7 @@ class CalendarEdits(
 
     private fun write(
         kind: EventEditKind, provider: String, account: String, eventId: String?, changes: Set<EventEditChange>,
-        draft: EventDraft?, base: EventDraft?, guestsOk: Boolean,
+        draft: EventDraft?, base: EventDraft?, guestsOk: Boolean, resends: String? = null,
     ): String {
         val id = ids()
         val now = nowMs()
@@ -425,6 +507,7 @@ class CalendarEdits(
             base.notes?.let { fields[EventEditFields.BASE_NOTES] = it.fv() }
         }
         if (guestsOk) fields[EventEditFields.GUESTS_OK] = true.fv()
+        resends?.let { fields[EventEditFields.RESENDS] = it.fv() }
         replica.commitLocal(EntityTypes.EVENT_EDIT, id, fields)
         return id
     }

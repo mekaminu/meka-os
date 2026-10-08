@@ -569,6 +569,32 @@ final class CoreModel {
         }
     }
 
+    /// Clash chooser (slice 2c-iii), Keep mine: the clashed edit is sent again against Google's version after five
+    /// seconds' Undo (undoing asks again). Only the edit's id (a String) crosses into the core. Returns why not, or nil.
+    func keepMyVersion(_ clashId: String) async -> String? {
+        guard let core else { return "Connect this Mac to your server first." }
+        MekaHaptics.light()
+        do {
+            switch onEnum(of: try await core.keepMyVersion(clashId: clashId)) {
+            case .made(let m):
+                let id = m.id
+                offerEventUndo(core.eventEditLine(id: id) ?? "Sending your version", .eventEdit(id))
+                return nil
+            case .refused(let r):
+                return r.reason
+            }
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    /// Clash chooser, Keep theirs: nothing is sent; Google's version stays.
+    func keepTheirVersion(_ clashId: String) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        _ = try? await core.keepTheirVersion(clashId: clashId)
+    }
+
     static func providerName(_ p: String) -> String {
         switch p { case "google": "Google"; case "microsoft": "Outlook"; case "fixtures": "Fixtures"; case "news": "Headlines"; case "bank_holidays": "Bank holidays"; default: p }
     }

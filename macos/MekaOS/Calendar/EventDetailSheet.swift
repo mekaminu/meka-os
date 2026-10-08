@@ -108,6 +108,26 @@ struct EventDetailSheet: View {
             }
             .staggeredAppear(1)
         }
+        // Clash chooser (slice 2c-iii): both versions of what the edit touched; Meka chooses, never MEKA. Unfolds
+        // with the expand spring.
+        Group {
+            if let c = d.edit?.clash {
+                ClashChooserView(
+                    clash: c, canKeepMine: d.editable,
+                    keepMine: {
+                        let id = c.editId
+                        Task { if await model.keepMyVersion(id) == nil { dismiss() } }
+                    },
+                    keepTheirs: {
+                        let id = c.editId
+                        Task { await model.keepTheirVersion(id) }
+                    },
+                    palette: palette
+                )
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: d.edit?.clash?.editId)
 
         // Remind me / Leave by: a heads-up through the notification governor (quiet hours apply).
         let remindChoices = d.remindChoices.map { $0.int32Value }
@@ -239,5 +259,47 @@ struct EventDetailSheet: View {
         var c = URLComponents(string: "https://maps.apple.com/")
         c?.queryItems = [URLQueryItem(name: "q", value: query)]
         return c?.url
+    }
+}
+
+
+/// The clash chooser in the event sheet: "It changed in Google after you edited it", then per thing the edit touched
+/// its label over Yours and Google's side by side, and Keep mine · Keep Google's (press style).
+struct ClashChooserView: View {
+    let clash: EventClashView
+    let canKeepMine: Bool
+    let keepMine: () -> Void
+    let keepTheirs: () -> Void
+    let palette: MekaPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.s) {
+            Text(clash.explain).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            Grid(alignment: .leading, horizontalSpacing: MekaSpace.m, verticalSpacing: MekaSpace.xs) {
+                GridRow {
+                    Text("")
+                    Text(clash.mineLabel.uppercased()).font(MekaType.sectionLabel).foregroundStyle(palette.accent)
+                    Text(clash.theirsLabel.uppercased()).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+                }
+                ForEach(Array(clash.rows.enumerated()), id: \.offset) { _, r in
+                    GridRow(alignment: .firstTextBaseline) {
+                        Text(r.label).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        Text(r.mine).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(r.theirs).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            HStack(spacing: MekaSpace.s) {
+                if canKeepMine {
+                    Button(clash.keepMineLabel, action: keepMine).buttonStyle(MekaPressStyle())
+                        .foregroundStyle(palette.accent)
+                }
+                Button(clash.keepTheirsLabel, action: keepTheirs).buttonStyle(MekaPressStyle())
+            }
+        }
+        .padding(MekaSpace.m)
+        .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).stroke(palette.hairline, lineWidth: 1))
     }
 }

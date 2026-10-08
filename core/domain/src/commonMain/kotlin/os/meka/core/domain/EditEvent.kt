@@ -144,7 +144,7 @@ object EditEventRules {
      * The newest edit of [eventId] worth saying in its detail (on its way, needing Meka from the last day, or just
      * done), or null. Undone ones say nothing.
      */
-    fun note(eventId: String, edits: List<EventEdit>, nowMs: Long): EventEditNote? {
+    fun note(eventId: String, edits: List<EventEdit>, nowMs: Long, calendar: LocalCalendar? = null): EventEditNote? {
         // An undone edit never happened, so it doesn't hide an earlier one (two made in the same millisecond: the later id).
         // A provisional event (slice 2c-ii) is its add's own edit.
         val addId = PendingEditRules.editIdOf(eventId)
@@ -154,13 +154,91 @@ object EditEventRules {
         val anyway = needsGuestsOk(e, nowMs)
         return EventEditNote(
             editId = e.id,
-            text = if (anyway) "${CalendarEditRules.line(e, nowMs)} · they'll be told if you delete it" else line.text,
+            text = when {
+                anyway -> "${CalendarEditRules.line(e, nowMs)} · they'll be told if you delete it"
+                // The detail is where the choice is made, so its line doesn't send Meka elsewhere.
+                e.needsChoice -> CalendarEditRules.line(e, nowMs)
+                else -> line.text
+            },
             needsMeka = line.needsMeka,
             deleteAnyway = anyway,
             waiting = line.state == EventEditState.WAITING || line.state == EventEditState.SENDING,
+            clash = calendar?.let { ClashRules.view(e, nowMs, it) },
         )
     }
 }
+
+/**
+ * Edit your calendars, slice 2c-iii: **the clash chooser**. Non-AI, pure.
+ *
+ * When the server finds that the event changed in Google (or Outlook) meanwhile in something Meka's edit touches, it
+ * sends nothing and hands their version back (CLASH). The event's detail then shows both versions of what the edit
+ * touches, side by side, and asks: **Keep mine** sends Meka's edit again, checked against their version this time
+ * ([CalendarEdits.keepMine], five seconds' Undo); **Keep Google's** sends nothing ([CalendarEdits.keepTheirs]). It is
+ * never decided for him, and a resend is still checked against the provider's copy (another change meanwhile clashes
+ * again).
+ */
+object ClashRules {
+    private const val NOTES_SHOWN = 80
+
+    /** The chooser for [e], or null when it isn't an unanswered clash with their version. */
+    fun view(e: EventEdit, nowMs: Long, calendar: LocalCalendar): EventClashView? {
+        if (!e.needsChoice) return null
+        val theirs = e.theirs ?: return null
+        val p = CalendarEditRules.providerName(e.provider)
+        fun whenOf(d: EventDraft) = EventDetails.whenLine(d.startAtMs, d.endAtMs, d.allDay, calendar)
+        fun text(s: String?, max: Int = 60) = s?.trim()?.replace(Regex("\\s+"), " ")?.let { if (it.length > max) it.take(max - 1).trimEnd() + "…" else it }
+            ?.ifEmpty { null } ?: "None"
+        val rows = when (e.kind) {
+            EventEditKind.ADD -> return null
+            EventEditKind.DELETE -> listOf(
+                ClashRow("Event", "Deleted", "${text(theirs.title)} · ${whenOf(theirs)}"),
+            )
+            EventEditKind.CHANGE -> {
+                val draft = e.draft ?: return null
+                val mine = CalendarEditRules.merged(theirs, draft, e.changes)
+                EventEditChange.entries.filter { it in e.changes }.map { c ->
+                    when (c) {
+                        EventEditChange.TITLE -> ClashRow("Title", text(mine.title), text(theirs.title))
+                        EventEditChange.TIME -> ClashRow("When", whenOf(mine), whenOf(theirs))
+                        EventEditChange.LOCATION -> ClashRow("Place", text(mine.location), text(theirs.location))
+                        EventEditChange.NOTES -> ClashRow("Notes", text(mine.notes, NOTES_SHOWN), text(theirs.notes, NOTES_SHOWN))
+                    }
+                }
+            }
+        }
+        return EventClashView(
+            editId = e.id,
+            mineLabel = "Yours",
+            theirsLabel = p,
+            rows = rows,
+            keepMineLabel = if (e.kind == EventEditKind.DELETE) "Delete it" else "Keep mine",
+            keepTheirsLabel = "Keep $p's",
+            explain = if (e.kind == EventEditKind.DELETE) "It changed in $p after you deleted it"
+            else "It changed in $p after you edited it · only what you changed is shown",
+        )
+    }
+}
+
+/** One thing the clashed edit touches: Meka's version and theirs ("When" · "Fri 9 Oct · 16:00–17:00" · …). */
+data class ClashRow(val label: String, val mine: String, val theirs: String)
+
+/** The clash chooser in the event detail. */
+data class EventClashView(
+    /** The clashed edit (for Keep mine / Keep theirs). */
+    val editId: String,
+    /** "Yours". */
+    val mineLabel: String,
+    /** "Google" · "Outlook". */
+    val theirsLabel: String,
+    val rows: List<ClashRow>,
+    /** "Keep mine" (a delete: "Delete it"). */
+    val keepMineLabel: String,
+    /** "Keep Google's". */
+    val keepTheirsLabel: String,
+    /** The line above the rows. */
+    val explain: String,
+)
 
 /** What the event detail says about the event's own latest edit. */
 data class EventEditNote(
@@ -173,4 +251,6 @@ data class EventEditNote(
     val deleteAnyway: Boolean,
     /** Still on its way: Edit and Delete wait until it's answered. */
     val waiting: Boolean,
+    /** An unanswered clash: both versions and Keep mine · Keep theirs (slice 2c-iii). */
+    val clash: EventClashView? = null,
 )
