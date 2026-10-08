@@ -103,6 +103,30 @@ object MotionMath {
     /** Opacity of the dim behind a pane springing up ([progress] 0 → 1); the same with Motion → Off (it fades either way). */
     fun scrimAlpha(progress: Float): Float = MekaChoreography.sheetScrimOpacity * progress.coerceIn(0f, 1f)
 
+    /**
+     * Completing a task (motion pass 2, slice 4): how long the ring-and-check draw runs before the row leaves.
+     * Motion → Off: no draw, it is shown done at once.
+     */
+    fun checkDrawMs(reduced: Boolean): Int = if (reduced) 0 else MekaChoreography.checkDrawMs
+
+    /** The accent ring's sweep (degrees) [fraction] of the way through the draw: once round in the first half. */
+    fun checkRingDegrees(fraction: Float): Float = 360f * easeOutCubic(fraction / CHECK_RING_END)
+
+    /** How solid the fill inside the ring is: it floods in as the ring closes. */
+    fun checkFill(fraction: Float): Float =
+        ((fraction - CHECK_FILL_START) / (CHECK_STROKE_START - CHECK_FILL_START)).coerceIn(0f, 1f)
+
+    /** How much of the check's stroke is drawn (0 → 1): it strokes in over the second half, short leg first. */
+    fun checkStroke(fraction: Float): Float =
+        easeOutCubic((fraction - CHECK_STROKE_START) / (1f - CHECK_STROKE_START))
+
+    /** Where the ring has closed (fraction of the draw). */
+    const val CHECK_RING_END = 0.5f
+    /** Where the fill starts flooding in, just before the ring closes. */
+    const val CHECK_FILL_START = 0.35f
+    /** Where the check starts to stroke in (the fill is solid by then). */
+    const val CHECK_STROKE_START = 0.5f
+
     /** The pull's give: the finger travels about this much further than the content at first. */
     const val PULL_RESISTANCE = 1.2f
 

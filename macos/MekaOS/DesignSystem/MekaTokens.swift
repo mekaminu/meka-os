@@ -125,4 +125,5 @@ enum MekaChoreography {
     static let pullMaxDistance: CGFloat = 112
     static let syncSpinPeriod: Double = 0.900
     static let sheetScrimOpacity: CGFloat = 0.5
+    static let checkDraw: Double = 0.420
 }

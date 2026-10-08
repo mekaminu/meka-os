@@ -66,6 +66,28 @@ enum MotionMath {
     /// How much longer (seconds) the ring stays after a sync that took `elapsed`, so a quick sync is still seen.
     static func ringHold(elapsed: Double) -> Double { max(MekaChoreography.syncSpinPeriod - elapsed, 0) }
 
+    /// Completing a task (motion pass 2, slice 4): how long (seconds) the ring-and-check draw runs before the row
+    /// leaves. Motion → Off: no draw, shown done at once.
+    static func checkDraw(reduced: Bool) -> Double { reduced ? 0 : MekaChoreography.checkDraw }
+
+    /// Where the ring has closed, the fill starts flooding in and the check starts to stroke (fractions of the draw).
+    static let checkRingEnd: Double = 0.5
+    static let checkFillStart: Double = 0.35
+    static let checkStrokeStart: Double = 0.5
+
+    /// The accent ring's sweep (degrees) `fraction` of the way through the draw: once round in the first half.
+    static func checkRingDegrees(_ fraction: Double) -> Double { 360 * easeOutCubic(fraction / checkRingEnd) }
+
+    /// How solid the fill inside the ring is: it floods in as the ring closes.
+    static func checkFill(_ fraction: Double) -> Double {
+        min(max((fraction - checkFillStart) / (checkStrokeStart - checkFillStart), 0), 1)
+    }
+
+    /// How much of the check's stroke is drawn (0…1): it strokes in over the second half, short leg first.
+    static func checkStroke(_ fraction: Double) -> Double {
+        easeOutCubic((fraction - checkStrokeStart) / (1 - checkStrokeStart))
+    }
+
     /// Ease-out cubic: fast start, gentle landing.
     static func easeOutCubic(_ fraction: Double) -> Double {
         let f = min(max(fraction, 0), 1)
@@ -250,5 +272,51 @@ struct SyncRingView: View {
         .onAppear { began = Date() }
         .accessibilityElement()
         .accessibilityLabel("Syncing")
+    }
+}
+
+/// The completion check (motion pass 2, slice 4; catalogue "Complete a task"), drawn like the Fold's `CheckRing`: a
+/// quiet outline at rest; once `began` is set the accent ring sweeps round from the top, the inside floods with the
+/// accent as it closes and the check strokes in, over `checkDraw`. Motion → Off: shown done at once.
+struct CheckRingView: View {
+    let palette: MekaPalette
+    /// When the draw started; nil = at rest.
+    let began: Date?
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: nil, paused: began == nil || reduceMotion)) { context in
+            let f = fraction(at: context.date)
+            ZStack {
+                Circle().strokeBorder(palette.textTertiary, lineWidth: 1.5)
+                Circle()
+                    .trim(from: 0, to: MotionMath.checkRingDegrees(f) / 360)
+                    .stroke(palette.accent, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .padding(0.75)
+                Circle().fill(palette.accent.opacity(MotionMath.checkFill(f)))
+                CheckMark()
+                    .trim(from: 0, to: MotionMath.checkStroke(f))
+                    .stroke(palette.onAccent, style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+            }
+        }
+    }
+
+    private func fraction(at now: Date) -> Double {
+        guard let began else { return 0 }
+        let total = MotionMath.checkDraw(reduced: reduceMotion)
+        if total <= 0 { return 1 }
+        return min(max(now.timeIntervalSince(began) / total, 0), 1)
+    }
+}
+
+/// The check's two strokes, short leg first (the same points as the Fold's).
+private struct CheckMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX + rect.width * 0.30, y: rect.minY + rect.height * 0.52))
+        p.addLine(to: CGPoint(x: rect.minX + rect.width * 0.44, y: rect.minY + rect.height * 0.66))
+        p.addLine(to: CGPoint(x: rect.minX + rect.width * 0.71, y: rect.minY + rect.height * 0.38))
+        return p
     }
 }

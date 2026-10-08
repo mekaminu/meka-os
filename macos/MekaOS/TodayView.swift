@@ -517,33 +517,31 @@ private struct UpNextCard: View {
     }
 }
 
-/// Completion motion: ring fills → check → row leaves (brief §3). Also used by the evening shutdown.
+/// Completion motion (catalogue "Complete a task"; motion pass 2, slice 4): the accent ring sweeps round, fills and
+/// the check strokes in (`CheckRingView`, `checkDraw`) with a light haptic, then the row leaves. Also used by the
+/// evening shutdown. Motion → Off: shown done at once.
 struct CompleteButton: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let task: MekaTask
     let palette: MekaPalette
-    @State private var pressed = false
+    @State private var began: Date?
 
     var body: some View {
         Button {
-            guard !pressed else { return }
-            withAnimation(MekaMotion.complete(reduced: reduceMotion)) { pressed = true }
+            guard began == nil else { return }
+            began = Date()
             MekaHaptics.light()
             let id = task.id
-            let delay: Duration = reduceMotion ? .milliseconds(50) : .milliseconds(280)
+            let draw = MotionMath.checkDraw(reduced: reduceMotion)
             Task { @MainActor in
-                try? await Task.sleep(for: delay)
+                try? await Task.sleep(for: .milliseconds(Int(draw * 1000) + 50))
                 model.complete(id)
             }
         } label: {
-            ZStack {
-                Circle().strokeBorder(pressed ? palette.accent : palette.textTertiary, lineWidth: 1.5)
-                Circle().fill(pressed ? palette.accent : .clear).padding(pressed ? 0 : 8)
-                if pressed { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(palette.onAccent) }
-            }
-            .frame(width: 22, height: 22)
-            .scaleEffect(pressed && !reduceMotion ? 0.9 : 1)
+            CheckRingView(palette: palette, began: began)
+                .frame(width: 22, height: 22)
+                .contentShape(Circle())
         }
         .buttonStyle(MekaPressStyle())
         .accessibilityLabel("Complete \(task.title)")

@@ -122,4 +122,28 @@ class MotionMathTest {
         assertEquals(MekaChoreography.sheetScrimOpacity, MotionMath.scrimAlpha(1.2f)) // a spring's overshoot never darkens more
         assertTrue(MekaChoreography.sheetScrimOpacity in 0.3f..0.6f)
     }
+
+    @Test
+    fun completingATaskSweepsTheRingThenFillsThenStrokesTheCheck() {
+        assertEquals(420, MotionMath.checkDrawMs(reduced = false))
+        assertEquals(0, MotionMath.checkDrawMs(reduced = true))
+        // Start: nothing drawn.
+        assertEquals(0f, MotionMath.checkRingDegrees(0f))
+        assertEquals(0f, MotionMath.checkFill(0f))
+        assertEquals(0f, MotionMath.checkStroke(0f))
+        // The ring closes by half way; the fill floods in as it closes; the check hasn't started yet.
+        assertEquals(360f, MotionMath.checkRingDegrees(0.5f))
+        assertTrue(MotionMath.checkRingDegrees(0.25f) in 180f..360f) // eased out: fast start
+        assertEquals(0f, MotionMath.checkFill(0.3f))
+        assertTrue(MotionMath.checkFill(0.42f) in 0.1f..0.9f)
+        assertEquals(1f, MotionMath.checkFill(0.5f))
+        assertEquals(0f, MotionMath.checkStroke(0.5f))
+        // Then the check strokes in and lands exactly drawn.
+        assertTrue(MotionMath.checkStroke(0.75f) in 0.5f..1f)
+        assertEquals(1f, MotionMath.checkStroke(1f))
+        assertEquals(360f, MotionMath.checkRingDegrees(1f))
+        // Overshoot never draws past done.
+        assertEquals(1f, MotionMath.checkStroke(1.2f))
+        assertEquals(360f, MotionMath.checkRingDegrees(1.2f))
+    }
 }

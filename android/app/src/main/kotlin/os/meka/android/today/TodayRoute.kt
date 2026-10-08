@@ -17,17 +17,20 @@ import os.meka.android.calendar.SwipeableEvent
 import os.meka.android.calendar.eventActionHandlers
 import os.meka.android.calendar.rememberEventUndo
 import os.meka.core.domain.CalendarEvent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.rememberUpdatedState
+import os.meka.android.designsystem.CheckRing
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -70,7 +73,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -678,34 +680,38 @@ internal fun TaskRow(
     }
 }
 
-/** Completion motion (brief §3): ring fills → check → row compresses and leaves via animateItem. */
+/**
+ * Completion motion (catalogue "Complete a task"; motion pass 2, slice 4): the accent ring sweeps round, fills, the
+ * check strokes in ([CheckRing], [MekaChoreography.checkDrawMs]) with a light haptic, then the row leaves via
+ * animateItem. Motion → Off: shown done at once and completed straight away.
+ */
 @Composable
 internal fun CompleteButton(t: Task, onComplete: (String) -> Unit) {
     var pressed by remember(t.id) { mutableStateOf(false) }
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
-    val fill by animateColorAsState(if (pressed) Meka.colors.accent else Meka.colors.background, MekaMotion.complete(reduced), label = "fill")
-    val scale by animateFloatAsState(if (pressed && !reduced) 0.86f else 1f, MekaMotion.complete(reduced), label = "scale",
-        finishedListener = { if (pressed) onComplete(t.id) })
-    Box(
-        Modifier
+    val draw = remember(t.id) { Animatable(0f) }
+    val done by rememberUpdatedState(onComplete)
+    LaunchedEffect(pressed) {
+        if (!pressed) return@LaunchedEffect
+        val ms = MotionMath.checkDrawMs(reduced)
+        if (ms == 0) draw.snapTo(1f) else draw.animateTo(1f, tween(ms, easing = LinearEasing))
+        done(t.id)
+    }
+    CheckRing(
+        fraction = draw.value,
+        rest = Meka.colors.textTertiary, accent = Meka.colors.accent, onAccent = Meka.colors.onAccent,
+        modifier = Modifier
             .size(28.dp)
-            .scale(scale)
             .clip(CircleShape)
-            .background(fill)
-            .border(1.5.dp, if (pressed) Meka.colors.accent else Meka.colors.textTertiary, CircleShape)
             .semantics { contentDescription = "Complete ${t.title}" }
             .clickable(role = Role.Checkbox) {
                 if (!pressed) {
                     pressed = true
                     haptics.light()
-                    if (reduced) onComplete(t.id)
                 }
             },
-        contentAlignment = Alignment.Center,
-    ) {
-        if (pressed) Text("✓", color = Meka.colors.onAccent, style = MekaType.caption)
-    }
+    )
 }
 
 @Composable

@@ -82,4 +82,22 @@ final class MotionMathTests: XCTestCase {
         XCTAssertEqual(MotionMath.ringHold(elapsed: 0.3), period - 0.3, accuracy: 1e-9)
         XCTAssertEqual(MotionMath.ringHold(elapsed: 5), 0)
     }
+
+    @MainActor
+    func testCompletingATaskSweepsTheRingThenFillsThenStrokesTheCheck() {
+        XCTAssertEqual(MotionMath.checkDraw(reduced: false), 0.42, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.checkDraw(reduced: true), 0)
+        XCTAssertEqual(MotionMath.checkRingDegrees(0), 0)
+        XCTAssertEqual(MotionMath.checkFill(0), 0)
+        XCTAssertEqual(MotionMath.checkStroke(0), 0)
+        XCTAssertEqual(MotionMath.checkRingDegrees(0.5), 360, accuracy: 1e-9)
+        XCTAssertGreaterThan(MotionMath.checkRingDegrees(0.25), 180) // eased out: fast start
+        XCTAssertEqual(MotionMath.checkFill(0.3), 0)
+        XCTAssertEqual(MotionMath.checkFill(0.5), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.checkStroke(0.5), 0)
+        XCTAssertGreaterThan(MotionMath.checkStroke(0.75), 0.5)
+        XCTAssertEqual(MotionMath.checkStroke(1), 1)
+        XCTAssertEqual(MotionMath.checkStroke(1.2), 1) // never past done
+        XCTAssertEqual(MotionMath.checkRingDegrees(1.2), 360, accuracy: 1e-9)
+    }
 }

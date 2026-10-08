@@ -138,4 +138,5 @@ object MekaChoreography {
     const val pullMaxDistanceDp = 112
     const val syncSpinPeriodMs = 900
     const val sheetScrimOpacity = 0.5f
+    const val checkDrawMs = 420
 }
