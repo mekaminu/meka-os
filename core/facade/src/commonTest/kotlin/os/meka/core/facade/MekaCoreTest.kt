@@ -740,8 +740,10 @@ class MekaCoreTest {
         a.syncNow(); m.syncNow()
         now += 4 * 3_600_000L // 19:13: the slot is over
         a.tick(); m.tick()
-        val ask = a.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL).post
+        // The notice's key (at 19:13 the governor folds it into the evening digest, so it's built here as the core does).
+        val ask = os.meka.core.domain.SessionRules.notices(a.sessionsView.value, ZoneCalendar { TimeZone.of("Europe/London") })
             .single { it.source == os.meka.core.domain.NoticeSource.SESSION_ASK }
+        assertEquals("session:$id:${a.todayEpochDay()}:ask", ask.key)
         assertEquals(listOf(os.meka.core.domain.NoticeAction.WENT, os.meka.core.domain.NoticeAction.DIDNT_GO), ask.actions)
         val went = a.answerSessionNotice(ask.key, os.meka.core.domain.NoticeAction.WENT)
         assertEquals("Went · 1 of 3 this week", went?.line)
