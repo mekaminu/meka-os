@@ -879,11 +879,20 @@ class MekaCore(
         else os.meka.core.domain.SessionRules.book(sessionHabits, todayEpochDay(), nowMs(), cal) { day ->
             os.meka.core.domain.SessionRules.busyOn(day, dayEvents, workState.schedule, holidays, cal)
         }
-        _today.value = project(all, dayEvents)
-        _lists.value = lists.view(all, renewals.view())
+        val listsNow = lists.view(all, renewals.view())
+        val fastingNow = fasting.view()
+        val goalsNow = goals.view(all).withSessions(_sessions.value)
+        val projected = project(all, dayEvents)
+        // The live tiles under the Day ring: next event, a running fast, habits today, renewals due.
+        _today.value = projected.copy(
+            dayTiles = os.meka.core.domain.DayTileRules.build(
+                projected.events, nowMs(), dayWindow(nowMs()), fastingNow.current, goalsNow.habits, listsNow.renewals.dueCount,
+            ),
+        )
+        _lists.value = listsNow
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(_today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone))
-        _fasting.value = fasting.view()
-        _goals.value = goals.view(all).withSessions(_sessions.value)
+        _fasting.value = fastingNow
+        _goals.value = goalsNow
         _workMode.value = workState
         val today = dayWindow(nowMs())
         _shutdown.value = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), holidays)

@@ -315,6 +315,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(core.goalsView.value.habits.first { $0.id == id }?.doneToday, false)
     }
 
+    /// The Day ring's live tiles (the opening moment, part 2): their words reach Swift.
+    func testDayTilesReachSwift() {
+        XCTAssertEqual(DayTileRules.shared.valueText(kind: .nextEvent, shown: 100, total: 0), "1 h 40")
+        XCTAssertEqual(DayTileRules.shared.valueText(kind: .fast, shown: 790, total: 0), "13 h")
+        XCTAssertEqual(DayTileRules.shared.valueText(kind: .habits, shown: 1, total: 3), "1 of 3")
+        let tile = DayTile(kind: .renewals, value: 2, total: 0, label: "renewals due")
+        XCTAssertEqual(tile.text(shown: 1), "1")
+        XCTAssertEqual(tile.spokenLine, "2 renewals due")
+    }
+
     /// The opening moment's Day ring (motion pass 2, slice 7): the core's ring reaches Swift with its words and play rule.
     func testDayRingReachesSwift() {
         XCTAssertEqual(DayRingRules.shared.line(freeMinutes: 225, toDo: 4, nowMinute: 600), "3 h 45 free · 4 to do")

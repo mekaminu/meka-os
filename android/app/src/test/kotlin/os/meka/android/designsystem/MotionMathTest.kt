@@ -214,6 +214,32 @@ class MotionMathTest {
     }
 
     @Test
+    fun theLiveTilesRiseInAsTheMarkClosesAndTheGreetingSpellsItself() {
+        val full = DayRingPlay.FULL
+        // Tiles: once the mark has closed (600 ms), one stagger step apart, each over 360 ms.
+        assertEquals(0f, MotionMath.dayTile(600, 0, full, expressive = true), 1e-6f)
+        assertEquals(1f, MotionMath.dayTile(960, 0, full, expressive = true), 1e-6f)
+        assertEquals(0f, MotionMath.dayTile(780, 3, full, expressive = true), 1e-6f)
+        assertEquals(1f, MotionMath.dayTile(1140, 3, full, expressive = true), 1e-6f)
+        assertEquals(0f, MotionMath.dayTile(720, 3, full, expressive = false), 1e-6f)
+        assertEquals(0.875f, MotionMath.dayTile(150, 2, DayRingPlay.QUICK, expressive = true), 1e-6f)
+        assertEquals(1f, MotionMath.dayTile(0, 2, DayRingPlay.STILL, expressive = true), 1e-6f)
+        // Four tiles land within the count-up, so the ring's total is unchanged.
+        assertEquals(1500L, MotionMath.dayRingTotalMs(3, full, expressive = true, tiles = 4))
+        assertEquals(1300L, MotionMath.dayRingTotalMs(3, full, expressive = false, tiles = 4))
+        // Greeting letters: 28 ms apart, each over 260 ms; only on the first open of the day.
+        assertEquals(0f, MotionMath.greetingLetter(0, 0, full), 1e-6f)
+        assertEquals(1f, MotionMath.greetingLetter(260, 0, full), 1e-6f)
+        assertEquals(0f, MotionMath.greetingLetter(56, 2, full), 1e-6f)
+        assertEquals(1f, MotionMath.greetingLetter(316, 2, full), 1e-6f)
+        assertEquals(736L, MotionMath.greetingTotalMs("Good morning, Meka".length, full))
+        assertEquals(1f, MotionMath.greetingLetter(0, 5, DayRingPlay.QUICK), 1e-6f)
+        assertEquals(1f, MotionMath.greetingLetter(0, 5, DayRingPlay.STILL), 1e-6f)
+        assertEquals(0L, MotionMath.greetingTotalMs(18, DayRingPlay.QUICK))
+        assertEquals(0L, MotionMath.greetingTotalMs(0, full))
+    }
+
+    @Test
     fun laterOpensPlayTheDayRingQuicklyAndOffDrawsItAtOnce() {
         val quick = DayRingPlay.QUICK
         assertEquals(1f, MotionMath.dayRingMark(0, quick), 1e-6f)

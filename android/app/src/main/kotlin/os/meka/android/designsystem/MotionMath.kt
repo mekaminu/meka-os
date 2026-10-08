@@ -189,16 +189,50 @@ object MotionMath {
         DayRingPlay.FULL -> ((elapsedMs - MekaChoreography.dayRingMarkMs).toFloat() / countUpMs(expressive)).coerceIn(0f, 1f)
     }
 
-    /** When the whole opening has landed for a ring of [arcs] arcs, so the frame clock can stop. */
-    fun dayRingTotalMs(arcs: Int, play: DayRingPlay, expressive: Boolean): Long = when (play) {
+    /** When the whole opening has landed for a ring of [arcs] arcs and [tiles] live tiles, so the frame clock can stop. */
+    fun dayRingTotalMs(arcs: Int, play: DayRingPlay, expressive: Boolean, tiles: Int = 0): Long = when (play) {
         DayRingPlay.STILL -> 0L
         DayRingPlay.QUICK -> MekaChoreography.dayRingQuickMs.toLong()
         DayRingPlay.FULL -> maxOf(
             MekaChoreography.dayRingMarkMs / 2 + staggerSpanMs(arcs, false, expressive) + MekaChoreography.dayRingArcMs,
             MekaChoreography.dayRingMarkMs / 2 + MekaChoreography.dayRingNeedleMs,
             MekaChoreography.dayRingMarkMs + countUpMs(expressive),
+            if (tiles > 0) MekaChoreography.dayRingMarkMs + staggerSpanMs(tiles, false, expressive) + MekaChoreography.dayRingArcMs else 0,
         ).toLong()
     }
+
+    /**
+     * The live tiles under the Day ring (the opening moment, part 2): [DayRingPlay.FULL] — once the mark has closed,
+     * tile [index] fades and rises in (the stagger apart, each over `dayRingArc`) while its number counts up with the
+     * centre ([dayRingCount]); [DayRingPlay.QUICK] within `dayRingQuick`; [DayRingPlay.STILL] shown at once.
+     */
+    fun dayTile(elapsedMs: Long, index: Int, play: DayRingPlay, expressive: Boolean): Float = when (play) {
+        DayRingPlay.STILL -> 1f
+        DayRingPlay.QUICK -> easeOutCubic(elapsedMs.toFloat() / MekaChoreography.dayRingQuickMs)
+        DayRingPlay.FULL -> {
+            val begin = MekaChoreography.dayRingMarkMs + staggerDelayMs(index, false, expressive)
+            easeOutCubic((elapsedMs - begin).toFloat() / MekaChoreography.dayRingArcMs)
+        }
+    }
+
+    /**
+     * The greeting's letters on the first open of the day ([DayRingPlay.FULL]): letter [index] fades in
+     * `greetingLetter` after the one before, over `greetingLetterFade`. Later opens and Off: shown at once (1).
+     */
+    fun greetingLetter(elapsedMs: Long, index: Int, play: DayRingPlay): Float = when (play) {
+        DayRingPlay.FULL -> easeOutCubic(
+            (elapsedMs - index.coerceAtLeast(0).toLong() * MekaChoreography.greetingLetterMs).toFloat() / MekaChoreography.greetingLetterFadeMs,
+        )
+        else -> 1f
+    }
+
+    /** When the last of [letters] letters has faded in, so the frame clock can stop. */
+    fun greetingTotalMs(letters: Int, play: DayRingPlay): Long =
+        if (play != DayRingPlay.FULL || letters <= 0) 0L
+        else (letters - 1).toLong() * MekaChoreography.greetingLetterMs + MekaChoreography.greetingLetterFadeMs
+
+    /** How far (dp) a letter rises as it fades in. */
+    const val GREETING_LETTER_RISE_DP = 6f
 
     /** The breathing ring's smallest size and faintest glow. */
     const val BREATH_MIN_SCALE = 0.92f

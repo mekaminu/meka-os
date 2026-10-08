@@ -158,5 +158,7 @@ object MekaChoreography {
     const val dayRingArcMs = 360
     const val dayRingNeedleMs = 720
     const val dayRingQuickMs = 300
+    const val greetingLetterMs = 28
+    const val greetingLetterFadeMs = 260
     const val emptyBreathPeriodMs = 4200
 }

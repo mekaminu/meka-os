@@ -19,6 +19,11 @@ data class Today(
     val timeline: DayTimeline = DayTimeline.EMPTY,
     /** The Day ring at the top of Today (the opening moment): the day's arcs, the now needle, "3 h 45 free · 4 to do". */
     val dayRing: DayRing = DayRing.EMPTY,
+    /**
+     * The live tiles under the Day ring (the opening moment, part 2): next event countdown, a running fast, habits done
+     * today, renewals due ([DayTileRules]). Filled in by the facade, which holds the fasting, goals and lists views.
+     */
+    val dayTiles: List<DayTile> = emptyList(),
 ) {
     /** Timed events that have not ended yet: what's still ahead of you today. */
     fun upcomingEvents(nowMs: Long): List<CalendarEvent> = events.filter { !it.allDay && it.endAtMs > nowMs }

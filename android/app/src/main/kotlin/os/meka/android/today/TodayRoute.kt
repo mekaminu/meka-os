@@ -461,7 +461,8 @@ private fun TodayPane(
         ) {
             item(key = "greeting") {
                 Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play))) {
-                    Text(greeting(), style = MekaType.greeting, color = Meka.colors.textPrimary)
+                    // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
+                    GreetingText(greeting(), if (now == null) ringPlay else DayRingPlay.STILL)
                     if (today.timeline.dateLabel.isNotEmpty()) {
                         Text(today.timeline.dateLabel, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
                             modifier = Modifier.padding(top = MekaSpace.xxs))
@@ -492,7 +493,7 @@ private fun TodayPane(
             }
             // The opening moment (motion pass 2, slice 7): the Day ring under the greeting; not on the cover screen.
             if (now == null && today.timeline.dateLabel.isNotEmpty()) item(key = "dayring") {
-                DayRingHero(today.dayRing, ringPlay, ringPlayed, Modifier.padding(bottom = MekaSpace.l))
+                DayRingHero(today.dayRing, ringPlay, ringPlayed, Modifier.padding(bottom = MekaSpace.l), tiles = today.dayTiles)
             }
             // Motion pass 2: with the phone's animations off and nothing chosen in Appearance → Motion, a one-time card.
             motionCard?.let { card ->

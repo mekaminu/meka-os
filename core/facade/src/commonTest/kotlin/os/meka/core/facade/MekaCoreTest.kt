@@ -47,6 +47,19 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theDayRingsLiveTilesFollowTheFastAndTheClock() = runTest {
+        val c = core("android")
+        assertEquals(emptyList(), c.today.value.dayTiles)
+        c.startFast(startedMinutesAgo = 125)
+        val fast = c.today.value.dayTiles.single()
+        assertEquals(os.meka.core.domain.DayTileKind.FAST, fast.kind)
+        assertEquals("2 h", fast.valueText)
+        now += 60 * 60_000L
+        c.tick()
+        assertEquals("3 h", c.today.value.dayTiles.single().valueText)
+    }
+
+    @Test
     fun captureMakesOneTaskWithTitleAndNotesAndSyncsIt() = runTest {
         val a = core("android"); val m = core("mac")
         assertEquals(null, a.capture("  \n ", null))

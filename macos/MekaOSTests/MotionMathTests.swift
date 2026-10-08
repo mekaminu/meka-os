@@ -157,6 +157,27 @@ final class MotionMathTests: XCTestCase {
     }
 
     @MainActor
+    func testTheLiveTilesRiseInAsTheMarkClosesAndTheGreetingSpellsItself() {
+        let full = DayRingPlayback.full
+        XCTAssertEqual(MotionMath.dayTile(elapsed: 0.6, index: 0, play: full, expressive: true), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayTile(elapsed: 0.96, index: 0, play: full, expressive: true), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayTile(elapsed: 0.78, index: 3, play: full, expressive: true), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayTile(elapsed: 1.14, index: 3, play: full, expressive: true), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayTile(elapsed: 0.72, index: 3, play: full, expressive: false), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayTile(elapsed: 0.15, index: 2, play: .quick, expressive: true), 0.875, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayTile(elapsed: 0, index: 2, play: .still, expressive: true), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingTotal(arcs: 3, play: full, expressive: true, tiles: 4), 1.5, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingTotal(arcs: 3, play: full, expressive: false, tiles: 4), 1.3, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.greetingLetter(elapsed: 0, index: 0, play: full), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.greetingLetter(elapsed: 0.26, index: 0, play: full), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.greetingLetter(elapsed: 0.056, index: 2, play: full), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.greetingLetter(elapsed: 0.316, index: 2, play: full), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.greetingTotal(letters: "Good morning, Meka".count, play: full), 0.736, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.greetingLetter(elapsed: 0, index: 5, play: .quick), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.greetingTotal(letters: 18, play: .still), 0, accuracy: 1e-9)
+    }
+
+    @MainActor
     func testLaterOpensPlayTheDayRingQuicklyAndOffDrawsItAtOnce() {
         XCTAssertEqual(MotionMath.dayRingMark(elapsed: 0, play: .quick), 1, accuracy: 1e-9)
         XCTAssertEqual(MotionMath.dayRingArc(elapsed: 0.15, index: 5, play: .quick, expressive: true), 0.875, accuracy: 1e-9)

@@ -52,9 +52,8 @@ struct TodayView: View {
         VStack(spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: MekaSpace.xs) {
-                    Text(greeting)
-                        .font(MekaType.greeting).tracking(MekaType.greetingTracking)
-                        .foregroundStyle(palette.textPrimary)
+                    // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
+                    GreetingText(text: greeting, play: ringPlay ?? .still, palette: palette)
                         .staggeredAppear(0, play: play)
                     if let date = model.today?.timeline.dateLabel, !date.isEmpty {
                         Text(date).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
@@ -86,7 +85,8 @@ struct TodayView: View {
                     }
                     // The opening moment (motion pass 2, slice 7): the Day ring under the header.
                     if let today = model.today, !today.timeline.dateLabel.isEmpty {
-                        DayRingView(ring: today.dayRing, play: ringPlay ?? .still, played: { ringPlay = .still }, palette: palette)
+                        DayRingView(ring: today.dayRing, play: ringPlay ?? .still, played: { ringPlay = .still }, palette: palette,
+                                    tiles: today.dayTiles)
                             .padding(.top, MekaSpace.s)
                     }
                     Spacer().frame(height: MekaSpace.l)

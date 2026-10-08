@@ -165,8 +165,9 @@ enum MotionMath {
         }
     }
 
-    /// When the whole opening has landed for a ring of `arcs` arcs (seconds), so the timeline can pause.
-    static func dayRingTotal(arcs: Int, play: DayRingPlayback, expressive: Bool) -> Double {
+    /// When the whole opening has landed for a ring of `arcs` arcs and `tiles` live tiles (seconds), so the timeline
+    /// can pause.
+    static func dayRingTotal(arcs: Int, play: DayRingPlayback, expressive: Bool, tiles: Int = 0) -> Double {
         switch play {
         case .still: 0
         case .quick: MekaChoreography.dayRingQuick
@@ -174,9 +175,41 @@ enum MotionMath {
             max(
                 MekaChoreography.dayRingMark / 2 + staggerSpan(count: arcs, reduced: false, expressive: expressive) + MekaChoreography.dayRingArc,
                 MekaChoreography.dayRingMark / 2 + MekaChoreography.dayRingNeedle,
-                MekaChoreography.dayRingMark + countUpDuration(expressive: expressive)
+                MekaChoreography.dayRingMark + countUpDuration(expressive: expressive),
+                tiles > 0
+                    ? MekaChoreography.dayRingMark + staggerSpan(count: tiles, reduced: false, expressive: expressive) + MekaChoreography.dayRingArc
+                    : 0
             )
         }
+    }
+
+    /// The live tiles under the Day ring (the opening moment, part 2), number for number with the Fold: `.full` — once
+    /// the mark has closed, tile `index` fades and rises in (the stagger apart, each over `dayRingArc`) while its number
+    /// counts up with the centre; `.quick` within `dayRingQuick`; `.still` at once.
+    static func dayTile(elapsed: Double, index: Int, play: DayRingPlayback, expressive: Bool) -> Double {
+        switch play {
+        case .still: 1
+        case .quick: easeOutCubic(elapsed / MekaChoreography.dayRingQuick)
+        case .full:
+            easeOutCubic((elapsed - MekaChoreography.dayRingMark - staggerDelay(index: index, reduced: false, expressive: expressive))
+                / MekaChoreography.dayRingArc)
+        }
+    }
+
+    /// The greeting's letters on the first open of the day (`.full`): letter `index` fades in `greetingLetter` after
+    /// the one before, over `greetingLetterFade`. Later opens and Off: shown at once (1).
+    static func greetingLetter(elapsed: Double, index: Int, play: DayRingPlayback) -> Double {
+        guard play == .full else { return 1 }
+        return easeOutCubic((elapsed - Double(max(index, 0)) * MekaChoreography.greetingLetter) / MekaChoreography.greetingLetterFade)
+    }
+
+    /// How far (pt) the greeting rises as its letters fade in.
+    static let greetingLetterRise: CGFloat = 6
+
+    /// When the last of `letters` letters has faded in (seconds).
+    static func greetingTotal(letters: Int, play: DayRingPlayback) -> Double {
+        guard play == .full, letters > 0 else { return 0 }
+        return Double(letters - 1) * MekaChoreography.greetingLetter + MekaChoreography.greetingLetterFade
     }
 
     /// The number a count-up shows at `fraction` of the way from `from` to `to`. Lands exactly on `to`.

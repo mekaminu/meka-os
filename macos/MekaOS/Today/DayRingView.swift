@@ -13,20 +13,30 @@ struct DayRingView: View {
     let played: () -> Void
     let palette: MekaPalette
     var size: CGFloat = 184
+    /// The live tiles under the dial (the opening moment, part 2): next event, fast, habits, renewals.
+    var tiles: [DayTile] = []
     @Environment(\.mekaExpressiveMotion) private var expressive
     @State private var began = Date()
 
     var body: some View {
-        let total = MotionMath.dayRingTotal(arcs: ring.arcs.count, play: play, expressive: expressive)
+        let total = MotionMath.dayRingTotal(arcs: ring.arcs.count, play: play, expressive: expressive, tiles: tiles.count)
         TimelineView(.animation(minimumInterval: 1.0 / 60, paused: play == .still)) { context in
             let elapsed = play == .still ? total : context.date.timeIntervalSince(began)
-            dial(elapsed: elapsed)
+            VStack(spacing: MekaSpace.m) {
+                dial(elapsed: elapsed)
+                    .frame(width: size, height: size)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(ring.spokenLine)
+                if !tiles.isEmpty {
+                    DayTilesRow(tiles: tiles, count: MotionMath.dayRingCount(elapsed: elapsed, play: play, expressive: expressive),
+                                palette: palette) { i in
+                        MotionMath.dayTile(elapsed: elapsed, index: i, play: play, expressive: expressive)
+                    }
+                }
+            }
         }
-        .frame(width: size, height: size)
-        .frame(maxWidth: .infinity)
         .padding(.vertical, MekaSpace.s)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(ring.spokenLine)
         .onAppear { began = Date() }
         .task(id: play) {
             guard play != .still else { return }
@@ -96,6 +106,70 @@ struct DayRingView: View {
             .multilineTextAlignment(.center)
             .frame(width: size * 0.62)
         }
+    }
+}
+
+/// The live tiles under the Day ring (the opening moment, part 2), the Mac twin of the Fold's `DayTilesRow`: up to
+/// four small tiles side by side — next event countdown, a running fast, habits done today, renewals due
+/// (`DayTileRules`). Each fades and rises in after the mark closes while its number counts up with the centre;
+/// afterwards they follow Today's minute refresh. VoiceOver reads each as one line.
+struct DayTilesRow: View {
+    let tiles: [DayTile]
+    let count: Double
+    let palette: MekaPalette
+    let appear: (Int) -> Double
+    @Environment(\.mekaExpressiveMotion) private var expressive
+
+    var body: some View {
+        HStack(alignment: .top, spacing: MekaSpace.xs) {
+            ForEach(Array(tiles.enumerated()), id: \.offset) { i, tile in
+                let a = appear(i)
+                let shown = MotionMath.countUpValue(from: 0, to: Int(tile.value), fraction: count)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(tile.text(shown: Int32(shown)))
+                        .font(MekaType.body).monospacedDigit().foregroundStyle(palette.textPrimary).lineLimit(1)
+                    Text(tile.label)
+                        .font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, MekaSpace.s)
+                .padding(.vertical, MekaSpace.xs)
+                .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+                .opacity(a)
+                .offset(y: (1 - a) * MotionMath.riseDistance(expressive: expressive) / 2)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(tile.spokenLine)
+            }
+        }
+    }
+}
+
+/// The greeting on Today. On the first open of the day (`.full`) its letters fade in one after another, the line
+/// rising a little with the first of them (`MotionMath.greetingLetter`); later opens and Motion → Off show it at once.
+/// VoiceOver reads the plain words.
+struct GreetingText: View {
+    let text: String
+    let play: DayRingPlayback
+    let palette: MekaPalette
+    @State private var began = Date()
+
+    var body: some View {
+        let letters = Array(text)
+        let total = MotionMath.greetingTotal(letters: letters.count, play: play)
+        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: total == 0)) { context in
+            let elapsed = total == 0 ? total : context.date.timeIntervalSince(began)
+            let lead = MotionMath.greetingLetter(elapsed: elapsed, index: 0, play: play)
+            letters.enumerated().reduce(Text("")) { line, item in
+                let f = MotionMath.greetingLetter(elapsed: elapsed, index: item.offset, play: play)
+                return line + Text(String(item.element)).foregroundStyle(palette.textPrimary.opacity(f))
+            }
+            .font(MekaType.greeting).tracking(MekaType.greetingTracking)
+            .offset(y: (1 - lead) * MotionMath.greetingLetterRise)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+        .onAppear { began = Date() }
+        .onChange(of: play) { began = Date() }
     }
 }
 
