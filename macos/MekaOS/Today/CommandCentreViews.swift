@@ -73,6 +73,8 @@ struct CommandNeedsYouView: View {
 
 /// Coming up: the days after today with something on them, a few lines each ("+2 more"), then "Open Calendar ›".
 /// Clicking an event opens its detail sheet; a day's heading opens the Calendar section. Sections stagger in.
+/// Below it, News (news ticker, slice 2): today's match in Barça's colour (click for its detail), the top story of
+/// each lane (click opens the News sheet on that story), "Open News ›". Left out when there's nothing to show.
 struct ComingUpColumnView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -102,6 +104,13 @@ struct ComingUpColumnView: View {
                         .padding(.top, MekaSpace.s)
                         .staggeredAppear(1 + c.days.count)
                 }
+                if let place = model.newsPlace,
+                   let g = CommandCentreRules.shared.newsGlance(
+                       place: place,
+                       maxItems: shared ? CommandCentreRules.shared.NEWS_SHARED : CommandCentreRules.shared.NEWS_ALONE
+                   ) {
+                    newsView(g).padding(.top, MekaSpace.xl).staggeredAppear(2)
+                }
             }
             .padding(.horizontal, MekaSpace.gutter)
             .padding(.vertical, MekaSpace.xl)
@@ -128,6 +137,48 @@ struct ComingUpColumnView: View {
             }
         }
         .padding(.bottom, MekaSpace.s)
+    }
+
+    private func newsView(_ g: NewsGlance) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            SectionLabel("News", palette)
+            if let md = g.matchday {
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+                    Circle().fill(palette.barca).frame(width: 6, height: 6)
+                    Text(md.line).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).lineLimit(2)
+                        .id(md.line).transition(.opacity)
+                    Spacer(minLength: 0)
+                }
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: md.line)
+                .contentShape(Rectangle())
+                .onTapGesture { model.openEvent = md.event }
+                .accessibilityAddTraits(.isButton)
+            }
+            ForEach(g.items, id: \.id) { n in
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+                    Circle().fill(n.topic == "barca" ? palette.barca : palette.textTertiary).frame(width: 6, height: 6)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(n.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(2)
+                        Text(n.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 2)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    MekaHaptics.tick()
+                    model.newsStoryId = n.id
+                    model.showNews = true
+                }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Opens the story")
+            }
+            Button("Open News ›") { model.newsStoryId = nil; model.showNews = true }
+                .buttonStyle(.plain)
+                .font(MekaType.itemMeta)
+                .foregroundStyle(palette.accent)
+                .padding(.top, MekaSpace.s)
+        }
     }
 
     private func lineView(_ line: ComingUpLine) -> some View {

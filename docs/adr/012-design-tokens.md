@@ -14,5 +14,6 @@
 - **Palette:**
   - A neutral scale with one restrained accent.
   - State colours only where state must be read at a glance: critical, approval and offline.
+  - *Addendum 2026-10-08 (news ticker, slice 2):* one content colour, `barca` (a garnet, ≥ 3:1 like the state colours), marks Barça's lane in News, the command centre and the ticker. It is never used for UI state or actions; the accent stays the only brand colour.
   - No gradients in tokens. Elevation is expressed with surface tone in dark mode rather than shadows.
 - **Choreography tokens** (added 2026-10-05): `choreography` holds sequencing values (stagger step 40 ms with a cap of 8 steps, rise distance, count-up and shimmer periods). They generate `MekaChoreography` on both platforms; `MekaMotionKit` (Kotlin and Swift) is the only code that reads them, and its pure arithmetic (`MotionMath`) is unit-tested on both sides.

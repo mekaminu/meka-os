@@ -26,6 +26,7 @@ data class MekaColors(
     val approval: Color,
     val offline: Color,
     val success: Color,
+    val barca: Color,
 )
 
 val MekaDarkColors = MekaColors(
@@ -42,6 +43,7 @@ val MekaDarkColors = MekaColors(
     approval = Color(0xFF8FB8F2),
     offline = Color(0xFFA1A1AA),
     success = Color(0xFF8CC9A0),
+    barca = Color(0xFFE57A98),
 )
 
 val MekaLightColors = MekaColors(
@@ -58,6 +60,7 @@ val MekaLightColors = MekaColors(
     approval = Color(0xFF2F5FA8),
     offline = Color(0xFF5B5B63),
     success = Color(0xFF2E7D4F),
+    barca = Color(0xFFA50044),
 )
 
 object MekaType {

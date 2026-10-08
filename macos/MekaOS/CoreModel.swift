@@ -36,6 +36,8 @@ final class CoreModel {
     /// News (Ask → More → News): the chosen topics as lanes, Barça first, then AI. Topics sync with the Fold.
     private(set) var newsPlace: NewsPlace?
     var showNews = false
+    /// A story to open the News sheet on (from the command centre's News); taken once by the sheet.
+    var newsStoryId: String?
     /// Weekly review: the week looked back on, the week ahead, north-star numbers. "Done reviewing" syncs with the Fold.
     private(set) var review: WeeklyReviewView?
     /// The Calendar tab: week strips and the next 30 days grouped by day. Follows sync; moves with the clock.

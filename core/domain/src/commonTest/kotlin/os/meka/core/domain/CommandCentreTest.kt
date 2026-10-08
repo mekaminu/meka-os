@@ -115,4 +115,27 @@ class CommandCentreTest {
         assertTrue(c.days.isEmpty())
         assertEquals("Nothing planned in the next 30 days", c.emptyLine)
     }
+
+    private fun item(id: String, topic: String) = NewsItem(id, id, null, "Sport", topic, "Sport · 1 h ago", null, 0L)
+    private fun lane(topic: String, vararg ids: String) = NewsLane(topic, topic, "From Sport", ids.map { item(it, topic) })
+
+    @Test
+    fun newsUnderComingUpTakesTheTopStoryOfEachLaneInTurn() {
+        val place = NewsPlace(listOf(lane("barca", "b1", "b2", "b3"), lane("ai", "a1"), lane("top", "t1", "t2")), emptyList(), null)
+        assertEquals(listOf("b1", "a1"), CommandCentreRules.newsGlance(place, CommandCentreRules.NEWS_SHARED)!!.items.map { it.id })
+        assertEquals(listOf("b1", "a1", "t1", "b2"), CommandCentreRules.newsGlance(place, CommandCentreRules.NEWS_ALONE)!!.items.map { it.id })
+        assertEquals(listOf("b1", "a1", "t1", "b2", "t2", "b3"), CommandCentreRules.newsGlance(place, 10)!!.items.map { it.id })
+        assertNull(CommandCentreRules.newsGlance(place, 2)!!.matchday)
+    }
+
+    @Test
+    fun newsUnderComingUpIsLeftOutWhenThereIsNothingAndKeepsTheMatch() {
+        assertNull(CommandCentreRules.newsGlance(NewsPlace.EMPTY, CommandCentreRules.NEWS_ALONE))
+        assertNull(CommandCentreRules.newsGlance(NewsPlace(emptyList(), emptyList(), "No topics chosen · pick some below"), 4))
+        val e = ev("espn-1", at(tue6, 21), at(tue6, 23), provider = "fixtures")
+        val md = NewsMatchday("espn-1", "Barça v Real Madrid", "Barça v Real Madrid · 21:00 · in 11 h", false, e)
+        val g = CommandCentreRules.newsGlance(NewsPlace(emptyList(), emptyList(), null, md), 4)!!
+        assertEquals(md, g.matchday)
+        assertTrue(g.items.isEmpty())
+    }
 }

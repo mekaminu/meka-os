@@ -15,6 +15,7 @@ struct MekaPalette {
     let approval: Color
     let offline: Color
     let success: Color
+    let barca: Color
 }
 
 extension MekaPalette {
@@ -31,7 +32,8 @@ extension MekaPalette {
         critical: Color(.sRGB, red: 0.9490, green: 0.4627, blue: 0.4196, opacity: 1),
         approval: Color(.sRGB, red: 0.5608, green: 0.7216, blue: 0.9490, opacity: 1),
         offline: Color(.sRGB, red: 0.6314, green: 0.6314, blue: 0.6667, opacity: 1),
-        success: Color(.sRGB, red: 0.5490, green: 0.7882, blue: 0.6275, opacity: 1)
+        success: Color(.sRGB, red: 0.5490, green: 0.7882, blue: 0.6275, opacity: 1),
+        barca: Color(.sRGB, red: 0.8980, green: 0.4784, blue: 0.5961, opacity: 1)
     )
 }
 
@@ -49,7 +51,8 @@ extension MekaPalette {
         critical: Color(.sRGB, red: 0.7059, green: 0.2157, blue: 0.1725, opacity: 1),
         approval: Color(.sRGB, red: 0.1843, green: 0.3725, blue: 0.6588, opacity: 1),
         offline: Color(.sRGB, red: 0.3569, green: 0.3569, blue: 0.3882, opacity: 1),
-        success: Color(.sRGB, red: 0.1804, green: 0.4902, blue: 0.3098, opacity: 1)
+        success: Color(.sRGB, red: 0.1804, green: 0.4902, blue: 0.3098, opacity: 1),
+        barca: Color(.sRGB, red: 0.6471, green: 0.0000, blue: 0.2667, opacity: 1)
     )
 }
 

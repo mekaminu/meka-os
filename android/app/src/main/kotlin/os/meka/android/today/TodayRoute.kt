@@ -59,6 +59,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -82,6 +83,7 @@ import androidx.compose.material3.Text
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import os.meka.android.news.NewsPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.MekaSharedLayout
@@ -149,6 +151,11 @@ fun TodayRoute(
     var showShutdown by rememberSaveable { mutableStateOf(false) }
     var showBrief by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
+    // News over Today from the command centre (news ticker, slice 2): "" = the place, an id = that story; null = closed.
+    var newsOpen by rememberSaveable { mutableStateOf<String?>(null) }
+    var newsShown by remember { mutableStateOf<String?>(null) }
+    if (newsOpen != null) newsShown = newsOpen
+    val newsPlace by core.newsPlace.collectAsState()
     // An event's detail (calendar redesign, slice 3); the last one is kept while the pane leaves.
     var eventOpen by remember { mutableStateOf<CalendarEvent?>(null) }
     var eventShown by remember { mutableStateOf<CalendarEvent?>(null) }
@@ -227,7 +234,12 @@ fun TodayRoute(
                         columns, m,
                         detail = { dm -> DetailPane(selected, conflicts.filter { it.taskId == selected?.id }, actions, dm, onClose = { selectedId = null }) },
                         needsYou = { nm -> CommandNeedsYou(core, stack, moves, nm, openAfterWork = { showAfterWork = true }) },
-                        comingUp = { cm, shared -> ComingUpColumn(calendar, shared, cm, openEvent = { eventOpen = it }, openCalendar = openCalendar) },
+                        comingUp = { cm, shared ->
+                            ComingUpColumn(
+                                calendar, shared, cm, openEvent = { eventOpen = it }, openCalendar = openCalendar,
+                                news = newsPlace, openNews = { id -> newsOpen = id ?: "" },
+                            )
+                        },
                     )
                 },
             )
@@ -246,6 +258,12 @@ fun TodayRoute(
             MekaPane(visible = showBrief) { BriefPane(core, onClose = { showBrief = false }) }
             MekaPane(visible = eventOpen != null) {
                 eventShown?.let { e -> EventDetailPane(core, e, onClose = { eventOpen = null }) }
+            }
+            MekaPane(visible = newsOpen != null) {
+                // A fresh pane each time it opens, so it starts on the story that was tapped.
+                newsShown?.let { start ->
+                    key(start) { NewsPane(core, onClose = { newsOpen = null }, backLabel = "‹ Today", startStoryId = start.ifEmpty { null }) }
+                }
             }
             MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
             MekaPane(visible = showSearch) {

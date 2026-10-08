@@ -59,6 +59,12 @@ data class ComingUp(
     val emptyLine: String?,
 )
 
+/**
+ * News in the command centre (news ticker, slice 2): under Coming up, today's fixture if Barça plays, then a few
+ * headlines taken lane by lane (Barça's top story, AI's, then the next of each). Opens the News place.
+ */
+data class NewsGlance(val matchday: NewsMatchday?, val items: List<NewsItem>)
+
 object CommandCentreRules {
     /** The same breakpoint the shell and Today use for two panes. */
     const val TWO_DP = 600f
@@ -138,6 +144,29 @@ object CommandCentreRules {
             }
             .toList()
         return ComingUp(days, if (days.isEmpty()) NOTHING_AHEAD else null)
+    }
+
+    /** Headlines News shows under Coming up: fewer when it shares its column with Needs you. */
+    const val NEWS_SHARED = 2
+    const val NEWS_ALONE = 4
+
+    /**
+     * News under Coming up: the matchday line and at most [maxItems] stories, the first of each lane in lane order,
+     * then the second of each, and so on. Null when there is nothing to show (no topics, no headlines, no match), so
+     * the column stays calm.
+     */
+    fun newsGlance(place: NewsPlace, maxItems: Int): NewsGlance? {
+        val picked = ArrayList<NewsItem>()
+        var round = 0
+        while (picked.size < maxItems && place.lanes.any { it.items.size > round }) {
+            for (lane in place.lanes) {
+                if (picked.size >= maxItems) break
+                lane.items.getOrNull(round)?.let(picked::add)
+            }
+            round++
+        }
+        if (picked.isEmpty() && place.matchday == null) return null
+        return NewsGlance(place.matchday, picked)
     }
 
     const val ALL_DAY = "All day"

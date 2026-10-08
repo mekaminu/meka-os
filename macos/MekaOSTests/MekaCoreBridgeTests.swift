@@ -203,6 +203,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(place.lanes.isEmpty)
         XCTAssertEqual(place.emptyLine, "No headlines in the last two days · they refresh every hour")
         XCTAssertEqual(place.topics.filter(\.chosen).map(\.id), ["barca", "ai", "top", "world", "technology"])
+        // Slice 2: no fixture today, so no matchday line; nothing to show under Coming up either.
+        XCTAssertNil(place.matchday)
+        XCTAssertNil(CommandCentreRules.shared.newsGlance(place: place, maxItems: CommandCentreRules.shared.NEWS_ALONE))
     }
 
     func testWeeklyReviewThroughTheBridge() async throws {

@@ -209,4 +209,63 @@ class NewsTest {
         assertEquals(listOf("Summit opens", "New phone launched"), brief().headlines.map { it.title })
         assertEquals(NewsTopics.ALL.size, brief().newsTopics.size)
     }
+
+    // News ticker, slice 2: the matchday lead and the Barça lane.
+
+    private val bst = LocalCalendar.fixedOffset(hourMs)
+
+    private fun fixture(id: String, title: String, startMs: Long, provider: String = "fixtures", allDay: Boolean = false) =
+        CalendarEvent(id, title, startMs, startMs + 2 * hourMs, allDay, null, provider, null, "FC Barcelona")
+
+    /** Local [h]:[m] today in the test's time zone. */
+    private fun todayAt(h: Int, m: Int = 0) = bst.toEpochMs(bst.epochDayOf(now), h * 60 + m)
+
+    @Test
+    fun onMatchdayTheNewsPlaceLeadsWithTheFixture() {
+        world.clock.nowMs = todayAt(18, 0)
+        val match = fixture("espn-1", "Barça v Real Madrid", todayAt(21, 0))
+        val md = NewsRules.matchday(listOf(match), now, bst)!!
+        assertEquals("Barça v Real Madrid · 21:00 · in 3 h", md.line)
+        assertEquals("espn-1", md.eventId)
+        assertEquals(match, md.event)
+        assertEquals(false, md.live)
+        assertEquals("Barça v Real Madrid · 21:00 · in 25 min", NewsRules.matchday(listOf(match), todayAt(20, 35), bst)!!.line)
+        assertEquals("Barça v Real Madrid · 21:00 · kicking off", NewsRules.matchday(listOf(match), todayAt(20, 59) + 30_000, bst)!!.line)
+        val on = NewsRules.matchday(listOf(match), todayAt(21, 40), bst)!!
+        assertEquals("Barça v Real Madrid · 21:00 · on now", on.line)
+        assertTrue(on.live)
+        // Gone at the final whistle (the fixture's end).
+        assertNull(NewsRules.matchday(listOf(match), todayAt(23, 0), bst))
+        // Kick-off not set yet.
+        assertEquals("Girona v Barça · today · kick-off TBC",
+            NewsRules.matchday(listOf(fixture("espn-2", "Girona v Barça (kick-off TBC)", todayAt(20, 0))), now, bst)!!.line)
+        // Tomorrow's fixture, another calendar's event or an all-day entry aren't matchday.
+        assertNull(NewsRules.matchday(listOf(fixture("espn-3", "Barça v Sevilla", todayAt(21, 0) + 24 * hourMs)), now, bst))
+        assertNull(NewsRules.matchday(listOf(fixture("g-1", "Watch Barça v Madrid", todayAt(21, 0), provider = "google")), now, bst))
+        assertNull(NewsRules.matchday(listOf(fixture("espn-4", "Barça v Sevilla", bst.epochDayOf(now) * 86_400_000L, allDay = true)), now, bst))
+        // Two today (a friendly and the league): the next one leads.
+        assertEquals("espn-5", NewsRules.matchday(listOf(match, fixture("espn-5", "Barça v Como", todayAt(19, 0))), now, bst)!!.eventId)
+    }
+
+    @Test
+    fun theMatchdayLineShowsOnlyWithBarcaChosenAndTheBarcaLaneIsMarked() {
+        world.clock.nowMs = todayAt(18, 0)
+        val md = NewsRules.matchday(listOf(fixture("espn-1", "Barça v Real Madrid", todayAt(21, 0))), now, bst)
+        val all = listOf(nh("b1", "Pedri fit for the Clásico", "barca", 30, "Sport"), nh("a1", "New model released", "ai", 20, "The Verge"))
+        val withBarca = NewsRules.place(all, choices("barca", "ai"), now, md)
+        assertEquals("Barça v Real Madrid · 21:00 · in 3 h", withBarca.matchday?.line)
+        assertEquals(listOf(true, false), withBarca.lanes.map { it.isBarca })
+        assertNull(NewsRules.place(all, choices("ai"), now, md).matchday)
+        // No headlines yet but a match today: the line still leads.
+        assertEquals(md, NewsRules.place(emptyList(), choices("barca"), now, md).matchday)
+    }
+
+    @Test
+    fun theFacadesNewsPlaceReadsTodaysFixtureAndHidesAHiddenOne() {
+        world.clock.nowMs = todayAt(18, 0)
+        val match = fixture("espn-1", "Barça v Real Madrid", todayAt(21, 0))
+        assertEquals("Barça v Real Madrid · 21:00 · in 3 h", News(m.replica).place(now, listOf(match), bst).matchday?.line)
+        // The facade passes only the events on my day; a hidden fixture isn't among them.
+        assertNull(News(m.replica).place(now, emptyList(), bst).matchday)
+    }
 }

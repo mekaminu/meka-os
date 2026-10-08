@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +43,8 @@ import os.meka.core.domain.ComingUpDay
 import os.meka.core.domain.CommandCentreRules
 import os.meka.core.domain.CommandColumn
 import os.meka.core.domain.NeedsYouStack
+import os.meka.core.domain.NewsGlance
+import os.meka.core.domain.NewsPlace
 import os.meka.core.facade.MekaCore
 
 /**
@@ -88,6 +92,9 @@ internal fun CommandSide(
 /**
  * Coming up: the days after today with something on them, a few lines each ("+2 more"), then "Open Calendar ›".
  * An event opens its detail; a day's heading opens the Calendar tab. Shared with Needs you, it shows fewer days.
+ * Below it, News (news ticker, slice 2): today's match in Barça's colour, the top story of each lane, "Open News ›";
+ * a story opens the News place on that story ([openNews] with its id), the match opens its detail. Left out when
+ * there's nothing to show.
  */
 @Composable
 internal fun ComingUpColumn(
@@ -96,10 +103,15 @@ internal fun ComingUpColumn(
     modifier: Modifier,
     openEvent: (CalendarEvent) -> Unit,
     openCalendar: () -> Unit,
+    news: NewsPlace = NewsPlace.EMPTY,
+    openNews: (String?) -> Unit = {},
 ) {
     val c = remember(view, shared) {
         if (shared) CommandCentreRules.comingUp(view, CommandCentreRules.DAYS_SHARED, CommandCentreRules.LINES_SHARED)
         else CommandCentreRules.comingUp(view, CommandCentreRules.DAYS_ALONE, CommandCentreRules.LINES_ALONE)
+    }
+    val glance = remember(news, shared) {
+        CommandCentreRules.newsGlance(news, if (shared) CommandCentreRules.NEWS_SHARED else CommandCentreRules.NEWS_ALONE)
     }
     LazyColumn(
         modifier,
@@ -124,6 +136,55 @@ internal fun ComingUpColumn(
                     .padding(vertical = MekaSpace.xxs).animateItem().appear(rememberAppearance(1 + c.days.size)),
             )
         }
+        glance?.let { g ->
+            item(key = "news") {
+                NewsGlanceView(g, Modifier.padding(top = MekaSpace.xl).animateItem().appear(rememberAppearance(2 + c.days.size)), openEvent, openNews)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NewsGlanceView(g: NewsGlance, modifier: Modifier, openEvent: (CalendarEvent) -> Unit, openNews: (String?) -> Unit) {
+    val reducedLine = Meka.reducedMotion
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        SectionLabel("News")
+        g.matchday?.let { md ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button, onClickLabel = "Open the match") { openEvent(md.event) }
+                    .padding(vertical = MekaSpace.xxs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.padding(end = MekaSpace.s).size(6.dp).clip(CircleShape).background(Meka.colors.barca))
+                AnimatedContent(
+                    targetState = md.line,
+                    transitionSpec = { fadeIn(MekaMotion.appear(reducedLine)) togetherWith fadeOut(MekaMotion.appear(reducedLine)) },
+                    label = "glance-matchday",
+                ) { line -> Text(line, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+            }
+        }
+        g.items.forEach { n ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button, onClickLabel = "Open story") { openNews(n.id) }
+                    .padding(vertical = MekaSpace.xxs),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Box(Modifier.padding(top = 7.dp, end = MekaSpace.s).size(6.dp).clip(CircleShape)
+                    .background(if (n.topic == "barca") Meka.colors.barca else Meka.colors.textTertiary))
+                Column(Modifier.weight(1f)) {
+                    // News is context: the regular weight.
+                    Text(n.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(n.meta, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1)
+                }
+            }
+        }
+        Text(
+            "Open News ›", style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.padding(top = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.m))
+                .clickable(role = Role.Button) { openNews(null) }.padding(vertical = MekaSpace.xxs),
+        )
     }
 }
 

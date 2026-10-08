@@ -775,7 +775,7 @@ class MekaCore(
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
             news.all(), news.choices(), holidays)
-        _newsPlace.value = news.place(nowMs())
+        _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))
         _review.value = review.view(reviewOffset, all, dayEvents, _goals.value, fasting.ended()) { day ->
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }

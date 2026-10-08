@@ -80,6 +80,7 @@ private fun blend(a: MekaColors, b: MekaColors, t: Float): MekaColors = when (t)
         approval = lerp(a.approval, b.approval, t),
         offline = lerp(a.offline, b.offline, t),
         success = lerp(a.success, b.success, t),
+        barca = lerp(a.barca, b.barca, t),
     )
 }
 

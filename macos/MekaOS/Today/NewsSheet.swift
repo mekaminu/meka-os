@@ -8,6 +8,9 @@ import SwiftUI
 /// Headlines are untrusted (ADR-006): text only.
 /// Motion: the sheet scale-fades; lanes stagger in; the detail pushes in from the right and Previous/Next push the
 /// way you moved with a tick haptic. Reduce Motion: cross-fades.
+/// Slice 2: on matchday the list leads with the fixture in Barça's colour ("Barça v Real Madrid · 21:00 · in 3 h",
+/// cross-fading as time moves on), the Barça lane wears that colour too, and the command centre can open the sheet
+/// straight onto a story (`model.newsStoryId`).
 struct NewsSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -38,6 +41,9 @@ struct NewsSheet: View {
         .padding(MekaSpace.l)
         .frame(width: 520, height: 600, alignment: .top)
         .clipped()
+        .onAppear {
+            if let id = model.newsStoryId { forward = true; openId = id; model.newsStoryId = nil }
+        }
     }
 
     @ViewBuilder
@@ -57,12 +63,22 @@ struct NewsSheet: View {
             .font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(0)
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                if let md = place.matchday {
+                    matchday(md).staggeredAppear(1)
+                }
                 if let line = place.emptyLine {
                     Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).staggeredAppear(1)
                 }
                 ForEach(Array(place.lanes.enumerated()), id: \.element.topicId) { i, lane in
                     VStack(alignment: .leading, spacing: 2) {
-                        SectionLabel(lane.label, palette)
+                        if lane.isBarca {
+                            Text(lane.label.uppercased())
+                                .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                                .foregroundStyle(palette.barca)
+                                .padding(.bottom, MekaSpace.xxs)
+                        } else {
+                            SectionLabel(lane.label, palette)
+                        }
                         if !lane.sources.isEmpty {
                             Text(lane.sources).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         }
@@ -78,6 +94,27 @@ struct NewsSheet: View {
             .animation(MekaMotion.replan(reduced: reduceMotion), value: place.items.map(\.id))
         }
         HStack { Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }
+    }
+
+    /// Matchday: "MATCHDAY" (or "ON NOW") in Barça's colour over the fixture's line; the line cross-fades as it changes.
+    private func matchday(_ md: NewsMatchday) -> some View {
+        HStack(spacing: MekaSpace.s) {
+            Circle().fill(palette.barca).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(md.live ? "ON NOW" : "MATCHDAY")
+                    .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                    .foregroundStyle(palette.barca)
+                Text(md.line).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    .id(md.line)
+                    .transition(.opacity)
+            }
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: md.line)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.s)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .padding(.bottom, MekaSpace.s)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -136,7 +173,7 @@ struct NewsSheet: View {
     }
 }
 
-/// A story: a small dot (accent for Barça), the title in the regular weight (news is context), "Sport · 2 h ago".
+/// A story: a small dot (Barça's colour for Barça), the title in the regular weight (news is context), "Sport · 2 h ago".
 private struct StoryRow: View {
     let item: NewsItem
     let palette: MekaPalette
@@ -145,7 +182,7 @@ private struct StoryRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
-            Circle().fill(item.topic == "barca" ? palette.accent : palette.textTertiary).frame(width: 6, height: 6)
+            Circle().fill(item.topic == "barca" ? palette.barca : palette.textTertiary).frame(width: 6, height: 6)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title).font(MekaType.body)
                     .foregroundStyle(hovering ? palette.accent : palette.textPrimary)

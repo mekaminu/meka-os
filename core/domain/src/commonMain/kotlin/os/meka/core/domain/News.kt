@@ -118,7 +118,16 @@ data class NewsItem(
 )
 
 /** One topic's lane: "Barça" with "From Mundo Deportivo, Sport and Google News". */
-data class NewsLane(val topicId: String, val label: String, val sources: String, val items: List<NewsItem>)
+data class NewsLane(val topicId: String, val label: String, val sources: String, val items: List<NewsItem>) {
+    /** The Barça lane has its own colour (the `barca` token) on both apps. */
+    val isBarca: Boolean get() = topicId == NewsTopics.BARCA.id
+}
+
+/**
+ * On matchday the News place (and later the ticker) leads with the fixture: "Barça v Real Madrid · 21:00 · in 3 h",
+ * "… · on now" once it has kicked off, gone at the final whistle. [event] opens the fixture's detail.
+ */
+data class NewsMatchday(val eventId: String, val title: String, val line: String, val live: Boolean, val event: CalendarEvent)
 
 /** The detail sheet: the story, its place in the run ("3 of 18") and the stories either side (Next/Previous). */
 data class NewsDetail(val item: NewsItem, val position: String, val previousId: String?, val nextId: String?)
@@ -127,7 +136,13 @@ data class NewsDetail(val item: NewsItem, val position: String, val previousId: 
  * The News place (Ask → More → News): the chosen topics as lanes, Barça first, then AI, then the rest in chip order;
  * each story once (in the first lane it fits); [emptyLine] when there's nothing to show and why.
  */
-data class NewsPlace(val lanes: List<NewsLane>, val topics: List<NewsTopicChoice>, val emptyLine: String?) {
+data class NewsPlace(
+    val lanes: List<NewsLane>,
+    val topics: List<NewsTopicChoice>,
+    val emptyLine: String?,
+    /** Today's Barça fixture while it is still to come or on (only with the Barça topic chosen); null otherwise. */
+    val matchday: NewsMatchday? = null,
+) {
     /** Every story in reading order (lane by lane), for Next/Previous. */
     val items: List<NewsItem> get() = lanes.flatMap { it.items }
 
@@ -212,7 +227,7 @@ object NewsRules {
      * The News place: the chosen topics only, the last [MAX_AGE_IN_PLACE_MS], newest first in each lane, each story
      * once across lanes (the same article or the same title from another source), at most [MAX_IN_LANE] per lane.
      */
-    fun place(all: List<Headline>, topics: List<NewsTopicChoice>, nowMs: Long): NewsPlace {
+    fun place(all: List<Headline>, topics: List<NewsTopicChoice>, nowMs: Long, matchday: NewsMatchday? = null): NewsPlace {
         val chosen = topics.filter { it.chosen }.map { it.id }
         val order = LEAD.filter { it in chosen } + chosen.filter { it !in LEAD }
         val seenLinks = HashSet<String>()
@@ -232,7 +247,33 @@ object NewsRules {
             chosen.isEmpty() -> "No topics chosen · pick some below"
             else -> "No headlines in the last two days · they refresh every hour"
         }
-        return NewsPlace(lanes, topics, empty)
+        return NewsPlace(lanes, topics, empty, matchday?.takeIf { NewsTopics.BARCA.id in chosen })
+    }
+
+    /** What the fixtures feed adds to a title whose kick-off isn't set yet. */
+    private const val TBC_SUFFIX = "(kick-off TBC)"
+
+    /**
+     * Today's Barça fixture for the top of the News place: the first fixture (not all-day) that starts today and
+     * hasn't finished. Pass the events shown on my day, so a hidden fixture stays hidden. "Barça v Real Madrid ·
+     * 21:00 · in 3 h" / "· in 25 min" / "· kicking off", "· on now" once it has started, "· today · kick-off TBC".
+     */
+    fun matchday(events: List<CalendarEvent>, nowMs: Long, cal: LocalCalendar): NewsMatchday? {
+        val today = cal.epochDayOf(nowMs)
+        val e = events.filter { it.isFixture && !it.allDay && it.endAtMs > nowMs && cal.epochDayOf(it.startAtMs) == today }
+            .minWithOrNull(compareBy<CalendarEvent> { it.startAtMs }.thenBy { it.id }) ?: return null
+        val tbc = e.title.trimEnd().endsWith(TBC_SUFFIX)
+        val title = e.title.trimEnd().removeSuffix(TBC_SUFFIX).trim().ifEmpty { "Barça" }
+        val live = !tbc && nowMs >= e.startAtMs
+        val line = when {
+            tbc -> "$title · today · kick-off TBC"
+            live -> "$title · ${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))} · on now"
+            else -> {
+                val min = ((e.startAtMs - nowMs) / 60_000L).toInt()
+                "$title · ${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))} · " + if (min <= 0) "kicking off" else "in ${TimelineRules.inLabel(min)}"
+            }
+        }
+        return NewsMatchday(e.id, title, line, live, e)
     }
 
     /** Key that treats the same article in two topic feeds as one. */
@@ -301,7 +342,8 @@ class News(private val replica: Replica) {
     }
 
     /** The News place over the chosen topics. */
-    fun place(nowMs: Long): NewsPlace = NewsRules.place(all(), choices(), nowMs)
+    fun place(nowMs: Long, dayEvents: List<CalendarEvent> = emptyList(), cal: LocalCalendar = LocalCalendar.UTC): NewsPlace =
+        NewsRules.place(all(), choices(), nowMs, NewsRules.matchday(dayEvents, nowMs, cal))
 
     companion object {
         const val ENTITY_ID = "news"
