@@ -422,15 +422,36 @@ class MekaCore(
     /**
      * Slice 2g: tasks Meka changed here while their block was still on its way to the calendar; after each sync the
      * block follows once the calendar has it ([catchUpBlocks]). Kept on this device only, so the other never follows too.
+     * Slice 2h: kept as a device-local value of the store ([WaitingFollowCodec], never synced), read on first use, so a
+     * wait survives closing the app; [saveWaitingFollows] writes it back whenever it changes.
      */
-    private val waitingFollows = HashMap<String, os.meka.core.domain.WaitingFollow>()
+    private val waitingFollows: HashMap<String, os.meka.core.domain.WaitingFollow> by lazy {
+        val saved = runCatching { localStore.transaction { localStore.localValue(WaitingFollowCodec.KEY) } }.getOrNull()
+        savedWaitingFollows = saved
+        WaitingFollowCodec.decode(saved).associateByTo(HashMap()) { it.taskId }
+    }
+    private val localStore = store
+    private var savedWaitingFollows: String? = null
 
-    /** After a sync: blocks that were on their way follow their tasks now that the calendar may have them. */
-    private fun catchUpBlocks() {
+    private fun saveWaitingFollows() {
+        val text = WaitingFollowCodec.encode(waitingFollows.values)
+        if (text == savedWaitingFollows) return
+        runCatching { localStore.transaction { localStore.setLocalValue(WaitingFollowCodec.KEY, text) } }
+            .onSuccess { savedWaitingFollows = text }
+    }
+
+    /**
+     * After a sync: blocks that were on their way follow their tasks now that the calendar may have them. Just after
+     * opening the app nothing has read which accounts allow editing yet, so that is read first; while it can't be
+     * (offline), the waits stay for the next sync rather than being refused and dropped.
+     */
+    private suspend fun catchUpBlocks() {
         if (waitingFollows.isEmpty()) return
         val now = nowMs()
         waitingFollows.values.removeAll { !it.stillWanted(tasks.get(it.taskId), now) }
-        if (waitingFollows.isNotEmpty()) followBlocks(waitingFollows.keys.toList())
+        if (waitingFollows.isNotEmpty() && _editAccounts.value.isEmpty()) connectedAccounts()
+        if (waitingFollows.isNotEmpty() && _editAccounts.value.isNotEmpty()) followBlocks(waitingFollows.keys.toList())
+        saveWaitingFollows()
     }
 
     /**
@@ -490,6 +511,7 @@ class MekaCore(
                 break
             }
         }
+        saveWaitingFollows()
         return lines
     }
 

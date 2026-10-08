@@ -89,3 +89,6 @@ SELECT value FROM replica_meta WHERE key = ?;
 
 metaPut:
 INSERT OR REPLACE INTO replica_meta(key, value) VALUES (?, ?);
+
+metaDelete:
+DELETE FROM replica_meta WHERE key = ?;

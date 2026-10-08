@@ -28,3 +28,7 @@ The device database is the source of truth for the user's immediate experience (
 
 ## Revisit if
 - SQLCipher on Kotlin/Native gets an official package, or the Room KMP story materially improves.
+
+## Addendum (2026-10-08, calendar editing slice 2h): device-local values
+- `ReplicaStore.localValue/setLocalValue` keep small values that belong to one device and must never sync (first use: a calendar follow-up waiting on the device where Meka made the change). The SQL store keeps them in the existing `replica_meta` table under a `local:` prefix, apart from the pull cursor and clock; no schema change, no migration (one new `metaDelete` query). They never enter the op log and are never pushed.
+- They are conveniences only: a rebuilt database starts without them, and anything unreadable decodes to nothing. `ReplicaStoreContract` covers round trip, replace, remove, rollback and separation from the cursor.

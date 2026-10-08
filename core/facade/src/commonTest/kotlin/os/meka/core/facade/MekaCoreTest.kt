@@ -1165,4 +1165,75 @@ class MekaCoreTest {
         fold.rename(taskId, "Write the report")
         assertEquals(listOf("Changing “Write the report” in Google"), fold.calendarEditLines.value.map { it.text })
     }
+
+    @Test
+    fun aBlockStillOnItsWayFollowsAfterTheAppIsClosedAndOpenedAgain() = runTest {
+        val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
+        val store = InMemoryReplicaStore()
+        fun openMeka(seed: Int) = MekaCore(
+            householdId = "hh", deviceId = "android", store = store, transport = server,
+            secureRandom = Random(seed), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        )
+        val fold = openMeka(1)
+        val mac = core("mac")
+        val taskId = fold.addTask("Write report")
+        fold.refreshCalendarAccounts()
+        fold.setPlanToCalendar(true)
+        val plan = fold.planDay()
+        val addId = fold.applyPlan(plan).editIds.single()
+        val p = plan.placements.single()
+        now += 10_000
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        var k = 0
+        fun serverWrite(type: String, id: String, fields: Map<String, os.meka.core.sync.FieldValue>) = fields.forEach { (f, v) ->
+            serverOps.append(os.meka.core.sync.Op("srvrst${k++}", "hh", type, id, f, v, clock.now(), emptyList(), "server"))
+        }
+        serverWrite(os.meka.core.domain.EntityTypes.EVENT_EDIT, addId, mapOf(
+            os.meka.core.domain.EventEditFields.STATUS to os.meka.core.sync.FieldValue.Text("DONE"),
+            os.meka.core.domain.EventEditFields.STATUS_AT to os.meka.core.sync.FieldValue.Int64(now),
+        ))
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        now += 3 * 60_000L
+        fold.rename(taskId, "Write the Q3 report")
+        assertTrue(fold.calendarEditLines.value.isEmpty())
+        assertTrue(fold.syncNow())
+
+        // Meka closes MEKA before the mirror has the block; the wait was kept on the Fold only.
+        fold.close()
+        assertTrue(store.localValue("plan.waitingFollows")!!.contains(taskId))
+        now += 60_000L
+        serverWrite(os.meka.core.domain.EntityTypes.EVENT, "g1", mapOf(
+            os.meka.core.domain.EventFields.TITLE to os.meka.core.sync.FieldValue.Text("Write report"),
+            os.meka.core.domain.EventFields.START_AT to os.meka.core.sync.FieldValue.Int64(p.startMs),
+            os.meka.core.domain.EventFields.END_AT to os.meka.core.sync.FieldValue.Int64(p.endMs),
+            os.meka.core.domain.EventFields.ALL_DAY to os.meka.core.sync.FieldValue.Bool(false),
+            os.meka.core.domain.EventFields.PROVIDER to os.meka.core.sync.FieldValue.Text("google"),
+            os.meka.core.domain.EventFields.ACCOUNT to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
+            os.meka.core.domain.EventFields.CALENDAR to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
+            os.meka.core.domain.EventFields.REMOVED to os.meka.core.sync.FieldValue.Bool(false),
+        ))
+        assertTrue(mac.syncNow())
+        assertTrue(mac.calendarEditLines.value.isEmpty())
+
+        // Opened again: the first sync that brings the block renames it, and the wait is gone.
+        val reopened = openMeka(2)
+        assertTrue(reopened.syncNow())
+        assertEquals(listOf("Changing “Write the Q3 report” in Google"), reopened.calendarEditLines.value.map { it.text })
+        assertEquals(null, store.localValue("plan.waitingFollows"))
+        reopened.close()
+    }
+
+    @Test
+    fun aWaitThatOutlivedItsHalfHourIsDroppedAfterOpeningAgain() = runTest {
+        val store = InMemoryReplicaStore()
+        val w = os.meka.core.domain.WaitingFollow("t1", true, now, "Write report", os.meka.core.domain.Lifecycle.ACTIVE, now)
+        store.transaction { store.setLocalValue("plan.waitingFollows", WaitingFollowCodec.encode(listOf(w))) }
+        val c = MekaCore("hh", "android", store, FaultyTransport(service), Random(3), { TimeZone.of("Europe/London") }, { now })
+        now += os.meka.core.domain.PlanCalendarRules.WAIT_FOLLOW_MS + 1
+        assertTrue(c.syncNow())
+        assertEquals(null, store.localValue("plan.waitingFollows"))
+        c.close()
+    }
 }

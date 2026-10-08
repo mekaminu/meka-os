@@ -18,6 +18,7 @@ object ReplicaStoreContract {
         fieldStateReplacesHeadsAndAccumulatesSuperseded(newStore())
         pendingQueueOrderingAndAck(newStore())
         metaPersists(newStore())
+        localValuesPersistApartFromMeta(newStore())
         transactionRollsBack(newStore())
     }
 
@@ -75,6 +76,24 @@ object ReplicaStoreContract {
         s.transaction { s.setPullCursor(99); s.setClockHighWater(Hlc(5, 1, "dev")) }
         check(s.pullCursor() == 99L, "cursor persists")
         check(s.clockHighWater() == Hlc(5, 1, "dev"), "clock persists")
+    }
+
+    private fun localValuesPersistApartFromMeta(s: ReplicaStore) {
+        check(s.localValue("plan.follow") == null, "a local value starts absent")
+        s.transaction { s.setLocalValue("plan.follow", "[{\"t\":\"héllo\\n\"}]"); s.setLocalValue("pull_cursor", "x") }
+        check(s.localValue("plan.follow") == "[{\"t\":\"héllo\\n\"}]", "a local value round trips")
+        check(s.pullCursor() == 0L, "a local value never touches the cursor")
+        s.transaction { s.setLocalValue("plan.follow", "b") }
+        check(s.localValue("plan.follow") == "b", "a local value is replaced")
+        s.transaction { s.setLocalValue("plan.follow", null) }
+        check(s.localValue("plan.follow") == null, "null removes a local value")
+        check(s.localValue("pull_cursor") == "x", "removing one leaves the others")
+        try {
+            s.transaction { s.setLocalValue("rolled", "v"); throw IllegalStateException("boom") }
+        } catch (_: IllegalStateException) {
+        }
+        check(s.localValue("rolled") == null, "a rolled back local value is absent")
+        check(s.pendingCount() == 0, "local values are never queued for push")
     }
 
     private fun transactionRollsBack(s: ReplicaStore) {

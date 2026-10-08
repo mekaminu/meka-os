@@ -57,6 +57,11 @@ class SqlReplicaStore(driver: SqlDriver) : ReplicaStore {
     override fun clockHighWater(): Hlc = q.metaGet(META_CLOCK).executeAsOneOrNull()?.let(Hlc::decode) ?: Hlc.ZERO
     override fun setClockHighWater(hlc: Hlc) { q.metaPut(META_CLOCK, hlc.encode()) }
 
+    override fun localValue(key: String): String? = q.metaGet(LOCAL_PREFIX + key).executeAsOneOrNull()
+    override fun setLocalValue(key: String, value: String?) {
+        if (value == null) q.metaDelete(LOCAL_PREFIX + key) else q.metaPut(LOCAL_PREFIX + key, value)
+    }
+
     /** Column order of `op_log` (all op queries select exactly `op_log.*`), via SQLDelight's mapper overloads. */
     @Suppress("UNUSED_PARAMETER")
     private fun rowToOp(
@@ -72,6 +77,8 @@ class SqlReplicaStore(driver: SqlDriver) : ReplicaStore {
     private companion object {
         const val META_CURSOR = "pull_cursor"
         const val META_CLOCK = "clock_high_water"
+        /** Device-local values live in `replica_meta` under this prefix, apart from the cursor and clock. */
+        const val LOCAL_PREFIX = "local:"
 
         fun splitBase(s: String) = if (s.isEmpty()) emptyList() else s.split(',')
 

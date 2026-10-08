@@ -28,6 +28,13 @@ interface ReplicaStore {
 
     fun clockHighWater(): Hlc
     fun setClockHighWater(hlc: Hlc)
+
+    /**
+     * Device-local values that never sync and never enter the op log (e.g. a calendar follow-up waiting on this
+     * device only, slice 2h). Null when absent; setting null removes it. Kept apart from the cursor and clock.
+     */
+    fun localValue(key: String): String?
+    fun setLocalValue(key: String, value: String?)
 }
 
 class InMemoryReplicaStore : ReplicaStore {
@@ -37,6 +44,7 @@ class InMemoryReplicaStore : ReplicaStore {
     private val byEntity = HashMap<EntityRef, MutableSet<String>>()
     private var cursor = 0L
     private var highWater = Hlc.ZERO
+    private val locals = HashMap<String, String>()
 
     // Snapshot-based rollback keeps transaction semantics honest in tests.
     override fun <T> transaction(block: () -> T): T {
@@ -46,6 +54,7 @@ class InMemoryReplicaStore : ReplicaStore {
         val snapEntity = byEntity.mapValuesTo(HashMap()) { it.value.toMutableSet() }
         val snapCursor = cursor
         val snapHw = highWater
+        val snapLocals = HashMap(locals)
         try {
             return block()
         } catch (t: Throwable) {
@@ -55,6 +64,7 @@ class InMemoryReplicaStore : ReplicaStore {
             byEntity.clear(); byEntity.putAll(snapEntity)
             cursor = snapCursor
             highWater = snapHw
+            locals.clear(); locals.putAll(snapLocals)
             throw t
         }
     }
@@ -86,6 +96,9 @@ class InMemoryReplicaStore : ReplicaStore {
 
     override fun clockHighWater() = highWater
     override fun setClockHighWater(hlc: Hlc) { highWater = hlc }
+
+    override fun localValue(key: String) = locals[key]
+    override fun setLocalValue(key: String, value: String?) { if (value == null) locals.remove(key) else locals[key] = value }
 
     /** Test helper: total ops in the log. */
     val opCount: Int get() = ops.size
