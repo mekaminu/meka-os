@@ -184,6 +184,14 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
 
 - [~] Day ring hidden on the closed Fold (Meka, 2026-10-09 00:04: "I don't see anything"). Root cause: Today hid the ring whenever the single-pane now card was shown (`now == null` guard), i.e. on the closed Fold — the screen Meka uses — so none of the ring's motion was ever visible to him. Fixed interactively (ring on every screen, 168 dp closed); **not compiled locally**: next run checks CI for it, makes sure the closed-Fold layout reads well (ring, tiles, now card, Up next not crowded), adds a UI test "Today on a 412 dp-wide screen shows the Day ring", and from now on every motion item is checked on the closed-Fold width as well as open.
 
+- [ ] Fold review 2026-10-09 00:10 (Meka saw the Day ring unfolded; screenshots open + closed). Decided:
+  1. **Ring placement: in the header, beside the greeting** — not a big block between the ticker and Up next (it pushed the day down and left space empty). Open Fold / Mac: greeting + date + links on the left, the ring on the right (≈ 150 dp), live tiles move under the ticker as a slim row. Closed Fold: greeting left, a compact ring right (≈ 96 dp: ring, hand, now dot, arcs; the centre text is dropped at this size — free time stays in the timeline's now line). The first-open moment still draws it in place.
+  2. **Brighter ring:** track stroke 1.5 → 3 dp at 55 % brass (was ~28 % grey), edge glow 0.6→1.0 brass with a soft outer blur (8 dp), second hand 2 → 2.5 dp with a brighter tip dot and a longer comet tail (60°), hour marks at 50 % opacity. Check both themes; Light uses the darker brass.
+  3. **Up next is the same card on both screens:** the open Fold shows a huge bold title with a bare circle; use the closed Fold's card (UP NEXT label, title, "Anytime today", Done · Tomorrow · Open) everywhere, and lighten the title from the heavy display weight to a semibold ~22 sp (also on closed) so it isn't shouting.
+  4. **Hide holiday calendars by default:** Google's "Holidays in United States" (Columbus Day) and similar subscribed holiday calendars are hidden from Today/Coming up/brief by default (UK bank holidays come from GOV.UK); a switch in Calendars brings one back.
+  5. **Merge duplicate events:** the same event on several calendars (e.g. "Training" 18:00–19:00 twice + "Training - 3G") — same start/end and same or containing title → one row with the calendars listed; different times stay separate.
+  6. **Empty Needs you column on the open Fold:** when nothing needs Meka, the middle column shows the breathing check ring + "Nothing needs you", then useful content: today's habits (tick inline), Waiting on, and the next renewals — not a blank column.
+
 ## Milestones
 
 ### M0 · Foundation — done
