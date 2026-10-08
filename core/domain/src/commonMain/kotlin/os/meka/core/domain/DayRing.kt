@@ -77,6 +77,8 @@ enum class DayRingPlay {
  * - Free time counts what's left of the waking day ([DAY_START_MIN]–[DAY_END_MIN]) from now, less every arc's time
  *   (overlaps counted once). After [DAY_END_MIN] the day's free time is used up and the centre says "Evening".
  * - Hidden events and calendars hidden from Today never reach it: it is built from Today's own events.
+ * - Work hours on a work day ([WorkHours], Fold review 2026-10-08) aren't free time either: "1 h 50 free" on a work day
+ *   counts only the time outside work. Work isn't drawn as an arc (it isn't something booked).
  */
 object DayRingRules {
     const val DAY_START_MIN = 7 * 60
@@ -95,6 +97,8 @@ object DayRingRules {
         nowMs: Long,
         today: DayWindow,
         calendar: LocalCalendar,
+        /** Today's work blocks ([WorkHours.blocks]): not free, not arcs. */
+        work: List<WorkBlock> = emptyList(),
     ): DayRing {
         fun minute(ms: Long): Int = when {
             ms <= today.startMs -> 0
@@ -117,16 +121,17 @@ object DayRingRules {
             }
         }
         val arcs = items.sortedWith(compareBy<Item> { it.arc.startMinute }.thenBy { !it.event }.thenBy { it.arc.id }).map { it.arc }
-        return DayRing(arcs, now, freeMinutes(arcs, now), toDo)
+        val busy = work.map { minute(it.startMs) to minute(it.endMs) }
+        return DayRing(arcs, now, freeMinutes(arcs, now, busy), toDo)
     }
 
-    /** Minutes of the waking day left from [nowMinute] that no arc covers. */
-    fun freeMinutes(arcs: List<DayArc>, nowMinute: Int): Int {
+    /** Minutes of the waking day left from [nowMinute] that no arc (and no [busy] stretch, such as work) covers. */
+    fun freeMinutes(arcs: List<DayArc>, nowMinute: Int, busy: List<Pair<Int, Int>> = emptyList()): Int {
         val from = maxOf(nowMinute, DAY_START_MIN)
         if (from >= DAY_END_MIN) return 0
         var free = 0
         var cursor = from
-        arcs.map { maxOf(it.startMinute, from) to minOf(it.endMinute, DAY_END_MIN) }
+        (arcs.map { it.startMinute to it.endMinute } + busy).map { maxOf(it.first, from) to minOf(it.second, DAY_END_MIN) }
             .filter { it.second > it.first }
             .sortedBy { it.first }
             .forEach { (s, e) ->

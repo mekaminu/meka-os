@@ -75,7 +75,10 @@ object TodayProjection {
         calendar: LocalCalendar = LocalCalendar.fixedOffset(today.utcOffsetMs),
         /** Today's booked sessions still to come or on now ([SessionsView.todayBlocks]), for the timeline. */
         sessions: List<BookedSession> = emptyList(),
+        /** Work hours ([WorkHours]): a quiet block on the timeline and not free time on the ring. Null: none shown. */
+        work: WorkHours? = null,
     ): Today {
+        val workBlocks = work?.blocks(today.epochDay, calendar).orEmpty()
         val open = tasks.filter { (it.lifecycle == Lifecycle.ACTIVE || it.lifecycle == Lifecycle.INBOX) && !it.waitsForItsDay(today.epochDay) }
 
         val needs = buildList {
@@ -111,6 +114,7 @@ object TodayProjection {
             today = today,
             calendar = calendar,
             sessions = sessions,
+            work = workBlocks,
         )
         val ring = DayRingRules.build(
             planned = (needs.map { it.task } + listOfNotNull(upNext) + yourDay).filter { it.scheduledAtMs != null },
@@ -120,6 +124,7 @@ object TodayProjection {
             nowMs = nowMs,
             today = today,
             calendar = calendar,
+            work = workBlocks,
         )
         return Today(needs, upNext, yourDay, doneToday, todaysEvents, timeline, ring)
     }

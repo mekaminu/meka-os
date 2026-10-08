@@ -874,7 +874,10 @@ class MekaCore(
         }
         _search.value = runSearch(all)
         _activity.value = activity.view()
-        _calendar.value = CalendarAgenda.build(all, allEvents, nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden)
+        _calendar.value = CalendarAgenda.build(
+            all, allEvents, nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden,
+            work = os.meka.core.domain.WorkHours.of(workState, holidays, todayEpochDay()),
+        )
         _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars)
         _afterWork.value = held.summary()
         _notifyPreview.value = Governor.preview(currentNotices(), notifySettings, nowMs(), ZoneCalendar(timeZone))
@@ -913,7 +916,10 @@ class MekaCore(
     private fun project(all: List<os.meka.core.domain.Task> = tasks.all(), dayEvents: List<os.meka.core.domain.CalendarEvent> = visibleEvents(all)): Today {
         val now = nowMs()
         val day = dayWindow(now)
-        return TodayProjection.project(all, now, day, dayEvents, ZoneCalendar(timeZone), _sessions.value.todayBlocks(day.epochDay, now))
+        return TodayProjection.project(
+            all, now, day, dayEvents, ZoneCalendar(timeZone), _sessions.value.todayBlocks(day.epochDay, now),
+            work = work.hours(localClock(), day.epochDay),
+        )
     }
 
     /** Calendar events minus those hidden from my day. */

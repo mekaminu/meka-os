@@ -192,6 +192,12 @@ private struct AgendaSectionView: View {
                 AllDayChips(events: section.allDay, palette: palette)
                     .padding(.leading, TimelineMetrics.timeColumn + MekaSpace.xs)
             }
+            // Work hours (Fold review 2026-10-08): "Work 09:00–17:30" as the quiet band Today uses.
+            if let work = section.workLine {
+                WorkBand(title: work, detail: nil, running: false, palette: palette)
+                    .padding(.leading, TimelineMetrics.timeColumn + MekaSpace.xs)
+                    .padding(.bottom, MekaSpace.xxs)
+            }
             ForEach(section.ended, id: \.id) { r in AgendaEventRow(row: r, past: true, palette: palette) }
             ForEach(section.rows, id: \.id) { r in
                 switch r.kind {

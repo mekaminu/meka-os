@@ -258,6 +258,55 @@ object WorkModeRules {
     }
 }
 
+/** One stretch of work on a day, clipped to that day: "09:00–17:30". */
+data class WorkBlock(val startMs: Long, val endMs: Long, val startMinute: Int, val endMinute: Int) {
+    /** "09:00–17:30" (the shift's own times, even when a night shift is clipped at midnight). */
+    val label: String get() = "${LocalClock.formatMinute(startMinute)}–${LocalClock.formatMinute(endMinute)}"
+}
+
+/**
+ * Work hours as Today and the Calendar tab show them (Fold review 2026-10-08: Today said "10 h free" and Calendar
+ * "Nothing planned" on a work day). Non-AI, pure, unit-tested.
+ *
+ * - A work day is one the schedule has a shift starting on, bank holidays excluded ([WorkModeRules.isWorkDay]).
+ * - [offDay] is the day a manual "Work off" is in force during the shift (a sick day): that day's block goes.
+ * - A night shift shows on the day it starts (until midnight) and its tail on the next morning.
+ * - Work isn't an event: Today shows it as a quiet block and counts free time outside it; the Calendar tab says
+ *   "Work 09:00–17:30" on each work day.
+ */
+data class WorkHours(
+    val schedule: WorkSchedule,
+    val holidays: HolidayCalendar = HolidayCalendar.NONE,
+    val offDay: Long? = null,
+) {
+    fun isWorkDay(epochDay: Long): Boolean = epochDay != offDay && WorkModeRules.isWorkDay(schedule, holidays, epochDay)
+
+    /** "Work 09:00–17:30" on a work day; null otherwise. */
+    fun line(epochDay: Long): String? =
+        if (isWorkDay(epochDay)) "$TITLE ${LocalClock.formatMinute(schedule.startMinute)}–${LocalClock.formatMinute(schedule.endMinute)}" else null
+
+    /** The work on [epochDay] (its window from [calendar]), in time order: at most a night shift's tail and a shift. */
+    fun blocks(epochDay: Long, calendar: LocalCalendar): List<WorkBlock> = buildList {
+        val dayStart = calendar.toEpochMs(epochDay, 0)
+        val dayEnd = calendar.toEpochMs(epochDay + 1, 0)
+        if (schedule.crossesMidnight && schedule.endMinute > 0 && isWorkDay(epochDay - 1)) {
+            add(WorkBlock(dayStart, calendar.toEpochMs(epochDay, schedule.endMinute), schedule.startMinute, schedule.endMinute))
+        }
+        if (isWorkDay(epochDay)) {
+            val end = if (schedule.crossesMidnight) dayEnd else calendar.toEpochMs(epochDay, schedule.endMinute)
+            add(WorkBlock(calendar.toEpochMs(epochDay, schedule.startMinute), end, schedule.startMinute, schedule.endMinute))
+        }
+    }
+
+    companion object {
+        const val TITLE = "Work"
+
+        /** From the work-mode state: an active manual "Work off" during today's shift takes today's block away. */
+        fun of(state: WorkModeState, holidays: HolidayCalendar, todayEpochDay: Long): WorkHours =
+            WorkHours(state.schedule, holidays, offDay = todayEpochDay.takeIf { state.switchedManually && !state.atWork })
+    }
+}
+
 /** Reads and writes the synced work-mode entity. */
 class WorkMode(
     private val replica: Replica,
@@ -273,6 +322,9 @@ class WorkMode(
     /** [epochDay] is today's local date; with it, bank holidays are days off. */
     fun state(clock: LocalClock, epochDay: Long? = null): WorkModeState =
         WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, holidays()).copy(callAssistant = callAssistant())
+
+    /** Work hours for Today and the Calendar tab, with today's manual "Work off" (a sick day) taken into account. */
+    fun hours(clock: LocalClock, epochDay: Long): WorkHours = WorkHours.of(state(clock, epochDay), holidays(), epochDay)
 
     fun callAssistant(): Boolean = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_ASSISTANT)?.boolOrNull == true
 

@@ -252,6 +252,7 @@ struct TodayView: View {
         case .gap: GapRow(row: r, palette: palette)
         case .now: NowLine(row: r, palette: palette)
         case .session: SessionTimelineRow(row: r, palette: palette)
+        case .work: WorkTimelineRow(row: r, palette: palette)
         default: EmptyView()
         }
     }

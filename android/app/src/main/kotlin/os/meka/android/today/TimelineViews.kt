@@ -107,6 +107,40 @@ internal fun SessionTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Work hours (Fold review 2026-10-08): a quiet band, not an event. Time on the left, then a hairline-bordered band with
+ * a thin bar and "Work"; while at work the bar is lit and "Now · until 17:30" sits beside it in the accent colour.
+ * No taps. Motion: it glides with the other rows and leaves once work is over (animateItem); reduced motion cross-fades.
+ */
+@Composable
+internal fun WorkTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs)
+            .semantics(mergeDescendants = true) { contentDescription = listOfNotNull(r.title, r.time, r.detail).joinToString(", ") },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TimeColumn(r.time, past = true)
+        WorkBand(r.title, r.detail, r.running, Modifier.weight(1f))
+    }
+}
+
+/** The work band itself; the Calendar tab uses it for "Work 09:00–17:30" on each work day. */
+@Composable
+internal fun WorkBand(title: String, detail: String?, running: Boolean, modifier: Modifier = Modifier) {
+    Row(
+        modifier.clip(RoundedCornerShape(MekaRadius.s)).border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.s))
+            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(2.dp).height(14.dp).clip(RoundedCornerShape(1.dp)).background(if (running) Meka.colors.accent else Meka.colors.textTertiary))
+        Spacer(Modifier.width(MekaSpace.s))
+        Text(title, style = MekaType.caption, color = Meka.colors.textSecondary)
+        detail?.let {
+            Text(" · $it", style = MekaType.caption, color = if (running) Meka.colors.accent else Meka.colors.textTertiary)
+        }
+    }
+}
+
 /** A free stretch: "1 h 30 free", quiet. */
 @Composable
 internal fun GapRow(r: TimelineRow, modifier: Modifier = Modifier) {

@@ -6,6 +6,12 @@ enum class TimelineKind {
 
     /** A booked session (the Gym, [SessionRules]) still to come or on now; Today's session card answers it. */
     SESSION,
+
+    /**
+     * Work hours (Fold review 2026-10-08): a quiet block "Work 09:00–17:30", not an event. It takes its time out of the
+     * free gaps and leaves the timeline once it's over.
+     */
+    WORK,
 }
 
 /**
@@ -14,18 +20,21 @@ enum class TimelineKind {
  */
 data class TimelineRow(
     /**
-     * Stable across re-projections: "e-<event>", "t-<task>", "s-<habit>" (a booked session), "gap-<the row after it>"
-     * (stable while now moves), "now".
+     * Stable across re-projections: "e-<event>", "t-<task>", "s-<habit>" (a booked session), "w-<start minute>" (work),
+     * "gap-<the row after it>" (stable while now moves), "now".
      */
     val id: String,
     val kind: TimelineKind,
-    /** "09:30–10:00" · "Until 10:00" (started before today) · "14:00" (a planned task) · "11:00" (a gap) · "14:32" (now). */
+    /**
+     * "09:30–10:00" · "Until 10:00" (started before today) · "14:00" (a planned task) · "11:00" (a gap) · "14:32" (now) ·
+     * "09:00–17:30" (work).
+     */
     val time: String,
-    /** The event or task title; "1 h 30 free" for a gap; "Now" for the now line. */
+    /** The event or task title; "1 h 30 free" / "1 h free before work" / "30 min free after work" for a gap; "Now"; "Work". */
     val title: String,
     /**
      * "Camp Nou · Outlook" for an event; "30 min · 1/3 · ↻ Every weekday" for a task; "Leave by 17:30" or
-     * "Now · until 18:45" for a session; null when there's nothing to say.
+     * "Now · until 18:45" for a session; "Now · until 17:30" while at work; null when there's nothing to say.
      */
     val detail: String?,
     val task: Task?,
@@ -108,6 +117,10 @@ data class DayTimeline(
  * - Today's booked sessions still to come or on now (the Gym, [SessionRules]) sit in time order like events, "Gym · Push"
  *   with "Leave by 17:30" (or "Now · until 18:45"), and take their time out of the free gaps. Once a session is over
  *   (or answered) it leaves the timeline: Today's session card asks "Did you go?".
+ * - Work hours on a work day ([WorkHours], Fold review 2026-10-08) sit in time order as one quiet "Work" row
+ *   ("09:00–17:30"); they take their time out of the free gaps (an event during work makes no gap), the gap before
+ *   reads "1 h free before work" and the one after "30 min free after work". Once work is over the row leaves (it
+ *   isn't folded into "earlier"). Work isn't offered to Up next and doesn't count as an event ahead.
  */
 object TimelineRules {
     const val MIN_GAP_MIN = 30
@@ -123,14 +136,21 @@ object TimelineRules {
         today: DayWindow,
         calendar: LocalCalendar,
         sessions: List<BookedSession> = emptyList(),
+        /** Today's work blocks ([WorkHours.blocks]); none on a day off. */
+        work: List<WorkBlock> = emptyList(),
     ): DayTimeline {
         fun hhmm(ms: Long) = LocalClock.formatMinute(calendar.minuteOfDay(ms))
 
         val dayEvents = events.filter { it.overlaps(today) }
         val allDay = dayEvents.filter { it.allDay }.sortedBy { it.title }
 
-        /** [isEvent]: an event or session, which folds once ended, comes first at the same minute and takes time from gaps. */
-        data class Item(val row: TimelineRow, val start: Long, val end: Long, val isEvent: Boolean)
+        /**
+         * [isEvent]: an event, session or work, which comes first at the same minute and takes time from gaps; events
+         * and sessions fold once ended, work just leaves.
+         */
+        data class Item(val row: TimelineRow, val start: Long, val end: Long, val isEvent: Boolean) {
+            val isWork: Boolean get() = row.kind == TimelineKind.WORK
+        }
         val items = buildList {
             dayEvents.filter { !it.allDay }.forEach { e ->
                 val start = maxOf(e.startAtMs, today.startMs)
@@ -154,27 +174,42 @@ object TimelineRules {
                     null, null, running, s.startMs, s)
                 add(Item(row, s.startMs, s.endMs, true))
             }
-        }.sortedWith(compareBy<Item> { it.start }.thenBy { !it.isEvent }.thenBy { it.row.title })
+            work.filter { it.endMs > today.startMs && it.startMs < today.endMs && it.endMs > it.startMs }.forEach { w ->
+                val running = w.startMs <= nowMs && w.endMs > nowMs
+                val row = TimelineRow("w-${w.startMinute}", TimelineKind.WORK, w.label, WorkHours.TITLE,
+                    if (running) "Now · until ${LocalClock.formatMinute(w.endMinute)}" else null, null, null, running, w.startMs)
+                add(Item(row, w.startMs, w.endMs, true))
+            }
+        }.sortedWith(compareBy<Item> { it.start }.thenBy { !it.isEvent }.thenBy { it.isWork }.thenBy { it.row.title })
 
-        val ended = items.filter { it.isEvent && it.end <= nowMs }
+        val ended = items.filter { it.isEvent && !it.isWork && it.end <= nowMs }
         val endedIds = ended.map { it.row.id }.toSet()
-        val live = items.filter { it.row.id !in endedIds }
+        val live = items.filter { it.row.id !in endedIds && !(it.isWork && it.end <= nowMs) }
 
         val rows = buildList {
             val started = live.filter { it.start <= nowMs }
             val ahead = live.filter { it.start > nowMs }
             started.forEach { add(it.row) }
-            if (items.isNotEmpty()) {
+            if (items.any { !it.isWork } || live.isNotEmpty()) {
                 add(TimelineRow("now", TimelineKind.NOW, hhmm(nowMs), "Now", null, null, null, false, nowMs))
             }
-            // Free time counts from now, past anything still running.
-            var cursor = (started.filter { it.isEvent }.map { it.end } + nowMs).max()
+            // Free time counts from now, past anything still running (work included).
+            val runningEnds = started.filter { it.isEvent }.map { it.end }
+            var cursor = (runningEnds + nowMs).max()
+            // The gap after work says so: it starts where work ended.
+            var afterWork = started.any { it.isWork && it.end == cursor }
             ahead.forEach { item ->
                 val free = ((item.start - cursor) / MIN_MS).toInt()
                 if (free >= MIN_GAP_MIN) {
-                    add(TimelineRow("gap-" + item.row.id, TimelineKind.GAP, hhmm(cursor), freeLabel(free), null, null, null, false, cursor))
+                    val label = when {
+                        item.isWork -> "${freeLabel(free)} before work"
+                        afterWork -> "${freeLabel(free)} after work"
+                        else -> freeLabel(free)
+                    }
+                    add(TimelineRow("gap-" + item.row.id, TimelineKind.GAP, hhmm(cursor), label, null, null, null, false, cursor))
                 }
                 add(item.row)
+                if (item.end >= cursor) afterWork = item.isWork
                 cursor = maxOf(cursor, item.end)
             }
         }

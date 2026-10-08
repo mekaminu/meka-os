@@ -592,6 +592,7 @@ private fun TodayPane(
                         TimelineKind.GAP -> GapRow(r, m)
                         TimelineKind.NOW -> NowLine(r, m)
                         TimelineKind.SESSION -> SessionTimelineRow(r, m)
+                        TimelineKind.WORK -> WorkTimelineRow(r, m)
                     }
                 }
                 item(key = "s-day") { Spacer(Modifier.height(MekaSpace.l)) }

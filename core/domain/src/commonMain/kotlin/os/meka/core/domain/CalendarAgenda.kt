@@ -14,7 +14,10 @@ data class DayPill(
     val dots: Int,
     /** The agenda section a tap jumps to (the day, or the free stretch it sits in); null outside the window. */
     val sectionId: String?,
-    /** Screen readers: "Thursday 8 October, 2 events, 1 task" · "Saturday 10 October, nothing planned". */
+    /**
+     * Screen readers: "Thursday 8 October, 2 events, 1 task" · "Friday 9 October, work 09:00–17:30" · "Saturday 10
+     * October, nothing planned".
+     */
     val accessibilityLabel: String,
 )
 
@@ -56,6 +59,8 @@ data class AgendaSection(
     val emptyLine: String?,
     /** Events hidden from my day (calendar actions), listed quietly at the bottom of the day with "Show". */
     val hidden: List<CalendarEvent> = emptyList(),
+    /** "Work 09:00–17:30" on a work day (Fold review 2026-10-08), shown as a quiet line above the day's rows; else null. */
+    val workLine: String? = null,
 ) {
     /** "1 hidden from your day" · "2 hidden from your day"; null when none. */
     val hiddenLabel: String? get() = if (hidden.isEmpty()) null else "${hidden.size} hidden from your day"
@@ -94,6 +99,8 @@ data class CalendarView(
  * - Fixtures (the fixtures feed) are marked so they stand out.
  * - Week strips run Monday–Sunday from the week holding today; each day pill has up to 3 busy dots and jumps to its
  *   section. Days before today or past the window are dimmed.
+ * - Work days ([WorkHours], bank holidays off) carry "Work 09:00–17:30" and so are never folded away as "Nothing
+ *   planned"; work isn't counted in the busy dots or the counts.
  */
 object CalendarAgenda {
     const val DAYS = 30
@@ -107,6 +114,7 @@ object CalendarAgenda {
         calendar: LocalCalendar,
         days: Int = DAYS,
         hidden: Set<String> = emptySet(),
+        work: WorkHours? = null,
     ): CalendarView {
         val today = calendar.epochDayOf(nowMs)
         val lastDay = today + days - 1
@@ -179,7 +187,8 @@ object CalendarAgenda {
             while (i < dayData.size) {
                 val day = dayData[i]
                 val d = day.epochDay
-                if (day.count > 0 || day.hidden.isNotEmpty() || d <= today + 1) {
+                val workLine = work?.line(d)
+                if (day.count > 0 || day.hidden.isNotEmpty() || workLine != null || d <= today + 1) {
                     val named = d == today || d == today + 1
                     add(
                         AgendaSection(
@@ -192,18 +201,20 @@ object CalendarAgenda {
                                 today + 1 -> "Tomorrow"
                                 else -> CivilDate.shortLabel(d)
                             },
-                            subtitle = if (named) CivilDate.longLabel(d) else countsLine(day.events, day.fixtures, day.tasks) ?: "Nothing planned",
+                            subtitle = if (named) CivilDate.longLabel(d)
+                            else countsLine(day.events, day.fixtures, day.tasks) ?: if (workLine != null) null else "Nothing planned",
                             allDay = day.allDay,
                             ended = day.ended,
                             rows = day.rows,
-                            emptyLine = if (day.count == 0 && named) "Nothing planned" else null,
+                            emptyLine = if (day.count == 0 && named && workLine == null) "Nothing planned" else null,
                             hidden = day.hidden,
+                            workLine = workLine,
                         ),
                     )
                     i++
                 } else {
                     var j = i
-                    while (j + 1 < dayData.size && dayData[j + 1].count == 0 && dayData[j + 1].hidden.isEmpty()) j++
+                    while (j + 1 < dayData.size && dayData[j + 1].count == 0 && dayData[j + 1].hidden.isEmpty() && work?.line(dayData[j + 1].epochDay) == null) j++
                     val last = dayData[j].epochDay
                     add(AgendaSection("f-$d", AgendaKind.FREE, d, last, spanLabel(d, last), "Nothing planned", emptyList(), emptyList(), emptyList(), null))
                     i = j + 1
@@ -238,9 +249,12 @@ object CalendarAgenda {
                         accessibilityLabel = buildString {
                             append(CivilDate.longLabel(d))
                             if (d == today) append(", today")
+                            val workLine = data?.let { work?.line(d) }
                             when {
                                 data == null -> {}
+                                counts == null && workLine != null -> append(", ").append(workLine.lowercase())
                                 counts == null -> append(", nothing planned")
+                                workLine != null -> append(", ").append(workLine.lowercase()).append(", ").append(counts)
                                 else -> append(", ").append(counts)
                             }
                         },

@@ -230,6 +230,50 @@ struct GapRow: View {
     }
 }
 
+/// Work hours (Fold review 2026-10-08): a quiet band, not an event. Time on the left, then a hairline-bordered band with a
+/// thin bar and "Work"; while at work the bar is lit and "Now · until 17:30" sits beside it in the accent colour. No
+/// clicks. It glides with the other rows and leaves once work is over; reduced motion cross-fades.
+struct WorkTimelineRow: View {
+    let row: TimelineRow
+    let palette: MekaPalette
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text(row.time).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textTertiary)
+                .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
+            WorkBand(title: row.title, detail: row.detail, running: row.running, palette: palette)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, MekaSpace.xxs)
+        .padding(.horizontal, MekaSpace.xs)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([row.title, row.time, row.detail].compactMap { $0 }.joined(separator: ", "))
+    }
+}
+
+/// The work band itself; the Calendar tab uses it for "Work 09:00–17:30" on each work day.
+struct WorkBand: View {
+    let title: String
+    let detail: String?
+    let running: Bool
+    let palette: MekaPalette
+
+    var body: some View {
+        HStack(spacing: MekaSpace.s) {
+            RoundedRectangle(cornerRadius: 1).fill(running ? palette.accent : palette.textTertiary).frame(width: 2, height: 12)
+            HStack(spacing: 0) {
+                Text(title).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                if let detail {
+                    Text(" · \(detail)").font(MekaType.caption).foregroundStyle(running ? palette.accent : palette.textTertiary)
+                }
+            }
+        }
+        .padding(.horizontal, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xxs)
+        .overlay(RoundedRectangle(cornerRadius: MekaRadius.s).strokeBorder(palette.hairline, lineWidth: 1))
+    }
+}
+
 /// The now line: a breathing accent dot, the time, and a hairline across.
 struct NowLine: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
