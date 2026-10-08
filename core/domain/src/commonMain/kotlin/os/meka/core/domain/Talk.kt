@@ -256,6 +256,15 @@ object TalkRules {
     private fun clean(title: String) = speakable(title).trimEnd('.')
 }
 
+/**
+ * What a spoken yes came to ([TalkEffect.Do] run through `MekaCore.doTalk`): the proposals [done] with the undo bar's
+ * [lines] and how to take each back ([undos]), and how many [failed] (the task went meanwhile).
+ */
+data class TalkDid(val done: List<AskProposal>, val lines: List<String>, val undos: List<AskUndo>, val failed: Int) {
+    /** One undo bar for the lot: "Added “Milk” · Set a timer for 20 min", or why nothing was done. */
+    val barLine: String get() = lines.joinToString(" · ").ifEmpty { TalkRules.NOT_HEARD_CARD }
+}
+
 /** Where a conversation is. */
 enum class TalkPhase { LISTENING, THINKING, DOING, SPEAKING, ENDED }
 
@@ -367,4 +376,87 @@ object TalkFlow {
         TalkStep(s.copy(phase = TalkPhase.SPEAKING), listOf(TalkEffect.Speak(text)))
 
     private fun end(s: TalkSession): TalkStep = TalkStep(s.copy(phase = TalkPhase.ENDED), listOf(TalkEffect.End))
+}
+
+// ---- On the device: the voice, the orb and what goes wrong (build plan V1, voice slice 2; non-AI, pure) ----
+
+/**
+ * A text-to-speech voice the device offers, reduced to what choosing one needs: its [language] tag ("en-GB"), a
+ * [quality] rank where higher is better (Android's `Voice.QUALITY_*`, the Mac's default · enhanced · premium), whether
+ * it [needsNetwork] (the text would be sent away to be spoken) and whether it is [installed].
+ */
+data class VoiceCandidate(val name: String, val language: String, val quality: Int, val needsNetwork: Boolean = false, val installed: Boolean = true)
+
+/** Why MEKA can't listen, said on screen (not aloud) and the conversation ends. */
+enum class TalkProblem(val line: String) {
+    NO_PERMISSION("MEKA needs the microphone to hear you. Allow it when asked, or in Settings → Apps → Meka → Permissions."),
+    NO_ON_DEVICE("This phone can't recognise speech on the device, so MEKA won't listen: nothing is sent away to be transcribed."),
+    LANGUAGE_MISSING("This phone is fetching English for speech on the device. Try again in a minute."),
+    BUSY("The microphone is busy. Try again in a moment."),
+    FAILED("Couldn't hear that. Tap the mic to try again."),
+}
+
+object TalkVoice {
+    /** Languages in the order MEKA prefers them (Meka is in the UK). */
+    val PREFERRED = listOf("en-GB", "en-IE", "en-AU", "en-US")
+
+    /**
+     * The voice MEKA speaks with: only installed voices that speak on the device (none that sends the text away),
+     * English only, British first ([PREFERRED], then any other English), the highest [VoiceCandidate.quality], then by
+     * name so both runs agree. Null when none fits: the engine's own default is used.
+     */
+    fun best(voices: List<VoiceCandidate>): VoiceCandidate? {
+        val usable = voices.filter { it.installed && !it.needsNetwork && tag(it.language).startsWith("en") }
+        fun rank(v: VoiceCandidate): Int = PREFERRED.indexOfFirst { tag(it) == tag(v.language) }.let { if (it < 0) PREFERRED.size else it }
+        return usable.sortedWith(compareBy<VoiceCandidate>({ rank(it) }, { -it.quality }, { it.name })).firstOrNull()
+    }
+
+    /** "en_GB" and "EN-gb" read as "en-gb". */
+    private fun tag(language: String) = language.replace('_', '-').lowercase()
+}
+
+/**
+ * The voice orb's numbers (catalogue "Assistant · Talk"), the same on the Fold and the Mac: it breathes while idle or
+ * thinking, swells with Meka's voice while listening and ripples while MEKA speaks.
+ */
+object TalkOrb {
+    /** The quietest and loudest speech levels the recogniser reports (Android's `onRmsChanged`, in dB). */
+    const val QUIET_DB = -2f
+    const val LOUD_DB = 10f
+    /** How much bigger the orb grows at full voice. */
+    const val SWELL = 0.22f
+    /** One ripple's life while MEKA speaks, and how many are out at once. */
+    const val RIPPLE_MS = 1_400L
+    const val RIPPLES = 3
+
+    /** A reported level in dB as 0 (silence) … 1 (loud). */
+    fun level(db: Float): Float = ((db - QUIET_DB) / (LOUD_DB - QUIET_DB)).coerceIn(0f, 1f)
+
+    /** The shown level moves towards [target]: quickly up as Meka speaks, slowly down after (so it doesn't flicker). */
+    fun smooth(shown: Float, target: Float): Float {
+        val k = if (target > shown) 0.6f else 0.15f
+        return (shown + (target - shown) * k).coerceIn(0f, 1f)
+    }
+
+    /** The orb's size: swelling with [level] while listening, else with the breath (0 → 1, the empty states' breath). */
+    fun scale(phase: TalkPhase, level: Float, breath: Float): Float = when (phase) {
+        TalkPhase.LISTENING -> 1f + SWELL * level.coerceIn(0f, 1f)
+        TalkPhase.SPEAKING -> 1f
+        else -> 0.92f + 0.08f * breath.coerceIn(0f, 1f)
+    }
+
+    /** Ripple [i] (0 until [RIPPLES]) at [elapsedMs] while speaking: how far out it is, 0 (at the orb) → 1 (gone). */
+    fun ripple(i: Int, elapsedMs: Long): Float {
+        val offset = RIPPLE_MS * i / RIPPLES
+        return ((elapsedMs.coerceAtLeast(0L) + offset) % RIPPLE_MS).toFloat() / RIPPLE_MS
+    }
+
+    /** What the orb says under it (and to screen readers). */
+    fun label(phase: TalkPhase): String = when (phase) {
+        TalkPhase.LISTENING -> "Listening…"
+        TalkPhase.THINKING -> "Thinking…"
+        TalkPhase.DOING -> "Doing it…"
+        TalkPhase.SPEAKING -> "Tap to interrupt"
+        TalkPhase.ENDED -> "Tap the mic to talk"
+    }
 }

@@ -23,7 +23,12 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -36,7 +41,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -59,6 +69,8 @@ import os.meka.core.domain.AiStatusView
 import os.meka.core.domain.AskCard
 import os.meka.core.domain.AskOutcome
 import os.meka.core.domain.AskRules
+import os.meka.core.domain.TalkOrb
+import os.meka.core.domain.TalkPhase
 import os.meka.core.facade.MekaCore
 
 /** What Ask is showing under its field: nothing yet, MEKA thinking, an answer, or why there is none. */
@@ -75,6 +87,11 @@ private sealed interface AskShown {
  * shows the question, a thinking shimmer, then the answer's lines fading in one after another and up to three cards
  * rising under them; a card does nothing until tapped (light haptic), then leaves and the undo bar rises with what it
  * did and Undo. Motion per the catalogue's Assistant row; reduced motion cross-fades.
+ *
+ * Talk to MEKA (V1 voice slice 2): the mic beside the field starts a spoken conversation ([TalkController]; the
+ * microphone permission is asked the first time). The voice orb takes the field's place under it, the live transcript
+ * types in, MEKA's answers show here as typed ones do (their cards can still be tapped) and are said aloud; a spoken
+ * yes folds the cards away with one undo bar. Tapping the orb while MEKA speaks interrupts it; otherwise it ends.
  */
 @Composable
 fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modifier: Modifier = Modifier) {
@@ -89,6 +106,40 @@ fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modi
     LaunchedEffect(asks) { status = core.aiStatus() }
     val canAsk = status?.canAsk != false
     val reduced = Meka.reducedMotion
+    val context = LocalContext.current
+    val talk = remember {
+        TalkController(
+            context, core, scope,
+            onAnswer = { q, out ->
+                done = emptySet()
+                shown = AskShown.Answer(q, out, asks + 1)
+                asks += 1
+            },
+            onDid = { did, cards ->
+                val answer = (shown as? AskShown.Answer)?.outcome as? AskOutcome.Answered
+                val idx = cards.mapNotNull { c -> answer?.answer?.cards?.indexOf(c)?.takeIf { it >= 0 } }.toSet()
+                done = done + idx
+                if (did.done.isNotEmpty()) haptics.light()
+                val undos = did.undos
+                undo.show(did.barLine, if (undos.isEmpty()) null else suspend { core.undoTalk(undos); done = done - idx })
+            },
+        )
+    }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_STOP) talk.stop() }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs); talk.release() }
+    }
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) talk.start() else talk.refused()
+    }
+    fun startTalking() {
+        keyboard?.hide()
+        haptics.light()
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) talk.start()
+        else askMic.launch(Manifest.permission.RECORD_AUDIO)
+    }
 
     fun ask() {
         val q = AskRules.question(text) ?: return
@@ -106,6 +157,7 @@ fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modi
 
     fun tap(i: Int, card: AskCard) {
         haptics.light()
+        talk.cardTapped(card)
         done = done + i
         scope.launch {
             try {
@@ -147,6 +199,13 @@ fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modi
                 }
             }
             if (canAsk) {
+                // The mic: starts talking (or ends it), the orb's resting look.
+                VoiceOrb(
+                    TalkPhase.ENDED, 0f, size = 44.dp,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                        .clickable(role = Role.Button) { if (talk.active) { haptics.tick(); talk.stop() } else startTalking() }
+                        .semantics { contentDescription = if (talk.active) "Stop talking to MEKA" else "Talk to MEKA" },
+                )
                 val sendable = AskRules.question(text) != null && shown !is AskShown.Thinking
                 val bg by animateColorAsState(if (sendable) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.themeBlend(reduced), label = "ask-send")
                 Text("Ask", style = MekaType.itemMeta, color = if (sendable) Meka.colors.onAccent else Meka.colors.textTertiary,
@@ -170,6 +229,14 @@ fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modi
                 "MEKA's AI · " + (s?.line ?: "Checking…"),
                 style = MekaType.caption, color = if (s?.lit == true) Meka.colors.accent else Meka.colors.textTertiary,
             )
+        }
+        // Talking: the orb, what it's doing, the live transcript and what MEKA said; or why it can't listen.
+        AnimatedVisibility(
+            visible = talk.active || talk.problem != null,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            TalkPanel(talk) { haptics.tick(); talk.tapOrb() }
         }
         Column(
             Modifier.fillMaxWidth().padding(top = MekaSpace.m, bottom = MekaSpace.l)
@@ -210,6 +277,38 @@ fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modi
                     }
                 }
             }
+        }
+    }
+}
+
+/** The orb (tap: interrupt while MEKA speaks, else end), its line, the live transcript and MEKA's words. */
+@Composable
+private fun TalkPanel(talk: TalkController, onOrb: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(
+        Modifier.fillMaxWidth().padding(top = MekaSpace.m).semantics { liveRegion = LiveRegionMode.Polite },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        VoiceOrb(
+            talk.phase, talk.level,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                .clickable(enabled = talk.active, role = Role.Button, onClick = onOrb)
+                .semantics { contentDescription = "MEKA, ${TalkOrb.label(talk.phase)}" },
+        )
+        AnimatedContent(
+            targetState = talk.problem?.line ?: TalkOrb.label(talk.phase),
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "talk-line",
+        ) { line ->
+            Text(line, style = MekaType.caption, color = if (talk.problem != null) Meka.colors.accent else Meka.colors.textTertiary)
+        }
+        if (talk.heard.isNotBlank() && talk.problem == null) {
+            Text(talk.heard, style = MekaType.body, color = if (talk.phase == TalkPhase.LISTENING) Meka.colors.textSecondary else Meka.colors.textPrimary,
+                maxLines = 3, modifier = Modifier.animateContentSize(MekaMotion.expand(reduced)))
+        }
+        if (talk.said.isNotBlank() && talk.phase == TalkPhase.SPEAKING) {
+            Text(talk.said, style = MekaType.itemMeta, color = Meka.colors.accent, maxLines = 4)
         }
     }
 }

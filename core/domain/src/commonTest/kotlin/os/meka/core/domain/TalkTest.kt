@@ -160,4 +160,61 @@ class TalkTest {
         assertEquals(listOf("2", "3", "4"), c.turns.single().done)
         assertEquals(Conversation(), Conversation().did(listOf("x")))
     }
+
+    @Test
+    fun theVoiceIsBritishOnTheDeviceAndTheBestInstalled() {
+        val voices = listOf(
+            VoiceCandidate("en-us-x-iol-local", "en-US", 400),
+            VoiceCandidate("en-gb-x-gbd-network", "en-GB", 500, needsNetwork = true),
+            VoiceCandidate("en-gb-x-rjs-local", "en_GB", 300),
+            VoiceCandidate("en-gb-x-gba-local", "en-GB", 400),
+            VoiceCandidate("en-gb-x-gbc-local", "en-GB", 500, installed = false),
+            VoiceCandidate("fr-fr-x-local", "fr-FR", 500),
+        )
+        // Never one that sends the text away or isn't installed; British first, then quality.
+        assertEquals("en-gb-x-gba-local", TalkVoice.best(voices)?.name)
+        assertEquals("en-us-x-iol-local", TalkVoice.best(voices.filter { !it.language.lowercase().replace('_', '-').startsWith("en-gb") || it.needsNetwork })?.name)
+        // Any other English after the preferred ones; nothing English means the engine's default.
+        assertEquals("en-in", TalkVoice.best(listOf(VoiceCandidate("en-in", "en-IN", 500), VoiceCandidate("fr", "fr-FR", 500)))?.name)
+        assertEquals(null, TalkVoice.best(listOf(VoiceCandidate("fr", "fr-FR", 500), VoiceCandidate("gb-net", "en-GB", 500, needsNetwork = true))))
+        // A tie on quality goes by name, so it's the same voice every time.
+        assertEquals("a", TalkVoice.best(listOf(VoiceCandidate("b", "en-GB", 400), VoiceCandidate("a", "en-GB", 400)))?.name)
+    }
+
+    private fun near(expected: Float, actual: Float) = assertTrue(kotlin.math.abs(expected - actual) < 1e-3f, "$expected ≠ $actual")
+
+    @Test
+    fun theOrbSwellsWithTheVoiceBreathesWhileThinkingAndRipplesWhileSpeaking() {
+        assertEquals(0f, TalkOrb.level(-5f))
+        assertEquals(0f, TalkOrb.level(-2f))
+        assertEquals(0.5f, TalkOrb.level(4f))
+        assertEquals(1f, TalkOrb.level(12f))
+        // Up quickly, down slowly.
+        near(0.6f, TalkOrb.smooth(0f, 1f))
+        near(0.85f, TalkOrb.smooth(1f, 0f))
+        assertEquals(1f, TalkOrb.scale(TalkPhase.LISTENING, 0f, 0.3f))
+        near(1.22f, TalkOrb.scale(TalkPhase.LISTENING, 1f, 0.3f))
+        assertEquals(1f, TalkOrb.scale(TalkPhase.SPEAKING, 1f, 0f))
+        near(0.92f, TalkOrb.scale(TalkPhase.THINKING, 1f, 0f))
+        near(1f, TalkOrb.scale(TalkPhase.ENDED, 0f, 1f))
+        // Three ripples spaced evenly through one life, looping.
+        assertEquals(0f, TalkOrb.ripple(0, 0))
+        near(1f / 3, TalkOrb.ripple(1, 0))
+        near(2f / 3, TalkOrb.ripple(2, 0))
+        near(0.5f, TalkOrb.ripple(0, 700))
+        assertEquals(0f, TalkOrb.ripple(0, TalkOrb.RIPPLE_MS))
+        assertEquals("Listening…", TalkOrb.label(TalkPhase.LISTENING))
+        assertEquals("Tap to interrupt", TalkOrb.label(TalkPhase.SPEAKING))
+        assertEquals("Tap the mic to talk", TalkOrb.label(TalkPhase.ENDED))
+    }
+
+    @Test
+    fun aSpokenYesIsOneUndoBarAndTheProblemsSayWhatToDo() {
+        val did = TalkDid(listOf(add.proposal, timer.proposal), listOf("Added “Call the dentist”", "Timer · 20 min"), emptyList(), 0)
+        assertEquals("Added “Call the dentist” · Timer · 20 min", did.barLine)
+        assertEquals(TalkRules.NOT_HEARD_CARD, TalkDid(emptyList(), emptyList(), emptyList(), 1).barLine)
+        // Nothing is ever sent away to be transcribed, and the line says so.
+        assertTrue(TalkProblem.NO_ON_DEVICE.line.contains("nothing is sent away"))
+        assertTrue(TalkProblem.NO_PERMISSION.line.contains("microphone"))
+    }
 }

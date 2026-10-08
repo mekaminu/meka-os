@@ -231,4 +231,27 @@ class AskMekaFacadeTest {
         assertEquals(TalkPhase.ENDED, step.session.phase)
         assertEquals(TalkEffect.End, step.effects.single())
     }
+
+    @Test
+    fun aSpokenYesDoesEveryCardItCanAndOneUndoTakesThemAllBack() = runTest {
+        val c = core()
+        val id = c.addTask("Book dentist")
+        val today = c.todayEpochDay()
+        val move = AskRules.cardOf(AskProposal.MoveTask(id, "Book dentist", today + 1, 9 * 60), today)
+        val add = AskRules.cardOf(AskProposal.AddTask("Milk", null, null), today)
+        val gone = AskRules.cardOf(AskProposal.CompleteTask("nope", "Gone"), today)
+        val did = c.doTalk(listOf(move, gone, add))
+        assertEquals(listOf(move.proposal, add.proposal), did.done)
+        assertEquals(1, did.failed)
+        assertEquals(2, did.undos.size)
+        fun open() = (listOfNotNull(c.today.value.upNext) + c.today.value.yourDay).map { it.title }
+        assertTrue("Milk" in open())
+        assertFalse("Book dentist" in open())
+        // The undo bar's Undo takes both back, newest first.
+        assertTrue(c.undoTalk(did.undos))
+        assertFalse("Milk" in open())
+        assertTrue("Book dentist" in open())
+        // Again, nothing is left to take back.
+        assertFalse(c.undoTalk(did.undos))
+    }
 }

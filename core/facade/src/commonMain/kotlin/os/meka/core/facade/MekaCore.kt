@@ -1263,6 +1263,32 @@ class MekaCore(
     }
 
     /**
+     * Talk to MEKA (voice slice 2): a spoken yes does the confirmed [cards] one after another exactly as tapping each
+     * would ([doAsk]); one that can't be done any more is counted as failed and the rest still go. Never throws for a
+     * card that can't be done.
+     */
+    suspend fun doTalk(cards: List<os.meka.core.domain.AskCard>): os.meka.core.domain.TalkDid {
+        val done = mutableListOf<os.meka.core.domain.AskProposal>()
+        val lines = mutableListOf<String>()
+        val undos = mutableListOf<os.meka.core.domain.AskUndo>()
+        var failed = 0
+        cards.forEach { card ->
+            try {
+                val d = doAsk(card)
+                done += card.proposal; lines += d.line; d.undo?.let { undos += it }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { failed++ }
+        }
+        return os.meka.core.domain.TalkDid(done, lines, undos, failed)
+    }
+
+    /** The undo bar's Undo after a spoken yes: takes each change back, newest first. True when anything was undone. */
+    suspend fun undoTalk(undos: List<os.meka.core.domain.AskUndo>): Boolean {
+        var any = false
+        undos.asReversed().forEach { if (undoAsk(it)) any = true }
+        return any
+    }
+
+    /**
      * What Ask says about MEKA's AI under its field ([os.meka.core.domain.AskRules.statusView]): on with the month's
      * spend, off, used up or not answering, from the server's `POST /v1/ai/status`. Never throws.
      */

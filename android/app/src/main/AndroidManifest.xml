@@ -23,6 +23,19 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Talk to MEKA (V1 voice slice 2): asked for the first time Meka taps the mic. Speech is recognised on the
+         device only (SpeechRecognizer's on-device recogniser); nothing is recorded, kept or sent away as audio. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Talk to MEKA: see the speech recogniser and the text-to-speech engine on Android 11+ (package visibility). -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 
     <application
         android:name=".MekaApplication"
