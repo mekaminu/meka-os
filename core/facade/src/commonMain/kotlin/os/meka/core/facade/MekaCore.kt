@@ -1178,13 +1178,24 @@ class MekaCore(
      * engine as a suggestion. A card does nothing until Meka taps it ([doAsk]). Never throws for a missing answer:
      * AI off, the month's budget spent, offline and failures come back as [os.meka.core.domain.AskOutcome.Unavailable].
      */
-    suspend fun askMeka(question: String): os.meka.core.domain.AskOutcome {
+    suspend fun askMeka(question: String): os.meka.core.domain.AskOutcome = ask(question, emptyList(), voice = false)
+
+    /**
+     * Talk to MEKA (build plan V1, slice 1): asks [question] like [askMeka], with the conversation so far ([history],
+     * oldest first; only the last [os.meka.core.domain.TalkRules.MAX_HISTORY] are sent) so "move it to Friday" means
+     * something, and asks for an answer that reads well aloud. The cards are checked exactly as for typed questions;
+     * a spoken yes runs them through [doAsk] like a tap ([os.meka.core.domain.TalkFlow]).
+     */
+    suspend fun talk(question: String, history: List<os.meka.core.domain.TalkTurn>): os.meka.core.domain.AskOutcome =
+        ask(question, history.takeLast(os.meka.core.domain.TalkRules.MAX_HISTORY), voice = true)
+
+    private suspend fun ask(question: String, history: List<os.meka.core.domain.TalkTurn>, voice: Boolean): os.meka.core.domain.AskOutcome {
         val q = os.meka.core.domain.AskRules.question(question)
             ?: return os.meka.core.domain.AskOutcome.Unavailable("Ask something first")
         val api = aiApi ?: return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
         val cal = ZoneCalendar(timeZone)
         val context = onCore { os.meka.core.domain.AskRules.context(_today.value, nowMs(), cal) }
-        val reply = try { api.ask(q, context) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+        val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
         }
         return when (reply) {
@@ -1262,6 +1273,13 @@ class MekaCore(
         } ?: return os.meka.core.domain.AskRules.STATUS_UNKNOWN
         return os.meka.core.domain.AskRules.statusView(r.state, r.reason, r.spentCents, r.budgetCents, r.level)
     }
+
+    /** An earlier exchange trimmed to what the server accepts (question, answer, at most three confirmed lines). */
+    private fun sendable(t: os.meka.core.domain.TalkTurn) = os.meka.core.domain.TalkTurn(
+        os.meka.core.domain.AskRules.question(t.question) ?: "…",
+        t.answer.take(os.meka.core.domain.AskRules.MAX_ANSWER),
+        t.done.takeLast(os.meka.core.domain.TalkRules.MAX_DONE).map { it.take(os.meka.core.domain.AskRules.MAX_LINE) },
+    )
 
     /** ADR-006: a model's proposal is a suggestion the policy engine must allow; it can never run without a tap. */
     private fun askAllowed(p: os.meka.core.domain.AskProposal, untrusted: Boolean): Boolean {

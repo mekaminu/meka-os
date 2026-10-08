@@ -34,10 +34,32 @@ object AskCodec {
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** Exchanges sent with a question in a conversation (Talk to MEKA); more are refused. */
+    const val MAX_HISTORY = 6
+    /** Lines of what Meka confirmed after one answer. */
+    const val MAX_DONE = 3
+
     data class Item(val ref: String, val kind: String, val line: String)
 
-    /** [date] is the device's local ISO date, [now] its readable "Thursday 8 October 2026 · 17:05". */
-    data class Request(val question: String, val date: String, val now: String, val items: List<Item>)
+    /**
+     * An earlier exchange in a conversation: Meka's [question] (at most [MAX_QUESTION]), MEKA's [answer] (at most
+     * [MAX_ANSWER]) and what Meka confirmed after it ([done]: at most [MAX_DONE] lines of at most [MAX_LINE]).
+     */
+    data class Turn(val question: String, val answer: String, val done: List<String> = emptyList())
+
+    /**
+     * [date] is the device's local ISO date, [now] its readable "Thursday 8 October 2026 · 17:05". [history] is the
+     * conversation so far (oldest first, empty for a one-off question; left out of the JSON when empty, so an older
+     * server reads it as before), [voice] says the answer will be spoken.
+     */
+    data class Request(
+        val question: String,
+        val date: String,
+        val now: String,
+        val items: List<Item>,
+        val history: List<Turn> = emptyList(),
+        val voice: Boolean = false,
+    )
 
     /** A proposal as the model wrote it: every field optional, strings at most [MAX_FIELD] characters. */
     data class Action(
@@ -66,6 +88,18 @@ object AskCodec {
         put("date", r.date)
         put("now", r.now)
         putJsonArray("items") { r.items.forEach { i -> addJsonObject { put("ref", i.ref); put("kind", i.kind); put("line", i.line) } } }
+        if (r.history.isNotEmpty()) {
+            putJsonArray("history") {
+                r.history.forEach { t ->
+                    addJsonObject {
+                        put("q", t.question)
+                        put("a", t.answer)
+                        if (t.done.isNotEmpty()) putJsonArray("done") { t.done.forEach { add(JsonPrimitive(it)) } }
+                    }
+                }
+            }
+        }
+        if (r.voice) put("voice", true)
     }.toString()
 
     fun decodeRequest(body: String): Request = wrap("ask request") {
@@ -86,7 +120,22 @@ object AskCodec {
             }
         }
         require(items.size <= MAX_ITEMS) { "items" }
-        Request(q, date, now, items)
+        val history = (o["history"] as? JsonArray ?: JsonArray(emptyList())).map { e ->
+            val t = e.jsonObject
+            val done = (t["done"] as? JsonArray ?: JsonArray(emptyList())).map { d ->
+                ((d as? JsonPrimitive)?.takeIf { it.isString }?.content ?: throw IllegalArgumentException("done")).also {
+                    require(it.length <= MAX_LINE) { "done" }
+                }
+            }
+            Turn(t.str("q"), t.str("a"), done).also {
+                require(it.question.isNotBlank() && it.question.length <= MAX_QUESTION) { "history question" }
+                require(it.answer.length <= MAX_ANSWER) { "history answer" }
+                require(done.size <= MAX_DONE) { "done" }
+            }
+        }
+        require(history.size <= MAX_HISTORY) { "history" }
+        val voice = (o["voice"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+        Request(q, date, now, items, history, voice)
     }
 
     fun encodeResponse(r: Response): String = buildJsonObject {
@@ -121,6 +170,12 @@ object AskCodec {
         if (o == null || words == null) return text.trim().take(MAX_ANSWER) to emptyList()
         return words.trim().take(MAX_ANSWER) to actionsOf(o)
     }
+
+    /** An earlier answer as the model wrote it, for the conversation's turns: `{"answer":"…","actions":[]}`. */
+    fun encodeModelAnswer(answer: String): String = buildJsonObject {
+        put("answer", answer)
+        putJsonArray("actions") {}
+    }.toString()
 
     /** The server's AI status (`POST /v1/ai/status`): on/off/failing, why, and the month's spend when it meters. */
     data class Status(val state: String, val reason: String?, val spentCents: Long?, val budgetCents: Long?, val level: String?)

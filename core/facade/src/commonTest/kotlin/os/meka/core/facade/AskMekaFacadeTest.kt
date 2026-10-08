@@ -9,6 +9,10 @@ import os.meka.core.domain.AskRawAction
 import os.meka.core.domain.AskRules
 import os.meka.core.domain.AskUndo
 import os.meka.core.domain.AiStatusView
+import os.meka.core.domain.TalkEffect
+import os.meka.core.domain.TalkFlow
+import os.meka.core.domain.TalkPhase
+import os.meka.core.domain.TalkTurn
 import os.meka.core.domain.ValidationException
 import os.meka.core.sync.InMemoryReplicaStore
 import os.meka.core.sync.InMemoryServerOpStore
@@ -32,6 +36,7 @@ class AskMekaFacadeTest {
     private class Server(service: SyncService) : SyncTransport, AiApi {
         private val sync = os.meka.core.testing.FaultyTransport(service)
         val asked = mutableListOf<Pair<String, AskContext>>()
+        val histories = mutableListOf<Pair<List<TalkTurn>, Boolean>>()
         var reply: AskReply = AskReply.Answered("Nothing yet.", emptyList())
         var down = false
         var status: AiStatusReply? = AiStatusReply("on", null, 120, 2000, "ok")
@@ -41,8 +46,9 @@ class AskMekaFacadeTest {
         }
         override suspend fun push(request: PushRequest) = sync.push(request)
         override suspend fun pull(request: PullRequest) = sync.pull(request)
-        override suspend fun ask(question: String, context: AskContext): AskReply {
+        override suspend fun ask(question: String, context: AskContext, history: List<TalkTurn>, voice: Boolean): AskReply {
             asked += question to context
+            histories += history to voice
             if (down) throw TransportException("offline")
             return reply
         }
@@ -181,5 +187,48 @@ class AskMekaFacadeTest {
         server.down = true
         assertEquals(AskRules.STATUS_UNKNOWN, c.aiStatus())
         assertEquals(AskRules.STATUS_NOT_CONNECTED, core(transport = null).aiStatus())
+    }
+
+    @Test
+    fun talkingSendsTheConversationAndASpokenYesDoesWhatATapWould() = runTest {
+        val c = core()
+        val id = c.addTask("Book dentist")
+        // A one-off question sends no history and isn't spoken.
+        c.askMeka("what's left?")
+        assertEquals(emptyList<TalkTurn>() to false, server.histories.last())
+
+        var step = TalkFlow.start()
+        step = TalkFlow.heard(step.session, "What's on today?")
+        val ask1 = assertIs<TalkEffect.Ask>(step.effects.single())
+        server.reply = AskReply.Answered("Just the dentist to book.", emptyList())
+        step = TalkFlow.answered(step.session, ask1.question, c.talk(ask1.question, ask1.history), c.todayEpochDay())
+        assertEquals(TalkEffect.Speak("Just the dentist to book."), step.effects.single())
+        assertEquals(emptyList<TalkTurn>() to true, server.histories.last())
+        step = TalkFlow.spoke(step.session)
+
+        step = TalkFlow.heard(step.session, "move it to tomorrow at nine")
+        val ask2 = assertIs<TalkEffect.Ask>(step.effects.single())
+        server.reply = AskReply.Answered("Tomorrow at 9.", listOf(AskRawAction("move_task", ref = "t1", date = "2026-10-09", time = "09:00")))
+        step = TalkFlow.answered(step.session, ask2.question, c.talk(ask2.question, ask2.history), c.todayEpochDay())
+        // The first exchange went with the second question.
+        assertEquals(listOf(TalkTurn("What's on today?", "Just the dentist to book.")) to true, server.histories.last())
+        assertEquals(TalkEffect.Speak("Tomorrow at 9. Shall I move Book dentist to tomorrow at 09:00?"), step.effects.single())
+        // Nothing moved until the yes.
+        assertEquals(id, c.today.value.upNext?.id)
+        step = TalkFlow.spoke(step.session)
+        step = TalkFlow.heard(step.session, "yes please")
+        val todo = assertIs<TalkEffect.Do>(step.effects.single())
+        val done = todo.cards.map { c.doAsk(it) }
+        assertTrue((listOfNotNull(c.today.value.upNext) + c.today.value.yourDay).none { it.id == id })
+        step = TalkFlow.did(step.session, todo.cards.map { it.proposal }, done.map { it.line }, 0, c.todayEpochDay())
+        assertEquals(TalkEffect.Speak("Moved Book dentist to tomorrow at 09:00. Anything else?"), step.effects.single())
+        assertEquals(listOf("Moved “Book dentist” to Tomorrow · 09:00"), step.session.conversation.turns.last().done)
+        // The undo chip still takes it back.
+        assertTrue(c.undoAsk(done.single().undo!!))
+
+        step = TalkFlow.spoke(step.session)
+        step = TalkFlow.heard(step.session, "that's all, thanks")
+        assertEquals(TalkPhase.ENDED, step.session.phase)
+        assertEquals(TalkEffect.End, step.effects.single())
     }
 }

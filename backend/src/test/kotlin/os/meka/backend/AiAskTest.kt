@@ -69,6 +69,36 @@ class AiAskTest {
     }
 
     @Test
+    fun aConversationGoesAsAlternatingTurnsWithTheDayOnlyInTheLatest() {
+        val model = FakeModel(answered("""{"answer":"Done.","actions":[]}"""))
+        val talk = request.copy(
+            question = "and the CR to Friday",
+            history = listOf(
+                AskCodec.Turn("What's on today?", "Just the dentist <to book>."),
+                AskCodec.Turn("Move it to tomorrow", "Tomorrow at 9.", listOf("Moved “Book dentist” to Tomorrow · 09:00")),
+            ),
+            voice = true,
+        )
+        AskService(model).ask(talk)
+        val sent = model.asked.single()
+        assertEquals(
+            listOf(ModelTurn.Role.USER, ModelTurn.Role.ASSISTANT, ModelTurn.Role.USER, ModelTurn.Role.ASSISTANT, ModelTurn.Role.USER),
+            sent.turns.map { it.role },
+        )
+        assertEquals("Question: What's on today?", sent.turns[0].text)
+        assertEquals("""{"answer":"Just the dentist ‹to book›.","actions":[]}""", sent.turns[1].text)
+        val last = sent.turns.last().text
+        assertTrue(last.startsWith("Since then Meka did: Moved “Book dentist” to Tomorrow · 09:00\n<today"), last)
+        assertTrue(last.endsWith("Question: and the CR to Friday"), last)
+        assertEquals(1, sent.turns.count { "<today" in it.text })
+        assertTrue("answer will be spoken" in sent.system)
+        // A one-off question is the single turn it always was, without the voice line.
+        AskService(model).ask(request)
+        assertEquals(1, model.asked.last().turns.size)
+        assertFalse("answer will be spoken" in model.asked.last().system)
+    }
+
+    @Test
     fun offOverBudgetAndFailuresSayWhy() {
         assertEquals(AskCodec.Response.OFF, AskService(null).ask(request).state)
         assertEquals(AskCodec.Response.OFF, AskService(FakeModel(ModelOutcome.Off)).ask(request).state)

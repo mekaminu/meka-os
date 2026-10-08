@@ -75,7 +75,13 @@ data class AiStatusReply(val state: String, val reason: String?, val spentCents:
 
 /** Ask MEKA (V1 AI layer, slice 3), available once the device is connected. */
 interface AiApi {
-    suspend fun ask(question: String, context: os.meka.core.domain.AskContext): AskReply
+    /** [history]: the conversation so far (Talk to MEKA), oldest first; [voice]: the answer will be spoken. */
+    suspend fun ask(
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn> = emptyList(),
+        voice: Boolean = false,
+    ): AskReply
     /** Whether MEKA's AI is on and the month's spend; null when the server has no AI layer. */
     suspend fun aiStatus(): AiStatusReply? = null
 }
@@ -206,9 +212,18 @@ class HttpSyncTransport(
         }
     }
 
-    override suspend fun ask(question: String, context: os.meka.core.domain.AskContext): AskReply {
+    override suspend fun ask(
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn>,
+        voice: Boolean,
+    ): AskReply {
         val body = AskCodec.encodeRequest(
-            AskCodec.Request(question, context.dateIso, context.nowLine, context.items.map { AskCodec.Item(it.ref, it.kind.wire, it.line) }),
+            AskCodec.Request(
+                question, context.dateIso, context.nowLine, context.items.map { AskCodec.Item(it.ref, it.kind.wire, it.line) },
+                history = history.map { AskCodec.Turn(it.question, it.answer, it.done) },
+                voice = voice,
+            ),
         )
         prepare() // the ask route requires the device's signing key on the server
         val resp = send("/v1/ai/ask", body)

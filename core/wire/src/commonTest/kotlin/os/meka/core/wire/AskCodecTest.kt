@@ -28,6 +28,28 @@ class AskCodecTest {
     }
 
     @Test
+    fun aConversationsHistoryAndVoiceRoundTripAndAOneOffQuestionIsUnchangedOnTheWire() {
+        val talk = req.copy(
+            history = listOf(
+                AskCodec.Turn("What's on today?", "Just the dentist."),
+                AskCodec.Turn("Move it to tomorrow", "Tomorrow at 9.", listOf("Moved “Book dentist” to Tomorrow · 09:00")),
+            ),
+            voice = true,
+        )
+        assertEquals(talk, AskCodec.decodeRequest(AskCodec.encodeRequest(talk)))
+        // An older server sees exactly what it saw before when there's no conversation.
+        val plain = AskCodec.encodeRequest(req)
+        assertTrue("history" !in plain && "voice" !in plain, plain)
+        fun bad(r: AskCodec.Request) = assertFailsWith<WireFormatException> { AskCodec.decodeRequest(AskCodec.encodeRequest(r)) }
+        bad(talk.copy(history = List(7) { AskCodec.Turn("q", "a") }))
+        bad(talk.copy(history = listOf(AskCodec.Turn(" ", "a"))))
+        bad(talk.copy(history = listOf(AskCodec.Turn("q", "a".repeat(1201)))))
+        bad(talk.copy(history = listOf(AskCodec.Turn("q", "a", List(4) { "x" }))))
+        bad(talk.copy(history = listOf(AskCodec.Turn("q", "a", listOf("x".repeat(161))))))
+        assertEquals("""{"answer":"Tomorrow at 9.","actions":[]}""", AskCodec.encodeModelAnswer("Tomorrow at 9."))
+    }
+
+    @Test
     fun aResponseRoundTrips() {
         val r = AskCodec.Response(
             AskCodec.Response.ANSWERED, "Two things left.",

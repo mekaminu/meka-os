@@ -13,7 +13,7 @@ class AskService(private val provider: LanguageModelProvider?) {
     fun ask(r: AskCodec.Request): AskCodec.Response {
         val p = provider ?: return AskCodec.Response(AskCodec.Response.OFF, reason = "MEKA's AI isn't set up")
         val outcome = p.complete(
-            ModelRequest(FEATURE, ModelTier.SMALL, SYSTEM, listOf(ModelTurn(ModelTurn.Role.USER, userTurn(r))), MAX_TOKENS),
+            ModelRequest(FEATURE, ModelTier.SMALL, if (r.voice) SYSTEM + "\n" + VOICE else SYSTEM, turns(r), MAX_TOKENS),
         )
         return when (outcome) {
             is ModelOutcome.Answered -> {
@@ -49,7 +49,36 @@ class AskService(private val provider: LanguageModelProvider?) {
             Reply with one JSON object and nothing else: {"answer":"…","actions":[…]}
         """.trimIndent()
 
-        /** The question and the day, as the single user turn. */
+        /**
+         * Talk to MEKA (spoken answers): short, plain sentences that read well aloud, and no asking to tap, since MEKA
+         * offers each card aloud itself.
+         */
+        val VOICE = """
+            He is talking to you aloud and your answer will be spoken: one or two short sentences, no lists, symbols, emoji or markdown, times as HH:MM. Don't ask him to tap or confirm; MEKA offers each action aloud itself.
+            Earlier turns are the conversation so far; use them to understand what "it" or "that" means. The <today> block in the latest turn is the current picture of the day.
+        """.trimIndent()
+
+        /**
+         * The conversation as model turns: each earlier exchange as Meka's question and MEKA's answer (its words only;
+         * the actions it offered then are not offered again), then the latest question with the day. What Meka
+         * confirmed after an answer leads the next question ("Since then Meka did: Added “Milk”").
+         */
+        fun turns(r: AskCodec.Request): List<ModelTurn> {
+            val out = mutableListOf<ModelTurn>()
+            var since = emptyList<String>()
+            r.history.forEach { t ->
+                out += ModelTurn(ModelTurn.Role.USER, sinceLine(since) + "Question: " + clean(t.question))
+                out += ModelTurn(ModelTurn.Role.ASSISTANT, AskCodec.encodeModelAnswer(clean(t.answer)))
+                since = t.done
+            }
+            out += ModelTurn(ModelTurn.Role.USER, sinceLine(since) + userTurn(r))
+            return out
+        }
+
+        private fun sinceLine(done: List<String>): String =
+            if (done.isEmpty()) "" else "Since then Meka did: " + done.joinToString("; ") { clean(it) } + "\n"
+
+        /** The question and the day, as the latest user turn. */
         fun userTurn(r: AskCodec.Request): String = buildString {
             appendLine("<today date=\"${r.date}\" now=\"${clean(r.now)}\">")
             r.items.forEach { i -> appendLine("${i.kind}${if (i.ref.isNotEmpty()) " ${i.ref}" else ""}: ${clean(i.line)}") }
