@@ -1,5 +1,10 @@
 package os.meka.core.domain
 
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.sin
+
 /** What a brass arc on the Day ring stands for. */
 enum class DayArcKind { EVENT, TASK, SESSION }
 
@@ -180,5 +185,121 @@ object DayRingRules {
         reduced -> DayRingPlay.STILL
         lastFullEpochDay == todayEpochDay -> DayRingPlay.QUICK
         else -> DayRingPlay.FULL
+    }
+}
+
+/** How the Day ring lives once the opening has landed ([DayRingLive.mode]). */
+enum class DayRingLiveMode {
+    /** The gold second hand sweeps smoothly round, the edge breathes and the hour's shimmer runs (60 fps while visible). */
+    SWEEP,
+
+    /** Power saving: no hand and no breath; the ring is redrawn once a minute so the now needle still moves. */
+    MINUTE,
+
+    /** Motion → Off: a still ring with no hand. */
+    STILL,
+}
+
+/**
+ * The living Day ring (Living Today, slice 1; Meka, 2026-10-08: "a constant animation every time I open the app… don't
+ * make it look cheap"): after the opening lands, the ring stays alive like a mechanical watch. Non-AI, pure, the same
+ * numbers on the Fold and the Mac (both apps only draw what this says).
+ *
+ * - **Second hand**: a fine brass hand with a soft comet tail orbits the dial once a minute, a smooth sweep (never a
+ *   tick), its angle from the wall clock so every screen agrees: :00 at the top, :15 at three o'clock.
+ * - **Now pop**: on each new minute the now needle's brass dot swells a touch and settles ([nowPop], a damped spring).
+ * - **Breath**: the ring's brass edge brightens and dims, [GLOW_LOW] → [GLOW_HIGH] → [GLOW_LOW] over [GLOW_PERIOD_MS]
+ *   (a sleeping laptop's light: calm, never a flash).
+ * - **Hour shimmer**: in the first [SHIMMER_MS] of each local hour a single band of light runs once round the ring.
+ * - Off: still, no hand. Power saving: no hand, no breath, the ring redrawn each minute ([DayRingLiveMode.MINUTE]).
+ */
+object DayRingLive {
+    /** One orbit of the second hand. */
+    const val SWEEP_MS = 60_000L
+
+    /** One breath of the brass edge. */
+    const val GLOW_PERIOD_MS = 5_000L
+    const val GLOW_LOW = 0.6f
+    const val GLOW_HIGH = 1f
+
+    /** How long the top-of-the-hour shimmer takes to run once round. */
+    const val SHIMMER_MS = 1_800L
+
+    /** How far round the shimmer's band of light reaches (degrees, behind its head). */
+    const val SHIMMER_BAND_DEGREES = 50f
+
+    /** How long the comet tail behind the hand reaches (degrees of the dial). */
+    const val TAIL_DEGREES = 42f
+
+    /** Segments the tail is drawn in, each fainter than the one before. */
+    const val TAIL_SEGMENTS = 14
+
+    /** How long the now dot's pop lasts after the minute turns, and how far it swells at most. */
+    const val NOW_POP_MS = 600L
+    const val NOW_POP_SCALE = 0.45f
+
+    /** How long the hand takes to fade in once the opening has landed. */
+    const val HAND_FADE_MS = 500L
+
+    private const val HOUR_MS = 3_600_000L
+
+    /** The damped sine's own peak, so the dot swells by exactly [NOW_POP_SCALE]. */
+    private const val POP_PEAK = 0.4636
+
+    fun mode(reduced: Boolean, powerSave: Boolean): DayRingLiveMode = when {
+        reduced -> DayRingLiveMode.STILL
+        powerSave -> DayRingLiveMode.MINUTE
+        else -> DayRingLiveMode.SWEEP
+    }
+
+    /**
+     * Where the second hand points, degrees clockwise from the top: the milliseconds into the current minute, swept
+     * smoothly ([epochMs] is the wall clock; every time zone's minutes start on UTC minutes).
+     */
+    fun handDegrees(epochMs: Long): Float = (epochMs).mod(SWEEP_MS).toFloat() * 360f / SWEEP_MS
+
+    /** How bright the brass edge is now: [GLOW_LOW] at the bottom of the breath, [GLOW_HIGH] at its top (a cosine, so it eases both ways). */
+    fun glow(epochMs: Long): Float {
+        val phase = (epochMs).mod(GLOW_PERIOD_MS).toDouble() / GLOW_PERIOD_MS
+        val rise = (0.5 - 0.5 * cos(phase * 2 * PI)).toFloat()
+        return GLOW_LOW + (GLOW_HIGH - GLOW_LOW) * rise
+    }
+
+    /**
+     * The hour's shimmer: how far round its head has run (0–1, eased) during the first [SHIMMER_MS] of a local hour,
+     * else null. [offsetMs] is the local zone's offset from UTC (half-hour zones' hours start on the half hour).
+     */
+    fun shimmer(epochMs: Long, offsetMs: Long): Float? {
+        val into = (epochMs + offsetMs).mod(HOUR_MS)
+        if (into >= SHIMMER_MS) return null
+        val t = into.toFloat() / SHIMMER_MS
+        return 1f - (1f - t) * (1f - t) * (1f - t)
+    }
+
+    /**
+     * The now dot's size after the minute turns: 1 at rest; swells to about 1 + [NOW_POP_SCALE] and settles back with
+     * a small overshoot below 1 (a damped spring) over [NOW_POP_MS].
+     */
+    fun nowPop(epochMs: Long): Float {
+        val into = (epochMs).mod(SWEEP_MS)
+        if (into >= NOW_POP_MS) return 1f
+        val t = into.toDouble() / NOW_POP_MS
+        return (1.0 + NOW_POP_SCALE * exp(-3.0 * t) * sin(t * 1.6 * PI) / POP_PEAK).toFloat()
+    }
+
+    /** The hand's opacity [sinceLandedMs] after the opening landed (fades in over [HAND_FADE_MS]). */
+    fun handFade(sinceLandedMs: Long): Float = (sinceLandedMs.toFloat() / HAND_FADE_MS).coerceIn(0f, 1f)
+
+    /** Opacity of tail segment [i] (0 = next to the hand, brightest), fading to nothing at the tail's end. */
+    fun tailAlpha(i: Int): Float {
+        val f = 1f - i.toFloat() / TAIL_SEGMENTS
+        return (f * f * 0.55f).coerceIn(0f, 1f)
+    }
+
+    /** How long until the ring next needs drawing in [mode]: the next frame while sweeping, the next minute else. */
+    fun nextDrawInMs(mode: DayRingLiveMode, epochMs: Long): Long? = when (mode) {
+        DayRingLiveMode.SWEEP -> 16L
+        DayRingLiveMode.MINUTE -> SWEEP_MS - (epochMs).mod(SWEEP_MS)
+        DayRingLiveMode.STILL -> null
     }
 }

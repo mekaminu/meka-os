@@ -24,6 +24,8 @@ struct DayRingView: View {
             let elapsed = play == .still ? total : context.date.timeIntervalSince(began)
             VStack(spacing: MekaSpace.m) {
                 dial(elapsed: elapsed)
+                    // Living Today: once the opening has landed the ring stays alive on a layer of its own.
+                    .overlay(DayRingLiveLayer(ring: ring, landed: play == .still, palette: palette))
                     .frame(width: size, height: size)
                     .frame(maxWidth: .infinity)
                     .accessibilityElement(children: .ignore)
@@ -105,6 +107,107 @@ struct DayRingView: View {
             }
             .multilineTextAlignment(.center)
             .frame(width: size * 0.62)
+        }
+    }
+}
+
+/// The living Day ring (Living Today, slice 1), the Mac twin of the Fold's `DayRingLiveLayer`: drawn over the dial
+/// once the opening has landed, with the same geometry and every number from the core's `DayRingLive` — a fine brass
+/// second hand with a comet tail sweeping round once a minute (smoothly, never ticking) and fading in, the brass edge
+/// breathing 60 % → 100 % over 5 s, a band of light running once round at the top of each hour, and the now dot
+/// popping on its spring as each minute turns. Its own `TimelineView` runs at 60 fps only while sweeping; Low Power
+/// Mode redraws it once a minute with no hand or breath; Motion → Off is a still edge with no hand. SwiftUI stops the
+/// timeline while the window is hidden.
+struct DayRingLiveLayer: View {
+    let ring: DayRing
+    let landed: Bool
+    let palette: MekaPalette
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var landedAt: Date? = nil
+
+    private var mode: DayRingLiveMode {
+        DayRingLive.shared.mode(reduced: reduceMotion, powerSave: ProcessInfo.processInfo.isLowPowerModeEnabled)
+    }
+
+    var body: some View {
+        let mode = self.mode
+        Group {
+            if landed {
+                if mode == .sweep {
+                    TimelineView(.animation(minimumInterval: 1.0 / 60)) { context in layer(now: context.date, mode: mode) }
+                } else {
+                    TimelineView(.everyMinute) { context in layer(now: context.date, mode: mode) }
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear { if landed { landedAt = Date() } }
+        .onChange(of: landed) { _, now in landedAt = now ? Date() : nil }
+    }
+
+    private func layer(now: Date, mode: DayRingLiveMode) -> some View {
+        let live = DayRingLive.shared
+        let ms = Int64((now.timeIntervalSince1970 * 1000).rounded(.down))
+        let sweeping = mode == .sweep
+        let sinceLanded = Int64(now.timeIntervalSince(landedAt ?? now) * 1000)
+        let fadeIn = sweeping ? Double(live.handFade(sinceLandedMs: sinceLanded)) : 1
+        let glow = sweeping ? Double(live.glow(epochMs: ms)) : 0.8
+        let offsetMs = Int64(TimeZone.current.secondsFromGMT(for: now)) * 1000
+        let shimmer = sweeping ? live.shimmer(epochMs: ms, offsetMs: offsetMs)?.doubleValue : nil
+        let hand = Double(live.handDegrees(epochMs: ms))
+        let pop = sweeping ? Double(live.nowPop(epochMs: ms)) : 1
+        let nowDegrees = Double(ring.nowDegrees)
+        let accent = palette.accent
+        return Canvas { ctx, canvasSize in
+            let stroke: CGFloat = 10
+            let radius = min(canvasSize.width, canvasSize.height) / 2 - stroke / 2 - 2
+            let c = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
+            func point(_ degrees: Double, _ r: CGFloat) -> CGPoint {
+                let a = (degrees - 90) * .pi / 180
+                return CGPoint(x: c.x + cos(a) * r, y: c.y + sin(a) * r)
+            }
+            func arc(_ r: CGFloat, from: Double, sweep: Double) -> Path {
+                var p = Path()
+                p.addArc(center: c, radius: r, startAngle: .degrees(from - 90), endAngle: .degrees(from - 90 + sweep), clockwise: false)
+                return p
+            }
+            let edge = radius + stroke / 2 + 1
+            // The brass edge and its soft halo, breathing.
+            ctx.stroke(arc(edge + 1.5, from: 0, sweep: 360), with: .color(accent.opacity(0.10 * glow * fadeIn)), lineWidth: 4)
+            ctx.stroke(arc(edge, from: 0, sweep: 360), with: .color(accent.opacity(0.55 * glow * fadeIn)), lineWidth: 1)
+            guard sweeping else { return }
+            // The hour's shimmer: a band of light running once round the edge.
+            if let s = shimmer {
+                let head = 360 * s
+                let fade = min(max((1 - s) * 4, 0), 1)
+                let parts = 10
+                let step = Double(live.SHIMMER_BAND_DEGREES) / Double(parts)
+                for j in 0..<parts {
+                    let f = 1 - Double(j) / Double(parts)
+                    ctx.stroke(arc(edge, from: head - step * Double(j + 1), sweep: step),
+                               with: .color(accent.opacity(f * f * 0.8 * fade)), lineWidth: 2.5)
+                }
+            }
+            // The second hand: a comet tail along the track, a fine brass hand across it and a bead where they meet.
+            let segments = Int(live.TAIL_SEGMENTS)
+            let step = Double(live.TAIL_DEGREES) / Double(segments)
+            for i in 0..<segments {
+                ctx.stroke(arc(radius, from: hand - step * Double(i + 1), sweep: step + 0.4),
+                           with: .color(accent.opacity(Double(live.tailAlpha(i: Int32(i))) * fadeIn)), lineWidth: 3)
+            }
+            var line = Path()
+            line.move(to: point(hand, radius - stroke * 1.2))
+            line.addLine(to: point(hand, radius + stroke * 0.9))
+            ctx.stroke(line, with: .color(accent.opacity(fadeIn)), style: StrokeStyle(lineWidth: 1.25, lineCap: .round))
+            let bead = point(hand, radius)
+            ctx.fill(Path(ellipseIn: CGRect(x: bead.x - 2.5, y: bead.y - 2.5, width: 5, height: 5)), with: .color(accent.opacity(fadeIn)))
+            // The now dot pops as the minute turns.
+            if pop > 1 {
+                let tip = point(nowDegrees, radius + stroke * 0.7)
+                let r = 3.5 * pop
+                ctx.fill(Path(ellipseIn: CGRect(x: tip.x - r, y: tip.y - r, width: r * 2, height: r * 2)), with: .color(accent))
+            }
         }
     }
 }

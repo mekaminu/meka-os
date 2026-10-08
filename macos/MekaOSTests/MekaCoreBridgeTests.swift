@@ -402,6 +402,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(ring.spokenLine, "Your day: 1 thing booked. Now 10:30. 3 h 45 free · 4 to do.")
     }
 
+    /// Living Today (slice 1): the living ring's numbers reach the Mac's layer.
+    func testDayRingLiveReachesSwift() {
+        let live = DayRingLive.shared
+        let nine: Int64 = 1_791_493_200_000 // Thu 8 Oct 2026 21:00 UTC
+        XCTAssertEqual(live.handDegrees(epochMs: nine + 15_000), 90, accuracy: 0.01)
+        XCTAssertEqual(live.glow(epochMs: nine), live.GLOW_LOW, accuracy: 0.001)
+        XCTAssertEqual(live.glow(epochMs: nine + 2_500), live.GLOW_HIGH, accuracy: 0.001)
+        XCTAssertEqual(live.shimmer(epochMs: nine, offsetMs: 3_600_000)?.floatValue, 0)
+        XCTAssertNil(live.shimmer(epochMs: nine + 600_000, offsetMs: 3_600_000))
+        XCTAssertGreaterThan(live.nowPop(epochMs: nine + 120), 1.3)
+        XCTAssertEqual(live.mode(reduced: false, powerSave: false), DayRingLiveMode.sweep)
+        XCTAssertEqual(live.mode(reduced: false, powerSave: true), DayRingLiveMode.minute)
+        XCTAssertEqual(live.mode(reduced: true, powerSave: false), DayRingLiveMode.still)
+        XCTAssertEqual(live.TAIL_SEGMENTS, 14)
+        XCTAssertGreaterThan(live.tailAlpha(i: 0), live.tailAlpha(i: 5))
+    }
+
     /// Calendar colours (Fold review 2026-10-08, item 9): fixtures wear Barça's colour, the rest take five hues.
     func testCalendarTonesReachSwift() {
         XCTAssertEqual(CalendarTones.shared.FIXTURE, 0)

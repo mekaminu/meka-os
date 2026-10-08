@@ -11,6 +11,7 @@ on:
       - "android/app/src/androidTest/**"
       - "android/app/src/main/kotlin/os/meka/android/designsystem/**"
       - "android/app/src/main/kotlin/os/meka/android/MainActivity.kt"
+      - "android/app/src/main/kotlin/os/meka/android/today/DayRing*.kt"
       - ".github/workflows/motion.yml"
       - "tools/motion-test.sh"
   schedule:

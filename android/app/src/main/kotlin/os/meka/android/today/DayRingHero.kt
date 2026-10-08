@@ -49,6 +49,15 @@ import os.meka.core.domain.DayTile
 import os.meka.core.domain.DayRing
 import os.meka.core.domain.DayRingPlay
 import os.meka.core.domain.DayRingRules
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
+import kotlinx.coroutines.delay
+import os.meka.android.designsystem.MotionPrefs
+import os.meka.core.domain.DayRingLive
+import os.meka.core.domain.DayRingLiveMode
+import java.util.TimeZone
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -69,6 +78,8 @@ fun DayRingHero(
     size: Dp = 196.dp,
     /** The live tiles under the dial (the opening moment, part 2): next event, fast, habits, renewals. */
     tiles: List<DayTile> = emptyList(),
+    /** Test hook (the motion workflow): called on every drawn frame of the living ring with the hand's angle and the glow. */
+    onLiveFrame: ((handDegrees: Float, glow: Float) -> Unit)? = null,
 ) {
     val expressive = Meka.expressiveMotion
     val total = remember(play) { MotionMath.dayRingTotalMs(ring.arcs.size, play, expressive, tiles.size) }
@@ -138,6 +149,9 @@ fun DayRingHero(
                     drawCircle(colors.accent, radius = 3.5.dp.toPx(), center = tip)
                 }
             }
+            // Living Today: once the opening has landed the ring stays alive — the gold second hand, the breath, the
+            // hour's shimmer and the now dot's pop — drawn on a layer of its own.
+            DayRingLiveLayer(ring, landed = play == DayRingPlay.STILL, size = size, onFrame = onLiveFrame)
             Column(
                 Modifier.size(size * 0.62f),
                 verticalArrangement = Arrangement.Center,
@@ -154,6 +168,98 @@ fun DayRingHero(
         if (tiles.isNotEmpty()) {
             DayTilesRow(tiles, count, Modifier.padding(top = MekaSpace.m)) { i -> MotionMath.dayTile(elapsed, i, play, expressive) }
         }
+    }
+}
+
+/**
+ * The living Day ring (Living Today, slice 1; catalogue "Living Today"): drawn over the dial once the opening has
+ * landed ([landed]), with the same geometry. Everything it draws comes from [DayRingLive]:
+ * - a fine brass second hand with a comet tail sweeping round once a minute (smoothly, never ticking), fading in;
+ * - the brass edge breathing 60 % → 100 % over 5 s, and once at the top of each hour a band of light running round;
+ * - the now needle's dot popping on its spring as each minute turns.
+ * Only this layer's draw reads the clock, so a frame redraws it without recomposing Today. Frames run only while the
+ * ring is on screen (the effect leaves with the list item) and MEKA is in front (resumed). Power saving: no hand or
+ * breath, redrawn once a minute. Motion → Off: a still edge, no hand.
+ */
+@Composable
+private fun DayRingLiveLayer(ring: DayRing, landed: Boolean, size: Dp, onFrame: ((Float, Float) -> Unit)?) {
+    val context = LocalContext.current
+    val reduced = Meka.reducedMotion
+    val powerSave = remember { MotionPrefs.powerSave(context) }
+    val mode = DayRingLive.mode(reduced, powerSave)
+    val resumed by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val front = resumed.isAtLeast(Lifecycle.State.RESUMED)
+    val clock = remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var landedAt by remember { mutableLongStateOf(Long.MAX_VALUE) }
+    LaunchedEffect(mode, landed, front) {
+        if (!landed) {
+            landedAt = Long.MAX_VALUE
+            return@LaunchedEffect
+        }
+        if (landedAt == Long.MAX_VALUE) landedAt = System.currentTimeMillis()
+        clock.longValue = System.currentTimeMillis()
+        if (!front) return@LaunchedEffect
+        while (true) {
+            when (mode) {
+                DayRingLiveMode.SWEEP -> withFrameMillis { clock.longValue = System.currentTimeMillis() }
+                DayRingLiveMode.MINUTE -> {
+                    delay(DayRingLive.nextDrawInMs(mode, System.currentTimeMillis()) ?: return@LaunchedEffect)
+                    clock.longValue = System.currentTimeMillis()
+                }
+                DayRingLiveMode.STILL -> return@LaunchedEffect
+            }
+        }
+    }
+    val colors = Meka.colors
+    Canvas(Modifier.size(size)) {
+        val now = clock.longValue // read only here: a new frame redraws this layer, nothing recomposes
+        if (!landed) return@Canvas // the opening draws the dial in first
+        val stroke = 10.dp.toPx()
+        val inset = stroke / 2 + 2.dp.toPx()
+        val radius = (this.size.width - inset * 2) / 2
+        val sweeping = mode == DayRingLiveMode.SWEEP
+        // Fades in as the opening lands (at once when the ring isn't sweeping: nothing would advance the fade).
+        val fadeIn = if (sweeping) DayRingLive.handFade(now - landedAt) else 1f
+        val glow = if (sweeping) DayRingLive.glow(now) else 0.8f
+        val edge = radius + stroke / 2 + 1.dp.toPx()
+        // The brass edge and its soft halo, breathing.
+        drawCircle(colors.accent.copy(alpha = 0.10f * glow), edge + 1.5.dp.toPx(), center, style = Stroke(4.dp.toPx()), alpha = fadeIn)
+        drawCircle(colors.accent.copy(alpha = 0.55f * glow), edge, center, style = Stroke(1.dp.toPx()), alpha = fadeIn)
+        if (!sweeping) return@Canvas
+        fun box(r: Float) = Pair(Offset(center.x - r, center.y - r), Size(r * 2, r * 2))
+        // The hour's shimmer: a band of light running once round the edge.
+        DayRingLive.shimmer(now, TimeZone.getDefault().getOffset(now).toLong())?.let { s ->
+            val head = 360f * s
+            val fade = ((1f - s) * 4f).coerceIn(0f, 1f)
+            val (tl, sz) = box(edge)
+            val parts = 10
+            for (j in 0 until parts) {
+                val step = DayRingLive.SHIMMER_BAND_DEGREES / parts
+                val a = (1f - j.toFloat() / parts).let { it * it } * 0.8f * fade
+                drawArc(colors.accent.copy(alpha = a), head - step * (j + 1) - 90f, step, false, tl, sz, style = Stroke(2.5.dp.toPx()))
+            }
+        }
+        // The second hand: a comet tail along the track, a fine brass hand across it and a bead where they meet.
+        val hand = DayRingLive.handDegrees(now)
+        val (tl, sz) = box(radius)
+        val step = DayRingLive.TAIL_DEGREES / DayRingLive.TAIL_SEGMENTS
+        for (i in 0 until DayRingLive.TAIL_SEGMENTS) {
+            drawArc(colors.accent.copy(alpha = DayRingLive.tailAlpha(i) * fadeIn), hand - step * (i + 1) - 90f, step + 0.4f,
+                false, tl, sz, style = Stroke(3.dp.toPx()))
+        }
+        val a = Math.toRadians(hand - 90.0)
+        fun at(r: Float) = Offset(center.x + (cos(a) * r).toFloat(), center.y + (sin(a) * r).toFloat())
+        drawLine(colors.accent.copy(alpha = fadeIn), at(radius - stroke * 1.2f), at(radius + stroke * 0.9f),
+            strokeWidth = 1.25.dp.toPx(), cap = StrokeCap.Round)
+        drawCircle(colors.accent.copy(alpha = fadeIn), 2.5.dp.toPx(), at(radius))
+        // The now dot pops as the minute turns.
+        val pop = DayRingLive.nowPop(now)
+        if (pop > 1f) {
+            val n = Math.toRadians(ring.nowDegrees - 90.0)
+            val tip = radius + stroke * 0.7f
+            drawCircle(colors.accent, 3.5.dp.toPx() * pop, Offset(center.x + (cos(n) * tip).toFloat(), center.y + (sin(n) * tip).toFloat()))
+        }
+        onFrame?.invoke(hand, glow)
     }
 }
 
