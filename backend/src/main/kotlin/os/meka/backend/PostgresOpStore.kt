@@ -99,6 +99,28 @@ class PostgresOpStore(private val ds: DataSource) : ServerOpStore {
         }
     }
 
+    /**
+     * Each field's current value (last writer wins by HLC) of every entity of [entityType] in a household, or of one
+     * entity ([entityId]). One query on the (household, type, entity) index (calendar edits).
+     */
+    fun latestFields(householdId: String, entityType: String, entityId: String? = null): Map<String, Map<String, FieldValue>> = conn { c ->
+        c.prepareStatement(
+            "SELECT DISTINCT ON (entity_id, field_name) * FROM op_log WHERE household_id = ? AND entity_type = ?" +
+                (if (entityId != null) " AND entity_id = ?" else "") + " ORDER BY entity_id, field_name, hlc DESC",
+        ).use { st ->
+            st.setString(1, householdId); st.setString(2, entityType)
+            if (entityId != null) st.setString(3, entityId)
+            st.executeQuery().use { rs ->
+                val out = LinkedHashMap<String, LinkedHashMap<String, FieldValue>>()
+                while (rs.next()) {
+                    val op = rs.toOp()
+                    out.getOrPut(op.entityId) { LinkedHashMap() }[op.field] = op.value
+                }
+                out
+            }
+        }
+    }
+
     override fun isDeviceAuthorised(householdId: String, deviceId: String): Boolean = conn { c ->
         c.prepareStatement("SELECT 1 FROM device WHERE household_id = ? AND id = ? AND revoked_at IS NULL").use { st ->
             st.setString(1, householdId); st.setString(2, deviceId)

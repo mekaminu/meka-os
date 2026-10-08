@@ -47,6 +47,13 @@ class Integrations(
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
 
+    /** The calendar provider with this id (the writer's way to the same adapters). */
+    fun provider(id: String): CalendarProvider? = providers[id]
+
+    /** The calendar writer (calendar editing, slice 2a) over the same store, op log and adapters. */
+    fun writer(reader: EntityReader, onWritten: (householdId: String) -> Unit = {}): CalendarWriter =
+        CalendarWriter(store, ops, reader, this, now, onWritten)
+
     fun redirectUri(provider: String) = "${publicUrl.trimEnd('/')}/v1/oauth/$provider/callback"
 
     sealed class StartResult {
@@ -157,6 +164,22 @@ class Integrations(
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
             throw e
         }
+    }
+
+    /**
+     * A fresh access token for [a] (calendar editing: the writer asks with [editing], so Microsoft includes the write
+     * scope); a rotated refresh token is stored. Throws [ReconnectRequired] when the sign-in is no longer good.
+     */
+    internal fun accessToken(a: AccountRow, editing: Boolean): String {
+        val p = providers.getValue(a.provider)
+        val client = clients.get(a.provider) ?: throw ReconnectRequired("provider not configured")
+        val ctx = context(a.householdId, a.provider)
+        val refresh = cipher.decrypt(a.refreshTokenEnc, ctx).decodeToString()
+        val tokens = p.refresh(client, refresh, editing)
+        if (tokens.refreshToken != null && tokens.refreshToken != refresh) {
+            store.transaction { store.updateRefreshToken(a.id, cipher.encrypt(tokens.refreshToken.toByteArray(), ctx)) }
+        }
+        return tokens.accessToken
     }
 
     private fun syncFeed(a: AccountRow, feed: FeedProvider) {
@@ -312,7 +335,7 @@ class Integrations(
                     desired[EventFields.MOVED_FROM] = FieldValue.Int64(prev.startMs)
                     desired[EventFields.MOVED_AT] = FieldValue.Int64(now())
                 }
-                wrote = write(a, entityId, e.startMs, e.endMs, false, prev, desired) || wrote
+                wrote = write(a, entityId, e.startMs, e.endMs, false, prev, desired, remoteId = e.id) || wrote
             }
             // Anything we mirrored inside this window that the provider no longer reports was cancelled or deleted.
             // Providers return events that overlap the window, so judge removals by overlap too. All-day events near
@@ -332,9 +355,12 @@ class Integrations(
     private fun write(
         a: AccountRow, entityId: String, startMs: Long, endMs: Long, removed: Boolean, prev: MirrorRow?, desired: Map<String, FieldValue>,
         entityType: String = EntityTypes.EVENT,
+        /** The provider's id (calendar events): kept on the mirror row so edits can find the real event. */
+        remoteId: String? = prev?.remoteId,
     ): Boolean {
         val fieldOps = HashMap(prev?.fieldOps ?: emptyMap())
-        var changed = prev == null || prev.removed != removed || prev.startMs != startMs || prev.endMs != endMs
+        var changed = prev == null || prev.removed != removed || prev.startMs != startMs || prev.endMs != endMs ||
+            (remoteId != null && prev.remoteId != remoteId)
         var appended = false
         for ((field, value) in desired) {
             val key = valueKey(value)
@@ -353,7 +379,7 @@ class Integrations(
             appended = true
         }
         val allDay = (desired[EventFields.ALL_DAY] as? FieldValue.Bool)?.value ?: prev?.allDay ?: false
-        if (changed) store.putMirror(a.householdId, MirrorRow(entityId, a.id, startMs, removed, fieldOps, endMs, allDay))
+        if (changed) store.putMirror(a.householdId, MirrorRow(entityId, a.id, startMs, removed, fieldOps, endMs, allDay, remoteId ?: prev?.remoteId))
         return appended
     }
 

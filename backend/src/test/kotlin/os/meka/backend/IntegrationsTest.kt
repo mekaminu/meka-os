@@ -395,4 +395,46 @@ class IntegrationsTest {
             assertEquals(false, pg.accounts("edit-hh").single().canEdit) // a read-only reconnect gives it up
         }
     }
+
+    /** Calendar editing, slice 2a, on Postgres: the mirror keeps provider ids, and edits are read back field by field. */
+    @Test
+    fun postgresKeepsRemoteIdsAndReadsEditsBack() {
+        val url = System.getenv("MEKA_TEST_DB_URL")?.takeIf { it.isNotBlank() } ?: return
+        com.zaxxer.hikari.HikariDataSource(com.zaxxer.hikari.HikariConfig().apply {
+            jdbcUrl = url; username = System.getenv("MEKA_TEST_DB_USER") ?: "postgres"
+            password = System.getenv("MEKA_TEST_DB_PASSWORD") ?: "postgres"; maximumPoolSize = 2
+        }).use { ds ->
+            Migrations.apply(ds)
+            PostgresDeviceRegistry(ds).enrol("edits-hh", "fold", "Fold")
+            ds.connection.use { c ->
+                c.createStatement().execute("DELETE FROM integration_account WHERE household_id = 'edits-hh'")
+                c.createStatement().execute("DELETE FROM op_log WHERE household_id = 'edits-hh'")
+            }
+            val opStore = PostgresOpStore(ds)
+            val pg = os.meka.backend.integrations.PostgresIntegrationStore(opStore)
+            val acc = pg.transaction { pg.upsertAccount("edits-hh", "google", "e@gmail.com", byteArrayOf(1), canEdit = true) { "acceditsrid" } }
+            val row = os.meka.backend.integrations.MirrorRow("evpg1", acc, 10, false, emptyMap(), 20, false, "cal1/abc")
+            pg.transaction { pg.putMirror("edits-hh", row) }
+            assertEquals("cal1/abc", pg.mirror("edits-hh", acc)["evpg1"]!!.remoteId)
+            // A row written without an id keeps the one it had.
+            pg.transaction { pg.putMirror("edits-hh", row.copy(startMs = 11, remoteId = null)) }
+            assertEquals("cal1/abc", pg.mirror("edits-hh", acc)["evpg1"]!!.remoteId)
+            assertEquals(11L, pg.mirror("edits-hh", acc)["evpg1"]!!.startMs)
+
+            fun op(id: String, entity: String, field: String, v: os.meka.core.sync.FieldValue, wall: Long) = os.meka.core.sync.Op(
+                id, "edits-hh", os.meka.core.domain.EntityTypes.EVENT_EDIT, entity, field, v, os.meka.core.sync.Hlc(wall, 0, "fold"), emptyList(), "fold",
+            )
+            opStore.transaction {
+                opStore.append(op("o1", "e1", "kind", os.meka.core.sync.FieldValue.Text("ADD"), 1))
+                opStore.append(op("o2", "e1", "undone", os.meka.core.sync.FieldValue.Bool(false), 1))
+                opStore.append(op("o3", "e1", "undone", os.meka.core.sync.FieldValue.Bool(true), 2))
+                opStore.append(op("o4", "e2", "kind", os.meka.core.sync.FieldValue.Text("DELETE"), 1))
+            }
+            val all = opStore.latestFields("edits-hh", os.meka.core.domain.EntityTypes.EVENT_EDIT)
+            assertEquals(setOf("e1", "e2"), all.keys)
+            assertEquals(os.meka.core.sync.FieldValue.Bool(true), all.getValue("e1")["undone"])
+            assertEquals(mapOf("kind" to os.meka.core.sync.FieldValue.Text("DELETE")), opStore.latestFields("edits-hh", os.meka.core.domain.EntityTypes.EVENT_EDIT, "e2")["e2"])
+            assertTrue(opStore.latestFields("edits-hh", os.meka.core.domain.EntityTypes.TASK).isEmpty())
+        }
+    }
 }

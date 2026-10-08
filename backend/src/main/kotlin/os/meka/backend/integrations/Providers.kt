@@ -1,6 +1,12 @@
 package os.meka.backend.integrations
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import os.meka.core.domain.EventDraft
+import os.meka.core.domain.EventEditChange
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -66,7 +72,42 @@ interface CalendarProvider {
     fun refresh(client: OAuthClient, refreshToken: String, editing: Boolean = false): TokenSet
     fun accountEmail(accessToken: String): String
     fun events(accessToken: String, fromMs: Long, toMs: Long): List<RemoteEvent>
+
+    // Writes (calendar editing, slice 2a). Only ever called for an account with `can_edit`, with an access token
+    // refreshed for [writeScope], and only for an edit Meka made (backend/integrations/CalendarWriter.kt).
+
+    /** The provider's current copy of one event ([RemoteEvent.id] form), or null when it's gone or cancelled. */
+    fun event(accessToken: String, remoteId: String): RemoteCopy? = throw UnsupportedOperationException("read-only provider")
+
+    /**
+     * Adds [draft] to the account's main calendar. [idemKey] (the edit's id, `[0-9a-f]`) makes a retry add nothing
+     * more. Returns the new event's id.
+     */
+    fun createEvent(accessToken: String, draft: EventDraft, idemKey: String): String = throw UnsupportedOperationException("read-only provider")
+
+    /** Sets the [changes] fields of [remoteId] to [draft]'s; [notifyGuests] tells the guests (an organiser's change). */
+    fun updateEvent(accessToken: String, remoteId: String, draft: EventDraft, changes: Set<EventEditChange>, notifyGuests: Boolean): Unit =
+        throw UnsupportedOperationException("read-only provider")
+
+    /** Deletes [remoteId]; [notifyGuests] sends them the cancellation. Returns false when it was already gone. */
+    fun deleteEvent(accessToken: String, remoteId: String, notifyGuests: Boolean): Boolean = throw UnsupportedOperationException("read-only provider")
 }
+
+/** The provider's copy of one event, as the clash check and the guards need it. */
+data class RemoteCopy(
+    val event: EventDraft,
+    /** Meka organises it (or it has no organiser): only then may MEKA change or delete it. */
+    val organisedByMe: Boolean,
+    /** Other people invited (rooms and Meka himself not counted). */
+    val guests: Int,
+)
+
+/** The provider said no to a write (HTTP 403: the write permission was taken away, or the calendar is read-only). */
+class WriteRefused(message: String) : RuntimeException(message)
+
+/** The provider's event id inside our `<calendar>/<event>` id. */
+internal fun eventPart(remoteId: String): String = remoteId.substringAfter('/', "")
+internal fun calendarPart(remoteId: String): String = remoteId.substringBefore('/')
 
 /** Minimal HTTPS helper on the JDK client: no extra dependencies, explicit timeouts, never logs bodies. */
 internal class Http(private val client: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()) {
@@ -85,6 +126,27 @@ internal class Http(private val client: HttpClient = HttpClient.newBuilder().con
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(body)).build(),
         )
+    }
+
+    /** One API call's answer: the status and the body when it was JSON. */
+    data class Answer(val status: Int, val body: JsonObject?)
+
+    /**
+     * A write or a single read (calendar editing): any method, an optional JSON body. Hands back the status for the
+     * caller to judge (404/409/410 mean things there); 401 means the token is no longer good (reconnect); 5xx and
+     * timeouts throw, so the edit is tried again later.
+     */
+    fun call(method: String, url: String, bearer: String, body: JsonObject? = null, headers: Map<String, String> = emptyMap()): Answer {
+        val b = HttpRequest.newBuilder(URI(url)).timeout(Duration.ofSeconds(30)).header("Authorization", "Bearer $bearer")
+        headers.forEach { (k, v) -> b.header(k, v) }
+        if (body != null) b.header("Content-Type", "application/json")
+        b.method(method, if (body != null) HttpRequest.BodyPublishers.ofString(body.toString()) else HttpRequest.BodyPublishers.noBody())
+        val resp = client.send(b.build(), HttpResponse.BodyHandlers.ofString())
+        val code = resp.statusCode()
+        if (code == 401) throw ReconnectRequired("provider API refused the token")
+        if (code == 403) throw WriteRefused("provider refused the change")
+        if (code >= 500 || code == 429) throw IllegalStateException("provider HTTP $code")
+        return Answer(code, runCatching { json.parseToJsonElement(resp.body()).jsonObject }.getOrNull())
     }
 
     private fun send(req: HttpRequest, apiCall: Boolean = false): JsonObject {
@@ -180,6 +242,8 @@ internal fun plainText(raw: String?): String? {
 }
 
 private fun rfc3339(ms: Long): String = DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(ms))
+private fun isoDate(ms: Long): String = LocalDate.ofEpochDay(Math.floorDiv(ms, DAY_MS)).toString()
+private val ALL_CHANGES = EventEditChange.entries.toSet()
 private const val DAY_MS = 86_400_000L
 private fun utcMidnight(date: String): Long = LocalDate.parse(date).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
 
@@ -254,6 +318,72 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
                 } while (page != null)
             }
         }
+    }
+
+    private val api = "https://www.googleapis.com/calendar/v3"
+    private fun eventUrl(remoteId: String) = "$api/calendars/${Http.enc(calendarPart(remoteId))}/events/${Http.enc(eventPart(remoteId))}"
+    private fun updates(notify: Boolean) = "sendUpdates=" + if (notify) "all" else "none"
+
+    override fun event(accessToken: String, remoteId: String): RemoteCopy? {
+        if (eventPart(remoteId).isEmpty()) return null
+        val a = http.call("GET", eventUrl(remoteId), accessToken)
+        if (a.status == 404 || a.status == 410) return null
+        val e = a.body?.takeIf { a.status in 200..299 } ?: throw WriteRefused("Google HTTP ${a.status}")
+        if (e["status"].str() == "cancelled") return null
+        val start = e["start"] as? JsonObject ?: return null
+        val end = e["end"] as? JsonObject ?: start
+        val allDay = start["date"] != null
+        val startMs = if (allDay) utcMidnight(start["date"].str()!!) else OffsetDateTime.parse(start["dateTime"].str()).toInstant().toEpochMilli()
+        val endMs = if (allDay) utcMidnight(end["date"].str() ?: start["date"].str()!!)
+        else end["dateTime"].str()?.let { OffsetDateTime.parse(it).toInstant().toEpochMilli() } ?: startMs
+        val organiser = e["organizer"] as? JsonObject
+        val mine = organiser == null || organiser["self"]?.jsonPrimitive?.booleanOrNull == true
+        val guests = (e["attendees"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>().count {
+            it["self"]?.jsonPrimitive?.booleanOrNull != true && it["resource"]?.jsonPrimitive?.booleanOrNull != true
+        }
+        val draft = EventDraft(e["summary"].str() ?: "", startMs, endMs, allDay, e["location"].str(), plainText(e["description"].str()))
+        return RemoteCopy(draft, mine, guests)
+    }
+
+    override fun createEvent(accessToken: String, draft: EventDraft, idemKey: String): String {
+        // Our own event id (base32hex: 0-9 and a-v), so a retry finds it already there (409) instead of adding twice.
+        val id = "meka$idemKey"
+        require(id.length in 5..1024 && id.all { it in '0'..'9' || it in 'a'..'v' }) { "edit id isn't base32hex" }
+        val primary = http.call("GET", "$api/calendars/primary", accessToken)
+        val cal = primary.body?.get("id").str()?.takeIf { primary.status in 200..299 } ?: throw WriteRefused("Google HTTP ${primary.status}")
+        val a = http.call("POST", "$api/calendars/${Http.enc(cal)}/events?${updates(false)}", accessToken, googleBody(draft, ALL_CHANGES, id))
+        if (a.status !in 200..299 && a.status != 409) throw WriteRefused("Google HTTP ${a.status}")
+        return "$cal/$id"
+    }
+
+    override fun updateEvent(accessToken: String, remoteId: String, draft: EventDraft, changes: Set<EventEditChange>, notifyGuests: Boolean) {
+        val a = http.call("PATCH", "${eventUrl(remoteId)}?${updates(notifyGuests)}", accessToken, googleBody(draft, changes, null))
+        if (a.status !in 200..299) throw WriteRefused("Google HTTP ${a.status}")
+    }
+
+    override fun deleteEvent(accessToken: String, remoteId: String, notifyGuests: Boolean): Boolean {
+        val a = http.call("DELETE", "${eventUrl(remoteId)}?${updates(notifyGuests)}", accessToken)
+        if (a.status == 404 || a.status == 410) return false
+        if (a.status !in 200..299) throw WriteRefused("Google HTTP ${a.status}")
+        return true
+    }
+
+    /** The fields of [changes] as Google writes them. An insert ([id] set) leaves the unused time form out. */
+    internal fun googleBody(d: EventDraft, changes: Set<EventEditChange>, id: String?) = buildJsonObject {
+        id?.let { put("id", it) }
+        if (EventEditChange.TITLE in changes) put("summary", d.title)
+        if (EventEditChange.TIME in changes) {
+            put("start", googleTime(d.startAtMs, d.allDay, patch = id == null))
+            put("end", googleTime(d.endAtMs, d.allDay, patch = id == null))
+        }
+        if (EventEditChange.LOCATION in changes) put("location", d.location)
+        if (EventEditChange.NOTES in changes) put("description", d.notes)
+    }
+
+    /** A patch clears the other form, so an event can turn all-day or timed. */
+    private fun googleTime(ms: Long, allDay: Boolean, patch: Boolean) = buildJsonObject {
+        if (allDay) put("date", isoDate(ms)) else put("dateTime", rfc3339(ms))
+        if (patch) put(if (allDay) "dateTime" else "date", JsonNull)
     }
 }
 
@@ -332,5 +462,68 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
                 }
             }
         }
+    }
+
+    private val graph = "https://graph.microsoft.com/v1.0"
+    private val utcPref = mapOf("Prefer" to "outlook.timezone=\"UTC\"")
+    private fun eventUrl(remoteId: String) = "$graph/me/events/${Http.enc(eventPart(remoteId))}"
+
+    override fun event(accessToken: String, remoteId: String): RemoteCopy? {
+        if (eventPart(remoteId).isEmpty()) return null
+        val a = http.call(
+            "GET", eventUrl(remoteId) + "?\$select=subject,start,end,isAllDay,isCancelled,isOrganizer,attendees,location,bodyPreview",
+            accessToken, headers = utcPref,
+        )
+        if (a.status == 404 || a.status == 410) return null
+        val e = a.body?.takeIf { a.status in 200..299 } ?: throw WriteRefused("Outlook HTTP ${a.status}")
+        if (e["isCancelled"]?.jsonPrimitive?.booleanOrNull == true) return null
+        val allDay = e["isAllDay"]?.jsonPrimitive?.booleanOrNull == true
+        val start = (e["start"] as? JsonObject)?.get("dateTime").str() ?: return null
+        val end = (e["end"] as? JsonObject)?.get("dateTime").str() ?: start
+        val location = (e["location"] as? JsonObject)?.get("displayName").str()?.takeIf { it.isNotBlank() }
+        val guests = (e["attendees"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>().count { it["type"].str() != "resource" }
+        val draft = EventDraft(e["subject"].str() ?: "", graphMs(start, allDay), graphMs(end, allDay), allDay, location, plainText(e["bodyPreview"].str()))
+        return RemoteCopy(draft, organisedByMe = e["isOrganizer"]?.jsonPrimitive?.booleanOrNull != false, guests = guests)
+    }
+
+    override fun createEvent(accessToken: String, draft: EventDraft, idemKey: String): String {
+        // transactionId: Graph adds nothing more when a retry sends the same one.
+        val body = JsonObject(graphBody(draft, ALL_CHANGES) + ("transactionId" to JsonPrimitive(idemKey)))
+        val a = http.call("POST", "$graph/me/events", accessToken, body, utcPref)
+        val id = a.body?.get("id").str()?.takeIf { a.status in 200..299 } ?: throw WriteRefused("Outlook HTTP ${a.status}")
+        return id
+    }
+
+    // Graph tells the guests itself when their organiser changes or cancels a meeting.
+    override fun updateEvent(accessToken: String, remoteId: String, draft: EventDraft, changes: Set<EventEditChange>, notifyGuests: Boolean) {
+        val a = http.call("PATCH", eventUrl(remoteId), accessToken, graphBody(draft, changes), utcPref)
+        if (a.status !in 200..299) throw WriteRefused("Outlook HTTP ${a.status}")
+    }
+
+    override fun deleteEvent(accessToken: String, remoteId: String, notifyGuests: Boolean): Boolean {
+        val a = http.call("DELETE", eventUrl(remoteId), accessToken)
+        if (a.status == 404 || a.status == 410) return false
+        if (a.status !in 200..299) throw WriteRefused("Outlook HTTP ${a.status}")
+        return true
+    }
+
+    /** The fields of [changes] as Graph writes them, times in UTC (an all-day event from UTC midnight to midnight). */
+    internal fun graphBody(d: EventDraft, changes: Set<EventEditChange>) = buildJsonObject {
+        if (EventEditChange.TITLE in changes) put("subject", d.title)
+        if (EventEditChange.TIME in changes) {
+            put("start", buildJsonObject { put("dateTime", graphTime(d.startAtMs)); put("timeZone", "UTC") })
+            put("end", buildJsonObject { put("dateTime", graphTime(d.endAtMs)); put("timeZone", "UTC") })
+            put("isAllDay", d.allDay)
+        }
+        if (EventEditChange.LOCATION in changes) put("location", buildJsonObject { put("displayName", d.location ?: "") })
+        if (EventEditChange.NOTES in changes) put("body", buildJsonObject { put("contentType", "text"); put("content", d.notes ?: "") })
+    }
+
+    private fun graphTime(ms: Long): String = LocalDateTime.ofEpochSecond(ms / 1000, 0, ZoneOffset.UTC).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+
+    /** A Graph time (UTC with the preference) in epoch ms; all-day boundaries rounded to the nearest UTC midnight. */
+    private fun graphMs(s: String, allDay: Boolean): Long {
+        val utc = LocalDateTime.parse(s.substringBefore('.')).toInstant(ZoneOffset.UTC).toEpochMilli()
+        return if (allDay) Math.floorDiv(utc + DAY_MS / 2, DAY_MS) * DAY_MS else utc
     }
 }

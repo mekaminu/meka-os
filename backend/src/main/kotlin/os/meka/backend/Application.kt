@@ -22,6 +22,8 @@ import kotlinx.io.readByteArray
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import os.meka.backend.integrations.BbcNewsRss
+import os.meka.backend.integrations.CalendarWriter
+import os.meka.backend.integrations.EntityReader
 import os.meka.backend.integrations.PublicNewsFeeds
 import os.meka.backend.integrations.NewsImages
 import os.meka.backend.integrations.PostgresNewsImageStore
@@ -35,6 +37,7 @@ import os.meka.backend.integrations.PostgresIntegrationStore
 import os.meka.backend.integrations.SecretsManagerOAuthClients
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
+import os.meka.core.domain.EntityTypes
 import os.meka.core.sync.ServerOpStore
 import os.meka.core.sync.SyncService
 import os.meka.core.wire.WireCodec
@@ -69,6 +72,8 @@ fun Application.mekaSync(
     voice: VoiceRoutes? = null,
     /** News pictures the server made (news, images slice); null leaves the route out. */
     newsImages: NewsImages? = null,
+    /** Sends calendar edits (calendar editing); a push carrying one pokes it so the edit goes out within seconds. */
+    calendarWriter: CalendarWriter? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -136,6 +141,7 @@ fun Application.mekaSync(
             val resp = withContext(Dispatchers.IO) { sync.push(req) } // blocking JDBC off the request threads
             // Wake the household's other devices so they pull now (coalesced; sent off the request).
             if (push != null && resp.acknowledged.isNotEmpty()) withContext(Dispatchers.IO) { runCatching { push.changed(who) } }
+            if (calendarWriter != null && req.ops.any { it.entityType == EntityTypes.EVENT_EDIT }) calendarWriter.poke()
             call.respondText(WireCodec.encodePushResponse(resp), ContentType.Application.Json)
         }
 
@@ -416,6 +422,15 @@ fun main(args: Array<String>) {
             val newsImages = NewsImages(PostgresNewsImageStore(ds))
             val integrations = integrationsFromEnv(opStore, onChanged = { hh -> push?.serverChanged(hh) }, images = newsImages)
             integrations?.let { startCalendarSync(it) }
+            // Calendar edits Meka makes in MEKA go to Google/Outlook after their undo window (calendar editing).
+            val calendarWriter = integrations?.writer(
+                object : EntityReader {
+                    override fun entities(householdId: String, entityType: String) = opStore.latestFields(householdId, entityType)
+                    override fun entity(householdId: String, entityType: String, entityId: String) =
+                        opStore.latestFields(householdId, entityType, entityId)[entityId]
+                },
+                onWritten = { hh -> push?.serverChanged(hh) },
+            )?.also { it.start() }
             // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push)
@@ -424,7 +439,7 @@ fun main(args: Array<String>) {
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
                     releases = Releases(PostgresReleaseStore(ds), onPublished = { who, r -> releaseActivity.record(who, r) }), push = push,
                     publisher = System.getenv("MEKA_RELEASE_PUBLISHER_SECRET")?.takeIf { it.isNotBlank() }?.let { SecretsManagerPublisherKey(it) },
-                    voice = voice, newsImages = newsImages,
+                    voice = voice, newsImages = newsImages, calendarWriter = calendarWriter,
                 )
             }.start(wait = true)
         }
@@ -489,7 +504,7 @@ object Migrations {
     private val all = listOf(
         1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql", 4 to "/db/V4__event_mirror_end.sql",
         5 to "/db/V5__app_release.sql", 6 to "/db/V6__push_token.sql", 7 to "/db/V7__news_image.sql",
-        8 to "/db/V8__calendar_editing.sql",
+        8 to "/db/V8__calendar_editing.sql", 9 to "/db/V9__event_edits.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

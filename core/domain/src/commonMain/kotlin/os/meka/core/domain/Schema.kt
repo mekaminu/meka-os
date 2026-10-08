@@ -38,11 +38,13 @@ object EntityTypes {
     const val HELD_MESSAGE = "held_message"
     /** An alarm (Alarms): the wake alarm for one morning, id `wake.d<epochDay>` (see [AlarmRules]). */
     const val ALARM = "alarm"
+    /** A change Meka made to a real calendar event, sent by the server after the undo window (see [CalendarEdits]). */
+    const val EVENT_EDIT = "event_edit"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
-        AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM,
+        AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT,
     )
 }
 
@@ -247,6 +249,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.HELD_MESSAGE -> MergePolicy.Lww
         // Alarms: the latest set, snooze or dismiss on any device wins.
         entityType == EntityTypes.ALARM -> MergePolicy.Lww
+        // Calendar edits: written once by the device that made them; Undo only ever sets true, the outcome only the server.
+        entityType == EntityTypes.EVENT_EDIT -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

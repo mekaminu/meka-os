@@ -38,6 +38,8 @@ data class MirrorRow(
     val fieldOps: Map<String, Pair<String, String>>,
     val endMs: Long = startMs,
     val allDay: Boolean = false,
+    /** The provider's id for it (`<calendar>/<event>`), so an edit can find the real event (calendar editing). */
+    val remoteId: String? = null,
 )
 
 /** Persistence for connected accounts and the event mirror. Runs inside the op store's transaction. */
@@ -200,7 +202,7 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
     }
 
     override fun mirror(householdId: String, accountId: String): Map<String, MirrorRow> = c { c ->
-        c.prepareStatement("SELECT entity_id, start_ms, removed, field_ops, end_ms, all_day FROM event_mirror WHERE household_id = ? AND account_id = ?").use { st ->
+        c.prepareStatement("SELECT entity_id, start_ms, removed, field_ops, end_ms, all_day, remote_id FROM event_mirror WHERE household_id = ? AND account_id = ?").use { st ->
             st.setString(1, householdId); st.setString(2, accountId)
             st.executeQuery().use { rs ->
                 buildMap {
@@ -208,7 +210,7 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
                         val id = rs.getString(1)
                         val start = rs.getLong(2)
                         val end = rs.getLong(5).takeIf { !rs.wasNull() } ?: start
-                        put(id, MirrorRow(id, accountId, start, rs.getBoolean(3), FieldOpsJson.decode(rs.getString(4)), end, rs.getBoolean(6)))
+                        put(id, MirrorRow(id, accountId, start, rs.getBoolean(3), FieldOpsJson.decode(rs.getString(4)), end, rs.getBoolean(6), rs.getString(7)))
                     }
                 }
             }
@@ -216,12 +218,14 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
     }
 
     override fun putMirror(householdId: String, row: MirrorRow) = update(
-        """INSERT INTO event_mirror(household_id, entity_id, account_id, start_ms, removed, field_ops, end_ms, all_day) VALUES (?,?,?,?,?,?,?,?)
+        """INSERT INTO event_mirror(household_id, entity_id, account_id, start_ms, removed, field_ops, end_ms, all_day, remote_id) VALUES (?,?,?,?,?,?,?,?,?)
            ON CONFLICT (household_id, entity_id) DO UPDATE SET start_ms = EXCLUDED.start_ms, removed = EXCLUDED.removed,
-             field_ops = EXCLUDED.field_ops, end_ms = EXCLUDED.end_ms, all_day = EXCLUDED.all_day""",
+             field_ops = EXCLUDED.field_ops, end_ms = EXCLUDED.end_ms, all_day = EXCLUDED.all_day,
+             remote_id = COALESCE(EXCLUDED.remote_id, event_mirror.remote_id)""",
     ) {
         it.setString(1, householdId); it.setString(2, row.entityId); it.setString(3, row.accountId)
         it.setLong(4, row.startMs); it.setBoolean(5, row.removed); it.setString(6, FieldOpsJson.encode(row.fieldOps))
         it.setLong(7, row.endMs); it.setBoolean(8, row.allDay)
+        if (row.remoteId != null) it.setString(9, row.remoteId) else it.setNull(9, java.sql.Types.VARCHAR)
     }
 }
