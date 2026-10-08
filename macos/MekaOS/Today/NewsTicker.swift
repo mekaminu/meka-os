@@ -78,7 +78,7 @@ enum TickerCardItem: Identifiable {
     }
 }
 
-private struct DriftingTicker: View {
+struct DriftingTicker: View {
     let cards: [TickerCardItem]
     let mode: TickerMode
     let palette: MekaPalette
@@ -150,7 +150,7 @@ private struct DriftingTicker: View {
 }
 
 /// Reduce Motion: one card at a time, ‹ 2 of 12 › to page (wrapping), cross-fading between cards.
-private struct StillTicker: View {
+struct StillTicker: View {
     let cards: [TickerCardItem]
     let palette: MekaPalette
     let open: (TickerCardItem) -> Void

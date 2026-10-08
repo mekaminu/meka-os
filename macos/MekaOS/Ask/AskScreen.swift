@@ -121,6 +121,8 @@ private struct AppearanceRow: View {
     @AppStorage(MekaAppearance.key) private var appearance = MekaAppearance.dark.rawValue
     /// News ticker (news ticker, slice 2): how the strip at the foot of Today moves on this Mac.
     @AppStorage(NewsTickerChoice.key) private var ticker = "calm"
+    /// The floating ticker (slice 2b): the same strip over every app, also in View → Floating Ticker.
+    @AppStorage(FloatingTicker.enabledKey) private var floating = false
     @State private var hovering = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -155,6 +157,23 @@ private struct AppearanceRow: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
+            }
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Floating ticker").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Text(floating ? "Over every app · drag its grip to the top or bottom" : "Off · a thin strip over every app")
+                        .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: floating)
+                }
+                Spacer()
+                Toggle("Floating ticker", isOn: $floating)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .onChange(of: floating) {
+                        MekaHaptics.tick()
+                        FloatingTicker.shared.refresh()
+                    }
             }
         }
         .padding(.horizontal, MekaSpace.m)

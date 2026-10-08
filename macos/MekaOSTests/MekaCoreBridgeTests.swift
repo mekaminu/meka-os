@@ -222,6 +222,16 @@ final class MekaCoreBridgeTests: XCTestCase {
                                                  loopsDone: TickerRules.shared.CALM_LOOPS, hasItems: true))
         let d = TickerRules.shared.step(drift: TickerDrift(offsetDp: 99, loops: 0), dtMs: 50, loopWidthDp: 100)
         XCTAssertEqual(d.loops, 1)
+        // The floating ticker (slice 2b): off by default, bottom middle, lets go onto the nearer edge.
+        XCTAssertFalse(FloatingTickerRules.shared.shown(enabled: true, ticker: ticker))
+        let screen = TickerRect(x: 0, y: 0, width: 1440, height: 875)
+        let placed = FloatingTickerRules.shared.placement(edgeId: nil, centre: Double.nan)
+        XCTAssertEqual(placed.edge, FloatingEdge.bottom)
+        let f = FloatingTickerRules.shared.frame(visible: screen, placement: placed)
+        XCTAssertEqual(f.x, 240)
+        XCTAssertEqual(f.width, FloatingTickerRules.shared.MAX_WIDTH)
+        let up = FloatingTickerRules.shared.dragged(start: f, dx: 0, dy: 600, visible: screen)
+        XCTAssertEqual(FloatingTickerRules.shared.dropped(visible: screen, panel: up).edge, FloatingEdge.top)
     }
 
     func testWeeklyReviewThroughTheBridge() async throws {

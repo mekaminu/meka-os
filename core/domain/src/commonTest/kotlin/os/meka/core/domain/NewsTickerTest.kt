@@ -121,3 +121,65 @@ class NewsTickerTest {
         assertEquals("Barça · Sport · 2 h ago: Pedri returns", TickerRules.spoken(item("b1", "barca", "Pedri returns")))
     }
 }
+
+class FloatingTickerTest {
+    private val screen = TickerRect(0.0, 0.0, 1440.0, 875.0) // a laptop's visible area (y up from the Dock)
+    private fun item(id: String) = NewsItem(id, id, null, "Sport", "ai", "Sport · 2 h ago", null, 0L)
+
+    @Test
+    fun offByDefaultAndHiddenWithNothingToShow() {
+        val some = TickerRules.ticker(NewsPlace(listOf(NewsLane("ai", "AI", "From Sport", listOf(item("a1")))), emptyList(), null))
+        assertFalse(FloatingTickerRules.shown(false, some))
+        assertTrue(FloatingTickerRules.shown(true, some))
+        assertFalse(FloatingTickerRules.shown(true, NewsTicker.EMPTY))
+        assertEquals(TickerMode.MOVING, FloatingTickerRules.MODE)
+    }
+
+    @Test
+    fun theStoredPlacementDefaultsToTheBottomMiddle() {
+        assertEquals(FloatingTickerRules.DEFAULT, FloatingTickerRules.placement(null, Double.NaN))
+        assertEquals(FloatingPlacement(FloatingEdge.TOP, 1.0), FloatingTickerRules.placement("top", 3.0))
+        assertEquals(FloatingPlacement(FloatingEdge.BOTTOM, 0.5), FloatingTickerRules.placement("sideways", Double.NaN))
+        assertEquals(FloatingPlacement(FloatingEdge.BOTTOM, 0.0), FloatingTickerRules.placement("bottom", -1.0))
+    }
+
+    @Test
+    fun theFrameSitsOnItsEdgeAtMostNineSixtyWideAndNeverPastASide() {
+        val bottom = FloatingTickerRules.frame(screen, FloatingTickerRules.DEFAULT)
+        assertEquals(TickerRect(240.0, 8.0, 960.0, 64.0), bottom)
+        val top = FloatingTickerRules.frame(screen, FloatingPlacement(FloatingEdge.TOP, 0.5))
+        assertEquals(875.0 - 8.0 - 64.0, top.y)
+        // Pushed right: stops 8 pt from the side.
+        assertEquals(1440.0 - 8.0 - 960.0, FloatingTickerRules.frame(screen, FloatingPlacement(FloatingEdge.TOP, 1.0)).x)
+        assertEquals(8.0, FloatingTickerRules.frame(screen, FloatingPlacement(FloatingEdge.TOP, 0.0)).x)
+        // A second screen to the left (negative x) and above the Dock.
+        val left = TickerRect(-1920.0, 40.0, 1920.0, 1000.0)
+        val f = FloatingTickerRules.frame(left, FloatingPlacement(FloatingEdge.BOTTOM, 0.25))
+        assertEquals(-1912.0, f.x) // the centre would put it past the left side
+        assertEquals(48.0, f.y)
+        // A narrow screen: the strip fills it within the margins, centred.
+        val small = TickerRect(0.0, 0.0, 600.0, 400.0)
+        assertEquals(TickerRect(8.0, 8.0, 584.0, 64.0), FloatingTickerRules.frame(small, FloatingPlacement(FloatingEdge.BOTTOM, 0.9)))
+        // Tinier than the minimum: never wider than the screen.
+        assertEquals(300.0, FloatingTickerRules.frame(TickerRect(0.0, 0.0, 300.0, 300.0), FloatingTickerRules.DEFAULT).width)
+    }
+
+    @Test
+    fun draggingKeepsThePanelOnTheScreenAndLettingGoPicksTheNearerEdge() {
+        val start = FloatingTickerRules.frame(screen, FloatingTickerRules.DEFAULT)
+        val moved = FloatingTickerRules.dragged(start, 100.0, 500.0, screen)
+        assertEquals(TickerRect(340.0, 508.0, 960.0, 64.0), moved)
+        // Can't be dragged off the screen.
+        val far = FloatingTickerRules.dragged(start, 5000.0, -5000.0, screen)
+        assertEquals(480.0, far.x)
+        assertEquals(0.0, far.y)
+        // Let go in the upper half: the top, centre kept (340 + 480 = 820 of 1440).
+        val p = FloatingTickerRules.dropped(screen, moved)
+        assertEquals(FloatingEdge.TOP, p.edge)
+        assertTrue(kotlin.math.abs(820.0 / 1440.0 - p.centre) < 1e-9)
+        assertTrue(kotlin.math.abs(340.0 - FloatingTickerRules.frame(screen, p).x) < 1e-9)
+        // Lower half: the bottom.
+        assertEquals(FloatingEdge.BOTTOM, FloatingTickerRules.dropped(screen, FloatingTickerRules.dragged(start, 0.0, 300.0, screen)).edge)
+        assertEquals(0.5, FloatingTickerRules.dropped(TickerRect(0.0, 0.0, 0.0, 0.0), start).centre)
+    }
+}

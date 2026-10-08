@@ -7,6 +7,8 @@ struct MekaOSApp: App {
     @NSApplicationDelegateAdaptor(MekaAppDelegate.self) private var appDelegate
     @State private var model = CoreModel()
     @AppStorage(MekaAppearance.key) private var appearance = MekaAppearance.dark.rawValue
+    /// The floating ticker (news ticker, slice 2b), off by default.
+    @AppStorage(FloatingTicker.enabledKey) private var floatingTicker = false
 
     var body: some Scene {
         WindowGroup("Meka", id: "today") {
@@ -15,6 +17,7 @@ struct MekaOSApp: App {
                 .frame(minWidth: 760, minHeight: 560)
                 .task {
                     await model.start()
+                    FloatingTicker.shared.attach(model)
                     // Services captures that arrived while the core was starting go in now.
                     let model = model
                     CaptureInbox.shared.attach { text, subject in model.capture(text, subject: subject) }
@@ -39,6 +42,9 @@ struct MekaOSApp: App {
             CommandGroup(after: .toolbar) {
                 Picker("Appearance", selection: $appearance) {
                     ForEach(MekaAppearance.allCases) { Text($0.label).tag($0.rawValue) }
+                }
+                Button(floatingTicker ? "Hide Floating Ticker" : "Show Floating Ticker") {
+                    FloatingTicker.shared.setEnabled(!floatingTicker)
                 }
             }
             CommandGroup(after: .textEditing) {
@@ -79,15 +85,24 @@ struct MekaOSApp: App {
 }
 
 /// MEKA's mark in the menu bar, and beside it "12 min" before the next event or "14 h 12 m" into a fast.
+/// It lives as long as the app, so it also starts the floating ticker (which needs a way to reopen the window).
 struct MenuBarStatusLabel: View {
     let model: CoreModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        if let status = model.menuBarStatus {
-            Image(systemName: status.symbol)
-            Text(status.text).monospacedDigit()
-        } else {
-            Image(systemName: "circle.dotted")
+        Group {
+            if let status = model.menuBarStatus {
+                Image(systemName: status.symbol)
+                Text(status.text).monospacedDigit()
+            } else {
+                Image(systemName: "circle.dotted")
+            }
+        }
+        .onAppear {
+            let open = openWindow
+            FloatingTicker.shared.openMainWindow = { open(id: "today") }
+            FloatingTicker.shared.attach(model)
         }
     }
 }

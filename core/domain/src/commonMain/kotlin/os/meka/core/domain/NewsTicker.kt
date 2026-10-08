@@ -118,3 +118,83 @@ object TickerRules {
         return listOfNotNull(lane, item.meta).joinToString(" · ") + ": " + item.title
     }
 }
+
+/** Which screen edge the Mac's floating ticker sits on. */
+enum class FloatingEdge(val id: String, val label: String) {
+    TOP("top", "Top of the screen"),
+    BOTTOM("bottom", "Bottom of the screen"),
+}
+
+/** A rectangle in screen points, y counted up from the bottom (the Mac's screen coordinates). */
+data class TickerRect(val x: Double, val y: Double, val width: Double, val height: Double) {
+    val midX: Double get() = x + width / 2
+    val midY: Double get() = y + height / 2
+}
+
+/** Where the floating ticker sits: an edge, and its centre across the screen (0 = left, 1 = right). */
+data class FloatingPlacement(val edge: FloatingEdge, val centre: Double)
+
+/**
+ * The Mac's floating ticker (build plan M1, news ticker slice 2b), non-AI and pure: a thin always-on-top strip of the
+ * same cards as Today's ticker, off by default (View → Floating Ticker), at the top or bottom edge of the screen. It is
+ * dragged by its grip and lets go onto the nearer edge, keeping where it was across the screen. It always drifts
+ * ([MODE]: there is no "Today opening" to be calm about), holds while hovered, and is hidden while there is nothing to
+ * show. The Mac keeps it out of full-screen apps. The choice and the placement are per Mac, nothing synced.
+ */
+object FloatingTickerRules {
+    /** The floating strip keeps drifting (hover holds it; Reduce Motion pages instead). */
+    val MODE: TickerMode = TickerMode.MOVING
+    const val HEIGHT = 64.0
+    const val MAX_WIDTH = 960.0
+    const val MIN_WIDTH = 320.0
+    /** Gap between the strip and the screen's edges (inside the menu bar and the Dock). */
+    const val MARGIN = 8.0
+
+    /** Off until turned on; at the bottom, centred. */
+    val DEFAULT = FloatingPlacement(FloatingEdge.BOTTOM, 0.5)
+
+    /** The stored edge; anything unknown (or nothing) is the bottom. */
+    fun edge(id: String?): FloatingEdge = FloatingEdge.entries.firstOrNull { it.id == id } ?: FloatingEdge.BOTTOM
+
+    /** The stored placement, the centre kept within the screen (nothing stored, NaN, is the middle). */
+    fun placement(edgeId: String?, centre: Double): FloatingPlacement =
+        FloatingPlacement(edge(edgeId), if (centre.isNaN()) 0.5 else centre.coerceIn(0.0, 1.0))
+
+    /** Whether the panel is on screen: turned on and something to show. */
+    fun shown(enabled: Boolean, ticker: NewsTicker): Boolean = enabled && !ticker.isEmpty
+
+    /**
+     * The panel's frame inside the screen's [visible] area (without the menu bar and the Dock): at most [MAX_WIDTH]
+     * wide and [MARGIN] in from the sides (never narrower than [MIN_WIDTH] unless the screen is), centred where it was
+     * left but never past a side, [MARGIN] from its edge.
+     */
+    fun frame(visible: TickerRect, placement: FloatingPlacement): TickerRect {
+        val room = visible.width - 2 * MARGIN
+        val width = minOf(MAX_WIDTH, maxOf(room, minOf(MIN_WIDTH, visible.width)))
+        val x = if (width >= room) {
+            visible.x + (visible.width - width) / 2
+        } else {
+            (visible.x + placement.centre * visible.width - width / 2)
+                .coerceIn(visible.x + MARGIN, visible.x + visible.width - MARGIN - width)
+        }
+        val y = when (placement.edge) {
+            FloatingEdge.TOP -> visible.y + visible.height - MARGIN - HEIGHT
+            FloatingEdge.BOTTOM -> visible.y + MARGIN
+        }
+        return TickerRect(x, y, width, HEIGHT)
+    }
+
+    /** While dragging: the panel moved by ([dx], [dy]) from where the drag began, kept wholly on the screen. */
+    fun dragged(start: TickerRect, dx: Double, dy: Double, visible: TickerRect): TickerRect {
+        val maxX = maxOf(visible.x, visible.x + visible.width - start.width)
+        val maxY = maxOf(visible.y, visible.y + visible.height - start.height)
+        return start.copy(x = (start.x + dx).coerceIn(visible.x, maxX), y = (start.y + dy).coerceIn(visible.y, maxY))
+    }
+
+    /** Let go at [panel]: the nearer edge (the upper half is the top), and where its centre is across the screen. */
+    fun dropped(visible: TickerRect, panel: TickerRect): FloatingPlacement {
+        val edge = if (panel.midY >= visible.midY) FloatingEdge.TOP else FloatingEdge.BOTTOM
+        val centre = if (visible.width <= 0.0) 0.5 else ((panel.midX - visible.x) / visible.width).coerceIn(0.0, 1.0)
+        return FloatingPlacement(edge, centre)
+    }
+}
