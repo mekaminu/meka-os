@@ -2,6 +2,10 @@ package os.meka.android.goals
 
 import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -32,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -81,6 +86,10 @@ import os.meka.core.facade.MekaCore
  * When an extended fast reaches its goal, "You did it · 5 days" pops in and the ring bursts once (a ring of light
  * spreading out with twelve short rays, light haptic), once per fast on this phone ([FastBurst]). Reduced motion: the
  * line fades in, no burst.
+ *
+ * "Pick a day and time" (Longer fast) unfolds in place: day chips (Today … ten days on), a time stepping by half
+ * hours with ‹ › (the digits cross-fade, tick haptic) and the line saying the goal or why not ([FastingRules.untilPick]),
+ * which cross-fades as the choice changes; Start gives a light haptic and folds it away.
  */
 @Composable
 internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
@@ -89,6 +98,7 @@ internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
     val haptics = rememberMekaHaptics()
     val act: (suspend () -> Unit) -> Unit = { body -> scope.launch { runCatching { body() } } }
     var adjusting by rememberSaveable { mutableStateOf(false) }
+    var picking by rememberSaveable { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val cur = v.current
     // The timer ticks every second while a fast runs.
@@ -166,6 +176,11 @@ internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
                 val n = FastingRules.EXTENDED_CHOICES.size
                 if (i < n) act { core.startExtendedFast(FastingRules.EXTENDED_CHOICES[i].hours, 0) }
                 else act { core.startFastUntil(v.untilChoices[i - n].untilMs, 0) }
+            }
+            // A custom end: "Pick a day and time" unfolds the day chips and a time stepper in place.
+            Action(if (picking) "Close" else "Pick a day and time") { haptics.tick(); picking = !picking }
+            AnimatedVisibility(picking, enter = unfold(), exit = fold()) {
+                UntilPicker(v) { untilMs -> haptics.light(); picking = false; act { core.startFastUntil(untilMs, 0) } }
             }
             v.last?.takeIf { it.canResume }?.let { last -> Action("Undo end") { act { core.resumeFast(last.id) } } }
             Chips("Plan", FastingRules.PLAN_CHOICES.map { it.label to (FastingRules.planLabel(v.plan) == it.label) }) { i -> act { core.chooseFastingPlan(i) } }
@@ -347,3 +362,45 @@ object FastBurst {
         return true
     }
 }
+
+/**
+ * A custom "until" end: a day ([FastingView.untilDays]) and a time in half-hour steps, checked by the core as you
+ * choose ("Goal 4 d 18 h · starts now" or "Pick an end at least 12 hours away"). Start is offered only when it's valid.
+ */
+@Composable
+private fun UntilPicker(v: FastingView, start: (Long) -> Unit) {
+    val haptics = rememberMekaHaptics()
+    val days = v.untilDays
+    if (days.isEmpty()) return
+    var day by rememberSaveable { mutableLongStateOf(days.getOrElse(1) { days.first() }.epochDay) }
+    var minute by rememberSaveable { mutableIntStateOf(FastingRules.UNTIL_HOUR * 60) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    // The check moves on with the clock while the picker is open.
+    LaunchedEffect(Unit) { while (true) { delay(30_000); now = System.currentTimeMillis() } }
+    val chosen = days.firstOrNull { it.epochDay == day } ?: days.first()
+    val untilMs = v.untilAt(chosen, minute)
+    val pick = FastingRules.untilPick(now, untilMs)
+    val reduced = Meka.reducedMotion
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s), modifier = Modifier.padding(top = MekaSpace.xxs)) {
+        Chips("Ends on", days.map { it.label to (it.epochDay == chosen.epochDay) }) { i -> haptics.tick(); day = days[i].epochDay }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+            Text("At", style = MekaType.caption, color = Meka.colors.textTertiary)
+            Action("‹") { haptics.tick(); minute = FastingRules.stepUntilTime(minute, -1) }
+            AnimatedContent(
+                targetState = FastingRules.hm(minute),
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "until-time",
+            ) { t -> Text(t, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { contentDescription = "Ends at $t" }) }
+            Action("›") { haptics.tick(); minute = FastingRules.stepUntilTime(minute, 1) }
+        }
+        AnimatedContent(
+            targetState = pick,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "until-line",
+        ) { p -> Text(p.line, style = MekaType.caption, color = if (p.ok) Meka.colors.textSecondary else Meka.colors.critical) }
+        AnimatedVisibility(pick.ok, enter = unfold(), exit = fold()) {
+            Action("Start fast until ${chosen.label} ${FastingRules.hm(minute)}") { start(untilMs) }
+        }
+    }
+}
+

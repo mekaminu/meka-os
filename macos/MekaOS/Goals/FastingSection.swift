@@ -1,3 +1,4 @@
+import Combine
 @preconcurrency import MekaKit
 import SwiftUI
 
@@ -9,6 +10,8 @@ import SwiftUI
 /// keeps every fast (planned against actual), the streak and a twelve-week heat strip. Tracking only, no advice.
 /// When an extended fast reaches its goal, "You did it · 5 days" pops in and the ring bursts once (a ring of light
 /// spreading out with twelve rays), once per fast on this Mac. Reduce Motion: the line fades in, no burst.
+/// Longer fast → Pick a Day and Time… opens a popover (the system scale-fades it): a date-and-time field limited to
+/// 12 hours … ten days on, the core's line saying the goal or why not (it cross-fades), and Start.
 struct FastingSection: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -17,6 +20,8 @@ struct FastingSection: View {
     @AppStorage("meka.fastBurst") private var burstFastId = ""
     @State private var burst: Double = 0
     @State private var pop: Double = 1
+    /// "Pick a Day and Time…" from the Longer fast menu.
+    @State private var pickingUntil = false
 
     var body: some View {
         if let v = model.fasting {
@@ -117,8 +122,16 @@ struct FastingSection: View {
                     ForEach(v.untilChoices, id: \.untilMs) { c in
                         Button(c.label) { model.startFastUntil(c.untilMs) }
                     }
+                    Divider()
+                    Button("Pick a Day and Time…") { pickingUntil = true }
                 }
                 .menuStyle(.button).fixedSize()
+                .popover(isPresented: $pickingUntil, arrowEdge: .bottom) {
+                    FastUntilPicker(defaultMs: v.untilChoices.first?.untilMs, palette: palette) { ms in
+                        pickingUntil = false
+                        model.startFastUntil(ms)
+                    }
+                }
                 if let last = v.last, last.canResume {
                     Button("Undo end") { model.resumeFast(last.id) }
                 }
@@ -320,3 +333,49 @@ private struct FastingHistorySection: View {
         }
     }
 }
+
+/// A custom "until" end on the Mac: any day and time from 12 hours to ten days on, checked by the core as it changes
+/// ("Goal 4 d 18 h · starts now"). Start is enabled only when it's valid.
+struct FastUntilPicker: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let palette: MekaPalette
+    let start: (Int64) -> Void
+    @State private var date: Date
+    @State private var now = Date()
+
+    init(defaultMs: Int64?, palette: MekaPalette, start: @escaping (Int64) -> Void) {
+        self.palette = palette
+        self.start = start
+        let fallback = Date().addingTimeInterval(TimeInterval(FastingRules.shared.MIN_UNTIL_HOURS) * 3600 * 2)
+        _date = State(initialValue: defaultMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) } ?? fallback)
+    }
+
+    private static func ms(_ d: Date) -> Int64 { Int64((d.timeIntervalSince1970 * 1000).rounded()) }
+    private static func date(_ ms: Int64) -> Date { Date(timeIntervalSince1970: TimeInterval(ms) / 1000) }
+
+    var body: some View {
+        let nowMs = Self.ms(now)
+        let pick = FastingRules.shared.untilPick(nowMs: nowMs, untilMs: Self.ms(date))
+        let range = Self.date(FastingRules.shared.untilEarliest(nowMs: nowMs))...Self.date(FastingRules.shared.untilLatest(nowMs: nowMs))
+        VStack(alignment: .leading, spacing: MekaSpace.s) {
+            Text("Fast until").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+            DatePicker("Ends", selection: $date, in: range, displayedComponents: [.date, .hourAndMinute])
+                .datePickerStyle(.field).labelsHidden()
+            Text(pick.line)
+                .font(MekaType.caption)
+                .foregroundStyle(pick.ok ? palette.textSecondary : palette.critical)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: pick.line)
+            HStack {
+                Spacer()
+                Button("Start") { MekaHaptics.light(); start(Self.ms(date)) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!pick.ok)
+            }
+        }
+        .padding(MekaSpace.l)
+        .frame(width: 260)
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now = $0 }
+    }
+}
+

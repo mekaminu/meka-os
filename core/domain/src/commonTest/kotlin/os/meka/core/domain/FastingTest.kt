@@ -283,6 +283,50 @@ class FastingTest {
     }
 
     @Test
+    fun aCustomUntilDayAndTimeStartsAFastUntilThen() {
+        // Monday 20:00: 12 hours on is Tuesday 08:00, ten days on is Thursday week 20:00.
+        val v = f.view()
+        assertEquals("Tomorrow", v.untilDays.first().label)
+        assertEquals(today() + 1, v.untilDays.first().epochDay)
+        assertEquals(10, v.untilDays.size)
+        assertEquals(today() + 10, v.untilDays.last().epochDay)
+        val sat = v.untilDays[4]
+        assertEquals(CivilDate.shortLabel(today() + 5).substringBeforeLast(' '), sat.label)
+        assertTrue(sat.label.startsWith("Sat "))
+        val untilMs = v.untilAt(sat, 14 * 60 + 30)
+        assertEquals((today() + 5) * dayMs + (14 * 60 + 30) * 60_000L, untilMs)
+        assertEquals(FastUntilPick(true, "Goal 4 d 18 h · starts now"), FastingRules.untilPick(world.clock.nowMs, untilMs))
+        // Too soon (Tuesday 07:30) or past ten days (Thursday week 20:30) is said, not started.
+        val early = v.untilAt(v.untilDays.first(), 7 * 60 + 30)
+        assertEquals(FastUntilPick(false, "Pick an end at least 12 hours away"), FastingRules.untilPick(world.clock.nowMs, early))
+        val late = v.untilAt(v.untilDays.last(), 20 * 60 + 30)
+        assertEquals(FastUntilPick(false, "Pick an end within ten days"), FastingRules.untilPick(world.clock.nowMs, late))
+        assertEquals("Pick an end at least 12 hours away", assertFailsWith<ValidationException> { f.startUntil(early) }.message)
+        assertTrue(FastingRules.untilPick(world.clock.nowMs, v.untilAt(v.untilDays.last(), 20 * 60)).ok)
+        f.startUntil(untilMs)
+        val cur = assertNotNull(f.view().current)
+        assertEquals("Fast until Sat 14:30", cur.title)
+        assertEquals(115, cur.targetHours) // 114 h 30 m, rounded up
+        assertEquals("Day 1 of 5 · 0 h", cur.dayLine)
+    }
+
+    @Test
+    fun lateInTheEveningTodayIsNotADayAndTimeSteps() {
+        world.clock.nowMs = (today() * dayMs) + 9 * hourMs // Monday 09:00: 21:00 today is 12 h on
+        val v = f.view()
+        assertEquals("Today", v.untilDays.first().label)
+        assertEquals("Tomorrow", v.untilDays[1].label)
+        assertEquals(11, v.untilDays.size) // Monday → Thursday week (09:00 is ten days on)
+        assertEquals(18 * 60 + 30, FastingRules.stepUntilTime(18 * 60, 1))
+        assertEquals(17 * 60 + 30, FastingRules.stepUntilTime(18 * 60, -1))
+        assertEquals(0, FastingRules.stepUntilTime(23 * 60 + 30, 1))
+        assertEquals(23 * 60 + 30, FastingRules.stepUntilTime(0, -1))
+        assertEquals(18 * 60, FastingRules.stepUntilTime(18 * 60 + 10, 0)) // snaps to the half hour
+        assertEquals("Start a 5-day fast", FastingRules.startTitle(120))
+        assertEquals("Start a 36 h fast", FastingRules.startTitle(36))
+    }
+
+    @Test
     fun theHeatStripCountsHoursFastedEachDay() {
         f.start(); hours(16); f.end() // Monday 20:00 → Tuesday 12:00
         val h = f.view().history

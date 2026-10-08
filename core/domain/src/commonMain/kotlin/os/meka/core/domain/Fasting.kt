@@ -152,8 +152,18 @@ data class FastingView(
     val history: FastingHistory = FastingHistory.EMPTY,
     /** "Until …" goals offered for a new extended fast: the next six days at 18:00. */
     val untilChoices: List<FastUntilChoice> = emptyList(),
+    /**
+     * Days a custom "until" end can fall on ("Pick a day and time"): from the day 12 hours from now falls on to the
+     * day ten days from now falls on ("Today", "Tomorrow", "Sat 10"); the first and last are only partly valid.
+     */
+    val untilDays: List<FastUntilDay> = emptyList(),
+    /** Local time for [untilAt]; the device's own. */
+    private val untilCalendar: LocalCalendar = LocalCalendar.UTC,
 ) {
     val isFasting: Boolean get() = current != null
+
+    /** The moment [minuteOfDay] on [day] for a custom "until" end (a time skipped by a clock change moves forward). */
+    fun untilAt(day: FastUntilDay, minuteOfDay: Int): Long = untilCalendar.toEpochMs(day.epochDay, minuteOfDay.mod(24 * 60))
 
     companion object {
         val EMPTY = FastingView(FastingRules.DEFAULT_PLAN, null, null, "", emptyList(), null)
@@ -162,6 +172,12 @@ data class FastingView(
 
 /** "Until Fri 18:00" for a new extended fast. */
 data class FastUntilChoice(val label: String, val untilMs: Long)
+
+/** A day for a custom "until" end: "Today", "Tomorrow", "Sat 10 Oct". */
+data class FastUntilDay(val label: String, val epochDay: Long)
+
+/** Whether a custom "until" end can start a fast now, and the line that says so ("Goal 3 d 20 h · starts now"). */
+data class FastUntilPick(val ok: Boolean, val line: String)
 
 data class ExtendedFastChoice(val label: String, val hours: Int)
 
@@ -190,6 +206,8 @@ object FastingRules {
     const val MIN_UNTIL_HOURS = 12
     /** The "Until …" choices are this hour of day. */
     const val UNTIL_HOUR = 18
+    /** A custom "until" time moves in steps of this many minutes. */
+    const val UNTIL_STEP_MIN = 30
     /** Finished fasts kept in the history list (all of them stay in the data and the export). */
     const val HISTORY_MAX = 30
     /** Weeks in the heat strip. */
@@ -246,6 +264,28 @@ object FastingRules {
     /** Share of the way from [startedAtMs] to [goalAtMs], 0 to 1 (capped). */
     fun progressTo(startedAtMs: Long, goalAtMs: Long, nowMs: Long): Float =
         ((nowMs - startedAtMs).toDouble() / (goalAtMs - startedAtMs).coerceAtLeast(1)).coerceIn(0.0, 1.0).toFloat()
+
+    /** The earliest end a fast "until" a moment can have if it starts at [nowMs]. */
+    fun untilEarliest(nowMs: Long): Long = nowMs + MIN_UNTIL_HOURS * HOUR_MS
+
+    /** The latest end: ten days on. */
+    fun untilLatest(nowMs: Long): Long = nowMs + MAX_TARGET_HOURS * HOUR_MS
+
+    /** Whether a fast starting at [nowMs] can run until [untilMs]: "Goal 3 d 20 h · starts now", or why not. */
+    fun untilPick(nowMs: Long, untilMs: Long): FastUntilPick = when {
+        untilMs < untilEarliest(nowMs) -> FastUntilPick(false, "Pick an end at least $MIN_UNTIL_HOURS hours away")
+        untilMs > untilLatest(nowMs) -> FastUntilPick(false, "Pick an end within ten days")
+        else -> FastUntilPick(true, "Goal ${longDuration(untilMs - nowMs)} · starts now")
+    }
+
+    /** [minuteOfDay] moved by [steps] of [UNTIL_STEP_MIN], kept within the day (23:30 + 1 step is 00:00). */
+    fun stepUntilTime(minuteOfDay: Int, steps: Int): Int {
+        val snapped = minuteOfDay.mod(24 * 60) / UNTIL_STEP_MIN * UNTIL_STEP_MIN
+        return (snapped + steps * UNTIL_STEP_MIN).mod(24 * 60)
+    }
+
+    /** The command bar's "Start a 5-day fast" / "Start a 36 h fast". */
+    fun startTitle(hours: Int): String = "Start a ${extendedTitle(hours)}"
 
     /** "5-day fast", "36 h fast", "24 h fast". */
     fun extendedTitle(targetHours: Int): String =
@@ -376,10 +416,8 @@ class Fasting(
     /** Starts an extended fast that runs until [untilMs] ("until Friday 18:00"). */
     fun startUntil(untilMs: Long, startedMinutesAgo: Int = 0): String {
         val start = nowMs() - startedMinutesAgo * 60_000L
-        val span = untilMs - start
-        if (span < FastingRules.MIN_UNTIL_HOURS * HOUR) throw ValidationException("Pick an end at least ${FastingRules.MIN_UNTIL_HOURS} hours away")
-        if (span > FastingRules.MAX_TARGET_HOURS * HOUR) throw ValidationException("Pick an end within ten days")
-        return begin(startedMinutesAgo, ((span + HOUR - 1) / HOUR).toInt(), extended = true, goalAt = untilMs)
+        FastingRules.untilPick(start, untilMs).takeIf { !it.ok }?.let { throw ValidationException(it.line) }
+        return begin(startedMinutesAgo, ((untilMs - start + HOUR - 1) / HOUR).toInt(), extended = true, goalAt = untilMs)
     }
 
     private fun begin(startedMinutesAgo: Int, target: Int, extended: Boolean, goalAt: Long?): String {
@@ -517,7 +555,23 @@ class Fasting(
                 val ms = calendar.toEpochMs(today + ahead, FastingRules.UNTIL_HOUR * 60)
                 FastUntilChoice("Until ${dayTime(ms)}", ms)
             },
+            untilDays = untilDays(now, today),
+            untilCalendar = calendar,
         )
+    }
+
+    /** Days with at least one valid custom "until" end: from the day 12 hours on falls in to the day ten days on does. */
+    private fun untilDays(now: Long, today: Long): List<FastUntilDay> {
+        val first = calendar.epochDayOf(FastingRules.untilEarliest(now))
+        val last = calendar.epochDayOf(FastingRules.untilLatest(now))
+        return (first..last).map { d ->
+            val label = when (d - today) {
+                0L -> "Today"
+                1L -> "Tomorrow"
+                else -> CivilDate.shortLabel(d).substringBeforeLast(' ') // "Sat 10"
+            }
+            FastUntilDay(label, d)
+        }
     }
 
     /** Every finished fast (newest first), the streak, the totals and the heat strip. */

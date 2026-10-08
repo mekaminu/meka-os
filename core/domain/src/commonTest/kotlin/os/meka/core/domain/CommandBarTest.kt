@@ -125,4 +125,26 @@ class CommandBarTest {
         assertEquals("You can undo it for 10 minutes", end.detail)
         assertNull(CommandBarRules.run("today", ctx).rows.first().detail)
     }
+
+    @Test
+    fun longerFastsAreFoundByTypingAndCarryTheirLength() {
+        // Not in the list shown when nothing is typed (it stays short), and never while fasting.
+        assertFalse(CommandBarAction.FAST_LONGER in actions(""))
+        val five = CommandBarRules.run("5 day", ctx).rows.first()
+        assertEquals(CommandBarAction.FAST_LONGER, five.action)
+        assertEquals("Start a 5-day fast", five.title)
+        assertEquals("Goal 5 days · starts now", five.detail)
+        assertEquals(120, five.hours)
+        val longer = CommandBarRules.run("longer", ctx).rows.filter { it.action == CommandBarAction.FAST_LONGER }
+        assertEquals(FastingRules.EXTENDED_CHOICES.map { it.hours }, longer.map { it.hours })
+        assertEquals(listOf("Start a 24 h fast", "Start a 36 h fast", "Start a 2-day fast"), longer.take(3).map { it.title })
+        assertEquals(36, CommandBarRules.run("36", ctx).rows.first().hours)
+        // "fast" still offers the usual fast first, then the lengths.
+        val fast = CommandBarRules.run("fast", ctx).rows
+        assertEquals(CommandBarAction.FAST_START, fast.first().action)
+        assertEquals(CommandBarAction.FAST_LONGER, fast[1].action)
+        assertFalse(CommandBarAction.FAST_LONGER in actions("longer", ctx.copy(fasting = true)))
+        // Every other row carries no length.
+        assertTrue(CommandBarRules.run("", ctx).rows.all { it.hours == null })
+    }
 }

@@ -212,7 +212,7 @@ enum CommandBarNav {
         case .shutDown: "moon"
         case .syncNow: "arrow.triangle.2.circlepath"
         case .workStart, .workFinish, .workMode: "briefcase"
-        case .fastStart, .fastEnd: "circle.lefthalf.filled"
+        case .fastStart, .fastEnd, .fastLonger: "circle.lefthalf.filled"
         case .notifications: "bell"
         case .activity: "clock.arrow.circlepath"
         case .yourData: "square.and.arrow.down"

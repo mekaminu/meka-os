@@ -2,7 +2,7 @@ package os.meka.core.domain
 
 /**
  * The command bar (build plan M1, Outside the app: the Mac's ⌘K). One field that reaches every place and the everyday
- * actions by typing a few letters: "rev" → Review, "fast" → Start a fast, "exp" → Your data. Whatever is typed can also
+ * actions by typing a few letters: "rev" → Review, "fast" → Start a fast, "5 day" → Start a 5-day fast, "exp" → Your data. Whatever is typed can also
  * be searched for or added as a task, so the bar is never a dead end.
  *
  * Non-AI and pure: a fixed catalogue matched with the same word-start rules as Search ([SearchRules]); nothing stored,
@@ -13,6 +13,10 @@ package os.meka.core.domain
 enum class CommandBarAction {
     GO_TODAY, GO_NEEDS_YOU, GO_CALENDAR, GO_ASK, GO_LISTS, GO_GOALS, GO_REVIEW, GO_VAULT,
     PLAN_DAY, MORNING_BRIEF, SHUT_DOWN, SYNC_NOW, WORK_START, WORK_FINISH, FAST_START, FAST_END,
+
+    /** Starts an extended fast of [CommandBarRow.hours] now (Fasting v2's "Longer fast" lengths). */
+    FAST_LONGER,
+
     WORK_MODE, NOTIFICATIONS, ACTIVITY, YOUR_DATA, CALENDARS,
     APPEARANCE_DARK, APPEARANCE_LIGHT, APPEARANCE_AUTO,
 
@@ -39,6 +43,8 @@ data class CommandBarRow(
     val detail: String?,
     /** What was typed, for [CommandBarAction.SEARCH_FOR] and [CommandBarAction.ADD_TASK]; null for the rest. */
     val text: String?,
+    /** The fast's length for [CommandBarAction.FAST_LONGER] (24 … 168); null for the rest. */
+    val hours: Int? = null,
 )
 
 data class CommandBarGroup(
@@ -76,6 +82,10 @@ object CommandBarRules {
         val title: String,
         /** Other words people use for it; they match, but count less than the title. */
         val keywords: String,
+        /** For [CommandBarAction.FAST_LONGER]: the length. */
+        val hours: Int? = null,
+        /** Shown only while typing, not in the catalogue listed when nothing is typed (keeps it short). */
+        val typedOnly: Boolean = false,
     )
 
     private val CATALOGUE: List<Entry> = listOf(
@@ -94,6 +104,13 @@ object CommandBarRules {
         Entry(CommandBarAction.WORK_FINISH, CommandBarSection.DO, "Finish work", "work mode switch off done stop"),
         Entry(CommandBarAction.FAST_START, CommandBarSection.DO, "Start a fast", "fasting timer begin"),
         Entry(CommandBarAction.FAST_END, CommandBarSection.DO, "End the fast", "fasting stop break eat"),
+    ) + FastingRules.EXTENDED_CHOICES.map { c ->
+        // "Start a 5-day fast" · keywords "5 days longer extended": typing "5 day", "longer" or "extended" finds it.
+        Entry(
+            CommandBarAction.FAST_LONGER, CommandBarSection.DO, FastingRules.startTitle(c.hours),
+            "${c.label} longer extended fasting", hours = c.hours, typedOnly = true,
+        )
+    } + listOf(
         Entry(CommandBarAction.SYNC_NOW, CommandBarSection.DO, "Sync now", "refresh reload update"),
         Entry(CommandBarAction.WORK_MODE, CommandBarSection.OPEN, "Work mode", "hours schedule shift"),
         Entry(CommandBarAction.NOTIFICATIONS, CommandBarSection.OPEN, "Notifications", "quiet hours digest alerts settings"),
@@ -109,7 +126,7 @@ object CommandBarRules {
     private fun offered(action: CommandBarAction, ctx: CommandBarContext): Boolean = when (action) {
         CommandBarAction.WORK_START -> !ctx.atWork
         CommandBarAction.WORK_FINISH -> ctx.atWork
-        CommandBarAction.FAST_START -> !ctx.fasting
+        CommandBarAction.FAST_START, CommandBarAction.FAST_LONGER -> !ctx.fasting
         CommandBarAction.FAST_END -> ctx.fasting
         CommandBarAction.CALENDARS -> ctx.connected
         CommandBarAction.SYNC_NOW -> ctx.connected
@@ -119,8 +136,9 @@ object CommandBarRules {
         else -> true
     }
 
-    private fun detail(action: CommandBarAction, ctx: CommandBarContext): String? = when (action) {
+    private fun detail(action: CommandBarAction, ctx: CommandBarContext, hours: Int?): String? = when (action) {
         CommandBarAction.FAST_START -> "Goal ${ctx.fastGoalHours} h · starts now"
+        CommandBarAction.FAST_LONGER -> "Goal ${FastingRules.daysLabel(hours ?: 0)} · starts now"
         CommandBarAction.FAST_END -> "You can undo it for 10 minutes"
         CommandBarAction.WORK_START -> "Until your schedule next changes"
         CommandBarAction.WORK_FINISH -> "Until your schedule next changes"
@@ -147,7 +165,7 @@ object CommandBarRules {
         if (typed.isEmpty()) {
             return CommandBarResults(
                 CommandBarSection.entries.mapNotNull { section ->
-                    val rows = entries.filter { it.section == section }.map { row(it, context) }
+                    val rows = entries.filter { it.section == section && !it.typedOnly }.map { row(it, context) }
                     if (rows.isEmpty()) null else CommandBarGroup(section.label, rows)
                 },
             )
@@ -169,5 +187,5 @@ object CommandBarRules {
         return CommandBarResults(listOf(CommandBarGroup(null, rows)))
     }
 
-    private fun row(e: Entry, ctx: CommandBarContext) = CommandBarRow(e.action, e.title, detail(e.action, ctx), null)
+    private fun row(e: Entry, ctx: CommandBarContext) = CommandBarRow(e.action, e.title, detail(e.action, ctx, e.hours), null, e.hours)
 }

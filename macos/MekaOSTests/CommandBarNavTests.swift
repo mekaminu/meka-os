@@ -26,4 +26,21 @@ final class CommandBarNavTests: XCTestCase {
         XCTAssertEqual(rows.last?.action, .addTask)
         XCTAssertEqual(rows.last?.text, "rev")
     }
+
+    @MainActor
+    func testLongerFastRowsCarryTheirLengthToSwift() {
+        let ctx = CommandBarContext(atWork: false, fasting: false, fastGoalHours: 16, connected: true, appearance: "dark")
+        let row = CommandBarRules.shared.run(query: "5 day", context: ctx).rows.first
+        XCTAssertEqual(row?.action, .fastLonger)
+        XCTAssertEqual(row?.title, "Start a 5-day fast")
+        XCTAssertEqual(row?.hours?.int32Value, 120)
+        XCTAssertEqual(CommandBarNav.symbol(.fastLonger), CommandBarNav.symbol(.fastStart))
+        XCTAssertNil(CommandBarNav.destination(.fastLonger))
+        // The custom "until" check the Mac's popover shows.
+        let now: Int64 = 1_760_000_000_000
+        XCTAssertFalse(FastingRules.shared.untilPick(nowMs: now, untilMs: now + 3_600_000).ok)
+        XCTAssertEqual(FastingRules.shared.untilPick(nowMs: now, untilMs: now + 36 * 3_600_000).line, "Goal 36 h 00 m · starts now")
+        XCTAssertEqual(FastingRules.shared.untilLatest(nowMs: now) - FastingRules.shared.untilEarliest(nowMs: now), 228 * 3_600_000)
+    }
 }
+

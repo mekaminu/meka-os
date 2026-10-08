@@ -356,6 +356,7 @@ final class CoreModel {
         case .workStart: setWorkSwitch(true)
         case .workFinish: setWorkSwitch(false)
         case .fastStart: startFast(minutesAgo: 0)
+        case .fastLonger: if let h = row.hours { startExtendedFast(hours: h.int32Value) }
         case .fastEnd: endFast()
         case .workMode: showWork = true
         case .notifications: showNotifications = true
