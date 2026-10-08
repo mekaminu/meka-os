@@ -50,6 +50,7 @@ import os.meka.android.designsystem.SkeletonRows
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.DatabaseProtectionRules
 import os.meka.core.domain.ExportSummary
 import os.meka.core.facade.DataExportFile
 import os.meka.core.facade.MekaCore
@@ -165,6 +166,10 @@ fun YourData(core: MekaCore, modifier: Modifier = Modifier, onClose: (() -> Unit
         Text(
             "The file isn't encrypted: keep it somewhere only you can open. It's JSON, readable without MEKA.",
             style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(3)),
+        )
+        Text(
+            DatabaseProtectionRules.PHONE_LINE,
+            style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(4)),
         )
     }
 }

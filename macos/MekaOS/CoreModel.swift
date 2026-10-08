@@ -96,6 +96,8 @@ final class CoreModel {
     private(set) var activityNote: String?
     var showActivity = false
     private(set) var exportSummary: ExportSummary?
+    /// Your data's line on how MEKA's database on this Mac is protected (encrypted, or FileVault only).
+    private(set) var databaseLine: String?
     private(set) var exporting = false
     private(set) var exportOutcome: String?
     private(set) var exportSaved = false
@@ -132,13 +134,16 @@ final class CoreModel {
         let identity = DeviceIdentity.loadOrCreate()
         self.identity = identity
         let syncURL = identity.serverURL
+        let database = Self.prepareDatabase()
+        databaseLine = DatabaseProtectionRules.shared.macLine(protection: database.protection)
+        if let note = database.note { lastError = note }
         let core = MacCoreFactory.shared.create(
             householdId: identity.householdID,
             deviceId: identity.deviceID,
             syncUrl: syncURL,
             deviceSecret: identity.deviceSecret,
-            databaseKeyHex: nil,     // spike S6: SQLCipher linkage pending (ADR-002)
-            encrypted: false,
+            databaseKeyHex: database.keyHex,   // slice 2b: SQLCipher with a sealed key (ADR-002)
+            encrypted: database.encrypted,
             databaseDirectory: Self.databaseDirectory(),
             databaseName: "meka.db",
             deviceKey: syncURL == nil ? nil : deviceKey
@@ -1295,6 +1300,25 @@ final class CoreModel {
     }
 
     /// ~/Library/Application Support/os.meka.mac — app-specific, created on first launch.
+    /// Mac database encryption (slice 2b): encrypts a plain database once, before the core opens it. The key lives
+    /// only as a sealed file; SQLCipher is checked on throwaway files first, so a key never reaches a plain SQLite.
+    private static func prepareDatabase() -> DatabaseEncryption.Prepared {
+        let directory = databaseDirectory()
+        let key = DeviceIdentity.databaseKey()
+        var ready = false
+        if key != nil {
+            let probe = MacCoreFactory.shared.databaseEncryptionProbe(directory: directory)
+            ready = probe.cipherVersion != nil && probe.opensWithKey && probe.fileUnreadable && probe.refusedWithoutKey
+        }
+        return DatabaseEncryption.prepare(
+            directory: URL(fileURLWithPath: directory, isDirectory: true),
+            name: "meka.db",
+            key: key,
+            sqlcipherReady: ready,
+            opensWithKey: { dir, name, hex in MacCoreFactory.shared.databaseOpensWithKey(directory: dir, name: name, keyHex: hex) }
+        )
+    }
+
     private static func databaseDirectory() -> String {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("os.meka.mac", isDirectory: true)

@@ -112,6 +112,15 @@ object MacCoreFactory {
         }
     }
 
+    /**
+     * Mac database encryption (slice 2b, ADR-002): whether the existing database [name] in [directory] opens and reads
+     * with [keyHex] exactly as [create] will open it (the same driver and keying). The app calls it on an encrypted copy
+     * before swapping it in, and on a sealed database before opening it. Only call it for a file that exists (a
+     * missing one would be created) and once [databaseEncryptionProbe] found SQLCipher.
+     */
+    fun databaseOpensWithKey(directory: String, name: String, keyHex: String): Boolean =
+        MacDatabase.opens(keyHex, directory.trimEnd('/'), name)
+
     private fun randomHex(bytes: Int): String =
         AppleSecureRandom.nextBytes(bytes).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
 

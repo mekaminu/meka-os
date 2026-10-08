@@ -45,6 +45,32 @@ struct DeviceIdentity {
     nonisolated static func signingKey() -> Lookup { lookup("device_signing_key") }
     nonisolated static func saveSigningKey(_ value: String) { write("device_signing_key", value) }
 
+    /// The 256-bit database key as 64 hex characters (Mac database encryption, slice 2b), and whether it was made on
+    /// this launch. Kept only as a sealed file, never in the Keychain fallback: nil when this Mac has no sealed files
+    /// (no Secure Enclave, or the move from the Keychain didn't finish) or the key file won't open. A new key is
+    /// written and read back before it's returned, so it is durable before anything is encrypted with it.
+    nonisolated static func databaseKey() -> (hex: String, made: Bool)? {
+        guard let files else { return nil }
+        switch files.read(databaseKeyName) {
+        case .found(let v):
+            return isKeyHex(v) ? (v, false) : nil
+        case .unreadable:
+            return nil
+        case .missing:
+            var bytes = [UInt8](repeating: 0, count: 32)
+            guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { return nil }
+            let hex = bytes.map { String(format: "%02x", $0) }.joined()
+            guard files.write(databaseKeyName, hex), case .found(let back) = files.read(databaseKeyName), back == hex else { return nil }
+            return (hex, true)
+        }
+    }
+
+    nonisolated private static let databaseKeyName = "database_key"
+
+    nonisolated static func isKeyHex(_ s: String) -> Bool {
+        s.count == 64 && s.allSatisfy { $0.isHexDigit && !$0.isUppercase }
+    }
+
     /// Every value this struct keeps. Migration copies exactly these.
     nonisolated static let accounts = ["device_id", "household_id", "device_secret", "server_url", "device_signing_key"]
     nonisolated private static let migratedMarker = "moved_from_keychain_v3"

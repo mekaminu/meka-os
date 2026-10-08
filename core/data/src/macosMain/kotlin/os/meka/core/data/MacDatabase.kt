@@ -6,11 +6,11 @@ import app.cash.sqldelight.driver.native.NativeSqliteDriver
 import co.touchlab.sqliter.DatabaseConfiguration
 
 /**
- * Opens the replica database on macOS. [keyHex] is the 64-hex-char key from the Keychain.
+ * Opens the replica database on macOS. [keyHex] is the 64-hex-char key from the Mac's sealed key files.
  *
- * ADR-002 / spike S6: the key is applied with `PRAGMA key` only once SQLCipher is linked instead of the system
- * SQLite. Until then [encrypted] must be false and the app relies on FileVault + CryptoKit column encryption,
- * and says so in Settings → Security. Never pass a key to a non-SQLCipher build: it would be silently ignored.
+ * ADR-002 (spike S6 passed, slice 2b): the key is applied with `PRAGMA key` when [encrypted]. The app checks that
+ * SQLCipher is linked (the S6 probe) before passing a key, and encrypts an older plain database first. Never pass a
+ * key to a non-SQLCipher build: it would be silently ignored.
  */
 object MacDatabase {
     /** [directory] must be app-specific (Application Support/os.meka.mac); tests pass a temporary directory. */

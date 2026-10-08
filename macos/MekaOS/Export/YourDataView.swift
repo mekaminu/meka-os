@@ -63,6 +63,12 @@ struct YourDataSection: View {
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .staggeredAppear(firstIndex + 2)
+            if let line = model.databaseLine {
+                Text(line)
+                    .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .staggeredAppear(firstIndex + 3)
+            }
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.exporting)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.exportSummary?.total)
