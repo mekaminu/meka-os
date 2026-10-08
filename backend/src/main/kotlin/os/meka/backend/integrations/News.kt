@@ -23,6 +23,8 @@ import org.xml.sax.InputSource
 data class RemoteHeadline(
     val id: String, val title: String, val url: String, val publishedMs: Long,
     val source: String? = null, val summary: String? = null,
+    /** The story's picture as the feed names it (https only; see [NewsImages]); null when it names none. */
+    val imageUrl: String? = null,
 )
 
 /**
@@ -159,7 +161,11 @@ internal object Rss {
             val link = e.text("link")?.trim()?.let(::canonical) ?: return@mapNotNull null
             val published = (e.text("pubDate")?.trim()?.let(::parseDate) ?: e.text("dc:date")?.trim()?.let(::parseIsoDate)) ?: return@mapNotNull null
             val source = e.text("source")?.let(::oneLine)?.takeIf { it.isNotEmpty() }
-            RemoteHeadline(link, title, link, published, source = source, summary = e.text("description")?.let(::plainSummary))
+            val description = e.text("description")
+            RemoteHeadline(
+                link, title, link, published, source = source, summary = description?.let(::plainSummary),
+                imageUrl = image(e, description, e.text("content:encoded")),
+            )
         }.distinctBy { it.id }
     }
 
@@ -201,8 +207,48 @@ internal object Rss {
                 .firstNotNullOfOrNull { it.getAttribute("href").takeIf(String::isNotBlank) }
             val link = href?.trim()?.let(::canonical) ?: return@mapNotNull null
             val published = (e.text("published") ?: e.text("updated"))?.trim()?.let(::parseIsoDate) ?: return@mapNotNull null
-            RemoteHeadline(link, title, link, published, summary = (e.text("summary") ?: e.text("content"))?.let(::plainSummary))
+            val enclosure = (0 until links.length).map { links.item(it) as Element }
+                .firstOrNull { it.getAttribute("rel") == "enclosure" && it.getAttribute("type").startsWith("image/") }?.getAttribute("href")
+            RemoteHeadline(
+                link, title, link, published, summary = (e.text("summary") ?: e.text("content"))?.let(::plainSummary),
+                imageUrl = image(e, e.text("summary"), e.text("content")) ?: NewsImages.safeImageUrl(enclosure),
+            )
         }.distinctBy { it.id }
+    }
+
+    /**
+     * The story's picture: `media:thumbnail` or an image `media:content` (the one nearest 320 px wide, else the
+     * largest), an image `enclosure`, else the first `<img src>` in the description or content. https only.
+     */
+    fun image(e: Element, vararg html: String?): String? {
+        data class Candidate(val url: String, val width: Int)
+        val media = listOf("media:thumbnail", "media:content").flatMap { tag ->
+            val nodes = e.getElementsByTagName(tag)
+            (0 until nodes.length).mapNotNull { i ->
+                val m = nodes.item(i) as Element
+                val type = m.getAttribute("type").lowercase()
+                val medium = m.getAttribute("medium").lowercase()
+                val url = m.getAttribute("url")
+                val isImage = tag == "media:thumbnail" || medium == "image" || type.startsWith("image/") ||
+                    (medium.isEmpty() && type.isEmpty() && Regex("(?i)\\.(jpe?g|png|gif)(\\?|$)").containsMatchIn(url))
+                if (!isImage) return@mapNotNull null
+                NewsImages.safeImageUrl(url)?.let { Candidate(it, m.getAttribute("width").toIntOrNull() ?: 0) }
+            }
+        }
+        if (media.isNotEmpty()) {
+            val wide = media.filter { it.width >= NewsImageMaker.MAX_WIDTH }.minByOrNull { it.width }
+            return (wide ?: media.maxBy { it.width }).url
+        }
+        val enclosures = e.getElementsByTagName("enclosure")
+        for (i in 0 until enclosures.length) {
+            val enc = enclosures.item(i) as Element
+            if (enc.getAttribute("type").lowercase().startsWith("image/")) NewsImages.safeImageUrl(enc.getAttribute("url"))?.let { return it }
+        }
+        for (h in html) {
+            val src = h?.let { Regex("(?is)<img\\b[^>]*?\\bsrc\\s*=\\s*[\"']([^\"']+)[\"']").find(it) }?.groupValues?.get(1)
+            NewsImages.safeImageUrl(src)?.let { return it }
+        }
+        return null
     }
 
     /** RSS or Atom, whichever the document is. */

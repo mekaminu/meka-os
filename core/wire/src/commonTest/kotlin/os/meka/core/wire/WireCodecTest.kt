@@ -92,6 +92,15 @@ class WireCodecTest {
     }
 
     @Test
+    fun newsImageRefsAreOnlyServerKeys() {
+        val k = "0123456789abcdef0123456789abcdef"
+        assertEquals(k, WireCodec.decodeNewsImageRef(WireCodec.encodeNewsImageRef(k)))
+        for (bad in listOf("", k.uppercase(), k + "0", "../" + k.drop(3), "https://x.example/a.jpg")) {
+            assertFailsWith<WireFormatException> { WireCodec.decodeNewsImageRef(WireCodec.encodeNewsImageRef(bad)) }
+        }
+    }
+
+    @Test
     fun releaseDocumentsRoundTripAndAreValidated() {
         val size = WireCodec.RELEASE_CHUNK_BYTES * 2L + 10
         val r = WireCodec.AppRelease("android", 412, "0.1.412", "a".repeat(64), size, 3)

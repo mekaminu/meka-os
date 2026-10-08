@@ -265,6 +265,19 @@ object WireCodec {
         t
     }
 
+    /**
+     * A news picture by the server's key (news, images slice): 32 lowercase hex characters, never a path or an
+     * address, so a device can only ever ask for pictures the server itself made.
+     */
+    private val newsImageKeyPattern = Regex("^[0-9a-f]{32}$")
+
+    fun encodeNewsImageRef(key: String): String = doc { put("key", key) }
+    fun decodeNewsImageRef(s: String): String = parse(s) { o ->
+        val k = o.str("key")
+        if (!newsImageKeyPattern.matches(k)) throw WireFormatException("bad image key")
+        k
+    }
+
     fun encodeChunkData(dataB64: String): String = doc { put("data", dataB64) }
     fun decodeChunkData(s: String): String = parse(s) { o -> o.str("data") }
 

@@ -23,6 +23,8 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import os.meka.backend.integrations.BbcNewsRss
 import os.meka.backend.integrations.PublicNewsFeeds
+import os.meka.backend.integrations.NewsImages
+import os.meka.backend.integrations.PostgresNewsImageStore
 import os.meka.backend.integrations.EspnTeamFixtures
 import os.meka.backend.integrations.GoogleCalendar
 import os.meka.backend.integrations.GovUkBankHolidays
@@ -65,6 +67,8 @@ fun Application.mekaSync(
     publisher: PublisherKeySource? = null,
     /** The call assistant's phone-service webhooks (build plan M1); null leaves them out. */
     voice: VoiceRoutes? = null,
+    /** News pictures the server made (news, images slice); null leaves the route out. */
+    newsImages: NewsImages? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -213,6 +217,18 @@ fun Application.mekaSync(
                     is Releases.Upload.Conflict -> call.respondText(r.reason, status = HttpStatusCode.Conflict)
                     is Releases.Upload.Rejected -> call.respondText(r.reason, status = HttpStatusCode.BadRequest)
                 }
+            }
+        }
+
+        if (newsImages != null) {
+            // A news picture by the server's key (never an address). Keyed devices only; the publisher is refused.
+            post("/v1/news/image") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val key = WireCodec.decodeNewsImageRef(body)
+                val bytes = withContext(Dispatchers.IO) { newsImages.get(key) }
+                    ?: return@post call.respondText("no such picture", status = HttpStatusCode.NotFound)
+                call.respondText(WireCodec.encodeChunkData(java.util.Base64.getEncoder().encodeToString(bytes)), ContentType.Application.Json)
             }
         }
 
@@ -368,7 +384,8 @@ fun main(args: Array<String>) {
             val enrolToken = System.getenv("MEKA_ENROL_TOKEN")
             val opStore = PostgresOpStore(ds)
             val push = pushFromEnv(ds)
-            val integrations = integrationsFromEnv(opStore, onChanged = { hh -> push?.serverChanged(hh) })
+            val newsImages = NewsImages(PostgresNewsImageStore(ds))
+            val integrations = integrationsFromEnv(opStore, onChanged = { hh -> push?.serverChanged(hh) }, images = newsImages)
             integrations?.let { startCalendarSync(it) }
             // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
@@ -378,7 +395,7 @@ fun main(args: Array<String>) {
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
                     releases = Releases(PostgresReleaseStore(ds), onPublished = { who, r -> releaseActivity.record(who, r) }), push = push,
                     publisher = System.getenv("MEKA_RELEASE_PUBLISHER_SECRET")?.takeIf { it.isNotBlank() }?.let { SecretsManagerPublisherKey(it) },
-                    voice = voice,
+                    voice = voice, newsImages = newsImages,
                 )
             }.start(wait = true)
         }
@@ -386,7 +403,7 @@ fun main(args: Array<String>) {
 }
 
 /** Null unless the deployment provides a KMS key and a public URL (local dev runs without integrations). */
-fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: String) -> Unit = {}): Integrations? {
+fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: String) -> Unit = {}, images: NewsImages? = null): Integrations? {
     val key = System.getenv("MEKA_KMS_KEY_ID") ?: return null
     val publicUrl = System.getenv("MEKA_PUBLIC_URL") ?: return null
     val secrets = buildMap {
@@ -400,6 +417,7 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         feeds = listOf(EspnTeamFixtures()).associateBy { it.id },
         news = listOf(BbcNewsRss(), PublicNewsFeeds()).associateBy { it.id },
         holidays = listOf(GovUkBankHolidays()).associateBy { it.id },
+        images = images,
         onChanged = onChanged,
     )
 }
@@ -441,7 +459,7 @@ fun startCalendarSync(integrations: Integrations, periodMs: Long = 5 * 60_000L) 
 object Migrations {
     private val all = listOf(
         1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql", 4 to "/db/V4__event_mirror_end.sql",
-        5 to "/db/V5__app_release.sql", 6 to "/db/V6__push_token.sql",
+        5 to "/db/V5__app_release.sql", 6 to "/db/V6__push_token.sql", 7 to "/db/V7__news_image.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

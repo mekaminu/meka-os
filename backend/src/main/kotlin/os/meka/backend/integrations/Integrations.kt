@@ -36,6 +36,8 @@ class Integrations(
     private val news: Map<String, NewsProvider> = emptyMap(),
     /** Public lists of days off mirrored for work mode (UK bank holidays; no sign-in). */
     private val holidays: Map<String, HolidayProvider> = emptyMap(),
+    /** News pictures (images slice): fetched, shrunk and kept by the server; null leaves headlines without pictures. */
+    private val images: NewsImages? = null,
     /**
      * Called after a calendar or fixtures poll wrote ops for a household (not for headlines), so push can wake its
      * devices: a moved event's reminders re-arm and a moved kick-off is announced within seconds of the poll.
@@ -164,7 +166,10 @@ class Integrations(
             val fetched = source.topics.mapNotNull { t -> runCatching { t to source.headlines(t) }.getOrElse { failures++; null } }.toMap()
             // One topic's feed failing leaves its headlines as they were; only fail when nothing could be read.
             if (failures == source.topics.size) error("no news feed could be read")
-            applyNews(a, source, fetched)
+            // Pictures first, outside the database transaction (fetching takes a while); a failure leaves them out.
+            val shown = fetched.values.flatMap { items -> items.distinctBy { it.id }.take(source.slots) }
+            val pictures = images?.let { im -> runCatching { im.prepare(shown.sortedByDescending { it.publishedMs }.mapNotNull { it.imageUrl }) }.getOrNull() }.orEmpty()
+            applyNews(a, source, fetched, pictures)
             store.transaction { store.markSynced(a.id, now()) }
         } catch (e: Exception) {
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
@@ -211,7 +216,11 @@ class Integrations(
      * slot), so the number of entities never grows. A headline still in the feed keeps its slot and is not
      * rewritten; new ones fill the slots that freed up; slots left over are marked removed.
      */
-    internal fun applyNews(a: AccountRow, source: NewsProvider, byTopic: Map<String, List<RemoteHeadline>>) = store.transaction {
+    internal fun applyNews(
+        a: AccountRow, source: NewsProvider, byTopic: Map<String, List<RemoteHeadline>>,
+        /** Picture address → the key [NewsImages] keeps it under. */
+        pictures: Map<String, String> = emptyMap(),
+    ) = store.transaction {
         ops.transaction {
             store.lockAccount(a.id)
             val mirror = store.mirror(a.householdId, a.id)
@@ -242,6 +251,8 @@ class Integrations(
                             // The feed's own summary, plain text (news ticker, slice 1). Additive; never written as null
                             // for a slot that never had one.
                             HeadlineFields.SUMMARY to (h.summary?.take(MAX_SUMMARY)?.let { FieldValue.Text(it) } ?: FieldValue.Null),
+                            // The picture's key on this server (images slice), never the publisher's address. Additive.
+                            HeadlineFields.IMAGE to (h.imageUrl?.let(pictures::get)?.let { FieldValue.Text(it) } ?: FieldValue.Null),
                         )
                         write(a, slot, h.publishedMs, h.publishedMs, false, prev, desiredFields, EntityTypes.HEADLINE)
                     }

@@ -137,6 +137,7 @@ class MekaCore(
     private var accountsApi: AccountsApi? = transport as? AccountsApi
     private var releasesApi: ReleasesApi? = transport as? ReleasesApi
     private var pushApi: PushApi? = transport as? PushApi
+    private var newsImagesApi: NewsImagesApi? = transport as? NewsImagesApi
 
     private val _today = MutableStateFlow(project())
     val today: StateFlow<Today> = _today.asStateFlow()
@@ -665,7 +666,7 @@ class MekaCore(
     suspend fun connect(transport: SyncTransport) = withContext(confined) {
         syncMutex.withLock { 
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
-            pushApi = transport as? PushApi
+            pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi
         }
         startSync()
     }
@@ -679,6 +680,30 @@ class MekaCore(
     /** Accounts connected for this household, for the Calendars screen. Empty when offline or not connected. */
     suspend fun connectedAccounts(): List<ConnectedAccount> =
         try { accountsApi?.accounts() ?: emptyList() } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
+
+    // ---- News pictures (news, images slice) ----
+
+    private val newsImageCache = NewsImageCache()
+
+    /**
+     * The picture of a story ([os.meka.core.domain.NewsItem.imageKey]) from this household's server: a small JPEG, or
+     * null when there is none, offline or not connected (the app shows the source's tile). Pictures are kept in memory
+     * for the session ([NewsImageCache]); a key that isn't a server key is never sent.
+     */
+    suspend fun newsImage(key: String): ByteArray? {
+        if (!os.meka.core.domain.NewsRules.isImageKey(key)) return null
+        newsImageCache.get(key)?.let { return it }
+        if (newsImageCache.missedRecently(key, nowMs())) return null
+        val api = newsImagesApi ?: return null
+        val bytes = try { api.newsImage(key) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        if (bytes == null || bytes.isEmpty() || bytes.size > NewsImageCache.MAX_BYTES) { newsImageCache.missed(key, nowMs()); return null }
+        newsImageCache.put(key, bytes)
+        return bytes
+    }
+
+    /** [newsImage] as base64, for the Mac (Swift turns it into `Data` without copying byte by byte). */
+    suspend fun newsImageBase64(key: String): String? =
+        newsImage(key)?.let { kotlin.io.encoding.Base64.encode(it) }
 
     // ---- Self-updating phone app (build plan M1) ----
 

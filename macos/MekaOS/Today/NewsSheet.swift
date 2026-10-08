@@ -11,6 +11,9 @@ import SwiftUI
 /// Slice 2: on matchday the list leads with the fixture in Barça's colour ("Barça v Real Madrid · 21:00 · in 3 h",
 /// cross-fading as time moves on), the Barça lane wears that colour too, and the command centre can open the sheet
 /// straight onto a story (`model.newsStoryId`).
+/// Pictures (images slice): each story shows the picture its feed names, made small by the server and fetched from it
+/// by key (`NewsThumb`); the detail leads with it. A tile with the source's initial stands in until it arrives, and the
+/// picture cross-fades in over it (Reduce Motion: a short fade).
 struct NewsSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -128,6 +131,12 @@ struct NewsSheet: View {
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: MekaSpace.s) {
+                    if d.item.imageKey != nil {
+                        NewsThumb(item: d.item, palette: palette, corner: MekaRadius.m, initialFont: MekaType.upNextTitle)
+                            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                            .padding(.bottom, MekaSpace.s)
+                    }
                     Text(d.item.title).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(d.item.meta).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
@@ -173,7 +182,8 @@ struct NewsSheet: View {
     }
 }
 
-/// A story: a small dot (Barça's colour for Barça), the title in the regular weight (news is context), "Sport · 2 h ago".
+/// A story: a small dot (Barça's colour for Barça), the title in the regular weight (news is context), "Sport · 2 h ago",
+/// and its picture on the right.
 private struct StoryRow: View {
     let item: NewsItem
     let palette: MekaPalette
@@ -181,14 +191,17 @@ private struct StoryRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+        HStack(alignment: .top, spacing: MekaSpace.s) {
             Circle().fill(item.topic == "barca" ? palette.barca : palette.textTertiary).frame(width: 6, height: 6)
+                .padding(.top, 8)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title).font(MekaType.body)
                     .foregroundStyle(hovering ? palette.accent : palette.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(item.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
+            Spacer(minLength: MekaSpace.s)
+            NewsThumb(item: item, palette: palette).frame(width: 72, height: 54).padding(.top, 2)
         }
         .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -197,5 +210,38 @@ private struct StoryRow: View {
         .onTapGesture { open() }
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Opens the story")
+    }
+}
+
+/// A story's picture: the server's small JPEG (fetched by key through the core, kept in memory), over a tile with the
+/// source's initial (Barça's colour on Barça stories) that shows until it arrives or when there is none. Decorative:
+/// the row already says the title and source.
+struct NewsThumb: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let item: NewsItem
+    let palette: MekaPalette
+    var corner: CGFloat = MekaRadius.s
+    var initialFont: Font = MekaType.body.weight(.semibold)
+    @State private var picture: NSImage?
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(palette.surfaceRaised)
+            if let picture {
+                Image(nsImage: picture).resizable().scaledToFill()
+                    .transition(.opacity)
+            } else {
+                Text(item.tileInitial).font(initialFont)
+                    .foregroundStyle(item.topic == "barca" ? palette.barca : palette.textTertiary)
+                    .transition(.opacity)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: corner))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: picture != nil)
+        .accessibilityHidden(true)
+        .task(id: item.imageKey) {
+            picture = await model.newsImage(item.imageKey)
+        }
     }
 }

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -85,7 +86,10 @@ private const val SWIPE_DP = 72f
  * and the Barça lane wears its own colour (the `barca` token). It also opens over Today from the command centre's
  * News, then [backLabel] says where back goes and [startStoryId] opens straight onto that story.
  *
- * Motion: lanes stagger in 40 ms apart; the topic chips unfold in place and a chosen chip's colour blends with a tick
+ * Pictures (images slice): each story shows the picture its feed names, made small by the server and fetched from it
+ * by key ([NewsThumb]); the detail leads with it. A tile with the source's initial stands in until it arrives.
+ *
+ * Motion: lanes stagger in 40 ms apart; pictures cross-fade in over their tiles; the topic chips unfold in place and a chosen chip's colour blends with a tick
  * haptic; the detail springs up from the bottom; Previous/Next slide the story across the way you moved with a tick
  * haptic. Reduced motion: cross-fades only.
  */
@@ -160,7 +164,7 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                     LaneHeader(lane, Modifier.padding(top = if (i == 0) 0.dp else MekaSpace.l).animateItem().appear(rememberAppearance(1 + i)))
                 }
                 items(lane.items, key = { "n-" + it.id }) { n ->
-                    StoryRow(n, Modifier.animateItem().appear(rememberAppearance(1 + i))) { haptics.tick(); openId = n.id }
+                    StoryRow(core, n, Modifier.animateItem().appear(rememberAppearance(1 + i))) { haptics.tick(); openId = n.id }
                 }
             }
         }
@@ -171,7 +175,7 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
             val last = remember { arrayOfNulls<NewsDetail>(1) }
             if (detail != null) last[0] = detail
             (detail ?: last[0])?.let { d ->
-                NewsDetailSheet(d, onClose = { openId = null }) { id -> haptics.tick(); openId = id }
+                NewsDetailSheet(core, d, onClose = { openId = null }) { id -> haptics.tick(); openId = id }
             }
         }
         MekaPane(visible = eventOpen != null) {
@@ -215,9 +219,12 @@ private fun LaneHeader(lane: NewsLane, modifier: Modifier) {
     }
 }
 
-/** A story: a small dot (Barça's colour on Barça stories), the title (regular weight: news is context, not something to act on), "Sport · 2 h ago". */
+/**
+ * A story: a small dot (Barça's colour on Barça stories), the title (regular weight: news is context, not something to
+ * act on), "Sport · 2 h ago", and its picture on the right (the source's tile until it arrives, or when there is none).
+ */
 @Composable
-private fun StoryRow(n: NewsItem, modifier: Modifier, open: () -> Unit) {
+private fun StoryRow(core: MekaCore, n: NewsItem, modifier: Modifier, open: () -> Unit) {
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
             .clickable(role = Role.Button, onClickLabel = "Open story") { open() }
@@ -230,6 +237,7 @@ private fun StoryRow(n: NewsItem, modifier: Modifier, open: () -> Unit) {
             Text(n.title, style = MekaType.body, color = Meka.colors.textPrimary)
             Text(n.meta, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
+        NewsThumb(core, n, Modifier.padding(start = MekaSpace.s, top = 2.dp).size(width = 72.dp, height = 54.dp))
     }
 }
 
@@ -238,7 +246,7 @@ private fun StoryRow(n: NewsItem, modifier: Modifier, open: () -> Unit) {
  * story slides across the way you moved (reduced motion: cross-fade).
  */
 @Composable
-private fun NewsDetailSheet(d: NewsDetail, onClose: () -> Unit, go: (String) -> Unit) {
+private fun NewsDetailSheet(core: MekaCore, d: NewsDetail, onClose: () -> Unit, go: (String) -> Unit) {
     val uriHandler = LocalUriHandler.current
     val reduced = Meka.reducedMotion
     var dragged by remember { mutableStateOf(0f) }
@@ -281,6 +289,13 @@ private fun NewsDetailSheet(d: NewsDetail, onClose: () -> Unit, go: (String) -> 
             label = "news-detail",
         ) { s ->
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = MekaSpace.m)) {
+                // The story's picture leads when it has one (16:9, cropped), cross-fading in over the source's tile.
+                if (s.item.imageKey != null) {
+                    NewsThumb(
+                        core, s.item, Modifier.fillMaxWidth().aspectRatio(16f / 9f).padding(bottom = MekaSpace.l),
+                        corner = MekaRadius.m, initialStyle = MekaType.greeting,
+                    )
+                }
                 Text(s.item.title, style = MekaType.greeting, color = Meka.colors.textPrimary)
                 Text(s.item.meta, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs))
                 Spacer(Modifier.height(MekaSpace.l))

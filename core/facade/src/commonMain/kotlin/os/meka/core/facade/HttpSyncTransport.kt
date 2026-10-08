@@ -45,6 +45,15 @@ interface PushApi {
     suspend fun registerPushToken(service: String, token: String)
 }
 
+/**
+ * News pictures (news, images slice): the server fetched each story's picture from its feed, made a small JPEG and
+ * keeps it under a key; devices fetch it from their own server only, never from the publisher.
+ */
+interface NewsImagesApi {
+    /** The picture's bytes, or null when the server has none under [key] (made later, or tidied away). */
+    suspend fun newsImage(key: String): ByteArray?
+}
+
 /** Account management calls, available once the device is connected. */
 interface AccountsApi {
     suspend fun startConnect(provider: String): ConnectStart
@@ -63,7 +72,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -132,6 +141,22 @@ class HttpSyncTransport(
             resp.status.value == 409 || resp.status.value == 400 -> throw PublishRefusedException(resp.bodyAsText().take(200))
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/releases/upload")
             else -> WireCodec.decodeUploadAck(resp.bodyAsText()).complete
+        }
+    }
+
+    override suspend fun newsImage(key: String): ByteArray? {
+        prepare() // the picture route requires the device's signing key on the server
+        val resp = send("/v1/news/image", WireCodec.encodeNewsImageRef(key))
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/news/image")
+            // 404: no picture under this key (or an older server without the route).
+            resp.status.value == 404 -> null
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/news/image")
+            else -> try {
+                Base64.decode(WireCodec.decodeChunkData(resp.bodyAsText()))
+            } catch (e: IllegalArgumentException) {
+                throw TransportException("malformed picture", e)
+            }
         }
     }
 

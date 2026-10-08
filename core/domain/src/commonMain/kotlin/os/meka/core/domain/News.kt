@@ -26,6 +26,11 @@ object HeadlineFields {
     const val REMOVED = "removed"
     /** The feed's own summary as plain text (news ticker, slice 1; additive). Absent when the feed has none. */
     const val SUMMARY = "summary"
+    /**
+     * The story's picture as the server keeps it (news, images slice; additive): a [NewsRules.isImageKey] key the apps
+     * fetch from their own server (`/v1/news/image`), never the publisher's address. Absent when the feed has none.
+     */
+    const val IMAGE = "image"
 }
 
 /** Which topics the brief shows: one `context_mode` entity, id [News.ENTITY_ID], one LWW field. */
@@ -79,6 +84,8 @@ data class Headline(
     val topic: String,
     val publishedAtMs: Long,
     val summary: String? = null,
+    /** The server's key for the story's picture ([HeadlineFields.IMAGE]); null when there is none. */
+    val imageKey: String? = null,
 ) {
     companion object {
         /** Null for empty slots and anything incomplete. */
@@ -94,6 +101,7 @@ data class Headline(
                 topic = s[HeadlineFields.TOPIC].textOrNull ?: "",
                 publishedAtMs = at,
                 summary = s[HeadlineFields.SUMMARY].textOrNull?.let(NewsRules::cleanSummary)?.takeIf { it.isNotEmpty() },
+                imageKey = s[HeadlineFields.IMAGE].textOrNull?.takeIf(NewsRules::isImageKey),
             )
         }
     }
@@ -115,7 +123,12 @@ data class NewsItem(
     val meta: String,
     val summary: String?,
     val publishedAtMs: Long,
-)
+    /** The picture to fetch with `MekaCore.newsImage` ([HeadlineFields.IMAGE]); null → the source's tile. */
+    val imageKey: String? = null,
+) {
+    /** The tile shown while the picture loads or when there is none: the source's initial ("M" for Mundo Deportivo). */
+    val tileInitial: String get() = NewsRules.tileInitial(source)
+}
 
 /** One topic's lane: "Barça" with "From Mundo Deportivo, Sport and Google News". */
 data class NewsLane(val topicId: String, val label: String, val sources: String, val items: List<NewsItem>) {
@@ -188,6 +201,16 @@ object NewsRules {
         return u
     }
 
+    /**
+     * A picture key from the server: 32 lowercase hex characters (the first half of the SHA-256 of the picture's
+     * address). Anything else is ignored, so a key can never be a path or an address.
+     */
+    fun isImageKey(s: String): Boolean = s.length == 32 && s.all { it in '0'..'9' || it in 'a'..'f' }
+
+    /** The source's first letter or digit, upper-cased ("Mundo Deportivo" → "M", "9to5Mac" → "9"); "N" when none. */
+    fun tileInitial(source: String): String =
+        source.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "N"
+
     /** "just now", "25 min ago", "3 h ago", "yesterday". */
     fun age(publishedAtMs: Long, nowMs: Long): String {
         val min = ((nowMs - publishedAtMs) / 60_000L).coerceAtLeast(0)
@@ -238,7 +261,7 @@ object NewsRules {
                 .sortedWith(compareByDescending<Headline> { it.publishedAtMs }.thenBy { it.id })
                 .filter { seenLinks.add(linkKey(it)) && seenTitles.add(storyKey(it.title)) }
                 .take(MAX_IN_LANE)
-                .map { h -> NewsItem(h.id, h.title, h.url, h.source, h.topic, "${h.source} · ${age(h.publishedAtMs, nowMs)}", h.summary, h.publishedAtMs) }
+                .map { h -> NewsItem(h.id, h.title, h.url, h.source, h.topic, "${h.source} · ${age(h.publishedAtMs, nowMs)}", h.summary, h.publishedAtMs, h.imageKey) }
             if (items.isEmpty()) null
             else NewsLane(topic, NewsTopics.byId(topic)?.label ?: topic, sourcesLine(items), items)
         }

@@ -621,6 +621,14 @@ final class CoreModel {
         do { try await core.briefSeen() } catch { lastError = error.localizedDescription }
     }
 
+    /// A story's picture (images slice): the small JPEG the server made from the feed's picture, fetched from the
+    /// server by key (never from the publisher) and kept in memory by the core. Nil when there is none or offline.
+    func newsImage(_ key: String?) async -> NSImage? {
+        guard let key, let core else { return nil }
+        guard let b64 = try? await core.newsImageBase64(key: key), let data = Data(base64Encoded: b64) else { return nil }
+        return NSImage(data: data)
+    }
+
     /// Shows or hides a news topic's headlines in the brief; synced with the Fold.
     func setNewsTopic(_ id: String, on: Bool) { MekaHaptics.tick(); run { try await $0.setNewsTopic(topicId: id, on: on) } }
 

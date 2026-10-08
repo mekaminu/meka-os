@@ -206,6 +206,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Slice 2: no fixture today, so no matchday line; nothing to show under Coming up either.
         XCTAssertNil(place.matchday)
         XCTAssertNil(CommandCentreRules.shared.newsGlance(place: place, maxItems: CommandCentreRules.shared.NEWS_ALONE))
+        // Pictures (images slice): with no server there is none, and only server keys are ever asked for.
+        let none = try await core.newsImageBase64(key: "0123456789abcdef0123456789abcdef")
+        XCTAssertNil(none)
+        let notAKey = try await core.newsImageBase64(key: "https://img.example/a.jpg")
+        XCTAssertNil(notAKey)
+        XCTAssertEqual(NewsRules.shared.tileInitial(source: "Mundo Deportivo"), "M")
     }
 
     func testWeeklyReviewThroughTheBridge() async throws {

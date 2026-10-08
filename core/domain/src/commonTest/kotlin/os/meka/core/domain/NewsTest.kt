@@ -195,6 +195,38 @@ class NewsTest {
     }
 
     @Test
+    fun picturesTravelAsServerKeysOnlyAndEveryStoryHasATile() {
+        val key = "0123456789abcdef0123456789abcdef"
+        fun write(id: String, image: String) = a.replica.commitLocal(
+            EntityTypes.HEADLINE, id,
+            mapOf(
+                HeadlineFields.TITLE to "Story $id".fv(), HeadlineFields.URL to "https://www.sport.es/$id".fv(), HeadlineFields.SOURCE to "Sport".fv(),
+                HeadlineFields.TOPIC to "barca".fv(), HeadlineFields.PUBLISHED_AT to now.fv(), HeadlineFields.REMOVED to false.fv(),
+                HeadlineFields.IMAGE to image.fv(),
+            ),
+        )
+        write("p1", key)
+        write("p2", "https://evil.example/pic.jpg") // never an address
+        write("p3", "../../etc/passwd0123456789abcdef")
+        write("p4", key.uppercase())
+        mirror("p5", "No picture", "barca", 1, "https://www.sport.es/p5")
+        a.sync(); m.sync()
+        val byId = News(m.replica).place(now).items.associateBy { it.id }
+        assertEquals(key, byId.getValue("p1").imageKey)
+        assertNull(byId.getValue("p2").imageKey)
+        assertNull(byId.getValue("p3").imageKey)
+        assertNull(byId.getValue("p4").imageKey)
+        assertNull(byId.getValue("p5").imageKey)
+        assertEquals("S", byId.getValue("p1").tileInitial)
+        assertEquals("M", NewsRules.tileInitial("Mundo Deportivo"))
+        assertEquals("9", NewsRules.tileInitial("9to5Mac"))
+        assertEquals("B", NewsRules.tileInitial("  «Barça»"))
+        assertEquals("N", NewsRules.tileInitial("· ·"))
+        assertTrue(NewsRules.isImageKey(key))
+        assertTrue(!NewsRules.isImageKey(key.dropLast(1)))
+    }
+
+    @Test
     fun theBriefCarriesHeadlinesFromTheChosenTopics() {
         mirror("hl1", "Summit opens", "world", 5, "https://www.bbc.com/news/a")
         mirror("hl2", "New phone launched", "technology", 20, "https://www.bbc.com/news/b")
