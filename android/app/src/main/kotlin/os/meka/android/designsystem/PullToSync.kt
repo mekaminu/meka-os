@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -155,6 +156,8 @@ fun PullToSyncBox(state: PullToSyncState, modifier: Modifier = Modifier, content
     val density = LocalDensity.current
     Box(
         modifier
+            // Pulled content never draws over what sits below the list (Today's capture bar).
+            .clipToBounds()
             .nestedScroll(state.connection)
             .semantics { customActions = listOf(CustomAccessibilityAction("Sync now") { state.syncNow(); true }) },
     ) {

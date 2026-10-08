@@ -232,6 +232,9 @@ struct TodayView: View {
                 .animation(MekaMotion.complete(reduced: reduceMotion), value: allDayOpen)
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.timeline.allDayItems.map(\.event.id))
             }
+            // The foot fades into the ticker and capture field rather than cutting a row in half (Fold review item
+            // 4); the xl bottom padding is more than the fade, so the last row still scrolls fully clear.
+            .footFade()
             .onAppear {
                 if ringPlay == nil { ringPlay = DayRingOpen.claim(reduced: reduceMotion) }
             }

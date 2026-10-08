@@ -228,4 +228,18 @@ class MotionMathTest {
         assertEquals(1f, MotionMath.dayRingCount(0, still, expressive = true), 1e-6f)
         assertEquals(0L, MotionMath.dayRingTotalMs(3, still, expressive = true))
     }
+
+    @Test
+    fun listFootFadesIntoTheBarAndTheLastRowStillScrollsClear() {
+        // Fold review 2026-10-08 item 4: rows fade out over the last 24 dp instead of being cut by the capture bar.
+        assertEquals(24, MotionMath.FOOT_FADE_DP)
+        assertEquals(0f, MotionMath.footAlpha(0f))
+        assertEquals(0.5f, MotionMath.footAlpha(12f))
+        assertEquals(1f, MotionMath.footAlpha(24f))
+        assertEquals(1f, MotionMath.footAlpha(400f))
+        assertEquals(0f, MotionMath.footAlpha(-3f))
+        // Today, Needs you and the Calendar agenda end with xl padding: more than the fade, so the last row is clear.
+        assertTrue(MotionMath.footClear(MekaSpace.xl.value))
+        assertFalse(MotionMath.footClear(MekaSpace.s.value))
+    }
 }

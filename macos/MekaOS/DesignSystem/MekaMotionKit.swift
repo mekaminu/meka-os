@@ -184,6 +184,16 @@ enum MotionMath {
         if fraction >= 1 { return to }
         return Int((Double(from) + Double(to - from) * easeOutCubic(fraction)).rounded())
     }
+
+    /// A list's foot above a bar (Today's capture field): rows fade out over the last `footFade` points instead of
+    /// being cut mid-row where the list meets the bar (Fold review 2026-10-08, item 4).
+    static let footFade: CGFloat = 24
+
+    /// Opacity `fromFoot` points above the list's foot: 0 at the foot, fully shown from `footFade` up.
+    static func footAlpha(fromFoot: CGFloat) -> CGFloat { min(max(fromFoot / footFade, 0), 1) }
+
+    /// True when the list's bottom padding keeps the last row out of the fade once scrolled to the end.
+    static func footClear(bottomPadding: CGFloat) -> Bool { bottomPadding >= footFade }
 }
 
 /// What a staying tick does (`MotionMath.tickDraw`): at rest (an outline), draw the check in, or show it done at once.
@@ -218,6 +228,18 @@ private struct StaggeredAppear: ViewModifier {
 }
 
 extension View {
+    /// The list's foot fades into the bar below it (`MotionMath.footFade`) rather than cutting a row in half. Pair it
+    /// with a bottom padding of at least that much so the last row scrolls fully clear. No motion of its own.
+    func footFade() -> some View {
+        mask {
+            VStack(spacing: 0) {
+                Rectangle()
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: MotionMath.footFade)
+            }
+        }
+    }
+
     /// Item `index` of a staggered group (catalogue: sections 40 ms apart, timeline blocks cascade).
     func staggeredAppear(_ index: Int, play: Bool = true) -> some View {
         modifier(StaggeredAppear(index: index, play: play))

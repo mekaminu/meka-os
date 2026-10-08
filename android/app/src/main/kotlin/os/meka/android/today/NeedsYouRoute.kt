@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.BreathingRing
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.footFade
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.MekaSharedLayout
 import os.meka.android.designsystem.MekaSpace
@@ -145,8 +146,9 @@ internal fun NeedsYouColumn(
     compact: Boolean = false, play: Boolean = true,
 ) {
     val cards = NeedsYouStackRules.ordered(stack, moves.setAside)
+    // The foot fades into the tabs rather than cutting a card in half; the xl bottom padding clears the fade.
     LazyColumn(
-        modifier,
+        modifier.footFade(),
         contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {

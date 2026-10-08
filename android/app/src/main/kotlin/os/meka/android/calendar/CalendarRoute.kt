@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.footFade
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.MekaRadius
@@ -253,7 +254,8 @@ private fun AgendaList(
     LazyColumn(
         state = list,
         contentPadding = PaddingValues(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.s, bottom = MekaSpace.xl),
-        modifier = Modifier.fillMaxSize(),
+        // The foot fades into the tabs rather than cutting a row in half; the xl bottom padding clears the fade.
+        modifier = Modifier.fillMaxSize().footFade(),
     ) {
         items(entries, key = { it.key }) { e ->
             // Sections stagger in 40 ms apart on first show; later rows just glide.

@@ -216,6 +216,21 @@ object MotionMath {
 
     /** The brass ring's longest arc, so the turning gap reads as motion. */
     const val RING_ARC_DEGREES = 300f
+
+    /**
+     * A list's foot above a bar (Today's capture bar, the tabs): rows fade out over the last [FOOT_FADE_DP] instead of
+     * being sliced by the bar mid-row (Fold review 2026-10-08, item 4). The bar sits under the list, never over it.
+     */
+    const val FOOT_FADE_DP = 24
+
+    /** Opacity of a row's pixel [fromFootDp] above the list's foot: 0 at the foot, fully shown from [FOOT_FADE_DP] up. */
+    fun footAlpha(fromFootDp: Float): Float = (fromFootDp / FOOT_FADE_DP).coerceIn(0f, 1f)
+
+    /**
+     * True when the list's bottom padding keeps the last row out of the fade once scrolled to the end, so the fade
+     * can stay on all the time and the last row still scrolls fully clear of the bar.
+     */
+    fun footClear(bottomPaddingDp: Float): Boolean = bottomPaddingDp >= FOOT_FADE_DP
 }
 
 /** What a staying tick does ([MotionMath.tickDraw]): at rest (an outline), draw the check in, or show it done at once. */

@@ -169,4 +169,16 @@ final class MotionMathTests: XCTestCase {
         XCTAssertEqual(MotionMath.dayRingCount(elapsed: 0, play: .still, expressive: true), 1, accuracy: 1e-9)
         XCTAssertEqual(MotionMath.dayRingTotal(arcs: 3, play: .still, expressive: true), 0, accuracy: 1e-9)
     }
+
+    @MainActor
+    func testListFootFadesIntoTheBarAndTheLastRowStillScrollsClear() {
+        XCTAssertEqual(MotionMath.footFade, 24)
+        XCTAssertEqual(MotionMath.footAlpha(fromFoot: 0), 0)
+        XCTAssertEqual(MotionMath.footAlpha(fromFoot: 12), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.footAlpha(fromFoot: 24), 1)
+        XCTAssertEqual(MotionMath.footAlpha(fromFoot: 400), 1)
+        XCTAssertEqual(MotionMath.footAlpha(fromFoot: -3), 0)
+        XCTAssertTrue(MotionMath.footClear(bottomPadding: MekaSpace.xl))
+        XCTAssertFalse(MotionMath.footClear(bottomPadding: MekaSpace.s))
+    }
 }

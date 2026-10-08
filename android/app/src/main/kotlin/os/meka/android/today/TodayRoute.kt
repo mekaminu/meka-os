@@ -93,6 +93,7 @@ import os.meka.core.domain.TickerMode
 import os.meka.core.domain.TickerRules
 import os.meka.android.designsystem.BreathingRing
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.footFade
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.PullToSyncBox
 import os.meka.android.designsystem.rememberPullToSync
@@ -422,8 +423,10 @@ private fun TodayPane(
     Column(modifier.imePadding()) {
         // Pull to sync (motion pass 2, slice 3): pulling Today down past its top fills a brass ring; letting go syncs.
         PullToSyncBox(pull, Modifier.weight(1f).fillMaxWidth()) {
+        // The foot fades into the capture bar rather than cutting a row in half (Fold review item 4); the bottom
+        // padding (xl) is more than the fade, so the last row still scrolls fully clear.
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().footFade(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
