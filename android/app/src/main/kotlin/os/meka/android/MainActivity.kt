@@ -63,6 +63,8 @@ class MainActivity : ComponentActivity() {
         val app = application as MekaApplication
         when {
             open == OPEN_AFTER_WORK -> app.openAfterWork.value = true
+            // The wake alarm was dismissed: Today with the morning brief springing up.
+            open == OPEN_BRIEF -> app.openBrief.value = true
             // The News widget: Today with News on the story ("" = News itself, which leads with the match).
             open.startsWith(OPEN_NEWS_PREFIX) -> app.openNewsStory.value = open.removePrefix(OPEN_NEWS_PREFIX)
             open.startsWith(OPEN_DESTINATION_PREFIX) ->
@@ -90,6 +92,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_OPEN = "os.meka.open"
         const val OPEN_AFTER_WORK = "after_work"
+        const val OPEN_BRIEF = "brief"
         /** "dest:LISTS" opens Lists. */
         const val OPEN_DESTINATION_PREFIX = "dest:"
         /** "news:<story id>" opens News over Today on that story; "news:" opens News. */

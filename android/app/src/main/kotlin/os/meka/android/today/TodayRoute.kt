@@ -181,6 +181,11 @@ fun TodayRoute(
     LaunchedEffect(widgetStory) {
         if (widgetStory != null) { newsOpen = widgetStory; widgetApp?.openNewsStory?.value = null }
     }
+    // Dismissing the wake alarm (Alarms, slice 1): the brief springs up over Today.
+    val alarmBrief = widgetApp?.openBrief?.collectAsState()?.value ?: false
+    LaunchedEffect(alarmBrief) {
+        if (alarmBrief) { showBrief = true; widgetApp?.openBrief?.value = false }
+    }
     val newsPlace by core.newsPlace.collectAsState()
     // The news ticker under the header (news ticker, slice 2): the per-device choice from Appearance.
     val ticker = remember(newsPlace) { TickerRules.ticker(newsPlace) }

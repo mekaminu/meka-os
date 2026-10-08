@@ -32,6 +32,8 @@ final class CoreModel {
     /// Evening shutdown: done today, left from today, tomorrow at a glance. Synced with the Fold.
     private(set) var shutdown: ShutdownView?
     var showShutdown = false
+    /// The smart wake alarm (Alarms, slice 1): the next morning's suggested time and the alarm if set. Synced with the Fold.
+    private(set) var wake: WakeView?
     /// Morning brief: today at a glance, waiting on, what needs you on your lists. "Got it" syncs with the Fold.
     private(set) var brief: MorningBriefView?
     var showBrief = false
@@ -162,6 +164,13 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await s in core.shutdownView { self?.shutdown = s }
+        })
+        observers.append(Task { [weak self] in
+            for await w in core.wakeView { self?.wake = w }
+        })
+        // The next alarm as a scheduled notification (the Fold rings it full screen).
+        observers.append(Task {
+            for await a in core.nextAlarm { await MacAlarm.schedule(a) }
         })
         observers.append(Task { [weak self] in
             for await b in core.briefView { self?.brief = b }
@@ -630,6 +639,15 @@ final class CoreModel {
         do { try await core.shutDown() } catch { lastError = error.localizedDescription }
     }
 
+    // MARK: Alarms
+
+    /// Sets the next morning's wake alarm (the Fold rings it); also how ‹ › move a set alarm.
+    func setWake(_ minute: Int32) { MekaHaptics.light(); run { _ = try await $0.setWake(minute: minute) } }
+    /// "Use 06:30": the suggestion moved earlier than the alarm.
+    func useSuggestedWake() { MekaHaptics.light(); run { _ = try await $0.useSuggestedWake() } }
+    func wakeOff() { MekaHaptics.tick(); run { try await $0.wakeOff() } }
+    func setWakeBuffer(_ minutes: Int32) { MekaHaptics.tick(); run { _ = try await $0.setWakeBuffer(minutes: minutes) } }
+
     // MARK: Morning brief
 
     /// "Got it": the card is put away on the Fold too, until tomorrow morning.
@@ -737,6 +755,16 @@ final class CoreModel {
     /// Went / Didn't go pressed on a "Did you go?" notification, or Undo on the note that replaces it. The core answers
     /// only that day's session while it still asks; otherwise the notification just goes.
     func answerFromNotification(_ a: NotificationAnswer) {
+        // The wake alarm's Snooze / Dismiss (Alarms, slice 1); Dismiss brings up the morning brief.
+        if let alarm = MacAlarm.alarmID(fromKey: a.key) {
+            if a.action == MacAlarm.snoozeAction {
+                run { _ = try await $0.snoozeAlarm(id: alarm) }
+            } else if a.action == MacAlarm.dismissAction {
+                run { _ = try await $0.dismissAlarm(id: alarm) }
+                showBrief = true
+            }
+            return
+        }
         if a.action == MacNotifier.undoAction {
             MacNotifier.remove(key: a.key)
             if let habit = a.habit { run { try await $0.undoSession(id: habit) } }

@@ -133,6 +133,7 @@ class MekaCore(
     private val activity = os.meka.core.domain.ActivityLog(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val eventActions = os.meka.core.domain.EventActions(replica, tasks, nowMs, ZoneCalendar(timeZone))
     private val held = os.meka.core.domain.HeldMessages(replica, nowMs)
+    private val alarms = os.meka.core.domain.Alarms(replica, nowMs, ZoneCalendar(timeZone))
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
     private var releasesApi: ReleasesApi? = transport as? ReleasesApi
@@ -175,6 +176,21 @@ class MekaCore(
     private val _shutdown = MutableStateFlow(ShutdownView.EMPTY)
     /** Evening shutdown: what got done, what's left from today, tomorrow at a glance. Synced; moves with the clock. */
     val shutdownView: StateFlow<ShutdownView> = _shutdown.asStateFlow()
+
+    private val _wake = MutableStateFlow(os.meka.core.domain.WakeView.EMPTY)
+    /**
+     * The smart wake alarm (Alarms, slice 1): the next morning's suggested wake time (its first commitment less the
+     * get-ready buffer) and the alarm if Meka has set it. Synced; moves with the clock and the calendar.
+     */
+    val wakeView: StateFlow<os.meka.core.domain.WakeView> = _wake.asStateFlow()
+
+    private val _nextAlarm = MutableStateFlow<os.meka.core.domain.AlarmRing?>(null)
+    /**
+     * The alarm that rings next or is ringing now (null when none is on), for the platform's own alarm: the Fold
+     * registers it with `setAlarmClock`, the Mac schedules a notification. Follows sync, so Dismiss on one device
+     * stops the other.
+     */
+    val nextAlarm: StateFlow<os.meka.core.domain.AlarmRing?> = _nextAlarm.asStateFlow()
 
     private val _brief = MutableStateFlow(MorningBriefView.EMPTY)
     /**
@@ -530,6 +546,32 @@ class MekaCore(
     suspend fun carryAllToTomorrow() = onCore { shutdown.carryAllToTomorrow(dayWindow(nowMs())); Unit }
     /** Calls it a day: the shutdown card is put away on every device until tomorrow evening. */
     suspend fun shutDown() = onCore { shutdown.shutDown() }
+
+    // ---- Alarms ----
+
+    /**
+     * Sets the next morning's wake alarm at local [minute], noting the first commitment it's for. Returns false for a
+     * time already gone (just after midnight).
+     */
+    suspend fun setWake(minute: Int): Boolean = onCore { alarms.setWake(minute, _wake.value.suggestion?.commitment?.line) }
+    /** Sets the wake alarm to the suggested time ("Use 06:30"); false when there's no suggestion. */
+    suspend fun useSuggestedWake(): Boolean = onCore {
+        val s = _wake.value.suggestion
+        s != null && alarms.setWake(s.minute, s.commitment.line)
+    }
+    /** Turns the next morning's wake alarm off on every device. */
+    suspend fun wakeOff() = onCore { alarms.wakeOff() }
+    /** The get-ready buffer (15 min–3 h in fives); false and nothing written otherwise. */
+    suspend fun setWakeBuffer(minutes: Int): Boolean = onCore { alarms.setBuffer(minutes) }
+    /** Snoozes a ringing alarm for 9 minutes; returns it as it now rings, or null when it can't be snoozed. */
+    suspend fun snoozeAlarm(id: String): os.meka.core.domain.AlarmRing? = onCore { alarms.snooze(id) }
+    /** Dismisses an alarm on every device; false when it was already dismissed (e.g. on the other device). */
+    suspend fun dismissAlarm(id: String): Boolean = onCore { alarms.dismiss(id) }
+    /** The alarm ringing right now, if any (for the ringing screen); read from [nextAlarm] as it stands. */
+    fun ringingAlarm(): os.meka.core.domain.AlarmRing? {
+        val now = nowMs()
+        return _nextAlarm.value?.takeIf { now >= it.ringAtMs && now < it.ringAtMs + os.meka.core.domain.AlarmRules.RING_FOR_MS }
+    }
 
     // ---- Morning brief ----
 
@@ -896,6 +938,8 @@ class MekaCore(
         _workMode.value = workState
         val today = dayWindow(nowMs())
         _shutdown.value = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), holidays)
+        _wake.value = alarms.wakeView(dayEvents, os.meka.core.domain.WorkHours.of(workState, holidays, todayEpochDay()))
+        _nextAlarm.value = alarms.next()
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,

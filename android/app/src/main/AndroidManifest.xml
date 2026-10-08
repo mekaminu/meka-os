@@ -17,6 +17,12 @@
     <!-- Ongoing notifications (Outside the app): Android 16's "live updates" treatment for the event countdown and a
          running fast (a normal permission, granted at install; ignored on older Android). -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <!-- Alarms (slice 1): the wake alarm rings in a media-playback foreground service started from its exact alarm
+         (setAlarmClock, ADR-007's wake-up row) and shows full screen over the lock screen; it vibrates. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:name=".MekaApplication"
@@ -206,6 +212,25 @@
         <receiver
             android:name=".update.UpdateStatusReceiver"
             android:exported="false" />
+        <!-- Alarms (slice 1): the wake alarm. The receiver is its setAlarmClock target; the service rings it (sound on the
+             alarm stream, rising, and vibration) until it's snoozed, dismissed here or on the Mac, or 10 minutes pass;
+             the activity is the full-screen ringing screen over the lock screen. -->
+        <receiver
+            android:name=".alarm.AlarmReceiver"
+            android:exported="false" />
+        <service
+            android:name=".alarm.AlarmRingService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+        <activity
+            android:name=".alarm.AlarmActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="os.meka.android.alarm"
+            android:theme="@style/Theme.Meka" />
         <!-- Push via Firebase (build plan M1): data-only "sync now" wake-ups from MEKA's own server; nothing shown.
              Firebase's automatic analytics collection is off (MEKA doesn't include Analytics anyway). -->
         <service

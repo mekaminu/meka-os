@@ -50,6 +50,12 @@ struct ShutdownSheet: View {
                                 .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .top)))
                                 .staggeredAppear(2)
                         }
+                        // The smart wake alarm (Alarms, slice 1): confirm MEKA's suggestion or set your own.
+                        if let wake = model.wake {
+                            WakeSection(wake: wake, palette: palette)
+                                .padding(.top, MekaSpace.l)
+                                .staggeredAppear(3)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .animation(MekaMotion.replan(reduced: reduceMotion), value: v.left.map { $0.task.id })

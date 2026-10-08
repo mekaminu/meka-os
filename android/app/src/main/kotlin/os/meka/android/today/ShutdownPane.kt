@@ -130,8 +130,13 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
         }
         items(v.tomorrow.rows, key = { "r-" + it.id }) { r -> TomorrowLine(r, Modifier.animateItem().appear(rememberAppearance(2))) }
 
+        // The smart wake alarm (Alarms, slice 1): confirm MEKA's suggestion or set your own.
+        item(key = "wake") {
+            WakeSection(core, Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(3)))
+        }
+
         item(key = "shut") {
-            Column(Modifier.padding(top = MekaSpace.xl).animateItem().appear(rememberAppearance(3)), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.padding(top = MekaSpace.xl).animateItem().appear(rememberAppearance(4)), horizontalAlignment = Alignment.CenterHorizontally) {
                 ShutDownCheck(visible = closing || v.doneToday, line = v.doneLine ?: "Day shut down")
                 Spacer(Modifier.height(MekaSpace.m))
                 if (!v.doneToday && !closing) {

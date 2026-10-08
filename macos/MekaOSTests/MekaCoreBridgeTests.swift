@@ -32,6 +32,28 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(core.today.value.isAllClear)
     }
 
+    /// Alarms, slice 1: the wake alarm and the next alarm (a nullable flow) through the bridge.
+    func testWakeAlarmThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "alarm-\(UUID().uuidString).db", deviceKey: nil
+        )
+        XCTAssertNil(core.nextAlarm.value)
+        XCTAssertFalse(core.wakeView.value.isSet)
+        // 23:55 is always still ahead on the wake day (tomorrow, or today before 04:00).
+        let ok = try await core.setWake(minute: 23 * 60 + 55)
+        XCTAssertTrue(ok.boolValue)
+        XCTAssertTrue(core.wakeView.value.isSet)
+        XCTAssertEqual(core.wakeView.value.timeLabel, "23:55")
+        let ring = try XCTUnwrap(core.nextAlarm.value)
+        XCTAssertEqual(ring.timeLabel, "23:55")
+        XCTAssertNil(core.ringingAlarm())
+        XCTAssertEqual(AlarmRules.shared.bufferLine(min: 75), "1 h 15 to get ready")
+        try await core.wakeOff()
+        XCTAssertNil(core.nextAlarm.value)
+    }
+
     func testRepeatingTaskThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

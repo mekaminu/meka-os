@@ -402,6 +402,43 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theWakeAlarmSetOnTheFoldRingsOnBothAndDismissOnTheMacStopsTheFold() = runTest {
+        // Alarms, slice 1: Thursday evening (BST); Friday is a work day, so work at 09:00 less an hour.
+        val london = TimeZone.of("Europe/London")
+        fun at(d: Int, h: Int, m: Int) = kotlinx.datetime.LocalDateTime(2026, 10, d, h, m).toInstant(london).toEpochMilliseconds()
+        now = at(8, 21, 30)
+        val a = core("android"); val m = core("mac")
+        a.tick()
+        val v = a.wakeView.value
+        assertEquals("Tomorrow · Fri 9 Oct", v.dayLabel)
+        assertEquals("08:00", v.timeLabel)
+        assertEquals("Suggested from Work at 09:00 · 1 h to get ready", v.line)
+        assertEquals(null, a.nextAlarm.value)
+
+        assertTrue(a.useSuggestedWake())
+        assertEquals(at(9, 8, 0), a.nextAlarm.value?.ringAtMs)
+        assertEquals("Work at 09:00", a.nextAlarm.value?.line)
+        assertTrue(a.setWake(7 * 60 + 45))
+        assertEquals("07:45", a.wakeView.value.timeLabel)
+        a.syncNow(); m.syncNow()
+        assertEquals(at(9, 7, 45), m.nextAlarm.value?.ringAtMs)
+        assertEquals(null, a.ringingAlarm())
+
+        now = at(9, 7, 45); a.tick(); m.tick()
+        val ringing = a.ringingAlarm()!!
+        val snoozed = a.snoozeAlarm(ringing.id)!!
+        assertEquals("Snoozed until 07:54", snoozed.snoozeLine)
+        assertEquals(null, a.ringingAlarm())
+        now = at(9, 7, 54); a.tick()
+        assertEquals(ringing.id, a.ringingAlarm()?.id)
+        a.syncNow(); m.syncNow()
+        assertTrue(m.dismissAlarm(ringing.id))
+        m.syncNow(); a.syncNow()
+        assertEquals(null, a.nextAlarm.value)
+        assertEquals(null, a.ringingAlarm())
+    }
+
+    @Test
     fun readAfterMidnightTheBriefStillComesInTheMorningAndAReadOnTheMacIsALineOnTheFold() = runTest {
         // Fold review 2026-10-08: no card at 07:14–07:58 BST. A read after midnight was last night's brief.
         val london = TimeZone.of("Europe/London")

@@ -69,6 +69,10 @@ class MekaApplication : Application() {
     @Volatile var isOnScreen: Boolean = false
     /** Set by the nudge's tap: the shell opens Needs you with the after-work summary. */
     val openAfterWork = MutableStateFlow(false)
+    /** Dismissing the wake alarm: Today opens the morning brief, then clears it. */
+    val openBrief = MutableStateFlow(false)
+    /** The wake alarm (Alarms, slice 1), registered with Android whenever the core's next alarm changes. */
+    val alarms: os.meka.android.alarm.AlarmScheduler by lazy { os.meka.android.alarm.AlarmScheduler(this) }
     /** The News widget's tap: the story to open News on over Today ("" = News itself); null once handled. */
     val openNewsStory = MutableStateFlow<String?>(null)
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -99,6 +103,13 @@ class MekaApplication : Application() {
         // Every work-mode change on this phone (clock tick, sync, listener) goes past the nudger. Also runs once at
         // process start (after a reboot the listener's rebind starts us), which re-registers the end-of-work alarm.
         appScope.launch { core.workMode.collect { nudger.evaluate(it) } }
+        // The wake alarm follows the synced data: set, moved, snoozed or dismissed on either device. Also once at
+        // process start (after a reboot or an update), which re-arms it.
+        appScope.launch {
+            core.nextAlarm.map { os.meka.android.alarm.AlarmRouting.signature(it) to it }
+                .distinctUntilChanged { a, b -> a.first == b.first }
+                .collect { runCatching { alarms.register(it.second) } }
+        }
         // Urgent voice messages from the call assistant ring through as soon as they sync (also with the app open).
         appScope.launch { core.afterWork.collect { runCatching { nudger.alertVoiceMessages() } } }
         // Messages held before the summary was synced join it once (re-holding is a no-op, cleared ones stay cleared).
