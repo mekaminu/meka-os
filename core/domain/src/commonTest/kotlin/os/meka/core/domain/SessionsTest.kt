@@ -90,11 +90,55 @@ class SessionsTest {
         assertEquals(SessionStatus.MISSED, card.status)
         assertEquals("Not today · no worries", card.line)
         assertEquals("Rebooked for Tue 17:45", card.next)
-        // Sunday evening, missed: nothing left.
+        // Sunday afternoon, missed: nothing left this week (next week isn't booked before the evening).
         val sun = mon + 6
-        val none = book(listOf(gym(done = setOf(mon, mon + 2), missed = setOf(sun))), today = sun, now = at(sun, 20))
+        val none = book(listOf(gym(done = setOf(mon, mon + 2), missed = setOf(sun))), today = sun, now = at(sun, 17))
         assertEquals("No other slot this week", none.cards.single().next)
         assertEquals("No room left this week", none.lines["gym"])
+        // Sunday evening: it says when next week's first one is, not "rebooked".
+        val later = book(listOf(gym(done = setOf(mon, mon + 2), missed = setOf(sun))), today = sun, now = at(sun, 20))
+        assertEquals("No other slot this week · Next: Mon 17:45", later.cards.single().next)
+        assertEquals("No room left this week · Next week: Mon 17:45 · Wed 17:45 · Fri 17:45", later.lines["gym"])
+    }
+
+    @Test
+    fun sundayEveningBooksNextWeekToo() {
+        val sun = mon + 6
+        val h = listOf(gym(done = setOf(mon, mon + 2, mon + 4)))
+        // Before 18:00 only this week (done).
+        val before = book(h, today = sun, now = at(sun, 17, 59))
+        assertTrue(before.sessions.isEmpty())
+        assertEquals("Week done · 3 of 3", before.lines["gym"])
+        // From 18:00, when the weekly review comes, next week at its full target around work, a rest day between.
+        val v = book(h, today = sun, now = at(sun, 18))
+        assertEquals(listOf(sun + 1, sun + 3, sun + 5), v.sessions.map { it.day })
+        assertTrue(v.sessions.all { cal.minuteOfDay(it.startMs) == 17 * 60 + 45 })
+        assertEquals("Week done · 3 of 3 · Next week: Mon 17:45 · Wed 17:45 · Fri 17:45", v.lines["gym"])
+        // Nothing today, so no card; Today's timeline and the planner only ever take today's.
+        assertTrue(v.cards.isEmpty())
+        assertTrue(v.todayBlocks(sun, at(sun, 18)).isEmpty())
+        // Went today (Sunday): the card says what's next (Monday rests) instead of "Week done".
+        val went = book(listOf(gym(done = setOf(mon, mon + 2, sun))), today = sun, now = at(sun, 19)).cards.single()
+        assertEquals(SessionStatus.WENT, went.status)
+        assertEquals("Next: Tue 17:45", went.next)
+    }
+
+    @Test
+    fun nextWeekCarriesOnTheRestDaysAndTheRotation() {
+        val sun = mon + 6
+        // Two done, Sunday's session still to answer (17:00 on a free day): next week rests on Monday.
+        val v = book(listOf(gym(done = setOf(mon + 2, mon + 4), rotation = listOf("Push", "Pull", "Legs"), lastLabel = "Push")),
+            today = sun, now = at(sun, 18))
+        assertEquals(listOf(sun, sun + 2, sun + 4, sun + 6), v.sessions.map { it.day })
+        assertEquals(listOf("Pull", "Legs", "Push", "Pull"), v.sessions.map { it.label })
+        assertEquals(at(sun + 6, 17), v.sessions.last().startMs) // Saturday: no work, the evening from 17:00
+        val card = v.cards.single()
+        assertEquals(SessionStatus.ASK, card.status)
+        assertEquals("Next: Tue 17:45 · Legs", card.next)
+        // A day-long conference next Tuesday moves that session like any other.
+        val moved = book(listOf(gym(done = setOf(mon + 2, mon + 4))), today = sun, now = at(sun, 18),
+            events = listOf(ev("conference", at(sun + 2, 6), at(sun + 2, 22))))
+        assertEquals(sun + 3, moved.sessions[1].day)
     }
 
     @Test

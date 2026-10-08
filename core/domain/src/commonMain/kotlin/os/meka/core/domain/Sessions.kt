@@ -16,6 +16,10 @@ package os.meka.core.domain
  * now), so it stays put while the day goes by and becomes "Did you go?" once it's over.
  *
  * An optional rotation (Push · Pull · Legs) labels the sessions in turn, carrying on from the last session ticked.
+ *
+ * From Sunday evening ([NEXT_WEEK_FROM_MIN], when the weekly review comes) next week is booked too, Monday to Sunday at
+ * the full target, carrying on the rest days and the rotation, so Goals says "Next week: Mon 17:45 · Wed 17:45 · …" and
+ * Today's card says what's next. Those are previews like the rest: worked out afresh, so they follow the calendar.
  */
 data class SessionHabit(
     val id: String,
@@ -112,6 +116,8 @@ object SessionRules {
     const val MAX_LABEL = 24
     const val MAX_LABELS = 7
     const val MAX_NOTE = 80
+    /** Sunday from 18:00 (the weekly review's card, [ReviewRules.CARD_START_MIN]) next week is booked too. */
+    const val NEXT_WEEK_FROM_MIN = ReviewRules.CARD_START_MIN
     /** The fallback when the habit's part of the day has no room: 07:00–21:30. */
     private val ANY_WINDOW = 7 * 60 until 21 * 60 + 30
 
@@ -181,7 +187,7 @@ object SessionRules {
     }
 
     /**
-     * Books every habit in [habits] from [today] to Sunday and says what today holds (see the file comment). [busy]
+     * Books every habit in [habits] from [today] to Sunday (and next week from Sunday evening) and says what today holds (see the file comment). [busy]
      * gives a day's busy blocks ([busyOn]). Habits are booked in order, so a later one never overlaps an earlier one.
      */
     fun book(
@@ -189,6 +195,7 @@ object SessionRules {
     ): SessionsView {
         if (habits.isEmpty()) return SessionsView.EMPTY
         val sunday = GoalRules.weekStart(today) + 6
+        val bookNextWeek = today == sunday && cal.minuteOfDay(nowMs) >= NEXT_WEEK_FROM_MIN
         val taken = mutableMapOf<Long, MutableList<DayPlanner.Slot>>()
         val sessions = mutableListOf<BookedSession>()
         val cards = mutableListOf<SessionCard>()
@@ -206,60 +213,75 @@ object SessionRules {
             val missedToday = !wentToday && today in h.missedDays
             var needed = (weekTarget - doneWeek).coerceAtLeast(0)
 
-            // Candidate days with a slot: today (unless answered), then the rest of the week.
-            val candidates = mutableListOf<Pair<Long, DayPlanner.Slot>>()
-            for (d in today..sunday) {
-                if (d in h.doneDays || d in h.missedDays) continue
-                val notBefore = if (d == createdDay) h.createdAtMs + LEAD_AFTER_ADDING_MIN * 60_000L else Long.MIN_VALUE
-                val blocks = dayBusy.getOrPut(d) { busy(d) } + taken[d].orEmpty()
-                val slot = slotOn(d, window(h.timing), h.minutes, blocks, notBefore, cal)
-                    ?: slotOn(d, ANY_WINDOW, h.minutes, blocks, notBefore, cal)
-                    ?: continue
-                candidates += d to slot
-            }
-            // Pick: a rest day between sessions while the week still leaves room for one.
+            // Candidate days with a slot in [from, to] (answered days skipped), then picked with a rest day between
+            // sessions while the range still leaves room for one.
             var last = h.doneDays.filter { it <= today }.maxOrNull() ?: Long.MIN_VALUE / 2
-            val chosen = mutableListOf<Pair<Long, DayPlanner.Slot>>()
-            candidates.forEachIndexed { i, c ->
-                if (needed == 0) return@forEachIndexed
-                val left = candidates.size - i
-                if (c.first - last >= 2 || left <= needed) {
-                    chosen += c; needed--; last = c.first
+            fun pick(from: Long, to: Long, want: Int): List<Pair<Long, DayPlanner.Slot>> {
+                val candidates = mutableListOf<Pair<Long, DayPlanner.Slot>>()
+                for (d in from..to) {
+                    if (d in h.doneDays || d in h.missedDays) continue
+                    val notBefore = if (d == createdDay) h.createdAtMs + LEAD_AFTER_ADDING_MIN * 60_000L else Long.MIN_VALUE
+                    val blocks = dayBusy.getOrPut(d) { busy(d) } + taken[d].orEmpty()
+                    val slot = slotOn(d, window(h.timing), h.minutes, blocks, notBefore, cal)
+                        ?: slotOn(d, ANY_WINDOW, h.minutes, blocks, notBefore, cal)
+                        ?: continue
+                    candidates += d to slot
                 }
+                var left = want
+                val chosen = mutableListOf<Pair<Long, DayPlanner.Slot>>()
+                candidates.forEachIndexed { i, c ->
+                    if (left == 0) return@forEachIndexed
+                    if (c.first - last >= 2 || candidates.size - i <= left) {
+                        chosen += c; left--; last = c.first
+                    }
+                }
+                return chosen
+            }
+            val chosen = pick(today, sunday, needed)
+            needed -= chosen.size
+            // Sunday evening: next week at its full target, after this week's (rest days and rotation carry on).
+            val chosenNext = if (!bookNextWeek) emptyList() else {
+                val nextWeekTarget = GoalRules.weekTarget(h.perWeek, sunday + 1, createdDay)
+                val doneNext = h.doneDays.count { it in sunday + 1..sunday + 7 }
+                pick(sunday + 1, sunday + 7, (nextWeekTarget - doneNext).coerceAtLeast(0))
             }
             // Labels carry on from the last session ticked.
             val rot = h.rotation
             var next = if (rot.isEmpty()) 0 else (rot.indexOf(h.lastLabel).let { if (it < 0) 0 else it + 1 }) % rot.size
-            val booked = chosen.map { (d, slot) ->
+            val all = (chosen + chosenNext).map { (d, slot) ->
                 val label = rot.getOrNull(next)
                 if (rot.isNotEmpty()) next = (next + 1) % rot.size
                 taken.getOrPut(d) { mutableListOf() } += slot
                 BookedSession(h.id, h.title, label, d, slot.startMs, slot.endMs, whenLine(d, slot.startMs))
             }
-            sessions += booked
+            sessions += all
+            val booked = all.filter { it.day <= sunday }
+            val nextWeek = all.filter { it.day > sunday }
             val short = needed
             val weekMet = doneWeek >= weekTarget
-            lines[h.id] = when {
+            val thisWeek = when {
                 weekMet -> "Week done · $doneWeek of $weekTarget"
                 booked.isEmpty() -> "No room left this week"
                 else -> "Booked " + booked.joinToString(" · ") { it.whenLine } + (if (short > 0) " · no room for $short more" else "")
             }
+            lines[h.id] = if (nextWeek.isEmpty()) thisWeek else "$thisWeek · Next week: " + nextWeek.joinToString(" · ") { it.whenLine }
 
             // Today's card.
             val todays = booked.firstOrNull { it.day == today }
-            val later = booked.filter { it.day > today }
+            val later = all.filter { it.day > today }
             fun named(label: String?) = listOfNotNull(h.title, label).joinToString(" · ")
             val upcoming = later.firstOrNull()?.let { s -> "Next: ${s.whenLine}" + (s.label?.let { " · $it" } ?: "") }
             val count = "$doneWeek of $weekTarget this week"
             val card = when {
                 wentToday -> SessionCard(
                     h.id, SessionStatus.WENT, named(h.todayLabel), "Went · $count",
-                    if (weekMet) "Week done · $doneWeek of $weekTarget" else upcoming,
+                    upcoming ?: if (weekMet) "Week done · $doneWeek of $weekTarget" else null,
                     h.todayLabel, h.todayNote, null, null,
                     "${named(h.todayLabel)}, went today, $count" + (h.todayNote?.let { ", note $it" } ?: ""),
                 )
                 missedToday -> {
-                    val re = later.firstOrNull()?.let { s -> "Rebooked for ${s.whenLine}" + (s.label?.let { " · $it" } ?: "") }
+                    val re = later.firstOrNull { it.day <= sunday }?.let { s -> "Rebooked for ${s.whenLine}" + (s.label?.let { " · $it" } ?: "") }
+                        ?: nextWeek.firstOrNull()?.let { "No other slot this week · " + upcoming }
                         ?: "No other slot this week"
                     SessionCard(h.id, SessionStatus.MISSED, h.title, "Not today · no worries", re, null, null, null, null,
                         "${h.title}, not today. $re")

@@ -732,6 +732,24 @@ class MekaCoreTest {
     }
 
     @Test
+    fun sundayEveningBooksNextWeekIntoGoals() = runTest {
+        // Monday 21 Sep 2026, 15:13 in London; on to Sunday 27 Sep at 17:13, then 18:13.
+        val a = core("android")
+        a.addGym()
+        now += 6 * 86_400_000L + 2 * 3_600_000L
+        a.tick()
+        assertTrue("Next week" !in a.goalsView.value.habits.single().sessionLine.orEmpty(), "not before the evening")
+        now += 3_600_000L
+        a.tick()
+        // Sunday's 17:00 session is still to answer, so next week rests on Monday.
+        assertEquals("Booked Today 17:00 · no room for 2 more · Next week: Tue 17:45 · Thu 17:45 · Sat 17:00",
+            a.goalsView.value.habits.single().sessionLine)
+        assertEquals("Next: Tue 17:45", a.sessionsView.value.cards.single().next)
+        // Today's timeline only ever holds today's sessions.
+        assertTrue(a.today.value.timeline.rows.none { it.kind == os.meka.core.domain.TimelineKind.SESSION })
+    }
+
+    @Test
     fun didYouGoIsAnsweredFromTheNotificationOnceAndNotTheNextDay() = runTest {
         // Monday 21 Sep 2026, 15:13 in London.
         val a = core("android"); val m = core("mac")
