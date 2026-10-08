@@ -474,4 +474,26 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(note.deleteAnyway)
         XCTAssertFalse(note.waiting)
     }
+
+    /// V1 AI layer, slice 3b: Ask's status line, the answer's lines and a card with its Undo reach Swift.
+    func testAskMekaThroughTheBridge() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "ask-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let status = try await core.aiStatus()
+        XCTAssertFalse(status.canAsk)
+        XCTAssertEqual(AskRules.shared.statusView(state: "on", reason: nil, spentCents: 120, budgetCents: 2000, level: "ok").line, "On · $1.20 of $20 this month")
+        XCTAssertEqual(AskRules.shared.answerLines(text: "One.\n\nTwo."), ["One.", "Two."])
+        let card = AskRules.shared.cardOf(p: AskProposalAddTask(title: "Milk", day: nil, minute: nil), today: 0)
+        XCTAssertEqual(card.line, "Add “Milk”")
+        let done = try await core.doAsk(card: card)
+        XCTAssertEqual(done.line, "Added “Milk”")
+        XCTAssertEqual(core.today.value.upNext?.title, "Milk")
+        let undo = try XCTUnwrap(done.undo)
+        let back = try await core.undoAsk(undo: undo)
+        XCTAssertTrue(back.boolValue)
+        XCTAssertNil(core.today.value.upNext)
+    }
 }

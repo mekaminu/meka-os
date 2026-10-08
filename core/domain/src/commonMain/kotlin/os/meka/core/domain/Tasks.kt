@@ -451,6 +451,25 @@ class Tasks(
         return true
     }
 
+    /**
+     * Puts a task's state and timing back to [before] (an Ask card's Undo: ticked off or moved), only while it is
+     * still exactly as [after] left it; a change made since, here or on another device, wins. False when nothing was
+     * put back. A repeating task's next occurrence, created by Done, stays, as with Reopen.
+     */
+    fun putBack(id: String, before: TaskTiming, after: TaskTiming): Boolean {
+        val now = get(id) ?: return false
+        if (TaskTiming.of(now) != after) return false
+        val changes = linkedMapOf<String, FieldValue>()
+        if (before.lifecycle != after.lifecycle) changes[ActionableFields.LIFECYCLE] = before.lifecycle.name.fv()
+        if (before.deferredToDay != after.deferredToDay) changes[TaskFields.DEFERRED_TO_DAY] = before.deferredToDay?.fv() ?: FieldValue.Null
+        if (before.scheduledAtMs != after.scheduledAtMs) changes[TaskFields.SCHEDULED_AT] = before.scheduledAtMs?.fv() ?: FieldValue.Null
+        if (before.dueAtMs != after.dueAtMs) changes[ActionableFields.DUE_AT] = before.dueAtMs?.fv() ?: FieldValue.Null
+        if (before.remindAtMs != after.remindAtMs) changes[TaskFields.REMIND_AT] = before.remindAtMs?.fv() ?: FieldValue.Null
+        if (changes.isEmpty()) return false
+        replica.commitLocal(EntityTypes.TASK, id, changes)
+        return true
+    }
+
     fun moveToSomeday(id: String, kind: SomedayKind = SomedayKind.IDEA) {
         requireExists(id)
         replica.commitLocal(

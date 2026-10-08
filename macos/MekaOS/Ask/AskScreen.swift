@@ -1,8 +1,8 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// ASK on the Mac (build plan M1, Four tabs, one front door): the front door to everything that isn't a tab. Until the
-/// AI layer lands, asking is searching (the field opens Search Everything, as ⌘F does). More lists the places behind
+/// ASK on the Mac (build plan M1, Four tabs, one front door): the front door to everything that isn't a tab. The field
+/// asks MEKA in your own words (`AskMekaSection`, V1 AI layer slice 3b), with Search Everything (⌘F) beside it. More lists the places behind
 /// Ask (they open with the shell's push and keep Ask lit in spirit: the sidebar shows them under More) and the sheets.
 /// Motion: title, field and More's sections (Places · Daily · Settings) stagger in, each a step after the one before; rows lift 2 pt on hover; a lit Lists line blends its colour.
 struct AskScreen: View {
@@ -18,25 +18,8 @@ struct AskScreen: View {
                     .foregroundStyle(palette.textPrimary)
                     .padding(.bottom, MekaSpace.m)
                     .staggeredAppear(0)
-                Button { model.showSearch = true } label: {
-                    HStack {
-                        Image(systemName: "magnifyingglass").foregroundStyle(palette.textTertiary)
-                        Text("Search everything").font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
-                        Spacer()
-                        Text("⌘F").font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                    }
-                    .padding(.horizontal, MekaSpace.l)
-                    .frame(minHeight: 44)
-                    .background(palette.surfaceRaised, in: Capsule())
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(MekaPressStyle())
-                .accessibilityLabel("Search everything")
-                .staggeredAppear(1)
-                Text("Tasks, events, lists, goals and habits. Asking in your own words comes with the AI layer.")
-                    .font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                    .padding(.leading, MekaSpace.xxs)
-                    .padding(.bottom, MekaSpace.l)
+                // Ask MEKA (V1 AI layer, slice 3b): the field asks in your own words; Search sits beside it.
+                AskMekaSection(palette: palette)
                     .staggeredAppear(1)
                 // More in sections (Fold review 2026-10-08, item 10): Places · Daily · Settings, a small label over each.
                 ForEach(Array(ShellNav.moreSections(connected: model.isConnected && !model.signedOut).enumerated()), id: \.element.id) { s, section in

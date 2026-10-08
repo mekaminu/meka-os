@@ -8,6 +8,7 @@ import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -119,6 +120,20 @@ object AskCodec {
         val words = o?.optStr("answer")
         if (o == null || words == null) return text.trim().take(MAX_ANSWER) to emptyList()
         return words.trim().take(MAX_ANSWER) to actionsOf(o)
+    }
+
+    /** The server's AI status (`POST /v1/ai/status`): on/off/failing, why, and the month's spend when it meters. */
+    data class Status(val state: String, val reason: String?, val spentCents: Long?, val budgetCents: Long?, val level: String?)
+
+    /**
+     * Reads `{"state", "reason"?, "budget": {"spentCents", "budgetCents", "level"}?}` (the status carries no wire
+     * version: it is a small read-only answer, and unknown fields are ignored).
+     */
+    fun decodeStatus(body: String): Status = wrap("ai status") {
+        val o = json.parseToJsonElement(body).jsonObject
+        val b = o["budget"] as? JsonObject
+        fun JsonObject.long(k: String): Long? = (this[k] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull
+        Status(o.str("state"), o.optStr("reason"), b?.long("spentCents"), b?.long("budgetCents"), b?.optStr("level"))
     }
 
     private fun actionsOf(o: JsonObject): List<Action> =

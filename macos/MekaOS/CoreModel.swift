@@ -854,6 +854,50 @@ final class CoreModel {
         }
     }
 
+    // MARK: Ask MEKA (V1 AI layer, slice 3b)
+
+    /// MEKA's AI and the month's spend under Ask's field ("On · $1.20 of $20 this month"); nil until checked.
+    private(set) var aiStatus: AiStatusView?
+    /// The last Ask card whose Undo was pressed, so Ask shows it again.
+    private(set) var askUndone: AskUndone?
+
+    func refreshAiStatus() async {
+        guard let core, !signedOut else { aiStatus = AskRules.shared.STATUS_NOT_CONNECTED; return }
+        aiStatus = try? await core.aiStatus()
+    }
+
+    /// Asks MEKA; only the question (a String) crosses into the core. The answer as Ask shows it: its lines (they fade
+    /// in one after another) and cards, or why there is none.
+    func askMeka(_ question: String) async -> AskReplyView {
+        guard let core else { return AskReplyView(lines: [], cards: [], unavailable: AskRules.shared.NOT_CONNECTED_LINE) }
+        var reply = AskReplyView(lines: [], cards: [], unavailable: AskRules.shared.OFFLINE_LINE)
+        if let out = try? await core.askMeka(question: question) {
+            switch onEnum(of: out) {
+            case .answered(let a):
+                reply = AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil)
+            case .unavailable(let u):
+                reply = AskReplyView(lines: [], cards: [], unavailable: u.line)
+            }
+        }
+        await refreshAiStatus()
+        return reply
+    }
+
+    /// Does what an Ask card proposes on Meka's click (light haptic), then the undo bar rises with what it did. The
+    /// card crosses into the core once. Returns false when it couldn't be done (the bar says why).
+    func doAsk(_ card: AskCard, index: Int) async -> Bool {
+        guard let core else { return false }
+        MekaHaptics.light()
+        do {
+            let done = try await core.doAsk(card: card)
+            offerEventUndo(done.line, done.undo == nil ? nil : EventUndoOffer.Action.ask(done, index))
+            return true
+        } catch {
+            offerEventUndo(error.localizedDescription, nil)
+            return false
+        }
+    }
+
     // MARK: Weekly review
 
     /// Shows the week `offset` weeks from this one (0 this week, -1 last week, back to -12); a tick haptic.
@@ -1216,6 +1260,10 @@ final class CoreModel {
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
         case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
+        case .ask(let done, let card):
+            guard let undo = done.undo else { break }
+            askUndone = AskUndone(n: (askUndone?.n ?? 0) + 1, card: card)
+            run { _ = try await $0.undoAsk(undo: undo) }
         }
     }
 
@@ -1336,6 +1384,19 @@ final class CoreModel {
     }
 }
 
+/// An answer as Ask shows it on the Mac: its lines and cards, or the line saying why there is none.
+struct AskReplyView {
+    let lines: [String]
+    let cards: [AskCard]
+    let unavailable: String?
+}
+
+/// An Ask card taken back with Undo: `n` counts, `card` is its place in the answer.
+struct AskUndone: Equatable {
+    let n: Int
+    let card: Int
+}
+
 /// What the calendar-action undo bar offers.
 struct EventUndoOffer: Identifiable, Equatable {
     enum Action: Equatable {
@@ -1359,6 +1420,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case eventEdit(String)
         /// Plan my day's blocks on their way to the calendar (slice 2e): taken back; the tasks stay planned.
         case planBlocks([String])
+        /// An Ask card (V1 AI layer, slice 3b): what it did is taken back; the Int is the card's place in the answer.
+        case ask(AskDone, Int)
     }
 
     let id = UUID()

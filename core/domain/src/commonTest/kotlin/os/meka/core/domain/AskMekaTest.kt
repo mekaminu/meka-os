@@ -165,4 +165,37 @@ class AskMekaTest {
         assertEquals("Started a 2 days fast", AskRules.doneLine(AskProposal.StartFast(48), today))
         assertEquals("Alarm set · 06:30", AskRules.doneLine(AskProposal.Alarm(390), today))
     }
+
+    @Test
+    fun theStatusLineSaysOnWithTheSpendOffUsedUpOrNotAnswering() {
+        assertEquals(AiStatusView("On · $1.20 of $20 this month", lit = false, canAsk = true), AskRules.statusView("on", null, 120, 2000, "ok"))
+        assertEquals(AiStatusView("On", lit = false, canAsk = true), AskRules.statusView("on", null, null, null, null))
+        assertEquals(
+            AiStatusView("On · $14.05 of $20 this month · most of the month's budget used", lit = true, canAsk = true),
+            AskRules.statusView("on", null, 1405, 2000, "alert"),
+        )
+        assertEquals(AiStatusView("This month's budget is used up · back on the 1st", lit = true, canAsk = false), AskRules.statusView("on", null, 2000, 2000, "over"))
+        assertEquals(AiStatusView("Off · Search still finds everything", lit = false, canAsk = false), AskRules.statusView("off", "No AI key set", 0, 2000, "ok"))
+        assertEquals(AiStatusView("Not answering · Anthropic refused the key", lit = true, canAsk = true), AskRules.statusView("failing", "Anthropic refused the key", 0, 2000, "ok"))
+        assertEquals("Not answering", AskRules.statusView("weird", "  ", null, null, null).line)
+        assertFalse(AskRules.STATUS_NOT_CONNECTED.canAsk)
+        assertEquals("$0", AskRules.dollars(-5))
+        assertEquals("$0.07", AskRules.dollars(7))
+        assertEquals("$40", AskRules.dollars(4000))
+    }
+
+    @Test
+    fun theAnswerFadesInAsParagraphsAndSentences() {
+        assertEquals(listOf("Moved it to tomorrow at 9."), AskRules.answerLines("Moved it to tomorrow at 9."))
+        assertEquals(listOf("You have three things:", "- Book dentist", "- Call Mum"), AskRules.answerLines("You have three things:\n\n- Book dentist\n- Call Mum\n"))
+        val long = "Your afternoon is clear until Training at 18:00, so there's room for the CR before then. " +
+            "Book dentist is overdue since Tuesday; I can move it to tomorrow morning if you like. Anything else?"
+        val lines = AskRules.answerLines(long)
+        assertTrue(lines.size >= 2, lines.toString())
+        assertTrue(lines.all { it.length <= 140 }, lines.toString())
+        assertEquals(long, lines.joinToString(" "))
+        assertEquals(listOf("No answer"), AskRules.answerLines("  \n "))
+        // A long run with no sentence end stays one line.
+        assertEquals(1, AskRules.answerLines("x".repeat(300)).size)
+    }
 }

@@ -60,4 +60,15 @@ class AskCodecTest {
         assertEquals(5, AskCodec.parseModelAnswer("""{"answer":"ok","actions":[$many]}""").second.size)
         assertEquals(AskCodec.MAX_ANSWER, AskCodec.parseModelAnswer("z".repeat(3000)).first.length)
     }
+
+    @Test
+    fun theStatusReadsOnOffAndTheMonthsSpend() {
+        val on = AskCodec.decodeStatus(
+            """{"state":"on","checkedAtMs":1,"budget":{"month":"2026-10","spentCents":120,"budgetCents":2000,"level":"ok","features":[{"feature":"ask","calls":3,"cents":120}]}}""",
+        )
+        assertEquals(AskCodec.Status("on", null, 120, 2000, "ok"), on)
+        assertEquals(AskCodec.Status("off", "No AI key set", null, null, null), AskCodec.decodeStatus("""{"state":"off","reason":"No AI key set"}"""))
+        assertFailsWith<WireFormatException> { AskCodec.decodeStatus("""{"reason":"x"}""") }
+        assertFailsWith<WireFormatException> { AskCodec.decodeStatus("not json") }
+    }
 }

@@ -1199,33 +1199,68 @@ class MekaCore(
 
     /**
      * Does what an Ask card proposes, on Meka's tap (his own action, like any button): adds, ticks off or moves a task,
-     * starts a fast, or sets a timer or alarm exactly as typing it would. Returns the undo bar's line. Throws
-     * [os.meka.core.domain.ValidationException] when it can't be done any more (the task is gone, already fasting).
+     * starts a fast, or sets a timer or alarm exactly as typing it would. Returns the undo bar's line and how to take it
+     * back ([undoAsk]). Throws [os.meka.core.domain.ValidationException] when it can't be done any more (the task is
+     * gone, already fasting).
      */
-    suspend fun doAsk(card: os.meka.core.domain.AskCard): String = onCore {
+    suspend fun doAsk(card: os.meka.core.domain.AskCard): os.meka.core.domain.AskDone = onCore {
         val cal = ZoneCalendar(timeZone)
         val today = cal.epochDayOf(nowMs())
-        when (val p = card.proposal) {
+        fun openTask(id: String): os.meka.core.domain.Task =
+            tasks.get(id)?.takeIf { !it.lifecycle.isTerminal } ?: throw os.meka.core.domain.ValidationException("That task isn't open any more")
+        val undo: os.meka.core.domain.AskUndo? = when (val p = card.proposal) {
             is os.meka.core.domain.AskProposal.AddTask -> {
                 val id = tasks.create(NewTask(p.title))
                 p.day?.let { d -> tasks.setWhen(id, d, p.minute); followBlocks(listOf(id)) }
+                os.meka.core.domain.AskUndo.RemoveTask(id)
             }
             is os.meka.core.domain.AskProposal.CompleteTask -> {
-                if (tasks.get(p.taskId)?.lifecycle?.isTerminal != false) throw os.meka.core.domain.ValidationException("That task isn't open any more")
+                val before = os.meka.core.domain.TaskTiming.of(openTask(p.taskId))
                 tasks.complete(p.taskId)
+                tasks.get(p.taskId)?.let { os.meka.core.domain.AskUndo.PutBack(p.taskId, before, os.meka.core.domain.TaskTiming.of(it)) }
             }
             is os.meka.core.domain.AskProposal.MoveTask -> {
-                if (tasks.get(p.taskId)?.lifecycle?.isTerminal != false) throw os.meka.core.domain.ValidationException("That task isn't open any more")
+                val before = os.meka.core.domain.TaskTiming.of(openTask(p.taskId))
                 tasks.setWhen(p.taskId, p.day, p.minute); followBlocks(listOf(p.taskId))
+                tasks.get(p.taskId)?.let { os.meka.core.domain.AskUndo.PutBack(p.taskId, before, os.meka.core.domain.TaskTiming.of(it)) }
             }
-            is os.meka.core.domain.AskProposal.StartFast -> fasting.startExtended(p.hours, 0)
+            is os.meka.core.domain.AskProposal.StartFast -> os.meka.core.domain.AskUndo.DiscardFast(fasting.startExtended(p.hours, 0))
             is os.meka.core.domain.AskProposal.Timer, is os.meka.core.domain.AskProposal.Alarm -> {
                 val q = os.meka.core.domain.QuickAlarmRules.parse(os.meka.core.domain.AskRules.captureLine(p), nowMs(), cal)
                     ?: throw os.meka.core.domain.ValidationException("That can't be set")
-                alarms.setQuick(q) ?: throw os.meka.core.domain.ValidationException("That can't be set")
+                os.meka.core.domain.AskUndo.CancelAlarm(alarms.setQuick(q) ?: throw os.meka.core.domain.ValidationException("That can't be set"))
             }
         }
-        os.meka.core.domain.AskRules.doneLine(card.proposal, today)
+        os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
+    }
+
+    /**
+     * The undo bar's Undo after an Ask card: the added task goes, a ticked-off or moved task is put back while it is
+     * still as the card left it, the fast is thrown away while it runs, the timer or alarm is cancelled. False when
+     * there was nothing left to take back (changed since, here or on the other device).
+     */
+    suspend fun undoAsk(undo: os.meka.core.domain.AskUndo): Boolean = onCore {
+        when (undo) {
+            is os.meka.core.domain.AskUndo.RemoveTask -> {
+                if (tasks.get(undo.taskId) == null) false else { tasks.delete(undo.taskId); followBlocks(listOf(undo.taskId)); true }
+            }
+            is os.meka.core.domain.AskUndo.PutBack ->
+                tasks.putBack(undo.taskId, undo.before, undo.after).also { if (it) followBlocks(listOf(undo.taskId)) }
+            is os.meka.core.domain.AskUndo.DiscardFast -> fasting.discardIfOpen(undo.fastId)
+            is os.meka.core.domain.AskUndo.CancelAlarm -> alarms.cancel(undo.alarmId)
+        }
+    }
+
+    /**
+     * What Ask says about MEKA's AI under its field ([os.meka.core.domain.AskRules.statusView]): on with the month's
+     * spend, off, used up or not answering, from the server's `POST /v1/ai/status`. Never throws.
+     */
+    suspend fun aiStatus(): os.meka.core.domain.AiStatusView {
+        val api = aiApi ?: return os.meka.core.domain.AskRules.STATUS_NOT_CONNECTED
+        val r = try { api.aiStatus() } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            return os.meka.core.domain.AskRules.STATUS_UNKNOWN
+        } ?: return os.meka.core.domain.AskRules.STATUS_UNKNOWN
+        return os.meka.core.domain.AskRules.statusView(r.state, r.reason, r.spentCents, r.budgetCents, r.level)
     }
 
     /** ADR-006: a model's proposal is a suggestion the policy engine must allow; it can never run without a tap. */

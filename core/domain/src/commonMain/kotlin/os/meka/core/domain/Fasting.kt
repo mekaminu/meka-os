@@ -487,6 +487,13 @@ class Fasting(
         open.forEach { replica.commitLocal(EntityTypes.FAST, it.id, mapOf(ActionableFields.DELETED to true.fv())) }
     }
 
+    /** Throws away fast [id] while it still runs (an Ask card's Undo); false once it has ended or gone. */
+    fun discardIfOpen(id: String): Boolean {
+        if (open().none { it.id == id }) return false
+        replica.commitLocal(EntityTypes.FAST, id, mapOf(ActionableFields.DELETED to true.fv()))
+        return true
+    }
+
     // ---- Reads ----
 
     fun view(): FastingView {

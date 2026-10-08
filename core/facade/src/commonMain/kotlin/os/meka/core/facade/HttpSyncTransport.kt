@@ -70,9 +70,14 @@ sealed class AskReply {
     data class Unavailable(val state: String, val reason: String?) : AskReply()
 }
 
+/** What the server says about MEKA's AI (`POST /v1/ai/status`): never the key. Budget fields are null on an older server. */
+data class AiStatusReply(val state: String, val reason: String?, val spentCents: Long?, val budgetCents: Long?, val level: String?)
+
 /** Ask MEKA (V1 AI layer, slice 3), available once the device is connected. */
 interface AiApi {
     suspend fun ask(question: String, context: os.meka.core.domain.AskContext): AskReply
+    /** Whether MEKA's AI is on and the month's spend; null when the server has no AI layer. */
+    suspend fun aiStatus(): AiStatusReply? = null
 }
 
 /** Account management calls, available once the device is connected. */
@@ -220,6 +225,19 @@ class HttpSyncTransport(
         } else {
             AskReply.Unavailable(r.state, r.reason)
         }
+    }
+
+    override suspend fun aiStatus(): AiStatusReply? {
+        prepare() // the status route requires the device's signing key on the server too
+        val resp = send("/v1/ai/status", "{}")
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/status")
+            // A server without the AI layer (older, or no key secret configured): AI is off.
+            resp.status.value == 404 -> return AiStatusReply(AskCodec.Response.OFF, null, null, null, null)
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/status")
+        }
+        val st = AskCodec.decodeStatus(resp.bodyAsText())
+        return AiStatusReply(st.state, st.reason, st.spentCents, st.budgetCents, st.level)
     }
 
     private suspend fun post(path: String, body: String): String {

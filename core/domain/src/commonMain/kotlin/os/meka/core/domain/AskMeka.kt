@@ -66,6 +66,28 @@ sealed interface AskOutcome {
     data class Unavailable(val line: String) : AskOutcome
 }
 
+/**
+ * How to take back what an Ask card did (the undo bar's Undo): the task it added goes, a ticked-off or moved task gets
+ * its state back (only while it is still as the card left it), the fast it started is thrown away while it still runs,
+ * the timer or alarm is cancelled.
+ */
+sealed interface AskUndo {
+    data class RemoveTask(val taskId: String) : AskUndo
+    data class PutBack(val taskId: String, val before: TaskTiming, val after: TaskTiming) : AskUndo
+    data class DiscardFast(val fastId: String) : AskUndo
+    data class CancelAlarm(val alarmId: String) : AskUndo
+}
+
+/** What a tapped card did: the undo bar's line ("Added “Milk”") and how to take it back. */
+data class AskDone(val line: String, val undo: AskUndo?)
+
+/**
+ * What Ask shows about MEKA's AI under its field (`POST /v1/ai/status`): "On · $1.20 of $20 this month". [lit] when it
+ * needs a look (most of the month's budget used, used up, not answering); [canAsk] false when asking can't work (off,
+ * used up, not connected), so Ask leads with Search instead.
+ */
+data class AiStatusView(val line: String, val lit: Boolean, val canAsk: Boolean)
+
 object AskRules {
     const val MAX_QUESTION = 500
     const val MAX_ITEMS = 60
@@ -194,6 +216,56 @@ object AskRules {
         "off" -> "MEKA's AI is off"
         "over" -> "This month's AI budget is used up · back on the 1st"
         else -> reason?.trim()?.take(120)?.takeIf { it.isNotEmpty() }?.let { "Couldn't ask: $it" } ?: "Couldn't ask just now"
+    }
+
+    /**
+     * Ask's status line from the server's AI status: [state] on · off · failing (anything else reads as failing),
+     * [level] ok · alert · over for the month's budget, [spentCents]/[budgetCents] when the server meters (null on an
+     * older server). Money is in US dollars, as Anthropic bills it.
+     */
+    fun statusView(state: String, reason: String?, spentCents: Long?, budgetCents: Long?, level: String?): AiStatusView {
+        val spend = if (spentCents != null && budgetCents != null && budgetCents > 0) "${dollars(spentCents)} of ${dollars(budgetCents)} this month" else null
+        return when {
+            state == "off" -> AiStatusView("Off · Search still finds everything", lit = false, canAsk = false)
+            level == "over" -> AiStatusView("This month's budget is used up · back on the 1st", lit = true, canAsk = false)
+            state == "on" && level == "alert" -> AiStatusView(listOfNotNull("On", spend, "most of the month's budget used").joinToString(" · "), lit = true, canAsk = true)
+            state == "on" -> AiStatusView(listOfNotNull("On", spend).joinToString(" · "), lit = false, canAsk = true)
+            else -> AiStatusView(
+                "Not answering" + (reason?.trim()?.take(80)?.takeIf { it.isNotEmpty() }?.let { " · $it" } ?: ""),
+                lit = true, canAsk = true,
+            )
+        }
+    }
+
+    /** Before the server has said (offline, or this device isn't connected). */
+    val STATUS_UNKNOWN = AiStatusView("Couldn't check just now", lit = false, canAsk = true)
+    val STATUS_NOT_CONNECTED = AiStatusView("Ask works once this device is connected", lit = false, canAsk = false)
+
+    /** Cents → "$1.20"; whole dollars → "$20". */
+    fun dollars(cents: Long): String {
+        val c = cents.coerceAtLeast(0)
+        return if (c % 100 == 0L) "\$${c / 100}" else "\$${c / 100}.${(c % 100).toString().padStart(2, '0')}"
+    }
+
+    /**
+     * The answer as lines that fade in one after another (the catalogue's Assistant row): its paragraphs and list
+     * lines, and long paragraphs split after their sentences. Never empty.
+     */
+    fun answerLines(text: String): List<String> {
+        val out = mutableListOf<String>()
+        text.split('\n').map { it.trim() }.filter { it.isNotEmpty() }.forEach { para ->
+            if (para.length <= 140 || para.startsWith("-") || para.startsWith("•")) { out += para; return@forEach }
+            var rest = para
+            while (rest.length > 140) {
+                val cut = Regex("""[.!?](\s)""").findAll(rest).map { it.range.first + 1 }.lastOrNull { it in 40..140 }
+                    ?: Regex("""[.!?](\s)""").find(rest)?.range?.first?.plus(1)
+                    ?: break
+                out += rest.take(cut).trim()
+                rest = rest.drop(cut).trim()
+            }
+            if (rest.isNotEmpty()) out += rest
+        }
+        return out.ifEmpty { listOf(answerText(text)) }
     }
 
     const val OFFLINE_LINE = "Couldn't reach MEKA · try again when you're online"

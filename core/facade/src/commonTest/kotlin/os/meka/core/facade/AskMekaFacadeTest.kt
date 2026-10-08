@@ -7,6 +7,8 @@ import os.meka.core.domain.AskOutcome
 import os.meka.core.domain.AskProposal
 import os.meka.core.domain.AskRawAction
 import os.meka.core.domain.AskRules
+import os.meka.core.domain.AskUndo
+import os.meka.core.domain.AiStatusView
 import os.meka.core.domain.ValidationException
 import os.meka.core.sync.InMemoryReplicaStore
 import os.meka.core.sync.InMemoryServerOpStore
@@ -32,6 +34,11 @@ class AskMekaFacadeTest {
         val asked = mutableListOf<Pair<String, AskContext>>()
         var reply: AskReply = AskReply.Answered("Nothing yet.", emptyList())
         var down = false
+        var status: AiStatusReply? = AiStatusReply("on", null, 120, 2000, "ok")
+        override suspend fun aiStatus(): AiStatusReply? {
+            if (down) throw TransportException("offline")
+            return status
+        }
         override suspend fun push(request: PushRequest) = sync.push(request)
         override suspend fun pull(request: PullRequest) = sync.pull(request)
         override suspend fun ask(question: String, context: AskContext): AskReply {
@@ -73,7 +80,7 @@ class AskMekaFacadeTest {
         assertEquals("Move “Book dentist” to Tomorrow · 09:00", card.line)
         // Nothing happened until the tap.
         assertEquals(id, c.today.value.upNext?.id)
-        assertEquals("Moved “Book dentist” to Tomorrow · 09:00", c.doAsk(card))
+        assertEquals("Moved “Book dentist” to Tomorrow · 09:00", c.doAsk(card).line)
         assertTrue((listOfNotNull(c.today.value.upNext) + c.today.value.yourDay).none { it.id == id })
     }
 
@@ -84,15 +91,15 @@ class AskMekaFacadeTest {
         server.reply = AskReply.Answered("Here.", listOf(AskRawAction("add_task", title = "Milk"), AskRawAction("complete_task", ref = "t1"), AskRawAction("set_timer", minutes = 20)))
         val cards = assertIs<AskOutcome.Answered>(c.askMeka("do things")).answer.cards
         assertEquals(listOf("Add “Milk”", "Tick off “Create CR”", "Timer · 20 min"), cards.map { it.line })
-        assertEquals("Added “Milk”", c.doAsk(cards[0]))
+        assertEquals("Added “Milk”", c.doAsk(cards[0]).line)
         assertTrue((listOfNotNull(c.today.value.upNext) + c.today.value.yourDay).any { it.title == "Milk" })
-        assertEquals("Ticked off “Create CR”", c.doAsk(cards[1]))
+        assertEquals("Ticked off “Create CR”", c.doAsk(cards[1]).line)
         assertTrue(c.today.value.doneToday.any { it.id == id })
         // Ticked off already: the card can't do it twice.
         assertFailsWith<ValidationException> { c.doAsk(cards[1]) }
-        assertEquals("Timer set · 20 min", c.doAsk(cards[2]))
+        assertEquals("Timer set · 20 min", c.doAsk(cards[2]).line)
         val fast = os.meka.core.domain.AskRules.cardOf(AskProposal.StartFast(36), 0)
-        assertEquals("Started a 36 h fast", c.doAsk(fast))
+        assertEquals("Started a 36 h fast", c.doAsk(fast).line)
         assertFailsWith<ValidationException> { c.doAsk(fast) }
     }
 
@@ -110,5 +117,69 @@ class AskMekaFacadeTest {
         assertEquals(AskOutcome.Unavailable("Ask something first"), c.askMeka("   "))
         assertEquals(4, server.asked.size)
         assertEquals(AskOutcome.Unavailable(AskRules.NOT_CONNECTED_LINE), core(transport = null).askMeka("hi"))
+    }
+
+    @Test
+    fun everyCardCanBeTakenBack() = runTest {
+        val c = core()
+        c.addTask("Book dentist")
+        c.addTask("Create CR")
+        server.reply = AskReply.Answered("Here.", listOf(
+            AskRawAction("add_task", title = "Milk", date = "2026-10-09"),
+            AskRawAction("complete_task", ref = "t1"),
+            AskRawAction("move_task", ref = "t2", date = "2026-10-10", time = "09:00"),
+        ))
+        val cards = assertIs<AskOutcome.Answered>(c.askMeka("do things")).answer.cards
+        assertEquals(3, cards.size)
+        val dentist = assertIs<AskProposal.CompleteTask>(cards[1].proposal).taskId
+        val cr = assertIs<AskProposal.MoveTask>(cards[2].proposal).taskId
+        assertTrue(dentist != cr)
+        fun open() = (listOfNotNull(c.today.value.upNext) + c.today.value.yourDay).map { it.id }
+
+        val added = c.doAsk(cards[0])
+        val milk = assertIs<AskUndo.RemoveTask>(added.undo).taskId
+        assertTrue(c.undoAsk(added.undo!!))
+        assertFalse(c.undoAsk(added.undo!!))
+        assertFalse(milk in open())
+
+        val ticked = c.doAsk(cards[1])
+        assertTrue(c.today.value.doneToday.any { it.id == dentist })
+        assertTrue(c.undoAsk(ticked.undo!!))
+        assertTrue(dentist in open())
+        // Already put back: nothing more to do.
+        assertFalse(c.undoAsk(ticked.undo!!))
+
+        val moved = c.doAsk(cards[2])
+        assertFalse(cr in open())
+        assertTrue(c.undoAsk(moved.undo!!))
+        assertTrue(cr in open())
+
+        // Changed since (moved again by hand): Undo leaves it.
+        val again = c.doAsk(cards[2])
+        c.setWhen(cr, AskRules.parseDay("2026-10-13")!!, null)
+        assertFalse(c.undoAsk(again.undo!!))
+
+        val fast = c.doAsk(AskRules.cardOf(AskProposal.StartFast(36), 0))
+        assertTrue(c.undoAsk(fast.undo!!))
+        assertFalse(c.undoAsk(fast.undo!!))
+        // Thrown away, so a new fast can start.
+        c.doAsk(AskRules.cardOf(AskProposal.StartFast(36), 0))
+
+        val timer = c.doAsk(AskRules.cardOf(AskProposal.Timer(20), 0))
+        assertIs<AskUndo.CancelAlarm>(timer.undo)
+        assertTrue(c.undoAsk(timer.undo!!))
+    }
+
+    @Test
+    fun theStatusLineComesFromTheServer() = runTest {
+        val c = core()
+        assertEquals(AiStatusView("On · $1.20 of $20 this month", lit = false, canAsk = true), c.aiStatus())
+        server.status = AiStatusReply("on", null, 2000, 2000, "over")
+        assertFalse(c.aiStatus().canAsk)
+        server.status = null
+        assertEquals(AskRules.STATUS_UNKNOWN, c.aiStatus())
+        server.down = true
+        assertEquals(AskRules.STATUS_UNKNOWN, c.aiStatus())
+        assertEquals(AskRules.STATUS_NOT_CONNECTED, core(transport = null).aiStatus())
     }
 }
