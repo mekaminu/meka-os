@@ -164,13 +164,14 @@ enum MotionMath {
     }
 
     /// How strongly hour mark `hour` (0–23, midnight at the top) shows: in full each fades in as the drawing mark
-    /// reaches it, one after another round the dial (over `dayRingHourFade` hours of the dial); in the quick draw they
+    /// reaches it, one after another round the dial (over `dayRingHourFade` hours of the dial, paced so the last, 23:00,
+    /// is fully in as the mark closes); in the quick draw they
     /// all come up together with the mark (`mark` is `dayRingMark`'s value); Off: shown.
     static func dayRingHour(mark: Double, hour: Int, play: DayRingPlayback) -> Double {
         switch play {
         case .still: 1
         case .quick: min(max(mark, 0), 1)
-        case .full: min(max((mark * 24 - Double(hour)) / dayRingHourFade, 0), 1)
+        case .full: min(max((mark * (24 + dayRingHourFade) - Double(hour)) / dayRingHourFade, 0), 1)
         }
     }
 

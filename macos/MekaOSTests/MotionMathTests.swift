@@ -167,12 +167,13 @@ final class MotionMathTests: XCTestCase {
 
     @MainActor
     func testTheHourMarksFadeInOneByOneBehindTheMarkOnTheFirstOpen() {
+        XCTAssertEqual(MotionMath.dayRingHour(mark: 0, hour: 0, play: .full), 0, accuracy: 1e-9)
         XCTAssertEqual(MotionMath.dayRingHour(mark: 0.5, hour: 0, play: .full), 1, accuracy: 1e-9)
-        XCTAssertEqual(MotionMath.dayRingHour(mark: 0.5, hour: 10, play: .full), 1, accuracy: 1e-9)
-        XCTAssertEqual(MotionMath.dayRingHour(mark: 0.5, hour: 11, play: .full), 2.0 / 3.0, accuracy: 1e-9)
-        XCTAssertEqual(MotionMath.dayRingHour(mark: 0.5, hour: 12, play: .full), 0, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingHour(mark: 0.5, hour: 11, play: .full), 1, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingHour(mark: 0.5, hour: 12, play: .full), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.dayRingHour(mark: 0.5, hour: 13, play: .full), 0, accuracy: 1e-9)
         XCTAssertEqual(MotionMath.dayRingHour(mark: 0.5, hour: 23, play: .full), 0, accuracy: 1e-9)
-        XCTAssertEqual(MotionMath.dayRingHour(mark: 1, hour: 23, play: .full), 1, accuracy: 1e-9)
+        for h in 0..<24 { XCTAssertEqual(MotionMath.dayRingHour(mark: 1, hour: h, play: .full), 1, accuracy: 1e-9) }
         XCTAssertEqual(MotionMath.dayRingHour(mark: 0.4, hour: 20, play: .quick), 0.4, accuracy: 1e-9)
         XCTAssertEqual(MotionMath.dayRingHour(mark: 0, hour: 17, play: .still), 1, accuracy: 1e-9)
     }

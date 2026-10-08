@@ -226,13 +226,15 @@ class MotionMathTest {
     @Test
     fun theHourMarksFadeInOneByOneBehindTheMarkOnTheFirstOpen() {
         val full = DayRingPlay.FULL
-        // Halfway round (noon at the bottom): the morning's marks are up, 11 is fading in, noon hasn't begun.
+        // Nothing before the mark starts; halfway round the morning's marks are up, noon is fading in, 13:00 hasn't begun.
+        assertEquals(0f, MotionMath.dayRingHour(0f, 0, full), 1e-6f)
         assertEquals(1f, MotionMath.dayRingHour(0.5f, 0, full), 1e-6f)
-        assertEquals(1f, MotionMath.dayRingHour(0.5f, 10, full), 1e-6f)
-        assertEquals(2f / 3f, MotionMath.dayRingHour(0.5f, 11, full), 1e-5f)
-        assertEquals(0f, MotionMath.dayRingHour(0.5f, 12, full), 1e-6f)
+        assertEquals(1f, MotionMath.dayRingHour(0.5f, 11, full), 1e-6f)
+        assertEquals(0.5f, MotionMath.dayRingHour(0.5f, 12, full), 1e-5f)
+        assertEquals(0f, MotionMath.dayRingHour(0.5f, 13, full), 1e-6f)
         assertEquals(0f, MotionMath.dayRingHour(0.5f, 23, full), 1e-6f)
-        assertEquals(1f, MotionMath.dayRingHour(1f, 23, full), 1e-6f)
+        // Every mark is fully in once the mark has closed, 23:00 included.
+        for (h in 0 until 24) assertEquals(1f, MotionMath.dayRingHour(1f, h, full), 1e-6f)
         // The quick draw brings them up together with the mark; Off shows them.
         assertEquals(0.4f, MotionMath.dayRingHour(0.4f, 20, DayRingPlay.QUICK), 1e-6f)
         assertEquals(0.4f, MotionMath.dayRingHour(0.4f, 1, DayRingPlay.QUICK), 1e-6f)

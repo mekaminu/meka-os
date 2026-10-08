@@ -188,13 +188,14 @@ object MotionMath {
 
     /**
      * How strongly hour mark [hour] (0–23, midnight at the top) shows: in full each fades in as the drawing mark
-     * reaches it, one after another round the dial (over [DAY_RING_HOUR_FADE] hours of the dial); in the quick draw
+     * reaches it, one after another round the dial (over [DAY_RING_HOUR_FADE] hours of the dial, paced so the last,
+     * 23:00, is fully in as the mark closes); in the quick draw
      * they all come up together with the mark ([mark] is [dayRingMark]'s value); Off: shown.
      */
     fun dayRingHour(mark: Float, hour: Int, play: DayRingPlay): Float = when (play) {
         DayRingPlay.STILL -> 1f
         DayRingPlay.QUICK -> mark.coerceIn(0f, 1f)
-        DayRingPlay.FULL -> ((mark * 24f - hour) / DAY_RING_HOUR_FADE).coerceIn(0f, 1f)
+        DayRingPlay.FULL -> ((mark * (24f + DAY_RING_HOUR_FADE) - hour) / DAY_RING_HOUR_FADE).coerceIn(0f, 1f)
     }
 
     /** The centre's count-up fraction (linear; [countUpValue] eases it). */
