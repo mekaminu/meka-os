@@ -74,6 +74,8 @@ fun Application.mekaSync(
     newsImages: NewsImages? = null,
     /** Sends calendar edits (calendar editing); a push carrying one pokes it so the edit goes out within seconds. */
     calendarWriter: CalendarWriter? = null,
+    /** The AI layer's key health check (V1, first slice); null leaves the route out. */
+    ai: AiHealth? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -252,6 +254,16 @@ fun Application.mekaSync(
                 val bytes = withContext(Dispatchers.IO) { newsImages.get(key) }
                     ?: return@post call.respondText("no such picture", status = HttpStatusCode.NotFound)
                 call.respondText(WireCodec.encodeChunkData(java.util.Base64.getEncoder().encodeToString(bytes)), ContentType.Application.Json)
+            }
+        }
+
+        if (ai != null) {
+            // Whether MEKA's AI is on (key set and accepted), never the key. Keyed devices only; the publisher is refused.
+            post("/v1/ai/status") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val status = withContext(Dispatchers.IO) { ai.status() }
+                call.respondText(status.toJson().toString(), ContentType.Application.Json)
             }
         }
 
@@ -434,12 +446,13 @@ fun main(args: Array<String>) {
             // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push)
+            val ai = aiFromEnv()?.also { startAiCheck(it) }
             embeddedServer(Netty, port = port) {
                 mekaSync(
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
                     releases = Releases(PostgresReleaseStore(ds), onPublished = { who, r -> releaseActivity.record(who, r) }), push = push,
                     publisher = System.getenv("MEKA_RELEASE_PUBLISHER_SECRET")?.takeIf { it.isNotBlank() }?.let { SecretsManagerPublisherKey(it) },
-                    voice = voice, newsImages = newsImages, calendarWriter = calendarWriter,
+                    voice = voice, newsImages = newsImages, calendarWriter = calendarWriter, ai = ai,
                 )
             }.start(wait = true)
         }
@@ -488,6 +501,15 @@ fun voiceFromEnv(opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?)
 fun pushFromEnv(ds: DataSource): Push? {
     val secret = System.getenv("MEKA_FCM_SECRET")?.takeIf { it.isNotBlank() } ?: return null
     return Push(PostgresPushTokenStore(ds), FcmSender.fromSecret(secret))
+}
+
+/** Checks the AI key shortly after start and logs only the state (never the key), so a deploy shows whether AI is on. */
+fun startAiCheck(ai: AiHealth) {
+    Thread.ofVirtual().name("ai-check").start {
+        Thread.sleep(20_000)
+        val s = runCatching { ai.status() }.getOrNull() ?: return@start
+        System.err.println("ai: ${s.state.wire}" + (s.reason?.let { " ($it)" } ?: ""))
+    }
 }
 
 /** Calendar mirror cadence: every 5 minutes, first run shortly after start. Failures are recorded per account. */
