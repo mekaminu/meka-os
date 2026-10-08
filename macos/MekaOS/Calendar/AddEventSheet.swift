@@ -7,6 +7,10 @@ import SwiftUI
 /// are several; the one added to last time first), a place and notes. Add (⏎) makes a synced edit that waits five
 /// seconds for Undo (the shell's undo bar) before the server sends it; Esc cancels.
 ///
+/// Editing (slice 2c): with `editing` it is the event's Edit form inside the event sheet, filled in from the event on its
+/// own account: Save sends only what changed, the When rows are left out when its time can't change, notes only where
+/// MEKA can write them, and "Delete from Google" sits quietly under Save; Cancel goes back to the detail.
+///
 /// Motion (catalogue "Add event"): the system sheet scale-fades in; rows stagger in; chips blend their colour with a
 /// tick haptic; the digits cross-fade; Add gives a light haptic and the sheet drops away as the undo bar rises.
 /// Reduce Motion: cross-fades.
@@ -16,6 +20,9 @@ struct AddEventSheet: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let day: Int64
     let palette: MekaPalette
+    var editing: CalendarEvent? = nil
+    /// Editing: back to the event's detail (adding dismisses the sheet).
+    var onCancel: (() -> Void)? = nil
     @State private var form: AddEventForm?
     @State private var refusal: String?
     @State private var picking = false
@@ -24,20 +31,25 @@ struct AddEventSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let f = form, let v = model.addEventView(f) {
+            if let f = form, let v = view(f) {
                 content(f, v)
             } else {
                 Color.clear.frame(height: 240)
             }
         }
         .padding(MekaSpace.xl)
-        .frame(width: 480)
+        .frame(width: editing == nil ? 480 : nil)
         .background(palette.background)
         .task {
-            form = await model.addEventForm(day: day)
-            titleFocused = true
+            if let e = editing {
+                form = model.editEventForm(e)
+            } else {
+                form = await model.addEventForm(day: day)
+                titleFocused = true
+            }
         }
         .onChange(of: model.editAccounts) { _, accounts in
+            guard editing == nil else { return }
             // An account allowed while the sheet is open becomes the choice.
             guard let f = form, !accounts.contains(where: { $0.key == f.accountKey }), let first = accounts.first else { return }
             form = f.withAccount(key: first.key)
@@ -46,7 +58,7 @@ struct AddEventSheet: View {
 
     @ViewBuilder
     private func content(_ f: AddEventForm, _ v: AddEventView) -> some View {
-        Text("Add event")
+        Text(editing == nil ? "Add event" : "Edit event")
             .font(MekaType.greeting).tracking(MekaType.greetingTracking)
             .foregroundStyle(palette.textPrimary)
             .accessibilityAddTraits(.isHeader)
@@ -65,6 +77,10 @@ struct AddEventSheet: View {
 
         Group {
         label("When").staggeredAppear(2)
+        if !v.timeEditable {
+            Text(EditEventRules.shared.TIME_NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .staggeredAppear(2)
+        } else {
         HStack(spacing: MekaSpace.xs) {
             ForEach(v.chips, id: \.day) { c in
                 chip(c.label, lit: c.selected) { if !c.selected { MekaHaptics.tick(); set(f.withDay(epochDay: c.day)) } }
@@ -101,6 +117,7 @@ struct AddEventSheet: View {
             .staggeredAppear(3)
         }
         }
+        }
 
         Group {
         label("Calendar").staggeredAppear(4)
@@ -130,7 +147,9 @@ struct AddEventSheet: View {
         Group {
         label("Notes").staggeredAppear(6)
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            field("Add notes…", text: Binding(get: { f.notes }, set: { set(form?.withNotes(text: $0)) }), lines: 3)
+            if v.notesEditable {
+                field("Add notes…", text: Binding(get: { f.notes }, set: { set(form?.withNotes(text: $0)) }), lines: 3)
+            }
             if let note = v.notesNote {
                 Text(note).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
@@ -145,7 +164,7 @@ struct AddEventSheet: View {
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: problem)
             }
             HStack(spacing: MekaSpace.s) {
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { if let onCancel { onCancel() } else { dismiss() } }
                     .keyboardShortcut(.cancelAction)
                     .buttonStyle(MekaPressStyle())
                     .foregroundStyle(palette.accent)
@@ -161,6 +180,14 @@ struct AddEventSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(!v.canAdd || sending)
             }
+            // Editing: Delete is a quiet red line with the undo bar (no dialog).
+            if editing != nil, let del = v.deleteLabel {
+                Button(del) { delete() }
+                    .buttonStyle(MekaPressStyle())
+                    .foregroundStyle(palette.critical)
+                    .disabled(sending)
+                    .padding(.top, MekaSpace.s)
+            }
         }
         .padding(.top, MekaSpace.l)
         .staggeredAppear(7)
@@ -173,11 +200,28 @@ struct AddEventSheet: View {
         refusal = nil
     }
 
+    private func view(_ f: AddEventForm) -> AddEventView? {
+        if let e = editing { return model.editEventView(e, f) }
+        return model.addEventView(f)
+    }
+
     private func add() {
         guard let f = form, !sending else { return }
         sending = true
+        let e = editing
         Task {
-            let problem = await model.addEvent(f)
+            let problem: String?
+            if let e { problem = await model.saveEventEdit(e, f) } else { problem = await model.addEvent(f) }
+            sending = false
+            if let problem { refusal = problem } else { dismiss() }
+        }
+    }
+
+    private func delete() {
+        guard let e = editing, !sending else { return }
+        sending = true
+        Task {
+            let problem = await model.deleteEvent(e, guestsOk: false)
             sending = false
             if let problem { refusal = problem } else { dismiss() }
         }

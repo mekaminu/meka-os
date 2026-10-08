@@ -49,6 +49,10 @@ data class EventDetailView(
     val openIn: OpenLink? = null,
     /** Ring as an alarm is on for Leave by (Alarms, slice 3); the switch shows while a travel time is set. */
     val leaveAlarm: Boolean = false,
+    /** Calendar editing (slice 2c): the account allows editing, so the pane offers Edit and Delete. */
+    val editable: Boolean = false,
+    /** The event's own latest edit ("Moving “Dentist” in Google", a refusal, Delete anyway); null when none. */
+    val edit: EventEditNote? = null,
 )
 
 /**

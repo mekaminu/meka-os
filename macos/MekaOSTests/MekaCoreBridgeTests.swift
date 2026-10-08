@@ -455,5 +455,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(AddEventRules.shared.lengthLabel(minutes: 90), "1 h 30")
         XCTAssertEqual(AddEventRules.shared.endLabel(endMinute: 1470), "00:30 next day")
     }
-}
 
+    /// Calendar editing, slice 2c: the Edit form's words and the detail's edit note reach Swift.
+    func testEditEventRulesReachSwift() {
+        XCTAssertTrue(EditEventRules.shared.TIME_NOTE.hasPrefix("Its time can't be changed"))
+        let note = EventEditNote(editId: "e1", text: "This cancels it for 4 people", needsMeka: true, deleteAnyway: true, waiting: false)
+        XCTAssertTrue(note.deleteAnyway)
+        XCTAssertFalse(note.waiting)
+    }
+}

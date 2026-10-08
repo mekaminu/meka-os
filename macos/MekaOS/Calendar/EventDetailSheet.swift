@@ -8,13 +8,19 @@ import SwiftUI
 /// The notes come from whoever made the event, so they are untrusted (ADR-006): plain text only, nothing in them is
 /// opened unless you click Join (an https link to a known call service, or the provider's own link).
 ///
-/// Motion: the sheet scale-fades in (macOS); sections stagger in. Reduce Motion: cross-fades.
+/// Calendar editing (slice 2c): where the account allows editing, Edit turns the sheet into the event's Edit form
+/// (`AddEventSheet` with `editing`); Save and Delete close it and raise the shell's undo bar for five seconds before
+/// anything is sent. The event's latest edit is said under the actions, and a delete the server held back for its
+/// guests offers Delete anyway (Meka's second click).
+///
+/// Motion: the sheet scale-fades in (macOS); sections stagger in; Edit cross-fades to the form. Reduce Motion: cross-fades.
 struct EventDetailSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
+    @State private var editing = false
 
     var body: some View {
         // "In 25 min" moves on while the sheet is open.
@@ -22,19 +28,28 @@ struct EventDetailSheet: View {
             VStack(alignment: .leading, spacing: MekaSpace.s) {
                 // Reading the marks here re-renders the sheet when a prep task or hide lands (or syncs in).
                 let _ = model.eventMarks
-                if let e = model.openEvent, let d = model.eventDetail(e) {
+                let _ = model.editAccounts
+                let _ = model.editLines
+                if editing, let e = model.openEvent {
+                    AddEventSheet(day: -1, palette: palette, editing: e, onCancel: { editing = false })
+                        .transition(.opacity)
+                } else if let e = model.openEvent, let d = model.eventDetail(e) {
                     content(d, event: e)
                 } else {
                     Text("Event").font(MekaType.upNextTitle)
                 }
-                HStack {
-                    Spacer()
-                    Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                if !editing {
+                    HStack {
+                        Spacer()
+                        Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                    }
                 }
             }
-            .padding(MekaSpace.l)
-            .frame(width: 440)
+            .padding(editing ? 0 : MekaSpace.l)
+            .frame(width: editing ? 480 : 440)
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: editing)
         }
+        .task { await model.refreshEditAccounts() }
     }
 
     @ViewBuilder
@@ -60,6 +75,10 @@ struct EventDetailSheet: View {
             Button(d.hidden ? "Show in my day" : "Hide from my day") {
                 if d.hidden { model.showEvent(d.id) } else { model.hideEvent(d.id, offerUndo: false) }
             }
+            // Calendar editing: changes the real event (after five seconds' Undo); not while an edit is on its way.
+            if d.editable && !(d.edit?.waiting ?? false) {
+                Button("Edit") { MekaHaptics.tick(); editing = true }
+            }
             let note = [d.prepLine, d.reminderLine, d.hidden ? "Hidden from your day" : nil].compactMap { $0 }.joined(separator: " · ")
             if !note.isEmpty {
                 Text(note).font(MekaType.caption).foregroundStyle(palette.textSecondary)
@@ -68,6 +87,24 @@ struct EventDetailSheet: View {
         }
         .controlSize(.small)
         .staggeredAppear(1)
+
+        if let note = d.edit {
+            HStack(spacing: MekaSpace.s) {
+                Text(note.text).font(MekaType.caption)
+                    .foregroundStyle(note.needsMeka ? palette.accent : palette.textSecondary)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: note.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                if note.deleteAnyway && d.editable, let e = model.openEvent {
+                    Button("Delete anyway") {
+                        Task { if await model.deleteEvent(e, guestsOk: true) == nil { dismiss() } }
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .foregroundStyle(palette.critical)
+                }
+            }
+            .staggeredAppear(1)
+        }
 
         // Remind me / Leave by: a heads-up through the notification governor (quiet hours apply).
         let remindChoices = d.remindChoices.map { $0.int32Value }
@@ -160,7 +197,7 @@ struct EventDetailSheet: View {
                                 openURL(url)
                             }
                             .buttonStyle(.link)
-                            .help("Change the real event there; MEKA doesn't edit your calendars yet")
+                            .help("Open the real event in its own calendar")
                         }
                     }
                     .staggeredAppear(3)
@@ -177,7 +214,9 @@ struct EventDetailSheet: View {
                     .staggeredAppear(4)
                 }
 
-                Text("Change the event itself in your calendar. Prep tasks, reminders and hiding stay in MEKA.")
+                Text(d.editable
+                     ? "Edit and Delete change the event in your calendar too. Prep tasks, reminders and hiding stay in MEKA."
+                     : "Change the event itself in your calendar. Prep tasks, reminders and hiding stay in MEKA.")
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .staggeredAppear(5)
             }

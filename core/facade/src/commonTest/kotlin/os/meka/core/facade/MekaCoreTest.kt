@@ -23,6 +23,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MekaCoreTest {
@@ -973,5 +974,38 @@ class MekaCoreTest {
         assertTrue(fold.calendarEditAccounts.value.isEmpty())
         assertTrue(fold.addEventForm(-1).accountKey == null)
     }
-}
 
+    @Test
+    fun theEventDetailOffersEditAndDeleteOnlyWhereEditingIsAllowed() = runTest {
+        val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
+        val fold = core("android", server)
+        val mac = core("mac")
+        val start = now + 2 * 3_600_000L
+        val dentist = os.meka.core.domain.CalendarEvent(
+            "ev1", "Dentist", start, start + 3_600_000L, false, "High St", "google", "meka@gmail.com", "Personal",
+        )
+        val outlook = dentist.copy(id = "ev2", provider = "microsoft", account = "meka@outlook.com")
+        assertFalse(fold.eventDetail(dentist).editable) // accounts not read yet
+        fold.refreshCalendarAccounts()
+        assertTrue(fold.eventDetail(dentist).editable)
+        assertFalse(fold.eventDetail(outlook).editable)
+        assertFalse(fold.eventDetail(dentist.copy(provider = "fixtures")).editable)
+
+        val form = fold.editEventForm(dentist).stepTime(4)
+        val v = fold.editEventView(dentist, form)
+        assertEquals("Save to Google", v.addLabel)
+        assertTrue(v.canAdd)
+        val id = assertIs<os.meka.core.domain.EventEditResult.Made>(fold.saveEventEdit(dentist, form)).id
+        assertEquals("Moving “Dentist” in Google", fold.eventEditLine(id))
+        assertEquals("Moving “Dentist” in Google", fold.eventDetail(dentist).edit?.text)
+        assertTrue(fold.undoEventEdit(id))
+        assertNull(fold.eventDetail(dentist).edit)
+        assertIs<os.meka.core.domain.EventEditResult.Refused>(fold.saveEventEdit(dentist, fold.editEventForm(dentist)))
+
+        val del = assertIs<os.meka.core.domain.EventEditResult.Made>(fold.deleteEvent(dentist, guestsOk = false)).id
+        assertEquals("Deleting “Dentist” from Google", fold.deletingLine(dentist))
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(del, mac.eventDetail(dentist).edit?.editId)
+        assertIs<os.meka.core.domain.EventEditResult.Refused>(mac.deleteEvent(dentist, guestsOk = false)) // the Mac hasn't read its accounts
+    }
+}

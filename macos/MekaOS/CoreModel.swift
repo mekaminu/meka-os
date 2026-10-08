@@ -521,6 +521,54 @@ final class CoreModel {
         }
     }
 
+    // MARK: Calendar editing: change, move and delete from the event detail (slice 2c)
+
+    /// The Edit form filled in from the event (its own account; the time as it is). Pure, in the core.
+    func editEventForm(_ event: CalendarEvent) -> AddEventForm? { core?.editEventForm(event: event) }
+
+    /// The Edit sheet as shown for a form (pure): the Add sheet's rows, "Save to Google", whether Save can go.
+    func editEventView(_ event: CalendarEvent, _ form: AddEventForm) -> AddEventView? { core?.editEventView(event: event, form: form) }
+
+    /// Save: only what changed becomes a synced edit (a new time alone is a move) that waits five seconds for Undo.
+    /// The event and form are handed to the core once each. Returns why it couldn't be saved, or nil once it's on its way.
+    func saveEventEdit(_ event: CalendarEvent, _ form: AddEventForm) async -> String? {
+        guard let core else { return "Connect this Mac to your server first." }
+        MekaHaptics.light()
+        do {
+            switch onEnum(of: try await core.saveEventEdit(event: event, form: form)) {
+            case .made(let m):
+                let id = m.id
+                offerEventUndo(core.eventEditLine(id: id) ?? "Changing it in your calendar", .eventEdit(id))
+                return nil
+            case .refused(let r):
+                return r.reason
+            }
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    /// Delete from the calendar after five seconds' Undo; `guestsOk` only for Delete anyway (Meka's second tap after
+    /// the server said it cancels the event for its guests). Returns why not, or nil once it's on its way.
+    func deleteEvent(_ event: CalendarEvent, guestsOk: Bool) async -> String? {
+        guard let core else { return "Connect this Mac to your server first." }
+        // Worked out before the event is handed to the core, which then owns it.
+        let fallback = core.deletingLine(event: event)
+        MekaHaptics.light()
+        do {
+            switch onEnum(of: try await core.deleteEvent(event: event, guestsOk: guestsOk)) {
+            case .made(let m):
+                let id = m.id
+                offerEventUndo(core.eventEditLine(id: id) ?? fallback, .eventEdit(id))
+                return nil
+            case .refused(let r):
+                return r.reason
+            }
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     static func providerName(_ p: String) -> String {
         switch p { case "google": "Google"; case "microsoft": "Outlook"; case "fixtures": "Fixtures"; case "news": "Headlines"; case "bank_holidays": "Bank holidays"; default: p }
     }

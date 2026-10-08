@@ -192,10 +192,11 @@ object CalendarEditRules {
 
     /** What [after] changes compared with [before] (notes only where they can be written). */
     fun changes(before: EventDraft, after: EventDraft, provider: String): Set<EventEditChange> = buildSet {
-        if (before.title.trim() != after.title.trim()) add(EventEditChange.TITLE)
+        // Compared as they'd be written (trimmed, cut to MEKA's limits), so a long field left alone isn't a change.
+        if (before.title.trim().take(MAX_TITLE) != after.title.trim().take(MAX_TITLE)) add(EventEditChange.TITLE)
         if (before.startAtMs != after.startAtMs || before.endAtMs != after.endAtMs || before.allDay != after.allDay) add(EventEditChange.TIME)
-        if (norm(before.location) != norm(after.location)) add(EventEditChange.LOCATION)
-        if (canChangeNotes(provider) && norm(before.notes) != norm(after.notes)) add(EventEditChange.NOTES)
+        if (norm(before.location)?.take(MAX_LOCATION) != norm(after.location)?.take(MAX_LOCATION)) add(EventEditChange.LOCATION)
+        if (canChangeNotes(provider) && norm(before.notes)?.take(MAX_NOTES) != norm(after.notes)?.take(MAX_NOTES)) add(EventEditChange.NOTES)
     }
 
     private fun norm(s: String?) = s?.trim()?.ifEmpty { null }

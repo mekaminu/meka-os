@@ -122,7 +122,7 @@ fun CalendarRoute(core: MekaCore) {
     Box(Modifier.fillMaxSize()) {
         Agenda(v, handlers, showAgain, addHeader) { openEvent = it }
         MekaPane(visible = openEvent != null) {
-            shown?.let { e -> EventDetailPane(core, e, onClose = { openEvent = null }) }
+            shown?.let { e -> EventDetailPane(core, e, onClose = { openEvent = null }, undo = undo) }
         }
         MekaPane(visible = addingOn != null) {
             AddEventPane(

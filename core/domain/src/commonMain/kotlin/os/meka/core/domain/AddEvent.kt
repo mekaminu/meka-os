@@ -81,6 +81,12 @@ data class AddEventView(
     val addLabel: String,
     /** A quiet line under the notes: Outlook keeps notes added here, but MEKA can't change them later. */
     val notesNote: String?,
+    /** Editing an event (slice 2c): false when its time can't be changed, so the When rows are left out. */
+    val timeEditable: Boolean = true,
+    /** Editing an event: false when its notes can't be changed from MEKA (Outlook, or very long notes). */
+    val notesEditable: Boolean = true,
+    /** Editing an event: "Delete from Google" (a quiet line under Save); null when adding. */
+    val deleteLabel: String? = null,
 )
 
 object AddEventRules {
@@ -222,6 +228,10 @@ object EditLineRules {
         .take(MAX_LINES)
         .map { e ->
             val s = e.state(nowMs)
-            EditLine(e.id, CalendarEditRules.line(e, nowMs), s, s == EventEditState.CLASH || s == EventEditState.REFUSED || s == EventEditState.FAILED)
+            // A delete held back for its guests names the event and says where to confirm it (slice 2c).
+            val text = if (EditEventRules.needsGuestsOk(e, nowMs)) {
+                "“${e.base?.title.orEmpty().trim().ifEmpty { "Event" }.take(60)}” · ${CalendarEditRules.line(e, nowMs)} · open it to delete anyway"
+            } else CalendarEditRules.line(e, nowMs)
+            EditLine(e.id, text, s, s == EventEditState.CLASH || s == EventEditState.REFUSED || s == EventEditState.FAILED)
         }
 }

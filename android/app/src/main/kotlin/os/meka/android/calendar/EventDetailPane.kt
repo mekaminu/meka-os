@@ -41,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
@@ -64,11 +65,17 @@ import os.meka.core.facade.MekaCore
  * The notes come from whoever made the event, so they are untrusted (ADR-006): plain text only, nothing in them is
  * opened unless you tap Join (an https link to a known call service, or the provider's own link).
  *
+ * Calendar editing (slice 2c): where the event's account allows editing, **Edit** turns the pane into the event's
+ * Edit form ([AddEventPane] with `editing`), whose Save and Delete close the pane and raise [undo]'s bar for five
+ * seconds before anything is sent. The event's latest edit is said under the actions ("Moving “Dentist” in Google",
+ * a refusal lit in the accent colour); when the server held a delete back because it cancels the event for its
+ * guests, **Delete anyway** is Meka's second tap.
+ *
  * Motion: the pane springs up from the bottom ([os.meka.android.designsystem.MekaPane]); its sections stagger in 40 ms
- * apart; Join gives a light haptic. Reduced motion: cross-fades only.
+ * apart; Join gives a light haptic; Edit cross-fades to the form, whose rows stagger in. Reduced motion: cross-fades only.
  */
 @Composable
-fun EventDetailPane(core: MekaCore, event: CalendarEvent, onClose: () -> Unit) {
+fun EventDetailPane(core: MekaCore, event: CalendarEvent, onClose: () -> Unit, undo: EventUndo? = null) {
     // "In 25 min" moves on while the pane is open.
     var tick by remember { mutableIntStateOf(0) }
     LaunchedEffect(event.id) {
@@ -78,7 +85,46 @@ fun EventDetailPane(core: MekaCore, event: CalendarEvent, onClose: () -> Unit) {
         }
     }
     val marks by core.eventMarks.collectAsState()
-    val d = remember(event, tick, marks) { core.eventDetail(event) }
+    val editAccounts by core.calendarEditAccounts.collectAsState()
+    val editLines by core.calendarEditLines.collectAsState()
+    // Which accounts allow editing (Today doesn't read them otherwise); offline keeps what was known.
+    LaunchedEffect(Unit) { if (event.provider in os.meka.core.domain.CalendarEditRules.WRITABLE) runCatching { core.refreshCalendarAccounts() } }
+    val d = remember(event, tick, marks, editAccounts, editLines) { core.eventDetail(event) }
+    val haptics = rememberMekaHaptics()
+    var editing by remember(event.id) { mutableStateOf(false) }
+    val reducedFade = Meka.reducedMotion
+    AnimatedContent(
+        targetState = editing,
+        transitionSpec = { fadeIn(MekaMotion.appear(reducedFade)) togetherWith fadeOut(MekaMotion.appear(reducedFade)) },
+        label = "event-edit",
+    ) { isEditing ->
+        if (isEditing) {
+            AddEventPane(
+                core, -1L,
+                onClose = { editing = false },
+                onAdded = { id ->
+                    editing = false
+                    onClose()
+                    undo?.show(core.eventEditLine(id) ?: "Changing it in your calendar") { core.undoEventEdit(id) }
+                },
+                editing = event,
+                onDeleted = { id ->
+                    editing = false
+                    onClose()
+                    undo?.show(core.eventEditLine(id) ?: core.deletingLine(event)) { core.undoEventEdit(id) }
+                },
+            )
+        } else {
+            DetailContent(core, event, d, tick, marks, onClose, onEdit = { haptics.tick(); editing = true }, undo)
+        }
+    }
+}
+
+@Composable
+private fun DetailContent(
+    core: MekaCore, event: CalendarEvent, d: os.meka.core.domain.EventDetailView, tick: Int,
+    marks: os.meka.core.domain.EventMarks, onClose: () -> Unit, onEdit: () -> Unit, undo: EventUndo?,
+) {
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     val haptics = rememberMekaHaptics()
@@ -123,6 +169,35 @@ fun EventDetailPane(core: MekaCore, event: CalendarEvent, onClose: () -> Unit) {
             ActionChip(if (d.hidden) "Show in my day" else "Hide from my day") {
                 haptics.light()
                 scope.launch { runCatching { if (d.hidden) core.showEvent(event.id) else core.hideEvent(event.id) } }
+            }
+            // Calendar editing: changes the real event (after five seconds' Undo); not while an edit is on its way.
+            if (d.editable && undo != null && d.edit?.waiting != true) ActionChip("Edit") { onEdit() }
+        }
+        val reducedNote = Meka.reducedMotion
+        d.edit?.let { note ->
+            Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.l).appear(rememberAppearance(1))) {
+                AnimatedContent(
+                    targetState = note.text,
+                    transitionSpec = { fadeIn(MekaMotion.appear(reducedNote)) togetherWith fadeOut(MekaMotion.appear(reducedNote)) },
+                    label = "event-edit-note",
+                ) { text ->
+                    Text(text, style = MekaType.caption, color = if (note.needsMeka) Meka.colors.accent else Meka.colors.textSecondary)
+                }
+                if (note.deleteAnyway && d.editable) {
+                    Text(
+                        "Delete anyway", style = MekaType.itemMeta, color = Meka.colors.critical,
+                        modifier = Modifier.padding(top = MekaSpace.xs).clickable(role = Role.Button) {
+                            haptics.light()
+                            scope.launch {
+                                val r = runCatching { core.deleteEvent(event, guestsOk = true) }.getOrNull()
+                                if (r is os.meka.core.domain.EventEditResult.Made) {
+                                    onClose()
+                                    undo?.show(core.eventEditLine(r.id) ?: core.deletingLine(event)) { core.undoEventEdit(r.id) }
+                                }
+                            }
+                        }.padding(vertical = MekaSpace.xs),
+                    )
+                }
             }
         }
         // Remind me / Leave by: a heads-up through the notification governor (quiet hours apply).
@@ -228,7 +303,8 @@ fun EventDetailPane(core: MekaCore, event: CalendarEvent, onClose: () -> Unit) {
         }
 
         Text(
-            "Change the event itself in your calendar. Prep tasks, reminders and hiding stay in MEKA.", style = MekaType.caption, color = Meka.colors.textTertiary,
+            if (d.editable) "Edit and Delete change the event in your calendar too. Prep tasks, reminders and hiding stay in MEKA."
+            else "Change the event itself in your calendar. Prep tasks, reminders and hiding stay in MEKA.", style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(5)),
         )
         Spacer(Modifier.height(MekaSpace.xl))

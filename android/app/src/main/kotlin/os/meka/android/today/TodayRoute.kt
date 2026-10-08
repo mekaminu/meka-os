@@ -310,7 +310,7 @@ fun TodayRoute(
             MekaPane(visible = showShutdown) { ShutdownPane(core, onClose = { showShutdown = false }) }
             MekaPane(visible = showBrief) { BriefPane(core, onClose = { showBrief = false }) }
             MekaPane(visible = eventOpen != null) {
-                eventShown?.let { e -> EventDetailPane(core, e, onClose = { eventOpen = null }) }
+                eventShown?.let { e -> EventDetailPane(core, e, onClose = { eventOpen = null }, undo = eventUndo) }
             }
             MekaPane(visible = newsOpen != null) {
                 // A fresh pane each time it opens, so it starts on the story that was tapped.

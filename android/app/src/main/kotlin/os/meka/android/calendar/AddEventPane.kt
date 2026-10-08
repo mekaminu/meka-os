@@ -56,6 +56,8 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.DayPickerDialog
 import os.meka.core.domain.AddEventForm
+import os.meka.core.domain.CalendarEvent
+import os.meka.core.domain.EditEventRules
 import os.meka.core.domain.EditLine
 import os.meka.core.domain.EventEditResult
 import os.meka.core.facade.MekaCore
@@ -67,12 +69,20 @@ import os.meka.core.facade.MekaCore
  * makes a synced edit that waits five seconds for Undo (the screen's undo bar) before the server sends it; the
  * Calendar screen's line then says "Adding …" → "Added “Dentist” to Google".
  *
+ * Editing (slice 2c): with [editing] the same pane is the event's Edit form, filled in from the event on its own
+ * account: Save sends only what changed (a new time alone is a move), the When rows are left out when its time can't
+ * change, notes only where MEKA can write them, and "Delete from Google" sits quietly under Save. Both raise the undo
+ * bar for five seconds before anything is sent.
+ *
  * Motion (catalogue "Add event"): the pane springs up from the bottom; rows stagger in 40 ms apart; chips blend their
  * colour with a tick haptic; ‹ › tick and the digits cross-fade; Add gives a light haptic, the pane drops away and the
  * undo bar rises. Reduced motion: cross-fades.
  */
 @Composable
-fun AddEventPane(core: MekaCore, startDay: Long, onClose: () -> Unit, onAdded: (String) -> Unit) {
+fun AddEventPane(
+    core: MekaCore, startDay: Long, onClose: () -> Unit, onAdded: (String) -> Unit,
+    editing: CalendarEvent? = null, onDeleted: (String) -> Unit = {},
+) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val accounts by core.calendarEditAccounts.collectAsState()
@@ -80,9 +90,12 @@ fun AddEventPane(core: MekaCore, startDay: Long, onClose: () -> Unit, onAdded: (
     var refusal by remember(startDay) { mutableStateOf<String?>(null) }
     var picking by remember { mutableStateOf(false) }
     var sending by remember(startDay) { mutableStateOf(false) }
-    LaunchedEffect(startDay) { form = runCatching { core.addEventForm(startDay) }.getOrNull() }
+    LaunchedEffect(startDay, editing) {
+        form = runCatching { if (editing != null) core.editEventForm(editing) else core.addEventForm(startDay) }.getOrNull()
+    }
     // An account allowed while the pane is open becomes the choice.
     LaunchedEffect(accounts) {
+        if (editing != null) return@LaunchedEffect
         val f = form ?: return@LaunchedEffect
         if (accounts.none { it.key == f.accountKey }) accounts.firstOrNull()?.let { form = f.withAccount(it.key) }
     }
@@ -92,9 +105,10 @@ fun AddEventPane(core: MekaCore, startDay: Long, onClose: () -> Unit, onAdded: (
         Box(Modifier.fillMaxSize())
         return
     }
-    val v = remember(f, accounts) { core.addEventView(f) }
+    val v = remember(f, accounts) { if (editing != null) core.editEventView(editing, f) else core.addEventView(f) }
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    // Adding starts on the title; editing waits for a tap, so the keyboard doesn't cover the form.
+    LaunchedEffect(Unit) { if (editing == null) runCatching { focus.requestFocus() } }
     val set: (AddEventForm) -> Unit = { form = it; refusal = null }
 
     Column(
@@ -106,7 +120,7 @@ fun AddEventPane(core: MekaCore, startDay: Long, onClose: () -> Unit, onAdded: (
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s),
         )
         Text(
-            "Add event", style = MekaType.greeting, color = Meka.colors.textPrimary,
+            if (editing != null) "Edit event" else "Add event", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.padding(top = MekaSpace.s).appear(rememberAppearance(0)).semantics { heading() },
         )
         Column(Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(1))) {
@@ -118,7 +132,9 @@ fun AddEventPane(core: MekaCore, startDay: Long, onClose: () -> Unit, onAdded: (
         }
 
         Label("When", Modifier.appear(rememberAppearance(2)))
-        Row(
+        if (!v.timeEditable) {
+            Text(EditEventRules.TIME_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(2)))
+        } else Row(
             Modifier.horizontalScroll(rememberScrollState()).appear(rememberAppearance(2)),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
@@ -167,7 +183,9 @@ fun AddEventPane(core: MekaCore, startDay: Long, onClose: () -> Unit, onAdded: (
         FormField(f.location, "Add a place", { set(f.withLocation(it)) }, singleLine = true, modifier = Modifier.appear(rememberAppearance(5)))
 
         Label("Notes", Modifier.appear(rememberAppearance(6)))
-        FormField(f.notes, "Add notes…", { set(f.withNotes(it)) }, singleLine = false, modifier = Modifier.appear(rememberAppearance(6)))
+        if (v.notesEditable) {
+            FormField(f.notes, "Add notes…", { set(f.withNotes(it)) }, singleLine = false, modifier = Modifier.appear(rememberAppearance(6)))
+        }
         v.notesNote?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
 
         val problem = refusal ?: v.problem
@@ -183,16 +201,38 @@ fun AddEventPane(core: MekaCore, startDay: Long, onClose: () -> Unit, onAdded: (
                         sending = true
                         val chosen = f
                         scope.launch {
-                            when (val r = runCatching { core.addEvent(chosen) }.getOrNull()) {
+                            val made = runCatching { if (editing != null) core.saveEventEdit(editing, chosen) else core.addEvent(chosen) }.getOrNull()
+                            when (val r = made) {
                                 is EventEditResult.Made -> onAdded(r.id)
                                 is EventEditResult.Refused -> refusal = r.reason
-                                null -> refusal = "Couldn't add it · try again"
+                                null -> refusal = if (editing != null) "Couldn't save it · try again" else "Couldn't add it · try again"
                             }
                             sending = false
                         }
                     }
                     .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
             )
+            // Editing: Delete is a quiet red line with the undo bar (no dialog); guests get Delete anyway later.
+            val del = v.deleteLabel
+            if (editing != null && del != null) {
+                Text(
+                    del, style = MekaType.itemMeta, color = Meka.colors.critical,
+                    modifier = Modifier.padding(top = MekaSpace.l)
+                        .clickable(enabled = !sending, role = Role.Button) {
+                            haptics.light()
+                            sending = true
+                            scope.launch {
+                                when (val r = runCatching { core.deleteEvent(editing, guestsOk = false) }.getOrNull()) {
+                                    is EventEditResult.Made -> onDeleted(r.id)
+                                    is EventEditResult.Refused -> refusal = r.reason
+                                    null -> refusal = "Couldn't delete it · try again"
+                                }
+                                sending = false
+                            }
+                        }
+                        .padding(vertical = MekaSpace.s),
+                )
+            }
         }
     }
     if (picking) {
