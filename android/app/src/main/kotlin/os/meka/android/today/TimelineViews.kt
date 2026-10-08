@@ -11,7 +11,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,7 +21,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -180,24 +178,6 @@ internal fun NowLine(r: TimelineRow, modifier: Modifier = Modifier) {
             }
         }
         Box(Modifier.weight(1f).height(1.dp).background(Meka.colors.accent.copy(alpha = 0.5f)))
-    }
-}
-
-/** All-day events as chips above the timeline; a chip opens the event's detail when [onEvent] is given. */
-@Composable
-internal fun AllDayChips(events: List<CalendarEvent>, modifier: Modifier = Modifier, onEvent: ((CalendarEvent) -> Unit)? = null) {
-    Row(
-        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = MekaSpace.xs),
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        events.forEach { e ->
-            Text(
-                e.title, style = MekaType.caption, color = Meka.colors.textSecondary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                    .then(if (onEvent != null) Modifier.clickable(role = Role.Button) { onEvent(e) } else Modifier)
-                    .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs),
-            )
-        }
     }
 }
 

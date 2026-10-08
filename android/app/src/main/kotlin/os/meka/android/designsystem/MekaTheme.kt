@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import os.meka.core.domain.MotionCard
@@ -133,7 +134,22 @@ private fun blend(a: MekaColors, b: MekaColors, t: Float): MekaColors = when (t)
         offline = lerp(a.offline, b.offline, t),
         success = lerp(a.success, b.success, t),
         barca = lerp(a.barca, b.barca, t),
+        calendar1 = lerp(a.calendar1, b.calendar1, t),
+        calendar2 = lerp(a.calendar2, b.calendar2, t),
+        calendar3 = lerp(a.calendar3, b.calendar3, t),
+        calendar4 = lerp(a.calendar4, b.calendar4, t),
+        calendar5 = lerp(a.calendar5, b.calendar5, t),
     )
+}
+
+/** A calendar's dot colour for a [os.meka.core.domain.CalendarTones] value: fixtures in Barça's colour, else 1–5. */
+fun MekaColors.calendarTone(tone: Int): Color = when (tone) {
+    os.meka.core.domain.CalendarTones.FIXTURE -> barca
+    1 -> calendar1
+    2 -> calendar2
+    3 -> calendar3
+    4 -> calendar4
+    else -> calendar5
 }
 
 object Meka {

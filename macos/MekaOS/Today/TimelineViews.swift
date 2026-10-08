@@ -308,26 +308,6 @@ struct NowLine: View {
     }
 }
 
-/// All-day events as chips above the timeline.
-struct AllDayChips: View {
-    let events: [CalendarEvent]
-    let palette: MekaPalette
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: MekaSpace.xs) {
-                ForEach(events, id: \.id) { e in
-                    Text(e.title).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                        .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
-                        .background(Capsule().fill(palette.surfaceRaised))
-                        .opensEvent(e)
-                }
-            }
-        }
-        .padding(.bottom, MekaSpace.xs)
-    }
-}
-
 /// The "All day" group's label, once above its rows (all-day polish, Meka 2026-10-07 22:37): "All day", or
 /// "All day · Timestripe" when every entry shares a calendar.
 struct AllDayLabel: View {

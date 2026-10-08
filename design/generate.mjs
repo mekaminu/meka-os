@@ -42,7 +42,7 @@ function contrast(a, b) {
   const [l1, l2] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (l1 + 0.05) / (l2 + 0.05);
 }
-const contrastRules = { textPrimary: 4.5, textSecondary: 4.5, textTertiary: 3, accent: 3, critical: 3, approval: 3, success: 3, barca: 3 };
+const contrastRules = { textPrimary: 4.5, textSecondary: 4.5, textTertiary: 3, accent: 3, critical: 3, approval: 3, success: 3, barca: 3, calendar1: 3, calendar2: 3, calendar3: 3, calendar4: 3, calendar5: 3 };
 const failures = [];
 for (const mode of ['dark', 'light']) {
   for (const bg of ['background', 'surface', 'surfaceRaised']) {

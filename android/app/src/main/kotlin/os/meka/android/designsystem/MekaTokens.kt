@@ -27,6 +27,11 @@ data class MekaColors(
     val offline: Color,
     val success: Color,
     val barca: Color,
+    val calendar1: Color,
+    val calendar2: Color,
+    val calendar3: Color,
+    val calendar4: Color,
+    val calendar5: Color,
 )
 
 val MekaDarkColors = MekaColors(
@@ -44,6 +49,11 @@ val MekaDarkColors = MekaColors(
     offline = Color(0xFFA1A1AA),
     success = Color(0xFF8CC9A0),
     barca = Color(0xFFE57A98),
+    calendar1 = Color(0xFF5FC2B8),
+    calendar2 = Color(0xFFB49CF2),
+    calendar3 = Color(0xFFE8A26A),
+    calendar4 = Color(0xFF7DB3E8),
+    calendar5 = Color(0xFFB7C46A),
 )
 
 val MekaLightColors = MekaColors(
@@ -61,6 +71,11 @@ val MekaLightColors = MekaColors(
     offline = Color(0xFF5B5B63),
     success = Color(0xFF2E7D4F),
     barca = Color(0xFFA50044),
+    calendar1 = Color(0xFF1F7A72),
+    calendar2 = Color(0xFF6A4FC2),
+    calendar3 = Color(0xFFA65A1C),
+    calendar4 = Color(0xFF2D6FAE),
+    calendar5 = Color(0xFF66701E),
 )
 
 object MekaType {

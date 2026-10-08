@@ -16,6 +16,11 @@ struct MekaPalette {
     let offline: Color
     let success: Color
     let barca: Color
+    let calendar1: Color
+    let calendar2: Color
+    let calendar3: Color
+    let calendar4: Color
+    let calendar5: Color
 }
 
 extension MekaPalette {
@@ -33,7 +38,12 @@ extension MekaPalette {
         approval: Color(.sRGB, red: 0.5608, green: 0.7216, blue: 0.9490, opacity: 1),
         offline: Color(.sRGB, red: 0.6314, green: 0.6314, blue: 0.6667, opacity: 1),
         success: Color(.sRGB, red: 0.5490, green: 0.7882, blue: 0.6275, opacity: 1),
-        barca: Color(.sRGB, red: 0.8980, green: 0.4784, blue: 0.5961, opacity: 1)
+        barca: Color(.sRGB, red: 0.8980, green: 0.4784, blue: 0.5961, opacity: 1),
+        calendar1: Color(.sRGB, red: 0.3725, green: 0.7608, blue: 0.7216, opacity: 1),
+        calendar2: Color(.sRGB, red: 0.7059, green: 0.6118, blue: 0.9490, opacity: 1),
+        calendar3: Color(.sRGB, red: 0.9098, green: 0.6353, blue: 0.4157, opacity: 1),
+        calendar4: Color(.sRGB, red: 0.4902, green: 0.7020, blue: 0.9098, opacity: 1),
+        calendar5: Color(.sRGB, red: 0.7176, green: 0.7686, blue: 0.4157, opacity: 1)
     )
 }
 
@@ -52,7 +62,12 @@ extension MekaPalette {
         approval: Color(.sRGB, red: 0.1843, green: 0.3725, blue: 0.6588, opacity: 1),
         offline: Color(.sRGB, red: 0.3569, green: 0.3569, blue: 0.3882, opacity: 1),
         success: Color(.sRGB, red: 0.1804, green: 0.4902, blue: 0.3098, opacity: 1),
-        barca: Color(.sRGB, red: 0.6471, green: 0.0000, blue: 0.2667, opacity: 1)
+        barca: Color(.sRGB, red: 0.6471, green: 0.0000, blue: 0.2667, opacity: 1),
+        calendar1: Color(.sRGB, red: 0.1216, green: 0.4784, blue: 0.4471, opacity: 1),
+        calendar2: Color(.sRGB, red: 0.4157, green: 0.3098, blue: 0.7608, opacity: 1),
+        calendar3: Color(.sRGB, red: 0.6510, green: 0.3529, blue: 0.1098, opacity: 1),
+        calendar4: Color(.sRGB, red: 0.1765, green: 0.4353, blue: 0.6824, opacity: 1),
+        calendar5: Color(.sRGB, red: 0.4000, green: 0.4392, blue: 0.1176, opacity: 1)
     )
 }
 

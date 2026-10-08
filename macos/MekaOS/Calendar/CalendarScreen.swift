@@ -3,8 +3,10 @@ import SwiftUI
 
 /// CALENDAR on the Mac (calendar redesign, slice 2), matching android/.../calendar/CalendarRoute.kt: a week strip
 /// (seven day pills with busy dots; ‹ › or ⌘[ ⌘] for other weeks) above the next 30 days grouped by day. All-day
-/// events are chips, fixtures are marked in the accent colour, planned tasks sit among the events, empty stretches
-/// fold into one "Nothing planned" line. Click a day to jump to it; scrolling keeps the strip on the week in view.
+/// events are an "All day" group like Today's (one row each, at most 3 then "+2 more"; Fold review 2026-10-08, item
+/// 9), each event carries its calendar's colour dot (a key under the summary names them), fixtures are marked in
+/// Barça's colour, planned tasks sit among the events, empty stretches fold into one "Nothing planned" line. Click a
+/// day to spring the agenda to it; scrolling keeps the strip on the week in view.
 /// Shows only: nothing here changes anything; clicking an event opens its detail sheet (slice 3).
 ///
 /// Motion: the strip pushes across between weeks the way you moved; the lit pill blends across with a tick haptic;
@@ -50,6 +52,11 @@ struct CalendarScreen: View {
                     .staggeredAppear(0)
                 Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .staggeredAppear(1)
+                if !v.legend.isEmpty {
+                    CalendarKey(legend: v.legend, palette: palette)
+                        .padding(.top, MekaSpace.xxs)
+                        .staggeredAppear(1)
+                }
             }
             .padding(.bottom, MekaSpace.m)
 
@@ -60,7 +67,7 @@ struct CalendarScreen: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(v.sections.enumerated()), id: \.element.id) { i, s in
-                        AgendaSectionView(section: s, palette: palette)
+                        AgendaSectionView(view: v, section: s, palette: palette)
                             .staggeredAppear(3 + min(i, 8))
                     }
                 }
@@ -117,7 +124,8 @@ struct CalendarScreen: View {
                         guard let id = d.sectionId else { return }
                         MekaHaptics.tick()
                         clicked = d.epochDay
-                        withAnimation(reduceMotion ? nil : MekaMotion.replan(reduced: false)) { topSection = id }
+                        // The agenda springs to the day (the expand spring); Reduce Motion jumps.
+                        withAnimation(reduceMotion ? nil : MekaMotion.expand(reduced: false)) { topSection = id }
                     }
                 }
             }
@@ -168,11 +176,63 @@ private struct DayPillView: View {
     }
 }
 
-/// One section: "Today" with its date, all-day chips, then events, planned tasks and (today) the now line.
+extension MekaPalette {
+    /// A calendar's dot colour for a `CalendarTones` value: fixtures (`CalendarTones.FIXTURE`, 0) in Barça's colour,
+    /// the other calendars 1–5.
+    func calendarTone(_ tone: Int32) -> Color {
+        switch tone {
+        case 0: return barca
+        case 1: return calendar1
+        case 2: return calendar2
+        case 3: return calendar3
+        case 4: return calendar4
+        default: return calendar5
+        }
+    }
+}
+
+/// A calendar's small colour dot.
+struct CalendarDot: View {
+    let tone: Int32
+    let palette: MekaPalette
+    var past = false
+
+    var body: some View {
+        Circle().fill(palette.calendarTone(tone)).frame(width: 7, height: 7).opacity(past ? 0.5 : 1)
+    }
+}
+
+/// The key under the summary: each calendar's dot and name ("● Kids  ● Personal  ● Fixtures").
+private struct CalendarKey: View {
+    let legend: [CalendarTone]
+    let palette: MekaPalette
+
+    var body: some View {
+        HStack(spacing: MekaSpace.s) {
+            ForEach(legend, id: \.key) { c in
+                HStack(spacing: MekaSpace.xxs) {
+                    CalendarDot(tone: c.tone, palette: palette)
+                    Text(c.label).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Calendars: " + legend.map(\.label).joined(separator: ", "))
+    }
+}
+
+/// The dot's column beside a title, so events, all-day rows and tasks keep one title column.
+private let dotColumn: CGFloat = MekaSpace.m
+
+/// One section: "Today" with its date, the "All day" group, then events, planned tasks and (today) the now line.
 private struct AgendaSectionView: View {
     @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let view: CalendarView
     let section: AgendaSection
     let palette: MekaPalette
+    /// "+2 more" unfolds the rest of the day's all-day rows with the expand spring.
+    @State private var allDayOpen = false
 
     var body: some View {
         let free = section.kind == .free
@@ -188,9 +248,21 @@ private struct AgendaSectionView: View {
             .padding(.top, free ? MekaSpace.s : MekaSpace.l)
             .padding(.bottom, free ? MekaSpace.s : MekaSpace.xs)
 
-            if !section.allDay.isEmpty {
-                AllDayChips(events: section.allDay, palette: palette)
+            if !section.allDayItems.isEmpty {
+                // The "All day" group as Today shows it: the label once, one row each, "+2 more" unfolds the rest.
+                AllDayLabel(label: section.allDayLabel, palette: palette)
                     .padding(.leading, TimelineMetrics.timeColumn + MekaSpace.xs)
+                ForEach(AllDayRules.shared.shown(items: section.allDayItems, open: allDayOpen), id: \.event.id) { item in
+                    AgendaAllDayRow(item: item, tone: view.toneOf(event: item.event), palette: palette)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+                if let more = AllDayRules.shared.moreLabel(items: section.allDayItems, open: allDayOpen) {
+                    AllDayMore(label: more, open: Binding(
+                        get: { allDayOpen },
+                        set: { v in withAnimation(MekaMotion.expand(reduced: reduceMotion)) { allDayOpen = v } }
+                    ), palette: palette)
+                    .padding(.leading, MekaSpace.xs)
+                }
             }
             // Work hours (Fold review 2026-10-08): "Work 09:00–17:30" as the quiet band Today uses.
             if let work = section.workLine {
@@ -198,10 +270,10 @@ private struct AgendaSectionView: View {
                     .padding(.leading, TimelineMetrics.timeColumn + MekaSpace.xs)
                     .padding(.bottom, MekaSpace.xxs)
             }
-            ForEach(section.ended, id: \.id) { r in AgendaEventRow(row: r, past: true, palette: palette) }
+            ForEach(section.ended, id: \.id) { r in AgendaEventRow(row: r, past: true, tone: tone(r), palette: palette) }
             ForEach(section.rows, id: \.id) { r in
                 switch r.kind {
-                case .event: AgendaEventRow(row: r, past: false, palette: palette).eventActions(r.event, palette: palette)
+                case .event: AgendaEventRow(row: r, past: false, tone: tone(r), palette: palette).eventActions(r.event, palette: palette)
                 case .task: AgendaTaskRow(row: r, palette: palette)
                 case .now: NowLine(row: r, palette: palette)
                 default: EmptyView() // the agenda has no gaps; Today shows free time
@@ -234,12 +306,43 @@ private struct AgendaSectionView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    private func tone(_ r: TimelineRow) -> Int32? { r.event.map { view.toneOf(event: $0) } }
 }
 
-/// An event: context, so the regular body weight. Fixtures are marked in the accent colour.
+/// One all-day entry in the agenda, as Today's "All day" row (the title in the event weight in the title column, its
+/// calendar under it only when calendars are mixed), with its calendar's dot. Clicking opens the detail; the agenda
+/// only shows, so "Make it a task" and the right-click menu stay on Today.
+private struct AgendaAllDayRow: View {
+    let item: AllDayItem
+    let tone: Int32
+    let palette: MekaPalette
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Spacer().frame(width: TimelineMetrics.timeColumn)
+            CalendarDot(tone: tone, palette: palette).frame(width: dotColumn, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.event.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                if let line = item.line {
+                    Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+            }
+            Spacer()
+        }
+        .padding(.vertical, MekaSpace.xs)
+        .padding(.horizontal, MekaSpace.xs)
+        .contentShape(Rectangle())
+        .opensEvent(item.event)
+    }
+}
+
+/// An event: context, so the regular body weight, after its calendar's colour dot (dimmed once it has ended).
+/// Fixtures are marked in the accent colour.
 private struct AgendaEventRow: View {
     let row: TimelineRow
     let past: Bool
+    let tone: Int32?
     let palette: MekaPalette
 
     var body: some View {
@@ -248,6 +351,10 @@ private struct AgendaEventRow: View {
             Text(row.time).font(MekaType.itemMeta).monospacedDigit()
                 .foregroundStyle(past ? palette.textTertiary : palette.textSecondary)
                 .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
+            Group {
+                if let tone { CalendarDot(tone: tone, palette: palette, past: past) } else { Color.clear.frame(width: 7, height: 7) }
+            }
+            .frame(width: dotColumn, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.title).font(MekaType.body).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
                 let line = [row.running ? "Now" : nil, row.detail].compactMap { $0 }.joined(separator: " · ")
@@ -273,6 +380,7 @@ private struct AgendaTaskRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text(row.time).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textSecondary)
                 .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
+            Spacer().frame(width: dotColumn)
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let d = row.detail { Text(d).font(MekaType.caption).foregroundStyle(palette.textTertiary) }

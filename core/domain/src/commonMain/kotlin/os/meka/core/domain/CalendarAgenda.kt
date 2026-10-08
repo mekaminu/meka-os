@@ -61,6 +61,13 @@ data class AgendaSection(
     val hidden: List<CalendarEvent> = emptyList(),
     /** "Work 09:00–17:30" on a work day (Fold review 2026-10-08), shown as a quiet line above the day's rows; else null. */
     val workLine: String? = null,
+    /**
+     * The day's "All day" group as Today shows it (Fold review 2026-10-08, item 9): "All day", or "All day · Timestripe"
+     * when every entry shares one calendar; empty when the day has none.
+     */
+    val allDayLabel: String = "",
+    /** One row per all-day entry ([allDay] in order), with its calendar under the title only when calendars are mixed. */
+    val allDayItems: List<AllDayItem> = emptyList(),
 ) {
     /** "1 hidden from your day" · "2 hidden from your day"; null when none. */
     val hiddenLabel: String? get() = if (hidden.isEmpty()) null else "${hidden.size} hidden from your day"
@@ -75,7 +82,14 @@ data class CalendarView(
     val sections: List<AgendaSection>,
     /** "4 events in the next 30 days · 2 fixtures" */
     val summary: String,
+    /** Each calendar's colour ([CalendarTones]), by [CalendarRules.key]. */
+    val tones: Map<String, Int> = emptyMap(),
+    /** The calendars on screen with their colours, for the key under the summary; empty when there's only one. */
+    val legend: List<CalendarTone> = emptyList(),
 ) {
+    /** The colour of [event]'s calendar ([CalendarTones]): fixtures are [CalendarTones.FIXTURE], others 1–5. */
+    fun toneOf(event: CalendarEvent): Int = if (event.isFixture) CalendarTones.FIXTURE else tones[CalendarRules.key(event)] ?: 1
+
     /** The week strip index holding [epochDay], or 0. */
     fun weekIndexOf(epochDay: Long): Int = weeks.indexOfFirst { epochDay in it.startEpochDay until it.startEpochDay + 7 }.coerceAtLeast(0)
 
@@ -87,12 +101,43 @@ data class CalendarView(
     }
 }
 
+/** One calendar in the Calendar tab's key: "Personal", "Fixtures", with its colour. */
+data class CalendarTone(val key: String, val label: String, val tone: Int)
+
+/**
+ * Calendar colours (Fold review 2026-10-08, item 9), non-AI and pure: each calendar gets a small colour dot so sources
+ * read apart at a glance (kids' football vs Barça vs work). Fixtures always use Barça's colour ([FIXTURE]); every
+ * other calendar takes one of [COUNT] calm hues (`calendar1`…`calendar5` in the design tokens) in the order of its key,
+ * so the same calendars get the same colours on the Fold and the Mac, and five calendars never share one.
+ */
+object CalendarTones {
+    const val FIXTURE = 0
+    const val COUNT = 5
+
+    /** Colours for every calendar in [events]; a sixth calendar wraps round to the first hue. */
+    fun assign(events: List<CalendarEvent>): Map<String, Int> =
+        events.asSequence().filter { !it.isFixture }.map { CalendarRules.key(it) }.distinct().sorted()
+            .withIndex().associate { (i, k) -> k to 1 + i % COUNT } +
+            events.filter { it.isFixture }.map { CalendarRules.key(it) }.distinct().associateWith { FIXTURE }
+
+    /** The key under the summary: each calendar with something in [shown], by name; empty when there's one or none. */
+    fun legend(shown: List<CalendarEvent>, tones: Map<String, Int>): List<CalendarTone> {
+        val seen = LinkedHashMap<String, CalendarTone>()
+        for (e in shown) {
+            val k = CalendarRules.key(e)
+            if (k !in seen) seen[k] = CalendarTone(k, CalendarRules.label(e), if (e.isFixture) FIXTURE else tones[k] ?: 1)
+        }
+        if (seen.size < 2) return emptyList()
+        return seen.values.sortedWith(compareBy<CalendarTone>({ it.tone == FIXTURE }, { it.label.lowercase() }, { it.key }))
+    }
+}
+
 /**
  * The Calendar tab (calendar redesign, slice 2), non-AI and pure: a week strip and a 30-day agenda grouped by day.
  *
  * - The agenda runs from today for [DAYS] days (the server mirrors 30 days ahead). Today and Tomorrow always show;
  *   later days with nothing on them fold into one "Nothing planned" line per stretch ("Thu 8 – Sat 10 Oct").
- * - A day holds its all-day events (as chips) and its timed events and open planned tasks in time order (events first
+ * - A day holds its all-day events (an "All day" group like Today's) and its timed events and open planned tasks in time order (events first
  *   at the same minute). An event that runs over midnight shows on each day it touches: "From 22:00", "All day",
  *   "Until 01:00".
  * - Today's events that have ended are listed first (dimmed), then what has started, a now line, and what's ahead.
@@ -190,6 +235,7 @@ object CalendarAgenda {
                 val workLine = work?.line(d)
                 if (day.count > 0 || day.hidden.isNotEmpty() || workLine != null || d <= today + 1) {
                     val named = d == today || d == today + 1
+                    val allDayGroup = if (day.allDay.isEmpty()) null else group(day.allDay, d)
                     add(
                         AgendaSection(
                             id = "d-$d",
@@ -209,6 +255,8 @@ object CalendarAgenda {
                             emptyLine = if (day.count == 0 && named && workLine == null) "Nothing planned" else null,
                             hidden = day.hidden,
                             workLine = workLine,
+                            allDayLabel = allDayGroup?.label ?: "",
+                            allDayItems = allDayGroup?.items ?: emptyList(),
                         ),
                     )
                     i++
@@ -273,8 +321,13 @@ object CalendarAgenda {
             totalEvents.count { it.isFixture }.takeIf { it > 0 }?.let { plural(it, "fixture") },
         ).joinToString(" · ")
 
-        return CalendarView(CivilDate.longLabel(today), today, weeks, sections, summary)
+        val tones = CalendarTones.assign(events)
+        val legend = CalendarTones.legend(totalEvents, tones)
+        return CalendarView(CivilDate.longLabel(today), today, weeks, sections, summary, tones, legend)
     }
+
+    /** The day's all-day group, as Today's: "until Fri 9 Oct" is counted from [epochDay], the day it sits under. */
+    private fun group(allDay: List<CalendarEvent>, epochDay: Long) = AllDayRules.group(allDay, epochDay)
 
     /** The local day [epochDay] as a window (DST-safe: its own midnight to the next). */
     fun window(epochDay: Long, calendar: LocalCalendar): DayWindow {

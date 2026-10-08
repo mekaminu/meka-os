@@ -7,6 +7,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,11 +63,16 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
-import os.meka.android.today.AllDayChips
+import os.meka.android.designsystem.calendarTone
+import os.meka.android.today.AllDayLabel
+import os.meka.android.today.AllDayMore
 import os.meka.android.today.NowLine
 import os.meka.android.today.TimeColumn
 import os.meka.core.domain.AgendaKind
 import os.meka.core.domain.AgendaSection
+import os.meka.core.domain.AllDayItem
+import os.meka.core.domain.AllDayRules
+import os.meka.core.domain.CalendarTone
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.CalendarView
 import os.meka.core.domain.DayPill
@@ -74,9 +82,11 @@ import os.meka.core.facade.MekaCore
 
 /**
  * CALENDAR (calendar redesign, slice 2): a week strip (seven day pills with busy dots; swipe for the next week) above
- * the next 30 days grouped by day: "Today", "Tomorrow", "Thu 8 Oct". All-day events are chips, fixtures are marked in
- * the accent colour, planned tasks sit among the events, empty stretches fold into one "Nothing planned" line. Tap a
- * day to jump to it; scrolling the agenda keeps the strip on the week you're looking at. Shows only: nothing here
+ * the next 30 days grouped by day: "Today", "Tomorrow", "Thu 8 Oct". All-day events are an "All day" group like
+ * Today's (one row each, at most 3 then "+2 more"; Fold review 2026-10-08, item 9), each event carries its calendar's
+ * colour dot (a key under the summary names them), fixtures are marked in Barça's colour, planned tasks sit among the
+ * events, empty stretches fold into one "Nothing planned" line. Tap a day to spring the agenda to it; scrolling the
+ * agenda keeps the strip on the week you're looking at. Shows only: nothing here
  * changes anything; tapping an event opens its detail (slice 3).
  *
  * Motion (catalogue "Calendar"): the strip slides between weeks; the lit pill's colour blends across with a tick
@@ -115,7 +125,9 @@ private sealed interface Entry {
     val section: AgendaSection
 
     data class Header(override val section: AgendaSection, val index: Int) : Entry { override val key = "h-" + section.id }
-    data class Chips(override val section: AgendaSection) : Entry { override val key = "c-" + section.id }
+    data class AllDayHead(override val section: AgendaSection) : Entry { override val key = "al-" + section.id }
+    data class AllDay(override val section: AgendaSection, val item: AllDayItem) : Entry { override val key = section.id + "/a-" + item.event.id }
+    data class AllDayMoreLine(override val section: AgendaSection, val text: String) : Entry { override val key = "am-" + section.id }
     data class Line(override val section: AgendaSection, val row: TimelineRow, val past: Boolean) : Entry {
         override val key = section.id + "/" + row.id
     }
@@ -125,10 +137,15 @@ private sealed interface Entry {
     data class Hidden(override val section: AgendaSection, val event: CalendarEvent) : Entry { override val key = section.id + "/hidden-" + event.id }
 }
 
-private fun flatten(v: CalendarView): List<Entry> = buildList {
+private fun flatten(v: CalendarView, allDayOpen: Set<String>): List<Entry> = buildList {
     v.sections.forEachIndexed { i, s ->
         add(Entry.Header(s, i))
-        if (s.allDay.isNotEmpty()) add(Entry.Chips(s))
+        if (s.allDayItems.isNotEmpty()) {
+            val open = s.id in allDayOpen
+            add(Entry.AllDayHead(s))
+            AllDayRules.shown(s.allDayItems, open).forEach { add(Entry.AllDay(s, it)) }
+            AllDayRules.moreLabel(s.allDayItems, open)?.let { add(Entry.AllDayMoreLine(s, it)) }
+        }
         s.workLine?.let { add(Entry.Work(s, it)) }
         s.ended.forEach { add(Entry.Line(s, it, past = true)) }
         s.rows.forEach { add(Entry.Line(s, it, past = false)) }
@@ -145,7 +162,9 @@ private fun Agenda(v: CalendarView, handlers: EventActionHandlers, showAgain: (C
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
-    val entries = remember(v) { flatten(v) }
+    // Days whose "+2 more" was tapped show all their all-day rows (they spring in with the list's item motion).
+    var allDayOpen by remember { mutableStateOf(emptySet<String>()) }
+    val entries = remember(v, allDayOpen) { flatten(v, allDayOpen) }
     val headerIndex = remember(entries) { entries.withIndex().filter { it.value is Entry.Header }.associate { it.value.section.id to it.index } }
     val list = rememberLazyListState()
     val pager = rememberPagerState(pageCount = { v.weeks.size })
@@ -168,7 +187,7 @@ private fun Agenda(v: CalendarView, handlers: EventActionHandlers, showAgain: (C
         if (index != null) {
             haptics.tick()
             tapped = d.epochDay
-            scope.launch { if (reduced) list.scrollToItem(index) else list.animateScrollToItem(index) }
+            scope.launch { if (reduced) list.scrollToItem(index) else list.springScrollTo(index) }
         }
     }
 
@@ -176,6 +195,7 @@ private fun Agenda(v: CalendarView, handlers: EventActionHandlers, showAgain: (C
         Column(Modifier.padding(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.xl)) {
             Text("Calendar", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
             Text(v.summary, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs).appear(rememberAppearance(1)))
+            if (v.legend.isNotEmpty()) CalendarKey(v.legend, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1)))
             Spacer(Modifier.height(MekaSpace.m))
             WeekTitle(v, pager.currentPage, Modifier.appear(rememberAppearance(2)))
         }
@@ -189,8 +209,46 @@ private fun Agenda(v: CalendarView, handlers: EventActionHandlers, showAgain: (C
             }
         }
         Box(Modifier.fillMaxWidth().padding(top = MekaSpace.s).height(1.dp).background(Meka.colors.hairline))
-        AgendaList(entries, list, handlers, showAgain, onEvent)
+        AgendaList(v, entries, list, handlers, showAgain, onEvent) { id -> allDayOpen = allDayOpen + id }
     }
+}
+
+/**
+ * Springs the agenda to the item at [index] (the expand spring): from close by it glides the whole way; from far away
+ * it first jumps to a few rows short of the day so the last stretch still springs into place.
+ */
+private suspend fun LazyListState.springScrollTo(index: Int) {
+    if (layoutInfo.visibleItemsInfo.none { it.index == index }) {
+        val near = if (index > firstVisibleItemIndex) index - 3 else index + 3
+        scrollToItem(near.coerceIn(0, (layoutInfo.totalItemsCount - 1).coerceAtLeast(0)))
+    }
+    val target = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+    if (target == null) animateScrollToItem(index) else animateScrollBy(target.offset.toFloat(), MekaMotion.expand(false))
+}
+
+/** The key under the summary: each calendar's dot and name ("● Kids  ● Personal  ● Fixtures"), wrapping. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CalendarKey(legend: List<CalendarTone>, modifier: Modifier) {
+    FlowRow(
+        modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "Calendars: " + legend.joinToString(", ") { it.label } },
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        legend.forEach { c ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CalendarDot(c.tone)
+                Spacer(Modifier.width(MekaSpace.xxs))
+                Text(c.label, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
+        }
+    }
+}
+
+/** A calendar's small colour dot. */
+@Composable
+private fun CalendarDot(tone: Int, modifier: Modifier = Modifier) {
+    Box(modifier.size(7.dp).clip(CircleShape).background(Meka.colors.calendarTone(tone)))
 }
 
 /** The days a section covers, for keeping a tapped day lit inside a free stretch. */
@@ -248,8 +306,8 @@ private fun Pill(d: DayPill, lit: Boolean, modifier: Modifier, onTap: () -> Unit
 
 @Composable
 private fun AgendaList(
-    entries: List<Entry>, list: LazyListState, handlers: EventActionHandlers, showAgain: (CalendarEvent) -> Unit,
-    onEvent: (CalendarEvent) -> Unit,
+    v: CalendarView, entries: List<Entry>, list: LazyListState, handlers: EventActionHandlers, showAgain: (CalendarEvent) -> Unit,
+    onEvent: (CalendarEvent) -> Unit, openAllDay: (String) -> Unit,
 ) {
     LazyColumn(
         state = list,
@@ -264,7 +322,10 @@ private fun AgendaList(
             val m = Modifier.animateItem().appear(appearance)
             when (e) {
                 is Entry.Header -> SectionHeader(e.section, m)
-                is Entry.Chips -> AllDayChips(e.section.allDay, m.padding(start = os.meka.android.today.TIME_COLUMN), onEvent)
+                // The "All day" group as Today shows it: the label once, one row each, "+2 more" unfolds the rest.
+                is Entry.AllDayHead -> AllDayLabel(e.section.allDayLabel, m.padding(start = os.meka.android.today.TIME_COLUMN))
+                is Entry.AllDay -> AgendaAllDayRow(e.item, v.toneOf(e.item.event), m) { onEvent(e.item.event) }
+                is Entry.AllDayMoreLine -> AllDayMore(e.text, { openAllDay(e.section.id) }, m)
                 is Entry.Empty -> Text(
                     e.text, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = m.padding(start = os.meka.android.today.TIME_COLUMN, bottom = MekaSpace.xs),
@@ -280,8 +341,11 @@ private fun AgendaList(
                 )
                 is Entry.Hidden -> HiddenRow(e.event, m, { onEvent(e.event) }) { showAgain(e.event) }
                 is Entry.Line -> when (e.row.kind) {
-                    TimelineKind.EVENT -> if (e.past) EventRow(e.row, true, m.opensEvent(e.row.event, onEvent))
-                    else SwipeableEvent(e.row.event, handlers, m, onOpen = onEvent) { sm -> EventRow(e.row, false, sm) }
+                    TimelineKind.EVENT -> {
+                        val tone = e.row.event?.let { v.toneOf(it) }
+                        if (e.past) EventRow(e.row, true, tone, m.opensEvent(e.row.event, onEvent))
+                        else SwipeableEvent(e.row.event, handlers, m, onOpen = onEvent) { sm -> EventRow(e.row, false, tone, sm) }
+                    }
                     TimelineKind.TASK -> TaskRow(e.row, m)
                     TimelineKind.NOW -> NowLine(e.row, m)
                     TimelineKind.GAP -> Unit // the agenda has no gaps; Today shows free time
@@ -312,12 +376,16 @@ private fun SectionHeader(s: AgendaSection, modifier: Modifier) {
     }
 }
 
-/** An event: context, so the regular body weight. Fixtures are marked in the accent colour. */
+/**
+ * An event: context, so the regular body weight, after its calendar's colour dot (dimmed once it has ended). Fixtures
+ * are marked in the accent colour.
+ */
 @Composable
-private fun EventRow(r: TimelineRow, past: Boolean, modifier: Modifier) {
+private fun EventRow(r: TimelineRow, past: Boolean, tone: Int?, modifier: Modifier) {
     val fixture = r.event?.isFixture == true
     Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
         TimeColumn(r.time, past)
+        DotColumn(tone, past)
         Column(Modifier.weight(1f)) {
             Text(r.title, style = MekaType.body, color = if (past) Meka.colors.textTertiary else Meka.colors.textPrimary)
             val line = listOfNotNull(if (r.running) "Now" else null, r.detail).joinToString(" · ")
@@ -327,6 +395,35 @@ private fun EventRow(r: TimelineRow, past: Boolean, modifier: Modifier) {
                     color = if (!past && (r.running || fixture)) Meka.colors.accent else Meka.colors.textTertiary,
                 )
             }
+        }
+    }
+}
+
+/** The dot beside a title, centred on its first line; nothing (but the same width) without a calendar. */
+@Composable
+private fun DotColumn(tone: Int?, past: Boolean = false) {
+    Box(Modifier.width(MekaSpace.m).height(24.dp), contentAlignment = Alignment.CenterStart) {
+        if (tone != null) CalendarDot(tone, Modifier.alpha(if (past) 0.5f else 1f))
+    }
+}
+
+/**
+ * One all-day entry in the agenda, as Today's "All day" row (the title in the event weight in the title column, its
+ * calendar under it only when calendars are mixed), with its calendar's dot. Tapping opens the detail; the agenda only
+ * shows, so the to-do pill and the long-press menu stay on Today.
+ */
+@Composable
+private fun AgendaAllDayRow(item: AllDayItem, tone: Int, modifier: Modifier, onOpen: () -> Unit) {
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onOpen() }
+            .padding(vertical = MekaSpace.xs),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Spacer(Modifier.width(os.meka.android.today.TIME_COLUMN))
+        DotColumn(tone)
+        Column(Modifier.weight(1f)) {
+            Text(item.event.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            item.line?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         }
     }
 }
@@ -354,6 +451,7 @@ private fun HiddenRow(event: CalendarEvent, modifier: Modifier, onOpen: () -> Un
 private fun TaskRow(r: TimelineRow, modifier: Modifier) {
     Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
         TimeColumn(r.time, past = false)
+        DotColumn(null)
         Column(Modifier.weight(1f)) {
             Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary)
             r.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }

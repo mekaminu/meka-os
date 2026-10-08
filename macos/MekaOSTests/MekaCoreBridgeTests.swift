@@ -331,6 +331,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(ring.spokenLine, "Your day: 1 thing booked. Now 10:30. 3 h 45 free · 4 to do.")
     }
 
+    /// Calendar colours (Fold review 2026-10-08, item 9): fixtures wear Barça's colour, the rest take five hues.
+    func testCalendarTonesReachSwift() {
+        XCTAssertEqual(CalendarTones.shared.FIXTURE, 0)
+        XCTAssertEqual(CalendarTones.shared.COUNT, 5)
+        let tone = CalendarTone(key: "google|meka@gmail.com|Kids", label: "Kids", tone: 2)
+        XCTAssertEqual(tone.label, "Kids")
+        XCTAssertEqual(AllDayRules.shared.LABEL, "All day")
+    }
+
     func testNeedsYouEmptyStateReachesSwift() {
         XCTAssertEqual(NeedsYouStackRules.shared.EMPTY_LINE, "Nothing needs you")
         XCTAssertEqual(NeedsYouStackRules.shared.EMPTY_CAPTION, "Approvals, replies and decisions land here.")

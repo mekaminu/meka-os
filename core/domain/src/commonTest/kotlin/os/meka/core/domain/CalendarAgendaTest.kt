@@ -191,4 +191,66 @@ class CalendarAgendaTest {
         assertEquals("1 event · 1 fixture · 3 tasks", CalendarAgenda.countsLine(1, 1, 3))
         assertEquals("Nothing in your calendars for the next 30 days", build().summary)
     }
+
+    private fun named(e: CalendarEvent, calendar: String, account: String? = "meka@gmail.com") = e.copy(calendarName = calendar, account = account)
+
+    @Test
+    fun allDayEntriesAreTodaysAllDayGroupNotChips() {
+        val fri9 = tue6 + 3
+        val one = build(events = listOf(named(allDay("Pay nursery", fri9), "Timestripe"), named(allDay("Bins", fri9), "Timestripe")))
+        val s = one.sections.first { it.firstDay == fri9 }
+        assertEquals("All day · Timestripe", s.allDayLabel)
+        assertEquals(listOf("Bins", "Pay nursery"), s.allDayItems.map { it.event.title })
+        assertEquals(listOf(null, null), s.allDayItems.map { it.line })
+        assertTrue(s.allDayItems.single { it.event.title == "Pay nursery" }.todo)
+
+        // Mixed calendars keep a name per row; a multi-day entry says when it ends, counted from the day it sits under.
+        val mixed = build(events = listOf(named(allDay("Half term", fri9, fri9 + 4), "Family"), named(allDay("Bins", fri9), "Timestripe")))
+        val m = mixed.sections.first { it.firstDay == fri9 }
+        assertEquals("All day", m.allDayLabel)
+        assertEquals(listOf("Timestripe", "Family · until Tue 13 Oct"), m.allDayItems.map { it.line })
+        val mon12 = mixed.sections.first { it.firstDay == fri9 + 3 }
+        assertEquals("All day · Family", mon12.allDayLabel)
+        assertEquals(listOf("until Tue 13 Oct"), mon12.allDayItems.map { it.line })
+
+        // No all-day entries: no group.
+        val today = build().sections.first()
+        assertEquals("", today.allDayLabel)
+        assertTrue(today.allDayItems.isEmpty())
+    }
+
+    @Test
+    fun eachCalendarHasItsOwnColourAndTheKeyNamesThem() {
+        val wed7 = tue6 + 1
+        val football = named(ev("Kids football", at(wed7, 17), at(wed7, 18)), "Kids")
+        val work = named(ev("Standup", at(wed7, 9, 30), at(wed7, 9, 45)), "Work", account = "meka@work.com")
+        val personal = named(ev("Dentist", at(wed7, 12), at(wed7, 13)), "Personal")
+        val barca = ev("Barça v Sevilla", at(wed7, 20), at(wed7, 22), provider = "fixtures")
+        val v = build(events = listOf(football, work, personal, barca))
+
+        // Fixtures always wear Barça's colour; the other calendars take distinct hues in the order of their keys.
+        assertEquals(CalendarTones.FIXTURE, v.toneOf(barca))
+        val tones = listOf(football, work, personal).map { v.toneOf(it) }
+        assertEquals(3, tones.distinct().size)
+        assertTrue(tones.all { it in 1..CalendarTones.COUNT })
+        // Same calendars, same colours, whatever order the events arrive in (so the Fold and the Mac agree).
+        val again = build(events = listOf(barca, personal, work, football))
+        assertEquals(tones, listOf(football, work, personal).map { again.toneOf(it) })
+        // A second event from the same calendar shares its colour.
+        assertEquals(v.toneOf(personal), v.toneOf(named(ev("Haircut", 0, 0), "Personal")))
+
+        // The key under the summary: calendars by name, fixtures last.
+        assertEquals(listOf("Kids", "Personal", "Work", "Fixtures"), v.legend.map { it.label })
+        assertEquals(v.toneOf(work), v.legend.single { it.label == "Work" }.tone)
+        assertEquals(CalendarTones.FIXTURE, v.legend.last().tone)
+        // One calendar needs no key.
+        assertTrue(build(events = listOf(personal)).legend.isEmpty())
+    }
+
+    @Test
+    fun aSixthCalendarWrapsRoundTheHues() {
+        val events = (1..6).map { named(ev("e$it", at(tue6, 12), at(tue6, 13)), "Cal $it") }
+        val tones = CalendarTones.assign(events)
+        assertEquals(listOf(1, 2, 3, 4, 5, 1), events.map { tones[CalendarRules.key(it)] })
+    }
 }
