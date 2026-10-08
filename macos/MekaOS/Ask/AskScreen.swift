@@ -4,7 +4,7 @@ import SwiftUI
 /// ASK on the Mac (build plan M1, Four tabs, one front door): the front door to everything that isn't a tab. Until the
 /// AI layer lands, asking is searching (the field opens Search Everything, as ⌘F does). More lists the places behind
 /// Ask (they open with the shell's push and keep Ask lit in spirit: the sidebar shows them under More) and the sheets.
-/// Motion: title, field and rows stagger in; rows lift 2 pt on hover; a lit Lists line blends its colour.
+/// Motion: title, field and More's sections (Places · Daily · Settings) stagger in, each a step after the one before; rows lift 2 pt on hover; a lit Lists line blends its colour.
 struct AskScreen: View {
     let palette: MekaPalette
     @Environment(CoreModel.self) private var model
@@ -38,20 +38,25 @@ struct AskScreen: View {
                     .padding(.leading, MekaSpace.xxs)
                     .padding(.bottom, MekaSpace.l)
                     .staggeredAppear(1)
-                Text("MORE")
-                    .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                    .foregroundStyle(palette.textTertiary)
-                    .staggeredAppear(2)
-                ForEach(Array(ShellNav.more(connected: model.isConnected && !model.signedOut).enumerated()), id: \.element) { i, item in
-                    Group {
-                        if ShellNav.unfoldsInPlace(item) {
-                            AppearanceRow(palette: palette)
-                        } else {
-                            MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue, atWork: model.work?.atWork == true),
-                                    lit: ShellNav.moreLit(item, listsDue: model.listsDue), palette: palette) { open(item) }
+                // More in sections (Fold review 2026-10-08, item 10): Places · Daily · Settings, a small label over each.
+                ForEach(Array(ShellNav.moreSections(connected: model.isConnected && !model.signedOut).enumerated()), id: \.element.id) { s, section in
+                    Text(section.group.label.uppercased())
+                        .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                        .foregroundStyle(palette.textTertiary)
+                        .padding(.top, s == 0 ? 0 : MekaSpace.m)
+                        .accessibilityAddTraits(.isHeader)
+                        .staggeredAppear(ShellNav.moreLabelStep(s))
+                    ForEach(Array(section.items.enumerated()), id: \.element) { i, item in
+                        Group {
+                            if ShellNav.unfoldsInPlace(item) {
+                                AppearanceRow(palette: palette)
+                            } else {
+                                MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue, atWork: model.work?.atWork == true),
+                                        lit: ShellNav.moreLit(item, listsDue: model.listsDue), palette: palette) { open(item) }
+                            }
                         }
+                        .staggeredAppear(ShellNav.moreRowStep(s, i))
                     }
-                    .staggeredAppear(3 + i)
                 }
             }
             .frame(maxWidth: 560, alignment: .leading)

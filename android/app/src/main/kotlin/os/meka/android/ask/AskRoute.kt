@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -76,9 +77,10 @@ import os.meka.core.facade.MekaCore
 /**
  * ASK (build plan M1, Four tabs, one front door). The fourth tab and the front door to everything that isn't a tab.
  * Until the AI layer lands (Needs Meka #3) asking is searching: the field opens Search everything. Below it, More
- * lists every place behind Ask (Lists, Goals and habits, Review, Vault: they open with the shell's forward slide and
- * keep Ask lit) and the settings-like panes, which spring up over Ask as they do over Today.
- * Motion: the title, field and More rows stagger in 40 ms apart; a lit Lists line blends its colour; a row's label
+ * lists, in three sections (Places · Daily · Settings), every place behind Ask (Lists, Goals and habits, Review,
+ * Vault: they open with the shell's forward slide and keep Ask lit) and the panes, which spring up over Ask as they
+ * do over Today. Motion: the title, field and More's sections stagger in 40 ms apart (each section a step after the
+ * one before began, its label leading its rows); a lit Lists line blends its colour; a row's label
  * travels into the title of what it opens (and back). Reduced motion cross-fades.
  */
 @Composable
@@ -89,7 +91,7 @@ fun AskRoute(core: MekaCore, connected: Boolean, openPlace: (ShellDestination) -
     var appearanceOpen by rememberSaveable { mutableStateOf(false) }
     var pane by rememberSaveable { mutableStateOf<MoreItem?>(null) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
-    val items = ShellNav.more(connected)
+    val sections = ShellNav.moreSections(connected)
     // Back closes whatever sprang up over Ask before it leaves the app.
     BackHandler(enabled = pane != null || showSearch) { if (showSearch) showSearch = false else pane = null }
 
@@ -123,18 +125,26 @@ fun AskRoute(core: MekaCore, connected: Boolean, openPlace: (ShellDestination) -
                     )
                 }
             }
-            item(key = "more") {
-                Text("MORE", style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
-                    modifier = Modifier.padding(bottom = MekaSpace.xxs).appear(rememberAppearance(2)))
-            }
-            itemsIndexed(items, key = { _, it -> it.name }) { i, item ->
-                if (ShellNav.unfoldsInPlace(item)) {
-                    AppearanceRow(appearanceOpen, Modifier.appear(rememberAppearance(3 + i)), openTopics = { pane = MoreItem.NEWS }) { appearanceOpen = !appearanceOpen }
-                } else {
-                    MoreRow(item, ShellNav.moreLine(item, lists.dueCount, work.atWork), ShellNav.moreLit(item, lists.dueCount),
-                        pane == item, Modifier.appear(rememberAppearance(3 + i))) {
-                        val d = item.destination
-                        if (d != null) openPlace(d) else pane = item
+            // More in sections (Fold review 2026-10-08, item 10): Places · Daily · Settings, a small label over each;
+            // each section staggers in one step after the one before began.
+            sections.forEachIndexed { s, section ->
+                item(key = "more-${section.group.name}") {
+                    Text(section.group.label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
+                        modifier = Modifier
+                            .padding(top = if (s == 0) 0.dp else MekaSpace.m, bottom = MekaSpace.xxs)
+                            .semantics { heading() }
+                            .appear(rememberAppearance(ShellNav.moreLabelStep(s))))
+                }
+                itemsIndexed(section.items, key = { _, it -> it.name }) { i, item ->
+                    val step = ShellNav.moreRowStep(s, i)
+                    if (ShellNav.unfoldsInPlace(item)) {
+                        AppearanceRow(appearanceOpen, Modifier.appear(rememberAppearance(step)), openTopics = { pane = MoreItem.NEWS }) { appearanceOpen = !appearanceOpen }
+                    } else {
+                        MoreRow(item, ShellNav.moreLine(item, lists.dueCount, work.atWork), ShellNav.moreLit(item, lists.dueCount),
+                            pane == item, Modifier.appear(rememberAppearance(step))) {
+                            val d = item.destination
+                            if (d != null) openPlace(d) else pane = item
+                        }
                     }
                 }
             }

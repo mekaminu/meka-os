@@ -41,11 +41,32 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
 
 enum ShellLayout { case bottomBar, rail }
 
+/// The sections of Ask's More list (Fold review 2026-10-08, item 10: twelve rows in one flat list were hard to scan).
+enum MoreGroup: Int, CaseIterable, Identifiable {
+    case places, daily, settings
+    var id: Int { rawValue }
+
+    var label: String {
+        switch self {
+        case .places: "Places"
+        case .daily: "Daily"
+        case .settings: "Settings"
+        }
+    }
+}
+
+/// One section of More: its label and its rows, in order.
+struct MoreSection: Equatable, Identifiable {
+    let group: MoreGroup
+    let items: [MoreItem]
+    var id: Int { group.rawValue }
+}
+
 /// A row in Ask's More list: a place behind Ask (`destination`), a sheet over the current screen (nil), or
 /// Appearance, which shows its choices in the row itself (`ShellNav.unfoldsInPlace`). Today's header keeps only
 /// Search and Plan my day (Today clarity, slice 2): the brief, the shutdown, work mode and the theme moved here.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, review, vault, brief, news, shutdown, work, notifications, appearance, activity, yourData, calendars
+    case lists, goals, review, vault, brief, news, shutdown, work, notifications, appearance, calendars, activity, yourData
     var id: Int { rawValue }
 
     var label: String {
@@ -81,6 +102,14 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .activity: "What MEKA did and why"
         case .yourData: "Export everything as one file"
         case .calendars: "Connected accounts and feeds"
+        }
+    }
+
+    var group: MoreGroup {
+        switch self {
+        case .lists, .goals, .review, .vault: .places
+        case .brief, .news, .shutdown: .daily
+        case .work, .notifications, .appearance, .calendars, .activity, .yourData: .settings
         }
     }
 
@@ -120,6 +149,19 @@ enum ShellNav {
 
     /// Ask's More list; Calendars only once this device is connected.
     static func more(connected: Bool) -> [MoreItem] { MoreItem.allCases.filter { connected || $0 != .calendars } }
+
+    /// More in its sections (Places · Daily · Settings); a section with no rows is left out.
+    static func moreSections(connected: Bool) -> [MoreSection] {
+        let items = more(connected: connected)
+        return MoreGroup.allCases.map { g in MoreSection(group: g, items: items.filter { $0.group == g }) }
+            .filter { !$0.items.isEmpty }
+    }
+
+    /// Stagger steps for More (after the title 0 and field 1): each section starts one step after the one before
+    /// began; a label leads its rows by one step. Places: 2, rows 3–6 · Daily: 4, rows 5–7 · Settings: 6, rows 7–12.
+    static func moreLabelStep(_ section: Int) -> Int { 2 + 2 * section }
+
+    static func moreRowStep(_ section: Int, _ row: Int) -> Int { moreLabelStep(section) + 1 + row }
 
     /// Lists says what's due when something is ("2 need you · …"), else the fixed words.
     static func moreLine(_ item: MoreItem, listsDue: Int, atWork: Bool = false) -> String {

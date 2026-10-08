@@ -28,27 +28,40 @@ enum class ShellLayout {
 }
 
 /**
+ * The sections of Ask's More list (Fold review 2026-10-08, item 10: twelve rows in one flat list were hard to scan).
+ * Each has a small section label over its rows; the rows are the same.
+ */
+enum class MoreGroup(val label: String) {
+    PLACES("Places"),
+    DAILY("Daily"),
+    SETTINGS("Settings"),
+}
+
+/**
  * A row in Ask's "More" list: a place behind Ask ([destination]), a pane that springs up over Ask (null), or
  * Appearance, which unfolds its choices in place ([ShellNav.unfoldsInPlace]).
  * Lines are fixed words, not counts, except Lists when something on it is due ([ShellNav.moreLine]).
  * Today's header keeps only Search and Plan my day (Today clarity, slice 2): the brief, the shutdown, work mode and
  * the theme moved here.
  */
-enum class MoreItem(val label: String, val line: String, val destination: ShellDestination?) {
-    LISTS("Lists", "Waiting for · Someday · Decisions · Renewals", ShellDestination.LISTS),
-    GOALS("Goals and habits", "Habits, goals and fasting", ShellDestination.GOALS),
-    REVIEW("Review", "Your week, looked back on", ShellDestination.REVIEW),
-    VAULT("Vault", "Your data now; documents later", ShellDestination.VAULT),
-    BRIEF("Morning brief", "Your day, who you're waiting on and headlines", null),
-    NEWS("News", "Barça, AI and the headlines · topics and sources", null),
-    SHUTDOWN("Shut down the day", "Tick off, carry over and see tomorrow", null),
-    WORK("Work mode", "Work hours and the Work switch", null),
-    NOTIFICATIONS("Notifications", "Quiet hours, digests and what reaches you", null),
-    APPEARANCE("Appearance", "Dark, Light or Auto", null),
-    ACTIVITY("Activity", "What MEKA did and why", null),
-    YOUR_DATA("Your data", "Export everything as one file", null),
-    CALENDARS("Calendars", "Connected accounts and feeds", null),
+enum class MoreItem(val label: String, val line: String, val destination: ShellDestination?, val group: MoreGroup) {
+    LISTS("Lists", "Waiting for · Someday · Decisions · Renewals", ShellDestination.LISTS, MoreGroup.PLACES),
+    GOALS("Goals and habits", "Habits, goals and fasting", ShellDestination.GOALS, MoreGroup.PLACES),
+    REVIEW("Review", "Your week, looked back on", ShellDestination.REVIEW, MoreGroup.PLACES),
+    VAULT("Vault", "Your data now; documents later", ShellDestination.VAULT, MoreGroup.PLACES),
+    BRIEF("Morning brief", "Your day, who you're waiting on and headlines", null, MoreGroup.DAILY),
+    NEWS("News", "Barça, AI and the headlines · topics and sources", null, MoreGroup.DAILY),
+    SHUTDOWN("Shut down the day", "Tick off, carry over and see tomorrow", null, MoreGroup.DAILY),
+    WORK("Work mode", "Work hours and the Work switch", null, MoreGroup.SETTINGS),
+    NOTIFICATIONS("Notifications", "Quiet hours, digests and what reaches you", null, MoreGroup.SETTINGS),
+    APPEARANCE("Appearance", "Dark, Light or Auto", null, MoreGroup.SETTINGS),
+    CALENDARS("Calendars", "Connected accounts and feeds", null, MoreGroup.SETTINGS),
+    ACTIVITY("Activity", "What MEKA did and why", null, MoreGroup.SETTINGS),
+    YOUR_DATA("Your data", "Export everything as one file", null, MoreGroup.SETTINGS),
 }
+
+/** One section of More: its label and its rows, in order. */
+data class MoreSection(val group: MoreGroup, val items: List<MoreItem>)
 
 object ShellNav {
     /** Same breakpoint Today uses for its two panes. */
@@ -74,6 +87,19 @@ object ShellNav {
 
     /** Ask's More list; Calendars only once this device is connected (before that, Today offers Connect). */
     fun more(connected: Boolean): List<MoreItem> = MoreItem.entries.filter { connected || it != MoreItem.CALENDARS }
+
+    /** More in its sections (Places · Daily · Settings), each with its rows; a section with no rows is left out. */
+    fun moreSections(connected: Boolean): List<MoreSection> =
+        MoreGroup.entries.map { g -> MoreSection(g, more(connected).filter { it.group == g }) }.filter { it.items.isNotEmpty() }
+
+    /**
+     * Stagger steps for More (40 ms apart, after the title 0, field 1): each section starts one step after the one
+     * before began rather than after its last row, so the list settles quickly; a label leads its rows by one step.
+     * Places: label 2, rows 3–6 · Daily: label 4, rows 5–7 · Settings: label 6, rows 7–12.
+     */
+    fun moreLabelStep(section: Int): Int = 2 + 2 * section
+
+    fun moreRowStep(section: Int, row: Int): Int = moreLabelStep(section) + 1 + row
 
     /** A More row's line: Lists says what's due when something is ("2 need you"), else the fixed words. */
     fun moreLine(item: MoreItem, listsDue: Int, atWork: Boolean = false): String = when {

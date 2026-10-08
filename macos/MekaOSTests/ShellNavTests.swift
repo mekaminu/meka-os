@@ -46,11 +46,36 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(
             ShellNav.more(connected: true).map(\.label),
             ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Work mode", "Notifications",
-             "Appearance", "Activity", "Your data", "Calendars"]
+             "Appearance", "Calendars", "Activity", "Your data"]
         )
         XCTAssertFalse(ShellNav.more(connected: false).contains(.calendars))
         let places = Set(ShellNav.more(connected: false).compactMap(\.destination))
         XCTAssertEqual(places, Set(ShellDestination.allCases.filter { ShellNav.parent($0) != nil }))
+    }
+
+    @MainActor
+    func testMoreIsGroupedIntoPlacesDailyAndSettings() {
+        // Fold review 2026-10-08, item 10.
+        let sections = ShellNav.moreSections(connected: true)
+        XCTAssertEqual(sections.map(\.group.label), ["Places", "Daily", "Settings"])
+        XCTAssertEqual(sections[0].items.map(\.label), ["Lists", "Goals and habits", "Review", "Vault"])
+        XCTAssertEqual(sections[1].items.map(\.label), ["Morning brief", "News", "Shut down the day"])
+        XCTAssertEqual(sections[2].items.map(\.label), ["Work mode", "Notifications", "Appearance", "Calendars", "Activity", "Your data"])
+        XCTAssertEqual(sections.flatMap(\.items), ShellNav.more(connected: true))
+        XCTAssertTrue(sections[0].items.allSatisfy { $0.destination != nil })
+        XCTAssertTrue(sections.dropFirst().flatMap(\.items).allSatisfy { $0.destination == nil })
+        let offline = ShellNav.moreSections(connected: false)
+        XCTAssertEqual(offline.count, 3)
+        XCTAssertFalse(offline[2].items.contains(.calendars))
+    }
+
+    @MainActor
+    func testMoreSectionsStaggerOneStepApart() {
+        XCTAssertEqual((0...2).map(ShellNav.moreLabelStep), [2, 4, 6])
+        XCTAssertEqual((0...3).map { ShellNav.moreRowStep(0, $0) }, [3, 4, 5, 6])
+        XCTAssertEqual(ShellNav.moreRowStep(1, 0), 5)
+        XCTAssertEqual(ShellNav.moreRowStep(2, 5), 12)
+        for s in 0...2 { XCTAssertLessThan(ShellNav.moreLabelStep(s), ShellNav.moreRowStep(s, 0)) }
     }
 
     @MainActor

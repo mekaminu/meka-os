@@ -53,7 +53,7 @@ class ShellNavTest {
         assertEquals(
             listOf(
                 "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Work mode", "Notifications",
-                "Appearance", "Activity", "Your data", "Calendars",
+                "Appearance", "Calendars", "Activity", "Your data",
             ),
             ShellNav.more(connected = true).map { it.label },
         )
@@ -61,6 +61,37 @@ class ShellNavTest {
         // Every place behind Ask is reachable from More.
         val places = ShellNav.more(connected = false).mapNotNull { it.destination }.toSet()
         assertEquals(ShellDestination.entries.filter { ShellNav.parent(it) != null }.toSet(), places)
+    }
+
+    @Test
+    fun moreIsGroupedIntoPlacesDailyAndSettings() {
+        // Fold review 2026-10-08, item 10.
+        val sections = ShellNav.moreSections(connected = true)
+        assertEquals(listOf("Places", "Daily", "Settings"), sections.map { it.group.label })
+        assertEquals(listOf("Lists", "Goals and habits", "Review", "Vault"), sections[0].items.map { it.label })
+        assertEquals(listOf("Morning brief", "News", "Shut down the day"), sections[1].items.map { it.label })
+        assertEquals(
+            listOf("Work mode", "Notifications", "Appearance", "Calendars", "Activity", "Your data"),
+            sections[2].items.map { it.label },
+        )
+        // The same rows as the flat list, in the same order; the places are exactly the Places section.
+        assertEquals(ShellNav.more(connected = true), sections.flatMap { it.items })
+        assertTrue(sections[0].items.all { it.destination != null })
+        assertTrue(sections.drop(1).flatMap { it.items }.all { it.destination == null })
+        // Not connected: Calendars leaves Settings, the sections stay.
+        val offline = ShellNav.moreSections(connected = false)
+        assertEquals(3, offline.size)
+        assertFalse(MoreItem.CALENDARS in offline[2].items)
+    }
+
+    @Test
+    fun moreSectionsStaggerOneStepApart() {
+        assertEquals(listOf(2, 4, 6), (0..2).map { ShellNav.moreLabelStep(it) })
+        assertEquals(listOf(3, 4, 5, 6), (0..3).map { ShellNav.moreRowStep(0, it) })
+        assertEquals(5, ShellNav.moreRowStep(1, 0))
+        assertEquals(12, ShellNav.moreRowStep(2, 5))
+        // Each label comes before its own rows.
+        for (s in 0..2) assertTrue(ShellNav.moreLabelStep(s) < ShellNav.moreRowStep(s, 0))
     }
 
     @Test
