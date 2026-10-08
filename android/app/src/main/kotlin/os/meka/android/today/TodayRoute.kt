@@ -62,6 +62,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -869,15 +872,31 @@ internal fun DetailPane(task: Task?, conflicts: List<ConflictChoice>, actions: T
 @Composable
 private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, actions: TodayActions) {
     var title by remember(task.id, task.title) { mutableStateOf(task.title) }
+    // The title saves itself (Meka, 2026-10-08: an edit was lost on Close because only the keyboard's Done saved it):
+    // shortly after typing stops, when the field loses focus, on Done, and when the detail closes. A blank title is
+    // never saved (the old one stays).
+    val latestTitle by rememberUpdatedState(title)
+    val latestTask by rememberUpdatedState(task)
+    val saveTitle = {
+        val t = latestTitle.trim()
+        if (t.isNotEmpty() && t != latestTask.title) actions.rename(latestTask.id, t)
+    }
+    LaunchedEffect(task.id, title) {
+        if (title.trim() != task.title) { delay(TITLE_AUTOSAVE_MS); saveTitle() }
+    }
+    DisposableEffect(task.id) { onDispose { saveTitle() } }
+    val focus = LocalFocusManager.current
     BasicTextField(
         value = title,
-        onValueChange = { title = it },
+        onValueChange = { title = it.replace('\n', ' ') },
+        singleLine = false,
         textStyle = MekaType.upNextTitle.copy(color = Meka.colors.textPrimary),
         cursorBrush = SolidColor(Meka.colors.accent),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { actions.rename(task.id, title) }),
+        keyboardActions = KeyboardActions(onDone = { saveTitle(); focus.clearFocus() }),
         // On the closed Fold the title arrives from the row that was tapped (a no-op outside a pane).
-        modifier = Modifier.fillMaxWidth().padding(vertical = MekaSpace.m).sharedTitleInPane(SharedMotion.taskKey(task.id)),
+        modifier = Modifier.fillMaxWidth().padding(vertical = MekaSpace.m).sharedTitleInPane(SharedMotion.taskKey(task.id))
+            .onFocusChanged { if (!it.isFocused) saveTitle() },
     )
     meta(task)?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
 
@@ -912,6 +931,8 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
 }
 
 internal fun providerLabel(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Outlook"; "fixtures" -> "Fixtures"; "news" -> "Headlines"; "bank_holidays" -> "Bank holidays"; else -> p }
+
+private const val TITLE_AUTOSAVE_MS = 800L
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 

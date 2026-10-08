@@ -736,15 +736,46 @@ private struct DetailContent: View {
     let task: MekaTask?
     let palette: MekaPalette
     @State private var title = ""
+    @State private var pendingSave: Task<Void, Never>?
+
+    private func saveTitle(_ task: MekaTask) { saveTitle(id: task.id) }
+
+    /// Saves the typed title onto the task it was typed for, if it changed and isn't blank.
+    private func saveTitle(id: String) {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        if let current = model.allTasks.first(where: { $0.id == id }), current.title == t { return }
+        model.rename(id, to: t)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
             if let task {
+                // The title saves itself (Meka, 2026-10-08): shortly after typing stops, on Return, when another
+                // task is shown and when the detail goes away. A blank title is never saved.
                 TextField("Title", text: $title)
                     .textFieldStyle(.plain)
                     .font(MekaType.upNextTitle)
-                    .onSubmit { model.rename(task.id, to: title) }
+                    .onSubmit { saveTitle(task) }
                     .onAppear { title = task.title }
+                    .onChange(of: task.id) { oldId, _ in
+                        saveTitle(id: oldId)
+                        title = task.title
+                    }
+                    .onChange(of: task.title) { _, newTitle in
+                        if pendingSave == nil { title = newTitle }
+                    }
+                    .onChange(of: title) { _, _ in
+                        pendingSave?.cancel()
+                        let id = task.id
+                        pendingSave = Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(800))
+                            guard !Task.isCancelled else { return }
+                            saveTitle(id: id)
+                            pendingSave = nil
+                        }
+                    }
+                    .onDisappear { saveTitle(task) }
 
                 ForEach(model.conflicts.filter { $0.taskId == task.id }, id: \.field) { c in
                     Text("EDITED ON TWO DEVICES").font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
