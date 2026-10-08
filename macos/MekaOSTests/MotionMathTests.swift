@@ -67,4 +67,19 @@ final class MotionMathTests: XCTestCase {
         XCTAssertEqual(MotionMath.hoverLift(hovering: false, reduced: false), 0)
         XCTAssertEqual(MotionMath.hoverLift(hovering: true, reduced: true), 0)
     }
+
+    @MainActor
+    func testTheBrassSyncRingTurnsOncePerPeriodAndStaysLongEnoughToSee() {
+        let period = MekaChoreography.syncSpinPeriod
+        XCTAssertEqual(MotionMath.ringSweepDegrees(progress: 0), 0)
+        XCTAssertEqual(MotionMath.ringSweepDegrees(progress: 2), MotionMath.ringArcDegrees)
+        XCTAssertLessThan(MotionMath.ringArcDegrees, 360) // the gap shows the turn
+        XCTAssertEqual(MotionMath.ringSpinDegrees(elapsed: 0, reduced: false), 0)
+        XCTAssertEqual(MotionMath.ringSpinDegrees(elapsed: period / 2, reduced: false), 180, accuracy: 1e-6)
+        XCTAssertEqual(MotionMath.ringSpinDegrees(elapsed: period * 1.25, reduced: false), 90, accuracy: 1e-6)
+        XCTAssertEqual(MotionMath.ringSpinDegrees(elapsed: period / 2, reduced: true), 0) // Off: a still ring
+        XCTAssertEqual(MotionMath.ringHold(elapsed: 0), period, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.ringHold(elapsed: 0.3), period - 0.3, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.ringHold(elapsed: 5), 0)
+    }
 }

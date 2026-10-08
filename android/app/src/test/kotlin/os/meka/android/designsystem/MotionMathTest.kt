@@ -2,6 +2,7 @@ package os.meka.android.designsystem
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class MotionMathTest {
@@ -76,5 +77,49 @@ class MotionMathTest {
         assertEquals(2, MotionMath.hoverLiftDp(hovering = true, reduced = false))
         assertEquals(0, MotionMath.hoverLiftDp(hovering = false, reduced = false))
         assertEquals(0, MotionMath.hoverLiftDp(hovering = true, reduced = true))
+    }
+
+    @Test
+    fun pullToSyncFollowsTheFingerThenGivesAndNeverPassesItsLimit() {
+        assertEquals(0f, MotionMath.pullOffsetDp(0f))
+        assertEquals(0f, MotionMath.pullOffsetDp(-20f))
+        var last = 0f
+        for (drag in 1..600) {
+            val o = MotionMath.pullOffsetDp(drag.toFloat())
+            assertTrue(o > last, "pull went backwards at $drag")
+            assertTrue(o < MekaChoreography.pullMaxDistanceDp, "pull passed its limit at $drag")
+            assertTrue(o <= drag * MotionMath.PULL_RESISTANCE)
+            last = o
+        }
+        // A thumb's length arms it: well under the screen's height.
+        val armedAt = (1..600).first { MotionMath.pullArmed(MotionMath.pullOffsetDp(it.toFloat())) }
+        assertTrue(armedAt in 80..200, "armed after $armedAt dp")
+        assertFalse(MotionMath.pullArmed(MekaChoreography.pullThresholdDistanceDp - 1f))
+    }
+
+    @Test
+    fun theBrassRingFillsWithThePullAndTurnsOncePerPeriodWhileSyncing() {
+        assertEquals(0f, MotionMath.pullProgress(0f))
+        assertEquals(0.5f, MotionMath.pullProgress(MekaChoreography.pullThresholdDistanceDp / 2f))
+        assertEquals(1f, MotionMath.pullProgress(500f))
+        assertEquals(0f, MotionMath.ringSweepDegrees(0f))
+        assertEquals(MotionMath.RING_ARC_DEGREES, MotionMath.ringSweepDegrees(1f))
+        assertTrue(MotionMath.RING_ARC_DEGREES < 360f) // the gap shows the turn
+        val period = MekaChoreography.syncSpinPeriodMs.toLong()
+        assertEquals(0f, MotionMath.ringSpinDegrees(0, reduced = false))
+        assertEquals(180f, MotionMath.ringSpinDegrees(period / 2, reduced = false))
+        assertEquals(90f, MotionMath.ringSpinDegrees(period + period / 4, reduced = false))
+        assertEquals(0f, MotionMath.ringSpinDegrees(period / 2, reduced = true)) // Off: a still ring
+        assertEquals(period, MotionMath.ringHoldMs(0))
+        assertEquals(period - 300, MotionMath.ringHoldMs(300))
+        assertEquals(0L, MotionMath.ringHoldMs(5_000))
+    }
+
+    @Test
+    fun aPaneDimsTheScreenBehindItAsItSpringsUp() {
+        assertEquals(0f, MotionMath.scrimAlpha(0f))
+        assertEquals(MekaChoreography.sheetScrimOpacity, MotionMath.scrimAlpha(1f))
+        assertEquals(MekaChoreography.sheetScrimOpacity, MotionMath.scrimAlpha(1.2f)) // a spring's overshoot never darkens more
+        assertTrue(MekaChoreography.sheetScrimOpacity in 0.3f..0.6f)
     }
 }

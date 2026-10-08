@@ -121,4 +121,8 @@ enum MekaChoreography {
     static let expressiveEntryScale: CGFloat = 0.96
     static let pressScale: CGFloat = 0.97
     static let hoverLift: CGFloat = 2
+    static let pullThresholdDistance: CGFloat = 64
+    static let pullMaxDistance: CGFloat = 112
+    static let syncSpinPeriod: Double = 0.900
+    static let sheetScrimOpacity: CGFloat = 0.5
 }

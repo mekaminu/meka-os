@@ -1,6 +1,12 @@
 package os.meka.android.designsystem
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.Easing
@@ -139,22 +145,38 @@ fun SkeletonRows(count: Int = 3, modifier: Modifier = Modifier, rowHeight: andro
 }
 
 /**
- * A full-screen pane over the current screen (phone): springs up from the bottom and fades; leaves the same way.
- * Reduced motion: a cross-fade only. Content can share elements with the screen below via [sharedTitleInPane].
+ * A pane over the current screen (phone): springs up from the bottom as a sheet with rounded top corners while the
+ * screen behind dims (motion pass 2, slice 3); leaves the same way. The dim takes taps so nothing behind is pressed by
+ * mistake. Reduced motion: cross-fades only (the dim still fades). Content can share elements with the screen below
+ * via [sharedTitleInPane].
  */
 @Composable
 fun MekaPane(visible: Boolean, content: @Composable () -> Unit) {
     val reduced = Meka.reducedMotion
-    AnimatedVisibility(
-        visible = visible,
-        enter = if (reduced) fadeIn(MekaMotion.expand(true)) else
-            slideInVertically(MekaMotion.expand(false)) { it / 3 } + fadeIn(MekaMotion.appear(false)),
-        exit = if (reduced) fadeOut(MekaMotion.expand(true)) else
-            slideOutVertically(MekaMotion.expand(false)) { it / 3 } + fadeOut(MekaMotion.appear(false)),
-    ) {
+    // The pane's own enter/exit lives on its two layers below; this only keeps them composed while they animate.
+    AnimatedVisibility(visible = visible, enter = EnterTransition.None, exit = ExitTransition.None) {
         // Shared titles inside ride this pane's enter/exit (see MekaShared.kt).
         CompositionLocalProvider(LocalPaneScope provides this) {
-            Box(Modifier.fillMaxSize().background(Meka.colors.background)) { content() }
+            Box(Modifier.fillMaxSize()) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .animateEnterExit(enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced)))
+                        .background(Color.Black.copy(alpha = MotionMath.scrimAlpha(1f)))
+                        .pointerInput(Unit) { detectTapGestures { } }
+                        .clearAndSetSemantics { },
+                )
+                Box(
+                    Modifier.fillMaxSize().padding(top = MekaSpace.xs)
+                        .animateEnterExit(
+                            enter = if (reduced) fadeIn(MekaMotion.expand(true)) else
+                                slideInVertically(MekaMotion.expand(false)) { it / 3 } + fadeIn(MekaMotion.appear(false)),
+                            exit = if (reduced) fadeOut(MekaMotion.expand(true)) else
+                                slideOutVertically(MekaMotion.expand(false)) { it / 3 } + fadeOut(MekaMotion.appear(false)),
+                        )
+                        .clip(RoundedCornerShape(topStart = MekaRadius.l, topEnd = MekaRadius.l))
+                        .background(Meka.colors.background),
+                ) { content() }
+            }
         }
     }
 }

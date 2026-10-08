@@ -1013,7 +1013,19 @@ final class CoreModel {
 
     func completeSelected() { if let id = selectedID { complete(id) } }
     func deleteSelected() { if let id = selectedID { delete(id) } }
-    func syncNow() async { _ = try? await core?.syncNow() }
+    /// True while a sync asked for here (⌘R, the command bar) runs: Today's brass ring turns (motion pass 2, slice 3).
+    private(set) var syncRingShowing = false
+
+    func syncNow() async {
+        guard !syncRingShowing else { return }
+        syncRingShowing = true
+        defer { syncRingShowing = false }
+        let began = Date()
+        _ = try? await core?.syncNow()
+        // At least one turn, so a quick sync is still seen.
+        let hold = MotionMath.ringHold(elapsed: Date().timeIntervalSince(began))
+        if hold > 0 { try? await Task.sleep(for: .seconds(hold)) }
+    }
 
     var allTasks: [MekaTask] {
         guard let t = today else { return [] }

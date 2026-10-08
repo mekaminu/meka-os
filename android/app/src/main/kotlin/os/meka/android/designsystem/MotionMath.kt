@@ -71,4 +71,41 @@ object MotionMath {
     /** How far (dp) a card lifts while the pointer is over it (Mac; the Fold has no hover). None when reduced. */
     fun hoverLiftDp(hovering: Boolean, reduced: Boolean): Int =
         if (hovering && !reduced) MekaChoreography.hoverLiftDp else 0
+
+    /**
+     * Pull to sync (motion pass 2, slice 3): how far (dp) Today follows a finger dragged [dragDp] down past its top.
+     * Rubber-banded: it starts at about the finger's pace and slows, never passing [MekaChoreography.pullMaxDistanceDp].
+     */
+    fun pullOffsetDp(dragDp: Float): Float {
+        if (dragDp <= 0f) return 0f
+        val max = MekaChoreography.pullMaxDistanceDp.toFloat()
+        return max * (1f - 1f / (dragDp * PULL_RESISTANCE / max + 1f))
+    }
+
+    /** How full the brass ring is for a pull that has gone [offsetDp]: 0 at rest, 1 once letting go would sync. */
+    fun pullProgress(offsetDp: Float): Float =
+        (offsetDp / MekaChoreography.pullThresholdDistanceDp).coerceIn(0f, 1f)
+
+    /** Whether letting go now syncs. */
+    fun pullArmed(offsetDp: Float): Boolean = offsetDp >= MekaChoreography.pullThresholdDistanceDp
+
+    /** The ring's arc (degrees) as it fills with the pull: up to [RING_ARC_DEGREES], leaving a gap that shows the spin. */
+    fun ringSweepDegrees(progress: Float): Float = RING_ARC_DEGREES * progress.coerceIn(0f, 1f)
+
+    /** The ring's turn (degrees) [elapsedMs] into a sync: one turn per [MekaChoreography.syncSpinPeriodMs]; still when reduced. */
+    fun ringSpinDegrees(elapsedMs: Long, reduced: Boolean): Float =
+        if (reduced || elapsedMs <= 0) 0f
+        else (elapsedMs % MekaChoreography.syncSpinPeriodMs).toFloat() / MekaChoreography.syncSpinPeriodMs * 360f
+
+    /** How much longer (ms) the ring keeps spinning after a sync that took [elapsedMs], so a quick sync is still seen. */
+    fun ringHoldMs(elapsedMs: Long): Long = (MekaChoreography.syncSpinPeriodMs - elapsedMs).coerceAtLeast(0L)
+
+    /** Opacity of the dim behind a pane springing up ([progress] 0 → 1); the same with Motion → Off (it fades either way). */
+    fun scrimAlpha(progress: Float): Float = MekaChoreography.sheetScrimOpacity * progress.coerceIn(0f, 1f)
+
+    /** The pull's give: the finger travels about this much further than the content at first. */
+    const val PULL_RESISTANCE = 1.2f
+
+    /** The brass ring's longest arc, so the turning gap reads as motion. */
+    const val RING_ARC_DEGREES = 300f
 }

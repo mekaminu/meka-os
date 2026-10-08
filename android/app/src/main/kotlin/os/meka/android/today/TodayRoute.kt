@@ -91,6 +91,8 @@ import os.meka.core.domain.TickerMode
 import os.meka.core.domain.TickerRules
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaPane
+import os.meka.android.designsystem.PullToSyncBox
+import os.meka.android.designsystem.rememberPullToSync
 import os.meka.android.designsystem.MekaSharedLayout
 import os.meka.android.designsystem.rememberPaneMorph
 import os.meka.android.designsystem.sharedTitle
@@ -401,9 +403,12 @@ private fun TodayPane(
     val motion = Meka.motion
     // Not on the closed Fold's cover screen: the card waits for the main screen.
     val motionCard = if (now == null) motion.card else null
+    val pull = rememberPullToSync { core?.syncNow() }
     Column(modifier.imePadding()) {
+        // Pull to sync (motion pass 2, slice 3): pulling Today down past its top fills a brass ring; letting go syncs.
+        PullToSyncBox(pull, Modifier.weight(1f).fillMaxWidth()) {
         LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
@@ -581,6 +586,7 @@ private fun TodayPane(
                         modifier = Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(5, play)))
                 }
             }
+        }
         }
         QuickCapture(actions.add)
     }

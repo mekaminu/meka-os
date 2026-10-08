@@ -50,6 +50,22 @@ enum MotionMath {
         hovering && !reduced ? MekaChoreography.hoverLift : 0
     }
 
+    /// The brass sync ring's longest arc (degrees), so the turning gap reads as motion (motion pass 2, slice 3).
+    static let ringArcDegrees: Double = 300
+
+    /// The ring's arc as it fills (`progress` 0…1); the Fold fills it with the pull, the Mac shows it full.
+    static func ringSweepDegrees(progress: Double) -> Double { ringArcDegrees * min(max(progress, 0), 1) }
+
+    /// The ring's turn (degrees) `elapsed` seconds into a sync: one turn per `syncSpinPeriod`; still with Motion → Off.
+    static func ringSpinDegrees(elapsed: Double, reduced: Bool) -> Double {
+        if reduced || elapsed <= 0 { return 0 }
+        let period = MekaChoreography.syncSpinPeriod
+        return elapsed.truncatingRemainder(dividingBy: period) / period * 360
+    }
+
+    /// How much longer (seconds) the ring stays after a sync that took `elapsed`, so a quick sync is still seen.
+    static func ringHold(elapsed: Double) -> Double { max(MekaChoreography.syncSpinPeriod - elapsed, 0) }
+
     /// Ease-out cubic: fast start, gentle landing.
     static func easeOutCubic(_ fraction: Double) -> Double {
         let f = min(max(fraction, 0), 1)
@@ -213,4 +229,26 @@ enum MekaHaptics {
     static func light() { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
     static func medium() { NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now) }
     static func tick() { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
+}
+
+/// The brass sync ring (motion pass 2, slice 3; catalogue: Sync): beside Today's links while a sync you asked for
+/// runs (⌘R, the View menu or the command bar), turning once per `syncSpinPeriod`. Motion → Off: a still ring.
+struct SyncRingView: View {
+    let palette: MekaPalette
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var began = Date()
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: nil, paused: reduceMotion)) { context in
+            Circle()
+                .trim(from: 0, to: MotionMath.ringSweepDegrees(progress: 1) / 360)
+                .stroke(palette.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(-90 + MotionMath.ringSpinDegrees(
+                    elapsed: context.date.timeIntervalSince(began), reduced: reduceMotion)))
+        }
+        .frame(width: 13, height: 13)
+        .onAppear { began = Date() }
+        .accessibilityElement()
+        .accessibilityLabel("Syncing")
+    }
 }

@@ -134,4 +134,8 @@ object MekaChoreography {
     const val expressiveEntryScale = 0.96f
     const val pressScale = 0.97f
     const val hoverLiftDp = 2
+    const val pullThresholdDistanceDp = 64
+    const val pullMaxDistanceDp = 112
+    const val syncSpinPeriodMs = 900
+    const val sheetScrimOpacity = 0.5f
 }

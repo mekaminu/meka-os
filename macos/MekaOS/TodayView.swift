@@ -68,7 +68,12 @@ struct TodayView: View {
                         Button("Search") { model.showSearch = true }
                         Button("Plan my day") { model.showPlan = true }
                         // Work mode, the brief, the shutdown and the theme live in Ask's More now (Today clarity, slice 2).
+                        if model.syncRingShowing {
+                            SyncRingView(palette: palette)
+                                .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.scale(scale: 0.6).combined(with: .opacity))
+                        }
                     }
+                    .animation(MekaMotion.expand(reduced: reduceMotion), value: model.syncRingShowing)
                     .buttonStyle(MekaPressStyle())
                     .font(MekaType.caption)
                     .foregroundStyle(palette.accent)
