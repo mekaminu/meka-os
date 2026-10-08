@@ -550,9 +550,11 @@ private fun TodayPane(
                     }
                 }
             }
-            // The opening moment (motion pass 2, slice 7): the Day ring under the greeting; not on the cover screen.
-            if (now == null && today.timeline.dateLabel.isNotEmpty()) item(key = "dayring") {
-                DayRingHero(today.dayRing, ringPlay, ringPlayed, Modifier.padding(bottom = MekaSpace.l), tiles = today.dayTiles)
+            // The opening moment (motion pass 2, slice 7): the Day ring under the greeting; on every screen.
+            // Shown on the closed Fold too (Meka uses it most and had never seen the ring), a little smaller there.
+            if (today.timeline.dateLabel.isNotEmpty()) item(key = "dayring") {
+                DayRingHero(today.dayRing, ringPlay, ringPlayed, Modifier.padding(bottom = MekaSpace.l),
+                    size = if (now == null) 196.dp else 168.dp, tiles = today.dayTiles)
             }
             // Motion pass 2: with the phone's animations off and nothing chosen in Appearance → Motion, a one-time card.
             motionCard?.let { card ->
