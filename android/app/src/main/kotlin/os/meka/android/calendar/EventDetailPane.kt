@@ -413,8 +413,8 @@ private fun ClashChooser(
 ) {
     Column(
         Modifier.fillMaxWidth().padding(top = MekaSpace.s)
-            .clip(RoundedCornerShape(MekaRadius.card))
-            .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.card))
+            .clip(RoundedCornerShape(MekaRadius.m))
+            .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.m))
             .padding(MekaSpace.m),
     ) {
         Text(c.explain, style = MekaType.caption, color = Meka.colors.textSecondary)
