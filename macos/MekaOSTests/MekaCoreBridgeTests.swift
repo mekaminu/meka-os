@@ -441,4 +441,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         let a = ConnectedAccount(provider: "google", email: "me@gmail.com", status: "ok", lastSyncAtMs: nil, canEdit: true)
         XCTAssertEqual(a.editingAction, .stopEditing)
     }
+
+    /// Calendar editing, slice 2b: the Add event sheet's form steps and view reach Swift.
+    func testAddEventRulesReachSwift() {
+        let google = EditAccount(provider: "google", email: "me@gmail.com")
+        XCTAssertEqual(google.key, "google|me@gmail.com")
+        XCTAssertEqual(google.label, "Google · me@gmail.com")
+        let form = AddEventRules.shared.start(today: 100, nowMinute: 600, day: nil, accounts: [google], lastUsedKey: nil)
+            .withTitle(text: "Dentist").stepTime(steps: 2).withLength(minutes: 30)
+        XCTAssertEqual(form.minuteOrNone, 645)
+        XCTAssertEqual(form.accountKey, google.key)
+        XCTAssertEqual(form.withAllDay(on: true).minuteOrNone, -1)
+        XCTAssertEqual(AddEventRules.shared.lengthLabel(minutes: 90), "1 h 30")
+        XCTAssertEqual(AddEventRules.shared.endLabel(endMinute: 1470), "00:30 next day")
+    }
 }
+

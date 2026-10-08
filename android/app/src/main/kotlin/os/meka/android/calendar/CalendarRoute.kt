@@ -86,8 +86,9 @@ import os.meka.core.facade.MekaCore
  * Today's (one row each, at most 3 then "+2 more"; Fold review 2026-10-08, item 9), each event carries its calendar's
  * colour dot (a key under the summary names them), fixtures are marked in Barça's colour, planned tasks sit among the
  * events, empty stretches fold into one "Nothing planned" line. Tap a day to spring the agenda to it; scrolling the
- * agenda keeps the strip on the week you're looking at. Shows only: nothing here
- * changes anything; tapping an event opens its detail (slice 3).
+ * agenda keeps the strip on the week you're looking at. Tapping an event opens its detail (slice 3); "+ Add event"
+ * (calendar editing, slice 2b) adds a real event where an account allows editing, and the lines under the summary say
+ * how it's going ("Added “Dentist” to Google").
  *
  * Motion (catalogue "Calendar"): the strip slides between weeks; the lit pill's colour blends across with a tick
  * haptic; sections stagger in 40 ms apart; rows glide as the day moves on; the now line's dot breathes. Reduced
@@ -110,14 +111,35 @@ fun CalendarRoute(core: MekaCore) {
     val undo = rememberEventUndo()
     val handlers = remember(core, scope, undo) { eventActionHandlers(core, scope, undo) }
     val showAgain: (CalendarEvent) -> Unit = { e -> scope.launch { runCatching { core.showEvent(e.id) } } }
+    // Calendar editing (slice 2b): "+ Add event" while an account allows editing; the pane opens on the lit day.
+    val editAccounts by core.calendarEditAccounts.collectAsState()
+    val editLines by core.calendarEditLines.collectAsState()
+    LaunchedEffect(Unit) { runCatching { core.refreshCalendarAccounts() } }
+    var addingOn by remember { mutableStateOf<Long?>(null) }
+    var addShown by remember { mutableLongStateOf(-1L) }
+    addingOn?.let { addShown = it }
+    val addHeader = AddHeader(editAccounts.isNotEmpty(), editLines) { day -> addingOn = day }
     Box(Modifier.fillMaxSize()) {
-        Agenda(v, handlers, showAgain) { openEvent = it }
+        Agenda(v, handlers, showAgain, addHeader) { openEvent = it }
         MekaPane(visible = openEvent != null) {
             shown?.let { e -> EventDetailPane(core, e, onClose = { openEvent = null }) }
+        }
+        MekaPane(visible = addingOn != null) {
+            AddEventPane(
+                core, addShown,
+                onClose = { addingOn = null },
+                onAdded = { id ->
+                    addingOn = null
+                    undo.show(core.eventEditLine(id) ?: "Adding it to your calendar") { core.undoEventEdit(id) }
+                },
+            )
         }
         EventUndoBar(undo, Modifier.align(Alignment.BottomCenter))
     }
 }
+
+/** The header's editing bits: the Add event button (when allowed) and the lines about edits on their way. */
+private class AddHeader(val canAdd: Boolean, val lines: List<os.meka.core.domain.EditLine>, val onAdd: (Long) -> Unit)
 
 /** One line of the agenda list, flattened so the strip can jump to a section's header. */
 private sealed interface Entry {
@@ -158,7 +180,9 @@ private fun flatten(v: CalendarView, allDayOpen: Set<String>): List<Entry> = bui
 }
 
 @Composable
-private fun Agenda(v: CalendarView, handlers: EventActionHandlers, showAgain: (CalendarEvent) -> Unit, onEvent: (CalendarEvent) -> Unit) {
+private fun Agenda(
+    v: CalendarView, handlers: EventActionHandlers, showAgain: (CalendarEvent) -> Unit, add: AddHeader, onEvent: (CalendarEvent) -> Unit,
+) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -193,8 +217,12 @@ private fun Agenda(v: CalendarView, handlers: EventActionHandlers, showAgain: (C
 
     Column(Modifier.fillMaxSize().background(Meka.colors.background)) {
         Column(Modifier.padding(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.xl)) {
-            Text("Calendar", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
+            Row(Modifier.fillMaxWidth().appear(rememberAppearance(0)), verticalAlignment = Alignment.CenterVertically) {
+                Text("Calendar", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                if (add.canAdd) AddEventButton(onClick = { add.onAdd(lit) })
+            }
             Text(v.summary, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs).appear(rememberAppearance(1)))
+            EditLines(add.lines, Modifier.padding(top = MekaSpace.xxs).appear(rememberAppearance(1)))
             if (v.legend.isNotEmpty()) CalendarKey(v.legend, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1)))
             Spacer(Modifier.height(MekaSpace.m))
             WeekTitle(v, pager.currentPage, Modifier.appear(rememberAppearance(2)))

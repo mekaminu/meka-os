@@ -7,7 +7,8 @@ import SwiftUI
 /// 9), each event carries its calendar's colour dot (a key under the summary names them), fixtures are marked in
 /// Barça's colour, planned tasks sit among the events, empty stretches fold into one "Nothing planned" line. Click a
 /// day to spring the agenda to it; scrolling keeps the strip on the week in view.
-/// Shows only: nothing here changes anything; clicking an event opens its detail sheet (slice 3).
+/// Clicking an event opens its detail sheet (slice 3); "Add event" (calendar editing, slice 2b) adds a real event
+/// where an account allows editing, and the lines under the summary say how it's going ("Added “Dentist” to Google").
 ///
 /// Motion: the strip pushes across between weeks the way you moved; the lit pill blends across with a tick haptic;
 /// sections stagger in; rows glide as the day moves on; the now line's dot breathes. Reduce Motion: cross-fades, jumps
@@ -35,6 +36,10 @@ struct CalendarScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(palette.background)
+        .task { await model.refreshEditAccounts() }
+        .sheet(isPresented: Binding(get: { model.addEventDay != nil }, set: { if !$0 { model.addEventDay = nil } })) {
+            AddEventSheet(day: model.addEventDay ?? -1, palette: palette)
+        }
     }
 
     @ViewBuilder
@@ -46,11 +51,31 @@ struct CalendarScreen: View {
         }()
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text("Calendar")
-                    .font(MekaType.greeting).tracking(MekaType.greetingTracking)
-                    .foregroundStyle(palette.textPrimary)
-                    .staggeredAppear(0)
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Calendar")
+                        .font(MekaType.greeting).tracking(MekaType.greetingTracking)
+                        .foregroundStyle(palette.textPrimary)
+                    Spacer()
+                    // Calendar editing (slice 2b): only while an account allows editing; opens on the lit day.
+                    if !model.editAccounts.isEmpty {
+                        Button {
+                            MekaHaptics.tick()
+                            model.addEventDay = lit
+                        } label: {
+                            Label("Add event", systemImage: "plus")
+                                .font(MekaType.caption)
+                                .foregroundStyle(palette.textPrimary)
+                                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                                .background(Capsule().fill(palette.surfaceRaised))
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .help("Add an event to your calendar")
+                    }
+                }
+                .staggeredAppear(0)
                 Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .staggeredAppear(1)
+                EditLinesView(lines: model.editLines, palette: palette)
                     .staggeredAppear(1)
                 if !v.legend.isEmpty {
                     CalendarKey(legend: v.legend, palette: palette)

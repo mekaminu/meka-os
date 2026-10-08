@@ -21,6 +21,7 @@ import os.meka.core.testing.FaultyTransport
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -908,4 +909,69 @@ class MekaCoreTest {
         a.sessionWent(ask.session!!.habitId, null)
         assertEquals(os.meka.core.domain.NowKind.CLEAR, a.coverNow().kind)
     }
+
+    // ---- Calendar editing: Add event (slice 2b) ----
+
+    /** The server's account list (calendar editing) on top of the in-memory sync service. */
+    private inner class EditingTransport(
+        var list: List<ConnectedAccount>,
+        private val inner: FaultyTransport = FaultyTransport(service),
+    ) : SyncTransport by inner, AccountsApi {
+        var offline = false
+        override suspend fun startConnect(provider: String, editing: Boolean): ConnectStart = ConnectStart.NotSetUp
+        override suspend fun accounts(): List<ConnectedAccount> { if (offline) error("offline"); return list }
+        override suspend fun stopEditing(provider: String, email: String): List<ConnectedAccount> {
+            list = list.map { if (it.provider == provider && it.email == email) it.copy(canEdit = false) else it }
+            return list
+        }
+    }
+
+    @Test
+    fun addEventWaitsForAnAccountThatCanEditThenBecomesAnEditBothDevicesSee() = runTest {
+        val server = EditingTransport(
+            listOf(
+                ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true),
+                ConnectedAccount("microsoft", "meka@outlook.com", "ok", null, canEdit = false),
+                ConnectedAccount("fixtures", "FC Barcelona", "ok", null, canEdit = true),
+            ),
+        )
+        val fold = core("android", server)
+        val mac = core("mac")
+        // Not read yet: nothing to add to.
+        assertTrue(fold.calendarEditAccounts.value.isEmpty())
+        val early = fold.addEventForm(-1).withTitle("Dentist")
+        assertEquals("Allow editing on an account in Calendars first", fold.addEventView(early).problem)
+        assertIs<os.meka.core.domain.EventEditResult.Refused>(fold.addEvent(early))
+
+        assertEquals(listOf("google|meka@gmail.com"), fold.refreshCalendarAccounts().map { it.key })
+        val form = fold.addEventForm(-1).withTitle("Dentist")
+        assertEquals("google|meka@gmail.com", form.accountKey)
+        assertEquals(15 * 60 + 30, form.minute) // 15:13 in London → 15:30
+        val v = fold.addEventView(form)
+        assertTrue(v.canAdd)
+        assertEquals("Add to Google", v.addLabel)
+        val id = assertIs<os.meka.core.domain.EventEditResult.Made>(fold.addEvent(form)).id
+        assertEquals("Adding “Dentist” to Google", fold.eventEditLine(id))
+        assertEquals(listOf(id), fold.calendarEditLines.value.map { it.id })
+
+        // Undo inside the five seconds: the line goes.
+        assertTrue(fold.undoEventEdit(id))
+        assertTrue(fold.calendarEditLines.value.isEmpty())
+
+        val again = assertIs<os.meka.core.domain.EventEditResult.Made>(fold.addEvent(fold.addEventForm(-1).withTitle("Gym"))).id
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(listOf("Adding “Gym” to Google"), mac.calendarEditLines.value.map { it.text })
+        now += 10_000
+        assertFalse(fold.undoEventEdit(again))
+
+        // Offline keeps what was known; Stop editing takes the account away at once.
+        server.offline = true
+        assertTrue(fold.connectedAccounts().isEmpty())
+        assertEquals(1, fold.calendarEditAccounts.value.size)
+        server.offline = false
+        fold.stopCalendarEditing("google", "meka@gmail.com")
+        assertTrue(fold.calendarEditAccounts.value.isEmpty())
+        assertTrue(fold.addEventForm(-1).accountKey == null)
+    }
 }
+

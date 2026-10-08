@@ -137,6 +137,14 @@ class MekaCore(
     private val alarms = os.meka.core.domain.Alarms(replica, nowMs, ZoneCalendar(timeZone)) {
         os.meka.core.domain.LeaveAlarmRules.alarms(events.all(), eventActions.marks(), nowMs(), ZoneCalendar(timeZone))
     }
+    /**
+     * Calendar editing: the accounts where editing is allowed, as the server last listed them ([connectedAccounts]);
+     * empty until read. The server checks again before it sends anything.
+     */
+    private val _editAccounts = MutableStateFlow<List<os.meka.core.domain.EditAccount>>(emptyList())
+    private val calendarEdits = os.meka.core.domain.CalendarEdits(replica, nowMs, ids::next) { p, a ->
+        _editAccounts.value.any { it.provider == p && it.email == a }
+    }
     private var syncClient: SyncClient? = transport?.let { SyncClient(replica, it) }
     private var accountsApi: AccountsApi? = transport as? AccountsApi
     private var releasesApi: ReleasesApi? = transport as? ReleasesApi
@@ -236,6 +244,16 @@ class MekaCore(
     private val _eventMarks = MutableStateFlow(os.meka.core.domain.EventMarks.NONE)
     /** Hidden events and prep tasks (calendar actions); the event detail reads it. */
     val eventMarks: StateFlow<os.meka.core.domain.EventMarks> = _eventMarks.asStateFlow()
+
+    /** Accounts MEKA may add events to (calendar editing), for the Add event button and sheet. */
+    val calendarEditAccounts: StateFlow<List<os.meka.core.domain.EditAccount>> = _editAccounts.asStateFlow()
+
+    private val _editLines = MutableStateFlow<List<os.meka.core.domain.EditLine>>(emptyList())
+    /**
+     * Edits on their way to Google/Outlook, needing Meka, or just sent ("Adding “Dentist” to Google", "Added …"),
+     * newest first, for the Calendar screen. Synced (the other device's edits too); moves with the clock.
+     */
+    val calendarEditLines: StateFlow<List<os.meka.core.domain.EditLine>> = _editLines.asStateFlow()
 
     private val _calendarsOnToday = MutableStateFlow<List<os.meka.core.domain.CalendarChoice>>(emptyList())
     /** Calendars' "On Today" list: every calendar in the mirror and whether it shows on Today (all-day polish). */
@@ -849,12 +867,66 @@ class MekaCore(
      * Stop editing on one account: the server stops changing it at once. Returns the accounts as they are now, or null
      * when it couldn't be reached (nothing changed; the screen says so).
      */
-    suspend fun stopCalendarEditing(provider: String, email: String): List<ConnectedAccount>? =
-        try { accountsApi?.stopEditing(provider, email) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+    suspend fun stopCalendarEditing(provider: String, email: String): List<ConnectedAccount>? {
+        val now = try { accountsApi?.stopEditing(provider, email) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        now?.let(::rememberEditing)
+        return now
+    }
 
     /** Accounts connected for this household, for the Calendars screen. Empty when offline or not connected. */
-    suspend fun connectedAccounts(): List<ConnectedAccount> =
-        try { accountsApi?.accounts() ?: emptyList() } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
+    suspend fun connectedAccounts(): List<ConnectedAccount> {
+        val list = try { accountsApi?.accounts() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        // Offline keeps what was known: the server checks again before sending anything.
+        list?.let(::rememberEditing)
+        return list ?: emptyList()
+    }
+
+    private fun rememberEditing(accounts: List<ConnectedAccount>) {
+        _editAccounts.value = accounts
+            .filter { it.canEdit && it.provider in os.meka.core.domain.CalendarEditRules.WRITABLE }
+            .map { os.meka.core.domain.EditAccount(it.provider, it.email) }
+            .distinct()
+    }
+
+    // ---- Calendar editing: Add event (slice 2b) ----
+
+    /** Reads which accounts allow editing (the Calendar screen asks when it appears). */
+    suspend fun refreshCalendarAccounts(): List<os.meka.core.domain.EditAccount> {
+        connectedAccounts()
+        return _editAccounts.value
+    }
+
+    /**
+     * A fresh Add event sheet on local epoch day [day] (today when negative or earlier): the next quarter hour, an
+     * hour long, on the account Meka last added to while it can still edit.
+     */
+    suspend fun addEventForm(day: Long): os.meka.core.domain.AddEventForm = onCore {
+        val cal = ZoneCalendar(timeZone)
+        os.meka.core.domain.AddEventRules.start(
+            todayEpochDay(), cal.minuteOfDay(nowMs()), day.takeIf { it >= 0 }, _editAccounts.value,
+            os.meka.core.domain.AddEventRules.lastUsedKey(calendarEdits.all()),
+        )
+    }
+
+    /** The sheet as shown for [form] (pure): chips, times, lengths, accounts, and whether Add can go. */
+    fun addEventView(form: os.meka.core.domain.AddEventForm): os.meka.core.domain.AddEventView =
+        os.meka.core.domain.AddEventRules.view(form, _editAccounts.value, nowMs(), ZoneCalendar(timeZone))
+
+    /**
+     * Add: the event becomes a synced edit that waits five seconds for [undoEventEdit], then the server adds it to
+     * Google/Outlook. Refused in words when it can't be written ("Give it a title", "Editing isn't allowed …").
+     */
+    suspend fun addEvent(form: os.meka.core.domain.AddEventForm): os.meka.core.domain.EventEditResult = onCore {
+        val account = os.meka.core.domain.AddEventRules.account(form, _editAccounts.value)
+        if (account == null) os.meka.core.domain.EventEditResult.Refused("Allow editing on an account in Calendars first")
+        else calendarEdits.add(account.provider, account.email, os.meka.core.domain.AddEventRules.draft(form, ZoneCalendar(timeZone)))
+    }
+
+    /** Undo inside the five seconds: nothing is sent. False once it may be on its way. */
+    suspend fun undoEventEdit(id: String): Boolean = onCore { calendarEdits.undo(id) }
+
+    /** The edit's line as it stands ("Adding “Dentist” to Google"), for the undo bar. */
+    fun eventEditLine(id: String): String? = _editLines.value.firstOrNull { it.id == id }?.text
 
     // ---- News pictures (news, images slice) ----
 
@@ -1005,6 +1077,7 @@ class MekaCore(
             work = os.meka.core.domain.WorkHours.of(workState, holidays, todayEpochDay()),
         )
         _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars)
+        _editLines.value = os.meka.core.domain.EditLineRules.lines(calendarEdits.all(), nowMs())
         _afterWork.value = held.summary()
         _notifyPreview.value = Governor.preview(currentNotices(all), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->

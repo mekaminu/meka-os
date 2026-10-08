@@ -56,6 +56,12 @@ final class CoreModel {
     private(set) var calendarsOnToday: [CalendarChoice] = []
     /// The calendar-action undo bar ("Hidden from your day · Undo"); goes after 5 seconds.
     private(set) var eventUndo: EventUndoOffer?
+    /// Calendar editing (slice 2b): the accounts MEKA may add events to, as the server last listed them.
+    private(set) var editAccounts: [EditAccount] = []
+    /// Edits on their way to Google/Outlook, needing Meka, or just sent ("Added “Dentist” to Google"), newest first.
+    private(set) var editLines: [EditLine] = []
+    /// The day the Add event sheet is open on (nil: closed).
+    var addEventDay: Int64?
     /// Quiet hours, digest times and tiers (notification governor), synced with the Fold.
     private(set) var notifySettings: NotificationSettings?
     /// "Quiet until 07:00", "Next digest 18:00 · 3 things so far".
@@ -196,6 +202,12 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await c in core.calendarsOnToday { self?.calendarsOnToday = c }
+        })
+        observers.append(Task { [weak self] in
+            for await a in core.calendarEditAccounts { self?.editAccounts = a }
+        })
+        observers.append(Task { [weak self] in
+            for await l in core.calendarEditLines { self?.editLines = l }
         })
         observers.append(Task { [weak self] in
             for await s in core.notificationSettings { self?.notifySettings = s }
@@ -470,6 +482,42 @@ final class CoreModel {
             calendarsNote = CalendarAccessRules.shared.stoppedLine(provider: provider)
         } else {
             calendarsMessage = "Couldn't reach your server. Editing is still on; try again."
+        }
+    }
+
+    // MARK: Calendar editing: Add event (slice 2b)
+
+    /// Reads which accounts allow editing (the Calendar section asks when it appears).
+    func refreshEditAccounts() async {
+        guard let core else { return }
+        _ = try? await core.refreshCalendarAccounts()
+    }
+
+    /// A fresh Add event form on a local epoch day (negative: today).
+    func addEventForm(day: Int64) async -> AddEventForm? {
+        guard let core else { return nil }
+        return try? await core.addEventForm(day: day)
+    }
+
+    /// The sheet as shown for a form (pure, in the core).
+    func addEventView(_ form: AddEventForm) -> AddEventView? { core?.addEventView(form: form) }
+
+    /// Add: the event becomes a synced edit that waits five seconds for Undo (the undo bar), then the server adds it.
+    /// The form is handed to the core once. Returns why it couldn't be added, or nil once it's on its way.
+    func addEvent(_ form: AddEventForm) async -> String? {
+        guard let core else { return "Connect this Mac to your server first." }
+        MekaHaptics.light()
+        do {
+            switch onEnum(of: try await core.addEvent(form: form)) {
+            case .made(let m):
+                let id = m.id
+                offerEventUndo(core.eventEditLine(id: id) ?? "Adding it to your calendar", .eventEdit(id))
+                return nil
+            case .refused(let r):
+                return r.reason
+            }
+        } catch {
+            return error.localizedDescription
         }
     }
 
@@ -1073,6 +1121,7 @@ final class CoreModel {
         case .leaveBy(let id, let m): run { try await $0.setEventLeaveBy(eventId: id, travelMinutes: m) }
         case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
+        case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
         }
     }
 
@@ -1193,6 +1242,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case decision(DecisionUndo)
         /// A card set aside with Later comes back to the front.
         case unsetAside(String)
+        /// Add event (calendar editing): taken back inside the five seconds, so nothing is sent.
+        case eventEdit(String)
     }
 
     let id = UUID()
