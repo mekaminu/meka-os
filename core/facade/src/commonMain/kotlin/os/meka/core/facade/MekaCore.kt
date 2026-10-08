@@ -343,7 +343,8 @@ class MekaCore(
     suspend fun cancelAlarm(id: String): Boolean = onCore { alarms.cancel(id) }
     suspend fun complete(taskId: String) = onCore { tasks.complete(taskId) }
     suspend fun reopen(taskId: String) = onCore { tasks.reopen(taskId) }
-    suspend fun rename(taskId: String, title: String) = onCore { tasks.edit(taskId, TaskEdit(title = title)) }
+    /** Renames the task; its calendar block (Plan my day's "Also add the blocks") is renamed with it (slice 2g). */
+    suspend fun rename(taskId: String, title: String) = onCore { tasks.edit(taskId, TaskEdit(title = title)); followBlocks(listOf(taskId)); Unit }
     suspend fun schedule(taskId: String, atMs: Long?) = onCore {
         tasks.edit(taskId, if (atMs == null) TaskEdit(clearScheduledAt = true) else TaskEdit(scheduledAtMs = atMs))
         followBlocks(listOf(taskId))
@@ -419,12 +420,26 @@ class MekaCore(
     private val takenBackAdds = HashMap<String, os.meka.core.domain.EventEdit>()
 
     /**
+     * Slice 2g: tasks Meka changed here while their block was still on its way to the calendar; after each sync the
+     * block follows once the calendar has it ([catchUpBlocks]). Kept on this device only, so the other never follows too.
+     */
+    private val waitingFollows = HashMap<String, os.meka.core.domain.WaitingFollow>()
+
+    /** After a sync: blocks that were on their way follow their tasks now that the calendar may have them. */
+    private fun catchUpBlocks() {
+        if (waitingFollows.isEmpty()) return
+        val now = nowMs()
+        waitingFollows.values.removeAll { !it.stillWanted(tasks.get(it.taskId), now) }
+        if (waitingFollows.isNotEmpty()) followBlocks(waitingFollows.keys.toList())
+    }
+
+    /**
      * Slice 2f: keeps the calendar blocks of [taskIds] (from Plan my day's "Also add the blocks") in step after Meka
      * changed those tasks here ([os.meka.core.domain.PlanCalendarRules.follow]): each step is an ordinary calendar edit
      * with its five seconds, made for the task. An edit for the block still inside its five seconds is taken back
      * first and worked out afresh, so Google only gets where the task ended up (a quick Undo sends nothing at all).
-     * Only Meka's own changes on this device lead here, never a sync, so two devices never both follow.
-     * Returns the lines of blocks that couldn't follow yet (still on their way to the calendar).
+     * Only Meka's own changes on this device lead here, never a sync, so two devices never both follow (a block still
+     * on its way is caught up after a later sync on this same device only, see [waitingFollows]). Returns the lines of blocks that couldn't follow yet (still on their way to the calendar).
      */
     private fun followBlocks(taskIds: Collection<String>): List<String> {
         val lines = mutableListOf<String>()
@@ -453,6 +468,7 @@ class MekaCore(
                 // A removal still in its five seconds comes back with Undo even with the setting off.
                 val waiting = block.latest.state(nowMs()) == os.meka.core.domain.EventEditState.WAITING
                 val step = os.meka.core.domain.PlanCalendarRules.follow(task, block, planCalendar.on() || waiting)
+                if (step !is os.meka.core.domain.BlockStep.OnItsWay) waitingFollows.remove(id)
                 if (step is os.meka.core.domain.BlockStep.None) break
                 if (waiting && guard++ < 4) {
                     if (calendarEdits.undo(block.latest.id)) { takenBack = block.latest; continue }
@@ -460,9 +476,15 @@ class MekaCore(
                 when (step) {
                     is os.meka.core.domain.BlockStep.Move ->
                         calendarEdits.change(step.event, os.meka.core.domain.PlanCalendarRules.moved(step.event, step.startAtMs), forTask = id)
+                    is os.meka.core.domain.BlockStep.Change -> calendarEdits.change(step.event, step.draft, forTask = id)
                     is os.meka.core.domain.BlockStep.Remove -> calendarEdits.delete(step.event, forTask = id)
                     is os.meka.core.domain.BlockStep.Add -> calendarEdits.add(step.provider, step.account, step.draft, forTask = id)
-                    is os.meka.core.domain.BlockStep.OnItsWay -> lines += step.line
+                    is os.meka.core.domain.BlockStep.OnItsWay -> {
+                        lines += step.line
+                        val now = nowMs()
+                        waitingFollows[id] = waitingFollows[id]?.takeIf { it.stillWanted(task, now) }
+                            ?: os.meka.core.domain.WaitingFollow.of(id, task, now)
+                    }
                     os.meka.core.domain.BlockStep.None -> Unit
                 }
                 break
@@ -1174,6 +1196,7 @@ class MekaCore(
             _sync.value = if (report.rejected.isEmpty()) SyncStatus.Synced(nowMs())
             else SyncStatus.Failing("${report.rejected.size} change(s) were refused by the server", replica.pendingPushCount())
             refresh()
+            catchUpBlocks()
             null
         } catch (e: CancellationException) {
             throw e

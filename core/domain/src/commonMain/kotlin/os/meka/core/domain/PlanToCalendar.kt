@@ -125,14 +125,31 @@ object PlanCalendarRules {
                     }
             }
         }
-        return TaskBlock(taskId, latest.provider, latest.account, latest, event)
+        return TaskBlock(taskId, latest.provider, latest.account, latest, event, writtenTitle(taskId, edits))
     }
 
     /**
+     * Slice 2g: the title MEKA last wrote for [taskId]'s block (its add, or a follow-up that renamed it); undone,
+     * refused and failed edits don't count. A block whose title isn't this any more was renamed in the calendar by
+     * Meka, so MEKA leaves its title alone.
+     */
+    fun writtenTitle(taskId: String, edits: List<EventEdit>): String? = edits
+        .filter {
+            it.forTask == taskId && !it.undone && it.status != EventEditStatus.REFUSED && it.status != EventEditStatus.FAILED &&
+                it.draft != null && (it.kind == EventEditKind.ADD || EventEditChange.TITLE in it.changes)
+        }
+        .maxWithOrNull(compareBy<EventEdit>({ it.createdAtMs }, { it.id }))?.draft?.title?.trim()
+
+    /** The title a task's block carries: the task's own, trimmed ("Task" when blank). */
+    fun blockTitle(task: Task): String = task.title.trim().ifEmpty { "Task" }
+
+    /**
      * What the block should do now that its task changed: moving the task (When, Tomorrow, Plan again, carrying it
-     * over) moves the block to its new start, keeping its length; Done leaves it where it was; Someday, Skip, Delete
-     * or no time any more removes it; a block removed that way comes back when the task is planned again with the
-     * setting on ([settingOn]), e.g. Undo after Delete. Nothing is done while a clash waits for Meka's choice.
+     * over) moves the block to its new start, keeping its length; renaming the task renames the block (slice 2g),
+     * unless Meka renamed the block in the calendar himself ([TaskBlock.writtenTitle]); Done leaves it where it was;
+     * Someday, Skip, Delete or no time any more removes it; a block removed that way comes back when the task is
+     * planned again with the setting on ([settingOn]), e.g. Undo after Delete. Nothing is done while a clash waits for
+     * Meka's choice.
      */
     fun follow(task: Task?, block: TaskBlock?, settingOn: Boolean): BlockStep {
         if (block == null || task?.lifecycle == Lifecycle.DONE) return BlockStep.None
@@ -144,14 +161,20 @@ object PlanCalendarRules {
             val length = (was.endAtMs - was.startAtMs).takeIf { it > 0 } ?: DEFAULT_LENGTH_MS
             return BlockStep.Add(
                 block.provider, block.account,
-                EventDraft(task.title.trim().ifEmpty { "Task" }, start, start + length, allDay = false, notes = NOTE),
+                EventDraft(blockTitle(task), start, start + length, allDay = false, notes = NOTE),
             )
         }
         val ev = block.event
+        if (start == null) return if (ev == null || ev.isProvisional) BlockStep.OnItsWay(onItsWayLine(block)) else BlockStep.Remove(ev)
+        val title = blockTitle(task)
+        if (ev == null) return BlockStep.OnItsWay(onItsWayLine(block))
+        val written = block.writtenTitle
+        val rename = written != null && ev.title.trim() == written && written != title
+        val move = ev.startAtMs != start
         return when {
-            start == null -> if (ev == null || ev.isProvisional) BlockStep.OnItsWay(onItsWayLine(block)) else BlockStep.Remove(ev)
-            ev != null && ev.startAtMs == start -> BlockStep.None
-            ev == null || ev.isProvisional -> BlockStep.OnItsWay(onItsWayLine(block))
+            !move && !rename -> BlockStep.None
+            ev.isProvisional -> BlockStep.OnItsWay(onItsWayLine(block))
+            rename -> BlockStep.Change(ev, moved(ev, start).copy(title = title))
             else -> BlockStep.Move(ev, start)
         }
     }
@@ -160,11 +183,17 @@ object PlanCalendarRules {
     fun moved(event: CalendarEvent, startAtMs: Long): EventDraft =
         CalendarEditRules.draftOf(event).copy(startAtMs = startAtMs, endAtMs = startAtMs + (event.endAtMs - event.startAtMs))
 
-    /** "The block is still on its way to Google · change it there once it shows" (said, nothing sent). */
+    /**
+     * "The block is still on its way to Google · it follows once it's there" (nothing sent yet; the device that made
+     * the change follows once the calendar has it, see [WaitingFollow]).
+     */
     fun onItsWayLine(block: TaskBlock): String {
         val p = CalendarEditRules.providerName(block.provider)
-        return "The block is still on its way to $p · change it there once it shows"
+        return "The block is still on its way to $p · it follows once it's there"
     }
+
+    /** How long a device keeps trying to catch up a block that was still on its way (the mirror takes about a minute). */
+    const val WAIT_FOLLOW_MS = 30 * 60_000L
 
     /** A re-added block's length when the old one's is unknown. */
     const val DEFAULT_LENGTH_MS = 30 * 60_000L
@@ -179,6 +208,8 @@ data class TaskBlock(
     val latest: EventEdit,
     /** The event it is now; null when removed, or not to be found yet. */
     val event: CalendarEvent?,
+    /** The title MEKA last wrote for it ([PlanCalendarRules.writtenTitle]). */
+    val writtenTitle: String? = null,
 ) {
     val removed: Boolean get() = latest.kind == EventEditKind.DELETE
 }
@@ -188,12 +219,39 @@ sealed class BlockStep {
     data object None : BlockStep()
     /** Move it to start at [startAtMs] (same length). */
     data class Move(val event: CalendarEvent, val startAtMs: Long) : BlockStep()
+    /** Rename it (and move it when the time changed too): [draft] is the whole event as it should be. */
+    data class Change(val event: CalendarEvent, val draft: EventDraft) : BlockStep()
     /** Take it out of the calendar. */
     data class Remove(val event: CalendarEvent) : BlockStep()
     /** Add it again (it was removed with the task, and the task is planned again). */
     data class Add(val provider: String, val account: String, val draft: EventDraft) : BlockStep()
     /** It should follow, but the provider doesn't have it yet, so nothing can be sent. */
     data class OnItsWay(val line: String) : BlockStep()
+}
+
+/**
+ * Slice 2g: a task change whose block was still on its way to the calendar ([BlockStep.OnItsWay]), kept on the device
+ * where Meka made it (never synced, so only that device follows) and tried again after each sync until the calendar has
+ * the block. Dropped when the task has changed since (that newer change has its own follow-up, possibly on the other
+ * device) or after [PlanCalendarRules.WAIT_FOLLOW_MS].
+ */
+data class WaitingFollow(
+    val taskId: String,
+    /** False when the task was deleted. */
+    val present: Boolean,
+    val scheduledAtMs: Long?,
+    val title: String,
+    val lifecycle: Lifecycle?,
+    val sinceMs: Long,
+) {
+    /** Whether to try again now: the task is as it was when it waited, and it hasn't waited too long. */
+    fun stillWanted(task: Task?, nowMs: Long): Boolean =
+        nowMs - sinceMs <= PlanCalendarRules.WAIT_FOLLOW_MS && this == of(taskId, task, sinceMs)
+
+    companion object {
+        fun of(taskId: String, task: Task?, nowMs: Long) =
+            WaitingFollow(taskId, task != null, task?.scheduledAtMs, task?.title.orEmpty(), task?.lifecycle, nowMs)
+    }
 }
 
 /** The synced setting (`context_mode/plan`). */

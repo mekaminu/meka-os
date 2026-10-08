@@ -1112,4 +1112,56 @@ class MekaCoreTest {
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         assertTrue(shown(mac).isEmpty())
     }
+
+    @Test
+    fun aRenamedTaskRenamesItsBlockAndABlockStillOnItsWayFollowsAfterTheNextSyncOnThatDeviceOnly() = runTest {
+        val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
+        val fold = core("android", server)
+        val mac = core("mac")
+        val taskId = fold.addTask("Write report")
+        fold.refreshCalendarAccounts()
+        fold.setPlanToCalendar(true)
+        val plan = fold.planDay()
+        val addId = fold.applyPlan(plan).editIds.single()
+        val p = plan.placements.single()
+        now += 10_000
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+
+        // Google took it, but the mirror hasn't caught up: the rename can't be sent yet.
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        var k = 0
+        fun serverWrite(type: String, id: String, fields: Map<String, os.meka.core.sync.FieldValue>) = fields.forEach { (f, v) ->
+            serverOps.append(os.meka.core.sync.Op("srvren${k++}", "hh", type, id, f, v, clock.now(), emptyList(), "server"))
+        }
+        serverWrite(os.meka.core.domain.EntityTypes.EVENT_EDIT, addId, mapOf(
+            os.meka.core.domain.EventEditFields.STATUS to os.meka.core.sync.FieldValue.Text("DONE"),
+            os.meka.core.domain.EventEditFields.STATUS_AT to os.meka.core.sync.FieldValue.Int64(now),
+        ))
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        fold.rename(taskId, "Write the Q3 report")
+        assertTrue(fold.calendarEditLines.value.isEmpty())
+
+        // The mirror has it now: after the next sync the Fold (where Meka renamed it) renames the block; the Mac doesn't.
+        serverWrite(os.meka.core.domain.EntityTypes.EVENT, "g1", mapOf(
+            os.meka.core.domain.EventFields.TITLE to os.meka.core.sync.FieldValue.Text("Write report"),
+            os.meka.core.domain.EventFields.START_AT to os.meka.core.sync.FieldValue.Int64(p.startMs),
+            os.meka.core.domain.EventFields.END_AT to os.meka.core.sync.FieldValue.Int64(p.endMs),
+            os.meka.core.domain.EventFields.ALL_DAY to os.meka.core.sync.FieldValue.Bool(false),
+            os.meka.core.domain.EventFields.PROVIDER to os.meka.core.sync.FieldValue.Text("google"),
+            os.meka.core.domain.EventFields.ACCOUNT to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
+            os.meka.core.domain.EventFields.CALENDAR to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
+            os.meka.core.domain.EventFields.REMOVED to os.meka.core.sync.FieldValue.Bool(false),
+        ))
+        assertTrue(mac.syncNow())
+        assertTrue(mac.calendarEditLines.value.isEmpty())
+        assertTrue(fold.syncNow())
+        assertEquals(listOf("Changing “Write the Q3 report” in Google"), fold.calendarEditLines.value.map { it.text })
+        assertTrue(fold.today.value.events.none { it.title.startsWith("Write") })
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(1, mac.calendarEditLines.value.size) // the Fold's one change, nothing of the Mac's own
+
+        // Renamed again while that change is in its five seconds: it is taken back and one rename goes.
+        fold.rename(taskId, "Write the report")
+        assertEquals(listOf("Changing “Write the report” in Google"), fold.calendarEditLines.value.map { it.text })
+    }
 }

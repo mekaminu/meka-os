@@ -196,7 +196,7 @@ class PlanToCalendarTest {
         assertTrue(waiting.event!!.isProvisional)
         assertEquals(EventEditState.WAITING, waiting.latest.state(now))
         val step = PlanCalendarRules.follow(planned(at(15)), waiting, true)
-        assertEquals(BlockStep.OnItsWay("The block is still on its way to Google · change it there once it shows"), step)
+        assertEquals(BlockStep.OnItsWay("The block is still on its way to Google · it follows once it's there"), step)
         // Answered, but the mirror hasn't caught up: still on its way.
         world.clock.nowMs += 10_000
         sync(); answer(id, "DONE"); sync()
@@ -220,5 +220,80 @@ class PlanToCalendarTest {
         val block = blockNow(listOf(inGoogle))!!
         assertEquals(EventEditKind.ADD, block.latest.kind)
         assertEquals("g9", block.event?.id)
+    }
+
+    // ---- Slice 2g: a renamed task renames its block; a block on its way follows later ----
+
+    @Test
+    fun aRenamedTaskRenamesItsBlockAndMovesItTooWhenTheTimeChanged() {
+        blockInGoogle()
+        val block = blockNow(listOf(inGoogle))!!
+        assertEquals("Write report", block.writtenTitle)
+        val renamed = planned(at(11)).copy(title = "  Write Q3 report ")
+        assertEquals(BlockStep.Change(inGoogle, EventDraft("Write Q3 report", at(11), at(11, 30), false)), PlanCalendarRules.follow(renamed, block, true))
+        assertEquals(
+            BlockStep.Change(inGoogle, EventDraft("Write Q3 report", at(15), at(15, 30), false)),
+            PlanCalendarRules.follow(renamed.copy(scheduledAtMs = at(15)), block, true),
+        )
+        // A blank title becomes "Task", as when the block was made.
+        assertEquals("Task", PlanCalendarRules.blockTitle(renamed.copy(title = "  ")))
+
+        // The rename is an ordinary change made for the task: only the title is sent; the block is still hidden.
+        val step = PlanCalendarRules.follow(renamed, block, true) as BlockStep.Change
+        val c = eFold.edit(made(eFold.change(step.event, step.draft, forTask = "t1")))!!
+        assertEquals(setOf(EventEditChange.TITLE), c.changes)
+        assertEquals("Changing “Write Q3 report” in Google", CalendarEditRules.line(c, now))
+        val after = blockNow(listOf(inGoogle))!!
+        assertEquals("Write Q3 report", after.writtenTitle)
+        assertEquals("Write Q3 report", after.event?.title)
+        assertEquals(BlockStep.None, PlanCalendarRules.follow(renamed, after, true))
+        assertEquals(listOf("ev2"), PlanCalendarRules.withoutTaskBlocks(PendingEditRules.apply(listOf(dentist, inGoogle), eFold.all(), now), eFold.all()).map { it.id })
+        // Polled with the new name: still the task's block, on the Mac too.
+        sync()
+        val polled = inGoogle.copy(title = "Write Q3 report")
+        assertEquals(listOf("ev2"), PlanCalendarRules.withoutTaskBlocks(listOf(dentist, polled), eMac.all()).map { it.id })
+        // Undone, the rename doesn't count.
+        assertTrue(eFold.undo(c.id))
+        assertEquals("Write report", blockNow(listOf(inGoogle))!!.writtenTitle)
+    }
+
+    @Test
+    fun aBlockMekaRenamedInGoogleKeepsHisTitleWhenItMoves() {
+        val id = blockInGoogle()
+        // He renamed the block in Google after a move made for the task (found by id from then on).
+        made(eFold.change(inGoogle, PlanCalendarRules.moved(inGoogle, at(15)), forTask = "t1"))
+        world.clock.nowMs += 10_000
+        sync()
+        for (e in eFold.all().filter { it.id != id }) answer(e.id, "DONE")
+        sync()
+        val his = inGoogle.copy(title = "Report (do it properly)", startAtMs = at(15), endAtMs = at(15, 30))
+        val block = blockNow(listOf(his))!!
+        assertEquals("Write report", block.writtenTitle)
+        val renamed = planned(at(15)).copy(title = "Write Q3 report")
+        assertEquals(BlockStep.None, PlanCalendarRules.follow(renamed, block, true))
+        assertEquals(BlockStep.Move(his, at(16)), PlanCalendarRules.follow(renamed.copy(scheduledAtMs = at(16)), block, true))
+        assertEquals("Report (do it properly)", PlanCalendarRules.moved(his, at(16)).title)
+    }
+
+    @Test
+    fun aRenameWhileTheBlockIsOnItsWayWaitsAndTheWaitIsDroppedOnceTheTaskChangesAgain() {
+        val id = made(eFold.add("google", "meka@gmail.com", PlanCalendarRules.draft(report), forTask = "t1"))
+        world.clock.nowMs += 10_000
+        sync(); answer(id, "DONE"); sync()
+        val renamed = planned(at(11)).copy(title = "Write Q3 report")
+        assertIs<BlockStep.OnItsWay>(PlanCalendarRules.follow(renamed, blockNow(emptyList()), true))
+        // Once the mirror has it, the same task renames it.
+        assertIs<BlockStep.Change>(PlanCalendarRules.follow(renamed, blockNow(listOf(inGoogle)), true))
+
+        val w = WaitingFollow.of("t1", renamed, now)
+        assertTrue(w.stillWanted(renamed, now + 60_000))
+        assertFalse(w.stillWanted(renamed.copy(scheduledAtMs = at(16)), now)) // changed again (maybe on the Mac)
+        assertFalse(w.stillWanted(renamed.copy(title = "Other"), now))
+        assertFalse(w.stillWanted(renamed.copy(lifecycle = Lifecycle.SOMEDAY), now))
+        assertFalse(w.stillWanted(null, now))
+        assertFalse(w.stillWanted(renamed, now + PlanCalendarRules.WAIT_FOLLOW_MS + 1))
+        val deleted = WaitingFollow.of("t1", null, now)
+        assertTrue(deleted.stillWanted(null, now))
+        assertFalse(deleted.stillWanted(renamed, now))
     }
 }
