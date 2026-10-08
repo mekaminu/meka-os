@@ -119,4 +119,6 @@ enum MekaChoreography {
     static let expressiveRiseDistance: CGFloat = 28
     static let expressiveCountUp: Double = 0.900
     static let expressiveEntryScale: CGFloat = 0.96
+    static let pressScale: CGFloat = 0.97
+    static let hoverLift: CGFloat = 2
 }

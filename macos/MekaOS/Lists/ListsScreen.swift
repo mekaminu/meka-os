@@ -218,7 +218,7 @@ struct ListRowView<Details: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MekaPressStyle())
             .accessibilityHint(expanded ? "Hides actions" : "Shows actions")
             if expanded {
                 VStack(alignment: .leading, spacing: MekaSpace.s) { details() }
@@ -347,6 +347,6 @@ private struct AddDecisionRow: View {
 
 extension View {
     func rowActions(_ palette: MekaPalette) -> some View {
-        buttonStyle(.plain).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+        buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
     }
 }

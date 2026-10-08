@@ -172,7 +172,7 @@ struct StillTicker: View {
                 Button("›") { step(1) }.accessibilityLabel("Next headline")
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MekaPressStyle())
         .foregroundStyle(palette.accent)
         .animation(MekaMotion.appear(reduced: true), value: i)
     }

@@ -138,6 +138,7 @@ struct AfterWorkCard: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(MekaPressStyle())
+                .mekaHoverLift()
             }
         }
     }

@@ -32,7 +32,7 @@ struct ShutdownSheet: View {
                         }
                         if v.left.count > 1 {
                             Button("Move the rest to tomorrow") { model.carryAllToTomorrow() }
-                                .buttonStyle(.plain).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                                .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
                                 .padding(.vertical, MekaSpace.xs)
                                 .staggeredAppear(1)
                         }
@@ -123,7 +123,7 @@ private struct LeftRow: View {
                     if item.canSkip { Button("Skip") { model.skip(item.task.id) } }
                     if item.canSomeday { Button("Someday") { model.moveToSomeday(item.task.id) } }
                 }
-                .buttonStyle(.plain).font(MekaType.caption).foregroundStyle(palette.accent)
+                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
                 .padding(.top, 2)
             }
             Spacer()
@@ -174,6 +174,7 @@ struct ShutdownCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(MekaPressStyle())
+        .mekaHoverLift()
     }
 }
 
@@ -204,6 +205,6 @@ struct TomorrowGlanceView: View {
             .contentShape(Rectangle())
             .animation(MekaMotion.appear(reduced: reduceMotion), value: glance)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MekaPressStyle())
     }
 }

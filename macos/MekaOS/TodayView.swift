@@ -60,7 +60,7 @@ struct TodayView: View {
                     }
                     if !model.isConnected || model.signedOut {
                         Button(model.signedOut ? "Reconnect this Mac" : "This Mac isn't syncing yet · Connect") { model.showConnect = true }
-                            .buttonStyle(.plain)
+                            .buttonStyle(MekaPressStyle())
                             .font(MekaType.caption)
                             .foregroundStyle(palette.accent)
                     }
@@ -69,7 +69,7 @@ struct TodayView: View {
                         Button("Plan my day") { model.showPlan = true }
                         // Work mode, the brief, the shutdown and the theme live in Ask's More now (Today clarity, slice 2).
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MekaPressStyle())
                     .font(MekaType.caption)
                     .foregroundStyle(palette.accent)
                     .staggeredAppear(0, play: play)
@@ -508,6 +508,7 @@ private struct UpNextCard: View {
         .padding(MekaSpace.l)
         .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surfaceRaised))
         .onTapGesture { model.select(task.id, reduced: reduceMotion) }
+        .mekaHoverLift()
     }
 }
 
@@ -539,7 +540,7 @@ struct CompleteButton: View {
             .frame(width: 22, height: 22)
             .scaleEffect(pressed && !reduceMotion ? 0.9 : 1)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MekaPressStyle())
         .accessibilityLabel("Complete \(task.title)")
     }
 }
@@ -607,7 +608,7 @@ private struct DetailContent: View {
                     Text("EDITED ON TWO DEVICES").font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
                     ForEach(c.options, id: \.self) { option in
                         Button(option) { model.resolve(c, with: option) }
-                            .buttonStyle(.plain)
+                            .buttonStyle(MekaPressStyle())
                             .font(MekaType.itemTitle)
                             .padding(MekaSpace.m)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -632,7 +633,7 @@ private struct DetailContent: View {
                     }
                     Button("Delete", role: .destructive) { model.delete(task.id) }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MekaPressStyle())
                 .font(MekaType.itemTitle)
                 .foregroundStyle(palette.accent)
             } else {

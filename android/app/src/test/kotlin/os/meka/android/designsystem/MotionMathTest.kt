@@ -60,4 +60,21 @@ class MotionMathTest {
         assertEquals(1f, MotionMath.easeOutCubic(2f))
         assertTrue(MotionMath.easeOutCubic(0.5f) > 0.5f)
     }
+
+    @Test
+    fun anythingTappablePressesInToNinetySevenPercentAndOffOnlyDims() {
+        assertEquals(1f, MotionMath.pressScale(pressed = false, reduced = false))
+        assertEquals(0.97f, MotionMath.pressScale(pressed = true, reduced = false))
+        assertEquals(1f, MotionMath.pressScale(pressed = true, reduced = true))
+        assertEquals(0f, MotionMath.pressDim(pressed = false, reduced = true))
+        assertTrue(MotionMath.pressDim(pressed = true, reduced = true) > MotionMath.pressDim(pressed = true, reduced = false))
+        assertTrue(MotionMath.pressDim(pressed = true, reduced = false) > 0f)
+    }
+
+    @Test
+    fun cardsLiftTwoDpUnderThePointerExceptWithMotionOff() {
+        assertEquals(2, MotionMath.hoverLiftDp(hovering = true, reduced = false))
+        assertEquals(0, MotionMath.hoverLiftDp(hovering = false, reduced = false))
+        assertEquals(0, MotionMath.hoverLiftDp(hovering = true, reduced = true))
+    }
 }

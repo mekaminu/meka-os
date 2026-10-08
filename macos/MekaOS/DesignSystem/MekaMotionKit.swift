@@ -34,6 +34,22 @@ enum MotionMath {
         reduced || !expressive ? 1 : MekaChoreography.expressiveEntryScale
     }
 
+    /// Scale of anything clickable while held (feedback motion, motion pass 2): 0.97 in Subtle and Expressive; Off never
+    /// scales (a brief dim instead, `pressOpacity`).
+    static func pressScale(pressed: Bool, reduced: Bool) -> CGFloat {
+        pressed && !reduced ? MekaChoreography.pressScale : 1
+    }
+
+    /// Opacity of a held item: only Motion → Off dims it, since it doesn't press in.
+    static func pressOpacity(pressed: Bool, reduced: Bool) -> Double {
+        pressed && reduced ? 0.85 : 1
+    }
+
+    /// How far (pt) a card lifts while the pointer is over it. None with Motion → Off.
+    static func hoverLift(hovering: Bool, reduced: Bool) -> CGFloat {
+        hovering && !reduced ? MekaChoreography.hoverLift : 0
+    }
+
     /// Ease-out cubic: fast start, gentle landing.
     static func easeOutCubic(_ fraction: Double) -> Double {
         let f = min(max(fraction, 0), 1)
@@ -160,18 +176,36 @@ struct SkeletonRows: View {
     }
 }
 
-/// Cards and More rows press in as they're clicked (scale 0.97 on the complete spring) before what they open
-/// scale-fades in (Four tabs, slice 3; the Mac's simpler stand-in for the Fold's travelling titles, rule 7).
-/// Reduce Motion: a brief dim instead.
+/// Every plain button in the app presses in as it's clicked (scale 0.97 on the complete spring; feedback motion,
+/// motion pass 2): cards, More rows, text actions and chips, before what they open scale-fades in. It draws only the
+/// label, like `.plain`. Motion → Off: a brief dim instead.
 struct MekaPressStyle: ButtonStyle {
     @Environment(\.mekaReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-            .opacity(configuration.isPressed && reduceMotion ? 0.85 : 1)
+            .scaleEffect(MotionMath.pressScale(pressed: configuration.isPressed, reduced: reduceMotion))
+            .opacity(MotionMath.pressOpacity(pressed: configuration.isPressed, reduced: reduceMotion))
             .animation(MekaMotion.complete(reduced: reduceMotion), value: configuration.isPressed)
     }
+}
+
+/// Cards lift 2 pt while the pointer is over them (motion pass 2: "hover lifts cards 2 pt"); no shadow, since elevation
+/// is surface tone (ADR-012). Motion → Off: still.
+private struct MekaHoverLift: ViewModifier {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .offset(y: -MotionMath.hoverLift(hovering: hovering, reduced: reduceMotion))
+            .onHover { h in withAnimation(MekaMotion.appear(reduced: reduceMotion)) { hovering = h } }
+    }
+}
+
+extension View {
+    /// Lifts this card 2 pt under the pointer (see `MekaHoverLift`).
+    func mekaHoverLift() -> some View { modifier(MekaHoverLift()) }
 }
 
 /// Haptics named for what happened (catalogue: light on complete, medium on approve). Trackpad only; silent otherwise.

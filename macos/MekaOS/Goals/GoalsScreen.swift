@@ -39,7 +39,7 @@ struct GoalsScreen: View {
                 if !(model.goals?.habits ?? []).contains(where: { $0.booked }) {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Button("Add Gym") { model.addGym() }
-                            .buttonStyle(.plain).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                            .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
                         Text("Three times a week, evenings, an hour: MEKA books the sessions around your calendar and work, and rebooks a missed one.")
                             .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
@@ -113,7 +113,7 @@ private struct HabitRowView: View {
                     .scaleEffect(habit.doneToday || reduceMotion ? 1 : 0.9)
                     .animation(reduceMotion ? MekaMotion.appear(reduced: true) : .spring(response: 0.28, dampingFraction: 0.5), value: habit.doneToday)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MekaPressStyle())
                 .accessibilityLabel((habit.doneToday ? "Untick " : "Tick ") + habit.title + " for today")
 
                 Button(action: toggle) {
@@ -148,7 +148,7 @@ private struct HabitRowView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MekaPressStyle())
                 .accessibilityHint(expanded ? "Hides settings" : "Shows settings")
             }
             if expanded {
@@ -179,7 +179,7 @@ private struct HabitRowView: View {
                         .menuStyle(.button).fixedSize()
                     }
                     Button("Delete", role: .destructive) { model.deleteHabit(habit.id) }
-                        .buttonStyle(.plain).font(MekaType.itemTitle).foregroundStyle(palette.critical)
+                        .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.critical)
                 }
                 .padding(.leading, 22 + MekaSpace.m)
                 .transition(.opacity.combined(with: .move(edge: .top)))
@@ -235,7 +235,7 @@ private struct AppLinkField: View {
                     .onChange(of: text) { bad = false }
                 if habit.appLink != nil {
                     Button("Remove") { save("") }
-                        .buttonStyle(.plain).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                        .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
                 }
             }
             Text(line).font(MekaType.caption).foregroundStyle(bad ? palette.critical : palette.textTertiary)
@@ -289,7 +289,7 @@ private struct GoalRowView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MekaPressStyle())
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(goal.title), \(goal.progressPct) percent, \(goal.meta)")
             .accessibilityHint(expanded ? "Hides actions" : "Shows actions")
@@ -309,7 +309,7 @@ private struct GoalRowView: View {
                         Button("Finished") { model.finishGoal(goal.id) }
                         Button("Delete", role: .destructive) { model.deleteGoal(goal.id) }.foregroundStyle(palette.critical)
                     }
-                    .buttonStyle(.plain).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                    .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
                     if goal.counted {
                         Text("Progress counts itself from the habits and tasks linked to this goal.")
                             .font(MekaType.caption).foregroundStyle(palette.textTertiary)

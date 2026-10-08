@@ -273,5 +273,6 @@ struct ReviewCardView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(MekaPressStyle())
+        .mekaHoverLift()
     }
 }

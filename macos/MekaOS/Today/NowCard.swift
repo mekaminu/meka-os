@@ -25,13 +25,13 @@ struct NowCard: View {
                     Button(then) {
                         if let t = v.thenTask { openTask(t.id) } else if let e = v.thenEvent { openEvent(e) }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MekaPressStyle())
                     .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
                     .disabled(v.thenTask == nil && v.thenEvent == nil)
                 }
                 if let needs = v.needsYouLine {
                     Button("\(needs) ›") { bringForward { model.go(to: .needsYou, reduced: reduceMotion) } }
-                        .buttonStyle(.plain)
+                        .buttonStyle(MekaPressStyle())
                         .font(MekaType.itemMeta).foregroundStyle(palette.accent)
                 }
             }

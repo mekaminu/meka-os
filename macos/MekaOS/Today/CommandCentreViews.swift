@@ -16,7 +16,7 @@ struct CommandSideView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     if model.selected != nil {
                         Button("Close") { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { model.selectedID = nil } }
-                            .buttonStyle(.plain)
+                            .buttonStyle(MekaPressStyle())
                             .font(MekaType.itemMeta)
                             .foregroundStyle(palette.accent)
                             .keyboardShortcut(.cancelAction)
@@ -98,7 +98,7 @@ struct ComingUpColumnView: View {
                         dayView(day).staggeredAppear(1 + i)
                     }
                     Button("Open Calendar ›") { model.go(to: .calendar, reduced: reduceMotion) }
-                        .buttonStyle(.plain)
+                        .buttonStyle(MekaPressStyle())
                         .font(MekaType.itemMeta)
                         .foregroundStyle(palette.accent)
                         .padding(.top, MekaSpace.s)
@@ -128,7 +128,7 @@ struct ComingUpColumnView: View {
                     }
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MekaPressStyle())
             ForEach(day.lines, id: \.id) { line in
                 lineView(line)
             }
@@ -174,7 +174,7 @@ struct ComingUpColumnView: View {
                 .accessibilityHint("Opens the story")
             }
             Button("Open News ›") { model.newsStoryId = nil; model.showNews = true }
-                .buttonStyle(.plain)
+                .buttonStyle(MekaPressStyle())
                 .font(MekaType.itemMeta)
                 .foregroundStyle(palette.accent)
                 .padding(.top, MekaSpace.s)

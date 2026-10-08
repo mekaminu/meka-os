@@ -161,7 +161,7 @@ private struct DayPillView: View {
             .opacity(day.inRange ? 1 : 0.5)
             .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MekaPressStyle())
         .disabled(day.sectionId == nil)
         .accessibilityLabel(day.accessibilityLabel)
         .accessibilityAddTraits(lit ? .isSelected : [])

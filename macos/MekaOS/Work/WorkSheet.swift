@@ -33,7 +33,7 @@ struct WorkSheet: View {
                     .buttonStyle(.borderedProminent)
                 if model.work?.switchedManually == true {
                     Button("Back to my hours") { model.workBackToSchedule() }
-                        .buttonStyle(.plain).foregroundStyle(palette.accent)
+                        .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent)
                         .transition(.opacity)
                 }
             }

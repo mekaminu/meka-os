@@ -344,7 +344,7 @@ struct AllDayMore: View {
                 .padding(.vertical, MekaSpace.xxs)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MekaPressStyle())
     }
 }
 
@@ -366,7 +366,7 @@ struct EarlierToggle: View {
             .padding(.vertical, MekaSpace.xxs)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MekaPressStyle())
     }
 }
 

@@ -132,4 +132,6 @@ object MekaChoreography {
     const val expressiveRiseDistanceDp = 28
     const val expressiveCountUpMs = 900
     const val expressiveEntryScale = 0.96f
+    const val pressScale = 0.97f
+    const val hoverLiftDp = 2
 }

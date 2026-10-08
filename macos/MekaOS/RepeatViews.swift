@@ -82,14 +82,14 @@ private struct StepRow: View {
                 .scaleEffect(step.checked || reduceMotion ? 1 : 0.9)
                 .animation(reduceMotion ? MekaMotion.appear(reduced: true) : .spring(response: 0.28, dampingFraction: 0.5), value: step.checked)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MekaPressStyle())
             .accessibilityLabel((step.checked ? "Untick " : "Tick ") + step.text)
             Text(step.text)
                 .font(MekaType.body)
                 .foregroundStyle(step.checked ? palette.textTertiary : palette.textPrimary)
             Spacer()
             Button("Remove") { model.removeStep(step.id) }
-                .buttonStyle(.plain)
+                .buttonStyle(MekaPressStyle())
                 .font(MekaType.caption)
                 .foregroundStyle(palette.textTertiary)
         }

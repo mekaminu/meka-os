@@ -3,6 +3,7 @@ package os.meka.android.designsystem
 import android.content.Context
 import android.provider.Settings
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -79,7 +80,8 @@ object MotionPrefs {
  * Follows MEKA's own Motion setting (Appearance → Motion), not the phone's animator scale: the activity's recomposer
  * plays animations at full speed (MotionClock.kt) and Off means cross-fades only. With nothing chosen, the phone's
  * "Remove animations" keeps MEKA still and Today offers a one-time card.
- * Switching theme blends every colour across instead of snapping.
+ * Switching theme blends every colour across instead of snapping. Every clickable presses in while held
+ * ([MekaPressIndication]).
  */
 @Composable
 fun MekaTheme(content: @Composable () -> Unit) {
@@ -100,12 +102,15 @@ fun MekaTheme(content: @Composable () -> Unit) {
     val t by animateFloatAsState(if (dark) 1f else 0f, MekaMotion.themeBlend(reduced), label = "theme")
     val colors = blend(MekaLightColors, MekaDarkColors, t)
     val control = ThemeControl(choice, dark) { choice = it; ThemeChoice.save(context, it) }
+    // Feedback motion: every clickable presses in (0.97) while held (PressIndication.kt).
+    val press = remember(reduced, colors.textPrimary) { MekaPressIndication(reduced, colors.textPrimary) }
     CompositionLocalProvider(
         LocalMekaColors provides colors,
         LocalReducedMotion provides reduced,
         LocalExpressiveMotion provides expressive,
         LocalMotionControl provides motion,
         LocalThemeControl provides control,
+        LocalIndication provides press,
         content = content,
     )
 }

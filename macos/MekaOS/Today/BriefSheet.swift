@@ -185,5 +185,6 @@ struct BriefCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(MekaPressStyle())
+        .mekaHoverLift()
     }
 }

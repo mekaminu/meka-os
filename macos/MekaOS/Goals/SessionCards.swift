@@ -78,7 +78,7 @@ private struct SessionCardView: View {
                         .accessibilityHint("Opens \(card.appName ?? "the app") outside MEKA")
                 }
             }
-            .buttonStyle(.plain).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+            .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
 
             if went && card.note == nil {
                 TextField("Add a note · push day, 5 km… (optional)", text: $note)

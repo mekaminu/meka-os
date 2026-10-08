@@ -130,7 +130,7 @@ private struct SearchRow: View {
             }
             if unfolded {
                 Button("Reopen") { onReopen() }
-                    .buttonStyle(.plain).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                    .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
                     .padding(.top, MekaSpace.xxs)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }

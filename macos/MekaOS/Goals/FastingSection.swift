@@ -143,7 +143,7 @@ struct FastingSection: View {
                 .menuStyle(.button).fixedSize()
             }
         }
-        .buttonStyle(.plain).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+        .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
     }
 }
 

@@ -70,7 +70,7 @@ struct ActivitySheet: View {
                         Text(undone).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     } else if row.canUndo {
                         Button("Undo") { model.undoActivity(row.id) }
-                            .buttonStyle(.plain).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                            .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
                     }
                 }
                 .transition(.opacity)

@@ -30,7 +30,7 @@ struct AskScreen: View {
                     .background(palette.surfaceRaised, in: Capsule())
                     .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MekaPressStyle())
                 .accessibilityLabel("Search everything")
                 .staggeredAppear(1)
                 Text("Tasks, events, lists, goals and habits. Asking in your own words comes with the AI layer.")
@@ -84,7 +84,6 @@ private struct MoreRow: View {
     let lit: Bool
     let palette: MekaPalette
     let action: () -> Void
-    @State private var hovering = false
     @Environment(\.mekaReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -105,10 +104,9 @@ private struct MoreRow: View {
             .padding(.vertical, MekaSpace.s)
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
             .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
-            .offset(y: hovering && !reduceMotion ? -2 : 0)
         }
         .buttonStyle(MekaPressStyle())
-        .onHover { h in withAnimation(MekaMotion.appear(reduced: reduceMotion)) { hovering = h } }
+        .mekaHoverLift()
         .accessibilityHint(item.destination == nil ? "Opens a sheet" : "Opens \(item.label)")
     }
 }
@@ -170,7 +168,7 @@ private struct AppearanceRow: View {
                 }
                 Spacer()
                 Button("Topics…") { model.showNews = true }
-                    .buttonStyle(.plain).font(MekaType.caption).foregroundStyle(palette.accent)
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
                 Picker("News ticker", selection: $ticker) {
                     ForEach(NewsTickerChoice.all, id: \.id) { m in Text(m.label).tag(m.id) }
                 }

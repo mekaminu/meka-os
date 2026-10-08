@@ -82,7 +82,7 @@ function kotlin() {
   s += '\n/** Sequencing for motion (stagger, rise, count-up, shimmer). Values in ms unless the name says otherwise. */\nobject MekaChoreography {\n';
   for (const [k, v] of entries(t.choreography)) {
     if (/scale$/i.test(k)) s += `    const val ${k} = ${v.$value}f\n`;
-    else s += `    const val ${k}${k === 'staggerMaxSteps' ? '' : /riseDistance$/i.test(k) ? 'Dp' : 'Ms'} = ${v.$value}\n`;
+    else s += `    const val ${k}${k === 'staggerMaxSteps' ? '' : /(riseDistance|Lift)$/i.test(k) ? 'Dp' : 'Ms'} = ${v.$value}\n`;
   }
   s += '}\n';
   return s;
@@ -119,7 +119,7 @@ function swift() {
   s += '\n/// Sequencing for motion (stagger, rise, count-up, shimmer). Durations in seconds; distances in points.\nenum MekaChoreography {\n';
   for (const [k, v] of entries(t.choreography)) {
     if (k === 'staggerMaxSteps') s += `    static let ${k} = ${v.$value}\n`;
-    else if (/riseDistance$/i.test(k) || /scale$/i.test(k)) s += `    static let ${k}: CGFloat = ${v.$value}\n`;
+    else if (/(riseDistance|Lift)$/i.test(k) || /scale$/i.test(k)) s += `    static let ${k}: CGFloat = ${v.$value}\n`;
     else s += `    static let ${k}: Double = ${(v.$value / 1000).toFixed(3)}\n`;
   }
   s += '}\n';

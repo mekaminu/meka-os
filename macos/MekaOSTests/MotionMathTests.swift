@@ -55,4 +55,16 @@ final class MotionMathTests: XCTestCase {
         XCTAssertEqual(MotionMath.countUpValue(from: 20, to: 10, fraction: 1), 10)
         XCTAssertGreaterThan(MotionMath.easeOutCubic(0.5), 0.5)
     }
+
+    @MainActor
+    func testClicksPressInToNinetySevenPercentAndCardsLiftTwoPoints() {
+        XCTAssertEqual(MotionMath.pressScale(pressed: true, reduced: false), 0.97, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.pressScale(pressed: false, reduced: false), 1)
+        XCTAssertEqual(MotionMath.pressScale(pressed: true, reduced: true), 1)
+        XCTAssertEqual(MotionMath.pressOpacity(pressed: true, reduced: true), 0.85, accuracy: 1e-9)
+        XCTAssertEqual(MotionMath.pressOpacity(pressed: true, reduced: false), 1)
+        XCTAssertEqual(MotionMath.hoverLift(hovering: true, reduced: false), 2)
+        XCTAssertEqual(MotionMath.hoverLift(hovering: false, reduced: false), 0)
+        XCTAssertEqual(MotionMath.hoverLift(hovering: true, reduced: true), 0)
+    }
 }
