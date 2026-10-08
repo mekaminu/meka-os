@@ -1,6 +1,7 @@
 package os.meka.android.notify
 
 import os.meka.android.shell.ShellDestination
+import os.meka.core.domain.NoticeAction
 import os.meka.core.domain.NoticePrecision
 import os.meka.core.domain.NoticeTarget
 import os.meka.core.domain.NoticeTier
@@ -39,5 +40,18 @@ class NotifyRoutingTest {
     fun softRemindersMayBeBatchedLongerThanClockOnes() {
         assertEquals(10 * 60_000L, NotifyRouting.windowMs(NoticePrecision.SOFT))
         assertTrue(NotifyRouting.windowMs(NoticePrecision.CLOCK) < NotifyRouting.windowMs(NoticePrecision.SOFT))
+    }
+
+    @Test
+    fun eachButtonOnANoticeHasItsOwnIntent() {
+        val key = "session:gym:20352:ask"
+        val codes = setOf(
+            NotifyRouting.actionRequestCode(key, NoticeAction.WENT),
+            NotifyRouting.actionRequestCode(key, NoticeAction.DIDNT_GO),
+            NotifyRouting.undoRequestCode(key),
+            NotifyRouting.actionRequestCode("session:gym:20353:ask", NoticeAction.WENT),
+        )
+        assertEquals(4, codes.size)
+        assertEquals(NotifyRouting.actionRequestCode(key, NoticeAction.WENT), NotifyRouting.actionRequestCode(key, NoticeAction.WENT))
     }
 }

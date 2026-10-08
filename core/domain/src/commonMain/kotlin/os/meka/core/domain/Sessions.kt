@@ -314,8 +314,33 @@ object SessionRules {
                 key = "session:${c.habitId}:$day:ask", source = NoticeSource.SESSION_ASK, tier = NoticeTier.HEADS_UP,
                 title = "Did you go? · ${c.heading}", text = "${hhmm(start)}–${hhmm(end)} · Went or Didn't go in Today",
                 atMs = end, target = NoticeTarget.TODAY, expiresAtMs = cal.toEpochMs(day + 1, 0),
+                actions = listOf(NoticeAction.WENT, NoticeAction.DIDNT_GO),
             )
         }
         return out
     }
+
+    /**
+     * The habit a "Did you go?" notice ([notices]' key `session:<habit>:<day>:ask`) asks about, when that day is
+     * [today]; null for any other key or day (a notification left in the shade past midnight answers nothing).
+     */
+    fun askedHabit(key: String, today: Long): String? {
+        if (!key.startsWith(ASK_PREFIX) || !key.endsWith(ASK_SUFFIX)) return null
+        val mid = key.substring(ASK_PREFIX.length, key.length - ASK_SUFFIX.length)
+        val cut = mid.lastIndexOf(':').takeIf { it > 0 } ?: return null
+        val day = mid.substring(cut + 1).toLongOrNull() ?: return null
+        return mid.substring(0, cut).takeIf { day == today }
+    }
+
+    /** The card a "Did you go?" notice may still answer: that session today, offering Went / Didn't go. */
+    fun askedCard(view: SessionsView, key: String, today: Long): SessionCard? {
+        val id = askedHabit(key, today) ?: return null
+        return view.cards.firstOrNull { it.habitId == id && it.asks }
+    }
+
+    /** The quiet note after answering from a notification: "Went · 2 of 3 this week · Next: Thu 17:45 · Pull". */
+    fun answeredLine(card: SessionCard): String = listOfNotNull(card.line, card.next).joinToString(" · ")
+
+    private const val ASK_PREFIX = "session:"
+    private const val ASK_SUFFIX = ":ask"
 }

@@ -23,6 +23,8 @@ struct MekaOSApp: App {
                     // Services captures that arrived while the core was starting go in now.
                     let model = model
                     CaptureInbox.shared.attach { text, subject in model.capture(text, subject: subject) }
+                    // Notification buttons pressed while the core was starting are answered now.
+                    NotificationActionInbox.shared.attach { model.answerFromNotification($0) }
                 }
                 // tools/publish-fold.sh hands over the APK it built: mekaos://publish-fold-update?apk=…; the desktop
                 // News widget opens mekaos://news?story=<id>.

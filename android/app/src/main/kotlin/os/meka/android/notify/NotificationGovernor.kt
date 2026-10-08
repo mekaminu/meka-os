@@ -26,9 +26,13 @@ import os.meka.android.work.WorkAlerts
 import os.meka.core.domain.DeviceAlerts
 import os.meka.core.domain.Digest
 import os.meka.core.domain.Notice
+import os.meka.core.domain.NoticeAction
 import os.meka.core.domain.NoticePrecision
 import os.meka.core.domain.NoticeTarget
 import os.meka.core.domain.NoticeTier
+import os.meka.core.domain.NotifyRules
+import os.meka.core.domain.SessionCard
+import os.meka.core.domain.SessionRules
 
 /**
  * Posts what the shared notification governor (core `Governor`) says, on one channel per tier, and wakes itself with
@@ -108,10 +112,52 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
             .setContentIntent(openIntent(n.target, NotifyRouting.notificationId(n.key)))
             .setAutoCancel(true)
         if (n.text.isNotBlank()) b.setContentText(n.text)
+        // Buttons answered from the shade ("Did you go?": Went · Didn't go); the core checks each still applies.
+        n.actions.forEach { a ->
+            val i = Intent(context, NoticeActionReceiver::class.java)
+                .setAction(NoticeActionReceiver.ACTION_ANSWER)
+                .putExtra(NoticeActionReceiver.EXTRA_KEY, n.key)
+                .putExtra(NoticeActionReceiver.EXTRA_ACTION, NotifyRules.actionName(a))
+            b.addAction(0, NotifyRules.actionLabel(a), PendingIntent.getBroadcast(
+                context, NotifyRouting.actionRequestCode(n.key, a), i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            ))
+        }
         val live = context.getSystemService(NotificationManager::class.java)
             ?.getNotificationChannel(channel)?.importance != NotificationManager.IMPORTANCE_NONE
         return notify(NotifyRouting.notificationId(n.key), b.build()) && live
     }
+
+    /**
+     * After Went / Didn't go from the shade: the same notification turns into a silent note, "Gym · Push" ·
+     * "Went · 2 of 3 this week · Next: Thu 17:45 · Pull", with Undo for ten minutes; it times out on its own.
+     */
+    fun postAnswered(key: String, card: SessionCard) {
+        if (!WorkAlerts.canPost(context)) return
+        val id = NotifyRouting.notificationId(key)
+        val channel = ensureChannel(NoticeTier.HEADS_UP)
+        val undo = Intent(context, NoticeActionReceiver::class.java)
+            .setAction(NoticeActionReceiver.ACTION_UNDO)
+            .putExtra(NoticeActionReceiver.EXTRA_KEY, key)
+            .putExtra(NoticeActionReceiver.EXTRA_HABIT, card.habitId)
+        val n = NotificationCompat.Builder(context, channel)
+            .setSmallIcon(android.R.drawable.stat_notify_more)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setContentTitle(card.heading)
+            .setContentText(SessionRules.answeredLine(card))
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(NotificationCompat.Builder(context, channel).setSmallIcon(android.R.drawable.stat_notify_more)
+                .setContentTitle(NotifyRouting.publicTitle(NoticeTier.HEADS_UP)).build())
+            .setTimeoutAfter(NotifyRouting.ANSWERED_NOTE_MS)
+            .setContentIntent(openIntent(NoticeTarget.TODAY, id))
+            .addAction(0, "Undo", PendingIntent.getBroadcast(
+                context, NotifyRouting.undoRequestCode(key), undo, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            ))
+            .build()
+        notify(id, n)
+    }
+
+    fun cancel(key: String) = NotificationManagerCompat.from(context).cancel(NotifyRouting.notificationId(key))
 
     /** Posts the digest; false when its channel is turned off in the phone's settings or the post was refused. */
     private fun postDigest(d: Digest): Boolean {
@@ -209,6 +255,51 @@ object NotifyRouting {
     fun publicTitle(tier: NoticeTier): String = when (tier) {
         NoticeTier.CRITICAL, NoticeTier.ACTION -> "MEKA · needs you"
         else -> "MEKA · a heads-up"
+    }
+
+    /** How long the "Went · 2 of 3 this week · Undo" note stays in the shade. */
+    const val ANSWERED_NOTE_MS = 10 * 60_000L
+
+    /** One PendingIntent per notice and button (extras alone don't tell two apart). */
+    fun actionRequestCode(key: String, action: NoticeAction): Int = "$key#${action.name}".hashCode()
+
+    fun undoRequestCode(key: String): Int = "$key#undo".hashCode()
+}
+
+/**
+ * Buttons on a governor notification (Gym slice 2b): Went / Didn't go on "Did you go?", then Undo on the note that
+ * replaces it. The core answers only that day's session while it still asks (answered on the Mac already, or left
+ * over from yesterday: the notification just goes).
+ */
+class NoticeActionReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val key = intent.getStringExtra(EXTRA_KEY) ?: return
+        val app = context.applicationContext as MekaApplication
+        val pending = goAsync()
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            try {
+                when (intent.action) {
+                    ACTION_ANSWER -> {
+                        val action = NotifyRules.actionFromName(intent.getStringExtra(EXTRA_ACTION))
+                        val card = action?.let { runCatching { app.core.answerSessionNotice(key, it) }.getOrNull() }
+                        if (card != null) app.governor.postAnswered(key, card) else app.governor.cancel(key)
+                    }
+                    ACTION_UNDO -> {
+                        intent.getStringExtra(EXTRA_HABIT)?.let { id -> runCatching { app.core.undoSession(id) } }
+                        app.governor.cancel(key)
+                    }
+                }
+                app.governor.run()
+            } finally { pending.finish() }
+        }
+    }
+
+    companion object {
+        const val ACTION_ANSWER = "os.meka.notify.ANSWER"
+        const val ACTION_UNDO = "os.meka.notify.UNDO_ANSWER"
+        const val EXTRA_KEY = "os.meka.notify.key"
+        const val EXTRA_ACTION = "os.meka.notify.action"
+        const val EXTRA_HABIT = "os.meka.notify.habit"
     }
 }
 

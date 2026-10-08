@@ -34,6 +34,15 @@ enum class NoticePrecision { CLOCK, SOFT }
 /** Where tapping a notification takes you. */
 enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW }
 
+/**
+ * A button on a posted notification, answered without opening the app (Gym slice 2b: "Did you go?" offers Went and
+ * Didn't go). The app hands the notice's key and the action back to the core, which checks it still applies.
+ */
+enum class NoticeAction(val label: String) {
+    WENT("Went"),
+    DIDNT_GO("Didn't go"),
+}
+
 /** What a notice is about. Each source has a default tier, which the owner can lower (never raise). */
 enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     RENEWAL_CANCEL_BY("Cancel-by dates", NoticeTier.HEADS_UP),
@@ -75,6 +84,8 @@ data class Notice(
     /** After this it is stale and never posts on its own. */
     val expiresAtMs: Long? = null,
     val precision: NoticePrecision = NoticePrecision.SOFT,
+    /** Buttons on the posted notification, in order; none for most. */
+    val actions: List<NoticeAction> = emptyList(),
 )
 
 /** Quiet hours as local minutes of the day; an end at or before the start crosses midnight. */
@@ -576,4 +587,8 @@ object NotifyRules {
     /** A stored choice back; [fallback] when there is none or it isn't known. */
     fun deviceFromName(name: String?, fallback: DeviceAlerts): DeviceAlerts = DeviceAlerts.entries.firstOrNull { it.name == name } ?: fallback
     fun targetName(t: NoticeTarget): String = t.name
+    /** A notification button's label ("Went") and its stored name ("WENT"), and the name back (null if unknown). */
+    fun actionLabel(a: NoticeAction): String = a.label
+    fun actionName(a: NoticeAction): String = a.name
+    fun actionFromName(name: String?): NoticeAction? = NoticeAction.entries.firstOrNull { it.name == name }
 }

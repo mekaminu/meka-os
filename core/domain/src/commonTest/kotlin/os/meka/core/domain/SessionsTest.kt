@@ -243,6 +243,8 @@ class SessionsTest {
         assertEquals("17:45–18:45 · Went or Didn't go in Today", ask.text)
         assertEquals(at(mon, 18, 45), ask.atMs)
         assertEquals(at(mon + 1, 0), ask.expiresAtMs)
+        assertEquals(listOf(NoticeAction.WENT, NoticeAction.DIDNT_GO), ask.actions) // answered from the shade
+        assertTrue(leave.actions.isEmpty())
         // Only today's session: Wednesday's and Friday's come on their own days.
         assertEquals(2, ns.size)
     }
@@ -282,5 +284,30 @@ class SessionsTest {
         // A user can lower either source.
         val lowered = settings.copy(tiers = mapOf(NoticeSource.SESSION_LEAVE to NoticeTier.SILENT))
         assertTrue(Governor.evaluate(ns, lowered, DeviceAlerts.ALL, GovernorState(), at(mon, 17, 16), cal).post.isEmpty())
+    }
+
+    @Test
+    fun didYouGoFromTheNotificationAnswersOnlyThatDaysSessionWhileItAsks() {
+        val asking = book(listOf(gym(rotation = listOf("Push", "Pull", "Legs"))), now = at(mon, 19))
+        val key = sessionNotices(asking).single { it.source == NoticeSource.SESSION_ASK }.key
+        assertEquals("gym", SessionRules.askedHabit(key, mon))
+        assertNull(SessionRules.askedHabit(key, mon + 1), "left in the shade past midnight: answers nothing")
+        assertNull(SessionRules.askedHabit("session:gym:$mon:leave:123", mon))
+        assertNull(SessionRules.askedHabit("session::ask", mon))
+        assertNull(SessionRules.askedHabit("fast-goal:1", mon))
+        assertEquals("a:b", SessionRules.askedHabit("session:a:b:$mon:ask", mon), "ids may hold a colon")
+        val card = SessionRules.askedCard(asking, key, mon)!!
+        assertEquals("Push", card.label)
+        // Already answered (on the other device): nothing to answer.
+        assertNull(SessionRules.askedCard(book(listOf(gym(done = setOf(mon))), now = at(mon, 19)), key, mon))
+        assertNull(SessionRules.askedCard(book(listOf(gym(missed = setOf(mon))), now = at(mon, 19)), key, mon))
+        // The quiet note after answering.
+        val went = book(listOf(gym(done = setOf(mon))), now = at(mon, 19)).cards.single()
+        assertEquals("Went · 1 of 3 this week · Next: Wed 17:45", SessionRules.answeredLine(went))
+        val missed = book(listOf(gym(missed = setOf(mon))), now = at(mon, 19)).cards.single()
+        assertEquals("Not today · no worries · Rebooked for Tue 17:45", SessionRules.answeredLine(missed))
+        assertEquals(NoticeAction.DIDNT_GO, NotifyRules.actionFromName(NotifyRules.actionName(NoticeAction.DIDNT_GO)))
+        assertNull(NotifyRules.actionFromName("SNOOZE"))
+        assertEquals("Didn't go", NotifyRules.actionLabel(NoticeAction.DIDNT_GO))
     }
 }

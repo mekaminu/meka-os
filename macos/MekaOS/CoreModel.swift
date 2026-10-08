@@ -718,6 +718,29 @@ final class CoreModel {
     /// Undo for Went / Didn't go.
     func undoSession(_ id: String) { MekaHaptics.tick(); run { try await $0.undoSession(id: id) } }
 
+    /// Went / Didn't go pressed on a "Did you go?" notification, or Undo on the note that replaces it. The core answers
+    /// only that day's session while it still asks; otherwise the notification just goes.
+    func answerFromNotification(_ a: NotificationAnswer) {
+        if a.action == MacNotifier.undoAction {
+            MacNotifier.remove(key: a.key)
+            if let habit = a.habit { run { try await $0.undoSession(id: habit) } }
+            return
+        }
+        guard let core else { return }
+        let key = a.key
+        let name = a.action
+        Task {
+            guard let action = NotifyRules.shared.actionFromName(name: name),
+                  let card = try? await core.answerSessionNotice(key: key, action: action) else {
+                MacNotifier.remove(key: key)
+                return
+            }
+            await MacNotifier.postAnswered(
+                key: key, heading: card.heading, line: SessionRules.shared.answeredLine(card: card), habitId: card.habitId
+            )
+        }
+    }
+
     func addGoal(_ title: String, target: String?, horizonIndex: Int) {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }

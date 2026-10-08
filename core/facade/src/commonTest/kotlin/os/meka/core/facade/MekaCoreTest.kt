@@ -730,4 +730,30 @@ class MekaCoreTest {
         assertEquals("Next: Wed 17:45 · Pull", went.next)
         assertTrue(a.goalsView.value.habits.single().doneToday)
     }
+
+    @Test
+    fun didYouGoIsAnsweredFromTheNotificationOnceAndNotTheNextDay() = runTest {
+        // Monday 21 Sep 2026, 15:13 in London.
+        val a = core("android"); val m = core("mac")
+        val id = a.addGym()
+        a.setHabitRotation(id, 1)
+        a.syncNow(); m.syncNow()
+        now += 4 * 3_600_000L // 19:13: the slot is over
+        a.tick(); m.tick()
+        val ask = a.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL).post
+            .single { it.source == os.meka.core.domain.NoticeSource.SESSION_ASK }
+        assertEquals(listOf(os.meka.core.domain.NoticeAction.WENT, os.meka.core.domain.NoticeAction.DIDNT_GO), ask.actions)
+        val went = a.answerSessionNotice(ask.key, os.meka.core.domain.NoticeAction.WENT)
+        assertEquals("Went · 1 of 3 this week", went?.line)
+        assertEquals("Gym · Push", went?.heading) // the rotation's turn is recorded, as from the card
+        assertEquals(null, a.answerSessionNotice(ask.key, os.meka.core.domain.NoticeAction.DIDNT_GO), "answered already")
+        a.syncNow(); m.syncNow()
+        assertEquals(null, m.answerSessionNotice(ask.key, os.meka.core.domain.NoticeAction.DIDNT_GO), "answered on the other device")
+        assertEquals("Went · 1 of 3 this week", m.sessionsView.value.cards.single().line)
+        // Undo works as from the card; the next day the old notification answers nothing.
+        a.undoSession(id)
+        now += 6 * 3_600_000L // past midnight
+        a.tick()
+        assertEquals(null, a.answerSessionNotice(ask.key, os.meka.core.domain.NoticeAction.WENT))
+    }
 }

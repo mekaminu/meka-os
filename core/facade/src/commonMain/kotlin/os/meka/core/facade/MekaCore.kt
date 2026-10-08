@@ -457,6 +457,17 @@ class MekaCore(
     suspend fun setSessionNote(id: String, note: String?) = onCore { goals.setSessionNote(id, note) }
     /** Undo for Went / Didn't go. */
     suspend fun undoSession(id: String) = onCore { goals.clearSessionAnswer(id) }
+    /**
+     * Went / Didn't go from a "Did you go?" notification (Gym slice 2b). Answers only that day's session while it still
+     * asks; a notification left over from yesterday, or a session already answered on the other device, changes
+     * nothing (null). Returns the card after answering, for the quiet "Went · 2 of 3 this week" note and its Undo.
+     */
+    suspend fun answerSessionNotice(key: String, action: os.meka.core.domain.NoticeAction): os.meka.core.domain.SessionCard? = onCore {
+        val card = os.meka.core.domain.SessionRules.askedCard(_sessions.value, key, todayEpochDay()) ?: return@onCore null
+        val went = action == os.meka.core.domain.NoticeAction.WENT
+        goals.answerSession(card.habitId, went = went, label = if (went) card.label else null, note = null)
+        _sessions.value.cards.firstOrNull { it.habitId == card.habitId }
+    }
 
     suspend fun addGoal(title: String, target: String?, horizon: GoalHorizon): String = onCore { goals.addGoal(title, target, horizon) }
     suspend fun editGoal(id: String, title: String?, target: String?, horizon: GoalHorizon?) = onCore { goals.editGoal(id, title, target, horizon) }

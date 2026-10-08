@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import UserNotifications
 
 /// Capture from anywhere on the Mac (build plan M1): select text in any app → Services → "Add to MEKA".
 /// The text becomes one task in the shared core (first line the title, the rest kept in the notes), exactly as the
@@ -49,5 +50,7 @@ final class MekaAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.servicesProvider = provider
         NSUpdateDynamicServices()
+        // Went / Didn't go on "Did you go?" (Gym slice 2b); set at launch so a press that launched MEKA arrives.
+        UNUserNotificationCenter.current().delegate = MacNotificationActions.shared
     }
 }
