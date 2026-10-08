@@ -33,6 +33,9 @@ final class CoreModel {
     /// Morning brief: today at a glance, waiting on, what needs you on your lists. "Got it" syncs with the Fold.
     private(set) var brief: MorningBriefView?
     var showBrief = false
+    /// News (Ask → More → News): the chosen topics as lanes, Barça first, then AI. Topics sync with the Fold.
+    private(set) var newsPlace: NewsPlace?
+    var showNews = false
     /// Weekly review: the week looked back on, the week ahead, north-star numbers. "Done reviewing" syncs with the Fold.
     private(set) var review: WeeklyReviewView?
     /// The Calendar tab: week strips and the next 30 days grouped by day. Follows sync; moves with the clock.
@@ -153,6 +156,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await b in core.briefView { self?.brief = b }
+        })
+        observers.append(Task { [weak self] in
+            for await n in core.newsPlace { self?.newsPlace = n }
         })
         observers.append(Task { [weak self] in
             for await r in core.reviewView { self?.review = r }

@@ -45,6 +45,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.export.YourData
+import os.meka.android.news.NewsPane
 import os.meka.android.notify.NotificationsPane
 import os.meka.android.search.SearchPane
 import os.meka.android.shell.MoreItem
@@ -130,6 +131,7 @@ fun AskRoute(core: MekaCore, connected: Boolean, openPlace: (ShellDestination) -
             }
         }
         MekaPane(visible = pane == MoreItem.BRIEF) { BriefPane(core, onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.NEWS) { NewsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.SHUTDOWN) { ShutdownPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.WORK) { WorkPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.NOTIFICATIONS) { NotificationsPane(core, onClose = { pane = null }) }

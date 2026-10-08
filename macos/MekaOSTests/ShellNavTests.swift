@@ -45,7 +45,7 @@ final class ShellNavTests: XCTestCase {
     func testMoreListsEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
         XCTAssertEqual(
             ShellNav.more(connected: true).map(\.label),
-            ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "Shut down the day", "Work mode", "Notifications",
+            ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Work mode", "Notifications",
              "Appearance", "Activity", "Your data", "Calendars"]
         )
         XCTAssertFalse(ShellNav.more(connected: false).contains(.calendars))
@@ -62,7 +62,8 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(ShellNav.moreLine(.shutdown, listsDue: 0), "Tick off, carry over and see tomorrow")
         XCTAssertFalse(ShellNav.moreLit(.work, listsDue: 2))
         XCTAssertEqual(MoreItem.allCases.filter(ShellNav.unfoldsInPlace), [.appearance])
-        XCTAssertTrue([MoreItem.brief, .shutdown, .appearance].allSatisfy { $0.destination == nil })
+        XCTAssertTrue([MoreItem.brief, .news, .shutdown, .appearance].allSatisfy { $0.destination == nil })
+        XCTAssertEqual(ShellNav.moreLine(.news, listsDue: 3), "Barça, AI and the headlines · topics and sources")
     }
 
     @MainActor

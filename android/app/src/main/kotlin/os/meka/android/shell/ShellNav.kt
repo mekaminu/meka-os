@@ -40,6 +40,7 @@ enum class MoreItem(val label: String, val line: String, val destination: ShellD
     REVIEW("Review", "Your week, looked back on", ShellDestination.REVIEW),
     VAULT("Vault", "Your data now; documents later", ShellDestination.VAULT),
     BRIEF("Morning brief", "Your day, who you're waiting on and headlines", null),
+    NEWS("News", "Barça, AI and the headlines · topics and sources", null),
     SHUTDOWN("Shut down the day", "Tick off, carry over and see tomorrow", null),
     WORK("Work mode", "Work hours and the Work switch", null),
     NOTIFICATIONS("Notifications", "Quiet hours, digests and what reaches you", null),

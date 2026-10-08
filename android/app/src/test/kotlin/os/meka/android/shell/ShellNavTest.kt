@@ -52,7 +52,7 @@ class ShellNavTest {
     fun moreListsEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
         assertEquals(
             listOf(
-                "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "Shut down the day", "Work mode", "Notifications",
+                "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Work mode", "Notifications",
                 "Appearance", "Activity", "Your data", "Calendars",
             ),
             ShellNav.more(connected = true).map { it.label },
@@ -84,7 +84,8 @@ class ShellNavTest {
         assertFalse(ShellNav.moreLit(MoreItem.WORK, 2))
         // Appearance unfolds in place; every other row opens a place or a pane.
         assertEquals(listOf(MoreItem.APPEARANCE), MoreItem.entries.filter { ShellNav.unfoldsInPlace(it) })
-        assertTrue(listOf(MoreItem.BRIEF, MoreItem.SHUTDOWN, MoreItem.APPEARANCE).all { it.destination == null })
+        assertTrue(listOf(MoreItem.BRIEF, MoreItem.NEWS, MoreItem.SHUTDOWN, MoreItem.APPEARANCE).all { it.destination == null })
+        assertEquals("Barça, AI and the headlines · topics and sources", ShellNav.moreLine(MoreItem.NEWS, 3))
     }
 
     @Test

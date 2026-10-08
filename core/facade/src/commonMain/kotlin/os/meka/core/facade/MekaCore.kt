@@ -174,6 +174,14 @@ class MekaCore(
      */
     val briefView: StateFlow<MorningBriefView> = _brief.asStateFlow()
 
+    private val _newsPlace = MutableStateFlow(os.meka.core.domain.NewsPlace.EMPTY)
+    /**
+     * The News place (Ask → More → News): the chosen topics as lanes (Barça, then AI, then the rest), each story once,
+     * the last two days; [os.meka.core.domain.NewsPlace.detail] gives the detail sheet with Next/Previous. Headlines
+     * are untrusted (ADR-006): text only, https links only.
+     */
+    val newsPlace: StateFlow<os.meka.core.domain.NewsPlace> = _newsPlace.asStateFlow()
+
     private val _review = MutableStateFlow(WeeklyReviewView.EMPTY)
     /**
      * Weekly review: the week looked back on (done, habits, fasts, lists, still open), the week ahead, and the
@@ -459,7 +467,7 @@ class MekaCore(
 
     /** "Got it": the brief's card is put away on every device until tomorrow morning. */
     suspend fun briefSeen() = onCore { brief.markSeen() }
-    /** Shows or hides a news topic's headlines in the brief ([os.meka.core.domain.NewsTopics]); synced. */
+    /** Shows or hides a news topic in the brief and the News place ([os.meka.core.domain.NewsTopics]); synced. */
     suspend fun setNewsTopic(topicId: String, on: Boolean) = onCore { news.setTopic(topicId, on) }
 
     // ---- Weekly review ----
@@ -767,6 +775,7 @@ class MekaCore(
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
             news.all(), news.choices(), holidays)
+        _newsPlace.value = news.place(nowMs())
         _review.value = review.view(reviewOffset, all, dayEvents, _goals.value, fasting.ended()) { day ->
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }

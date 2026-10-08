@@ -45,7 +45,7 @@ enum ShellLayout { case bottomBar, rail }
 /// Appearance, which shows its choices in the row itself (`ShellNav.unfoldsInPlace`). Today's header keeps only
 /// Search and Plan my day (Today clarity, slice 2): the brief, the shutdown, work mode and the theme moved here.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, review, vault, brief, shutdown, work, notifications, appearance, activity, yourData, calendars
+    case lists, goals, review, vault, brief, news, shutdown, work, notifications, appearance, activity, yourData, calendars
     var id: Int { rawValue }
 
     var label: String {
@@ -55,6 +55,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .review: "Review"
         case .vault: "Vault"
         case .brief: "Morning brief"
+        case .news: "News"
         case .shutdown: "Shut down the day"
         case .work: "Work mode"
         case .notifications: "Notifications"
@@ -72,6 +73,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .review: "Your week, looked back on"
         case .vault: "Your data now; documents later"
         case .brief: "Your day, who you're waiting on and headlines"
+        case .news: "Barça, AI and the headlines · topics and sources"
         case .shutdown: "Tick off, carry over and see tomorrow"
         case .work: "Work hours and the Work switch"
         case .notifications: "Quiet hours, digests and what reaches you"
@@ -88,7 +90,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .goals: .goals
         case .review: .review
         case .vault: .vault
-        case .brief, .shutdown, .work, .notifications, .appearance, .activity, .yourData, .calendars: nil
+        case .brief, .news, .shutdown, .work, .notifications, .appearance, .activity, .yourData, .calendars: nil
         }
     }
 }

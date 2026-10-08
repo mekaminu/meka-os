@@ -65,6 +65,7 @@ struct AskScreen: View {
         if let d = item.destination { model.go(to: d, reduced: reduceMotion); return }
         switch item {
         case .brief: model.showBrief = true
+        case .news: model.showNews = true
         case .shutdown: model.showShutdown = true
         case .work: model.showWork = true
         case .notifications: model.showNotifications = true

@@ -216,10 +216,11 @@ class Integrations(
             store.lockAccount(a.id)
             val mirror = store.mirror(a.householdId, a.id)
             for ((topic, items) in byTopic) {
-                val desired = items.distinctBy { it.id }.take(NEWS_SLOTS)
-                val slots = (0 until NEWS_SLOTS).map { newsEntityId(a, topic, it) }
+                val n = source.slots
+                val desired = items.distinctBy { it.id }.take(n)
+                val slots = (0 until n).map { newsEntityId(a, topic, it) }
                 fun urlIn(slot: String) = mirror[slot]?.takeUnless { it.removed }?.fieldOps?.get(HeadlineFields.URL)?.second?.removePrefix("s:")
-                val assigned = arrayOfNulls<RemoteHeadline>(NEWS_SLOTS)
+                val assigned = arrayOfNulls<RemoteHeadline>(n)
                 slots.forEachIndexed { i, slot -> assigned[i] = desired.firstOrNull { it.url == urlIn(slot) } }
                 val rest = ArrayDeque(desired.filter { d -> assigned.none { it === d } })
                 for (i in assigned.indices) if (assigned[i] == null) assigned[i] = rest.removeFirstOrNull()
@@ -234,10 +235,13 @@ class Integrations(
                         val desiredFields = linkedMapOf(
                             HeadlineFields.TITLE to FieldValue.Text(h.title.take(MAX_HEADLINE)),
                             HeadlineFields.URL to FieldValue.Text(h.url),
-                            HeadlineFields.SOURCE to FieldValue.Text(source.source),
+                            HeadlineFields.SOURCE to FieldValue.Text((h.source ?: source.source).take(MAX_SOURCE)),
                             HeadlineFields.TOPIC to FieldValue.Text(topic),
                             HeadlineFields.PUBLISHED_AT to FieldValue.Int64(h.publishedMs),
                             HeadlineFields.REMOVED to FieldValue.Bool(false),
+                            // The feed's own summary, plain text (news ticker, slice 1). Additive; never written as null
+                            // for a slot that never had one.
+                            HeadlineFields.SUMMARY to (h.summary?.take(MAX_SUMMARY)?.let { FieldValue.Text(it) } ?: FieldValue.Null),
                         )
                         write(a, slot, h.publishedMs, h.publishedMs, false, prev, desiredFields, EntityTypes.HEADLINE)
                     }
@@ -340,7 +344,9 @@ class Integrations(
         // A cut link is a broken link: longer ones (none seen in practice) are left out rather than cut.
         private const val MAX_URL = 2_000
         private const val MAX_HEADLINE = 300
-        /** Headlines mirrored per topic. */
+        private const val MAX_SOURCE = 80
+        private const val MAX_SUMMARY = 500
+        /** Headlines mirrored per topic by default (a provider may ask for more, see [NewsProvider.slots]). */
         const val NEWS_SLOTS = 4
         const val NEWS_PERIOD_MS = 60 * 60_000L
         const val HOLIDAYS_PERIOD_MS = 7 * 24 * 60 * 60_000L

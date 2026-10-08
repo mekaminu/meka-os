@@ -624,6 +624,11 @@ class MekaCoreTest {
         a.syncNow(); m.syncNow()
         assertEquals(listOf("New phone launched", "Summit opens"), m.briefView.value.headlines.map { it.title })
         assertTrue(m.briefView.value.newsTopics.single { it.id == "technology" }.chosen)
+        // The News place follows the same choice: lanes for the chosen topics that have headlines.
+        assertEquals(listOf("world", "technology"), m.newsPlace.value.lanes.map { it.topicId })
+        val place = m.newsPlace.value
+        assertEquals(listOf("Summit opens", "New phone launched"), place.items.map { it.title })
+        assertEquals("2 of 2", place.detail(place.items[1].id)!!.position)
     }
 
     @Test

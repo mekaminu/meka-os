@@ -89,21 +89,109 @@ class NewsTest {
     }
 
     @Test
-    fun topicChoiceSyncsAndDefaultsToTopStoriesAndWorld() {
+    fun topicChoiceSyncsAndDefaultsToBarcaAiTopStoriesAndWorld() {
         val na = News(a.replica)
-        assertEquals(listOf("top", "world"), na.topics())
+        assertEquals(listOf("barca", "ai", "top", "world"), na.topics())
         na.setTopic("technology", true)
         na.setTopic("world", false)
-        assertEquals(listOf("top", "technology"), na.topics()) // catalogue order
+        assertEquals(listOf("barca", "ai", "top", "technology"), na.topics()) // catalogue order
         a.sync(); m.sync()
         val nm = News(m.replica)
-        assertEquals(listOf("top", "technology"), nm.topics())
-        assertEquals(listOf("top", "technology"), nm.choices().filter { it.chosen }.map { it.id })
-        nm.setTopic("top", false); nm.setTopic("technology", false)
+        assertEquals(listOf("barca", "ai", "top", "technology"), nm.topics())
+        assertEquals(listOf("barca", "ai", "top", "technology"), nm.choices().filter { it.chosen }.map { it.id })
+        for (t in listOf("barca", "ai", "top", "technology")) nm.setTopic(t, false)
         m.sync(); a.sync()
         assertTrue(na.topics().isEmpty()) // no news at all is a valid choice
         // Unknown ids from a newer app version are ignored.
         assertEquals(listOf("uk"), NewsTopics.decode("uk,weather"))
+    }
+
+    @Test
+    fun aChoiceMadeBeforeTheNewTopicsGetsBarcaAndAiButKeepsWhatWasTurnedOff() {
+        // Stored by an older app: Top stories and Technology, no record of which topics it knew (the first nine).
+        a.replica.commitLocal(EntityTypes.CONTEXT_MODE, News.ENTITY_ID, mapOf(NewsFields.TOPICS to "top,technology".fv()))
+        val na = News(a.replica)
+        assertEquals(listOf("barca", "ai", "top", "technology"), na.topics())
+        // Turning Barça off now sticks: the choice records that it knew about it.
+        na.setTopic("barca", false)
+        a.sync(); m.sync()
+        assertEquals(listOf("ai", "top", "technology"), News(m.replica).topics())
+        // Pure rule: nothing stored is the defaults; a topic the choice knew and left out stays off.
+        assertEquals(listOf("barca", "ai", "top", "world"), NewsRules.chosen(null, null))
+        assertEquals(listOf("world"), NewsRules.chosen("world", NewsTopics.ALL.joinToString(",") { it.id }))
+        assertEquals(emptyList(), NewsRules.chosen("", NewsTopics.ALL.joinToString(",") { it.id }))
+    }
+
+    @Test
+    fun theSameStoryFromSeveralSourcesIsOneKey() {
+        assertEquals(NewsRules.storyKey("Barça beat Real Madrid 3–1!"), NewsRules.storyKey("  barca BEAT real madrid 3-1"))
+        assertEquals(NewsRules.storyKey("Flick: \"Lamine está bien\""), NewsRules.storyKey("Flick - Lamine esta bien"))
+        assertTrue(NewsRules.storyKey("Barça beat Real Madrid") != NewsRules.storyKey("Barça lose to Real Madrid"))
+    }
+
+    private fun nh(id: String, title: String, topic: String, agoMin: Long, source: String, summary: String? = null) =
+        Headline(id, title, "https://news.example/$id", source, topic, now - agoMin * minMs, summary)
+
+    private fun choices(vararg chosen: String) = NewsTopics.ALL.map { NewsTopicChoice(it.id, it.label, it.id in chosen) }
+
+    @Test
+    fun theNewsPlaceLeadsWithBarcaThenAiEachStoryOnceNewestFirst() {
+        val all = listOf(
+            nh("1", "Summit opens in Geneva", "world", 10, "BBC News"),
+            nh("2", "Flick names his XI for El Clásico", "barca", 30, "Mundo Deportivo", "Flick has named the side to face Real Madrid."),
+            nh("3", "Flick names his XI for El Clásico", "barca", 25, "Sport"), // the same story from another paper
+            nh("4", "Pedri back in training", "barca", 90, "Sport"),
+            nh("5", "A new open model tops the charts", "ai", 5, "The Verge"),
+            nh("6", "A new open model tops the charts", "tech", 4, "Hacker News"), // same story, later lane
+            nh("7", "Rust 2.0 announced", "tech", 50, "Hacker News"),
+            nh("8", "Old Barça story", "barca", 49 * 60, "Sport"), // older than two days
+            nh("9", "Rates held", "business", 5, "BBC News"), // topic not chosen
+        )
+        val place = NewsRules.place(all, choices("top", "world", "tech", "ai", "barca"), now)
+        assertEquals(listOf("barca", "ai", "world", "tech"), place.lanes.map { it.topicId })
+        val barca = place.lanes[0]
+        assertEquals("Barça", barca.label)
+        assertEquals(listOf("Flick names his XI for El Clásico", "Pedri back in training"), barca.items.map { it.title })
+        assertEquals("Sport · 25 min ago", barca.items[0].meta) // the newest copy of the story wins
+        assertEquals("From Sport", barca.sources)
+        assertEquals(listOf("Rust 2.0 announced"), place.lanes[3].items.map { it.title })
+        assertNull(place.emptyLine)
+
+        // Detail: position and neighbours run across lanes in reading order.
+        val d = place.detail("5")!!
+        assertEquals("3 of 5", d.position)
+        assertEquals("4", d.previousId)
+        assertEquals("1", d.nextId)
+        assertNull(place.detail("2")) // left out as a duplicate
+        assertNull(place.detail("3")!!.previousId)
+
+        assertEquals("No topics chosen · pick some below", NewsRules.place(all, choices(), now).emptyLine)
+        assertEquals("No headlines in the last two days · they refresh every hour", NewsRules.place(emptyList(), choices("ai"), now).emptyLine)
+    }
+
+    @Test
+    fun aLaneNamesItsSourcesAndKeepsTen() {
+        val all = (1..14).map { nh("b$it", "Barça story $it", "barca", it.toLong(), if (it % 3 == 0) "Sport" else "Mundo Deportivo") } +
+            nh("g1", "Barça story from Google", "barca", 20, "Marca")
+        val lane = NewsRules.place(all, choices("barca"), now).lanes.single()
+        assertEquals(NewsRules.MAX_IN_LANE, lane.items.size)
+        assertEquals("From Mundo Deportivo and Sport", lane.sources)
+    }
+
+    @Test
+    fun summariesArePlainTextFromTheMirror() {
+        a.replica.commitLocal(
+            EntityTypes.HEADLINE, "hlx",
+            mapOf(
+                HeadlineFields.TITLE to "Pedri back".fv(), HeadlineFields.URL to "https://www.sport.es/x".fv(), HeadlineFields.SOURCE to "Sport".fv(),
+                HeadlineFields.TOPIC to "barca".fv(), HeadlineFields.PUBLISHED_AT to now.fv(), HeadlineFields.REMOVED to false.fv(),
+                HeadlineFields.SUMMARY to "<p>El centrocampista\n vuelve</p> a entrenar".fv(),
+            ),
+        )
+        a.sync(); m.sync()
+        val read = News(m.replica).all().single()
+        assertEquals("El centrocampista vuelve a entrenar", read.summary)
+        assertEquals("El centrocampista vuelve a entrenar", News(m.replica).place(now).detail("hlx")!!.item.summary)
     }
 
     @Test

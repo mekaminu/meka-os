@@ -193,11 +193,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(core.briefView.value.seenToday)
         XCTAssertFalse(core.briefView.value.offered)
 
-        // News topics: Top stories and World by default; a topic toggles and stays chosen.
-        XCTAssertEqual(core.briefView.value.newsTopics.filter(\.chosen).map(\.id), ["top", "world"])
+        // News topics: Barça, AI, Top stories and World by default; a topic toggles and stays chosen.
+        XCTAssertEqual(core.briefView.value.newsTopics.filter(\.chosen).map(\.id), ["barca", "ai", "top", "world"])
         XCTAssertTrue(core.briefView.value.headlines.isEmpty)
         try await core.setNewsTopic(topicId: "technology", on: true)
-        XCTAssertEqual(core.briefView.value.newsTopics.filter(\.chosen).map(\.id), ["top", "world", "technology"])
+        XCTAssertEqual(core.briefView.value.newsTopics.filter(\.chosen).map(\.id), ["barca", "ai", "top", "world", "technology"])
+        // The News place: the same choice, no headlines yet, and a line saying when they come.
+        let place = core.newsPlace.value
+        XCTAssertTrue(place.lanes.isEmpty)
+        XCTAssertEqual(place.emptyLine, "No headlines in the last two days · they refresh every hour")
+        XCTAssertEqual(place.topics.filter(\.chosen).map(\.id), ["barca", "ai", "top", "world", "technology"])
     }
 
     func testWeeklyReviewThroughTheBridge() async throws {

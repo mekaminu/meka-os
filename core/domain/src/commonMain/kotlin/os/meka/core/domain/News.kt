@@ -24,12 +24,19 @@ object HeadlineFields {
     const val PUBLISHED_AT = "publishedAtMs"
     /** True when the slot is empty (the feed had fewer items). Can flip back to false. */
     const val REMOVED = "removed"
+    /** The feed's own summary as plain text (news ticker, slice 1; additive). Absent when the feed has none. */
+    const val SUMMARY = "summary"
 }
 
 /** Which topics the brief shows: one `context_mode` entity, id [News.ENTITY_ID], one LWW field. */
 object NewsFields {
     /** Comma-separated [NewsTopic.id]s ("top,world"); empty for no news. Unknown ids are ignored when read. */
     const val TOPICS = "newsTopics"
+    /**
+     * The topics that existed when [TOPICS] was last written (additive, news ticker slice 1). A topic added since is
+     * neither chosen nor turned off yet, so it follows its default; absent = the first nine (BBC) topics.
+     */
+    const val KNOWN = "newsTopicsKnown"
 }
 
 data class NewsTopic(val id: String, val label: String)
@@ -45,9 +52,17 @@ object NewsTopics {
     val SCIENCE = NewsTopic("science", "Science")
     val HEALTH = NewsTopic("health", "Health")
     val FOOTBALL = NewsTopic("football", "Football")
+    // News ticker, slice 1 (Meka, 2026-10-07): several public feeds each, see the server's PublicNewsFeeds.
+    val BARCA = NewsTopic("barca", "Barça")
+    val SPAIN = NewsTopic("spain", "Spain football")
+    val AI = NewsTopic("ai", "AI")
+    val TECH = NewsTopic("tech", "Tech news")
 
-    val ALL = listOf(TOP, UK, WORLD, POLITICS, BUSINESS, TECHNOLOGY, SCIENCE, HEALTH, FOOTBALL)
-    val DEFAULT: List<String> = listOf(TOP.id, WORLD.id)
+    /** In the order the chips are offered: Barça and AI first (what Meka checks most), then the BBC's topics. */
+    val ALL = listOf(BARCA, AI, TOP, WORLD, UK, POLITICS, BUSINESS, TECHNOLOGY, TECH, SCIENCE, HEALTH, FOOTBALL, SPAIN)
+    val DEFAULT: List<String> = listOf(BARCA.id, AI.id, TOP.id, WORLD.id)
+    /** The topics there were before the news ticker (what an older stored choice knew about). */
+    val ORIGINAL: List<String> = listOf(TOP.id, UK.id, WORLD.id, POLITICS.id, BUSINESS.id, TECHNOLOGY.id, SCIENCE.id, HEALTH.id, FOOTBALL.id)
 
     fun byId(id: String): NewsTopic? = ALL.firstOrNull { it.id == id }
 
@@ -63,6 +78,7 @@ data class Headline(
     val source: String,
     val topic: String,
     val publishedAtMs: Long,
+    val summary: String? = null,
 ) {
     companion object {
         /** Null for empty slots and anything incomplete. */
@@ -77,6 +93,7 @@ data class Headline(
                 source = s[HeadlineFields.SOURCE].textOrNull?.let(NewsRules::clean)?.takeIf { it.isNotEmpty() } ?: "News",
                 topic = s[HeadlineFields.TOPIC].textOrNull ?: "",
                 publishedAtMs = at,
+                summary = s[HeadlineFields.SUMMARY].textOrNull?.let(NewsRules::cleanSummary)?.takeIf { it.isNotEmpty() },
             )
         }
     }
@@ -88,6 +105,43 @@ data class BriefHeadline(val id: String, val title: String, val url: String?, va
 /** A topic chip in the brief. */
 data class NewsTopicChoice(val id: String, val label: String, val chosen: Boolean)
 
+/** One headline in the News place: "Mundo Deportivo · 2 h ago", and the feed's summary for the detail sheet. */
+data class NewsItem(
+    val id: String,
+    val title: String,
+    val url: String?,
+    val source: String,
+    val topic: String,
+    val meta: String,
+    val summary: String?,
+    val publishedAtMs: Long,
+)
+
+/** One topic's lane: "Barça" with "From Mundo Deportivo, Sport and Google News". */
+data class NewsLane(val topicId: String, val label: String, val sources: String, val items: List<NewsItem>)
+
+/** The detail sheet: the story, its place in the run ("3 of 18") and the stories either side (Next/Previous). */
+data class NewsDetail(val item: NewsItem, val position: String, val previousId: String?, val nextId: String?)
+
+/**
+ * The News place (Ask → More → News): the chosen topics as lanes, Barça first, then AI, then the rest in chip order;
+ * each story once (in the first lane it fits); [emptyLine] when there's nothing to show and why.
+ */
+data class NewsPlace(val lanes: List<NewsLane>, val topics: List<NewsTopicChoice>, val emptyLine: String?) {
+    /** Every story in reading order (lane by lane), for Next/Previous. */
+    val items: List<NewsItem> get() = lanes.flatMap { it.items }
+
+    fun detail(id: String): NewsDetail? {
+        val all = items
+        val i = all.indexOfFirst { it.id == id }.takeIf { it >= 0 } ?: return null
+        return NewsDetail(all[i], "${i + 1} of ${all.size}", all.getOrNull(i - 1)?.id, all.getOrNull(i + 1)?.id)
+    }
+
+    companion object {
+        val EMPTY = NewsPlace(emptyList(), emptyList(), null)
+    }
+}
+
 /** Pure rules, unit-tested without a replica. */
 object NewsRules {
     /** Headlines shown in the brief. */
@@ -95,10 +149,19 @@ object NewsRules {
     /** Older headlines are left out: the brief is about this morning. */
     const val MAX_AGE_MS = 36 * 3_600_000L
     private const val MAX_TITLE = 300
+    private const val MAX_SUMMARY = 500
+    /** The News place keeps two days, so a quiet weekend still shows Saturday's Barça news on Sunday evening. */
+    const val MAX_AGE_IN_PLACE_MS = 48 * 3_600_000L
+    /** Headlines per lane in the News place. */
+    const val MAX_IN_LANE = 10
 
     /** Plain one-line text: control characters and anything tag-like removed, whitespace collapsed, length capped. */
     fun clean(s: String): String =
         s.replace(Regex("<[^>]*>"), " ").map { if (it < ' ') ' ' else it }.joinToString("").replace(Regex("\\s+"), " ").trim().take(MAX_TITLE)
+
+    /** A summary as plain text (the same cleaning, a longer cap). */
+    fun cleanSummary(s: String): String =
+        s.replace(Regex("<[^>]*>"), " ").map { if (it < ' ') ' ' else it }.joinToString("").replace(Regex("\\s+"), " ").trim().take(MAX_SUMMARY)
 
     /** The link only when it is a plain https URL with a host; anything else is never opened. */
     fun safeUrl(s: String): String? {
@@ -121,8 +184,78 @@ object NewsRules {
         }
     }
 
-    /** Key that treats the same story in two topic feeds as one. */
-    private fun storyKey(h: Headline) = h.url?.substringBefore('?')?.substringBefore('#')?.lowercase() ?: ("t:" + h.title.lowercase())
+    /**
+     * The chosen topics from the stored choice ([NewsFields.TOPICS]) and the topics it knew about
+     * ([NewsFields.KNOWN]): nothing stored = the defaults; a topic added since the choice was made follows its default.
+     */
+    fun chosen(stored: String?, known: String?): List<String> {
+        val picked = NewsTopics.decode(stored) ?: return NewsTopics.DEFAULT.let { d -> NewsTopics.ALL.map { it.id }.filter { it in d } }
+        val knew = known?.split(',')?.map { it.trim() }?.toSet() ?: NewsTopics.ORIGINAL.toSet()
+        val added = NewsTopics.DEFAULT.filter { it !in knew }
+        return NewsTopics.ALL.map { it.id }.filter { it in picked || it in added }
+    }
+
+    /** Lanes lead with these, then the other chosen topics in chip order. */
+    private val LEAD = listOf(NewsTopics.BARCA.id, NewsTopics.AI.id)
+
+    /** "From Mundo Deportivo, Sport and Google News" (most items first). */
+    private fun sourcesLine(items: List<NewsItem>): String {
+        val names = items.groupingBy { it.source }.eachCount().entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).map { it.key }
+        return when (names.size) {
+            0 -> ""
+            1 -> "From ${names[0]}"
+            else -> "From " + names.dropLast(1).joinToString(", ") + " and " + names.last()
+        }
+    }
+
+    /**
+     * The News place: the chosen topics only, the last [MAX_AGE_IN_PLACE_MS], newest first in each lane, each story
+     * once across lanes (the same article or the same title from another source), at most [MAX_IN_LANE] per lane.
+     */
+    fun place(all: List<Headline>, topics: List<NewsTopicChoice>, nowMs: Long): NewsPlace {
+        val chosen = topics.filter { it.chosen }.map { it.id }
+        val order = LEAD.filter { it in chosen } + chosen.filter { it !in LEAD }
+        val seenLinks = HashSet<String>()
+        val seenTitles = HashSet<String>()
+        val fresh = all.filter { it.publishedAtMs <= nowMs + 10 * 60_000L && nowMs - it.publishedAtMs <= MAX_AGE_IN_PLACE_MS }
+        val lanes = order.mapNotNull { topic ->
+            val items = fresh.filter { it.topic == topic }
+                .sortedWith(compareByDescending<Headline> { it.publishedAtMs }.thenBy { it.id })
+                .filter { seenLinks.add(linkKey(it)) && seenTitles.add(storyKey(it.title)) }
+                .take(MAX_IN_LANE)
+                .map { h -> NewsItem(h.id, h.title, h.url, h.source, h.topic, "${h.source} · ${age(h.publishedAtMs, nowMs)}", h.summary, h.publishedAtMs) }
+            if (items.isEmpty()) null
+            else NewsLane(topic, NewsTopics.byId(topic)?.label ?: topic, sourcesLine(items), items)
+        }
+        val empty = when {
+            lanes.isNotEmpty() -> null
+            chosen.isEmpty() -> "No topics chosen · pick some below"
+            else -> "No headlines in the last two days · they refresh every hour"
+        }
+        return NewsPlace(lanes, topics, empty)
+    }
+
+    /** Key that treats the same article in two topic feeds as one. */
+    private fun linkKey(h: Headline) = h.url?.substringBefore('?')?.substringBefore('#')?.lowercase() ?: ("t:" + h.title.lowercase())
+
+    private val accents = mapOf(
+        'á' to 'a', 'à' to 'a', 'â' to 'a', 'ä' to 'a', 'ã' to 'a', 'é' to 'e', 'è' to 'e', 'ê' to 'e', 'ë' to 'e',
+        'í' to 'i', 'ì' to 'i', 'î' to 'i', 'ï' to 'i', 'ó' to 'o', 'ò' to 'o', 'ô' to 'o', 'ö' to 'o', 'õ' to 'o',
+        'ú' to 'u', 'ù' to 'u', 'û' to 'u', 'ü' to 'u', 'ñ' to 'n', 'ç' to 'c',
+    )
+
+    /**
+     * The same story from several sources, as one key: the title lower-cased, accents and punctuation dropped,
+     * spacing collapsed ("Barça beat Real Madrid 3–1!" and "Barca beat Real Madrid 3-1" match). Titles that differ in
+     * wording stay apart (merging those is the AI layer's job).
+     */
+    fun storyKey(title: String): String = buildString {
+        var space = false
+        for (raw in title.lowercase()) {
+            val c = accents[raw] ?: raw
+            if (c.isLetterOrDigit()) { if (space && isNotEmpty()) append(' '); append(c); space = false } else space = true
+        }
+    }
 
     /**
      * The brief's headlines: the chosen topics only, from the last [MAX_AGE_MS], newest first, each story once (the
@@ -134,7 +267,7 @@ object NewsRules {
         return all.asSequence()
             .filter { it.topic in chosen && it.publishedAtMs <= nowMs + 10 * 60_000L && nowMs - it.publishedAtMs <= MAX_AGE_MS }
             .sortedWith(compareByDescending<Headline> { it.publishedAtMs }.thenBy { chosen.indexOf(it.topic) }.thenBy { it.id })
-            .filter { seenStories.add(storyKey(it)) && seenTitles.add(it.title.lowercase()) }
+            .filter { seenStories.add(linkKey(it)) && seenTitles.add(storyKey(it.title)) }
             .take(MAX_IN_BRIEF)
             .map { h ->
                 val topic = NewsTopics.byId(h.topic)?.takeIf { chosen.size > 1 }?.label
@@ -148,8 +281,10 @@ object NewsRules {
 class News(private val replica: Replica) {
     fun all(): List<Headline> = replica.entities(EntityTypes.HEADLINE).mapNotNull { Headline.from(it) }
 
-    fun topics(): List<String> =
-        NewsTopics.decode(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(NewsFields.TOPICS)?.textOrNull) ?: NewsTopics.DEFAULT
+    fun topics(): List<String> {
+        val e = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)
+        return NewsRules.chosen(e?.get(NewsFields.TOPICS)?.textOrNull, e?.get(NewsFields.KNOWN)?.textOrNull)
+    }
 
     fun choices(): List<NewsTopicChoice> = topics().let { chosen -> NewsTopics.ALL.map { NewsTopicChoice(it.id, it.label, it.id in chosen) } }
 
@@ -159,9 +294,14 @@ class News(private val replica: Replica) {
         val current = topics()
         val next = if (on) current + id else current - id
         val encoded = NewsTopics.encode(next)
-        if (replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(NewsFields.TOPICS)?.textOrNull == encoded) return
-        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NewsFields.TOPICS to encoded.fv()))
+        val known = NewsTopics.ALL.joinToString(",") { it.id }
+        val e = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)
+        if (e?.get(NewsFields.TOPICS)?.textOrNull == encoded && e?.get(NewsFields.KNOWN)?.textOrNull == known) return
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NewsFields.TOPICS to encoded.fv(), NewsFields.KNOWN to known.fv()))
     }
+
+    /** The News place over the chosen topics. */
+    fun place(nowMs: Long): NewsPlace = NewsRules.place(all(), choices(), nowMs)
 
     companion object {
         const val ENTITY_ID = "news"
