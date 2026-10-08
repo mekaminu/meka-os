@@ -212,6 +212,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         let notAKey = try await core.newsImageBase64(key: "https://img.example/a.jpg")
         XCTAssertNil(notAKey)
         XCTAssertEqual(NewsRules.shared.tileInitial(source: "Mundo Deportivo"), "M")
+        XCTAssertEqual(NewsRules.shared.tileMark(source: "Mundo Deportivo"), "MD")
+        XCTAssertEqual(NewsRules.shared.tileMark(source: "BBC News"), "BBC")
+        XCTAssertEqual(TickerRules.shared.edgeFadeFraction(widthDp: 480), 0.1, accuracy: 0.0001)
         // The news ticker (slice 2): nothing to show, so no strip; calm by default, rests after two loops.
         let ticker = TickerRules.shared.ticker(place: place)
         XCTAssertTrue(ticker.isEmpty)

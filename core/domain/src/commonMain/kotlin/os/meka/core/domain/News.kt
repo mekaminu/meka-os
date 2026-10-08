@@ -128,6 +128,8 @@ data class NewsItem(
 ) {
     /** The tile shown while the picture loads or when there is none: the source's initial ("M" for Mundo Deportivo). */
     val tileInitial: String get() = NewsRules.tileInitial(source)
+    /** The source's short name on its tile when there is no picture ("MD", "BBC", "TC"); see [NewsRules.tileMark]. */
+    val tileMark: String get() = NewsRules.tileMark(source)
 }
 
 /** One topic's lane: "Barça" with "From Mundo Deportivo, Sport and Google News". */
@@ -210,6 +212,33 @@ object NewsRules {
     /** The source's first letter or digit, upper-cased ("Mundo Deportivo" → "M", "9to5Mac" → "9"); "N" when none. */
     fun tileInitial(source: String): String =
         source.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "N"
+
+    /**
+     * The source's short name for its picture-less tile (Fold review 2026-10-08: a lone grey "T" looked unfinished):
+     * an all-capitals first word of 2–4 is kept ("BBC News" → "BBC", "ESPN" → "ESPN"); several words give their
+     * initials, a leading "The"/"El"/"La"/"Le" left out ("Mundo Deportivo" → "MD", "Sky Sports" → "SS"); one
+     * camel-cased word gives its capitals ("TechCrunch" → "TC", "9to5Mac" → "9M"); otherwise the first letter
+     * ("Sport" → "S", "The Athletic" → "A"). At most 3 characters, upper-cased; "N" when there is nothing to use.
+     */
+    fun tileMark(source: String): String {
+        val words = mutableListOf<String>()
+        val cur = StringBuilder()
+        for (ch in source) {
+            if (ch.isLetterOrDigit()) cur.append(ch) else if (cur.isNotEmpty()) { words += cur.toString(); cur.clear() }
+        }
+        if (cur.isNotEmpty()) words += cur.toString()
+        if (words.isEmpty()) return "N"
+        val first = words.first()
+        if (first.length in 2..4 && first.any { it.isLetter() } && first.all { !it.isLetter() || it.isUpperCase() }) return first
+        val kept = if (words.size > 1 && first.lowercase() in LEADING_ARTICLES) words.drop(1) else words
+        if (kept.size > 1) return kept.take(3).joinToString("") { it.first().uppercaseChar().toString() }
+        val word = kept.first()
+        val caps = word.filterIndexed { i, c -> c.isUpperCase() || (i == 0 && c.isDigit()) }
+        if (caps.length >= 2) return caps.take(3)
+        return word.first().uppercaseChar().toString()
+    }
+
+    private val LEADING_ARTICLES = setOf("the", "el", "la", "le", "les", "los", "il")
 
     /** "just now", "25 min ago", "3 h ago", "yesterday". */
     fun age(publishedAtMs: Long, nowMs: Long): String {

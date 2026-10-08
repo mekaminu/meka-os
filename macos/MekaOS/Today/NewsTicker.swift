@@ -93,6 +93,8 @@ struct DriftingTicker: View {
     var body: some View {
         // A set narrower than the strip can't loop without a gap: it stands still.
         let fits = loopWidth > 0 && loopWidth >= viewport
+        // Words fade over 48 pt at each end rather than being cut mid-word (TickerRules.EDGE_FADE_DP).
+        let edge = CGFloat(TickerRules.shared.edgeFadeFraction(widthDp: Float(viewport)))
         let moving = TickerRules.shared.moving(mode: mode, reducedMotion: false, onScreen: true, held: hovering,
                                                loopsDone: drift.loops, hasItems: fits)
         ZStack(alignment: .trailing) {
@@ -112,8 +114,8 @@ struct DriftingTicker: View {
             .clipped()
             .mask(
                 LinearGradient(stops: [
-                    .init(color: .clear, location: 0), .init(color: .black, location: 0.03),
-                    .init(color: .black, location: 0.97), .init(color: .clear, location: 1),
+                    .init(color: .clear, location: 0), .init(color: .black, location: edge),
+                    .init(color: .black, location: 1 - edge), .init(color: .clear, location: 1),
                 ], startPoint: .leading, endPoint: .trailing)
             )
             if fits && TickerRules.shared.offersPlay(mode: mode, reducedMotion: false, loopsDone: drift.loops, hasItems: true) {

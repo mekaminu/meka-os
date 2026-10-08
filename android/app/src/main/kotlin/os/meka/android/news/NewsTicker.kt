@@ -275,12 +275,12 @@ private fun Card(core: MekaCore, c: TickerCard, modifier: Modifier, open: (Ticke
     }
 }
 
-/** The strip fades out at both ends, so cards drift in and out softly. */
+/** The strip fades out over [TickerRules.EDGE_FADE_DP] at both ends, so words fade in and out rather than cut. */
 private fun Modifier.fadedEdges(): Modifier = this
     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     .drawWithContent {
         drawContent()
-        val edge = 24.dp.toPx() / size.width
+        val edge = TickerRules.edgeFadeFraction(size.width / density)
         drawRect(
             Brush.horizontalGradient(
                 0f to Color.Transparent, edge to Color.Black, (1f - edge) to Color.Black, 1f to Color.Transparent,

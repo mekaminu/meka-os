@@ -43,6 +43,14 @@ object TickerRules {
     const val MAX_ITEMS = 12
     /** A frame gap longer than this (a pause, a dropped frame) moves the strip no further than this. */
     const val MAX_STEP_MS = 100L
+    /**
+     * How wide the soft fade is at each end of the strip (Fold review 2026-10-08: at 24 dp words entering at the left
+     * looked cut mid-word, "ust two training…"; at 48 dp they fade).
+     */
+    const val EDGE_FADE_DP = 48f
+
+    /** The fade's share of a strip [widthDp] wide (each end), never more than a quarter so the middle stays clear. */
+    fun edgeFadeFraction(widthDp: Float): Float = if (widthDp <= 0f) 0f else minOf(0.25f, EDGE_FADE_DP / widthDp)
 
     /** The stored choice; anything unknown (or nothing) is [TickerMode.CALM]. */
     fun mode(id: String?): TickerMode = TickerMode.entries.firstOrNull { it.id == id } ?: TickerMode.CALM

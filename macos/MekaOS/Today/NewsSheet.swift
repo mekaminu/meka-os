@@ -213,8 +213,9 @@ private struct StoryRow: View {
     }
 }
 
-/// A story's picture: the server's small JPEG (fetched by key through the core, kept in memory), over a tile with the
-/// source's initial (Barça's colour on Barça stories) that shows until it arrives or when there is none. Decorative:
+/// A story's picture: the server's small JPEG (fetched by key through the core, kept in memory), over an accent-tinted
+/// tile with the source's short name ("MD", "BBC", "TC"; Barça's colour on Barça stories) that shows until it arrives
+/// or when there is none. Decorative:
 /// the row already says the title and source.
 struct NewsThumb: View {
     @Environment(CoreModel.self) private var model
@@ -232,9 +233,12 @@ struct NewsThumb: View {
                 Image(nsImage: picture).resizable().scaledToFill()
                     .transition(.opacity)
             } else {
-                Text(item.tileInitial).font(initialFont)
-                    .foregroundStyle(item.topic == "barca" ? palette.barca : palette.textTertiary)
-                    .transition(.opacity)
+                let tint = item.topic == "barca" ? palette.barca : palette.accent
+                ZStack {
+                    Rectangle().fill(tint.opacity(0.16))
+                    Text(item.tileMark).font(initialFont).foregroundStyle(tint).lineLimit(1).fixedSize()
+                }
+                .transition(.opacity)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: corner))

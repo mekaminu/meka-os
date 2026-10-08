@@ -31,10 +31,13 @@ import os.meka.core.facade.MekaCore
 
 /**
  * A story's picture (news, images slice): the small JPEG the household's server made from the feed's picture, fetched
- * from the server by key (never from the publisher). Until it arrives, or when there is none, a tile with the
- * source's initial (Barça's colour on Barça stories). The picture cross-fades in over the tile. Decorative: the row
+ * from the server by key (never from the publisher). Until it arrives, or when there is none, an accent-tinted tile
+ * with the source's short name ("MD", "BBC", "TC"; [NewsItem.tileMark]), tinted in Barça's colour on Barça stories. The picture cross-fades in over the tile. Decorative: the row
  * already says the title and source, so screen readers skip it.
  */
+/** How strongly the picture-less tile is tinted with the accent (or Barça's colour). */
+private const val TILE_TINT = 0.16f
+
 @Composable
 fun NewsThumb(core: MekaCore, item: NewsItem, modifier: Modifier, corner: Dp = MekaRadius.s, initialStyle: TextStyle = MekaType.itemTitle) {
     val key = item.imageKey
@@ -54,8 +57,9 @@ fun NewsThumb(core: MekaCore, item: NewsItem, modifier: Modifier, corner: Dp = M
             if (p != null) {
                 Image(p, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             } else {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(item.tileInitial, style = initialStyle, color = if (barca) Meka.colors.barca else Meka.colors.textTertiary)
+                val tint = if (barca) Meka.colors.barca else Meka.colors.accent
+                Box(Modifier.fillMaxSize().background(tint.copy(alpha = TILE_TINT)), contentAlignment = Alignment.Center) {
+                    Text(item.tileMark, style = initialStyle, color = tint, maxLines = 1, softWrap = false)
                 }
             }
         }

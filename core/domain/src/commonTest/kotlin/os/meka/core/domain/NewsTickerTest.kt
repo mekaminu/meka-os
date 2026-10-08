@@ -48,6 +48,14 @@ class NewsTickerTest {
     }
 
     @Test
+    fun theEdgesFadeOverFortyEightDpSoWordsFadeRatherThanCut() {
+        assertEquals(48f, TickerRules.EDGE_FADE_DP)
+        assertEquals(0.1f, TickerRules.edgeFadeFraction(480f))
+        assertEquals(0.25f, TickerRules.edgeFadeFraction(120f))
+        assertEquals(0f, TickerRules.edgeFadeFraction(0f))
+    }
+
+    @Test
     fun theChoiceDefaultsToCalm() {
         assertEquals(TickerMode.CALM, TickerRules.mode(null))
         assertEquals(TickerMode.CALM, TickerRules.mode("sideways"))
