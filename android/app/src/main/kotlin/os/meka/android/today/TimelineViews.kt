@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -43,6 +44,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import os.meka.android.calendar.EventActionHandlers
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -150,7 +152,10 @@ internal fun GapRow(r: TimelineRow, modifier: Modifier = Modifier) {
     }
 }
 
-/** The now line: a breathing accent dot, the time, and a hairline across. */
+/**
+ * The now line: a breathing accent dot, the time, and a hairline across. When the free stretch starts now, its words sit
+ * on the line ("07:57 ● 1 h free until Work", Fold review 2026-10-08) and cross-fade as they change.
+ */
 @Composable
 internal fun NowLine(r: TimelineRow, modifier: Modifier = Modifier) {
     val reduced = Meka.reducedMotion
@@ -160,11 +165,20 @@ internal fun NowLine(r: TimelineRow, modifier: Modifier = Modifier) {
         a
     }
     Row(
-        modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs).semantics { contentDescription = "Now, ${r.time}" },
+        modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs)
+            .semantics { contentDescription = listOfNotNull("Now, ${r.time}", r.detail).joinToString(", ") },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(r.time, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.width(TIME_COLUMN))
         Box(Modifier.size(8.dp).alpha(dotAlpha).clip(CircleShape).background(Meka.colors.accent))
+        r.detail?.let { free ->
+            Crossfade(free, Modifier.weight(1f, fill = false), animationSpec = MekaMotion.appear(reduced), label = "now-free") { line ->
+                Text(
+                    line, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = MekaSpace.xs),
+                )
+            }
+        }
         Box(Modifier.weight(1f).height(1.dp).background(Meka.colors.accent.copy(alpha = 0.5f)))
     }
 }

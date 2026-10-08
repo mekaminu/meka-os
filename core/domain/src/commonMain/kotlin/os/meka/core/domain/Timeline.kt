@@ -34,7 +34,7 @@ data class TimelineRow(
     val title: String,
     /**
      * "Camp Nou · Outlook" for an event; "30 min · 1/3 · ↻ Every weekday" for a task; "Leave by 17:30" or
-     * "Now · until 18:45" for a session; "Now · until 17:30" while at work; null when there's nothing to say.
+     * "Now · until 18:45" for a session; "Now · until 17:30" while at work; "1 h free until Work" on the now line when the free stretch starts now; null when there's nothing to say.
      */
     val detail: String?,
     val task: Task?,
@@ -113,6 +113,8 @@ data class DayTimeline(
  * - The now line sits after everything that has started and before what's still to come.
  * - From now on, a free stretch of at least [MIN_GAP_MIN] minutes between things shows as "1 h 30 free" (rounded down
  *   to 5 minutes so it doesn't tick every minute). A planned task with no estimate takes [DEFAULT_TASK_MIN] minutes.
+ *   When the first stretch starts now (nothing running), it is said on the now line instead of a row of its own:
+ *   the now row's detail reads "1 h free until Work" (Fold review 2026-10-08: the time was said twice).
  * - The next event starting within [UP_NEXT_WINDOW_MIN] minutes is offered to Up next.
  * - Today's booked sessions still to come or on now (the Gym, [SessionRules]) sit in time order like events, "Gym · Push"
  *   with "Leave by 17:30" (or "Now · until 18:45"), and take their time out of the free gaps. Once a session is over
@@ -186,7 +188,7 @@ object TimelineRules {
         val endedIds = ended.map { it.row.id }.toSet()
         val live = items.filter { it.row.id !in endedIds && !(it.isWork && it.end <= nowMs) }
 
-        val rows = buildList {
+        val rows = buildList<TimelineRow> {
             val started = live.filter { it.start <= nowMs }
             val ahead = live.filter { it.start > nowMs }
             started.forEach { add(it.row) }
@@ -198,15 +200,21 @@ object TimelineRules {
             var cursor = (runningEnds + nowMs).max()
             // The gap after work says so: it starts where work ended.
             var afterWork = started.any { it.isWork && it.end == cursor }
-            ahead.forEach { item ->
+            ahead.forEachIndexed { i, item ->
                 val free = ((item.start - cursor) / MIN_MS).toInt()
                 if (free >= MIN_GAP_MIN) {
-                    val label = when {
-                        item.isWork -> "${freeLabel(free)} before work"
-                        afterWork -> "${freeLabel(free)} after work"
-                        else -> freeLabel(free)
+                    val nowAt = lastIndex
+                    if (i == 0 && cursor == nowMs && nowAt >= 0 && this[nowAt].kind == TimelineKind.NOW) {
+                        // The free stretch starts now: say it on the now line, once ("07:57 ● 1 h free until Work").
+                        this[nowAt] = this[nowAt].copy(detail = untilLabel(free, item.row.title))
+                    } else {
+                        val label = when {
+                            item.isWork -> "${freeLabel(free)} before work"
+                            afterWork -> "${freeLabel(free)} after work"
+                            else -> freeLabel(free)
+                        }
+                        add(TimelineRow("gap-" + item.row.id, TimelineKind.GAP, hhmm(cursor), label, null, null, null, false, cursor))
                     }
-                    add(TimelineRow("gap-" + item.row.id, TimelineKind.GAP, hhmm(cursor), label, null, null, null, false, cursor))
                 }
                 add(item.row)
                 if (item.end >= cursor) afterWork = item.isWork
@@ -245,6 +253,12 @@ object TimelineRules {
             else -> "${m / 60} h ${(m % 60).toString().padStart(2, '0')} free"
         }
     }
+
+    /**
+     * The now line's words when the free stretch starts now (Fold review 2026-10-08, item 3): "1 h free until Work" ·
+     * "45 min free until Standup".
+     */
+    fun untilLabel(minutes: Int, next: String): String = "${freeLabel(minutes)} until $next"
 
     /** "25 min" · "1 h" */
     fun inLabel(minutes: Int): String = if (minutes >= 60) "${minutes / 60} h" else "$minutes min"

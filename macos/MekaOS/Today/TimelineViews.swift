@@ -274,7 +274,8 @@ struct WorkBand: View {
     }
 }
 
-/// The now line: a breathing accent dot, the time, and a hairline across.
+/// The now line: a breathing accent dot, the time, and a hairline across. When the free stretch starts now, its words
+/// sit on the line ("07:57 ● 1 h free until Work", Fold review 2026-10-08) and cross-fade as they change.
 struct NowLine: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let row: TimelineRow
@@ -287,12 +288,19 @@ struct NowLine: View {
                 .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
             Circle().fill(palette.accent).frame(width: 8, height: 8)
                 .opacity(reduceMotion ? 1 : (dim ? 0.45 : 1))
+            if let free = row.detail {
+                Text(free).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1).truncationMode(.tail)
+                    .padding(.horizontal, MekaSpace.xs)
+                    .id(free)
+                    .transition(.opacity)
+            }
             Rectangle().fill(palette.accent.opacity(0.5)).frame(height: 1)
         }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: row.detail)
         .padding(.vertical, MekaSpace.xxs)
         .padding(.horizontal, MekaSpace.xs)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Now, \(row.time)")
+        .accessibilityLabel(["Now, \(row.time)", row.detail].compactMap { $0 }.joined(separator: ", "))
         .onAppear {
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { dim = true }

@@ -22,12 +22,18 @@ class WorkHoursTest {
     private fun today(now: Long, events: List<CalendarEvent> = emptyList(), work: WorkHours? = weekdays, day: Long = thu8) =
         TodayProjection.project(emptyList(), now, window(day), events, cal, work = work)
 
-    private fun rows(t: Today) = t.timeline.rows.map { if (it.kind == TimelineKind.GAP) "gap:${it.title}" else it.id }
+    private fun rows(t: Today) = t.timeline.rows.map {
+        when {
+            it.kind == TimelineKind.GAP -> "gap:${it.title}"
+            it.kind == TimelineKind.NOW && it.detail != null -> "now:${it.detail}"
+            else -> it.id
+        }
+    }
 
     @Test
     fun aWorkDayShowsWorkAsOneQuietBlockAndFreeTimeBeforeIt() {
         val t = today(at(thu8, 7, 57))
-        assertEquals(listOf("now", "gap:1 h free before work", "w-540"), rows(t))
+        assertEquals(listOf("now:1 h free until Work", "w-540"), rows(t))
         val work = t.timeline.rows.last()
         assertEquals(TimelineKind.WORK, work.kind)
         assertEquals("09:00–17:30", work.time)
@@ -53,10 +59,10 @@ class WorkHoursTest {
         val standup = ev("Standup", at(thu8, 10), at(thu8, 10, 15))
         val dinner = ev("Dinner", at(thu8, 19), at(thu8, 20))
         val morning = today(at(thu8, 8), listOf(standup, dinner))
-        assertEquals(listOf("now", "gap:1 h free before work", "w-540", "e-Standup", "gap:1 h 30 free after work", "e-Dinner"), rows(morning))
+        assertEquals(listOf("now:1 h free until Work", "w-540", "e-Standup", "gap:1 h 30 free after work", "e-Dinner"), rows(morning))
         // After 17:30 work has gone (not folded into "earlier" like an event).
         val evening = today(at(thu8, 18), listOf(standup, dinner))
-        assertEquals(listOf("now", "gap:1 h free", "e-Dinner"), rows(evening))
+        assertEquals(listOf("now:1 h free until Dinner", "e-Dinner"), rows(evening))
         assertEquals(listOf("e-Standup"), evening.timeline.earlier.map { it.id })
         // Nothing but finished work: no now line, nothing on the timeline.
         assertEquals(emptyList(), today(at(thu8, 18)).timeline.rows)

@@ -41,13 +41,15 @@ class TimelineTest {
         assertEquals(listOf("e-standup"), tl.earlier.map { it.id })
         assertEquals("1 earlier", tl.earlierLabel)
         // write (14:00, 60 min) ends 15:00; call at 16:00 leaves a 1 h gap. From now (10:02) to lunch: 1 h 58 → 1 h 55.
+        // The first stretch starts now, so the now line says it (Fold review 2026-10-08: the time was said twice).
         assertEquals(
-            listOf("now", "gap", "e-lunch", "gap", "t-write", "gap", "e-call"),
+            listOf("now", "e-lunch", "gap", "t-write", "gap", "e-call"),
             tl.rows.map { if (it.kind == TimelineKind.GAP) "gap" else it.id },
         )
-        assertEquals(listOf("1 h 55 free", "1 h free", "1 h free"), tl.rows.filter { it.kind == TimelineKind.GAP }.map { it.title })
+        assertEquals("1 h 55 free until lunch", tl.rows.first().detail)
+        assertEquals(listOf("1 h free", "1 h free"), tl.rows.filter { it.kind == TimelineKind.GAP }.map { it.title })
         assertEquals("10:02", tl.rows.first().time)
-        assertEquals("gap-e-lunch", tl.rows[1].id) // stable while now moves
+        assertEquals("gap-t-write", tl.rows[2].id) // stable while now moves
         val lunch = tl.rows.first { it.id == "e-lunch" }
         assertEquals("12:00–13:00", lunch.time)
         assertEquals("Canteen", lunch.detail)
@@ -68,7 +70,28 @@ class TimelineTest {
         // A planned task whose time has passed isn't folded: it still needs doing. (Up next takes the next one.)
         val t = TodayProjection.project(listOf(task("morning", scheduled = at(8)), task("later", scheduled = at(15))), at(10), day)
         assertEquals("later", t.upNext!!.id)
-        assertEquals(listOf("t-morning", "now", "gap", "t-later"), t.timeline.rows.map { if (it.kind == TimelineKind.GAP) "gap" else it.id })
+        assertEquals(listOf("t-morning", "now", "t-later"), t.timeline.rows.map { if (it.kind == TimelineKind.GAP) "gap" else it.id })
+        assertEquals("5 h free until later", t.timeline.rows[1].detail)
+    }
+
+    @Test
+    fun theFreeStretchFromNowIsSaidOnTheNowLineOnce() {
+        // Fold review 2026-10-08: "07:57 ●────" then "07:57 · 10 h free" said the time twice.
+        val tl = project(emptyList(), listOf(ev("standup", at(9), at(9, 15))), now = at(7, 57))
+        assertEquals(listOf("now", "e-standup"), tl.rows.map { it.id })
+        val now = tl.rows.first()
+        assertEquals("07:57", now.time)
+        assertEquals("1 h free until standup", now.detail)
+        assertTrue(tl.rows.none { it.kind == TimelineKind.GAP })
+        // Something running: free time starts when it ends, so that gap keeps its own row (with its own time).
+        val busy = project(emptyList(), listOf(ev("workshop", at(9), at(10)), ev("review", at(11), at(12))), now = at(9, 30))
+        assertEquals(listOf("e-workshop", "now", "gap", "e-review"), busy.rows.map { if (it.kind == TimelineKind.GAP) "gap" else it.id })
+        assertNull(busy.rows[1].detail)
+        assertEquals("10:00", busy.rows[2].time)
+        // Under half an hour free: nothing on the line.
+        val soon = project(emptyList(), listOf(ev("call", at(10, 20), at(10, 30))), now = at(10))
+        assertNull(soon.rows.first().detail)
+        assertEquals("45 min free until Standup", TimelineRules.untilLabel(47, "Standup"))
     }
 
     @Test

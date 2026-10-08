@@ -418,13 +418,13 @@ class SessionsTest {
         val h = listOf(gym(rotation = listOf("Push", "Pull", "Legs")))
         val v = book(h, now = at(mon, 15))
         val tl = todayWith(v, at(mon, 15), events = listOf(ev("call", at(mon, 19, 30), at(mon, 20)))).timeline
-        assertEquals(listOf("now", "gap-s-gym", "s-gym", "gap-e-call", "e-call"), tl.rows.map { it.id })
+        assertEquals(listOf("now", "s-gym", "gap-e-call", "e-call"), tl.rows.map { it.id })
         val row = tl.rows.single { it.kind == TimelineKind.SESSION }
         assertEquals("17:45–18:45", row.time)
         assertEquals("Gym · Push", row.title)
         assertEquals("Leave by 17:30", row.detail)
         assertEquals("gym", row.session?.habitId)
-        assertEquals("2 h 45 free", tl.rows.first { it.id == "gap-s-gym" }.title)
+        assertEquals("2 h 45 free until Gym · Push", tl.rows.first().detail) // said on the now line
         assertEquals("45 min free", tl.rows.first { it.id == "gap-e-call" }.title) // from 18:45, not 15:00
         assertTrue(tl.hasEventsAhead)
         // On now: marked running; once over (or answered) it leaves the timeline.
