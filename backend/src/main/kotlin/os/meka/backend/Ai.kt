@@ -14,6 +14,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.security.MessageDigest
 import java.time.Duration
+import javax.sql.DataSource
 
 /**
  * The AI layer's first slice (build plan V1, ADR-006 §4 "keys live server-side only"): the service reads MEKA's cloud
@@ -105,11 +106,14 @@ class AiHealth(
             MessageDigest.getInstance("SHA-256").digest(k.toByteArray()).joinToString("") { "%02x".format(it) }
 
         /** Reads the key from Secrets Manager by ARN, cached for a minute; null when unset or `{}`. */
-        fun fromSecret(secretId: String): AiHealth {
+        fun fromSecret(secretId: String): AiHealth = AiHealth(key = secretKey(secretId))
+
+        /** The key as the service reads it at use time: from Secrets Manager, cached a minute; null when unset or `{}`. */
+        fun secretKey(secretId: String): () -> String? {
             val sm = SecretsManagerClient.builder().httpClient(UrlConnectionHttpClient.create()).build()
             var cached: Pair<Long, String?>? = null
             val lock = Any()
-            return AiHealth(key = {
+            return {
                 synchronized(lock) {
                     val hit = cached?.takeIf { System.currentTimeMillis() - it.first < 60_000 }
                     if (hit != null) hit.second else {
@@ -118,10 +122,23 @@ class AiHealth(
                         v
                     }
                 }
-            })
+            }
         }
     }
 }
 
-/** Null unless the deployment names the AI secret (local dev and tests run without it). */
-fun aiFromEnv(): AiHealth? = System.getenv("MEKA_AI_SECRET")?.takeIf { it.isNotBlank() }?.let { AiHealth.fromSecret(it) }
+/**
+ * Null unless the deployment names the AI secret (local dev and tests run without it). With a database the layer also
+ * meters every model call against the monthly budget (ADR-006 §5) and offers the cloud provider.
+ */
+fun aiFromEnv(ds: DataSource? = null): AiLayer? {
+    val secret = System.getenv("MEKA_AI_SECRET")?.takeIf { it.isNotBlank() } ?: return null
+    val key = AiHealth.secretKey(secret)
+    val health = AiHealth(key = key)
+    val budget = ds?.let {
+        AiBudget(AiBudget.usdFromEnv(), PostgresAiUsageStore(it), onAlert = { level, month ->
+            System.err.println("ai: budget ${if (level == AiBudget.Level.OVER) "used up, AI off until the 1st" else "70 % used"} ($month)")
+        })
+    }
+    return AiLayer(health, budget, budget?.let { AnthropicProvider(key, it) })
+}

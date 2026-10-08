@@ -74,8 +74,8 @@ fun Application.mekaSync(
     newsImages: NewsImages? = null,
     /** Sends calendar edits (calendar editing); a push carrying one pokes it so the edit goes out within seconds. */
     calendarWriter: CalendarWriter? = null,
-    /** The AI layer's key health check (V1, first slice); null leaves the route out. */
-    ai: AiHealth? = null,
+    /** The AI layer: the key's health check and the monthly budget (V1); null leaves the route out. */
+    ai: AiLayer? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -262,8 +262,8 @@ fun Application.mekaSync(
             post("/v1/ai/status") {
                 val body = call.boundedBody()
                 call.device(devices, verifier, body, requireKey = true)
-                val status = withContext(Dispatchers.IO) { ai.status() }
-                call.respondText(status.toJson().toString(), ContentType.Application.Json)
+                val status = withContext(Dispatchers.IO) { ai.statusJson() }
+                call.respondText(status.toString(), ContentType.Application.Json)
             }
         }
 
@@ -446,7 +446,7 @@ fun main(args: Array<String>) {
             // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push)
-            val ai = aiFromEnv()?.also { startAiCheck(it) }
+            val ai = aiFromEnv(ds)?.also { startAiCheck(it.health) }
             embeddedServer(Netty, port = port) {
                 mekaSync(
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
@@ -527,7 +527,7 @@ object Migrations {
     private val all = listOf(
         1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql", 4 to "/db/V4__event_mirror_end.sql",
         5 to "/db/V5__app_release.sql", 6 to "/db/V6__push_token.sql", 7 to "/db/V7__news_image.sql",
-        8 to "/db/V8__calendar_editing.sql", 9 to "/db/V9__event_edits.sql",
+        8 to "/db/V8__calendar_editing.sql", 9 to "/db/V9__event_edits.sql", 10 to "/db/V10__ai_usage.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

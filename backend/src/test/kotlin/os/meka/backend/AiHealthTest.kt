@@ -114,7 +114,7 @@ class AiHealthTest {
         val foldSecret = devices.enrol("hh", "fold")
         val foldKey = TestDeviceKey().also { devices.registerKey(DeviceIdentity("hh", "fold"), it.publicB64) }
         val bare = devices.enrol("hh", "old")
-        application { mekaSync(InMemoryServerOpStore(), devices, ai = AiHealth(key = { goodKey }, http = FakeGet(), nowMs = { now })) }
+        application { mekaSync(InMemoryServerOpStore(), devices, ai = AiLayer(AiHealth(key = { goodKey }, http = FakeGet(), nowMs = { now }))) }
 
         val ok = client.post("/v1/ai/status") { with(foldKey) { signed(foldSecret, "/v1/ai/status", "{}") } }
         assertEquals(HttpStatusCode.OK, ok.status)
