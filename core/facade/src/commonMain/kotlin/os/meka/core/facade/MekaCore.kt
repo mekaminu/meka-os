@@ -709,6 +709,74 @@ class MekaCore(
     /** Not a task (Not needed, Not an event) on a request card: gone from Needs you on every device, its text blanked. */
     suspend fun declineRequest(cardId: String): Boolean =
         onCore { requestCards.resolve(cardId, os.meka.core.domain.RequestResolution.DECLINED) }
+
+    /**
+     * Add on a request card (V1, requests slice 4): a task on its day (planned at its time; a reminder rings at its time
+     * while that is still ahead), an event in the calendar MEKA may edit (a planned task when none allows editing), or
+     * a work-from-home day. The card leaves Needs you on every device. Null when the card is already answered.
+     */
+    suspend fun acceptRequest(cardId: String): RequestDone? = onCore { doRequest(cardId, change = false) }
+
+    /**
+     * Change on a request card: the proposal as a task (an event too, so it can be edited before anything is written to
+     * a calendar), then the app opens its detail ([RequestDone.taskId]). Null for a work-from-home card or one already
+     * answered.
+     */
+    suspend fun changeRequest(cardId: String): RequestDone? = onCore { doRequest(cardId, change = true) }
+
+    /**
+     * Undo on the bar after Add or Change: deletes the task, cancels the calendar edit (inside its five seconds) or
+     * takes the work-from-home day back. The card stays answered.
+     */
+    suspend fun undoRequest(done: RequestDone): Boolean = onCore {
+        var undone = false
+        done.taskId?.let { id -> tasks.get(id)?.let { tasks.delete(id); followBlocks(listOf(id)); undone = true } }
+        done.editId?.let { if (calendarEdits.undo(it)) undone = true }
+        if (done.homeDay >= 0 && work.setHomeDay(done.homeDay, false, todayEpochDay())) undone = true
+        undone
+    }
+
+    private fun doRequest(cardId: String, change: Boolean): RequestDone? {
+        val rules = os.meka.core.domain.RequestAcceptRules
+        val card = requestCards.find(cardId) ?: return null
+        val cal = ZoneCalendar(timeZone)
+        val today = todayEpochDay()
+        val accounts = _editAccounts.value
+        val account = accounts.firstOrNull { it.key == os.meka.core.domain.AddEventRules.lastUsedKey(calendarEdits.all()) } ?: accounts.firstOrNull()
+        val plan = rules.plan(card.proposal, canAddEvent = account != null, change = change) ?: return null
+        val done = when (plan) {
+            is os.meka.core.domain.RequestPlan.AddTask -> {
+                val id = tasks.create(NewTask(plan.title))
+                rules.taskDay(plan, today)?.let { day -> tasks.setWhen(id, day, plan.minute) }
+                rules.remindAtMs(plan, today, nowMs(), cal)?.let { tasks.setReminder(id, it) }
+                followBlocks(listOf(id))
+                RequestDone(rules.doneLine(plan, card.proposal.kind, today), id, null)
+            }
+            is os.meka.core.domain.RequestPlan.AddEvent -> {
+                val acct = account ?: return null
+                val form = os.meka.core.domain.AddEventRules.start(today, cal.minuteOfDay(nowMs()), plan.day, accounts, acct.key)
+                    .copy(title = plan.title, minute = plan.minute, lengthMin = plan.lengthMin)
+                when (val r = calendarEdits.add(acct.provider, acct.email, os.meka.core.domain.AddEventRules.draft(form, cal))) {
+                    is os.meka.core.domain.EventEditResult.Made -> RequestDone(rules.doneLine(plan, card.proposal.kind, today, acct.provider), null, r.id)
+                    // Refused (a time already gone, say): keep it as a planned task rather than lose the request.
+                    is os.meka.core.domain.EventEditResult.Refused -> {
+                        val asTask = os.meka.core.domain.RequestPlan.AddTask(plan.title, plan.day, plan.minute, null)
+                        val id = tasks.create(NewTask(plan.title))
+                        rules.taskDay(asTask, today)?.let { day -> tasks.setWhen(id, day, plan.minute) }
+                        followBlocks(listOf(id))
+                        RequestDone(rules.doneLine(asTask, card.proposal.kind, today), id, null)
+                    }
+                }
+            }
+            is os.meka.core.domain.RequestPlan.HomeDay -> {
+                work.setHomeDay(plan.day, true, today)
+                val workDay = os.meka.core.domain.WorkModeRules.isWorkDay(work.schedule(), bankHolidays.calendar(), plan.day)
+                RequestDone(rules.doneLine(plan, card.proposal.kind, today, isWorkDay = workDay), null, null, plan.day)
+            }
+        }
+        requestCards.resolve(cardId, if (change) os.meka.core.domain.RequestResolution.CHANGED else os.meka.core.domain.RequestResolution.ADDED)
+        return done
+    }
     suspend fun setEventReminder(eventId: String, minutes: Int) = onCore { eventActions.setReminder(eventId, minutes) }
     /** Leave by: a heads-up [travelMinutes] before the event starts (how long it takes to get there); 0 turns it off. */
     suspend fun setEventLeaveBy(eventId: String, travelMinutes: Int) = onCore { eventActions.setLeaveBy(eventId, travelMinutes) }
@@ -1700,7 +1768,7 @@ class MekaCore(
         _goals.value = goalsNow
         _workMode.value = workState
         _shutdown.value = shutdownNow
-        _wake.value = alarms.wakeView(dayEvents, os.meka.core.domain.WorkHours.of(workState, holidays, todayEpochDay()))
+        _wake.value = alarms.wakeView(dayEvents, os.meka.core.domain.WorkHours.of(workState, holidays, todayEpochDay(), work.homeDays(todayEpochDay())))
         _nextAlarm.value = alarms.next()
         _quickAlarms.value = alarms.quickItems()
         val notifySettings = notifyPrefs.settings()
@@ -1716,7 +1784,7 @@ class MekaCore(
         _activity.value = activity.view()
         _calendar.value = CalendarAgenda.build(
             all, marks.forCalendarTab(allEvents), nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden,
-            work = os.meka.core.domain.WorkHours.of(workState, holidays, todayEpochDay()),
+            work = os.meka.core.domain.WorkHours.of(workState, holidays, todayEpochDay(), work.homeDays(todayEpochDay())),
         )
         _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars, marks.shownCalendars)
         val editsNow = calendarEdits.all()

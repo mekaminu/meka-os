@@ -684,6 +684,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(NeedsYouMeanwhileRules.shared.more(total: 3))
     }
 
+    /// Requests slice 4: what Add on a request card says reaches Swift, and answering a card that isn't there is a no-op.
+    func testRequestAnswersReachSwift() async throws {
+        let thu: Int64 = 20_741 // Thu 15 Oct 2026
+        let home = RequestAcceptRules.shared.doneLine(plan: RequestPlanHomeDay(day: thu), kind: .workFromHome, today: thu - 6,
+                                                      provider: nil, isWorkDay: true)
+        XCTAssertEqual(home, "Thu 15 Oct: work from home")
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "requests-\(UUID().uuidString).db", deviceKey: nil
+        )
+        XCTAssertTrue(core.requests.value.isEmpty)
+        let none = try await core.acceptRequest(cardId: "nope#0")
+        XCTAssertNil(none)
+    }
+
     /// The spoken morning brief (Weather and a voice, slice 8): the script the brief sheet's Listen reads reaches Swift.
     func testBriefSpeechReachesSwift() {
         XCTAssertEqual(BriefSpeech.shared.script(v: MorningBriefView.companion.EMPTY, name: "Meka"),

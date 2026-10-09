@@ -77,7 +77,7 @@ struct ShellView: View {
     }
 
     /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).
-    private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue }
+    private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue + model.requests.count }
 
     /// Sidebar selection that animates the switch (the List only ever sets a value; nil is ignored).
     private var selection: Binding<ShellDestination?> {
@@ -148,7 +148,10 @@ struct NeedsYouView: View {
                     AfterWorkCard(palette: palette)
                         .padding(.bottom, MekaSpace.s)
                         .staggeredAppear(1)
-                    if model.needsYouCards.isEmpty {
+                    // Requests from people Meka watches, above the stack (V1, requests slice 4).
+                    RequestCardsView(palette: palette)
+                        .padding(.bottom, model.requests.isEmpty ? 0 : MekaSpace.s)
+                    if model.needsYouCards.isEmpty && model.requests.isEmpty {
                         // The breathing check ring beside a light line and what lands here (catalogue "Empty
                         // states"; Fold review 2026-10-08, item 7); Off: still.
                         HStack(spacing: MekaSpace.m) {
@@ -164,7 +167,7 @@ struct NeedsYouView: View {
                         .staggeredAppear(1)
                         // Then what's coming: today's habits, Waiting on, the next renewals.
                         NeedsYouMeanwhileView(palette: palette)
-                    } else {
+                    } else if !model.needsYouCards.isEmpty {
                         NeedsYouStackView(palette: palette).staggeredAppear(1)
                     }
                 }

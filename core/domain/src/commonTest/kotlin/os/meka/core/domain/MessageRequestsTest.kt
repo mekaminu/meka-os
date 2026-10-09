@@ -120,7 +120,7 @@ class MessageRequestsTest {
         assertTrue(task.spoken.startsWith("Wife wrote “can you"))
         val wfh = cards[1]
         assertEquals("Work from home · Thu 15 Oct", wfh.action)
-        assertEquals("Sets Thu 15 Oct to Home and blocks the day", wfh.detail)
+        assertEquals("Thu 15 Oct shows as work from home on both apps", wfh.detail)
 
         // Asked again (or WhatsApp re-posts it): no second card.
         val again = RequestMessage("wa-2", "wife", "don't forget the dry cleaning tomorrow!", at + 60_000)

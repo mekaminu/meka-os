@@ -38,7 +38,7 @@ class RequestCardsTest {
         assertEquals("From Wife · 14:02", onMac[0].from)
         assertEquals("“can you pick up the dry cleaning tomorrow?”", onMac[0].quote)
         assertEquals("Add task: Pick up dry cleaning · Tomorrow", onMac[0].action)
-        assertEquals("Sets Thu 15 Oct to Home and blocks the day", onMac[1].detail)
+        assertEquals("Thu 15 Oct shows as work from home on both apps", onMac[1].detail)
     }
 
     @Test

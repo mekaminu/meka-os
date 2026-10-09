@@ -112,6 +112,13 @@ sealed class RequestRead {
 }
 
 /**
+ * What Add or Change on a request card did ([MekaCore.acceptRequest], [MekaCore.changeRequest]): [line] for the undo
+ * bar, and what [MekaCore.undoRequest] takes back — the task made, the calendar edit (inside its five seconds), or the
+ * work-from-home day (-1 when none).
+ */
+data class RequestDone(val line: String, val taskId: String?, val editId: String?, val homeDay: Long = -1)
+
+/**
  * MEKA's voice (Weather and a voice, item 3): the server says a piece of MEKA's own words with Amazon Polly. Only
  * MEKA's words are sent, never Meka's. Available once the device is connected.
  */

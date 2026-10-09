@@ -19,6 +19,11 @@ object WorkFields {
     const val SWITCH = "workSwitch"
     /** The call assistant's one switch (Bool, last writer wins; absent = off). Added 2026-10-07. */
     const val CALL_ASSISTANT = "callAssistant"
+    /**
+     * Work-from-home days (V1, requests slice 4: Add on a "Work from home · Thu 15 Oct" card): local epoch days,
+     * comma-separated, ascending, past days dropped on each write. Text, last writer wins. Added 2026-10-09.
+     */
+    const val HOME_DAYS = "workHomeDays"
 }
 
 /** Local wall-clock position in the week: ISO day of week (1 = Monday … 7 = Sunday) and minute of day (0 … 1439). */
@@ -259,7 +264,14 @@ object WorkModeRules {
 }
 
 /** One stretch of work on a day, clipped to that day: "09:00–17:30". */
-data class WorkBlock(val startMs: Long, val endMs: Long, val startMinute: Int, val endMinute: Int) {
+data class WorkBlock(
+    val startMs: Long,
+    val endMs: Long,
+    val startMinute: Int,
+    val endMinute: Int,
+    /** "Work", or "Work from home" on a home day ([WorkHours.homeDays]). */
+    val title: String = WorkHours.TITLE,
+) {
     /** "09:00–17:30" (the shift's own times, even when a night shift is clipped at midnight). */
     val label: String get() = "${LocalClock.formatMinute(startMinute)}–${LocalClock.formatMinute(endMinute)}"
 }
@@ -278,32 +290,47 @@ data class WorkHours(
     val schedule: WorkSchedule,
     val holidays: HolidayCalendar = HolidayCalendar.NONE,
     val offDay: Long? = null,
+    /** Days Meka works from home (Add on a request card): the work band reads "Work from home". */
+    val homeDays: Set<Long> = emptySet(),
 ) {
     fun isWorkDay(epochDay: Long): Boolean = epochDay != offDay && WorkModeRules.isWorkDay(schedule, holidays, epochDay)
 
-    /** "Work 09:00–17:30" on a work day; null otherwise. */
+    /** "Work from home" on a home day, else "Work". */
+    fun title(epochDay: Long): String = if (epochDay in homeDays) HOME_TITLE else TITLE
+
+    /** "Work 09:00–17:30" (or "Work from home 09:00–17:30") on a work day; null otherwise. */
     fun line(epochDay: Long): String? =
-        if (isWorkDay(epochDay)) "$TITLE ${LocalClock.formatMinute(schedule.startMinute)}–${LocalClock.formatMinute(schedule.endMinute)}" else null
+        if (isWorkDay(epochDay)) "${title(epochDay)} ${LocalClock.formatMinute(schedule.startMinute)}–${LocalClock.formatMinute(schedule.endMinute)}" else null
 
     /** The work on [epochDay] (its window from [calendar]), in time order: at most a night shift's tail and a shift. */
     fun blocks(epochDay: Long, calendar: LocalCalendar): List<WorkBlock> = buildList {
         val dayStart = calendar.toEpochMs(epochDay, 0)
         val dayEnd = calendar.toEpochMs(epochDay + 1, 0)
         if (schedule.crossesMidnight && schedule.endMinute > 0 && isWorkDay(epochDay - 1)) {
-            add(WorkBlock(dayStart, calendar.toEpochMs(epochDay, schedule.endMinute), schedule.startMinute, schedule.endMinute))
+            add(WorkBlock(dayStart, calendar.toEpochMs(epochDay, schedule.endMinute), schedule.startMinute, schedule.endMinute, title(epochDay - 1)))
         }
         if (isWorkDay(epochDay)) {
             val end = if (schedule.crossesMidnight) dayEnd else calendar.toEpochMs(epochDay, schedule.endMinute)
-            add(WorkBlock(calendar.toEpochMs(epochDay, schedule.startMinute), end, schedule.startMinute, schedule.endMinute))
+            add(WorkBlock(calendar.toEpochMs(epochDay, schedule.startMinute), end, schedule.startMinute, schedule.endMinute, title(epochDay)))
         }
     }
 
     companion object {
         const val TITLE = "Work"
+        const val HOME_TITLE = "Work from home"
 
-        /** From the work-mode state: an active manual "Work off" during today's shift takes today's block away. */
-        fun of(state: WorkModeState, holidays: HolidayCalendar, todayEpochDay: Long): WorkHours =
-            WorkHours(state.schedule, holidays, offDay = todayEpochDay.takeIf { state.switchedManually && !state.atWork })
+        /**
+         * From the work-mode state: an active manual "Work off" during today's shift takes today's block away;
+         * [homeDays] read "Work from home".
+         */
+        fun of(state: WorkModeState, holidays: HolidayCalendar, todayEpochDay: Long, homeDays: Set<Long> = emptySet()): WorkHours =
+            WorkHours(state.schedule, holidays, offDay = todayEpochDay.takeIf { state.switchedManually && !state.atWork }, homeDays = homeDays)
+
+        /** [WorkFields.HOME_DAYS] read: unreadable entries skipped. */
+        fun decodeHomeDays(s: String?): Set<Long> =
+            s?.split(',')?.mapNotNull { it.trim().toLongOrNull() }?.toSet().orEmpty()
+
+        fun encodeHomeDays(days: Set<Long>): String = days.sorted().joinToString(",")
     }
 }
 
@@ -324,7 +351,26 @@ class WorkMode(
         WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, holidays()).copy(callAssistant = callAssistant())
 
     /** Work hours for Today and the Calendar tab, with today's manual "Work off" (a sick day) taken into account. */
-    fun hours(clock: LocalClock, epochDay: Long): WorkHours = WorkHours.of(state(clock, epochDay), holidays(), epochDay)
+    fun hours(clock: LocalClock, epochDay: Long): WorkHours = WorkHours.of(state(clock, epochDay), holidays(), epochDay, homeDays(epochDay))
+
+    private fun storedHomeDays(): Set<Long> =
+        WorkHours.decodeHomeDays(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.HOME_DAYS)?.textOrNull)
+
+    /** Work-from-home days (synced, last writer wins) from [today] on (all of them when null). */
+    fun homeDays(today: Long? = null): Set<Long> = storedHomeDays().filter { today == null || it >= today }.toSet()
+
+    /**
+     * Marks [epochDay] as a work-from-home day ([on]) or a usual one; days before [today] are dropped as it writes.
+     * Returns whether anything changed.
+     */
+    fun setHomeDay(epochDay: Long, on: Boolean, today: Long): Boolean {
+        val stored = storedHomeDays()
+        val kept = stored.filter { it >= today }.toSet()
+        val next = if (on) kept + epochDay else kept - epochDay
+        if (next == stored) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.HOME_DAYS to WorkHours.encodeHomeDays(next).fv()))
+        return (epochDay in stored) != on
+    }
 
     fun callAssistant(): Boolean = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_ASSISTANT)?.boolOrNull == true
 

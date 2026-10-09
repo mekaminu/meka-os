@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 import os.meka.android.calendar.EventUndoBar
 import os.meka.android.calendar.rememberEventUndo
 import os.meka.core.domain.DecisionCard
+import os.meka.core.domain.RequestCard
 import os.meka.core.domain.DecisionEffect
 import os.meka.core.domain.DecisionMove
 import os.meka.core.domain.NeedsYouStackRules
@@ -104,6 +105,7 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
                 }
             }
             MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
+            RequestChangePane(core, moves)
             EventUndoBar(undo, Modifier.align(Alignment.BottomCenter))
         }
       }
@@ -117,6 +119,10 @@ internal class DecisionMoves(
     private val aside: MutableState<List<String>>,
     /** Opens Lists (a Waiting on or renewal row under "Nothing needs you"). */
     val openLists: () -> Unit = {},
+    /** Add · Change · Not a task on a request card (V1, requests slice 4). */
+    val onRequest: (RequestCard, RequestChoice) -> Unit = { _, _ -> },
+    /** The task Change just made, open over the screen ([RequestChangePane]); null when none. */
+    val changed: MutableState<RequestChange?> = mutableStateOf(null),
 ) {
     val setAside: List<String> get() = aside.value
 }
@@ -130,6 +136,7 @@ internal class DecisionMoves(
 internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (String?) -> Unit, openLists: () -> Unit): DecisionMoves {
     val scope = rememberCoroutineScope()
     val aside = remember { mutableStateOf(listOf<String>()) }
+    val changed = remember { mutableStateOf<RequestChange?>(null) }
     val latestOpenTask by rememberUpdatedState(openTask)
     val latestOpenLists by rememberUpdatedState(openLists)
     return remember(core, undo, scope) {
@@ -149,7 +156,23 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                     undo.show(NeedsYouStackRules.message(card, move)) { aside.value = aside.value - card.id }
                 }
             }
-        }, aside, { latestOpenLists() })
+        }, aside, { latestOpenLists() }, onRequest = { card, choice ->
+            scope.launch {
+                when (choice) {
+                    // The card leaves on both devices; Undo takes back what Add made (the card stays answered).
+                    RequestChoice.ADD -> runCatching { core.acceptRequest(card.id) }.getOrNull()
+                        ?.let { done -> undo.show(done.line) { core.undoRequest(done) } }
+                    RequestChoice.CHANGE -> runCatching { core.changeRequest(card.id) }.getOrNull()?.let { done ->
+                        undo.show(done.line) { core.undoRequest(done); changed.value = null }
+                        done.taskId?.let { changed.value = RequestChange(card.proposal.title, it) }
+                    }
+                    RequestChoice.DECLINE -> if (runCatching { core.declineRequest(card.id) }.getOrDefault(false)) {
+                        undo.show("${card.declineLabel} · ${card.from.removePrefix("From ").substringBefore(" · ")}", null)
+                    }
+                }
+                Unit
+            }
+        }, changed = changed)
     }
 }
 
@@ -163,6 +186,7 @@ internal fun NeedsYouColumn(
     compact: Boolean = false, play: Boolean = true,
 ) {
     val cards = NeedsYouStackRules.ordered(stack, moves.setAside)
+    val requests by core.requests.collectAsState()
     val goals by core.goalsView.collectAsState()
     val lists by core.listsView.collectAsState()
     val meanwhile = remember(goals, lists) { NeedsYouMeanwhileRules.build(goals, lists) }
@@ -177,7 +201,7 @@ internal fun NeedsYouColumn(
     ) {
         item(key = "title") {
             if (compact) {
-                SectionLabel(CommandCentreRules.needsYouHeading(cards.size), Modifier.animateItem().appear(rememberAppearance(0, play)))
+                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + requests.size), Modifier.animateItem().appear(rememberAppearance(0, play)))
             } else {
                 Text("Needs you", style = MekaType.greeting, color = Meka.colors.textPrimary,
                     modifier = Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play)))
@@ -186,7 +210,15 @@ internal fun NeedsYouColumn(
         item(key = "after-work") {
             AfterWorkCard(core, Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(1, play))) { openAfterWork() }
         }
-        if (cards.isEmpty()) {
+        // Requests from people Meka watches, oldest first, above the stack (V1, requests slice 4): each staggers in
+        // after the after-work card and folds away with the list's item motion once answered.
+        requests.forEachIndexed { i, card ->
+            item(key = "request-${card.id}") {
+                RequestCardView(card, { moves.onRequest(card, it) },
+                    Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(2 + i, play)))
+            }
+        }
+        if (cards.isEmpty() && requests.isEmpty()) {
             item(key = "clear") {
                 // The breathing check ring beside a light line (catalogue "Empty states"; Fold review 2026-10-08,
                 // item 7), on the full page and in the open Fold's column alike (Fold review 2026-10-09 00:10, item 6);
@@ -203,7 +235,7 @@ internal fun NeedsYouColumn(
             // Then what's coming for Meka instead of a blank page: today's habits (ticked inline), Waiting on and the
             // next renewals (NeedsYouMeanwhile; Fold reviews 2026-10-09, 00:10 item 6 and 07:26 item 10).
             meanwhileItems(meanwhile, play, firstIndex = 2, tick = tickHabit, open = moves.openLists)
-        } else {
+        } else if (cards.isNotEmpty()) {
             item(key = "stack") {
                 DecisionStackView(cards, moves.onMove, Modifier.animateItem().appear(rememberAppearance(1, play)))
             }

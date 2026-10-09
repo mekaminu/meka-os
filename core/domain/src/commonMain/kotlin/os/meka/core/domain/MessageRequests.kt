@@ -54,10 +54,11 @@ data class RequestCard(
     val quote: String,
     /** "Add task: Pick up dry cleaning · Tomorrow". */
     val action: String,
-    /** What happens on Add, when it does more than its line says ("Sets Thu 15 Oct to Home and blocks the day"). */
+    /** What happens on Add, when it does more than its line says ("Thu 15 Oct shows as work from home on both apps"). */
     val detail: String?,
     val addLabel: String = "Add",
-    val changeLabel: String = "Change",
+    /** "Change" (makes it a task and opens its detail); null on a work-from-home card, which has nothing to edit. */
+    val changeLabel: String? = "Change",
     val declineLabel: String,
     /** One sentence for TalkBack / VoiceOver. */
     val spoken: String,
@@ -163,6 +164,7 @@ object MessageRequestRules {
             quote = quote,
             action = action,
             detail = detailLine(p),
+            changeLabel = if (p.kind == RequestKind.WORK_FROM_HOME) null else "Change",
             declineLabel = p.kind.decline,
             spoken = "${message.personName.trim()} wrote $quote. $action?",
         )
@@ -180,7 +182,7 @@ object MessageRequestRules {
 
     /** The line under a work-from-home card: what Add will change. */
     fun detailLine(p: RequestProposal): String? = when (p.kind) {
-        RequestKind.WORK_FROM_HOME -> p.day?.let { "Sets ${CivilDate.shortLabel(it)} to Home and blocks the day" }
+        RequestKind.WORK_FROM_HOME -> p.day?.let { "${CivilDate.shortLabel(it)} shows as work from home on both apps" }
         else -> null
     }
 

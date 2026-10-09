@@ -403,6 +403,8 @@ fun TodayRoute(
             MekaPane(visible = showSearch) {
                 SearchPane(core, onClose = { showSearch = false }, openItem = { item -> showSearch = false; openItem(item) })
             }
+            // Change on a request card in the open Fold's Needs you column.
+            RequestChangePane(core, moves)
             EventUndoBar(eventUndo, Modifier.align(Alignment.BottomCenter))
         }
       }

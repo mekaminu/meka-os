@@ -20,6 +20,8 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Requests from people Meka watches through the facade (V1, slice 2): one message out, checked cards back, nothing done. */
@@ -107,5 +109,53 @@ class MessageRequestFacadeTest {
         server.down = false
         server.reply = MessageRequestCodec.Response("off")
         assertIs<RequestRead.Unavailable>(c.readRequest(msg("Wife", "get bread"), lists, watching))
+    }
+
+    @Test
+    fun addMakesThePlannedTaskClearsTheCardAndUndoTakesTheTaskBack() = runTest {
+        val c = core()
+        server.reply = MessageRequestCodec.Response(
+            "answered", listOf(MessageRequestCodec.Proposal("task", "pick up the dry cleaning", words = "tomorrow at 6pm")),
+        )
+        val card = assertIs<RequestRead.Read>(c.readRequest(msg("Wife", "can you pick up the dry cleaning tomorrow at 6pm?"), lists, watching)).cards.single()
+        val done = assertNotNull(c.acceptRequest(card.id))
+        assertEquals("Added “Pick up the dry cleaning” · Tomorrow · 18:00", done.line)
+        assertTrue(c.requests.value.isEmpty())
+        assertNull(c.acceptRequest(card.id)) // answered already (the Mac got there first)
+        val tomorrow = c.calendarView.value.sections.first { it.title == "Tomorrow" }
+        assertEquals(listOf("Pick up the dry cleaning"), tomorrow.rows.map { it.title })
+        assertTrue(c.undoRequest(done))
+        assertTrue(c.calendarView.value.sections.first { it.title == "Tomorrow" }.rows.isEmpty())
+    }
+
+    @Test
+    fun anEventWithNoCalendarToWriteToBecomesATaskAndChangeOpensATask() = runTest {
+        val c = core()
+        server.reply = MessageRequestCodec.Response(
+            "answered", listOf(MessageRequestCodec.Proposal("event", "parents' evening", words = "Tue at 6pm")),
+        )
+        val card = assertIs<RequestRead.Read>(c.readRequest(msg("Wife", "parents' evening is Tue at 6pm"), lists, watching)).cards.single()
+        val changed = assertNotNull(c.changeRequest(card.id))
+        assertNotNull(changed.taskId)
+        assertNull(changed.editId)
+        assertEquals("Added “Parents' evening” as a task · Tue 13 Oct · 18:00", changed.line)
+        assertTrue(c.requests.value.isEmpty())
+    }
+
+    @Test
+    fun workFromHomeMarksTheDayOnBothAppsAndHasNoChange() = runTest {
+        val c = core()
+        server.reply = MessageRequestCodec.Response(
+            "answered", listOf(MessageRequestCodec.Proposal("work_from_home", null, words = "Thursday")),
+        )
+        val card = assertIs<RequestRead.Read>(c.readRequest(msg("Wife", "can you work from home Thursday?"), lists, watching)).cards.single()
+        assertNull(card.changeLabel)
+        assertNull(c.changeRequest(card.id))
+        val done = assertNotNull(c.acceptRequest(card.id))
+        assertEquals("Thu 15 Oct: work from home", done.line)
+        val thu = c.calendarView.value.sections.first { it.title == "Thu 15 Oct" }
+        assertEquals("Work from home 09:00–17:30", thu.workLine)
+        assertTrue(c.undoRequest(done))
+        assertEquals("Work 09:00–17:30", c.calendarView.value.sections.first { it.title == "Thu 15 Oct" }.workLine)
     }
 }

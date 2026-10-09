@@ -54,9 +54,11 @@ struct CommandNeedsYouView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                SectionLabel(CommandCentreRules.shared.needsYouHeading(count: Int32(model.needsYouCards.count)), palette)
+                SectionLabel(CommandCentreRules.shared.needsYouHeading(count: Int32(model.needsYouCards.count + model.requests.count)), palette)
                     .staggeredAppear(0)
-                if model.needsYouCards.isEmpty {
+                // Requests from people Meka watches, above the stack (V1, requests slice 4).
+                RequestCardsView(palette: palette, firstIndex: 1)
+                if model.needsYouCards.isEmpty && model.requests.isEmpty {
                     // The breathing check ring and the line, then what's coming instead of a blank column (Fold
                     // review 2026-10-09 00:10, item 6).
                     HStack(spacing: MekaSpace.m) {
@@ -67,7 +69,7 @@ struct CommandNeedsYouView: View {
                     .accessibilityElement(children: .combine)
                     .staggeredAppear(1)
                     NeedsYouMeanwhileView(palette: palette)
-                } else {
+                } else if !model.needsYouCards.isEmpty {
                     NeedsYouStackView(palette: palette, autofocus: false).staggeredAppear(1)
                 }
             }

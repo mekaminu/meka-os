@@ -17,6 +17,9 @@ final class CoreModel {
     /// "While you were at work": what the Fold held during work mode, synced (Needs Meka #10). Done clears both.
     private(set) var afterWork: AfterWorkSummary?
     var showAfterWork = false
+    /// Requests from people Meka watches (V1, requests slice 4): the Fold read them, the cards sync; Add · Change ·
+    /// Not a task here clears them there too.
+    private(set) var requests: [RequestCard] = []
     /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
     private(set) var lists: ListsView?
     /// Needs you as a stack of decisions (four tabs, slice 2); see `needsYouCards`.
@@ -173,6 +176,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await s in core.afterWork { self?.afterWork = s }
+        })
+        observers.append(Task { [weak self] in
+            for await r in core.requests { self?.requests = r }
         })
         observers.append(Task { [weak self] in
             for await l in core.listsView { self?.lists = l }
@@ -1408,6 +1414,7 @@ final class CoreModel {
         case .reminder(let id, let m): run { try await $0.setEventReminder(eventId: id, minutes: m) }
         case .leaveBy(let id, let m): run { try await $0.setEventLeaveBy(eventId: id, travelMinutes: m) }
         case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }
+        case .request(let done): run { _ = try await $0.undoRequest(done: done) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
         case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
@@ -1423,6 +1430,47 @@ final class CoreModel {
     }
 
     func dismissEventUndo() { eventUndo = nil }
+
+    // MARK: Requests from people Meka watches
+
+    /// Add · Change · Not a task on a request card. Add makes the task, event or work-from-home day; Change makes it a
+    /// task and opens it in Search beside the results; each raises the undo bar (Undo takes back what was made; the
+    /// card stays answered on both devices). Nothing is sent to anyone.
+    func answerRequest(_ card: RequestCard, _ choice: RequestAnswer) {
+        guard let core else { return }
+        let id = card.id
+        switch choice {
+        case .add:
+            MekaHaptics.light()
+            Task {
+                do {
+                    if let done = try await core.acceptRequest(cardId: id) { offerEventUndo(done.line, .request(done)) }
+                } catch { lastError = error.localizedDescription }
+            }
+        case .change:
+            MekaHaptics.light()
+            let title = card.proposal.title
+            Task {
+                do {
+                    guard let done = try await core.changeRequest(cardId: id) else { return }
+                    offerEventUndo(done.line, .request(done))
+                    if let task = done.taskId {
+                        searchSeed = title
+                        searchChosenSeed = task
+                        showSearch = true
+                    }
+                } catch { lastError = error.localizedDescription }
+            }
+        case .decline:
+            MekaHaptics.tick()
+            let line = "\(card.declineLabel) · " + (card.from.replacingOccurrences(of: "From ", with: "").components(separatedBy: " · ").first ?? "")
+            Task {
+                do {
+                    if try await core.declineRequest(cardId: id).boolValue { offerEventUndo(line, nil) }
+                } catch { lastError = error.localizedDescription }
+            }
+        }
+    }
 
     // MARK: Needs you stack
 
@@ -1552,6 +1600,9 @@ struct AskUndone: Equatable {
     let cards: Set<Int>
 }
 
+/// What Meka pressed on a request card.
+enum RequestAnswer { case add, change, decline }
+
 /// What the calendar-action undo bar offers.
 /// Equal when it is the same offer (each has its own id; its message and action never change). `Action` isn't
 /// Equatable: `talk` carries the core's `AskUndo`, a Kotlin sealed interface that Swift sees as a protocol.
@@ -1583,6 +1634,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case ask(AskDone, Int)
         /// A spoken yes (Talk to MEKA): everything it did is taken back, newest first; the Ints are the cards' places.
         case talk([AskUndo], [Int])
+        /// Add or Change on a request card: the task, event edit or work-from-home day is taken back.
+        case request(RequestDone)
     }
 
     let id = UUID()
