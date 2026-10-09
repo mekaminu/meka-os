@@ -299,8 +299,8 @@ class HttpSyncTransport(
         when {
             resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/message-request")
             // A server without the route (older, or no AI key): nothing is read.
-            resp.status.value == 404 -> return codec.Response(AskCodec.Response.OFF)
-            resp.status.value == 403 -> return codec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            resp.status.value == 404 -> return os.meka.core.wire.MessageRequestCodec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.MessageRequestCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/message-request")
         }
         return codec.decodeResponse(resp.bodyAsText())
