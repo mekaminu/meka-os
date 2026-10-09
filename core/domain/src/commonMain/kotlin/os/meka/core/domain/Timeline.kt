@@ -172,6 +172,8 @@ object TimelineRules {
         sessions: List<BookedSession> = emptyList(),
         /** Today's work blocks ([WorkHours.blocks]); none on a day off. */
         work: List<WorkBlock> = emptyList(),
+        /** Anytime tasks still to do today, Up next's included (the now line counts them: "Work until 17:30 · 4 anytime tasks"). */
+        anytimeLeft: Int = anytime.size,
     ): DayTimeline {
         fun hhmm(ms: Long) = LocalClock.formatMinute(calendar.minuteOfDay(ms))
 
@@ -258,8 +260,11 @@ object TimelineRules {
             // Nothing ahead while something is on (work, an event): the now line says so, instead of leaving a bare
             // line and an empty stretch above "1 done today" (Meka's 10:48 screenshots, 2026-10-09).
             val nowAt = indexOfFirst { it.kind == TimelineKind.NOW }
+            // At work it reads as work, with the anytime tasks still to do (Fold review 2026-10-09 13:45, item 4).
             if (ahead.isEmpty() && started.isNotEmpty() && nowAt >= 0 && this[nowAt].detail == null) {
-                this[nowAt] = this[nowAt].copy(detail = nothingAfterLabel(if (cursor > nowMs && cursor < today.endMs) hhmm(cursor) else null))
+                val until = if (cursor > nowMs && cursor < today.endMs) hhmm(cursor) else null
+                val atWork = started.firstOrNull { it.isWork && it.end == cursor }?.row?.title
+                this[nowAt] = this[nowAt].copy(detail = restLabel(until, atWork, anytimeLeft))
             }
         }
 
@@ -311,6 +316,27 @@ object TimelineRules {
      * (at work until 17:30), or "Nothing else planned today" when what's on runs past midnight.
      */
     fun nothingAfterLabel(until: String?): String = if (until == null) NOTHING_ELSE else "$NOTHING_ELSE_AFTER $until"
+
+    /**
+     * The now line's words when nothing timed is ahead but something is on (Fold review 2026-10-09 13:45, item 4):
+     * at work "Work until 17:30 · 4 anytime tasks" ("Work from home until 17:30" on a home day); after an event with
+     * anytime tasks left "Free after 15:00 · 2 anytime tasks"; "Nothing else planned after 15:00" / "… today" only
+     * when no anytime task is left either. [until] null when what's on runs past midnight; [work] the running work
+     * block's title when work is what ends last.
+     */
+    fun restLabel(until: String?, work: String?, anytime: Int): String {
+        val tasks = if (anytime > 0) anytimeLabel(anytime) else null
+        return when {
+            work != null && until != null -> listOfNotNull("$work until $until", tasks).joinToString(" · ")
+            tasks == null -> nothingAfterLabel(until)
+            until != null -> "Free after $until · $tasks"
+            else -> "$NOTHING_ELSE_TIMED · $tasks"
+        }
+    }
+
+    /** "1 anytime task" · "4 anytime tasks" */
+    fun anytimeLabel(n: Int): String = if (n == 1) "1 anytime task" else "$n anytime tasks"
+    const val NOTHING_ELSE_TIMED = "Nothing else timed"
     const val NOTHING_ELSE = "Nothing else planned today"
     const val NOTHING_ELSE_AFTER = "Nothing else planned after"
 

@@ -135,6 +135,7 @@ object TodayProjection {
             calendar = calendar,
             sessions = sessions,
             work = workBlocks,
+            anytimeLeft = unscheduled.size,
         )
         val ring = DayRingRules.build(
             planned = (needs.map { it.task } + listOfNotNull(upNext) + yourDay).filter { it.scheduledAtMs != null },

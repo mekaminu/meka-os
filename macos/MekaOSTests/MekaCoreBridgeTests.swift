@@ -867,6 +867,13 @@ final class MekaCoreBridgeTests: XCTestCase {
                                                               synced: true, events: [], nowMs: 0), "No events in the next 30 days")
     }
 
+    /// Fold review 2026-10-09 13:45, item 4: at work the now line reads as work with the anytime tasks left.
+    func testNowLineAtWorkReachesSwift() {
+        XCTAssertEqual(TimelineRules.shared.restLabel(until: "17:30", work: "Work", anytime: 4), "Work until 17:30 · 4 anytime tasks")
+        XCTAssertEqual(TimelineRules.shared.restLabel(until: "15:00", work: nil, anytime: 1), "Free after 15:00 · 1 anytime task")
+        XCTAssertEqual(TimelineRules.shared.restLabel(until: nil, work: nil, anytime: 0), "Nothing else planned today")
+    }
+
     /// Calendar editing, slice 2b: the Add event sheet's form steps and view reach Swift.
     func testPlanCalendarRulesReachSwift() {
         let google = EditAccount(provider: "google", email: "me@gmail.com")

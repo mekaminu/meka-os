@@ -19,8 +19,12 @@ class WorkHoursTest {
 
     private fun ev(id: String, from: Long, to: Long, allDay: Boolean = false) = CalendarEvent(id, id, from, to, allDay, null, "google", null, null)
 
-    private fun today(now: Long, events: List<CalendarEvent> = emptyList(), work: WorkHours? = weekdays, day: Long = thu8) =
-        TodayProjection.project(emptyList(), now, window(day), events, cal, work = work)
+    private fun today(
+        now: Long, events: List<CalendarEvent> = emptyList(), work: WorkHours? = weekdays, day: Long = thu8,
+        tasks: List<Task> = emptyList(),
+    ) = TodayProjection.project(tasks, now, window(day), events, cal, work = work)
+
+    private fun anytime(id: String) = Task(id, id, null, Lifecycle.ACTIVE, null, null, null, 0, null, null, 0, null, false)
 
     private fun rows(t: Today) = t.timeline.rows.map {
         when {
@@ -150,7 +154,7 @@ class WorkHoursTest {
     fun atWorkWithNothingElseTheNowLineSaysSo() {
         // 10:48 on a work day, nothing else planned: no bare now line over an empty stretch.
         val t = today(at(thu8, 10, 48))
-        assertEquals(listOf("w-540", "now:Nothing else planned after 17:30"), rows(t))
+        assertEquals(listOf("w-540", "now:Work until 17:30"), rows(t))
         // Something after work: the gap says it, as before.
         val training = ev("Training", at(thu8, 18), at(thu8, 19, 30))
         assertEquals(listOf("w-540", "now", "gap:30 min free after work", "e-Training"), rows(today(at(thu8, 10, 48), listOf(training))))
@@ -160,6 +164,37 @@ class WorkHoursTest {
         // Nothing on at all (only ended events): the now line stays bare; Today's clear line speaks.
         val standup = ev("Standup", at(thu8, 7), at(thu8, 7, 15))
         assertEquals(listOf("now"), rows(today(at(thu8, 8), listOf(standup), work = null)))
+    }
+
+    // ---- Fold review 2026-10-09 13:45, item 4 ----
+
+    @Test
+    fun atWorkTheNowLineCountsTheAnytimeTasksLeft() {
+        val four = (1..4).map { anytime("a$it") }
+        // 13:44 at work with four anytime tasks (one of them Up next): work, then what's left to fit in.
+        assertEquals(listOf("w-540", "now:Work until 17:30 · 4 anytime tasks"), rows(today(at(thu8, 13, 44), tasks = four)))
+        assertEquals(listOf("w-540", "now:Work until 17:30 · 1 anytime task"), rows(today(at(thu8, 13, 44), tasks = four.take(1))))
+        // A home day says so.
+        val home = WorkHours(WorkSchedule.DEFAULT, homeDays = setOf(thu8))
+        assertEquals("now:Work from home until 17:30 · 4 anytime tasks", rows(today(at(thu8, 13, 44), work = home, tasks = four)).last())
+        // An event running past the end of work: free after it, with the tasks.
+        val late = ev("Late call", at(thu8, 17), at(thu8, 18, 15))
+        assertEquals("now:Free after 18:15 · 4 anytime tasks", rows(today(at(thu8, 17, 10), listOf(late), tasks = four)).last())
+        // Nothing left at all: the old words.
+        assertEquals("now:Nothing else planned after 18:15", rows(today(at(thu8, 17, 10), listOf(late))).last())
+        // Running past midnight with tasks left.
+        val night = ev("Night", at(thu8, 20), at(thu8 + 1, 1))
+        assertEquals("now:Nothing else timed · 2 anytime tasks", rows(today(at(thu8, 21), listOf(night), tasks = four.take(2))).last())
+    }
+
+    @Test
+    fun theRestLabelReadsNaturally() {
+        assertEquals("Work until 17:30", TimelineRules.restLabel("17:30", "Work", 0))
+        assertEquals("Work until 17:30 · 3 anytime tasks", TimelineRules.restLabel("17:30", "Work", 3))
+        assertEquals("Free after 15:00 · 1 anytime task", TimelineRules.restLabel("15:00", null, 1))
+        assertEquals("Nothing else planned after 15:00", TimelineRules.restLabel("15:00", null, 0))
+        assertEquals("Nothing else planned today", TimelineRules.restLabel(null, null, 0))
+        assertEquals("Nothing else timed · 2 anytime tasks", TimelineRules.restLabel(null, "Work", 2))
     }
 
     @Test
