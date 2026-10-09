@@ -930,7 +930,8 @@ class MekaCoreTest {
         now += 3_600_000L
         a.tick()
         // Sunday's 17:00 session is still to answer, so next week rests on Monday.
-        assertEquals("Booked Today 17:00 · no room for 2 more · Next week: Tue 17:45 · Thu 17:45 · Sat 17:00",
+        // Thursday is the short day (work until 15:30), so its session can start at the evening window, 17:00.
+        assertEquals("Booked Today 17:00 · no room for 2 more · Next week: Tue 17:45 · Thu 17:00 · Sat 17:00",
             a.goalsView.value.habits.single().sessionLine)
         assertEquals("Next: Tue 17:45", a.sessionsView.value.cards.single().next)
         // Today's timeline only ever holds today's sessions.
