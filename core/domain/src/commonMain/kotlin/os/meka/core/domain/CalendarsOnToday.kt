@@ -9,7 +9,10 @@ object CalendarMarkFields {
     const val KEY = "calendarKey"
     /** Its name when it was hidden, so Calendars can list it while it has no events in the mirror. */
     const val LABEL = "calendarLabel"
-    /** Hidden from Today (and the rest of my day); the Calendar tab and Search still show its events. */
+    /**
+     * Hidden from Today (and the rest of my day); the Calendar tab and Search still show its events. `false` written
+     * on a holiday calendar ([HolidayCalendars]) is Meka turning it on: without a mark one starts hidden.
+     */
     const val HIDDEN_FROM_TODAY = "hiddenFromToday"
     const val HIDDEN_AT = "hiddenAtMs"
 }
@@ -58,12 +61,23 @@ object CalendarRules {
         ).joinToString(" · ").ifEmpty { null }
     }
 
-    /** Every calendar in [events] plus hidden ones with no events now, by name; each says whether it's on Today. */
-    fun choices(events: List<CalendarEvent>, hiddenCalendars: Map<String, String>): List<CalendarChoice> {
+    /**
+     * Every calendar in [events] plus hidden ones with no events now, by name; each says whether it's on Today. A
+     * holiday calendar ([HolidayCalendars]) is off unless Meka turned it on ([shownCalendars]), and says so.
+     */
+    fun choices(
+        events: List<CalendarEvent>,
+        hiddenCalendars: Map<String, String>,
+        shownCalendars: Set<String> = emptySet(),
+    ): List<CalendarChoice> {
         val seen = LinkedHashMap<String, CalendarChoice>()
         for (e in events) {
             val k = key(e)
-            if (k !in seen) seen[k] = CalendarChoice(k, label(e), detail(e), k !in hiddenCalendars)
+            if (k in seen) continue
+            val holiday = HolidayCalendars.isHolidayKey(k)
+            val off = k in hiddenCalendars || (holiday && k !in shownCalendars)
+            val detail = if (holiday) listOfNotNull(detail(e), HolidayCalendars.DETAIL).joinToString(" · ") else detail(e)
+            seen[k] = CalendarChoice(k, label(e), detail, !off)
         }
         for ((k, label) in hiddenCalendars) {
             if (k !in seen) seen[k] = CalendarChoice(k, label.ifBlank { "Calendar" }, null, false)
@@ -73,4 +87,55 @@ object CalendarRules {
 
     /** The undo bar's line after hiding: "Timestripe hidden from Today". */
     fun hiddenLine(label: String): String = "$label hidden from Today"
+}
+
+/**
+ * Holiday calendars start off Today (Fold review 2026-10-09, item 4: Google's "Holidays in United States" put Columbus
+ * Day on Today). UK bank holidays already come from GOV.UK for work mode, so a subscribed holiday calendar is noise
+ * until Meka turns it on in Calendars (a `calendar_mark` with `hiddenFromToday = false`). Non-AI, pure, by name only:
+ *
+ * - Google's own: "Holidays in United Kingdom", "Public holidays in Spain", "Christian Holidays", "Jewish Holidays"…
+ * - Outlook's: "United States holidays", "United Kingdom holidays" (a country from [COUNTRIES]).
+ * - A short country code: "UK Holidays", "US Holidays".
+ *
+ * Meka's own calendars are never caught: "Holidays", "Family holidays" or "Holiday plans" are not holiday calendars.
+ * The fixtures feed never is.
+ */
+object HolidayCalendars {
+    /** Added to the row's line in Calendars. */
+    const val DETAIL = "Holiday calendar · starts off (UK bank holidays come from GOV.UK)"
+
+    private val FAITHS = setOf(
+        "christian", "orthodox christian", "jewish", "muslim", "islamic", "hindu", "buddhist", "sikh", "religious",
+    )
+
+    /** Outlook's holiday calendars are named after the country ("United Kingdom holidays"). */
+    val COUNTRIES = setOf(
+        "united kingdom", "united states", "uk", "us", "usa", "england", "scotland", "wales", "northern ireland",
+        "ireland", "nigeria", "ghana", "canada", "australia", "new zealand", "india", "south africa", "spain", "france",
+        "germany", "italy", "portugal", "netherlands", "belgium", "poland", "kenya", "jamaica",
+    )
+
+    private val CODE = Regex("^[A-Z]{2,3} [Hh]olidays$")
+
+    fun isHolidayName(name: String?): Boolean {
+        val raw = name?.trim()?.replace(Regex("\\s+"), " ")?.takeIf { it.isNotEmpty() } ?: return false
+        val n = raw.lowercase()
+        if (n.startsWith("holidays in ") || n.startsWith("public holidays in ") || n.startsWith("bank holidays in ")) return true
+        if (CODE.matches(raw)) return true
+        val head = when {
+            n.endsWith(" public holidays") -> n.removeSuffix(" public holidays")
+            n.endsWith(" holidays") -> n.removeSuffix(" holidays")
+            else -> return false
+        }
+        return head in FAITHS || head in COUNTRIES
+    }
+
+    fun isHoliday(e: CalendarEvent): Boolean = !e.isFixture && isHolidayName(e.calendarName)
+
+    /** From a calendar key ([CalendarRules.key]: "google|meka@gmail.com|Holidays in United States"). */
+    fun isHolidayKey(key: String): Boolean {
+        val parts = key.split("|", limit = 3)
+        return parts.size == 3 && parts[0] != "fixtures" && isHolidayName(parts[2])
+    }
 }

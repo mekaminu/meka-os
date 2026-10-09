@@ -30,14 +30,20 @@ data class EventMarks(
     val hiddenCalendars: Map<String, String> = emptyMap(),
     /** Events whose leave-by rings as an alarm ([LeaveAlarmRules]). */
     val leaveAlarms: Set<String> = emptySet(),
+    /** Calendars Meka turned on in Calendars (a mark with `hiddenFromToday = false`): a holiday calendar shows then. */
+    val shownCalendars: Set<String> = emptySet(),
 ) {
     fun isHidden(eventId: String) = eventId in hidden
 
     /** Whether [e]'s calendar is hidden from Today. */
-    fun isCalendarHidden(e: CalendarEvent): Boolean = hiddenCalendars.isNotEmpty() && CalendarRules.key(e) in hiddenCalendars
+    fun isCalendarHidden(e: CalendarEvent): Boolean = isCalendarKeyHidden(CalendarRules.key(e))
 
-    /** For Swift: whether the calendar with [key] is hidden from Today. */
-    fun isCalendarKeyHidden(key: String): Boolean = key in hiddenCalendars
+    /**
+     * For Swift too: whether the calendar with [key] is hidden from Today — turned off, or a holiday calendar
+     * ([HolidayCalendars]) Meka hasn't turned on.
+     */
+    fun isCalendarKeyHidden(key: String): Boolean =
+        key in hiddenCalendars || (key !in shownCalendars && HolidayCalendars.isHolidayKey(key))
 
     /** For Swift: the reminder's minutes, or 0 for none. */
     fun reminderOf(eventId: String): Int = reminders[eventId] ?: 0
@@ -49,9 +55,12 @@ data class EventMarks(
     fun leaveRingsOf(eventId: String): Boolean = eventId in leaveAlarms
 
     /** The events that count for the day: everything not hidden, one by one or by its calendar. */
-    fun visible(events: List<CalendarEvent>): List<CalendarEvent> =
-        if (hidden.isEmpty() && hiddenCalendars.isEmpty()) events
-        else events.filter { it.id !in hidden && !isCalendarHidden(it) }
+    fun visible(events: List<CalendarEvent>): List<CalendarEvent> {
+        val byCalendar = HashMap<String, Boolean>()
+        return events.filter { e ->
+            e.id !in hidden && !byCalendar.getOrPut(CalendarRules.key(e)) { isCalendarKeyHidden(CalendarRules.key(e)) }
+        }
+    }
 
     companion object {
         val NONE = EventMarks(emptySet(), emptyMap())
@@ -87,14 +96,17 @@ class EventActions(
         fun minutes(field: String) = entities.mapNotNull { e ->
             e[field].longOrNull?.toInt()?.takeIf { it in 1..ReminderRules.MAX_MIN }?.let { e.ref.entityId to it }
         }.toMap()
-        val calendars = replica.entities(EntityTypes.CALENDAR_MARK)
+        val calendarMarks = replica.entities(EntityTypes.CALENDAR_MARK)
+        val shown = calendarMarks.filter { it[CalendarMarkFields.HIDDEN_FROM_TODAY].boolOrNull == false }
+            .mapNotNull { it[CalendarMarkFields.KEY].textOrNull }.toSet()
+        val calendars = calendarMarks
             .filter { it[CalendarMarkFields.HIDDEN_FROM_TODAY].boolOrNull == true }
             .mapNotNull { c ->
                 val key = c[CalendarMarkFields.KEY].textOrNull ?: return@mapNotNull null
                 key to (c[CalendarMarkFields.LABEL].textOrNull ?: "")
             }.toMap()
         val leaveAlarms = entities.filter { it[EventMarkFields.LEAVE_ALARM].boolOrNull == true }.map { it.ref.entityId }.toSet()
-        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars, leaveAlarms)
+        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars, leaveAlarms, shown)
     }
 
     /**
@@ -108,7 +120,9 @@ class EventActions(
         require(key.isNotEmpty()) { "calendar key is empty" }
         val id = CalendarRules.markId(key)
         val current = replica.entity(EntityTypes.CALENDAR_MARK, id)
-        if ((current?.get(CalendarMarkFields.HIDDEN_FROM_TODAY)?.boolOrNull ?: false) == hidden) return
+        // No mark yet and showing: still written when it's a holiday calendar, which starts hidden ([HolidayCalendars]).
+        val was = current?.get(CalendarMarkFields.HIDDEN_FROM_TODAY)?.boolOrNull ?: HolidayCalendars.isHolidayKey(key)
+        if (was == hidden) return
         val fields = buildMap {
             put(CalendarMarkFields.KEY, key.fv())
             put(CalendarMarkFields.HIDDEN_FROM_TODAY, hidden.fv())

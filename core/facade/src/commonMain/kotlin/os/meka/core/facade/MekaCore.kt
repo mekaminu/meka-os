@@ -1624,7 +1624,7 @@ class MekaCore(
             all, allEvents, nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden,
             work = os.meka.core.domain.WorkHours.of(workState, holidays, todayEpochDay()),
         )
-        _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars)
+        _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars, marks.shownCalendars)
         val editsNow = calendarEdits.all()
         _editsSeen.value = editsNow
         _editLines.value = os.meka.core.domain.EditLineRules.lines(editsNow, nowMs())

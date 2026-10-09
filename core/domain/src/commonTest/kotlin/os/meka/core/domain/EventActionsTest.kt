@@ -412,4 +412,71 @@ class EventActionsTest {
         val ops = a.replica.entities(EntityTypes.CALENDAR_MARK)
         assertEquals(listOf(CalendarRules.markId(key)), ops.map { it.ref.entityId })
     }
+
+    private fun hol(id: String, title: String, calendar: String = "Holidays in United States") =
+        CalendarEvent(id, title, tue6 * 24 * hour, (tue6 + 1) * 24 * hour, true, null, "google", "meka@gmail.com", calendar)
+
+    @Test
+    fun holidayCalendarsAreRecognisedByNameOnly() {
+        listOf(
+            "Holidays in United States", "Holidays in United Kingdom", "Public holidays in Spain", "Christian Holidays",
+            "Jewish holidays", "Muslim Holidays", "United Kingdom holidays", "United States holidays", "UK Holidays",
+            "US Holidays", "Nigeria public holidays", "  holidays  in   Ireland ",
+        ).forEach { assertTrue(HolidayCalendars.isHolidayName(it), it) }
+        listOf(
+            "Holidays", "Holiday", "Family holidays", "Our holidays", "Holiday plans", "Personal", "Timestripe", "Fixtures",
+            "School holidays", "Summer holidays", "", null,
+        ).forEach { assertFalse(HolidayCalendars.isHolidayName(it), it.toString()) }
+        assertTrue(HolidayCalendars.isHolidayKey("google|meka@gmail.com|Holidays in United States"))
+        assertTrue(HolidayCalendars.isHolidayKey("microsoft|meka@outlook.com|United Kingdom holidays"))
+        assertFalse(HolidayCalendars.isHolidayKey("fixtures||"))
+        assertFalse(HolidayCalendars.isHolidayKey("google|meka@gmail.com|Personal"))
+        assertTrue(HolidayCalendars.isHoliday(hol("h1", "Columbus Day")))
+    }
+
+    @Test
+    fun aHolidayCalendarStartsOffTodayAndTheSwitchBringsItBack() {
+        val columbus = hol("h1", "Columbus Day")
+        val events = listOf(columbus, ev(), todo())
+        val key = CalendarRules.key(columbus)
+        // No mark yet: off Today, the brief and the rest of my day; the Calendar tab still has it (not hidden one by one).
+        val marks = ea.marks()
+        assertTrue(marks.isCalendarHidden(columbus))
+        assertTrue(marks.isCalendarKeyHidden(key))
+        assertFalse(marks.isHidden("h1"))
+        assertEquals(listOf("ev1", "ad1"), marks.visible(events).map { it.id })
+        val today = TodayProjection.project(emptyList(), at(tue6, 10), DayWindow(at(tue6, 0), at(tue6 + 1, 0), hour), marks.visible(events))
+        assertEquals(listOf("Check if to pay for the parking permit"), today.timeline.allDayItems.map { it.event.title })
+        // Calendars lists it switched off and says why.
+        val row = CalendarRules.choices(events, marks.hiddenCalendars, marks.shownCalendars).single { it.key == key }
+        assertEquals("Holidays in United States", row.label)
+        assertEquals("Google · meka@gmail.com · " + HolidayCalendars.DETAIL, row.detail)
+        assertFalse(row.onToday)
+        // Turned on in Calendars: a mark with hiddenFromToday = false is written, synced, and it shows on both devices.
+        ea.showCalendar(key)
+        syncBoth()
+        listOf(a, m).forEach { d ->
+            val mk = actions(d).marks()
+            assertEquals(setOf(key), mk.shownCalendars)
+            assertEquals(3, mk.visible(events).size)
+            assertTrue(CalendarRules.choices(events, mk.hiddenCalendars, mk.shownCalendars).single { it.key == key }.onToday)
+        }
+        ea.showCalendar(key) // twice: no new op
+        assertEquals(1, a.replica.entities(EntityTypes.CALENDAR_MARK).size)
+        // Off again: hidden, and the switch the other way wins.
+        world.clock.nowMs += 60_000
+        em.hideCalendar(key, "Holidays in United States")
+        syncBoth()
+        listOf(a, m).forEach { d -> assertEquals(listOf("ev1", "ad1"), actions(d).marks().visible(events).map { it.id }) }
+    }
+
+    @Test
+    fun otherCalendarsStillStartOnAndHidingOneHolidayCalendarLeavesTheOthers() {
+        val events = listOf(ev(), ts("t1", "Weekly goals"), hol("h1", "Columbus Day"), hol("h2", "Rosh Hashanah", "Jewish Holidays"))
+        // Meka's own calendars are on with no mark; showing one that's already on writes nothing.
+        ea.showCalendar(CalendarRules.key(ev()))
+        assertTrue(a.replica.entities(EntityTypes.CALENDAR_MARK).isEmpty())
+        ea.showCalendar(CalendarRules.key(events[3]))
+        assertEquals(listOf("ev1", "t1", "h2"), ea.marks().visible(events).map { it.id })
+    }
 }
