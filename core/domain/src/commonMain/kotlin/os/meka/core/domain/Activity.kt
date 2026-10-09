@@ -58,6 +58,11 @@ enum class ActivityKind {
      * network's caller check, or withheld in quiet hours). Nothing to undo; unblocking is in Work mode. Added 2026-10-09.
      */
     SCREENED,
+    /**
+     * What the call assistant heard when it asked a caller "is it urgent?" and what it made of it (call assistant
+     * polish 8d). Written by the server; nothing to undo. Added 2026-10-09.
+     */
+    CALL,
 }
 
 /** One field MEKA changed: what it was, and what MEKA set. */

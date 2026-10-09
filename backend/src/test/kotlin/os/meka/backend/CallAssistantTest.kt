@@ -11,6 +11,8 @@ import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import os.meka.core.domain.ActivityFields
+import os.meka.core.domain.ActivityKind
 import os.meka.core.domain.CallAssistantRules
 import os.meka.core.domain.CallAssistantScript
 import os.meka.core.domain.CaptureKind
@@ -169,6 +171,44 @@ class CallAssistantTest {
         // ...and nothing for a call it never took a message on.
         hook(VoiceStep.TRANSCRIBED, "CallSid" to "CA404", "TranscriptionStatus" to "failed")
         assertEquals(before + 1, heldOps().size)
+    }
+
+    /** Polish 8d (Meka's test, 2026-10-09: he said it was urgent and the card didn't show it). */
+    @Test
+    fun anAnswerItDidntUnderstandIsAskedOnceMoreAndWhatItHeardShowsInActivity() = testApplication {
+        application { mekaSync(ops, devices, voice = voice) }
+        switch(true)
+        val call = arrayOf("CallSid" to "CA300", "From" to "07700 900333")
+        val asked = hook(VoiceStep.RECORDED, *call, "RecordingDuration" to "9").bodyAsText()
+        assertTrue("""actionOnEmptyResult="true"""" in asked, asked)
+        assertTrue("it is" in asked) // a hint for the recogniser
+
+        // "Hello?" isn't an answer: asked once more, on its own step.
+        val again = hook(VoiceStep.ANSWERED, *call, "SpeechResult" to "Hello?").bodyAsText()
+        assertTrue("Sorry, is it urgent?" in again, again)
+        assertTrue("""action="$base/v1/voice/twilio/answered-again"""" in again, again)
+        assertTrue(urgent.isEmpty())
+
+        // "It is." the second time: urgent, the Fold woken at once.
+        val bye = hook(VoiceStep.ANSWERED_AGAIN, *call, "SpeechResult" to "It is.").bodyAsText()
+        assertTrue("I&apos;ll let Meka know straight away" in bye, bye)
+        assertEquals(listOf("hh"), urgent)
+        assertTrue(fold().items().single().urgent)
+
+        // Activity: both askings, what was heard and what it made of it (written by the server; retries add nothing).
+        hook(VoiceStep.ANSWERED_AGAIN, *call, "SpeechResult" to "It is.")
+        val entries = ops.after("hh", 0, 1000).map { it.op }.filter { it.entityType == EntityTypes.AGENT_ACTION }
+        val details = entries.filter { it.field == ActivityFields.DETAIL }.map { (it.value as FieldValue.Text).value }
+        assertEquals(listOf("Heard “Hello?” · didn't understand, asked again", "Heard “It is.” · marked urgent"), details)
+        assertTrue(entries.filter { it.field == ActivityFields.SUMMARY }.all { (it.value as FieldValue.Text).value == "Asked 07700 900333 if it was urgent" })
+        assertTrue(entries.filter { it.field == ActivityFields.KIND }.all { it.value == FieldValue.Text(ActivityKind.CALL.name) })
+
+        // Still nothing the second time: not urgent, the usual goodbye, and no third asking.
+        hook(VoiceStep.RECORDED, "CallSid" to "CA301", "From" to "07700 900334", "RecordingDuration" to "9")
+        assertTrue("Sorry, is it urgent?" in hook(VoiceStep.ANSWERED, "CallSid" to "CA301").bodyAsText())
+        val last = hook(VoiceStep.ANSWERED_AGAIN, "CallSid" to "CA301").bodyAsText()
+        assertTrue("Meka will get your message after work" in last, last)
+        assertEquals(listOf("hh"), urgent)
     }
 
     @Test

@@ -1,5 +1,6 @@
 package os.meka.core.domain
 
+import os.meka.core.sync.FieldValue
 import os.meka.core.sync.fv
 import os.meka.core.testing.SyncWorld
 import kotlin.test.Test
@@ -102,6 +103,38 @@ class CallAssistantTest {
         assertEquals(false, CallAssistantRules.isUrgentAnswer(null, "nah it can wait"))
         assertNull(CallAssistantRules.isUrgentAnswer(null, "hello?"))
         assertNull(CallAssistantRules.isUrgentAnswer("9", null))
+    }
+
+    /** Recorded samples of how callers answer "is it urgent?" (polish 8d: Meka's "it is" wasn't understood). */
+    @Test
+    fun urgentAnswersCallersActuallyGive() {
+        val yes = listOf("It is.", "it is", "It's urgent.", "Yes, it is.", "Yeah.", "Yup", "Very.", "One.", "Please.", "It’s urgent", "Yes urgent", "ASAP", "Sure.", "I think so.")
+        val no = listOf("No.", "Nope", "It's not urgent.", "It is not.", "It isn't.", "Not really.", "No, it can wait.", "No rush.", "Two.", "Later.")
+        val unclear = listOf("Hello?", "Sorry, what?", "Um", "", "   ", "Meka")
+        yes.forEach { assertEquals(true, CallAssistantRules.isUrgentAnswer(null, it), it) }
+        no.forEach { assertEquals(false, CallAssistantRules.isUrgentAnswer(null, it), it) }
+        unclear.forEach { assertNull(CallAssistantRules.isUrgentAnswer(null, it), it) }
+        assertNull(CallAssistantRules.isUrgentAnswer(null, null))
+    }
+
+    @Test
+    fun whatTheAssistantHeardGoesToActivity() {
+        assertEquals("Pressed 1", CallAssistantRules.answerHeard("1", "yes"))
+        assertEquals("Heard “it is”", CallAssistantRules.answerHeard(null, "  it   is "))
+        assertEquals("No answer", CallAssistantRules.answerHeard("", ""))
+        assertEquals(61 + 7, CallAssistantRules.answerHeard(null, "a".repeat(200)).length) // Heard “ + 59 + … + ”
+
+        val f = CallAssistantRules.answerActivity("07700 900123", null, "it is", true, askingAgain = false, atMs = 5L)
+        assertEquals(ActivityKind.CALL.name, (f[ActivityFields.KIND] as FieldValue.Text).value)
+        assertEquals("Asked 07700 900123 if it was urgent", (f[ActivityFields.SUMMARY] as FieldValue.Text).value)
+        assertEquals("Heard “it is” · marked urgent", (f[ActivityFields.DETAIL] as FieldValue.Text).value)
+        fun detail(urgent: Boolean?, again: Boolean) =
+            (CallAssistantRules.answerActivity("x", null, null, urgent, again, 0)[ActivityFields.DETAIL] as FieldValue.Text).value
+        assertEquals("No answer · didn't understand, asked again", detail(null, true))
+        assertEquals("No answer · still unclear, not marked urgent", detail(null, false))
+        assertEquals("No answer · not urgent", detail(false, false))
+        assertFalse(CallAssistantRules.answerActivityId("h1", false) == CallAssistantRules.answerActivityId("h1", true))
+        assertEquals(CallAssistantRules.answerActivityId("h1", true), CallAssistantRules.answerActivityId("h1", true))
     }
 
     @Test

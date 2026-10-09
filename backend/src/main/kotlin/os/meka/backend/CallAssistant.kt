@@ -50,8 +50,11 @@ sealed class VoiceEvent {
     data class Incoming(override val callId: String, val from: String?) : VoiceEvent()
     /** The message was recorded ([seconds] long; 0 when nothing was said). */
     data class Recorded(override val callId: String, val from: String?, val seconds: Int) : VoiceEvent()
-    /** The answer to "is it urgent?" (keypad [digits] or recognised [speech]; both empty when the caller said nothing). */
-    data class Answered(override val callId: String, val digits: String?, val speech: String?) : VoiceEvent()
+    /**
+     * The answer to "is it urgent?" (keypad [digits] or recognised [speech]; both empty when the caller said nothing).
+     * [again] when it answers the second asking ([VoiceStep.ANSWERED_AGAIN]).
+     */
+    data class Answered(override val callId: String, val digits: String?, val speech: String?, val again: Boolean = false) : VoiceEvent()
     /**
      * The phone service's transcript of the message, or null when transcription failed. [recording] names the
      * recording, which the server then deletes from the phone service (the words live on only in the summary).
@@ -66,8 +69,12 @@ sealed class VoiceReply {
      * [atWork] picks the greeting ([CallAssistantScript.greeting]): outside work hours it doesn't say Meka is at work.
      */
     data class TakeMessage(val atWork: Boolean = true) : VoiceReply()
-    /** Ask "is it urgent?" (answer to [VoiceStep.ANSWERED]); [atWork] picks the goodbye if nothing is answered. */
-    data class AskUrgent(val atWork: Boolean = true) : VoiceReply()
+    /**
+     * Ask "is it urgent?" (answer to [VoiceStep.ANSWERED]); [atWork] picks the goodbye if nothing is answered. [again]
+     * asks once more ([CallAssistantScript.URGENT_AGAIN], answer to [VoiceStep.ANSWERED_AGAIN]) after an answer the
+     * assistant didn't understand.
+     */
+    data class AskUrgent(val atWork: Boolean = true, val again: Boolean = false) : VoiceReply()
     data class Goodbye(val text: String) : VoiceReply()
     /** Turn the call away as busy: the assistant is switched off or nobody is set up to take it. */
     data object Busy : VoiceReply()
@@ -80,6 +87,7 @@ object VoiceStep {
     const val INCOMING = "incoming"
     const val RECORDED = "recorded"
     const val ANSWERED = "answered"
+    const val ANSWERED_AGAIN = "answered-again"
     const val TRANSCRIBED = "transcribed"
 
     fun path(provider: String, step: String) = "/v1/voice/$provider/$step"
@@ -183,8 +191,15 @@ class CallAssistant(
                 VoiceReply.AskUrgent(atWork)
             }
             is VoiceEvent.Answered -> {
-                val urgent = CallAssistantRules.isUrgentAnswer(event.digits, event.speech) == true
-                if (urgent && exists(hh, id)) {
+                val answer = CallAssistantRules.isUrgentAnswer(event.digits, event.speech)
+                val known = exists(hh, id)
+                // Not understood (or nothing said) the first time: ask once more rather than drop the urgency (8d).
+                val askAgain = answer == null && !event.again && known
+                // What it heard, in Activity, so Meka can see why a message was or wasn't marked urgent.
+                if (known) logAnswer(hh, id, event, answer, askAgain)
+                if (askAgain) return VoiceReply.AskUrgent(!away(hh, id), again = true)
+                val urgent = answer == true
+                if (urgent && known) {
                     if (write(hh, id, mapOf(HeldMessageFields.URGENT to true.fv()))) runCatching { onUrgent(hh) }
                 }
                 VoiceReply.Goodbye(if (urgent) CallAssistantScript.THANKS_URGENT else CallAssistantScript.thanks(!away(hh, id)))
@@ -231,6 +246,16 @@ class CallAssistant(
         )
     }.getOrDefault(true)
 
+    /** One Activity entry per call and asking ([CallAssistantRules.answerActivity]); a retried webhook writes nothing more. */
+    private fun logAnswer(hh: String, id: String, event: VoiceEvent.Answered, answer: Boolean?, askingAgain: Boolean) {
+        val caller = (fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.PERSON) as? FieldValue.Text)?.value
+            ?: CallAssistantRules.WITHHELD_NAME
+        val entry = CallAssistantRules.answerActivityId(id, event.again)
+        val values = CallAssistantRules.answerActivity(caller, event.digits, event.speech, answer, askingAgain, now())
+        // No wake-up of its own: Activity can wait for the next sync (an urgent answer wakes the devices anyway).
+        write(hh, entry, values, EntityTypes.AGENT_ACTION)
+    }
+
     /** The message was taken outside work hours ([HeldMessageFields.AWAY]). */
     private fun away(hh: String, id: String) = fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.AWAY) == FieldValue.Bool(true)
 
@@ -241,14 +266,14 @@ class CallAssistant(
     private fun exists(hh: String, id: String) = ops.find(hh, opId(id, HeldMessageFields.KIND)) != null
 
     /** Appends the fields not written before; returns whether anything was written. */
-    private fun write(hh: String, id: String, values: Map<String, FieldValue>): Boolean = ops.transaction {
+    private fun write(hh: String, id: String, values: Map<String, FieldValue>, type: String = EntityTypes.HELD_MESSAGE): Boolean = ops.transaction {
         var appended = false
         for ((field, value) in values) {
             val opId = opId(id, field)
             if (ops.find(hh, opId) != null) continue
             ops.append(
                 Op(
-                    opId = opId, householdId = hh, entityType = EntityTypes.HELD_MESSAGE, entityId = id, field = field,
+                    opId = opId, householdId = hh, entityType = type, entityId = id, field = field,
                     value = value, hlc = synchronized(clock) { clock.now() }, baseOpIds = emptyList(), deviceId = Integrations.SERVER_DEVICE,
                 ),
             )
@@ -306,6 +331,7 @@ class TwilioVoice(
             VoiceStep.INCOMING -> VoiceEvent.Incoming(call, from)
             VoiceStep.RECORDED -> VoiceEvent.Recorded(call, from, form["RecordingDuration"]?.trim()?.toIntOrNull() ?: 0)
             VoiceStep.ANSWERED -> VoiceEvent.Answered(call, form["Digits"], form["SpeechResult"])
+            VoiceStep.ANSWERED_AGAIN -> VoiceEvent.Answered(call, form["Digits"], form["SpeechResult"], again = true)
             VoiceStep.TRANSCRIBED -> VoiceEvent.Transcribed(
                 call, form["TranscriptionText"].takeIf { form["TranscriptionStatus"] == "completed" }, form["RecordingSid"]?.trim(),
             )
@@ -326,9 +352,12 @@ class TwilioVoice(
                 """transcribeCallback="${url(VoiceStep.TRANSCRIBED)}"/>""" +
                 // Reached only when nothing was recorded (Twilio then skips the action).
                 say(s.NO_MESSAGE) + "<Hangup/>"
+            // actionOnEmptyResult: silence comes back too, so the assistant can ask once more (8d).
             is VoiceReply.AskUrgent ->
                 """<Gather input="dtmf speech" numDigits="1" timeout="${s.ANSWER_SECONDS}" speechTimeout="auto" language="en-GB" """ +
-                    """hints="yes, no, urgent" action="${url(VoiceStep.ANSWERED)}" method="POST">""" + say(s.URGENT_QUESTION) + "</Gather>" +
+                    """hints="$URGENT_HINTS" actionOnEmptyResult="true" """ +
+                    """action="${url(if (reply.again) VoiceStep.ANSWERED_AGAIN else VoiceStep.ANSWERED)}" method="POST">""" +
+                    say(if (reply.again) s.URGENT_AGAIN else s.URGENT_QUESTION) + "</Gather>" +
                     say(s.thanks(reply.atWork)) + "<Hangup/>"
             is VoiceReply.Goodbye -> say(reply.text) + "<Hangup/>"
             VoiceReply.Busy -> """<Reject reason="busy"/>"""
@@ -350,6 +379,8 @@ class TwilioVoice(
 
     companion object {
         const val ID = "twilio"
+        /** Words the speech recogniser should expect after "is it urgent?". */
+        const val URGENT_HINTS = "yes, no, urgent, it is, it's urgent, not urgent, it can wait, emergency"
         /** Twilio's names for the British Polly voices MEKA offers (`Polly.<Name>-Neural`). */
         val NEURAL_VOICES = setOf("Amy", "Emma", "Brian", "Arthur")
         /** Those Twilio also offers on Polly's generative engine (`Polly.<Name>-Generative`). */

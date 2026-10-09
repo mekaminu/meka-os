@@ -19,6 +19,11 @@ object CallAssistantScript {
         "Can I take a message, and is it urgent?"
     const val RECORD_PROMPT = "Please leave your message after the tone, then press the hash key or just hang up."
     const val URGENT_QUESTION = "Is it urgent? Press 1 or say yes if it is. Press 2 or say no if it can wait."
+    /**
+     * Asked once more when the first answer wasn't understood or nothing came (call assistant polish 8d, Meka's test
+     * 2026-10-09: he said it was urgent and the card didn't show it).
+     */
+    const val URGENT_AGAIN = "Sorry, is it urgent? Say yes or no, or press 1 for yes."
     const val THANKS_URGENT = "Thank you. I'll let Meka know straight away. Goodbye."
     const val THANKS = "Thank you. Meka will get your message after work. Goodbye."
 
@@ -63,25 +68,66 @@ object CallAssistantRules {
 
     /**
      * The answer to "is it urgent?": true for 1 or a yes, false for 2 or a no, null when there was no answer the
-     * assistant understood (then it is not treated as urgent, though the message's own words still can be).
+     * assistant understood (it then asks once more; after that it is not treated as urgent, though the message's own
+     * words still can be). A short "it is" / "it's urgent" / "very" / "one" counts as yes (polish 8d): callers answer
+     * the question in its own words.
      */
     fun isUrgentAnswer(digits: String?, speech: String?): Boolean? {
         when (digits?.trim()?.firstOrNull()) {
             '1' -> return true
             '2' -> return false
         }
-        val s = speech?.lowercase().orEmpty()
+        val s = speech?.lowercase()?.replace('’', '\'')?.replace(Regex("[^a-z0-9' ]+"), " ")?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
+        if (s.isEmpty()) return null
         return when {
             notUrgent.containsMatchIn(s) -> false // "no, it's not urgent" says "urgent" too
             yes.containsMatchIn(s) -> true
             no.containsMatchIn(s) -> false
+            s in shortYes -> true
+            s in shortNo -> false
             else -> null
         }
     }
 
-    private val notUrgent = Regex("\\b(not urgent|isn't urgent|can wait)\\b")
-    private val yes = Regex("\\b(yes|yeah|yep|urgent|urgently|emergency)\\b")
+    private val notUrgent = Regex("\\b(not urgent|isn't urgent|is not urgent|it's not|it is not|it isn't|not really|can wait|no rush|no hurry)\\b")
+    private val yes = Regex("\\b(yes|yeah|yep|yup|yea|urgent|urgently|emergency|asap|right away|straight away)\\b")
     private val no = Regex("\\b(no|nope|nah)\\b")
+    /** Whole answers that mean yes or no on their own ("it is", or the digit said aloud). */
+    private val shortYes = setOf("it is", "it's", "it is please", "very", "very much", "please", "one", "1", "it is actually", "sure", "definitely", "i think so")
+    private val shortNo = setOf("two", "2", "later", "fine", "no it can wait")
+
+    /** What the assistant heard when it asked, for Activity: "Pressed 1", "Heard “it is”" or "No answer". */
+    fun answerHeard(digits: String?, speech: String?): String {
+        digits?.trim()?.takeIf { it.isNotEmpty() }?.let { return "Pressed ${it.take(4)}" }
+        val words = speech?.replace(Regex("\\s+"), " ")?.trim()?.takeIf { it.isNotEmpty() } ?: return "No answer"
+        val shown = if (words.length > 60) words.take(59).trimEnd() + "…" else words
+        return "Heard “$shown”"
+    }
+
+    /**
+     * The Activity entry for one answer to "is it urgent?" (polish 8d: Meka can see what the assistant heard). [urgent]
+     * is [isUrgentAnswer]'s reading; [askingAgain] when it didn't understand and asks once more. Written by the server
+     * like a published build's entry (ADR-008 addendum); [ActivityKind.CALL].
+     */
+    fun answerActivity(caller: String, digits: String?, speech: String?, urgent: Boolean?, askingAgain: Boolean, atMs: Long): Map<String, FieldValue> {
+        val outcome = when {
+            urgent == true -> "marked urgent"
+            urgent == false -> "not urgent"
+            askingAgain -> "didn't understand, asked again"
+            else -> "still unclear, not marked urgent"
+        }
+        return linkedMapOf(
+            ActivityFields.AT to FieldValue.Int64(atMs),
+            ActivityFields.KIND to FieldValue.Text(ActivityKind.CALL.name),
+            ActivityFields.SUMMARY to FieldValue.Text("Asked $caller if it was urgent".take(ActivityRules.MAX_LINE)),
+            ActivityFields.DETAIL to FieldValue.Text("${answerHeard(digits, speech)} · $outcome".take(ActivityRules.MAX_LINE)),
+            ActivityFields.WHY to FieldValue.Text("Call assistant · is it urgent?"),
+            ActivityFields.SOURCE to FieldValue.Text("calls"),
+        )
+    }
+
+    /** The entry id of that answer: one per call and attempt, however often the phone service retries. */
+    fun answerActivityId(heldId: String, again: Boolean): String = "v" + ActivityRules.fnv64("urgentanswer:$heldId:${if (again) 2 else 1}")
 
     /** The phone service's transcript, tidied for display: whitespace collapsed, bounded, null when empty. */
     fun transcript(text: String?): String? =
