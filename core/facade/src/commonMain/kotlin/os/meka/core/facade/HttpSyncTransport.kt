@@ -447,14 +447,14 @@ class HttpSyncTransport(
 
     override suspend fun hereWeather(lat: Double, lon: Double): os.meka.core.wire.HereCodec.Response {
         val codec = os.meka.core.wire.HereCodec
-        val body = codec.encodeRequest(codec.Request(lat, lon))
+        val body = codec.encodeRequest(os.meka.core.wire.HereCodec.Request(lat, lon))
         prepare() // the route requires the device's signing key on the server
         val resp = send("/v1/weather/here", body)
         when {
             resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/weather/here")
             // A server without the route (older, or no weather): Today keeps home's line.
-            resp.status.value == 404 -> return codec.Response(codec.Response.OFF)
-            resp.status.value == 403 -> return codec.Response(codec.Response.FAILED, reason = "this device's key isn't registered yet")
+            resp.status.value == 404 -> return os.meka.core.wire.HereCodec.Response(os.meka.core.wire.HereCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.HereCodec.Response(os.meka.core.wire.HereCodec.Response.FAILED, reason = "this device's key isn't registered yet")
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/weather/here")
         }
         return codec.decodeResponse(resp.bodyAsText())
