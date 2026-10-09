@@ -16,7 +16,7 @@ struct AfterWorkSheet: View {
     var body: some View {
         let summary = model.afterWork
         VStack(alignment: .leading, spacing: MekaSpace.m) {
-            Text("While you were at work").font(MekaType.upNextTitle).staggeredAppear(0)
+            Text(summary?.title ?? "While you were at work").font(MekaType.upNextTitle).staggeredAppear(0)
             Text(summary?.headline ?? "Nothing came in.")
                 .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 .staggeredAppear(0)
@@ -130,7 +130,7 @@ struct AfterWorkCard: View {
             } else {
                 Button { model.showAfterWork = true } label: {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                        Text("While you were at work").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                        Text(summary.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                         Text(summary.headline).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                         if summary.urgentPeople > 0 {
                             Text("\(summary.urgentPeople) urgent").font(MekaType.caption.weight(.semibold)).foregroundStyle(palette.critical)

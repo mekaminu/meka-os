@@ -113,7 +113,8 @@ class CallAssistantTest {
         assertEquals(CaptureKind.VOICE_MESSAGE, item.kind)
         assertEquals("+447700900123", item.personName)
         assertTrue(item.urgent)
-        assertEquals("Voice message", item.displayLine)
+        assertEquals("Voice message · Transcribing…", item.displayLine)
+        assertFalse(item.away) // Thursday 10:00 in the UK: at work
         assertEquals(nowMs, item.atMs)
         assertEquals(CallAssistantRules.heldId("twilio", "CA100"), item.id)
         assertTrue(heldOps().all { it.deviceId == "server" })
@@ -158,10 +159,42 @@ class CallAssistantTest {
         hook(VoiceStep.TRANSCRIBED, "CallSid" to "CA2", "TranscriptionStatus" to "completed", "TranscriptionText" to "This is an emergency, call me")
         assertEquals(listOf("hh"), urgent)
         assertTrue(fold().items().first { it.personName == "07700 900222" }.isUrgent)
-        // A failed transcription writes nothing.
+        // A failed transcription writes only that no words came, once, so the apps stop showing "Transcribing…".
         val before = heldOps().size
         hook(VoiceStep.TRANSCRIBED, "CallSid" to "CA1", "TranscriptionStatus" to "failed", "TranscriptionText" to "")
-        assertEquals(before, heldOps().size)
+        hook(VoiceStep.TRANSCRIBED, "CallSid" to "CA1", "TranscriptionStatus" to "failed", "TranscriptionText" to "")
+        assertEquals(before + 1, heldOps().size)
+        assertEquals(HeldMessageFields.NO_TRANSCRIPT, heldOps().last().field)
+        assertEquals("Voice message · no words came through", fold().items().first { it.personName == "07700 900111" }.displayLine)
+        // ...and nothing for a call it never took a message on.
+        hook(VoiceStep.TRANSCRIBED, "CallSid" to "CA404", "TranscriptionStatus" to "failed")
+        assertEquals(before + 1, heldOps().size)
+    }
+
+    @Test
+    fun outsideWorkHoursTheAssistantDoesntSayMekaIsAtWork() = testApplication {
+        application { mekaSync(ops, devices, voice = voice) }
+        nowMs = 1_791_575_340_000L // Fri 2026-10-09 19:49 UTC, 20:49 in the UK: Meka's first real test call
+        switch(true)
+        val call = arrayOf("CallSid" to "CA800", "From" to "+447700900123")
+        val greet = hook(VoiceStep.INCOMING, *call).bodyAsText()
+        assertTrue("Meka can&apos;t take your call right now and will call you back." in greet, greet)
+        assertFalse("at work" in greet, greet)
+        val asked = hook(VoiceStep.RECORDED, *call, "RecordingDuration" to "6").bodyAsText()
+        assertTrue("Meka will get your message and call you back" in asked, asked) // said if nothing is answered
+        assertTrue("Meka will get your message and call you back" in hook(VoiceStep.ANSWERED, *call, "Digits" to "2").bodyAsText())
+        val item = fold().items().single()
+        assertTrue(item.away)
+        assertEquals("Messages MEKA took", fold().summary().title)
+
+        // Work switched on by hand that evening (a late shift): the at-work greeting again.
+        ops.append(
+            Op(
+                "s${seq++}", "hh", EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.SWITCH,
+                FieldValue.Text(os.meka.core.domain.WorkSwitch(true, nowMs, false).encode()), Hlc(nowMs + 50, 0, "fold"), emptyList(), "fold",
+            ),
+        )
+        assertTrue("Meka is at work right now" in hook(VoiceStep.INCOMING, "CallSid" to "CA801").bodyAsText())
     }
 
     @Test

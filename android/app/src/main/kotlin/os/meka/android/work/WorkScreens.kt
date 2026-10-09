@@ -264,7 +264,7 @@ fun AfterWorkPane(summary: AfterWorkSummary, onDone: () -> Unit, onClose: () -> 
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
-        Text("While you were at work", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
+        Text(summary.title, style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
         Text(summary.headline, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
         Spacer(Modifier.height(MekaSpace.xs))
         // Email-triage style: people sort into place with a stagger.
@@ -297,7 +297,7 @@ fun AfterWorkCard(core: MekaCore, modifier: Modifier = Modifier, onOpen: () -> U
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onOpen() }.padding(MekaSpace.m),
     ) {
-        Text("While you were at work", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Text(summary.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         Text(summary.headline, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         if (summary.urgentPeople > 0) {
             Text("${summary.urgentPeople} urgent", style = MekaType.caption.copy(fontWeight = FontWeight.SemiBold), color = Meka.colors.critical)

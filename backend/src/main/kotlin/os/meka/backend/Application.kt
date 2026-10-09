@@ -389,7 +389,7 @@ fun Application.mekaSync(
                 val reply = withContext(Dispatchers.IO) { voice.assistant.handle(provider.id, event) }
                 // Transcribed (or failed): the recording has done its job; delete it from the phone service, off the request.
                 if (event is VoiceEvent.Transcribed) event.recording?.let { rec -> background { runCatching { provider.deleteRecording(rec) } } }
-                if (event is VoiceEvent.Recorded && reply == VoiceReply.AskUrgent) call.application.environment.log.info("voice message taken") // no identifiers
+                if (event is VoiceEvent.Recorded && reply is VoiceReply.AskUrgent) call.application.environment.log.info("voice message taken") // no identifiers
                 val callVoice = if (reply == VoiceReply.Done || reply == VoiceReply.Busy) CallVoice.DEFAULT else withContext(Dispatchers.IO) { voice.assistant.voice() }
                 val (type, text) = provider.render(reply, voice.publicUrl, callVoice)
                 call.respondText(text, ContentType.parse(type))

@@ -21,6 +21,17 @@ object CallAssistantScript {
     const val URGENT_QUESTION = "Is it urgent? Press 1 or say yes if it is. Press 2 or say no if it can wait."
     const val THANKS_URGENT = "Thank you. I'll let Meka know straight away. Goodbye."
     const val THANKS = "Thank you. Meka will get your message after work. Goodbye."
+
+    /**
+     * Outside work hours (call assistant polish 6, Meka heard the at-work greeting at 20:50): calls only reach the
+     * assistant then when Meka declines one, so it doesn't say he is at work.
+     */
+    const val GREETING_AWAY = "Hi, you've reached Meka's automated assistant. Meka can't take your call right now and will call you back. " +
+        "Can I take a message, and is it urgent?"
+    const val THANKS_AWAY = "Thank you. Meka will get your message and call you back. Goodbye."
+
+    fun greeting(atWork: Boolean): String = if (atWork) GREETING else GREETING_AWAY
+    fun thanks(atWork: Boolean): String = if (atWork) THANKS else THANKS_AWAY
     const val NO_MESSAGE = "I didn't hear a message. Meka will see that you called. Goodbye."
 
     /** Longest message kept (the phone service's transcription covers up to two minutes). */
@@ -76,15 +87,33 @@ object CallAssistantRules {
     fun transcript(text: String?): String? =
         text?.replace(Regex("\\s+"), " ")?.trim()?.take(MAX_TEXT)?.takeIf { it.isNotEmpty() }
 
-    /** The fields of a new voice message (the transcript arrives later as [HeldMessageFields.TEXT]). */
-    fun messageFields(from: String?, atMs: Long): Map<String, FieldValue> = mapOf(
-        HeldMessageFields.APP to CaptureApp.PHONE.name.fv(),
-        HeldMessageFields.KIND to CaptureKind.VOICE_MESSAGE.name.fv(),
-        HeldMessageFields.PERSON to callerName(from).fv(),
-        HeldMessageFields.AT to FieldValue.Int64(atMs),
+    /**
+     * The fields of a new voice message (the transcript arrives later as [HeldMessageFields.TEXT]). [atWork] false marks
+     * a message taken outside work hours ([HeldMessageFields.AWAY]), so the summary isn't titled "While you were at work".
+     */
+    fun messageFields(from: String?, atMs: Long, atWork: Boolean = true): Map<String, FieldValue> = buildMap {
+        put(HeldMessageFields.APP, CaptureApp.PHONE.name.fv())
+        put(HeldMessageFields.KIND, CaptureKind.VOICE_MESSAGE.name.fv())
+        put(HeldMessageFields.PERSON, callerName(from).fv())
+        put(HeldMessageFields.AT, FieldValue.Int64(atMs))
         // The server doesn't have the family list (it stays on the Fold); the Fold ranks by number with its lists.
-        HeldMessageFields.FAMILY to false.fv(),
-    )
+        put(HeldMessageFields.FAMILY, false.fv())
+        if (!atWork) put(HeldMessageFields.AWAY, true.fv())
+    }
+
+    /** How long a voice message with no words yet reads "Transcribing…" (the phone service takes a minute or two). */
+    const val TRANSCRIBING_MS = 15 * 60_000L
+
+    /**
+     * Whether Meka is at work at this moment, from the synced work fields as stored ([WorkFields.SCHEDULE],
+     * [WorkFields.SWITCH], [BankHolidayFields.DATES]; null when never written) and the local date and time. The server
+     * uses it to pick the greeting ([CallAssistantScript.greeting]); the same rules the apps use ([WorkModeRules.state]).
+     */
+    fun atWork(schedule: String?, switch: String?, holidays: String?, epochDay: Long, minuteOfDay: Int, nowMs: Long): Boolean {
+        val s = if (schedule == null || schedule == WorkSchedule.LEGACY_DEFAULT) WorkSchedule.DEFAULT else WorkSchedule.decode(schedule) ?: WorkSchedule.DEFAULT
+        val clock = LocalClock(CivilDate.isoDayOfWeek(epochDay), minuteOfDay)
+        return WorkModeRules.state(s, WorkSwitch.decode(switch), clock, nowMs, epochDay, HolidayCalendar.of(BankHolidays.decode(holidays))).atWork
+    }
 
     /**
      * Urgent voice messages the Fold should alert about now: urgent (by the caller's answer or its words), left in the

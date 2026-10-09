@@ -75,7 +75,7 @@ object HeldPreviewRules {
             CaptureKind.MESSAGE -> firstLine(item.text.orEmpty()).ifEmpty { "Message" }
             CaptureKind.MISSED_CALL -> "Missed call"
             CaptureKind.VOICE_MESSAGE -> item.text?.let(::firstLine)?.takeIf { it.isNotEmpty() }
-                ?.let { "Voice message · “$it”" } ?: "Voice message"
+                ?.let { "Voice message · “$it”" } ?: item.displayLine // "Transcribing…" until its words arrive
         }
         return HeldPreviewRow(item.id, who, line, timeLabel(item.atMs, nowMs, cal), item.app, item.isUrgent)
     }

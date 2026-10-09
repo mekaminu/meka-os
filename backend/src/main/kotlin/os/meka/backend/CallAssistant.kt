@@ -4,6 +4,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import os.meka.backend.integrations.Integrations
+import os.meka.core.domain.BankHolidayFields
+import os.meka.core.domain.BankHolidayStore
 import os.meka.core.domain.CallAssistantRules
 import os.meka.core.domain.CallAssistantScript
 import os.meka.core.domain.EntityTypes
@@ -59,10 +61,13 @@ sealed class VoiceEvent {
 
 /** What the assistant does next, provider-neutral; the provider renders it as its own markup. */
 sealed class VoiceReply {
-    /** Greet, ask for a message and record it (then [VoiceStep.RECORDED]; the transcript later to [VoiceStep.TRANSCRIBED]). */
-    data object TakeMessage : VoiceReply()
-    /** Ask "is it urgent?" (answer to [VoiceStep.ANSWERED]). */
-    data object AskUrgent : VoiceReply()
+    /**
+     * Greet, ask for a message and record it (then [VoiceStep.RECORDED]; the transcript later to [VoiceStep.TRANSCRIBED]).
+     * [atWork] picks the greeting ([CallAssistantScript.greeting]): outside work hours it doesn't say Meka is at work.
+     */
+    data class TakeMessage(val atWork: Boolean = true) : VoiceReply()
+    /** Ask "is it urgent?" (answer to [VoiceStep.ANSWERED]); [atWork] picks the goodbye if nothing is answered. */
+    data class AskUrgent(val atWork: Boolean = true) : VoiceReply()
     data class Goodbye(val text: String) : VoiceReply()
     /** Turn the call away as busy: the assistant is switched off or nobody is set up to take it. */
     data object Busy : VoiceReply()
@@ -169,23 +174,29 @@ class CallAssistant(
         val hh = household() ?: return if (event is VoiceEvent.Incoming) VoiceReply.Busy else VoiceReply.Done
         val id = CallAssistantRules.heldId(provider, event.callId)
         return when (event) {
-            is VoiceEvent.Incoming -> if (switchedOn(hh)) VoiceReply.TakeMessage else VoiceReply.Busy
+            is VoiceEvent.Incoming -> if (switchedOn(hh)) VoiceReply.TakeMessage(atWork(hh)) else VoiceReply.Busy
             is VoiceEvent.Recorded -> {
                 if (event.seconds < 1) return VoiceReply.Goodbye(CallAssistantScript.NO_MESSAGE)
-                if (write(hh, id, CallAssistantRules.messageFields(event.from, now()))) runCatching { onWritten(hh) }
-                VoiceReply.AskUrgent
+                // A retry finds the message written: it keeps the at-work reading it was taken with.
+                val atWork = if (exists(hh, id)) !away(hh, id) else atWork(hh)
+                if (write(hh, id, CallAssistantRules.messageFields(event.from, now(), atWork))) runCatching { onWritten(hh) }
+                VoiceReply.AskUrgent(atWork)
             }
             is VoiceEvent.Answered -> {
                 val urgent = CallAssistantRules.isUrgentAnswer(event.digits, event.speech) == true
                 if (urgent && exists(hh, id)) {
                     if (write(hh, id, mapOf(HeldMessageFields.URGENT to true.fv()))) runCatching { onUrgent(hh) }
                 }
-                VoiceReply.Goodbye(if (urgent) CallAssistantScript.THANKS_URGENT else CallAssistantScript.THANKS)
+                VoiceReply.Goodbye(if (urgent) CallAssistantScript.THANKS_URGENT else CallAssistantScript.thanks(!away(hh, id)))
             }
             is VoiceEvent.Transcribed -> {
-                val text = CallAssistantRules.transcript(event.text) ?: return VoiceReply.Done
                 // Done on a device blanked the summary: a late transcript doesn't bring the words back.
                 if (!exists(hh, id) || fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.CLEARED) == FieldValue.Bool(true)) {
+                    return VoiceReply.Done
+                }
+                val text = CallAssistantRules.transcript(event.text) ?: run {
+                    // No words (transcription failed or heard nothing): the apps stop showing "Transcribing…".
+                    if (write(hh, id, mapOf(HeldMessageFields.NO_TRANSCRIPT to true.fv()))) runCatching { onWritten(hh) }
                     return VoiceReply.Done
                 }
                 if (write(hh, id, mapOf(HeldMessageFields.TEXT to text.fv()))) {
@@ -204,6 +215,24 @@ class CallAssistant(
         val offered = runCatching { speechVoices() }.getOrDefault(emptyList())
         return CallVoice.choose((chosen as? FieldValue.Text)?.value, offered)
     }
+
+    /**
+     * Whether Meka is at work now by the synced schedule, switch and bank holidays, in UK time ([CallAssistantRules.atWork]).
+     * Never throws: anything unreadable counts as at work, the greeting the assistant had before.
+     */
+    private fun atWork(hh: String): Boolean = runCatching {
+        fun text(entity: String, field: String) = (fields.latest(hh, EntityTypes.CONTEXT_MODE, entity, field) as? FieldValue.Text)?.value
+        val nowMs = now()
+        val local = java.time.Instant.ofEpochMilli(nowMs).atZone(UK)
+        CallAssistantRules.atWork(
+            schedule = text(WorkMode.ENTITY_ID, WorkFields.SCHEDULE), switch = text(WorkMode.ENTITY_ID, WorkFields.SWITCH),
+            holidays = text(BankHolidayStore.ENTITY_ID, BankHolidayFields.DATES),
+            epochDay = local.toLocalDate().toEpochDay(), minuteOfDay = local.hour * 60 + local.minute, nowMs = nowMs,
+        )
+    }.getOrDefault(true)
+
+    /** The message was taken outside work hours ([HeldMessageFields.AWAY]). */
+    private fun away(hh: String, id: String) = fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.AWAY) == FieldValue.Bool(true)
 
     /** The one switch (Work screen on either app): off means calls are turned away as busy. Absent = off. */
     private fun switchedOn(hh: String): Boolean =
@@ -229,6 +258,8 @@ class CallAssistant(
     }
 
     companion object {
+        private val UK: java.time.ZoneId = java.time.ZoneId.of("Europe/London")
+
         fun opId(heldId: String, field: String) = "srvvoice$heldId${field.lowercase().filter(Char::isLetterOrDigit)}"
     }
 }
@@ -289,16 +320,16 @@ class TwilioVoice(
         fun url(step: String) = xml(base + VoiceStep.path(ID, step))
         val s = CallAssistantScript
         val body = when (reply) {
-            VoiceReply.TakeMessage -> say(s.GREETING) + say(s.RECORD_PROMPT) +
+            is VoiceReply.TakeMessage -> say(s.greeting(reply.atWork)) + say(s.RECORD_PROMPT) +
                 """<Record action="${url(VoiceStep.RECORDED)}" method="POST" maxLength="${s.MAX_MESSAGE_SECONDS}" """ +
                 """timeout="${s.SILENCE_SECONDS}" finishOnKey="#" playBeep="true" transcribe="true" """ +
                 """transcribeCallback="${url(VoiceStep.TRANSCRIBED)}"/>""" +
                 // Reached only when nothing was recorded (Twilio then skips the action).
                 say(s.NO_MESSAGE) + "<Hangup/>"
-            VoiceReply.AskUrgent ->
+            is VoiceReply.AskUrgent ->
                 """<Gather input="dtmf speech" numDigits="1" timeout="${s.ANSWER_SECONDS}" speechTimeout="auto" language="en-GB" """ +
                     """hints="yes, no, urgent" action="${url(VoiceStep.ANSWERED)}" method="POST">""" + say(s.URGENT_QUESTION) + "</Gather>" +
-                    say(s.THANKS) + "<Hangup/>"
+                    say(s.thanks(reply.atWork)) + "<Hangup/>"
             is VoiceReply.Goodbye -> say(reply.text) + "<Hangup/>"
             VoiceReply.Busy -> """<Reject reason="busy"/>"""
             VoiceReply.Done -> ""

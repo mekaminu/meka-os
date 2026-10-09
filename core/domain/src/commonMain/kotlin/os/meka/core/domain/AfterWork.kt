@@ -37,6 +37,12 @@ data class CapturedItem(
     val family: Boolean = false,
     /** The caller told the call assistant it is urgent (a message's own words are checked by [Urgency]). */
     val urgent: Boolean = false,
+    /** A voice message the assistant took outside work hours ([HeldMessageFields.AWAY]). */
+    val away: Boolean = false,
+    /** A voice message whose words haven't arrived yet but still may ([CallAssistantRules.TRANSCRIBING_MS]). */
+    val transcribing: Boolean = false,
+    /** The phone service said it couldn't transcribe this voice message ([HeldMessageFields.NO_TRANSCRIPT]). */
+    val noTranscript: Boolean = false,
 ) {
     val personKey: String get() = People.key(personName)
 
@@ -47,7 +53,11 @@ data class CapturedItem(
     val displayLine: String get() = when (kind) {
         CaptureKind.MISSED_CALL -> "Missed call"
         CaptureKind.MESSAGE -> text.orEmpty()
-        CaptureKind.VOICE_MESSAGE -> text?.let { "Voice message \u00b7 \u201c$it\u201d" } ?: "Voice message"
+        CaptureKind.VOICE_MESSAGE -> text?.let { "Voice message \u00b7 \u201c$it\u201d" } ?: when {
+            noTranscript -> "Voice message \u00b7 no words came through"
+            transcribing -> "Voice message \u00b7 Transcribing\u2026"
+            else -> "Voice message"
+        }
     }
 }
 
@@ -196,6 +206,18 @@ data class AfterWorkSummary(val people: List<PersonSummary>) {
     /** Everything held, for "12 held for later" during work. */
     val itemCount: Int get() = people.sumOf { it.items.size }
 
+    /**
+     * The summary's title on both apps and in its notification: "Messages MEKA took" when everything in it is voice
+     * messages the assistant took outside work hours (call assistant polish 4), else "While you were at work".
+     */
+    val title: String get() =
+        if (people.isNotEmpty() && people.all { p -> p.items.all { it.kind == CaptureKind.VOICE_MESSAGE && it.away } }) AWAY_TITLE else WORK_TITLE
+
+    companion object {
+        const val WORK_TITLE = "While you were at work"
+        const val AWAY_TITLE = "Messages MEKA took"
+    }
+
     /** The same summary with this device's family list applied too (the Fold has the lists; the Mac uses the flags). */
     fun withLists(lists: PeopleLists): AfterWorkSummary =
         if (lists.family.isEmpty()) this else AfterWorkSummaries.build(people.flatMap { it.items }, lists)
@@ -273,7 +295,7 @@ object AfterWorkNudge {
             plural(summary.missedCalls, "missed call").takeIf { summary.missedCalls > 0 },
         ).joinToString(" · ")
         return AfterWorkNudgeText(
-            title = "While you were at work",
+            title = summary.title,
             text = "$who · $counts",
             publicText = "Your after-work summary is ready",
         )
@@ -297,6 +319,10 @@ object HeldMessageFields {
     const val FAMILY = "family"
     /** The caller said it is urgent (call assistant voice messages; TrueWins). Absent = no. */
     const val URGENT = "urgent"
+    /** A voice message the assistant took outside work hours (Bool, written once by the server). Absent = at work. Added 2026-10-09. */
+    const val AWAY = "away"
+    /** The phone service couldn't transcribe a voice message (Bool, written once by the server). Absent = not known. Added 2026-10-09. */
+    const val NO_TRANSCRIPT = "noTranscript"
     /** "Done" on either device: gone from the summary on both. */
     const val CLEARED = "cleared"
     const val CLEARED_AT = "clearedAtMs"
@@ -343,11 +369,17 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
             val app = e[HeldMessageFields.APP].textOrNull?.let { n -> CaptureApp.entries.firstOrNull { it.name == n } } ?: return@mapNotNull null
             val kind = e[HeldMessageFields.KIND].textOrNull?.let { n -> CaptureKind.entries.firstOrNull { it.name == n } } ?: return@mapNotNull null
             val person = e[HeldMessageFields.PERSON].textOrNull ?: return@mapNotNull null
+            val text = e[HeldMessageFields.TEXT].textOrNull
+            val noTranscript = e[HeldMessageFields.NO_TRANSCRIPT].boolOrNull == true
             CapturedItem(
                 id = e.ref.entityId, app = app, kind = kind, personName = person,
-                text = e[HeldMessageFields.TEXT].textOrNull, conversation = e[HeldMessageFields.CONVERSATION].textOrNull,
+                text = text, conversation = e[HeldMessageFields.CONVERSATION].textOrNull,
                 atMs = at, family = e[HeldMessageFields.FAMILY].boolOrNull == true,
                 urgent = e[HeldMessageFields.URGENT].boolOrNull == true,
+                away = e[HeldMessageFields.AWAY].boolOrNull == true,
+                transcribing = kind == CaptureKind.VOICE_MESSAGE && text == null && !noTranscript &&
+                    nowMs() - at < CallAssistantRules.TRANSCRIBING_MS,
+                noTranscript = noTranscript,
             )
         }.sortedWith(compareBy<CapturedItem>({ it.atMs }, { it.id })).takeLast(Capture.MAX_ITEMS)
     }
