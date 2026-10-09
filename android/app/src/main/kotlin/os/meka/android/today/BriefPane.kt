@@ -326,6 +326,10 @@ internal fun BriefCard(v: MorningBriefView, onOpen: () -> Unit, modifier: Modifi
             .clickable(role = Role.Button) { onOpen() }.padding(MekaSpace.l),
     ) {
         Text("Morning brief", style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = titleModifier)
-        Text(v.cardLine, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
+        // "16° · drizzle from 15:00 · 2 tasks · Barça v Getafe tomorrow 17:30" (Fold review 2026-10-09 07:26, item 4);
+        // it cross-fades as the weather or the day changes.
+        Crossfade(v.cardLine, Modifier.padding(top = MekaSpace.xxs), animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "brief-card-line") { line ->
+            Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        }
     }
 }

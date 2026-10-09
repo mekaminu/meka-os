@@ -57,7 +57,10 @@ data class MorningBriefView(
     val habitsLine: String?,
     /** "Fasting since 20:05 yesterday · goal at 12:05"; null when not fasting. */
     val fastingLine: String?,
-    /** The card's second line: "2 events · 4 tasks · first at 09:30 · 1 to chase". */
+    /**
+     * The card's second line (Fold review 2026-10-09 07:26, item 4): the weather, the day's counts and the next Barça
+     * match: "16° · drizzle from 15:00 · 2 tasks · Barça v Getafe tomorrow 17:30 · 1 to chase".
+     */
     val cardLine: String,
     /** Up to [NewsRules.MAX_IN_BRIEF] headlines from the chosen topics, newest first, each with its source named. */
     val headlines: List<BriefHeadline> = emptyList(),
@@ -131,12 +134,59 @@ object BriefRules {
         return if (due > 0) "$head · $due to chase today" else head
     }
 
-    /** "2 events · 4 tasks · first at 09:30 · 1 to chase · 1 renewal due", or "Nothing planned yet". */
-    fun cardLine(daySummary: String, hasDay: Boolean, chaseDue: Int, attention: Int): String = listOfNotNull(
-        if (hasDay) daySummary else "Nothing planned yet",
+    /** The fixture's title in the card is shortened at a word past this many characters. */
+    const val MAX_FIXTURE_CHARS = 32
+
+    /** What the fixtures feed adds to a title whose kick-off isn't set yet. */
+    private const val TBC_SUFFIX = "(kick-off TBC)"
+
+    /**
+     * The card's second line (Fold review 2026-10-09 07:26, item 4: "2 tasks" said nothing). The weather now and what the
+     * rest of today does ([WeatherRules.nowLine], when the forecast has it), the day's counts without "first at" (the
+     * pane has that), the next Barça match today or tomorrow ([fixtureLine]), then chases and what's on your lists:
+     * "16° · drizzle from 15:00 · 2 tasks · Barça v Getafe tomorrow 17:30 · 1 to chase". "Nothing planned yet" when the
+     * day is empty.
+     */
+    fun cardLine(
+        weather: String?, eventCount: Int, taskCount: Int, fixture: String?, chaseDue: Int, attention: Int,
+    ): String = listOfNotNull(
+        weather?.trim()?.takeIf { it.isNotEmpty() },
+        if (eventCount == 0 && taskCount == 0) "Nothing planned yet"
+        else listOfNotNull(
+            ShutdownRules.count(eventCount, "event").takeIf { eventCount > 0 },
+            ShutdownRules.count(taskCount, "task").takeIf { taskCount > 0 },
+        ).joinToString(" · "),
+        fixture,
         chaseDue.takeIf { it > 0 }?.let { "$it to chase" },
         attention.takeIf { it > 0 }?.let { ShutdownRules.count(it, "thing") + " on your lists" },
     ).joinToString(" · ")
+
+    /**
+     * The next match from the fixtures feed that hasn't finished and starts today or tomorrow (not all-day): "Barça v
+     * Getafe today 17:30", "Barça v Getafe tomorrow 17:30", "Barça v Getafe on now" once it has started, "Barça v Getafe
+     * tomorrow" while the kick-off is to be confirmed. Pass the events shown on my day, so a hidden fixture stays hidden.
+     * Null when there's no match today or tomorrow.
+     */
+    fun fixtureLine(events: List<CalendarEvent>, nowMs: Long, cal: LocalCalendar): String? {
+        val today = cal.epochDayOf(nowMs)
+        val e = events.filter { it.isFixture && !it.allDay && it.endAtMs > nowMs && cal.epochDayOf(it.startAtMs) in today..today + 1 }
+            .minWithOrNull(compareBy<CalendarEvent> { it.startAtMs }.thenBy { it.id }) ?: return null
+        val tbc = e.title.trimEnd().endsWith(TBC_SUFFIX)
+        val title = shorten(e.title.trimEnd().removeSuffix(TBC_SUFFIX).trim().ifEmpty { "Barça" })
+        val day = if (cal.epochDayOf(e.startAtMs) == today) "today" else "tomorrow"
+        return when {
+            tbc -> "$title $day"
+            nowMs >= e.startAtMs -> "$title on now"
+            else -> "$title $day ${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))}"
+        }
+    }
+
+    /** At most [MAX_FIXTURE_CHARS], cut at a word with "…". */
+    private fun shorten(title: String): String {
+        if (title.length <= MAX_FIXTURE_CHARS) return title
+        val at = title.take(MAX_FIXTURE_CHARS + 1).lastIndexOf(' ')
+        return (if (at >= MAX_FIXTURE_CHARS / 2) title.take(at) else title.take(MAX_FIXTURE_CHARS)).trimEnd(' ', '·', '-', ',') + "…"
+    }
 }
 
 class MorningBrief(
@@ -171,6 +221,8 @@ class MorningBrief(
         newsTopics: List<NewsTopicChoice> = NewsTopics.ALL.map { NewsTopicChoice(it.id, it.label, it.id in NewsTopics.DEFAULT) },
         /** Bank holidays are days off: "Christmas Day · no work" instead of the work hours. */
         holidays: HolidayCalendar = HolidayCalendar.NONE,
+        /** The weather now and the rest of today ([WeatherRules.nowLine]) for the card; null when there's no forecast. */
+        weatherNow: String? = null,
     ): MorningBriefView {
         val now = nowMs()
         val minute = calendar.minuteOfDay(now)
@@ -254,7 +306,9 @@ class MorningBrief(
             attention = attention,
             habitsLine = goals.paceLine,
             fastingLine = fastingLine,
-            cardLine = BriefRules.cardLine(daySummary, rows.isNotEmpty(), lists.chaseDue, attention.size),
+            cardLine = BriefRules.cardLine(
+                weatherNow, dayEvents.size, dayTasks.size, BriefRules.fixtureLine(events, now, calendar), lists.chaseDue, attention.size,
+            ),
             headlines = NewsRules.forBrief(headlines, newsTopics.filter { it.chosen }.map { it.id }, now),
             newsTopics = newsTopics,
             readElsewhereLine = if (readElsewhere) BriefRules.readElsewhereLine(mark?.get(BriefFields.SEEN_ON)?.textOrNull) else null,

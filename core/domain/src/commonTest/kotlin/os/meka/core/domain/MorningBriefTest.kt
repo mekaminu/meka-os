@@ -160,7 +160,50 @@ class MorningBriefTest {
         assertEquals("3 events · 3 tasks · first at 09:30", v.daySummary)
         assertEquals(1, v.overdueCount)
         assertEquals("Work 09:00–17:30", v.workLine)
-        assertTrue(v.cardLine.startsWith("3 events · 3 tasks · first at 09:30"))
+        assertEquals("3 events · 3 tasks · Barça v Sevilla today 20:00", v.cardLine)
+    }
+
+    @Test
+    fun theCardSaysTheWeatherTheDayAndTheNextMatch() {
+        // Fold review 2026-10-09 07:26, item 4: "16° · drizzle from 15:00 · 2 tasks · Barça v Getafe tomorrow 17:30".
+        val d = today()
+        ta.create(NewTask("Buy stamps"))
+        ta.create(NewTask("Call the bank"))
+        val events = listOf(event("f1", "Barça v Getafe", at(d + 1, 17, 30), at(d + 1, 19, 30), provider = "fixtures"))
+        val v = brief(a).view(ta.all(), events, schedule, QuietHours.DEFAULT, la.view(ta.all(), ra.view()), GoalsView.EMPTY,
+            FastingView.EMPTY, window(), weatherNow = "16° · drizzle from 15:00")
+        assertEquals("16° · drizzle from 15:00 · 2 tasks · Barça v Getafe tomorrow 17:30", v.cardLine)
+        // The pane's own summary keeps "first at".
+        assertEquals("2 tasks", v.daySummary)
+        // No forecast and no match: just the day.
+        assertEquals("2 tasks", view().cardLine)
+        // Weather on an empty day.
+        assertEquals("12° · cloudy, dry today · Nothing planned yet", BriefRules.cardLine("12° · cloudy, dry today", 0, 0, null, 0, 0))
+        assertEquals("1 event · 1 task · 1 to chase · 1 thing on your lists", BriefRules.cardLine(" ", 1, 1, null, 1, 1))
+    }
+
+    @Test
+    fun theMatchIsTodayOrTomorrowOnNowOrToBeConfirmed() {
+        val d = today()
+        val cal = LocalCalendar.UTC
+        fun fx(id: String, title: String, start: Long, allDay: Boolean = false) =
+            event(id, title, start, start + 2 * hourMs, allDay = allDay, provider = "fixtures")
+        val now = world.clock.nowMs // Tuesday 07:30
+        assertNull(BriefRules.fixtureLine(emptyList(), now, cal))
+        // Today's match comes before tomorrow's; a calendar event called "Barça" isn't a fixture.
+        val both = listOf(fx("b", "Barça v Getafe", at(d + 1, 17, 30)), fx("a", "Barça v Sevilla", at(d, 20)), event("x", "Barça night", at(d, 9), at(d, 10)))
+        assertEquals("Barça v Sevilla today 20:00", BriefRules.fixtureLine(both, now, cal))
+        // Started and not over: on now; over: tomorrow's.
+        assertEquals("Barça v Sevilla on now", BriefRules.fixtureLine(both, at(d, 20, 15), cal))
+        assertEquals("Barça v Getafe tomorrow 17:30", BriefRules.fixtureLine(both, at(d, 22, 1), cal))
+        // The day after tomorrow is too far; all-day entries don't count.
+        assertNull(BriefRules.fixtureLine(listOf(fx("c", "Barça v Betis", at(d + 2, 18))), now, cal))
+        assertNull(BriefRules.fixtureLine(listOf(fx("c", "Barça v Betis", d * dayMs, allDay = true)), now, cal))
+        // Kick-off to be confirmed: the day only.
+        assertEquals("Barça v Betis tomorrow", BriefRules.fixtureLine(listOf(fx("c", "Barça v Betis (kick-off TBC)", at(d + 1, 0))), now, cal))
+        // A long title is shortened at a word.
+        val long = BriefRules.fixtureLine(listOf(fx("c", "Barça v Borussia Mönchengladbach Champions League", at(d, 20))), now, cal)!!
+        assertEquals("Barça v Borussia Mönchengladbach… today 20:00", long)
     }
 
     @Test

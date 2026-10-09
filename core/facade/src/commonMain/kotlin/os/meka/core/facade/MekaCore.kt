@@ -1634,7 +1634,7 @@ class MekaCore(
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
-            news.all(), news.choices(), holidays).copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal))
+            news.all(), news.choices(), holidays, os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal)).copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal))
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))
         _weather.value = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted())
         _review.value = review.view(reviewOffset, all, dayEvents, _goals.value, fasting.ended()) { day ->

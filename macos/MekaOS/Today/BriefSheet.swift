@@ -220,6 +220,7 @@ struct BriefReadLineView: View {
 /// The morning card in Today: "Morning brief" with the day in one line.
 struct BriefCard: View {
     @Environment(CoreModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let brief: MorningBriefView
     let palette: MekaPalette
 
@@ -227,7 +228,11 @@ struct BriefCard: View {
         Button { model.showBrief = true } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Morning brief").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                // "16° · drizzle from 15:00 · 2 tasks · Barça v Getafe tomorrow 17:30" (Fold review 2026-10-09 07:26, item 4);
+                // it cross-fades as the weather or the day changes.
                 Text(brief.cardLine).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: brief.cardLine)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(MekaSpace.l)
