@@ -22,6 +22,8 @@ import java.util.concurrent.TimeUnit
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val app = applicationContext as MekaApplication
+        // Battery care: a periodic run is the heartbeat that shows MEKA wasn't stopped.
+        os.meka.android.today.BatteryCare.beat(app)
         val ok = app.core.syncNow()
         // A Work switch flipped on the Mac arrives here: let the after-work nudge see it before the process sleeps.
         runCatching { app.nudger.evaluate(app.core.currentWorkMode()) }

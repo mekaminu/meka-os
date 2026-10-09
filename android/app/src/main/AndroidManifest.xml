@@ -11,6 +11,9 @@
     <!-- Self-updating phone app: hand a build the Mac published to Android's installer. Android asks Meka once to
          allow it ("Install unknown apps") and shows its own Install prompt every time. Personal builds only (ADR-010). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Battery care (Reliability first, slice 1): Android's own "let MEKA always run in the background?" prompt, opened
+         only from Today's line on Meka's tap. Personal builds outside Play (ADR-010). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Event reminders (Remind me / Leave by): CLOCK precision only, ADR-007. Not granted by default; Meka can allow
          "Alarms & reminders" from the event detail, else reminders use a 5-minute window. Never USE_EXACT_ALARM. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />

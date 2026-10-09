@@ -104,6 +104,8 @@ class MekaApplication : Application() {
             secureRandom = SecureRandom().asKotlinRandom(),
         )
         if (transport != null) { SyncWorker.schedulePeriodic(this); ensurePush() }
+        // Battery care (Reliability first, slice 1): every process start is a heartbeat.
+        os.meka.android.today.BatteryCare.beat(this)
         // Every work-mode change on this phone (clock tick, sync, listener) goes past the nudger. Also runs once at
         // process start (after a reboot the listener's rebind starts us), which re-registers the end-of-work alarm.
         appScope.launch { core.workMode.collect { nudger.evaluate(it) } }

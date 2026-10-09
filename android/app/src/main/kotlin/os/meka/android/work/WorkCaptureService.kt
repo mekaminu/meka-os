@@ -50,6 +50,7 @@ class WorkCaptureService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (sbn.packageName == packageName) return
+        os.meka.android.today.BatteryCare.beat(this)
         val n = sbn.notification ?: return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         val defaultSms = runCatching { Telephony.Sms.getDefaultSmsPackage(this) }.getOrNull()

@@ -587,6 +587,16 @@ private fun TodayPane(
     // "+2 more" unfolds the rest of the all-day group.
     var allDayOpen by rememberSaveable { mutableStateOf(false) }
     val updater = (LocalContext.current.applicationContext as? MekaApplication)?.updater
+    // Samsung battery care (Reliability first, slice 1): re-read on every open, since Meka fixes it in Settings.
+    val batteryContext = LocalContext.current
+    val batteryWatching = remember(batteryContext) {
+        (batteryContext.applicationContext as? MekaApplication)?.let { runCatching { it.identity.deviceSecret() != null }.getOrDefault(false) } ?: false
+    }
+    var battery by remember { mutableStateOf(BatteryCare.view(batteryContext, batteryWatching)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        BatteryCare.beat(batteryContext)
+        battery = BatteryCare.view(batteryContext, batteryWatching)
+    }
     val update by remember(updater) { updater?.state ?: MutableStateFlow<UpdateState>(UpdateState.None) }.collectAsState()
     // Weather for home (weather item, slice 1): a quiet line under the date.
     val weatherFlow = remember(core) { core?.weatherView ?: MutableStateFlow(WeatherView.EMPTY) }
@@ -670,6 +680,12 @@ private fun TodayPane(
                     }
                     }
                     if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs))
+                    if (battery.line != null) {
+                        BatteryCareLine(battery, onDismiss = {
+                            battery.gap?.let { BatteryCare.dismiss(batteryContext, it.endMs) }
+                            battery = BatteryCare.view(batteryContext, batteryWatching)
+                        }, Modifier.padding(top = MekaSpace.xs))
+                    }
                     // News ticker (news ticker, slice 2): one line of drifting cards under the header; calm by default
                     // (two loops, then it rests). Off in Appearance hides it.
                     if (core != null && TickerRules.shown(tickerMode, ticker)) {
