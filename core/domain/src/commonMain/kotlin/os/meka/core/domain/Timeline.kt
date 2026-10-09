@@ -247,6 +247,12 @@ object TimelineRules {
                 if (item.end >= cursor) afterWork = item.isWork
                 cursor = maxOf(cursor, item.end)
             }
+            // Nothing ahead while something is on (work, an event): the now line says so, instead of leaving a bare
+            // line and an empty stretch above "1 done today" (Meka's 10:48 screenshots, 2026-10-09).
+            val nowAt = indexOfFirst { it.kind == TimelineKind.NOW }
+            if (ahead.isEmpty() && started.isNotEmpty() && nowAt >= 0 && this[nowAt].detail == null) {
+                this[nowAt] = this[nowAt].copy(detail = nothingAfterLabel(if (cursor > nowMs && cursor < today.endMs) hhmm(cursor) else null))
+            }
         }
 
         val next = dayEvents.filter { !it.allDay && it.startAtMs > nowMs && it.startAtMs - nowMs <= UP_NEXT_WINDOW_MIN * MIN_MS }
@@ -291,6 +297,14 @@ object TimelineRules {
         }
         return parts.take(SUMMARY_PARTS).joinToString(" · ").ifEmpty { null }
     }
+
+    /**
+     * The now line's words when nothing else is planned today but something is on: "Nothing else planned after 17:30"
+     * (at work until 17:30), or "Nothing else planned today" when what's on runs past midnight.
+     */
+    fun nothingAfterLabel(until: String?): String = if (until == null) NOTHING_ELSE else "$NOTHING_ELSE_AFTER $until"
+    const val NOTHING_ELSE = "Nothing else planned today"
+    const val NOTHING_ELSE_AFTER = "Nothing else planned after"
 
     /** "45 min free" · "2 h free" · "1 h 30 free", rounded down to 5 minutes. */
     fun freeLabel(minutes: Int): String {

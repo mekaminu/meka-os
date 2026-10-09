@@ -1243,7 +1243,15 @@ class MekaCore(
         val accounts = list ?: return emptyList()
         // Each signed-in account is titled like its main calendar, with Meka's own name for it when he gave one.
         val names = onCore { eventActions.calendarNames() }
-        return accounts.map { it.copy(title = os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names)) }
+        // Whether each account's events come through (Meka's 10:48 screenshots): every mirrored event, hidden ones too.
+        val mirrored = onCore { events.all() }
+        val now = nowMs()
+        return accounts.map {
+            it.copy(
+                title = os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names),
+                eventsLine = os.meka.core.domain.CalendarAccountRules.eventsLine(it.provider, it.email, it.status, it.lastSyncAtMs != null, mirrored, now),
+            )
+        }
     }
 
     private fun rememberEditing(accounts: List<ConnectedAccount>) {

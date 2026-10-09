@@ -844,9 +844,12 @@ private fun TodayPane(
                 }
             }
             if (today.doneToday.isNotEmpty()) {
+                // Straight under what's above: the day's section already ends with its own spacing, so a second gap
+                // left a large empty stretch above it (Meka's 10:48 screenshots, 2026-10-09).
+                val doneTop = if (head != null && tl.anytime.isEmpty()) 0.dp else MekaSpace.l
                 item(key = "done") {
                     Text("${today.doneToday.size} done today", style = MekaType.caption, color = Meka.colors.textTertiary,
-                        modifier = Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(5, play)))
+                        modifier = Modifier.padding(top = doneTop).animateItem().appear(rememberAppearance(5, play)))
                 }
             }
         }

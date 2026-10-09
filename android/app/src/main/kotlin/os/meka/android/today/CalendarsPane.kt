@@ -181,6 +181,8 @@ private fun AccountRow(a: ConnectedAccount, modifier: Modifier = Modifier, onRec
             Text(a.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
             val status = a.statusLine(a.lastSyncAtMs?.let { syncedFmt.format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault())) })
             Text(status, style = MekaType.caption, color = if (a.needsReconnect) Meka.colors.critical else Meka.colors.textTertiary)
+            // Whether its events come through: "No events in the next 30 days" says an empty calendar, not a broken one.
+            a.eventsLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
             // Calendar editing: read-only or editing allowed; the line cross-fades as it changes.
             a.editingLine?.let { line ->
                 Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "editing-line") {

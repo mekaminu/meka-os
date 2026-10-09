@@ -283,9 +283,11 @@ struct TodayView: View {
                             ForEach(tl.anytime, id: \.id) { t in TaskRow(task: t, reason: nil, palette: palette).staggeredAppear(4, play: play) }
                         }
                         if !today.doneToday.isEmpty {
+                            // Straight under the day's section, which already ends with its own spacing (Meka's
+                            // 10:48 screenshots: a double gap left a large empty stretch above it).
                             Text("\(today.doneToday.count) done today")
                                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                                .padding(.top, MekaSpace.l)
+                                .padding(.top, tl.head != nil && tl.anytime.isEmpty ? 0 : MekaSpace.l)
                                 .staggeredAppear(5, play: play)
                         }
                     }
@@ -486,6 +488,11 @@ struct CalendarsSheet: View {
                             Text(a.title).font(MekaType.itemTitle)
                             Text(status(a)).font(MekaType.caption)
                                 .foregroundStyle(a.needsReconnect ? palette.critical : palette.textTertiary)
+                            // Whether its events come through: "No events in the next 30 days" says an empty calendar,
+                            // not a broken one (Meka's 10:48 screenshots, 2026-10-09).
+                            if let events = a.eventsLine {
+                                Text(events).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            }
                             // Calendar editing: read-only or editing allowed; the line cross-fades as it changes.
                             if let line = a.editingLine {
                                 Text(line).font(MekaType.caption)

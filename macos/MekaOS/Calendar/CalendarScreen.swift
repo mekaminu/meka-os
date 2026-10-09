@@ -289,9 +289,10 @@ private struct AgendaSectionView: View {
                     .padding(.leading, MekaSpace.xs)
                 }
             }
-            // Work hours (Fold review 2026-10-08): "Work 09:00–17:30" as the quiet band Today uses.
-            if let work = section.workLine {
-                WorkBand(title: work, detail: nil, running: false, palette: palette)
+            // Work hours (Fold review 2026-10-08): "Work 09:00–17:30" as the quiet band Today uses, full width, and
+            // "Work · Now · until 17:30" with the bar lit while at work (Meka's 10:48 screenshots, 2026-10-09).
+            if let work = section.workTitle {
+                WorkBand(title: work, detail: section.workDetail, running: section.workRunning, palette: palette)
                     .padding(.leading, TimelineMetrics.timeColumn + MekaSpace.xs)
                     .padding(.bottom, MekaSpace.xxs)
             }

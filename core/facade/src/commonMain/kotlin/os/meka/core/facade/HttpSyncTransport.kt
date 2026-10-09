@@ -34,6 +34,11 @@ data class ConnectedAccount(
      * ("Personal", "Hotmail", or Meka's own); [MekaCore.connectedAccounts] fills Meka's names in.
      */
     val title: String = os.meka.core.domain.CalendarAccountRules.title(provider, email),
+    /**
+     * "No events in the next 30 days" / "12 events in the next 30 days" for a signed-in account (Meka's 10:48
+     * screenshots: is Hotmail coming through?); [MekaCore.connectedAccounts] fills it in from the mirrored events.
+     */
+    val eventsLine: String? = null,
 ) {
     val needsReconnect: Boolean get() = status == "needs_reconnect"
     /** "Google · meka@gmail.com · synced 08:29" · "Headlines · synced 08:29"; [syncedAt] as the device writes the time. */

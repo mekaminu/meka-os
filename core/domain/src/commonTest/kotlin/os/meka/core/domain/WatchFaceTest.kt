@@ -172,4 +172,38 @@ class WatchFaceTest {
         near(DayRingLive.GLOW_HIGH, WatchFaceRules.breath(4_000, bedside = true))
         assertTrue(WatchFaceRules.breath(2_500, bedside = true) < DayRingLive.GLOW_HIGH - 0.05f)
     }
+
+    // ---- Meka's 10:48 screenshots, 2026-10-09: "the watch face shows no event arcs" ----
+
+    @Test
+    fun atTenFortyEightOnAWorkDayTheRimShowsWorkToHalfFiveAndWhatsAhead() {
+        val work = WorkHours(WorkSchedule.DEFAULT) // Tue 6 Oct is a work day
+        val day = cal.epochDayOf(at(12))
+        val now = at(10, 48)
+        val blocks = work.blocks(day, cal) + work.blocks(day + 1, cal)
+        val call = ev("call", at(14), at(14, 30))
+        val face = WatchFaceRules.build(listOf(call), emptyList(), emptyList(), now, cal, blocks)
+        // Work: from now (the hour hand) round to 17:30, on now.
+        assertEquals(1, face.work.size)
+        near(WatchFaceRules.degrees(10 * 60 + 48), face.work[0].startDegrees)
+        near((17 * 60 + 30 - (10 * 60 + 48)) * 0.5f, face.work[0].sweepDegrees)
+        assertTrue(face.work[0].current)
+        // The call is an arc at 2 o'clock.
+        assertEquals(listOf("e-call"), face.arcs.map { it.id })
+        near(60f, face.arcs[0].startDegrees)
+        // A 09:15 task that has gone by isn't on the rim (it only shows what's ahead).
+        val earlier = Task("t1", "Plan", null, Lifecycle.ACTIVE, null, at(9, 15), null, 0, null, null, at(8), null, false)
+        assertTrue(WatchFaceRules.build(emptyList(), listOf(earlier), emptyList(), now, cal, blocks).arcs.isEmpty())
+    }
+
+    @Test
+    fun workIsABrassBandStandingClearOfTheTrackAndEventsAreFullBrass() {
+        // The band is as wide as the rim (wider than the 3 dp track) at 70 % of the accent, so it reads in both themes.
+        assertEquals(0.7f, WatchFaceRules.WORK_BAND_ALPHA)
+        assertTrue(WatchFaceRules.COMPACT_RIM_STROKE_DP * WatchFaceRules.WORK_BAND_WIDTH > DayRingLook.TRACK_STROKE_DP)
+        assertTrue(WatchFaceRules.WORK_BAND_ALPHA > DayRingLook.TRACK_ALPHA)
+        assertEquals(1f, WatchFaceRules.arcAlpha(DayArcKind.EVENT))
+        assertEquals(1f, WatchFaceRules.arcAlpha(DayArcKind.SESSION))
+        assertTrue(WatchFaceRules.arcAlpha(DayArcKind.TASK) > WatchFaceRules.WORK_BAND_ALPHA)
+    }
 }

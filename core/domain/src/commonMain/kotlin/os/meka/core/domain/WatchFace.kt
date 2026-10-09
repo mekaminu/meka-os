@@ -88,6 +88,22 @@ object WatchFaceRules {
     const val MINOR_MARKER_DP = 1.2f
     const val MARKER_ALPHA = 0.75f
 
+    /**
+     * How the rim's work and arcs read (Meka's 10:48 screenshots, 2026-10-09: "the watch face shows no event arcs" — the
+     * work band was a grey line at 16–26 % under the brass track, so it vanished): work is a brass band at 70 % as wide
+     * as the rim, so it stands clear of the 3 dp track; events are the full accent; planned tasks 85 %; the gym, Barça
+     * and training [HIGHLIGHT_WIDTH] × as wide. Both apps read these, so the Fold and the Mac match in Dark and Light
+     * (the accent is the theme's brass).
+     */
+    const val WORK_BAND_ALPHA = 0.7f
+    const val WORK_BAND_WIDTH = 1f
+    const val EVENT_ARC_ALPHA = 1f
+    const val TASK_ARC_ALPHA = 0.85f
+    const val HIGHLIGHT_WIDTH = 1.4f
+
+    /** An arc's alpha (of the accent): events and sessions full, planned tasks a shade under. */
+    fun arcAlpha(kind: DayArcKind): Float = if (kind == DayArcKind.TASK) TASK_ARC_ALPHA else EVENT_ARC_ALPHA
+
     /** The rim's arcs: an outer band this wide (dp), a highlighted one 1.4× as wide. */
     const val RIM_STROKE_DP = 6f
     const val COMPACT_RIM_STROKE_DP = 4f

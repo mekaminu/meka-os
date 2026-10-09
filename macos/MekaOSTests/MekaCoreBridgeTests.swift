@@ -785,7 +785,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(CalendarAccessRules.shared.action(provider: "fixtures", canEdit: false, needsReconnect: false))
         XCTAssertEqual(CalendarAccessRules.shared.line(provider: "google", canEdit: false, needsReconnect: false), "Read-only · MEKA only reads this calendar")
         XCTAssertTrue(CalendarAccessRules.shared.reconnectAsksEditing(canEdit: true))
-        let a = ConnectedAccount(provider: "google", email: "me@gmail.com", status: "ok", lastSyncAtMs: nil, canEdit: true, title: "Personal")
+        let a = ConnectedAccount(provider: "google", email: "me@gmail.com", status: "ok", lastSyncAtMs: nil, canEdit: true, title: "Personal", eventsLine: nil)
         XCTAssertEqual(a.editingAction, .stopEditing)
     }
 
@@ -794,9 +794,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CalendarAccountRules.shared.providerLabel(provider: "news_more"), "Headlines")
         XCTAssertEqual(CalendarAccountRules.shared.title(provider: "microsoft", email: "me@hotmail.co.uk", names: [:]), "Hotmail")
         let a = ConnectedAccount(provider: "google", email: "me@gmail.com", status: "ok", lastSyncAtMs: nil, canEdit: false,
-                                 title: CalendarAccountRules.shared.title(provider: "google", email: "me@gmail.com", names: [:]))
+                                 title: CalendarAccountRules.shared.title(provider: "google", email: "me@gmail.com", names: [:]),
+                                 eventsLine: "No events in the next 30 days")
         XCTAssertEqual(a.title, "Personal")
         XCTAssertEqual(a.statusLine(syncedAt: "08:29"), "Google · me@gmail.com · synced 08:29")
+        XCTAssertEqual(a.eventsLine, "No events in the next 30 days")
+    }
+
+    /// Meka's 10:48 screenshots (2026-10-09): the watch face's work band and arcs, the Calendar's live work band,
+    /// the now line when nothing else is planned, and whether an account's events come through.
+    func testTenFortyEightPolishReachesSwift() {
+        let rules = WatchFaceRules.shared
+        XCTAssertEqual(rules.WORK_BAND_ALPHA, 0.7, accuracy: 0.001)
+        XCTAssertEqual(rules.arcAlpha(kind: .event), 1, accuracy: 0.001)
+        XCTAssertEqual(TimelineRules.shared.nothingAfterLabel(until: "17:30"), "Nothing else planned after 17:30")
+        XCTAssertEqual(TimelineRules.shared.nothingAfterLabel(until: nil), "Nothing else planned today")
+        XCTAssertEqual(CalendarAccountRules.shared.eventsLine(provider: "microsoft", email: "me@hotmail.co.uk", status: "ok",
+                                                              synced: true, events: [], nowMs: 0), "No events in the next 30 days")
     }
 
     /// Calendar editing, slice 2b: the Add event sheet's form steps and view reach Swift.

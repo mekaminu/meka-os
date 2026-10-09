@@ -948,6 +948,23 @@ class MekaCoreTest {
         assertEquals("Home", accounts[0].title)
         assertEquals("Google · meka@gmail.com · synced 08:29", accounts[0].statusLine("08:29"))
         assertEquals("Headlines · first sync in progress", accounts[2].statusLine(null))
+        // Not synced yet: no events line (the status line says "first sync in progress").
+        assertNull(accounts[1].eventsLine)
+    }
+
+    @Test
+    fun calendarsSaysWhenAnAccountHasNoEventsComingThrough() = runTest {
+        // Meka's 10:48 screenshots, 2026-10-09: Hotmail connected, nothing of it showing.
+        val server = EditingTransport(
+            listOf(
+                ConnectedAccount("microsoft", "meka@hotmail.co.uk", "ok", 1L),
+                ConnectedAccount("news_more", "AI, tech and Barça news", "ok", 1L),
+            ),
+        )
+        val fold = core("android", server)
+        val accounts = fold.connectedAccounts()
+        assertEquals("No events in the next 30 days", accounts[0].eventsLine)
+        assertNull(accounts[1].eventsLine)
     }
 
     @Test

@@ -85,15 +85,17 @@ struct WatchFaceView: View {
                 ctx.stroke(tick, with: .color(palette.accent.opacity(Double(rules.MARKER_ALPHA) * shows[i])),
                            style: StrokeStyle(lineWidth: CGFloat(m.1 ? rules.MAJOR_MARKER_DP : rules.MINOR_MARKER_DP), lineCap: .round))
             }
-            // Work in the next 12 hours: a faint band on the rim, coming up with it.
+            // Work in the next 12 hours: a brass band at 70 % as wide as the rim (clear of the 3 pt track), coming up
+            // with it (Meka's 10:48 screenshots: the old grey band vanished under the track).
             for band in work {
-                ctx.stroke(arcPath(from: band.0, sweep: band.1), with: .color(palette.textTertiary.opacity((band.2 ? 0.26 : 0.16) * mark)),
-                           style: StrokeStyle(lineWidth: rim * 0.7, lineCap: .butt))
+                ctx.stroke(arcPath(from: band.0, sweep: band.1), with: .color(palette.accent.opacity(Double(rules.WORK_BAND_ALPHA) * mark)),
+                           style: StrokeStyle(lineWidth: rim * CGFloat(rules.WORK_BAND_WIDTH), lineCap: .butt))
             }
             // The next 12 hours' arcs, growing clockwise one after another; the gym, Barça and training wider.
             for (i, arc) in arcs.enumerated() where grows[i] > 0 {
-                ctx.stroke(arcPath(from: arc.0, sweep: arc.1 * grows[i]), with: .color(palette.accent.opacity(arc.3 ? 0.7 : 1)),
-                           style: StrokeStyle(lineWidth: arc.2 ? rim * 1.4 : rim, lineCap: .butt))
+                let alpha = Double(arc.3 ? rules.TASK_ARC_ALPHA : rules.EVENT_ARC_ALPHA)
+                ctx.stroke(arcPath(from: arc.0, sweep: arc.1 * grows[i]), with: .color(palette.accent.opacity(alpha)),
+                           style: StrokeStyle(lineWidth: arc.2 ? rim * CGFloat(rules.HIGHLIGHT_WIDTH) : rim, lineCap: .butt))
             }
         }
         .frame(width: size, height: size)

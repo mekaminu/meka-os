@@ -60,6 +60,30 @@ object CalendarAccountRules {
         return own ?: if (provider == "google") CalendarRules.PERSONAL else outlookName(email)
     }
 
+    /** How far ahead [eventsLine] looks. */
+    const val EVENTS_AHEAD_DAYS = 30
+
+    /**
+     * Whether a signed-in account's events are coming through (Meka's 10:48 screenshots, 2026-10-09: his Hotmail
+     * calendar is connected but nothing of it showed, so nothing said whether it was empty or broken): "12 events in the
+     * next 30 days" · "1 event in the next 30 days" · "No events in the next 30 days". Counts the account's mirrored
+     * events (any of its calendars, hidden ones too) that end after [nowMs] and start within [EVENTS_AHEAD_DAYS]. Null
+     * for a feed, an account that needs reconnecting or hasn't synced yet (its status line says so).
+     */
+    fun eventsLine(provider: String, email: String, status: String, synced: Boolean, events: List<CalendarEvent>, nowMs: Long): String? {
+        if (!isMailAccount(provider, email) || status == "needs_reconnect" || !synced) return null
+        val account = email.trim()
+        val until = nowMs + EVENTS_AHEAD_DAYS * 86_400_000L
+        val n = events.count { e ->
+            e.provider == provider && e.account?.trim().equals(account, ignoreCase = true) && e.endAtMs > nowMs && e.startAtMs < until
+        }
+        return when (n) {
+            0 -> "No events in the next $EVENTS_AHEAD_DAYS days"
+            1 -> "1 event in the next $EVENTS_AHEAD_DAYS days"
+            else -> "$n events in the next $EVENTS_AHEAD_DAYS days"
+        }
+    }
+
     /**
      * The line under the title. [syncedAt] is the last sync's time as the device writes it ("08:29"), or null before
      * the first one. A signed-in account carries its address: "Google · meka@gmail.com · synced 08:29".

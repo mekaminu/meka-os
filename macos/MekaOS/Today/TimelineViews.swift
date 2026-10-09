@@ -274,6 +274,8 @@ struct WorkBand: View {
         }
         .padding(.horizontal, MekaSpace.s)
         .padding(.vertical, MekaSpace.xxs)
+        // Full width, as on the Fold (Meka's 10:48 screenshots: the Calendar's work line was a short pill).
+        .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(RoundedRectangle(cornerRadius: MekaRadius.s).strokeBorder(palette.hairline, lineWidth: 1))
     }
 }

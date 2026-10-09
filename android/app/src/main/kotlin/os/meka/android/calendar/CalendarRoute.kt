@@ -168,7 +168,7 @@ private fun flatten(v: CalendarView, allDayOpen: Set<String>): List<Entry> = bui
             AllDayRules.shown(s.allDayItems, open).forEach { add(Entry.AllDay(s, it)) }
             AllDayRules.moreLabel(s.allDayItems, open)?.let { add(Entry.AllDayMoreLine(s, it)) }
         }
-        s.workLine?.let { add(Entry.Work(s, it)) }
+        s.workTitle?.let { add(Entry.Work(s, it)) }
         s.ended.forEach { add(Entry.Line(s, it, past = true)) }
         s.rows.forEach { add(Entry.Line(s, it, past = false)) }
         s.emptyLine?.let { add(Entry.Empty(s, it)) }
@@ -358,10 +358,11 @@ private fun AgendaList(
                     e.text, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = m.padding(start = os.meka.android.today.TIME_COLUMN, bottom = MekaSpace.xs),
                 )
-                // Work hours (Fold review 2026-10-08): "Work 09:00–17:30" as the quiet band Today uses.
+                // Work hours (Fold review 2026-10-08): "Work 09:00–17:30" as the quiet band Today uses, full width like
+                // Today's, and "Work · Now · until 17:30" with the bar lit while at work (Meka's 10:48 screenshots).
                 is Entry.Work -> os.meka.android.today.WorkBand(
-                    e.text, null, running = false,
-                    modifier = m.padding(start = os.meka.android.today.TIME_COLUMN, bottom = MekaSpace.xs),
+                    e.text, e.section.workDetail, running = e.section.workRunning,
+                    modifier = m.padding(start = os.meka.android.today.TIME_COLUMN, bottom = MekaSpace.xs).fillMaxWidth(),
                 )
                 is Entry.HiddenLabel -> Text(
                     e.text, style = MekaType.caption, color = Meka.colors.textTertiary,

@@ -57,4 +57,27 @@ class CalendarAccountsTest {
         assertFalse(CalendarAccountRules.isMailAccount("news", "BBC News"))
         assertTrue(CalendarAccountRules.isMailAccount("microsoft", "meka@hotmail.co.uk"))
     }
+
+    @Test
+    fun aSignedInAccountSaysWhetherItsEventsComeThrough() {
+        // Meka's 10:48 screenshots, 2026-10-09: Hotmail connected, nothing of it showing.
+        val now = 1_791_244_800_000L
+        val day = 86_400_000L
+        fun ev(id: String, provider: String, account: String?, from: Long) =
+            CalendarEvent(id, id, from, from + 3_600_000L, false, null, provider, account, "Calendar")
+        val events = listOf(
+            ev("a", "google", "meka@gmail.com", now + day),
+            ev("b", "google", "Meka@Gmail.com", now + 2 * day),
+            ev("c", "google", "meka@gmail.com", now + 40 * day), // past the 30 days
+            ev("d", "google", "meka@gmail.com", now - 2 * day), // over
+            ev("e", "microsoft", "other@hotmail.co.uk", now + day),
+        )
+        assertEquals("2 events in the next 30 days", CalendarAccountRules.eventsLine("google", "meka@gmail.com", "ok", true, events, now))
+        assertEquals("No events in the next 30 days", CalendarAccountRules.eventsLine("microsoft", "meka@hotmail.co.uk", "ok", true, events, now))
+        assertEquals("1 event in the next 30 days", CalendarAccountRules.eventsLine("microsoft", "other@hotmail.co.uk", "ok", true, events, now))
+        // Feeds, a lapsed sign-in or the first sync still running: the status line says enough.
+        kotlin.test.assertNull(CalendarAccountRules.eventsLine("news", "BBC News", "ok", true, events, now))
+        kotlin.test.assertNull(CalendarAccountRules.eventsLine("google", "meka@gmail.com", "needs_reconnect", true, events, now))
+        kotlin.test.assertNull(CalendarAccountRules.eventsLine("google", "meka@gmail.com", "ok", false, events, now))
+    }
 }

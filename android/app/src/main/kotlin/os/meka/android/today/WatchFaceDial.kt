@@ -49,7 +49,6 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.DayArc
-import os.meka.core.domain.DayArcKind
 import os.meka.core.domain.DayRing
 import os.meka.core.domain.DayRingLive
 import os.meka.core.domain.DayRingLiveMode
@@ -137,18 +136,19 @@ fun WatchFaceDial(
                     strokeWidth = (if (m.major) WatchFaceRules.MAJOR_MARKER_DP else WatchFaceRules.MINOR_MARKER_DP).dp.toPx(),
                     cap = StrokeCap.Round)
             }
-            // Work in the next 12 hours: a faint band on the rim, coming up with it.
+            // Work in the next 12 hours: a brass band at 70 % as wide as the rim (clear of the 3 dp track), coming up
+            // with it (Meka's 10:48 screenshots: the old grey band vanished under the track).
             face.work.forEach { band ->
-                drawArc(colors.textTertiary.copy(alpha = (if (band.current) 0.26f else 0.16f) * mark), band.startDegrees - 90f,
-                    band.sweepDegrees, false, topLeft, arcSize, style = Stroke(rim * 0.7f, cap = StrokeCap.Butt))
+                drawArc(colors.accent.copy(alpha = colors.accent.alpha * WatchFaceRules.WORK_BAND_ALPHA * mark), band.startDegrees - 90f,
+                    band.sweepDegrees, false, topLeft, arcSize, style = Stroke(rim * WatchFaceRules.WORK_BAND_WIDTH, cap = StrokeCap.Butt))
             }
             // The next 12 hours' arcs, growing clockwise one after another; the gym, Barça and training wider.
             face.arcs.forEachIndexed { i, arc ->
                 val grow = MotionMath.dayRingArc(elapsed, i, play, expressive)
                 if (grow <= 0f) return@forEachIndexed
-                val alpha = if (arc.kind == DayArcKind.TASK) 0.7f else 1f
+                val alpha = WatchFaceRules.arcAlpha(arc.kind)
                 drawArc(colors.accent.copy(alpha = colors.accent.alpha * alpha), arc.startDegrees - 90f, arc.sweepDegrees * grow,
-                    false, topLeft, arcSize, style = Stroke(if (arc.highlighted) rim * 1.4f else rim, cap = StrokeCap.Butt))
+                    false, topLeft, arcSize, style = Stroke(if (arc.highlighted) rim * WatchFaceRules.HIGHLIGHT_WIDTH else rim, cap = StrokeCap.Butt))
             }
         }
         // The hands, the breathing rim, the shimmer and the second hand on a layer of their own.

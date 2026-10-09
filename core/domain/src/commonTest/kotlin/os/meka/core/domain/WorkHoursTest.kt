@@ -143,4 +143,44 @@ class WorkHoursTest {
         assertNull(v.sections[1].workLine)
         assertEquals("Nothing planned", v.sections[1].emptyLine)
     }
+
+    // ---- Meka's 10:48 screenshots, 2026-10-09 ----
+
+    @Test
+    fun atWorkWithNothingElseTheNowLineSaysSo() {
+        // 10:48 on a work day, nothing else planned: no bare now line over an empty stretch.
+        val t = today(at(thu8, 10, 48))
+        assertEquals(listOf("w-540", "now:Nothing else planned after 17:30"), rows(t))
+        // Something after work: the gap says it, as before.
+        val training = ev("Training", at(thu8, 18), at(thu8, 19, 30))
+        assertEquals(listOf("w-540", "now", "gap:30 min free after work", "e-Training"), rows(today(at(thu8, 10, 48), listOf(training))))
+        // An event running past midnight: "today".
+        val late = ev("Late", at(thu8, 20), at(thu8 + 1, 1))
+        assertEquals(listOf("e-Late", "now:Nothing else planned today"), rows(today(at(thu8, 21), listOf(late))))
+        // Nothing on at all (only ended events): the now line stays bare; Today's clear line speaks.
+        val standup = ev("Standup", at(thu8, 7), at(thu8, 7, 15))
+        assertEquals(listOf("now"), rows(today(at(thu8, 8), listOf(standup), work = null)))
+    }
+
+    @Test
+    fun theCalendarsWorkBandIsLiveTodayLikeTodays() {
+        val v = CalendarAgenda.build(emptyList(), emptyList(), at(thu8, 10, 48), cal, days = 3, work = weekdays)
+        val today = v.sections[0]
+        assertEquals("Work", today.workTitle)
+        assertEquals("Now · until 17:30", today.workDetail)
+        assertTrue(today.workRunning)
+        assertEquals("Work 09:00–17:30", today.workLine)
+        val tomorrow = v.sections[1]
+        assertEquals("Work 09:00–17:30", tomorrow.workTitle)
+        assertNull(tomorrow.workDetail)
+        assertTrue(!tomorrow.workRunning)
+        // Before and after work today: the plain band.
+        val morning = CalendarAgenda.build(emptyList(), emptyList(), at(thu8, 7, 57), cal, days = 2, work = weekdays).sections[0]
+        assertEquals("Work 09:00–17:30", morning.workTitle)
+        assertTrue(!morning.workRunning)
+        // A home day reads "Work from home" while on.
+        val home = CalendarAgenda.build(emptyList(), emptyList(), at(thu8, 11), cal, days = 2, work = weekdays.copy(homeDays = setOf(thu8))).sections[0]
+        assertEquals("Work from home", home.workTitle)
+        assertEquals("Now · until 17:30", home.workDetail)
+    }
 }

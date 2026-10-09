@@ -62,6 +62,14 @@ data class AgendaSection(
     /** "Work 09:00–17:30" on a work day (Fold review 2026-10-08), shown as a quiet line above the day's rows; else null. */
     val workLine: String? = null,
     /**
+     * The work band as Today draws it (Meka's 10:48 screenshots, 2026-10-09: the Calendar's work line was a short pill):
+     * its title — "Work" (or "Work from home") with "Now · until 17:30" in [workDetail] while at work today, else
+     * [workLine] — and whether it is on now ([workRunning], the band's bar lit).
+     */
+    val workTitle: String? = workLine,
+    val workDetail: String? = null,
+    val workRunning: Boolean = false,
+    /**
      * The day's "All day" group as Today shows it (Fold review 2026-10-08, item 9): "All day", or "All day · Timestripe"
      * when every entry shares one calendar; empty when the day has none.
      */
@@ -235,6 +243,7 @@ object CalendarAgenda {
                 val day = dayData[i]
                 val d = day.epochDay
                 val workLine = work?.line(d)
+                val workNow = if (d == today) work?.blocks(d, calendar)?.firstOrNull { it.startMs <= nowMs && it.endMs > nowMs } else null
                 if (day.count > 0 || day.hidden.isNotEmpty() || workLine != null || d <= today + 1) {
                     val named = d == today || d == today + 1
                     val allDayGroup = if (day.allDay.isEmpty()) null else group(day.allDay, d)
@@ -257,6 +266,9 @@ object CalendarAgenda {
                             emptyLine = if (day.count == 0 && named && workLine == null) "Nothing planned" else null,
                             hidden = day.hidden,
                             workLine = workLine,
+                            workTitle = if (workNow != null) workNow.title else workLine,
+                            workDetail = workNow?.let { "Now · until ${LocalClock.formatMinute(it.endMinute)}" },
+                            workRunning = workNow != null,
                             allDayLabel = allDayGroup?.label ?: "",
                             allDayItems = allDayGroup?.items ?: emptyList(),
                         ),
