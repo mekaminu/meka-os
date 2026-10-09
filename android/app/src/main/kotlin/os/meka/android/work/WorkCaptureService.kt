@@ -10,22 +10,31 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import os.meka.android.MekaApplication
 import os.meka.core.domain.Capture
 import os.meka.core.domain.CaptureApp
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.CapturedItem
+import os.meka.core.domain.RequestWatchRules
+import os.meka.core.facade.RequestRead
 
 /**
  * Work mode's listener (build plan M1). Reads WhatsApp, SMS and missed-call notifications through Android's official
- * notification access, only while MEKA is in work mode, and keeps them for the after-work summary (a sealed copy
- * on this phone, and synced through Meka's own server so the Mac shows the same summary).
- * Urgent messages ("urgent", "emergency") and people on the always-notify list alert straight away.
+ * notification access. While MEKA is in work mode it keeps them for the after-work summary (a sealed copy on this
+ * phone, and synced through Meka's own server so the Mac shows the same summary); urgent messages ("urgent",
+ * "emergency") and people on the always-notify list alert straight away.
+ *
+ * All day, a new message from the Family list or someone on "Watch for requests from" (V1, requests slice 3) is read
+ * for requests through [os.meka.core.facade.MekaCore.readRequest]: only that message's text, the sender's name and its
+ * time go to MEKA's AI, and what comes back is a Needs you card, never an action. Each message is read once.
  *
  * It never replies, never marks anything read and never dismisses the original notification.
  */
 class WorkCaptureService : NotificationListenerService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val requestLock = Mutex()
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (sbn.packageName == packageName) return
@@ -36,14 +45,30 @@ class WorkCaptureService : NotificationListenerService() {
         val meka = application as MekaApplication
 
         scope.launch {
-            if (!meka.core.currentWorkMode().atWork) return@launch
             val items = runCatching { read(app, sbn, n) }.getOrDefault(emptyList())
             if (items.isEmpty()) return@launch
-            val fresh = meka.captures.add(items)
-            val lists = meka.captures.lists.value
-            // Into the synced summary too (Needs Meka #10), so the Mac shows it and Done on either clears both.
-            if (fresh.isNotEmpty()) runCatching { meka.core.holdCaptured(fresh, lists) }
-            fresh.forEach { item -> Capture.breakThrough(item, lists)?.let { WorkAlerts.post(this@WorkCaptureService, item, it) } }
+            if (meka.core.currentWorkMode().atWork) {
+                val fresh = meka.captures.add(items)
+                val lists = meka.captures.lists.value
+                // Into the synced summary too (Needs Meka #10), so the Mac shows it and Done on either clears both.
+                if (fresh.isNotEmpty()) runCatching { meka.core.holdCaptured(fresh, lists) }
+                fresh.forEach { item -> Capture.breakThrough(item, lists)?.let { WorkAlerts.post(this@WorkCaptureService, item, it) } }
+            }
+            // After the work path, so an urgent alert never waits on the AI.
+            readRequests(meka, items)
+        }
+    }
+
+    /** One at a time, so two re-posts of the same message never both reach the AI. */
+    private suspend fun readRequests(meka: MekaApplication, items: List<CapturedItem>) = requestLock.withLock {
+        val store = meka.captures
+        val lists = store.lists.value
+        val watch = store.watch.value
+        val toRead = RequestWatchRules.toRead(items, lists, watch, store.requestSeen(), System.currentTimeMillis())
+        toRead.forEach { item ->
+            val result = runCatching { meka.core.readRequest(item, lists, watch.people, watch.groups) }.getOrNull()
+            // Offline or AI unavailable: not marked, so WhatsApp's next re-post tries again.
+            if (result is RequestRead.Read || result is RequestRead.Skipped) store.markRequestSeen(listOf(item.id))
         }
     }
 

@@ -92,6 +92,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
     val store = (context.applicationContext as MekaApplication).captures
     val work by core.workMode.collectAsState()
     val lists by store.lists.collectAsState()
+    val watch by store.watch.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -229,6 +230,8 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         PeopleSection(ListKind.FAMILY, lists, store::setLists, 5) { pick(ListKind.FAMILY) }
         Spacer(Modifier.height(MekaSpace.s))
         PeopleSection(ListKind.ALWAYS, lists, store::setLists, 6) { pick(ListKind.ALWAYS) }
+        Spacer(Modifier.height(MekaSpace.m))
+        RequestWatchSection(lists, watch, listening, 7, store::setWatch)
         Spacer(Modifier.height(MekaSpace.xl))
     }
 }

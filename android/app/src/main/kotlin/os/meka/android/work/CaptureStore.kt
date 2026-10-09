@@ -14,6 +14,8 @@ import os.meka.core.domain.CaptureApp
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.CapturedItem
 import os.meka.core.domain.PeopleLists
+import os.meka.core.domain.RequestWatch
+import os.meka.core.domain.RequestWatchRules
 import java.io.File
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -22,7 +24,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * What the notification listener held during work mode, plus the owner's family and always-notify lists.
+ * What the notification listener held during work mode, plus the owner's family and always-notify lists, who MEKA
+ * reads for requests and which messages it already read for them.
  *
  * This file is the Fold's own copy (it spots WhatsApp's re-posts and keeps the lists, which stay on the phone); the
  * summary both apps show is synced separately ([os.meka.core.domain.HeldMessages], Needs Meka #10). The file is sealed with a
@@ -38,6 +41,13 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
 
     private val _lists = MutableStateFlow(PeopleLists())
     val lists: StateFlow<PeopleLists> = _lists.asStateFlow()
+
+    /** Who MEKA reads for requests all day (Work mode → People → Watch for requests from); stays on this phone. */
+    private val _watch = MutableStateFlow(RequestWatch())
+    val watch: StateFlow<RequestWatch> = _watch.asStateFlow()
+
+    /** Message ids already read for requests (id → when), so WhatsApp's re-posts never cost a second AI call. */
+    private var requestSeen: Map<String, Long> = emptyMap()
 
     init {
         synchronized(lock) { load() }
@@ -55,6 +65,18 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
 
     fun setLists(lists: PeopleLists) = synchronized(lock) { _lists.value = lists.pruned(); save() }
 
+    fun setWatch(watch: RequestWatch) = synchronized(lock) { _watch.value = watch; save() }
+
+    fun requestSeen(): Set<String> = synchronized(lock) { requestSeen.keys }
+
+    /** Marks [ids] read for requests (the old ones are forgotten after a week). */
+    fun markRequestSeen(ids: Collection<String>) = synchronized(lock) {
+        if (ids.isEmpty()) return@synchronized
+        val now = nowMs()
+        requestSeen = RequestWatchRules.pruneSeen(requestSeen + ids.associateWith { now }, now)
+        save()
+    }
+
     private fun load() {
         val bytes = try { file.readFully() } catch (e: java.io.FileNotFoundException) { return }
         val json = try { JSONObject(String(open(bytes), Charsets.UTF_8)) } catch (e: Exception) {
@@ -70,6 +92,14 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
             alwaysNotify = json.optJSONArray("alwaysNotify").strings(),
             numbers = numbers,
         )
+        _watch.value = RequestWatch(
+            people = json.optJSONArray("watchPeople").strings(),
+            groups = json.optJSONArray("watchGroups").strings(),
+        )
+        requestSeen = RequestWatchRules.pruneSeen(
+            json.optJSONObject("requestSeen")?.let { o -> o.keys().asSequence().associateWith { o.optLong(it) } }.orEmpty(),
+            nowMs(),
+        )
     }
 
     private fun save() {
@@ -79,6 +109,9 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
             .put("family", JSONArray(_lists.value.family.sorted()))
             .put("alwaysNotify", JSONArray(_lists.value.alwaysNotify.sorted()))
             .put("numbers", JSONObject().also { o -> _lists.value.numbers.forEach { (name, nums) -> o.put(name, JSONArray(nums.sorted())) } })
+            .put("watchPeople", JSONArray(_watch.value.people.sorted()))
+            .put("watchGroups", JSONArray(_watch.value.groups.sorted()))
+            .put("requestSeen", JSONObject().also { o -> requestSeen.forEach { (id, at) -> o.put(id, at) } })
         val sealed = seal(json.toString().toByteArray(Charsets.UTF_8))
         val out = file.startWrite()
         try { out.write(sealed); file.finishWrite(out) } catch (e: Exception) { file.failWrite(out); throw e }
