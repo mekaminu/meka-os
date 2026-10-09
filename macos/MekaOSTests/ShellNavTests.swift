@@ -46,7 +46,7 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(
             ShellNav.more(connected: true).map(\.label),
             ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Work mode", "Notifications",
-             "Appearance", "MEKA's voice", "Talk", "Calendars", "Activity", "Your data"]
+             "Appearance", "MEKA's voice", "Talk", "Calendars", "Health", "Activity", "Your data"]
         )
         XCTAssertFalse(ShellNav.more(connected: false).contains(.calendars))
         let places = Set(ShellNav.more(connected: false).compactMap(\.destination))

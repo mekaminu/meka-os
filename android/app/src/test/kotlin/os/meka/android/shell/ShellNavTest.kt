@@ -53,7 +53,7 @@ class ShellNavTest {
         assertEquals(
             listOf(
                 "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Work mode", "Notifications",
-                "Appearance", "MEKA's voice", "Talk", "Calendars", "Activity", "Your data",
+                "Appearance", "MEKA's voice", "Talk", "Calendars", "Health", "Activity", "Your data",
             ),
             ShellNav.more(connected = true).map { it.label },
         )
