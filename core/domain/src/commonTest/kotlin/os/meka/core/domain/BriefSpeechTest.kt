@@ -57,7 +57,7 @@ class BriefSpeechTest {
                 "You're waiting on 2 things, 1 to chase today. Chase Ada about the quote. " +
                 "On your lists: Netflix. Habits: 1 habit behind, 2 to do today. " +
                 "Fasting, since 20:05 yesterday, goal at 12:05. " +
-                "In the news. Mundo Deportivo: Barça win again. That's your morning.",
+                "In the news. From Mundo Deportivo: Barça win again. That's your morning.",
             BriefSpeech.script(v),
         )
     }
@@ -94,14 +94,47 @@ class BriefSpeechTest {
     }
 
     @Test
-    fun aCrowdedMorningIsCutAtASentenceAndStillSignsOff() {
-        val headlines = (1..3).map { BriefHeadline("n$it", "A".repeat(500), null, "BBC News · World") }
-        val s = BriefSpeech.script(brief(headlines = headlines))
-        assertTrue(s.length <= BriefSpeech.MAX_CHARS, "${s.length}")
+    fun aCrowdedMorningIsCutAtASentenceButTheNewsIsNever() {
+        val rows = (1..40).map { TomorrowRow("t-$it", null, "Task number $it " + "x".repeat(40), false, null) }
+        val attention = (1..40).map { BriefLine("r-$it", "Renewal " + "y".repeat(300), "") }
+        val headlines = (1..5).map { BriefHeadline("n$it", "Story $it " + "A".repeat(150), null, "BBC News · World") }
+        val s = BriefSpeech.script(brief(day = rows, tasks = 40, summary = "40 tasks", attention = attention, habits = "h".repeat(400), headlines = headlines))
+        assertFalse("Habits" in s, "the day's part is cut at a sentence")
+        val day = s.substringBefore(" In the news.")
+        assertTrue(day.length + 1 + BriefSpeech.SIGN_OFF.length <= BriefSpeech.MAX_CHARS, "${day.length}")
+        assertTrue(day.endsWith("."))
         assertTrue(s.endsWith(" " + BriefSpeech.SIGN_OFF))
-        assertTrue("BBC News: " + "A".repeat(500) + "." in s)
-        assertEquals(2, Regex("BBC News").findAll(s).count())
+        (1..5).forEach { assertTrue("From BBC News: Story $it " + "A".repeat(150) + "." in s, "story $it") }
         // Every piece it is cut into fits what the server will speak.
         assertTrue(SpeechRules.pieces(s).all { it.length <= SpeechRules.MAX_PIECE })
+    }
+
+    @Test
+    fun everyHeadlineTheBriefShowsIsReadInItsOrder() {
+        val shown = listOf(
+            BriefHeadline("n1", "Flick names his side for Getafe", null, "BBC Sport · Barça · 1 h ago"),
+            BriefHeadline("n2", "Yamal back in training", null, "Football España · Barça · 2 h ago"),
+            BriefHeadline("n3", "Rates held at 4%", null, "BBC News · UK · 3 h ago"),
+            BriefHeadline("n4", "New Fold leaks", null, "The Verge · Tech · 4 h ago"),
+            BriefHeadline("n5", "Untitled source story", null, ""),
+        )
+        val s = BriefSpeech.script(brief(headlines = shown))
+        assertTrue(
+            s.endsWith(
+                "In the news. From BBC Sport: Flick names his side for Getafe. From Football España: Yamal back in training. " +
+                    "From BBC News: Rates held at 4%. From The Verge: New Fold leaks. Untitled source story. That's your morning.",
+            ),
+            s,
+        )
+        assertEquals(BriefSpeech.news(shown).drop(1).size, shown.size)
+    }
+
+    @Test
+    fun anOverlongTitleIsShortenedAtAWord() {
+        val long = (1..80).joinToString(" ") { "word$it" }
+        val line = BriefSpeech.news(listOf(BriefHeadline("n", long, null, "BBC News")))[1]
+        assertTrue(line.length <= "From BBC News: ".length + BriefSpeech.MAX_HEADLINE_CHARS + 1, line)
+        assertTrue(line.endsWith("."), line)
+        assertFalse(line.contains("word80"))
     }
 }

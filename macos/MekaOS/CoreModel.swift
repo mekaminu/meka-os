@@ -964,10 +964,18 @@ final class CoreModel {
 
     /// One piece of MEKA's own words said in MEKA's voice (Amazon Polly through MEKA's server; only these words are
     /// sent), as MP3 data, or nil when the Mac's own voice should say it (chosen, offline, off, over the month, slow).
-    func speechClip(_ text: String, first: Bool) async -> Data? {
+    /// A long `reading` (the morning brief) waits longer for its first piece (`SpeechRules.firstWaitMs`).
+    func speechClip(_ text: String, first: Bool, reading: Bool = false) async -> Data? {
         guard let core else { return nil }
-        guard let clip = try? await core.speechClip(text: text, first: first) else { return nil }
+        guard let clip = try? await core.speechClip(text: text, first: first, reading: reading) else { return nil }
         return Data(base64Encoded: clip)
+    }
+
+    /// MEKA's voice isn't to be asked right now (not connected, the Mac's own voice chosen, or the server refused a
+    /// moment ago), so a missed piece of the brief hands the rest to the Mac's voice (`SpeechRules.onMiss`).
+    func speechResting() async -> Bool {
+        guard let core else { return true }
+        return (try? await core.speechResting())?.boolValue ?? true
     }
 
     /// Activity's line about MEKA's voice this month ("MEKA's voice · Amy · 12,400 of 1,000,000 characters in

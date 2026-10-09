@@ -146,4 +146,17 @@ class SpeechTest {
         assertTrue(VoicePickerRules.view(null, emptyList(), null, null, null, mac = false, connected = false).statusLine!!.startsWith("MEKA's voices come from your MEKA server."))
         assertNull(VoicePickerRules.view(null, emptyList(), null, null, null, mac = false, loaded = false).statusLine)
     }
+
+    @Test
+    fun aLongReadWaitsLongerForItsFirstPieceAndOnlyHandsTheMissedPieceToTheDevice() {
+        assertEquals(SpeechRules.FIRST_AUDIO_MS, SpeechRules.firstWaitMs(reading = false))
+        assertEquals(SpeechRules.READ_FIRST_AUDIO_MS, SpeechRules.firstWaitMs(reading = true))
+        assertTrue(SpeechRules.READ_FIRST_AUDIO_MS > SpeechRules.FIRST_AUDIO_MS)
+        // A conversation stays in one voice once the device has taken over.
+        assertEquals(SpeechRules.Miss.REST_ON_DEVICE, SpeechRules.onMiss(reading = false, resting = false))
+        assertEquals(SpeechRules.Miss.REST_ON_DEVICE, SpeechRules.onMiss(reading = false, resting = true))
+        // The brief goes back to MEKA's voice after one slow piece, unless the server is resting.
+        assertEquals(SpeechRules.Miss.PIECE_ON_DEVICE, SpeechRules.onMiss(reading = true, resting = false))
+        assertEquals(SpeechRules.Miss.REST_ON_DEVICE, SpeechRules.onMiss(reading = true, resting = true))
+    }
 }

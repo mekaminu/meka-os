@@ -7,9 +7,11 @@ package os.meka.core.domain
  *
  * It says what the pane shows, in the pane's order and nothing more: the greeting and the date, work, the weather,
  * the day (its first few timed things by name), what's overdue, who to chase, what needs doing on the lists, habits and
- * a fast, and a few headlines. Abbreviations are written out ("Fri 9 Oct" → "Friday 9 October", "09:30" → "9:30",
+ * a fast, and every headline the pane shows (Barça first, as listed), each "From BBC Sport: …". Abbreviations are written out ("Fri 9 Oct" → "Friday 9 October", "09:30" → "9:30",
  * "9–15°" → "9 to 15 degrees") and the pane's " · " separators become pauses, so either voice reads it naturally.
- * Bounded by [MAX_CHARS], cut at a sentence, so a crowded morning stays a minute or so of listening.
+ * The day's part is bounded by [MAX_CHARS], cut at a sentence, so a crowded morning stays a minute or so of listening;
+ * the news is never cut (Meka, 2026-10-09: Listen read 3 of the 5 headlines shown), only an overlong title is shortened
+ * at a word ([MAX_HEADLINE_CHARS]). Each story is its own sentence, so the voice pauses between them.
  */
 object BriefSpeech {
     /** Timed things named one by one; the rest are only counted. */
@@ -18,9 +20,9 @@ object BriefSpeech {
     const val MAX_CHASES = 2
     /** Things on the lists named. */
     const val MAX_ATTENTION = 3
-    /** Headlines read. */
-    const val MAX_HEADLINES = 3
-    /** About a minute of speech; whole sentences only. */
+    /** A headline's title longer than this is shortened at a word (titles are rarely half this). */
+    const val MAX_HEADLINE_CHARS = 240
+    /** About a minute of speech for the day's part (the news comes on top); whole sentences only. */
     const val MAX_CHARS = 1_200
 
     const val SIGN_OFF = "That's your morning."
@@ -59,15 +61,25 @@ object BriefSpeech {
         v.habitsLine?.let { out += sentence("Habits: $it") }
         v.fastingLine?.let { out += sentence(it) }
 
-        if (v.headlines.isNotEmpty()) {
-            out += "In the news."
-            v.headlines.take(MAX_HEADLINES).forEach { h ->
-                val source = h.meta.substringBefore(" · ").trim()
-                out += sentence(if (source.isEmpty()) clean(h.title) else "$source: ${clean(h.title)}")
-            }
-        }
         out += SIGN_OFF
-        return fit(out)
+        return (fit(out).dropLast(1) + news(v.headlines) + SIGN_OFF).joinToString(" ")
+    }
+
+    /** Every headline shown, in the pane's order: "In the news." then "From BBC Sport: Barça win again." each. */
+    fun news(headlines: List<BriefHeadline>): List<String> {
+        if (headlines.isEmpty()) return emptyList()
+        return listOf("In the news.") + headlines.map { h ->
+            val source = h.meta.substringBefore(" · ").trim()
+            val title = shorten(clean(h.title))
+            sentence(if (source.isEmpty()) title else "From $source: $title")
+        }
+    }
+
+    /** [title] cut at the last word that fits [MAX_HEADLINE_CHARS]. */
+    private fun shorten(title: String): String {
+        if (title.length <= MAX_HEADLINE_CHARS) return title
+        val cut = title.lastIndexOf(' ', MAX_HEADLINE_CHARS).takeIf { it > 0 } ?: MAX_HEADLINE_CHARS
+        return title.substring(0, cut).trimEnd(',', ';', ':', ' ')
     }
 
     /** "Fri 9 Oct" → "Friday 9 October"; anything else is left as it is. */
@@ -118,8 +130,8 @@ object BriefSpeech {
         return if (c.isEmpty() || c.last() in ".!?…") c else "$c."
     }
 
-    /** Joined, keeping whole sentences while they fit in [MAX_CHARS]; the sign-off always ends it. */
-    private fun fit(sentences: List<String>): String {
+    /** The sentences kept while they fit in [MAX_CHARS]; the sign-off always ends them. */
+    private fun fit(sentences: List<String>): List<String> {
         val body = sentences.filter { it.isNotBlank() }.dropLast(1)
         val kept = mutableListOf<String>()
         var length = SIGN_OFF.length
@@ -128,7 +140,7 @@ object BriefSpeech {
             kept += s
             length += 1 + s.length
         }
-        return (kept + SIGN_OFF).joinToString(" ")
+        return kept + SIGN_OFF
     }
 
     private const val ALL_DAY = "All day"

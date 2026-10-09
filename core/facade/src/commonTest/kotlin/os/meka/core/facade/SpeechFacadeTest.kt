@@ -172,4 +172,29 @@ class SpeechFacadeTest {
         assertEquals(listOf("Brian", "device"), unreachable.choices.map { it.id })
         assertTrue(!unreachable.choices.first().sample && unreachable.choices.first().selected)
     }
+
+    @Test
+    fun theBriefWaitsLongerForItsFirstPieceAndSaysWhenTheVoiceIsResting() = runTest {
+        assertTrue(core(transport = null).speechResting())
+        val c = core()
+        assertEquals(false, c.speechResting())
+        // A cold server taking 3 s: a conversation's first piece goes to the device, the brief's waits for MEKA's voice.
+        server.slowMs = 3_000
+        assertNull(c.speechClip("Good morning, Meka.", first = true))
+        assertEquals("bXAz19", c.speechClip("Good morning, Meka.", first = true, reading = true))
+        server.slowMs = 6_000 // even the brief gives up after 5 s
+        assertNull(c.speechClip("It's Friday.", first = true, reading = true))
+        server.slowMs = 0
+        assertEquals(false, c.speechResting()) // slow isn't a refusal
+        // Offline: resting for a minute, so the brief's device voice says the rest in one go.
+        server.down = true
+        assertNull(c.speechClip("Offline.", first = false, reading = true))
+        assertTrue(c.speechResting())
+        server.down = false
+        now += 61_000
+        assertEquals(false, c.speechResting())
+        // The device's own voice chosen: always resting.
+        assertTrue(c.chooseMekaVoice("device"))
+        assertTrue(c.speechResting())
+    }
 }

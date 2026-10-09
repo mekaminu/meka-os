@@ -31,8 +31,8 @@ import java.util.Locale
 import kotlin.coroutines.resume
 
 /**
- * MEKA saying something aloud on the Fold (Weather and a voice, slices 6 and 8): Talk's answers and the spoken
- * morning brief. A line is said piece by piece ([SpeechRules.pieces]) in MEKA's voice (Amazon Polly through MEKA's own
+ * MEKA saying something aloud on the Fold (Weather and a voice, slices 6 and 8; Morning brief read aloud): Talk's
+ * answers and the spoken morning brief (a long read: see [say]). A line is said piece by piece ([SpeechRules.pieces]) in MEKA's voice (Amazon Polly through MEKA's own
  * server, [MekaCore.speechClip]: only MEKA's own words are sent), the next piece fetched while one plays, each clip
  * played from memory (nothing written to storage); the phone's own voice (`TextToSpeech`, the best installed British
  * voice that speaks on the device, [DeviceVoiceRules.pick]: the one chosen in the voice picker, else MEKA's pick; never a
@@ -69,9 +69,11 @@ class MekaSpeaker(
 
     /**
      * Says [text], stopping anything already being said; [onDone] runs once it has all been said (or couldn't be),
-     * never when it was stopped or replaced.
+     * never when it was stopped or replaced. A long [reading] (the morning brief) waits longer for its first piece
+     * ([SpeechRules.firstWaitMs]) and, when one piece is late, lets the phone say only that piece before MEKA's voice
+     * carries on ([SpeechRules.onMiss]).
      */
-    fun say(text: String, onDone: () -> Unit = {}) {
+    fun say(text: String, reading: Boolean = false, onDone: () -> Unit = {}) {
         stop()
         // The picker may have changed the phone's voice since this speaker started (prefs are read from memory).
         DeviceVoiceStore.load(context).let { if (it != settings) useDeviceVoice(it) }
@@ -80,11 +82,13 @@ class MekaSpeaker(
         job = scope.launch {
             val pieces = SpeechRules.pieces(text)
             var i = 0
-            var next: Deferred<String?>? = pieces.firstOrNull()?.let { p -> async { core.speechClip(p, first = true) } }
+            var next: Deferred<String?>? = pieces.firstOrNull()?.let { p -> async { core.speechClip(p, true, reading) } }
             while (i < pieces.size) {
-                val clip = next?.await() ?: break
-                next = pieces.getOrNull(i + 1)?.let { p -> async { core.speechClip(p, first = false) } }
-                if (!play(clip)) break
+                val clip = next?.await()
+                next = pieces.getOrNull(i + 1)?.let { p -> async { core.speechClip(p, false, reading) } }
+                if (clip != null && play(clip)) { i++; continue }
+                if (SpeechRules.onMiss(reading, core.speechResting()) == SpeechRules.Miss.REST_ON_DEVICE) break
+                sayOnDevice(pieces[i])
                 i++
             }
             next?.cancel()

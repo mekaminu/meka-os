@@ -1346,12 +1346,18 @@ class MekaCore(
      * [os.meka.core.domain.SpeechRules.NEXT_AUDIO_MS]). A refusal leaves the server alone for a while
      * ([os.meka.core.domain.SpeechRules.quietUntil]); clips are kept in memory per voice and words. Never throws.
      */
-    suspend fun speechClip(text: String, first: Boolean): String? {
+    suspend fun speechClip(text: String, first: Boolean): String? = speechClip(text, first, reading = false)
+
+    /**
+     * [speechClip] for a long [reading] (the morning brief): its first piece may take up to
+     * [os.meka.core.domain.SpeechRules.READ_FIRST_AUDIO_MS] ([os.meka.core.domain.SpeechRules.firstWaitMs]).
+     */
+    suspend fun speechClip(text: String, first: Boolean, reading: Boolean): String? {
         val api = speechApi ?: return null
         val words = text.trim().takeIf { it.isNotEmpty() && it.length <= os.meka.core.domain.SpeechRules.MAX_PIECE } ?: return null
         val voice = onCore { speechVoiceNow() } ?: return null
         onCore { speechCached(voice.name, words) }?.let { return it }
-        val wait = if (first) os.meka.core.domain.SpeechRules.FIRST_AUDIO_MS else os.meka.core.domain.SpeechRules.NEXT_AUDIO_MS
+        val wait = if (first) os.meka.core.domain.SpeechRules.firstWaitMs(reading) else os.meka.core.domain.SpeechRules.NEXT_AUDIO_MS
         val r = withTimeoutOrNull(wait) {
             try { api.speak(words, voice.name) } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 os.meka.core.wire.SpeechCodec.Response(os.meka.core.wire.SpeechCodec.Response.FAILED)
@@ -1369,6 +1375,12 @@ class MekaCore(
             }
         }
     }
+
+    /**
+     * MEKA's voice isn't to be asked right now: not connected, the device's own voice is chosen, or the server refused
+     * a moment ago and is being left alone ([os.meka.core.domain.SpeechRules.onMiss]). Never throws.
+     */
+    suspend fun speechResting(): Boolean = speechApi == null || onCore { speechVoiceNow() == null }
 
     /**
      * Fetches MEKA's common lines ([os.meka.core.domain.SpeechRules.COMMON]) once, so they play at once in a

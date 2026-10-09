@@ -3,7 +3,7 @@ import AVFoundation
 import Observation
 import os
 
-/// MEKA saying something aloud on the Mac (Weather and a voice, slice 8): the spoken morning brief, like the Fold's
+/// MEKA saying something aloud on the Mac (Weather and a voice, slice 8; Morning brief read aloud): the spoken morning brief (a long read), like the Fold's
 /// MekaSpeaker. A line is said piece by piece (`SpeechRules.pieces`) in MEKA's voice (Amazon Polly through MEKA's own
 /// server, `CoreModel.speechClip`: only MEKA's own words are sent), the next piece fetched while one plays; the Mac's
 /// own voice (`AVSpeechSynthesizer`: the voice chosen in the picker, else the best installed English voice, at the Mac's
@@ -39,8 +39,10 @@ final class MekaSpeaker {
     }
 
     /// Says `text`, stopping anything already being said. `done` runs once the whole line has been said (in either
-    /// voice), never when it was cut short by `stop()` or another line.
-    func say(_ text: String, done: (@MainActor @Sendable () -> Void)? = nil) {
+    /// voice), never when it was cut short by `stop()` or another line. A long `reading` (the morning brief) waits
+    /// longer for its first piece and, when one piece is late, lets the Mac say only that piece before MEKA's voice
+    /// carries on (`SpeechRules.onMiss`).
+    func say(_ text: String, reading: Bool = false, done: (@MainActor @Sendable () -> Void)? = nil) {
         stop()
         line += 1
         let id = line
@@ -51,16 +53,22 @@ final class MekaSpeaker {
             guard let self else { return }
             var i = 0
             var next: Task<Data?, Never>?
-            if let first = pieces.first { next = Task { await self.model?.speechClip(first, first: true) } }
+            if let first = pieces.first { next = Task { await self.model?.speechClip(first, first: true, reading: reading) } }
             while i < pieces.count {
-                guard let clip = await next?.value, !Task.isCancelled else { break }
+                let clip = await next?.value
+                guard !Task.isCancelled else { break }
                 if i + 1 < pieces.count {
                     let piece = pieces[i + 1]
-                    next = Task { await self.model?.speechClip(piece, first: false) }
+                    next = Task { await self.model?.speechClip(piece, first: false, reading: reading) }
                 } else {
                     next = nil
                 }
-                guard await self.play(clip) else { break }
+                if let clip, await self.play(clip) { i += 1; continue }
+                guard !Task.isCancelled else { break }
+                let resting = await self.model?.speechResting() ?? true
+                if SpeechRules.shared.onMiss(reading: reading, resting: resting) == .restOnDevice { break }
+                await self.sayOnDevice(pieces[i])
+                guard !Task.isCancelled else { break }
                 i += 1
             }
             next?.cancel()

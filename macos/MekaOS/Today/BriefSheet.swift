@@ -152,7 +152,7 @@ struct BriefSheet: View {
             speaker.stop()
         } else {
             MekaHaptics.light()
-            speaker.say(BriefSpeech.shared.script(v: v, name: "Meka"))
+            speaker.say(BriefSpeech.shared.script(v: v, name: "Meka"), reading: true)
         }
     }
 

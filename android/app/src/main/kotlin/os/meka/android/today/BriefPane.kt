@@ -87,7 +87,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
     // Listen (Weather and a voice, slice 8): MEKA reads the brief aloud in its voice, else the phone's own.
     val speaker = remember { MekaSpeaker(context, core, scope) }
     DisposableEffect(speaker) { onDispose { speaker.release() } }
-    fun listen() = speaker.say(BriefSpeech.script(core.briefView.value))
+    fun listen() = speaker.say(BriefSpeech.script(core.briefView.value), reading = true)
     // After the wake alarm the brief reads itself once it has something to say.
     var autoRead by rememberSaveable { mutableStateOf(readAloud) }
     LaunchedEffect(autoRead, v.dateLabel) {

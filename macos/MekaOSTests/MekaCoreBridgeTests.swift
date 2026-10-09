@@ -666,6 +666,19 @@ final class MekaCoreBridgeTests: XCTestCase {
                        "9 to 15 degrees, light rain from 15:00, take a coat")
     }
 
+    /// Morning brief read aloud: every headline shown is read ("From BBC Sport: …"), and a long read keeps MEKA's voice.
+    func testBriefReadsEveryHeadlineInMekasVoice() {
+        let shown = [
+            BriefHeadline(id: "n1", title: "Barça win again", url: nil, meta: "BBC Sport · Barça · 1 h ago"),
+            BriefHeadline(id: "n2", title: "Rates held", url: nil, meta: "BBC News · UK"),
+        ]
+        XCTAssertEqual(BriefSpeech.shared.news(headlines: shown),
+                       ["In the news.", "From BBC Sport: Barça win again.", "From BBC News: Rates held."])
+        XCTAssertEqual(SpeechRules.shared.firstWaitMs(reading: true), SpeechRules.shared.READ_FIRST_AUDIO_MS)
+        XCTAssertTrue(SpeechRules.shared.onMiss(reading: true, resting: false) == .pieceOnDevice)
+        XCTAssertTrue(SpeechRules.shared.onMiss(reading: false, resting: false) == .restOnDevice)
+    }
+
     func testMotionCheckReachesSwift() {
         let off = MotionCheckRules.shared.mac(stored: nil, reduceMotion: true, lowPower: false)
         XCTAssertEqual(off.rows.map(\.label), ["MEKA Motion", "Reduce Motion", "Low Power Mode"])

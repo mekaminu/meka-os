@@ -15,6 +15,30 @@ object SpeechRules {
     const val FIRST_AUDIO_MS = 1_200L
     /** Later pieces are fetched while the one before plays; one this late hands the rest to the device's voice. */
     const val NEXT_AUDIO_MS = 6_000L
+    /**
+     * A long read (the morning brief's Listen, and after the wake alarm) waits this long for its first piece: Meka asked
+     * for the brief and sees "Stop" at once, so a few seconds for a cold server beats the phone's voice for all of it.
+     */
+    const val READ_FIRST_AUDIO_MS = 5_000L
+
+    /** How long to wait for a line's first piece: [READ_FIRST_AUDIO_MS] for a long [reading], else [FIRST_AUDIO_MS]. */
+    fun firstWaitMs(reading: Boolean): Long = if (reading) READ_FIRST_AUDIO_MS else FIRST_AUDIO_MS
+
+    /** What a device does when a piece of a line didn't come in time or wouldn't play. */
+    enum class Miss {
+        /** The device's own voice says this piece and everything after it. */
+        REST_ON_DEVICE,
+        /** The device's own voice says only this piece; MEKA's voice carries on with the next. */
+        PIECE_ON_DEVICE,
+    }
+
+    /**
+     * A missed piece in a conversation hands the rest to the device (one voice per answer). In a long [reading] only that
+     * piece goes to the device and MEKA's voice picks up again, unless the server is [resting] (refused, used up, off,
+     * or the device's voice is chosen), when the device says the rest in one go.
+     */
+    fun onMiss(reading: Boolean, resting: Boolean): Miss =
+        if (reading && !resting) Miss.PIECE_ON_DEVICE else Miss.REST_ON_DEVICE
     /** The server refuses more than this per piece (SpeechCodec.MAX_TEXT). */
     const val MAX_PIECE = 600
     /** Sentences after the first are joined up to about this many characters, so a reply is one or two requests. */
