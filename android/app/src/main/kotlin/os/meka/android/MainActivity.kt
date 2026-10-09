@@ -13,6 +13,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import os.meka.core.facade.MekaCore
+import os.meka.core.domain.TalkStartRules
 import os.meka.core.sync.SyncStatus
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -67,6 +68,11 @@ class MainActivity : ComponentActivity() {
             open == OPEN_BRIEF -> app.openBrief.value = true
             // The News widget: Today with News on the story ("" = News itself, which leads with the match).
             open.startsWith(OPEN_NEWS_PREFIX) -> app.openNewsStory.value = open.removePrefix(OPEN_NEWS_PREFIX)
+            // The side button or the headphones' button (TalkStartActivity): Ask, already listening.
+            open.startsWith(TalkStartRules.OPEN_PREFIX) -> TalkStartRules.fromOpen(open)?.let {
+                app.talkNow.value = it
+                app.openDestination.value = ShellDestination.ASK
+            }
             open.startsWith(OPEN_DESTINATION_PREFIX) ->
                 ShellDestination.entries.firstOrNull { it.name == open.removePrefix(OPEN_DESTINATION_PREFIX) }?.let { app.openDestination.value = it }
         }

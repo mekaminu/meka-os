@@ -46,7 +46,7 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(
             ShellNav.more(connected: true).map(\.label),
             ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Work mode", "Notifications",
-             "Appearance", "MEKA's voice", "Calendars", "Activity", "Your data"]
+             "Appearance", "MEKA's voice", "Talk", "Calendars", "Activity", "Your data"]
         )
         XCTAssertFalse(ShellNav.more(connected: false).contains(.calendars))
         let places = Set(ShellNav.more(connected: false).compactMap(\.destination))
@@ -60,7 +60,7 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(sections.map(\.group.label), ["Places", "Daily", "Settings"])
         XCTAssertEqual(sections[0].items.map(\.label), ["Lists", "Goals and habits", "Review", "Vault"])
         XCTAssertEqual(sections[1].items.map(\.label), ["Morning brief", "News", "Shut down the day"])
-        XCTAssertEqual(sections[2].items.map(\.label), ["Work mode", "Notifications", "Appearance", "MEKA's voice", "Calendars", "Activity", "Your data"])
+        XCTAssertEqual(sections[2].items.map(\.label), ["Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Activity", "Your data"])
         XCTAssertEqual(sections.flatMap(\.items), ShellNav.more(connected: true))
         XCTAssertTrue(sections[0].items.allSatisfy { $0.destination != nil })
         XCTAssertTrue(sections.dropFirst().flatMap(\.items).allSatisfy { $0.destination == nil })
@@ -75,6 +75,7 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual((0...3).map { ShellNav.moreRowStep(0, $0) }, [3, 4, 5, 6])
         XCTAssertEqual(ShellNav.moreRowStep(1, 0), 5)
         XCTAssertEqual(ShellNav.moreRowStep(2, 6), 13)
+        XCTAssertEqual(ShellNav.moreRowStep(2, 7), 14)
         for s in 0...2 { XCTAssertLessThan(ShellNav.moreLabelStep(s), ShellNav.moreRowStep(s, 0)) }
     }
 

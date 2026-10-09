@@ -549,6 +549,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(DeviceVoiceRules.shared.pitchLine(p: 0.9), "Pitch · 10% lower")
     }
 
+    /// Talk without tapping the mic (slice 1): the Talk sheet's words reach Swift.
+    func testTalkSetupReachesSwift() {
+        let v = TalkStartRules.shared.setup(mac: true, assistantHeld: false, samsung: false)
+        XCTAssertEqual(v.title, "Talk")
+        XCTAssertEqual(v.sections.map(\.label), ["On the Mac", "Safety"])
+        XCTAssertTrue(v.sections[0].status.contains("⌥Space"))
+        XCTAssertNil(v.sections[0].action)
+        XCTAssertEqual(TalkStartRules.shared.fromAction(action: "android.intent.action.ASSIST"), TalkStart.sideButton)
+    }
+
     /// The spoken morning brief (Weather and a voice, slice 8): the script the brief sheet's Listen reads reaches Swift.
     func testBriefSpeechReachesSwift() {
         XCTAssertEqual(BriefSpeech.shared.script(v: MorningBriefView.companion.EMPTY, name: "Meka"),

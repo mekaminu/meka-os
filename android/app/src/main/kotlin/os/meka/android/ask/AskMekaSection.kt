@@ -45,6 +45,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.flow.first
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.semantics.Role
@@ -139,6 +141,17 @@ fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modi
         haptics.light()
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) talk.start()
         else askMic.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    // Talk without tapping the mic (slice 1): the side button or the headphones' button opened MEKA on Ask; start
+    // listening once MEKA is in front (a start before that would be stopped by the lifecycle observer above).
+    val app = context.applicationContext as? os.meka.android.MekaApplication
+    val talkNow = app?.talkNow?.collectAsState()?.value
+    LaunchedEffect(talkNow) {
+        if (talkNow == null) return@LaunchedEffect
+        lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+        app?.talkNow?.value = null
+        if (!talk.active) startTalking()
     }
 
     fun ask() {

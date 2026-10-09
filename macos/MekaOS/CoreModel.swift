@@ -101,6 +101,8 @@ final class CoreModel {
     var showActivity = false
     /// Ask → More → MEKA's voice.
     var showVoice = false
+    /// Ask → More → Talk (Talk without tapping the mic): how to start talking on the Mac.
+    var showTalk = false
     private(set) var exportSummary: ExportSummary?
     /// Your data's line on how MEKA's database on this Mac is protected (encrypted, or FileVault only).
     private(set) var databaseLine: String?
