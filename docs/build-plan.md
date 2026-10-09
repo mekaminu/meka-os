@@ -222,6 +222,18 @@ Tokens live in `design/tokens/tokens.json` (`motion`). Reduced motion = short cr
   5. **Merge duplicate events:** the same event on several calendars (e.g. "Training" 18:00–19:00 twice + "Training - 3G") — same start/end and same or containing title → one row with the calendars listed; different times stay separate.
   6. **Empty Needs you column on the open Fold:** when nothing needs Meka, the middle column shows the breathing check ring + "Nothing needs you", then useful content: today's habits (tick inline), Waiting on, and the next renewals — not a blank column.
 
+- [ ] Fold review 2026-10-09 07:26 (12 screenshots, light + dark, closed Fold). Decided:
+  1. **English-only news by default:** Spanish-language headlines (Mundo Deportivo, Sport, Spanish Google News) are off; Barça comes from English sources: Google News "FC Barcelona" en-GB, BBC Sport (Barcelona/La Liga), Barca Universal, Football España (verify each feed). A "Spanish sources" switch in News, off. (Later with AI: translate a Spanish story's headline on request.)
+  2. **The ring becomes a real watch face (12-hour), still alive:** the 24-hour dial confused (at 07:21 the now dot sat near "4 o'clock"). New face: gold **hour and minute hands** (tapered, hour shorter/thicker), the fine **sweeping second hand** with its comet tail kept, 12 hour markers (no numerals), brass rim that breathes, hourly shimmer kept. The **next 12 hours of events** sit as arcs on the outer rim (work band, training/Barça highlighted, the current one glowing). Tap the face → the full 24-hour day ring opens as a sheet (the existing ring, enlarged). Same face on Mac, bedside clock (large), cover mini.
+  3. **Habits tile:** the full-width "0 of 1 habits today" slab becomes compact chips under the ticker (habit name + a ring to tick with the drawn check); hidden when no habits.
+  4. **Morning brief card says something:** "16° · drizzle from 15:00 · 2 tasks · Barça v Getafe tomorrow 17:30" instead of "2 tasks".
+  5. **Mic moves to the Capture bar** ("Capture anything…" + mic at its right end); not inside the Up next card.
+  6. **Today section empty under its label** on a work day (only "TODAY" then the capture bar): check — the work band, now line and anytime tasks must show; if the list is just hidden behind the capture bar, fix the padding; unit/UI test on a 412 dp screen.
+  7. **Brief pane tasks:** rows are indented into the empty time column and greyed; align left with a tick circle (tappable to complete), normal weight. Light theme: remove the grey band above the sheet (status-bar scrim showing).
+  8. **Ask header:** field + mic inside the field; Return asks; matching results (tasks/events/lists) appear under the field as you type — drop the separate Ask and Search buttons.
+  9. **Calendar legend:** show "Personal" (rename from the Gmail address; editable), and the US Holidays calendar hidden by default (already queued).
+  10. **Needs you (closed Fold) empty page:** under "Nothing needs you", show what's coming for Meka: today's habits, Waiting on, next renewals (same as the open-Fold column item).
+
 ## Milestones
 
 ### M0 · Foundation — done
