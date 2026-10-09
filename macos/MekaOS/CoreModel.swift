@@ -982,6 +982,19 @@ final class CoreModel {
     func setHabitBooked(_ id: String, _ on: Bool) { MekaHaptics.tick(); run { try await $0.setHabitBooked(id: id, on: on) } }
     /// The rotation preset at `index` in `SessionRules.ROTATIONS` (0: none).
     func setHabitRotation(_ id: String, _ index: Int) { MekaHaptics.tick(); run { try await $0.setHabitRotation(id: id, index: Int32(index)) } }
+    /// Weather place setting (Calendars → Weather): the town the forecast is for; blank or "Biggleswade" is home.
+    /// False (nothing saved) for a name that can't be a town. The server follows it at its next poll.
+    func setWeatherPlace(_ name: String) async -> Bool {
+        guard let core else { return false }
+        do {
+            let ok = try await core.setWeatherPlace(name: name).boolValue
+            if ok { MekaHaptics.light() } else { MekaHaptics.tick() }
+            return ok
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
     /// The workout app's link ("hevy.com"), opened from Today's card; blank clears it. False when it isn't a web address.
     func setHabitAppLink(_ id: String, _ link: String) async -> Bool {
         guard let core else { return false }

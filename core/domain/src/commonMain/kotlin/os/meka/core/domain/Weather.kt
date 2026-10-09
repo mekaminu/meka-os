@@ -1,5 +1,6 @@
 package os.meka.core.domain
 
+import os.meka.core.sync.FieldValue
 import os.meka.core.sync.Replica
 import kotlin.math.roundToInt
 
@@ -18,15 +19,41 @@ object WeatherFields {
     const val HOURS = "hours"
     /** "2026-10-09=9,15,61,70;…": local day = min °C, max °C, WMO code, rain % (the day's highest chance). */
     const val DAYS = "days"
-    /** "Biggleswade". */
+    /** "Biggleswade": the place the forecast is for, as the geocoder names it. */
     const val PLACE = "place"
+    /**
+     * The place name the server was asked for (Weather place setting: what Meka typed, normalised, from
+     * [WeatherPlaceFields.NAME]); absent while it forecasts home by default. Additive.
+     */
+    const val ASKED = "asked"
+    /** False when [ASKED] couldn't be found, so the forecast is still for home; absent or true otherwise. Additive. */
+    const val FOUND = "found"
+}
+
+/**
+ * Where the forecast is for (Weather place setting): one app-written `context_mode` entity with the fixed id
+ * [WeatherPlaceStore.ENTITY_ID], a town name Meka types (no GPS, nothing else about him). The server reads it at its next
+ * poll, looks the name up with Open-Meteo's geocoder (only the name is sent) and mirrors that place's forecast instead of
+ * home's. LWW: the latest change on either device wins.
+ */
+object WeatherPlaceFields {
+    /** "Bedford"; Null (or absent) for home ([WeatherPlaceRules.HOME]). */
+    const val NAME = "name"
 }
 
 data class WeatherHour(val startMs: Long, val tempC: Int, val code: Int, val rainChance: Int)
 
 data class WeatherDay(val epochDay: Long, val minC: Int, val maxC: Int, val code: Int, val rainChance: Int)
 
-data class WeatherForecast(val place: String, val hours: List<WeatherHour>, val days: List<WeatherDay>) {
+data class WeatherForecast(
+    val place: String,
+    val hours: List<WeatherHour>,
+    val days: List<WeatherDay>,
+    /** The place name the server was asked for ([WeatherFields.ASKED]); null for home. */
+    val asked: String? = null,
+    /** False when [asked] couldn't be found (the forecast is home's). */
+    val found: Boolean = true,
+) {
     val isEmpty: Boolean get() = hours.isEmpty() && days.isEmpty()
 
     companion object {
@@ -105,9 +132,90 @@ data class WeatherView(
     /** For screen readers: "14 degrees, light rain from 16:00". */
     val nowSpoken: String?,
     val place: String,
+    /** The place setting (Calendars → Weather): what the field holds and the line under it. */
+    val placeChoice: WeatherPlaceView = WeatherPlaceView.HOME,
 ) {
     companion object {
         val EMPTY = WeatherView(null, null, null, "")
+    }
+}
+
+/**
+ * The Weather place setting as the apps show it: [name] fills the field ("Biggleswade" for home), [line] says what the
+ * forecast is doing, lit in the accent colour ([lit]) when it couldn't follow the name.
+ */
+data class WeatherPlaceView(val name: String, val line: String, val lit: Boolean = false, val pending: Boolean = false) {
+    companion object {
+        val HOME = WeatherPlaceView(WeatherPlaceRules.HOME, "Forecast for ${WeatherPlaceRules.HOME} · from Open-Meteo")
+    }
+}
+
+/** Non-AI, pure: the place name Meka types and what the forecast says about it. */
+object WeatherPlaceRules {
+    /** Home: the server forecasts it when no place is set (its coordinates are fixed, no lookup). */
+    const val HOME = "Biggleswade"
+    const val MAX_NAME = 60
+
+    /**
+     * A typed name as stored: spaces collapsed, trimmed, at most [MAX_NAME]; null for one that can't be a place (blank,
+     * no letter, or characters a town name doesn't have).
+     */
+    fun normalize(input: String): String? {
+        val s = input.replace(Regex("\\s+"), " ").trim()
+        if (s.isEmpty() || s.length > MAX_NAME || s.none { it.isLetter() }) return null
+        if (s.any { !(it.isLetterOrDigit() || it == ' ' || it == '-' || it == '\'' || it == '.' || it == ',' || it == '’') }) return null
+        return s
+    }
+
+    fun isHome(name: String?): Boolean = name == null || name.equals(HOME, ignoreCase = true)
+
+    /** Whether [input] is something [normalize] would keep (or home); the apps don't save anything else. */
+    fun accepts(input: String): Boolean = normalize(input) != null
+
+    /**
+     * [wanted] is the stored name (null for home); [f] the mirrored forecast. "Forecast for Bedford · from Open-Meteo";
+     * "Finding “St Neots”… the forecast follows within a few minutes" until the server has answered; "Couldn't find
+     * “Xyzzy” — showing Biggleswade. Try the nearest town." (lit).
+     */
+    fun view(wanted: String?, f: WeatherForecast): WeatherPlaceView {
+        val shown = f.place.ifEmpty { HOME }
+        if (isHome(wanted)) {
+            // Back to home: the server forecasts home again at its next poll.
+            return if (f.asked == null || f.isEmpty) WeatherPlaceView(HOME, "Forecast for $HOME · from Open-Meteo")
+            else WeatherPlaceView(HOME, "Going back to $HOME… the forecast follows within a few minutes", pending = true)
+        }
+        val name = wanted!!
+        return when {
+            !f.asked.equals(name, ignoreCase = true) ->
+                WeatherPlaceView(name, "Finding “$name”… the forecast follows within a few minutes", pending = true)
+            !f.found -> WeatherPlaceView(name, "Couldn't find “$name” — showing $shown. Try the nearest town.", lit = true)
+            else -> WeatherPlaceView(name, "Forecast for $shown · from Open-Meteo")
+        }
+    }
+}
+
+/** The place setting, synced (either app can change it). */
+class WeatherPlaceStore(private val replica: Replica) {
+    /** The stored name, or null for home. */
+    fun wanted(): String? = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WeatherPlaceFields.NAME)?.textOrNull
+        ?.let(WeatherPlaceRules::normalize)?.takeUnless(WeatherPlaceRules::isHome)
+
+    /**
+     * Sets the place from what Meka typed; blank or home's name goes back to home. Returns false (and writes nothing)
+     * for a name that can't be a place. Writes nothing when it's already the place.
+     */
+    fun set(input: String): Boolean {
+        val back = input.isBlank() || WeatherPlaceRules.isHome(input.trim())
+        val name = if (back) null else WeatherPlaceRules.normalize(input) ?: return false
+        val current = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WeatherPlaceFields.NAME)
+        if (name == null && (current == null || current == FieldValue.Null)) return true
+        if (name != null && current?.textOrNull == name) return true
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WeatherPlaceFields.NAME to (name?.let { FieldValue.Text(it) } ?: FieldValue.Null)))
+        return true
+    }
+
+    companion object {
+        const val ENTITY_ID = "weather_place"
     }
 }
 
@@ -163,14 +271,16 @@ object WeatherRules {
         return f.hours.firstOrNull { it.startMs == h }
     }
 
-    fun view(f: WeatherForecast, nowMs: Long, cal: LocalCalendar): WeatherView {
-        if (f.isEmpty) return WeatherView.EMPTY
+    fun view(f: WeatherForecast, nowMs: Long, cal: LocalCalendar, wanted: String? = null): WeatherView {
+        val choice = WeatherPlaceRules.view(wanted, f)
+        if (f.isEmpty) return WeatherView.EMPTY.copy(placeChoice = choice)
         val now = nowLine(f, nowMs, cal)
         return WeatherView(
             nowLine = now,
             tomorrowLine = tomorrowLine(f, cal.epochDayOf(nowMs) + 1, cal),
             nowSpoken = now?.replace("°", " degrees"),
             place = f.place,
+            placeChoice = choice,
         )
     }
 
@@ -345,6 +455,8 @@ class WeatherStore(private val replica: Replica) {
             place = WeatherCodec.place(e[WeatherFields.PLACE]?.textOrNull),
             hours = WeatherCodec.decodeHours(e[WeatherFields.HOURS]?.textOrNull),
             days = WeatherCodec.decodeDays(e[WeatherFields.DAYS]?.textOrNull),
+            asked = e[WeatherFields.ASKED]?.textOrNull?.let(WeatherCodec::place)?.ifEmpty { null },
+            found = (e[WeatherFields.FOUND] as? FieldValue.Bool)?.value ?: true,
         )
     }
 

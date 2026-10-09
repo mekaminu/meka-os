@@ -139,6 +139,9 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
+        // Weather place setting: the town the forecast is for (home unless Meka types another). Synced.
+        Spacer(Modifier.height(MekaSpace.m))
+        WeatherPlaceSection(core, Modifier.appear(rememberAppearance(onToday.size + 1)))
         Spacer(Modifier.height(MekaSpace.l))
         ConnectButton("Connect Google Calendar") { connect("google") }
         ConnectButton("Connect Outlook Calendar") { connect("microsoft") }

@@ -134,6 +134,7 @@ class MekaCore(
     private val brief = MorningBrief(replica, nowMs, ZoneCalendar(timeZone))
     private val news = os.meka.core.domain.News(replica)
     private val weather = os.meka.core.domain.WeatherStore(replica)
+    private val weatherPlace = os.meka.core.domain.WeatherPlaceStore(replica)
     private val review = WeeklyReview(replica, nowMs, ZoneCalendar(timeZone))
     /** The week the review screen shows (null: the default for today); a screen choice, not synced. */
     private var reviewOffset: Int? = null
@@ -926,6 +927,13 @@ class MekaCore(
     /** The call assistant's one switch (synced; the Fold screens calls during work while it is on). */
     suspend fun setCallAssistant(on: Boolean) = onCore { work.setCallAssistant(on); refresh() }
 
+    /**
+     * Where the forecast is for (Weather place setting, synced): a town name; blank or "Biggleswade" is home. Returns
+     * false, saving nothing, for a name that can't be a place. The server follows it at its next poll (a few minutes);
+     * [weatherView]'s `placeChoice` says when it has.
+     */
+    suspend fun setWeatherPlace(name: String): Boolean = onCore { weatherPlace.set(name).also { refresh() } }
+
     /** Work hours. [days] are ISO (1 = Monday); minutes are local minutes of the day. */
     suspend fun setWorkSchedule(days: List<Int>, startMinute: Int, endMinute: Int, enabled: Boolean) =
         onCore { work.setSchedule(WorkSchedule(days.toSet(), startMinute, endMinute, enabled)) }
@@ -1467,7 +1475,7 @@ class MekaCore(
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
             news.all(), news.choices(), holidays).copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal))
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))
-        _weather.value = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal)
+        _weather.value = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted())
         _review.value = review.view(reviewOffset, all, dayEvents, _goals.value, fasting.ended()) { day ->
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }

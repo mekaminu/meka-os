@@ -498,6 +498,8 @@ struct CalendarsSheet: View {
                     .staggeredAppear(i)
                 }
             }
+            // Weather place setting: the town the forecast is for (home unless Meka types another). Synced.
+            WeatherPlaceSection(palette: palette).padding(.top, MekaSpace.s)
             HStack {
                 Button("Connect Google Calendar") { Task { await model.connectCalendar("google") } }
                 Button("Connect Outlook Calendar") { Task { await model.connectCalendar("microsoft") } }

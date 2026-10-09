@@ -127,6 +127,23 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun theWeatherPlaceIsSetFromTheAppAndReachesTheServer() = runTest {
+        val c = core()
+        assertEquals(os.meka.core.domain.WeatherPlaceView.HOME, c.weatherView.value.placeChoice)
+        assertTrue(!c.setWeatherPlace("<nope>"))
+        assertTrue(c.setWeatherPlace("Bedford"))
+        assertEquals("Finding “Bedford”… the forecast follows within a few minutes", c.weatherView.value.placeChoice.line)
+        c.syncNow()
+        // The server reads it from the op log (Weather place setting).
+        val sent = serverOps.after("hh", 0, 10_000).map { it.op }
+            .single { it.entityId == os.meka.core.domain.WeatherPlaceStore.ENTITY_ID && it.field == os.meka.core.domain.WeatherPlaceFields.NAME }
+        assertEquals(os.meka.core.sync.FieldValue.Text("Bedford"), sent.value)
+        // Home again: blank goes back to Biggleswade.
+        assertTrue(c.setWeatherPlace(""))
+        assertEquals("Biggleswade", c.weatherView.value.placeChoice.name)
+    }
+
+    @Test
     fun cardsAddTicksOffAndSetTimers() = runTest {
         val c = core()
         val id = c.addTask("Create CR")

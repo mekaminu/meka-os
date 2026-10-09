@@ -146,4 +146,107 @@ class WeatherTest {
         integrations.syncAll()
         assertEquals(before + 1, fetches)
     }
+
+    /** Open-Meteo's /v1/search answer (fields we read): Bedford, Texas first, then Bedfordshire's. */
+    private val bedford = """
+        {"results":[
+          {"id":4673353,"name":"Bedford","latitude":32.84402,"longitude":-97.14307,"country_code":"US","admin1":"Texas"},
+          {"id":2656192,"name":"Bedford","latitude":52.13459,"longitude":-0.46632,"country_code":"GB","admin1":"England"}
+        ],"generationtime_ms":0.7}"""
+
+    @Test
+    fun aTownNameIsLookedUpOncePreferringGreatBritain() {
+        val asked = mutableListOf<String>()
+        val source = OpenMeteoWeather({ url -> asked += url; if ("geocoding" in url) (if ("Xyzzy" in url) """{"generationtime_ms":0.2}""" else bedford) else sample() }, { now })
+        val at = source.locate("Bedford")!!
+        assertEquals("Bedford", at.name)
+        assertEquals(52.13459, at.latitude)
+        assertEquals("https://geocoding-api.open-meteo.com/v1/search?name=Bedford&count=10&language=en&format=json", asked.single())
+        // A name is only sent once; nothing found is remembered too.
+        source.locate("bedford ")
+        assertEquals(1, asked.size)
+        assertEquals(null, source.locate("Xyzzy"))
+        assertEquals(null, source.locate("xyzzy"))
+        assertEquals(2, asked.size)
+        // Only the name travels, encoded.
+        source.locate("St Neots")
+        assertTrue(asked.last().contains("name=St+Neots&"), asked.last())
+        // The forecast for a place is asked for at its coordinates and named after it.
+        val f = source.forecast(at)
+        assertTrue(asked.last().startsWith("https://api.open-meteo.com/v1/forecast?latitude=52.13459&longitude=-0.46632&"), asked.last())
+        assertEquals("Bedford", f.place)
+        assertEquals("Biggleswade", source.forecast().place)
+        // Junk from the network finds nothing rather than a broken place.
+        assertEquals(null, source.parseLocation("""{"results":[{"name":"Nowhere","latitude":"x"}]}"""))
+    }
+
+    @Test
+    fun aPlaceSetOnADeviceIsFollowedAtTheNextPoll() {
+        val forecasts = mutableListOf<String>()
+        val source = OpenMeteoWeather({ url ->
+            when {
+                "geocoding" in url -> if ("Xyzzy" in url) "{}" else bedford
+                else -> { forecasts += url.substringAfter("latitude=").substringBefore("&"); sample() }
+            }
+        }, { now })
+        val store = InMemoryIntegrationStore(knownHouseholds = listOf("home"))
+        val ops = InMemoryServerOpStore()
+        val integrations = Integrations(store, ops, emptyMap(), { null }, noCipher, "https://meka.example", { now }, weather = mapOf(source.id to source))
+        val r = Replica("home", "fold", HlcClock("fold", { now }), InMemoryReplicaStore(), MekaSchema) { "d" + System.nanoTime() }
+        var cursor = 0L
+        fun pull() { val page = ops.after("home", cursor, 10_000); r.applyRemoteBatch(page.map { it.op }); page.lastOrNull()?.let { cursor = it.seq } }
+        val deviceClock = HlcClock("fold", { now })
+        var n = 0
+        fun setPlace(name: String?) = ops.transaction {
+            ops.append(os.meka.core.sync.Op(
+                "fold${n++}", "home", os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.WeatherPlaceStore.ENTITY_ID,
+                os.meka.core.domain.WeatherPlaceFields.NAME, name?.let { os.meka.core.sync.FieldValue.Text(it) } ?: os.meka.core.sync.FieldValue.Null,
+                deviceClock.now(), emptyList(), "fold",
+            ))
+        }
+
+        // Home by default: nothing extra written (hours, days, place).
+        integrations.syncAll()
+        assertEquals(3, ops.after("home", 0, 10_000).size)
+        assertEquals(listOf("52.0868"), forecasts)
+
+        // Meka types Bedford: followed at the next poll, inside the half hour.
+        now += 5 * 60_000L
+        setPlace("Bedford")
+        integrations.syncAll()
+        assertEquals(listOf("52.0868", "52.13459"), forecasts)
+        pull()
+        val f = WeatherStore(r).forecast()
+        assertEquals("Bedford", f.place)
+        assertEquals("Bedford", f.asked)
+        assertTrue(f.found)
+        assertEquals("Forecast for Bedford · from Open-Meteo", os.meka.core.domain.WeatherPlaceRules.view("Bedford", f).line)
+        // Then back on the half-hour rhythm.
+        now += 5 * 60_000L
+        integrations.syncAll()
+        assertEquals(2, forecasts.size)
+
+        // A name that can't be found: home's forecast, said so.
+        now += 5 * 60_000L
+        setPlace("Xyzzy")
+        integrations.syncAll()
+        assertEquals("52.0868", forecasts.last())
+        pull()
+        val missing = WeatherStore(r).forecast()
+        assertEquals("Biggleswade", missing.place)
+        assertEquals("Xyzzy", missing.asked)
+        assertTrue(!missing.found)
+        assertEquals("ok", store.accounts("home").single().status)
+
+        // Back home: asked and found cleared, home's forecast.
+        now += 5 * 60_000L
+        setPlace(null)
+        integrations.syncAll()
+        pull()
+        val back = WeatherStore(r).forecast()
+        assertEquals(null, back.asked)
+        assertTrue(back.found)
+        assertEquals(os.meka.core.domain.WeatherPlaceView.HOME, os.meka.core.domain.WeatherPlaceRules.view(null, back))
+        assertTrue(r.conflicts(os.meka.core.domain.EntityTypes.CONTEXT_MODE).isEmpty())
+    }
 }

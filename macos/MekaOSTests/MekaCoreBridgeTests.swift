@@ -487,6 +487,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rain.startDegrees, 240, accuracy: 0.01)
     }
 
+    /// Weather place setting: what the Calendars sheet's field accepts and the line it shows reach Swift.
+    func testWeatherPlaceReachesSwift() {
+        XCTAssertEqual(WeatherPlaceRules.shared.HOME, "Biggleswade")
+        XCTAssertEqual(WeatherPlaceRules.shared.normalize(input: "  St   Neots "), "St Neots")
+        XCTAssertNil(WeatherPlaceRules.shared.normalize(input: "123"))
+        XCTAssertTrue(WeatherPlaceRules.shared.accepts(input: "Bedford"))
+        XCTAssertFalse(WeatherPlaceRules.shared.accepts(input: "<b>"))
+        XCTAssertTrue(WeatherPlaceRules.shared.isHome(name: "biggleswade"))
+        let home = WeatherForecast(place: "Biggleswade", hours: [], days: [], asked: "Xyzzy", found: false)
+        let lit = WeatherPlaceRules.shared.view(wanted: "Xyzzy", f: home)
+        XCTAssertTrue(lit.lit)
+        XCTAssertEqual(lit.line, "Couldn't find “Xyzzy” — showing Biggleswade. Try the nearest town.")
+        XCTAssertTrue(WeatherPlaceRules.shared.view(wanted: "Bedford", f: home).pending)
+    }
+
     func testMotionCheckReachesSwift() {
         let off = MotionCheckRules.shared.mac(stored: nil, reduceMotion: true, lowPower: false)
         XCTAssertEqual(off.rows.map(\.label), ["MEKA Motion", "Reduce Motion", "Low Power Mode"])

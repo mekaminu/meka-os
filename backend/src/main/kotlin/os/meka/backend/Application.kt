@@ -447,11 +447,7 @@ fun main(args: Array<String>) {
             integrations?.let { startCalendarSync(it) }
             // Calendar edits Meka makes in MEKA go to Google/Outlook after their undo window (calendar editing).
             val calendarWriter = integrations?.writer(
-                object : EntityReader {
-                    override fun entities(householdId: String, entityType: String) = opStore.latestFields(householdId, entityType)
-                    override fun entity(householdId: String, entityType: String, entityId: String) =
-                        opStore.latestFields(householdId, entityType, entityId)[entityId]
-                },
+                opStoreReader(opStore),
                 onWritten = { hh -> push?.serverChanged(hh) },
             )?.also { it.start() }
             // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
@@ -489,7 +485,15 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         images = images,
         onChanged = onChanged,
         ownKeys = OwnKeyReminders(opStore, onWritten = onChanged),
+        reader = opStoreReader(opStore),
     )
+}
+
+/** What the devices wrote, by one indexed query per type ([PostgresOpStore.latestFields]). */
+fun opStoreReader(opStore: PostgresOpStore): EntityReader = object : EntityReader {
+    override fun entities(householdId: String, entityType: String) = opStore.latestFields(householdId, entityType)
+    override fun entity(householdId: String, entityType: String, entityId: String) =
+        opStore.latestFields(householdId, entityType, entityId)[entityId]
 }
 
 /**

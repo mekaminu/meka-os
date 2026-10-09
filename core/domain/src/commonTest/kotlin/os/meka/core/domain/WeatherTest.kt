@@ -129,6 +129,84 @@ class WeatherTest {
     }
 
     @Test
+    fun aTypedPlaceIsKeptOnlyWhenItCanBeATown() {
+        assertEquals("Bedford", WeatherPlaceRules.normalize("  Bedford "))
+        assertEquals("St Neots", WeatherPlaceRules.normalize("St   Neots"))
+        assertEquals("Stratford-upon-Avon", WeatherPlaceRules.normalize("Stratford-upon-Avon"))
+        assertEquals("King's Lynn", WeatherPlaceRules.normalize("King's Lynn"))
+        assertNull(WeatherPlaceRules.normalize(""))
+        assertNull(WeatherPlaceRules.normalize("   "))
+        assertNull(WeatherPlaceRules.normalize("12345"))
+        // A pasted line break is just a space; anything a town name doesn't have is refused.
+        assertEquals("Bedford Kempston", WeatherPlaceRules.normalize("Bedford\nKempston"))
+        assertNull(WeatherPlaceRules.normalize("Bedford; drop"))
+        assertNull(WeatherPlaceRules.normalize("<script>"))
+        assertNull(WeatherPlaceRules.normalize("x".repeat(61)))
+        assertTrue(WeatherPlaceRules.isHome(null))
+        assertTrue(WeatherPlaceRules.isHome("biggleswade"))
+    }
+
+    @Test
+    fun thePlaceSyncsAndItsLineSaysWhatTheForecastIsDoing() {
+        val world = SyncWorld()
+        val a = world.device("android")
+        val m = world.device("mac")
+        val fold = WeatherPlaceStore(a.replica)
+        val home = forecast(*dry(24))
+        // Home by default: nothing stored, nothing written for home.
+        assertNull(fold.wanted())
+        assertEquals(WeatherPlaceView.HOME, WeatherPlaceRules.view(null, home))
+        assertTrue(fold.set("Biggleswade"))
+        assertTrue(fold.set(""))
+        assertNull(a.replica.entity(EntityTypes.CONTEXT_MODE, WeatherPlaceStore.ENTITY_ID))
+        // Something that can't be a place is refused and nothing is written.
+        assertTrue(!fold.set("???"))
+        assertNull(a.replica.entity(EntityTypes.CONTEXT_MODE, WeatherPlaceStore.ENTITY_ID))
+
+        // Set on the Fold, read on the Mac.
+        assertTrue(fold.set(" bedford "))
+        a.syncWithRetry(); m.syncWithRetry()
+        assertEquals("bedford", WeatherPlaceStore(m.replica).wanted())
+        // Until the server answers, the line says it's on its way.
+        val waiting = WeatherPlaceRules.view("bedford", home)
+        assertEquals("Finding “bedford”… the forecast follows within a few minutes", waiting.line)
+        assertTrue(waiting.pending)
+        assertEquals("bedford", waiting.name)
+        // Found (the geocoder's own spelling).
+        val found = home.copy(place = "Bedford", asked = "bedford", found = true)
+        assertEquals(WeatherPlaceView("bedford", "Forecast for Bedford · from Open-Meteo"), WeatherPlaceRules.view("bedford", found))
+        // Not found: still home's forecast, lit.
+        val missing = home.copy(asked = "Xyzzy", found = false)
+        val lit = WeatherPlaceRules.view("Xyzzy", missing)
+        assertEquals("Couldn't find “Xyzzy” — showing Biggleswade. Try the nearest town.", lit.line)
+        assertTrue(lit.lit)
+        // Back home: on its way until the server forecasts home again.
+        assertTrue(WeatherPlaceStore(m.replica).set("Biggleswade"))
+        m.syncWithRetry(); a.syncWithRetry()
+        assertNull(fold.wanted())
+        assertTrue(WeatherPlaceRules.view(null, found).pending)
+        assertEquals(WeatherPlaceView.HOME, WeatherPlaceRules.view(null, home))
+
+        // The server's answer reaches the store (asked, found) and the view carries the setting's line.
+        a.replica.commitLocal(
+            EntityTypes.CONTEXT_MODE, WeatherStore.ENTITY_ID,
+            mapOf(
+                WeatherFields.HOURS to WeatherCodec.encodeHours(home.hours).fv(),
+                WeatherFields.DAYS to WeatherCodec.encodeDays(home.days).fv(),
+                WeatherFields.PLACE to "Biggleswade".fv(),
+                WeatherFields.ASKED to "Xyzzy".fv(),
+                WeatherFields.FOUND to false.fv(),
+            ),
+        )
+        assertTrue(fold.set("Xyzzy"))
+        val read = WeatherStore(a.replica).forecast()
+        assertEquals("Xyzzy", read.asked)
+        assertTrue(!read.found)
+        assertTrue(WeatherRules.view(read, at(fri, 9), cal, fold.wanted()).placeChoice.lit)
+        assertEquals(WeatherPlaceView.HOME.line, WeatherRules.view(WeatherForecast.EMPTY, at(fri, 9), cal).placeChoice.line)
+    }
+
+    @Test
     fun aDaysGlanceDropsTheLabelForPlacesThatAlreadyNameTheDay() {
         val f = forecast(*dry(24), *dry(15), *wet(3), *dry(6))
         assertEquals("9–15°, light rain from 15:00 — take a coat", WeatherRules.dayGlance(f, sat, cal))

@@ -13,6 +13,9 @@ import os.meka.core.domain.HeadlineFields
 import os.meka.core.domain.WeatherCodec
 import os.meka.core.domain.WeatherFields
 import os.meka.core.domain.WeatherForecast
+import os.meka.core.domain.WeatherPlaceFields
+import os.meka.core.domain.WeatherPlaceRules
+import os.meka.core.domain.WeatherPlaceStore
 import os.meka.core.domain.WeatherStore
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.HlcClock
@@ -52,6 +55,8 @@ class Integrations(
     private val onChanged: (householdId: String) -> Unit = {},
     /** MEKA's own keys that run out, put on each household's renewals radar once (Outlook calendar item). */
     private val ownKeys: OwnKeyReminders? = null,
+    /** Reads what the devices wrote (the Weather place setting); Postgres passes its indexed reader. */
+    private val reader: EntityReader = EntityReader.scanning(ops),
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -247,10 +252,16 @@ class Integrations(
      * Nobody is woken for it; the devices pick it up at their next sync, like headlines.
      */
     private fun syncWeather(a: AccountRow, source: WeatherProvider) {
+        // The place setting: a changed name is followed at once, not at the next half hour.
+        val wanted = wantedPlace(a.householdId)
+        val asked = store.transaction { store.mirror(a.householdId, a.id) }[WeatherStore.ENTITY_ID]?.fieldOps?.get(WeatherFields.ASKED)?.second
+            ?.takeIf { it.startsWith("s:") }?.removePrefix("s:")
         val last = a.lastSyncAtMs
-        if (a.status == "ok" && last != null && now() - last < WEATHER_PERIOD_MS) return
+        if (wanted == asked && a.status == "ok" && last != null && now() - last < WEATHER_PERIOD_MS) return
         try {
-            applyWeather(a, source.forecast())
+            // A name that can't be found forecasts home and says so (the apps light the line); it's not a fault.
+            val at = wanted?.let { source.locate(it) }
+            applyWeather(a, source.forecast(at ?: source.home), asked = wanted, found = wanted == null || at != null)
             store.transaction { store.markSynced(a.id, now()) }
         } catch (e: Exception) {
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
@@ -258,17 +269,27 @@ class Integrations(
         }
     }
 
+    /** The household's place setting ([WeatherPlaceStore]), normalised; null for home. */
+    internal fun wantedPlace(householdId: String): String? =
+        runCatching { reader.entity(householdId, EntityTypes.CONTEXT_MODE, WeatherPlaceStore.ENTITY_ID) }.getOrNull()
+            ?.get(WeatherPlaceFields.NAME)?.let { (it as? FieldValue.Text)?.value }
+            ?.let(WeatherPlaceRules::normalize)?.takeUnless(WeatherPlaceRules::isHome)
+
     /**
      * Writes the forecast into the household's one `context_mode/weather` entity, field by field and only what changed
      * (readings are rounded, so a small wobble writes nothing). Returns whether anything was written.
      */
-    internal fun applyWeather(a: AccountRow, f: WeatherForecast): Boolean = store.transaction {
+    internal fun applyWeather(a: AccountRow, f: WeatherForecast, asked: String? = null, found: Boolean = true): Boolean = store.transaction {
         ops.transaction {
             store.lockAccount(a.id)
             val desired = linkedMapOf(
                 WeatherFields.HOURS to FieldValue.Text(WeatherCodec.encodeHours(f.hours)),
                 WeatherFields.DAYS to FieldValue.Text(WeatherCodec.encodeDays(f.days)),
                 WeatherFields.PLACE to FieldValue.Text(WeatherCodec.place(f.place)),
+                // The place setting (additive): what was asked for and whether it was found; both null for home, so
+                // nothing extra is written until a place is set (a never-written field already reads as null).
+                WeatherFields.ASKED to (asked?.let { FieldValue.Text(it) } ?: FieldValue.Null),
+                WeatherFields.FOUND to (if (asked == null) FieldValue.Null else FieldValue.Bool(found)),
             )
             val prev = store.mirror(a.householdId, a.id)[WeatherStore.ENTITY_ID]
             write(a, WeatherStore.ENTITY_ID, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
