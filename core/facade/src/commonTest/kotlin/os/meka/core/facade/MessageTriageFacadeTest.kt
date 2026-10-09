@@ -23,6 +23,7 @@ import os.meka.core.wire.MessageTriageCodec
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -79,6 +80,28 @@ class MessageTriageFacadeTest {
         assertEquals(1, server.sent.size)
         assertTrue(c.dismissTriage(item.id))
         assertTrue(c.triage.value.isEmpty())
+    }
+
+    @Test
+    fun sentAndSeenTakeTheCardsOutOnceAndRecordHowWithoutSendingAnything() = runTest {
+        val c = core()
+        server.reply = MessageTriageCodec.Response("answered", lane = "needs_reply", summary = "Asks if you're coming", draft = "Yes, see you then")
+        val tunde = msg("Tunde", "are you coming?")
+        assertIs<TriageRead.Read>(c.triageMessage(tunde))
+        server.reply = MessageTriageCodec.Response("answered", lane = "fyi", summary = "Parcel delivered")
+        val parcel = msg("Courier", "your parcel was delivered")
+        assertIs<TriageRead.Read>(c.triageMessage(parcel))
+        assertEquals(2, c.triage.value.size)
+        val calls = server.sent.size
+
+        assertTrue(c.sentTriage(tunde.id))
+        assertEquals(listOf(parcel.id), c.triage.value.map { it.id })
+        assertTrue(c.seenTriage(parcel.id))
+        assertTrue(c.triage.value.isEmpty())
+        // Already answered: nothing more is written, and the core never called anything to do it.
+        assertFalse(c.sentTriage(tunde.id))
+        assertFalse(c.seenTriage("never-seen"))
+        assertEquals(calls, server.sent.size)
     }
 
     @Test

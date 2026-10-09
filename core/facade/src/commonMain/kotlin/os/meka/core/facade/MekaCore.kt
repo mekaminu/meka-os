@@ -806,6 +806,18 @@ class MekaCore(
     suspend fun dismissTriage(messageId: String): Boolean =
         onCore { triageCards.resolve(messageId, os.meka.core.domain.TriageResolution.DISMISSED) }
 
+    /**
+     * After Meka's tap of Send (or Send all) went out through the message's own notification Reply action on the Fold
+     * (V1, messages slice 3): the card leaves Needs you on every device, its gist and draft blanked. The core never sends
+     * anything itself; this only records that he did.
+     */
+    suspend fun sentTriage(messageId: String): Boolean =
+        onCore { triageCards.resolve(messageId, os.meka.core.domain.TriageResolution.SENT) }
+
+    /** Seen on an FYI card, or the chat opened from a Needs a reply card: gone from Needs you on every device. */
+    suspend fun seenTriage(messageId: String): Boolean =
+        onCore { triageCards.resolve(messageId, os.meka.core.domain.TriageResolution.SEEN) }
+
     /** Not a task (Not needed, Not an event) on a request card: gone from Needs you on every device, its text blanked. */
     suspend fun declineRequest(cardId: String): Boolean =
         onCore { requestCards.resolve(cardId, os.meka.core.domain.RequestResolution.DECLINED) }

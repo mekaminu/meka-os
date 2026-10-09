@@ -54,11 +54,13 @@ struct CommandNeedsYouView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                SectionLabel(CommandCentreRules.shared.needsYouHeading(count: Int32(model.needsYouCards.count + model.requests.count)), palette)
+                SectionLabel(CommandCentreRules.shared.needsYouHeading(count: Int32(model.needsYouCards.count + model.requests.count + model.triage.count)), palette)
                     .staggeredAppear(0)
-                // Requests from people Meka watches, above the stack (V1, requests slice 4).
-                RequestCardsView(palette: palette, firstIndex: 1)
-                if model.needsYouCards.isEmpty && model.requests.isEmpty {
+                // Messages the Fold triaged (V1, messages slice 3), then requests from people Meka watches (V1,
+                // requests slice 4), above the stack.
+                TriageCardsView(palette: palette, firstIndex: 1)
+                RequestCardsView(palette: palette, firstIndex: 1 + model.triage.count)
+                if model.needsYouCards.isEmpty && model.requests.isEmpty && model.triage.isEmpty {
                     // The breathing check ring and the line, then what's coming instead of a blank column (Fold
                     // review 2026-10-09 00:10, item 6).
                     HStack(spacing: MekaSpace.m) {

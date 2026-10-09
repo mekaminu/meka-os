@@ -764,6 +764,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(SpeechRules.shared.seconds(ms: 1_834), "1.8 s")
     }
 
+    /// The messages assistant's cards (V1, messages slice 3): the Mac copies, never sends.
+    func testTriageReplyRulesReachSwift() {
+        let rules = TriageReplyRules.shared
+        let card = TriageCard(id: "wa-1", lane: .needsReply, personKey: "tunde", from: "Tunde · 14:02", gist: "Asks if you're coming",
+                              draft: "Yes, see you then", app: .whatsapp, mentioned: false, atMs: 1_000, spoken: "Tunde")
+        XCTAssertEqual(rules.label(primary: rules.primary(card: card, live: false, canSend: false)), "Copy reply")
+        XCTAssertEqual(rules.secondary(card: card), "Not now")
+        XCTAssertEqual(rules.copiedLine(card: card), "Reply to Tunde copied")
+        XCTAssertEqual(rules.notNowLine(card: card), "Not now · Tunde")
+        XCTAssertEqual(card.lane.label, "Needs a reply")
+    }
+
     func testMotionCheckReachesSwift() {
         let off = MotionCheckRules.shared.mac(stored: nil, reduceMotion: true, lowPower: false)
         XCTAssertEqual(off.rows.map(\.label), ["MEKA Motion", "Reduce Motion", "Low Power Mode"])

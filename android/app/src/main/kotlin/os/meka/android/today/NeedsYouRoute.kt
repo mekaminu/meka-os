@@ -17,6 +17,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -41,6 +42,9 @@ import os.meka.android.calendar.EventUndoBar
 import os.meka.android.calendar.rememberEventUndo
 import os.meka.core.domain.DecisionCard
 import os.meka.core.domain.RequestCard
+import os.meka.core.domain.TriageCard
+import os.meka.core.domain.TriageReplyRules
+import os.meka.android.work.LiveReplies
 import os.meka.core.domain.DecisionEffect
 import os.meka.core.domain.DecisionMove
 import os.meka.core.domain.NeedsYouStackRules
@@ -123,6 +127,10 @@ internal class DecisionMoves(
     val onRequest: (RequestCard, RequestChoice) -> Unit = { _, _ -> },
     /** The task Change just made, open over the screen ([RequestChangePane]); null when none. */
     val changed: MutableState<RequestChange?> = mutableStateOf(null),
+    /** Send · Open chat · Edit · Not now · Seen on a triaged message (V1, messages slice 3). */
+    val onTriage: (TriageCard, TriageChoice) -> Unit = { _, _ -> },
+    /** "Send all 3": each easy reply's draft, as its card shows it, on Meka's one tap. */
+    val onSendAll: (List<TriageCard>) -> Unit = {},
 ) {
     val setAside: List<String> get() = aside.value
 }
@@ -139,6 +147,7 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
     val changed = remember { mutableStateOf<RequestChange?>(null) }
     val latestOpenTask by rememberUpdatedState(openTask)
     val latestOpenLists by rememberUpdatedState(openLists)
+    val context = LocalContext.current.applicationContext
     return remember(core, undo, scope) {
         DecisionMoves({ card, move ->
             when (val effect = card.effect(move)) {
@@ -172,7 +181,49 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 }
                 Unit
             }
-        }, changed = changed)
+        }, changed = changed, onTriage = { card, choice ->
+            val rules = TriageReplyRules
+            scope.launch {
+                when (choice) {
+                    // Meka's tap is the approval (Level 3): the words on the card go through the notification's own Reply.
+                    is TriageChoice.Send -> if (LiveReplies.send(context, card.id, choice.reply)) {
+                        runCatching { core.sentTriage(card.id) }
+                        undo.show(rules.sentLine(card), null)
+                    } else {
+                        // The notification went meanwhile: the reply copied, the chat opened; Meka sends it there.
+                        LiveReplies.open(context, card.id, card.app, choice.reply)
+                        runCatching { core.seenTriage(card.id) }
+                        undo.show(TriageReplyRules.SEND_FAILED_LINE, null)
+                    }
+                    TriageChoice.OpenChat -> {
+                        LiveReplies.open(context, card.id, card.app, card.draft)
+                        runCatching { core.seenTriage(card.id) }
+                        undo.show(rules.openChatLine(card, rules.appName(card.app)), null)
+                    }
+                    TriageChoice.NotNow -> if (runCatching { core.dismissTriage(card.id) }.getOrDefault(false)) {
+                        undo.show(rules.notNowLine(card), null)
+                    }
+                    TriageChoice.Seen -> if (runCatching { core.seenTriage(card.id) }.getOrDefault(false)) {
+                        undo.show(rules.seenLine(card), null)
+                    }
+                }
+                Unit
+            }
+        }, onSendAll = { cards ->
+            scope.launch {
+                var sent = 0
+                cards.forEach { card ->
+                    val reply = TriageReplyRules.cleanReply(card.draft) ?: return@forEach
+                    if (LiveReplies.send(context, card.id, reply)) {
+                        sent++
+                        runCatching { core.sentTriage(card.id) }
+                    }
+                }
+                // Any that couldn't go stay on their cards, with Open chat.
+                if (sent > 0) undo.show(TriageReplyRules.sentAllLine(sent), null)
+                Unit
+            }
+        })
     }
 }
 
@@ -187,6 +238,11 @@ internal fun NeedsYouColumn(
 ) {
     val cards = NeedsYouStackRules.ordered(stack, moves.setAside)
     val requests by core.requests.collectAsState()
+    val triage by core.triage.collectAsState()
+    val live by LiveReplies.live.collectAsState()
+    val sendAll = remember(triage, live) { TriageReplyRules.sendAll(triage, live) }
+    // Meka's edits of MEKA's drafts, by message id, so Send and "Send all" send what each card shows.
+    val edits = remember { mutableStateMapOf<String, String>() }
     val goals by core.goalsView.collectAsState()
     val lists by core.listsView.collectAsState()
     val meanwhile = remember(goals, lists) { NeedsYouMeanwhileRules.build(goals, lists) }
@@ -201,7 +257,7 @@ internal fun NeedsYouColumn(
     ) {
         item(key = "title") {
             if (compact) {
-                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + requests.size), Modifier.animateItem().appear(rememberAppearance(0, play)))
+                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + requests.size + triage.size), Modifier.animateItem().appear(rememberAppearance(0, play)))
             } else {
                 Text("Needs you", style = MekaType.greeting, color = Meka.colors.textPrimary,
                     modifier = Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play)))
@@ -210,15 +266,33 @@ internal fun NeedsYouColumn(
         item(key = "after-work") {
             AfterWorkCard(core, Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(1, play))) { openAfterWork() }
         }
+        // Messages that need a reply (with MEKA's draft), then FYIs (V1, messages slice 3), above the requests: "Send all"
+        // first when two or more short replies can go; each card staggers in after the after-work card and folds away
+        // with the list's item motion once answered.
+        sendAll?.let { all ->
+            item(key = "triage-send-all") {
+                TriageSendAllRow(all, {
+                    val chosen = triage.filter { it.id in all.ids }.sortedBy { it.atMs }
+                    moves.onSendAll(chosen.map { c -> edits[c.id]?.let { e -> c.copy(draft = e) } ?: c })
+                },
+                    Modifier.animateItem().appear(rememberAppearance(2, play)))
+            }
+        }
+        triage.forEachIndexed { i, card ->
+            item(key = "triage-${card.id}") {
+                TriageCardView(card, card.id in live, edits[card.id] ?: card.draft.orEmpty(), { edits[card.id] = it }, { moves.onTriage(card, it) },
+                    Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(2 + i, play)))
+            }
+        }
         // Requests from people Meka watches, oldest first, above the stack (V1, requests slice 4): each staggers in
         // after the after-work card and folds away with the list's item motion once answered.
         requests.forEachIndexed { i, card ->
             item(key = "request-${card.id}") {
                 RequestCardView(card, { moves.onRequest(card, it) },
-                    Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(2 + i, play)))
+                    Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(2 + triage.size + i, play)))
             }
         }
-        if (cards.isEmpty() && requests.isEmpty()) {
+        if (cards.isEmpty() && requests.isEmpty() && triage.isEmpty()) {
             item(key = "clear") {
                 // The breathing check ring beside a light line (catalogue "Empty states"; Fold review 2026-10-08,
                 // item 7), on the full page and in the open Fold's column alike (Fold review 2026-10-09 00:10, item 6);

@@ -77,7 +77,7 @@ struct ShellView: View {
     }
 
     /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).
-    private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue + model.requests.count }
+    private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue + model.requests.count + model.triage.filter { TriageReplyRules.shared.secondary(card: $0) != nil }.count }
 
     /// Sidebar selection that animates the switch (the List only ever sets a value; nil is ignored).
     private var selection: Binding<ShellDestination?> {
@@ -148,10 +148,13 @@ struct NeedsYouView: View {
                     AfterWorkCard(palette: palette)
                         .padding(.bottom, MekaSpace.s)
                         .staggeredAppear(1)
-                    // Requests from people Meka watches, above the stack (V1, requests slice 4).
-                    RequestCardsView(palette: palette)
+                    // Messages the Fold triaged (V1, messages slice 3), then requests from people Meka watches
+                    // (V1, requests slice 4), above the stack.
+                    TriageCardsView(palette: palette)
+                        .padding(.bottom, model.triage.isEmpty ? 0 : MekaSpace.s)
+                    RequestCardsView(palette: palette, firstIndex: 2 + model.triage.count)
                         .padding(.bottom, model.requests.isEmpty ? 0 : MekaSpace.s)
-                    if model.needsYouCards.isEmpty && model.requests.isEmpty {
+                    if model.needsYouCards.isEmpty && model.requests.isEmpty && model.triage.isEmpty {
                         // The breathing check ring beside a light line and what lands here (catalogue "Empty
                         // states"; Fold review 2026-10-08, item 7); Off: still.
                         HStack(spacing: MekaSpace.m) {

@@ -20,6 +20,9 @@ final class CoreModel {
     /// Requests from people Meka watches (V1, requests slice 4): the Fold read them, the cards sync; Add · Change ·
     /// Not a task here clears them there too.
     private(set) var requests: [RequestCard] = []
+    /// Messages the Fold triaged (V1, messages slice 3): Needs a reply (with MEKA's draft) and FYI, synced. The Mac
+    /// never sends: Copy reply puts the draft on the pasteboard; Not now / Seen clear the card on both devices.
+    private(set) var triage: [TriageCard] = []
     /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
     private(set) var lists: ListsView?
     /// Needs you as a stack of decisions (four tabs, slice 2); see `needsYouCards`.
@@ -179,6 +182,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await r in core.requests { self?.requests = r }
+        })
+        observers.append(Task { [weak self] in
+            for await t in core.triage { self?.triage = t }
         })
         observers.append(Task { [weak self] in
             for await l in core.listsView { self?.lists = l }
@@ -1480,6 +1486,40 @@ final class CoreModel {
             Task {
                 do {
                     if try await core.declineRequest(cardId: id).boolValue { offerEventUndo(line, nil) }
+                } catch { lastError = error.localizedDescription }
+            }
+        }
+    }
+
+    /// A triaged message's buttons (V1, messages slice 3). [lead]: Copy reply (a draft; it goes on the pasteboard and
+    /// the card is answered, Meka sends it himself) or Seen (an FYI, or a reply with no draft); otherwise Not now.
+    /// Only the card's id (a String) crosses to the core. Nothing is ever sent from the Mac.
+    func answerTriage(_ card: TriageCard, lead: Bool) {
+        guard let core else { return }
+        let id = card.id
+        let rules = TriageReplyRules.shared
+        if lead {
+            MekaHaptics.light()
+            let line: String
+            if let draft = card.draft {
+                let board = NSPasteboard.general
+                board.clearContents()
+                board.setString(draft, forType: .string)
+                line = rules.copiedLine(card: card)
+            } else {
+                line = rules.seenLine(card: card)
+            }
+            Task {
+                do {
+                    if try await core.seenTriage(messageId: id).boolValue { offerEventUndo(line, nil) }
+                } catch { lastError = error.localizedDescription }
+            }
+        } else {
+            MekaHaptics.tick()
+            let line = rules.notNowLine(card: card)
+            Task {
+                do {
+                    if try await core.dismissTriage(messageId: id).boolValue { offerEventUndo(line, nil) }
                 } catch { lastError = error.localizedDescription }
             }
         }

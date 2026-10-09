@@ -38,7 +38,9 @@ import os.meka.core.facade.TriageRead
  * and comes back as a Needs you card (Needs a reply with a drafted reply, an Action, FYI); a busy group's chatter is kept
  * on this phone, sealed, for the digest, with no AI. Each message is triaged once.
  *
- * It never replies, never marks anything read and never dismisses the original notification.
+ * It never replies on its own, never marks anything read and never dismisses the original notification. While a
+ * message's notification shows, its Reply action is held in memory ([LiveReplies]) so Send on its Needs you card (Meka's
+ * tap, slice 3) answers through Android's own Reply.
  */
 class WorkCaptureService : NotificationListenerService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -55,6 +57,8 @@ class WorkCaptureService : NotificationListenerService() {
         scope.launch {
             val items = runCatching { read(app, sbn, n) }.getOrDefault(emptyList())
             if (items.isEmpty()) return@launch
+            // The notification's own Reply, held in memory while it shows, for Send on a Needs you card (slice 3).
+            if (app != CaptureApp.PHONE) LiveReplies.remember(sbn, items.map { it.id })
             if (meka.core.currentWorkMode().atWork) {
                 val fresh = meka.captures.add(items)
                 val lists = meka.captures.lists.value
@@ -99,6 +103,10 @@ class WorkCaptureService : NotificationListenerService() {
         }
         store.keepForDigest(digest)
         store.markTriageSeen(done)
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        if (sbn.packageName != packageName) LiveReplies.forget(sbn)
     }
 
     override fun onDestroy() {
