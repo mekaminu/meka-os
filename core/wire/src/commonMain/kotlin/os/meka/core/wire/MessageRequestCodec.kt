@@ -113,14 +113,15 @@ object MessageRequestCodec {
         return proposalsOf(o)
     }
 
-    private fun proposalsOf(o: JsonObject): List<Proposal> =
+    /** The `proposals` array of [o]: known kinds only, at most [MAX_PROPOSALS] (shared with [MessageTriageCodec]). */
+    internal fun proposalsOf(o: JsonObject): List<Proposal> =
         (o["proposals"] as? JsonArray).orEmpty().mapNotNull { e ->
             val p = e as? JsonObject ?: return@mapNotNull null
             val kind = p.optStr("kind")?.takeIf { it in KINDS } ?: return@mapNotNull null
             Proposal(kind, p.optStr("title"), p.optStr("date")?.takeIf(DATE::matches), p.optStr("time")?.takeIf(TIME::matches), p.optStr("words"))
         }.take(MAX_PROPOSALS)
 
-    private fun encodeProposal(p: Proposal): JsonObject = buildJsonObject {
+    internal fun encodeProposal(p: Proposal): JsonObject = buildJsonObject {
         put("kind", p.kind)
         p.title?.let { put("title", it) }
         p.date?.let { put("date", it) }

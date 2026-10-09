@@ -43,6 +43,7 @@ import os.meka.core.sync.ServerOpStore
 import os.meka.core.sync.SyncService
 import os.meka.core.wire.AskCodec
 import os.meka.core.wire.MessageRequestCodec
+import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
 import os.meka.core.wire.WireCodec
 import os.meka.core.wire.WireFormatException
@@ -289,6 +290,16 @@ fun Application.mekaSync(
                 val request = MessageRequestCodec.decodeRequest(body)
                 val answer = withContext(Dispatchers.IO) { requestService.read(request) }
                 call.respondText(MessageRequestCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+            // The messages assistant: one message (1:1, or a group message naming Meka); a lane, gist, draft or proposals
+            // back. Nothing is kept or logged.
+            val triageService = MessageTriageService(ai.provider)
+            post("/v1/ai/message-triage") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = MessageTriageCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { triageService.triage(request) }
+                call.respondText(MessageTriageCodec.encodeResponse(answer), ContentType.Application.Json)
             }
         }
 
