@@ -175,6 +175,29 @@ object MessageTriageRules {
         }
     }
 
+    /**
+     * The messages from one notification the listener triages now (slice 2): not [seen] already, from the last
+     * [RequestWatchRules.MAX_AGE_MS], not [route]d to Skip, once each, the newest [RequestWatchRules.MAX_PER_NOTIFICATION]
+     * in time order (WhatsApp re-posts a chat's unread history; only the new ones cost a call).
+     */
+    fun toTriage(items: List<CapturedItem>, settings: TriageSettings, seen: Set<String>, nowMs: Long): List<CapturedItem> =
+        items.asSequence()
+            .filter { it.id !in seen && it.atMs >= nowMs - RequestWatchRules.MAX_AGE_MS && it.atMs <= nowMs + FUTURE_SLACK_MS }
+            .filter { route(it, settings) != TriageRoute.Skip }
+            .distinctBy { it.id }
+            .sortedBy { it.atMs }
+            .toList()
+            .takeLast(RequestWatchRules.MAX_PER_NOTIFICATION)
+
+    /** How long the phone keeps a group's chatter for the digest (sealed on the phone, never synced). */
+    const val DIGEST_RETENTION_MS = 7 * 24 * 60 * 60_000L
+    /** A message stamped a little ahead of the phone's clock still counts. */
+    const val FUTURE_SLACK_MS = 5 * 60_000L
+
+    /** [kept] plus [incoming] for the digest: once each by id, nothing older than [DIGEST_RETENTION_MS], oldest first. */
+    fun keepForDigest(kept: List<CapturedItem>, incoming: List<CapturedItem>, nowMs: Long): List<CapturedItem> =
+        (kept + incoming).filter { it.atMs >= nowMs - DIGEST_RETENTION_MS }.distinctBy { it.id }.sortedBy { it.atMs }
+
     /** One paragraph (spaces collapsed), no control characters, at most [MAX_DRAFT] characters; null when empty or unsafe. */
     fun cleanDraft(s: String?): String? {
         val t = s?.replace(Regex("""[\u0000-\u001F\u007F]"""), " ")?.replace(Regex("""\s+"""), " ")?.trim()?.trim('"', '“', '”')?.trim()

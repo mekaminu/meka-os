@@ -145,6 +145,7 @@ class MekaCore(
     private val eventActions = os.meka.core.domain.EventActions(replica, tasks, nowMs, ZoneCalendar(timeZone))
     private val held = os.meka.core.domain.HeldMessages(replica, nowMs)
     private val requestCards = os.meka.core.domain.RequestCards(replica, nowMs, ZoneCalendar(timeZone))
+    private val triageCards = os.meka.core.domain.TriageCards(replica, nowMs, ZoneCalendar(timeZone))
     // Leave-by alarms are worked out from the calendar on every read (Alarms, slice 3).
     private val alarms = os.meka.core.domain.Alarms(replica, nowMs, ZoneCalendar(timeZone)) {
         os.meka.core.domain.LeaveAlarmRules.alarms(currentEvents(), eventActions.marks(), nowMs(), ZoneCalendar(timeZone))
@@ -315,6 +316,14 @@ class MekaCore(
      * oldest first. Synced, so the Mac shows the same cards; Add or Not a task on either device clears both.
      */
     val requests: StateFlow<List<os.meka.core.domain.RequestCard>> = _requests.asStateFlow()
+
+    private val _triage = MutableStateFlow<List<os.meka.core.domain.TriageCard>>(emptyList())
+    /**
+     * The messages assistant (V1, slice 2): the open triage cards — Needs a reply (with the drafted reply) first, then
+     * FYI, newest first. Synced (lane, gist and draft only; never the message), so the Mac shows the same cards. An
+     * Action's proposals are in [requests].
+     */
+    val triage: StateFlow<List<os.meka.core.domain.TriageCard>> = _triage.asStateFlow()
 
     private val _workMode = MutableStateFlow(work.state(localClock(), todayEpochDay()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
@@ -680,17 +689,9 @@ class MekaCore(
         val api = aiApi ?: return RequestRead.Unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
         val cal = ZoneCalendar(timeZone)
         val request = onCore {
-            val now = nowMs()
-            val today = cal.epochDayOf(now)
-            val schedule = work.schedule()
+            val m = messageContext(item)
             os.meka.core.wire.MessageRequestCodec.Request(
-                sender = item.personName.trim().take(os.meka.core.wire.MessageRequestCodec.MAX_SENDER),
-                sentAt = LocalClock.formatMinute(cal.minuteOfDay(item.atMs)),
-                date = os.meka.core.domain.AskRules.isoDate(today),
-                now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(now))}",
-                work = if (schedule.enabled && schedule.days.isNotEmpty()) {
-                    "${os.meka.core.domain.WorkSchedule.describeDays(schedule.days)} ${LocalClock.formatMinute(schedule.startMinute)}–${LocalClock.formatMinute(schedule.endMinute)}"
-                } else "",
+                sender = m.sender, sentAt = m.sentAt, date = m.date, now = m.now, work = m.work,
                 text = text.take(os.meka.core.wire.MessageRequestCodec.MAX_TEXT),
             )
         }
@@ -706,6 +707,104 @@ class MekaCore(
             requestCards.save(message, rules.check(raw, cal.epochDayOf(item.atMs), cal.minuteOfDay(item.atMs)))
         })
     }
+
+    private class MessageContext(val sender: String, val sentAt: String, val date: String, val now: String, val work: String)
+
+    /** What an AI message call says besides the text: the sender's label, its time, today and Meka's work days. */
+    private fun messageContext(item: os.meka.core.domain.CapturedItem): MessageContext {
+        val cal = ZoneCalendar(timeZone)
+        val now = nowMs()
+        val today = cal.epochDayOf(now)
+        val schedule = work.schedule()
+        return MessageContext(
+            sender = item.personName.trim().take(os.meka.core.wire.MessageRequestCodec.MAX_SENDER),
+            sentAt = LocalClock.formatMinute(cal.minuteOfDay(item.atMs)),
+            date = os.meka.core.domain.AskRules.isoDate(today),
+            now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(now))}",
+            work = if (schedule.enabled && schedule.days.isNotEmpty()) {
+                "${os.meka.core.domain.WorkSchedule.describeDays(schedule.days)} ${LocalClock.formatMinute(schedule.startMinute)}–${LocalClock.formatMinute(schedule.endMinute)}"
+            } else "",
+        )
+    }
+
+    /**
+     * The messages assistant (V1, slice 2): triages one message the Fold's listener captured. Routed first with no AI
+     * ([os.meka.core.domain.MessageTriageRules.route]): a Digest group's chatter comes back as [TriageRead.Digest] for the
+     * phone to keep; a voice note becomes "Listen to Tunde's voice note" (a request card); a person or group in
+     * [settings]' never-to-AI list is an FYI card that says so; a 1:1 message, or a group message naming Meka, goes alone
+     * (its text, the sender's label, the group's name, its time; never a number or another chat) to
+     * `POST /v1/ai/message-triage`. The answer is checked again here: Needs a reply and FYI become synced cards
+     * ([triage]; lane, gist, draft — never the text), an Action's proposals become request cards ([requests]) quoting the
+     * gist. Nothing is ever sent, replied to or marked read. A message already triaged is [TriageRead.Skipped].
+     */
+    suspend fun triageMessage(
+        item: os.meka.core.domain.CapturedItem,
+        settings: os.meka.core.domain.TriageSettings = os.meka.core.domain.TriageSettings(),
+    ): TriageRead {
+        val rules = os.meka.core.domain.MessageTriageRules
+        val route = rules.route(item, settings)
+        if (route == os.meka.core.domain.TriageRoute.Skip) return TriageRead.Skipped
+        if (route is os.meka.core.domain.TriageRoute.Digest) return TriageRead.Digest(route.groupKey)
+        if (onCore { triageCards.known(item.id) }) return TriageRead.Skipped
+        val text = item.text.orEmpty().trim()
+        val requestRules = os.meka.core.domain.MessageRequestRules
+        val fyi = os.meka.core.domain.MessageTriage(os.meka.core.domain.TriageLane.FYI)
+        when (route) {
+            os.meka.core.domain.TriageRoute.VoiceNote -> return onCore {
+                val message = os.meka.core.domain.RequestMessage(item.id, item.personName.trim(), text, item.atMs)
+                val made = requestCards.save(message, listOf(requestRules.voiceNoteProposal(item.personName)))
+                // Recorded (with no gist) so a re-post isn't triaged again; FYI cards for voice notes stay out of the way.
+                triageCards.save(item, os.meka.core.domain.MessageTriage(os.meka.core.domain.TriageLane.ACTION))
+                TriageRead.Read(null, made)
+            }
+            os.meka.core.domain.TriageRoute.LocalFyi -> return onCore {
+                if (!settings.isPrivate(item.personName) && !settings.isPrivate(item.conversation)) {
+                    // A bare photo or "ok": nothing worth a card, but remembered so it isn't looked at again.
+                    triageCards.save(item, os.meka.core.domain.MessageTriage(os.meka.core.domain.TriageLane.ACTION))
+                    TriageRead.Read(null)
+                } else TriageRead.Read(triageCards.save(item, fyi, local = true))
+            }
+            else -> Unit
+        }
+        val api = aiApi ?: return TriageRead.Unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
+        val codec = os.meka.core.wire.MessageTriageCodec
+        val request = onCore {
+            val m = messageContext(item)
+            os.meka.core.wire.MessageTriageCodec.Request(
+                sender = m.sender,
+                group = if ((route as? os.meka.core.domain.TriageRoute.AskAi)?.mentioned == true) {
+                    item.conversation.orEmpty().trim().take(codec.MAX_GROUP)
+                } else "",
+                sentAt = m.sentAt, date = m.date, now = m.now, work = m.work,
+                text = text.take(os.meka.core.wire.MessageRequestCodec.MAX_TEXT),
+            )
+        }
+        val reply = try { api.messageTriage(request) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            return TriageRead.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
+        }
+        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) {
+            return TriageRead.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
+        }
+        return onCore {
+            val cal = ZoneCalendar(timeZone)
+            val raw = os.meka.core.domain.RawTriage(
+                lane = reply.lane, draft = reply.draft, summary = reply.summary,
+                proposals = reply.proposals.map { os.meka.core.domain.RawRequestProposal(it.kind, it.title, it.date, it.time, it.words) },
+            )
+            // The day the message came, not the day it was read.
+            val checked = rules.check(raw, cal.epochDayOf(item.atMs), cal.minuteOfDay(item.atMs))
+            val requests = if (checked.lane == os.meka.core.domain.TriageLane.ACTION) {
+                // The card quotes the gist, not the message: the text stays on the phone.
+                val quote = checked.summary ?: os.meka.core.domain.TriageCard.NO_GIST_LINE
+                requestCards.save(os.meka.core.domain.RequestMessage(item.id, item.personName.trim(), quote, item.atMs), checked.proposals)
+            } else emptyList()
+            TriageRead.Read(triageCards.save(item, checked), requests)
+        }
+    }
+
+    /** Not now on a triage card: gone from Needs you on every device, its gist and draft blanked. */
+    suspend fun dismissTriage(messageId: String): Boolean =
+        onCore { triageCards.resolve(messageId, os.meka.core.domain.TriageResolution.DISMISSED) }
 
     /** Not a task (Not needed, Not an event) on a request card: gone from Needs you on every device, its text blanked. */
     suspend fun declineRequest(cardId: String): Boolean =
@@ -1845,6 +1944,7 @@ class MekaCore(
         _editLines.value = os.meka.core.domain.EditLineRules.lines(editsNow, nowMs())
         _afterWork.value = held.summary()
         _requests.value = requestCards.open()
+        _triage.value = triageCards.open()
         _notifyPreview.value = Governor.preview(currentNotices(all), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(

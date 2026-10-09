@@ -34,6 +34,10 @@ class HttpSyncTransportTest {
         os.meka.core.wire.SpeechCodec.Response("spoken", audio = "bXAz", format = "mp3", voice = "Amy", engine = "generative"),
     )
     private var requestStatus = HttpStatusCode.OK
+    private var triageStatus = HttpStatusCode.OK
+    private val triageReply = os.meka.core.wire.MessageTriageCodec.encodeResponse(
+        os.meka.core.wire.MessageTriageCodec.Response("answered", lane = "needs_reply", summary = "Asks about Saturday", draft = "Yes, I'll be there"),
+    )
     private val requestReply = os.meka.core.wire.MessageRequestCodec.encodeResponse(
         os.meka.core.wire.MessageRequestCodec.Response("answered", listOf(os.meka.core.wire.MessageRequestCodec.Proposal("task", "Pick up dry cleaning", words = "tomorrow"))),
     )
@@ -46,6 +50,7 @@ class HttpSyncTransportTest {
             "/v1/push/token" -> respond(pushReply, pushStatus, json)
             "/v1/speech/speak" -> speakRaw?.let { (bytes, h) -> respond(bytes, speakStatus, h) } ?: respond(speakReply, speakStatus, json)
             "/v1/ai/message-request" -> respond(requestReply, requestStatus, json)
+            "/v1/ai/message-triage" -> respond(triageReply, triageStatus, json)
             else -> respond("", HttpStatusCode.NotFound)
         }
     })
@@ -147,5 +152,22 @@ class HttpSyncTransportTest {
         assertTrue(req.headers[RequestSigning.HEADER_SIGNATURE] != null)
         requestStatus = HttpStatusCode.NotFound
         assertEquals("off", t.messageRequest(sent).state)
+    }
+
+    @Test
+    fun oneMessageIsSentSignedForItsTriageAndAServerWithoutTheRouteSaysOff() = runTest {
+        val t = HttpSyncTransport(client(), "https://meka.example", RecordingKey()) { "s".repeat(64) }
+        val sent = os.meka.core.wire.MessageTriageCodec.Request("Tunde", "", "14:02", "2026-10-09", "Friday 9 October 2026 · 14:03", "", "are you coming Saturday?")
+        val r = t.messageTriage(sent)
+        assertEquals("needs_reply", r.lane)
+        assertEquals("Yes, I'll be there", r.draft)
+        val req = requests.last()
+        assertEquals("/v1/ai/message-triage", req.url.encodedPath)
+        assertEquals(sent, os.meka.core.wire.MessageTriageCodec.decodeRequest((req.body as TextContent).text))
+        assertTrue(req.headers[RequestSigning.HEADER_SIGNATURE] != null)
+        triageStatus = HttpStatusCode.NotFound
+        assertEquals("off", t.messageTriage(sent).state)
+        triageStatus = HttpStatusCode.Forbidden
+        assertEquals("failed", t.messageTriage(sent).state)
     }
 }

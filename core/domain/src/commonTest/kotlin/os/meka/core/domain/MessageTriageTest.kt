@@ -135,4 +135,28 @@ class MessageTriageTest {
         assertEquals("Mum", cards[1].people)
         assertTrue(MessageTriageRules.digest(items, s, sinceMs = 1_000).isEmpty())
     }
+
+    @Test
+    fun theListenerTriagesOnlyNewRoutedMessagesOnceEachNewestLast() {
+        val s = TriageSettings(groupModes = mapOf("Quiet club" to GroupMode.NORMAL))
+        val nowMs = 2 * RequestWatchRules.MAX_AGE_MS
+        val fresh = msg("Tunde", "are you coming Saturday?", at = nowMs - 60_000)
+        val chatter = msg("Femi", "lineup for Getafe?", "Barça lads", at = nowMs - 30_000)
+        val left = msg("Ade", "training moved", "Quiet club", at = nowMs - 20_000)
+        val old = msg("Tunde", "yesterday's news", at = nowMs - RequestWatchRules.MAX_AGE_MS - 1)
+        val seen = msg("Mum", "call me", at = nowMs - 10_000)
+        val picked = MessageTriageRules.toTriage(listOf(seen, chatter, fresh, fresh, left, old), s, setOf(seen.id), nowMs)
+        assertEquals(listOf(fresh, chatter), picked) // the Normal group's chatter, the old one and the seen one stay out
+        val many = (1..8).map { msg("Tunde", "msg $it", at = nowMs - 1_000L * (10 - it)) }
+        assertEquals(many.takeLast(RequestWatchRules.MAX_PER_NOTIFICATION), MessageTriageRules.toTriage(many, s, emptySet(), nowMs))
+    }
+
+    @Test
+    fun theDigestKeepsAGroupsChatterOnceEachForAWeek() {
+        val nowMs = 30 * 24 * 60 * 60_000L
+        val a = msg("Femi", "lineup?", "Barça lads", at = nowMs - 60_000)
+        val b = msg("Tunde", "tickets", "Barça lads", at = nowMs - 30_000)
+        val stale = msg("Obi", "old", "Barça lads", at = nowMs - MessageTriageRules.DIGEST_RETENTION_MS - 1)
+        assertEquals(listOf(a, b), MessageTriageRules.keepForDigest(listOf(stale, b), listOf(a, b), nowMs))
+    }
 }

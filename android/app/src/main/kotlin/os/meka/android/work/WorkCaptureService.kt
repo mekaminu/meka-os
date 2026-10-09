@@ -17,8 +17,11 @@ import os.meka.core.domain.Capture
 import os.meka.core.domain.CaptureApp
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.CapturedItem
+import os.meka.core.domain.MessageTriageRules
 import os.meka.core.domain.RequestWatchRules
+import os.meka.core.domain.TriageSettings
 import os.meka.core.facade.RequestRead
+import os.meka.core.facade.TriageRead
 
 /**
  * Work mode's listener (build plan M1). Reads WhatsApp, SMS and missed-call notifications through Android's official
@@ -29,6 +32,11 @@ import os.meka.core.facade.RequestRead
  * All day, a new message from the Family list or someone on "Watch for requests from" (V1, requests slice 3) is read
  * for requests through [os.meka.core.facade.MekaCore.readRequest]: only that message's text, the sender's name and its
  * time go to MEKA's AI, and what comes back is a Needs you card, never an action. Each message is read once.
+ *
+ * All day too, the messages assistant (V1, slice 2) triages every new message through
+ * [os.meka.core.facade.MekaCore.triageMessage]: a 1:1 message, or a group message naming Meka, goes alone to MEKA's AI
+ * and comes back as a Needs you card (Needs a reply with a drafted reply, an Action, FYI); a busy group's chatter is kept
+ * on this phone, sealed, for the digest, with no AI. Each message is triaged once.
  *
  * It never replies, never marks anything read and never dismisses the original notification.
  */
@@ -56,6 +64,7 @@ class WorkCaptureService : NotificationListenerService() {
             }
             // After the work path, so an urgent alert never waits on the AI.
             readRequests(meka, items)
+            triage(meka, items)
         }
     }
 
@@ -70,6 +79,26 @@ class WorkCaptureService : NotificationListenerService() {
             // Offline or AI unavailable: not marked, so WhatsApp's next re-post tries again.
             if (result is RequestRead.Read || result is RequestRead.Skipped) store.markRequestSeen(listOf(item.id))
         }
+    }
+
+    /** The messages assistant: one message at a time (under the same lock, so a re-post is never triaged twice). */
+    private suspend fun triage(meka: MekaApplication, items: List<CapturedItem>) = requestLock.withLock {
+        val store = meka.captures
+        // Work mode → Messages (slice 5) will hold Meka's group modes and never-to-AI list; until then the defaults.
+        val settings = TriageSettings()
+        val toTriage = MessageTriageRules.toTriage(items, settings, store.triageSeen(), System.currentTimeMillis())
+        val digest = mutableListOf<CapturedItem>()
+        val done = mutableListOf<String>()
+        toTriage.forEach { item ->
+            when (runCatching { meka.core.triageMessage(item, settings) }.getOrNull()) {
+                is TriageRead.Digest -> { digest += item; done += item.id }
+                is TriageRead.Read, TriageRead.Skipped -> done += item.id
+                // Offline or AI unavailable: not marked, so WhatsApp's next re-post tries again.
+                is TriageRead.Unavailable, null -> Unit
+            }
+        }
+        store.keepForDigest(digest)
+        store.markTriageSeen(done)
     }
 
     override fun onDestroy() {

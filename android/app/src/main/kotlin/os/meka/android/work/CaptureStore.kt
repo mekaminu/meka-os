@@ -13,6 +13,7 @@ import os.meka.core.domain.Capture
 import os.meka.core.domain.CaptureApp
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.CapturedItem
+import os.meka.core.domain.MessageTriageRules
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.RequestWatch
 import os.meka.core.domain.RequestWatchRules
@@ -49,6 +50,16 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
     /** Message ids already read for requests (id → when), so WhatsApp's re-posts never cost a second AI call. */
     private var requestSeen: Map<String, Long> = emptyMap()
 
+    /** Message ids the messages assistant already triaged (id → when), for the same reason. */
+    private var triageSeen: Map<String, Long> = emptyMap()
+
+    /**
+     * Busy groups' chatter for the digest (messages assistant, slice 2): kept here only, sealed, for a week; never
+     * synced and never sent to the AI as it is (the digest's cards are built from it on the phone).
+     */
+    private val _digest = MutableStateFlow<List<CapturedItem>>(emptyList())
+    val digest: StateFlow<List<CapturedItem>> = _digest.asStateFlow()
+
     init {
         synchronized(lock) { load() }
     }
@@ -77,6 +88,23 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
         save()
     }
 
+    fun triageSeen(): Set<String> = synchronized(lock) { triageSeen.keys }
+
+    /** Marks [ids] triaged (the old ones are forgotten after a week). */
+    fun markTriageSeen(ids: Collection<String>) = synchronized(lock) {
+        if (ids.isEmpty()) return@synchronized
+        val now = nowMs()
+        triageSeen = RequestWatchRules.pruneSeen(triageSeen + ids.associateWith { now }, now)
+        save()
+    }
+
+    /** Keeps a Digest group's [items] for the digest (each once; a week at most). */
+    fun keepForDigest(items: List<CapturedItem>) = synchronized(lock) {
+        if (items.isEmpty()) return@synchronized
+        _digest.value = MessageTriageRules.keepForDigest(_digest.value, items, nowMs())
+        save()
+    }
+
     private fun load() {
         val bytes = try { file.readFully() } catch (e: java.io.FileNotFoundException) { return }
         val json = try { JSONObject(String(open(bytes), Charsets.UTF_8)) } catch (e: Exception) {
@@ -100,6 +128,15 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
             json.optJSONObject("requestSeen")?.let { o -> o.keys().asSequence().associateWith { o.optLong(it) } }.orEmpty(),
             nowMs(),
         )
+        triageSeen = RequestWatchRules.pruneSeen(
+            json.optJSONObject("triageSeen")?.let { o -> o.keys().asSequence().associateWith { o.optLong(it) } }.orEmpty(),
+            nowMs(),
+        )
+        _digest.value = MessageTriageRules.keepForDigest(
+            emptyList(),
+            json.optJSONArray("digest")?.let { a -> (0 until a.length()).mapNotNull { readItem(a.getJSONObject(it)) } }.orEmpty(),
+            nowMs(),
+        )
     }
 
     private fun save() {
@@ -112,6 +149,8 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
             .put("watchPeople", JSONArray(_watch.value.people.sorted()))
             .put("watchGroups", JSONArray(_watch.value.groups.sorted()))
             .put("requestSeen", JSONObject().also { o -> requestSeen.forEach { (id, at) -> o.put(id, at) } })
+            .put("triageSeen", JSONObject().also { o -> triageSeen.forEach { (id, at) -> o.put(id, at) } })
+            .put("digest", JSONArray().also { a -> _digest.value.forEach { a.put(writeItem(it)) } })
         val sealed = seal(json.toString().toByteArray(Charsets.UTF_8))
         val out = file.startWrite()
         try { out.write(sealed); file.finishWrite(out) } catch (e: Exception) { file.failWrite(out); throw e }

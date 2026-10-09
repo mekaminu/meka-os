@@ -107,6 +107,32 @@ interface AiApi {
      */
     suspend fun messageRequest(request: os.meka.core.wire.MessageRequestCodec.Request): os.meka.core.wire.MessageRequestCodec.Response =
         os.meka.core.wire.MessageRequestCodec.Response(AskCodec.Response.OFF)
+
+    /**
+     * The messages assistant (`POST /v1/ai/message-triage`): one message's text, its sender's label, the group's name when
+     * it named Meka, and its time; the lane, gist, draft and proposals come back unchecked
+     * ([os.meka.core.domain.MessageTriageRules.check] reads them). A server without the route answers "off".
+     */
+    suspend fun messageTriage(request: os.meka.core.wire.MessageTriageCodec.Request): os.meka.core.wire.MessageTriageCodec.Response =
+        os.meka.core.wire.MessageTriageCodec.Response(AskCodec.Response.OFF)
+}
+
+/** What [MekaCore.triageMessage] did with one captured message. */
+sealed class TriageRead {
+    /** Nothing to triage: a missed call, an empty message, an ignored group, a Normal group's chatter, already triaged. */
+    data object Skipped : TriageRead()
+    /** A Digest group's chatter: the Fold keeps it (sealed, on the phone) for the digest; no AI, nothing synced. */
+    data class Digest(val groupKey: String) : TriageRead()
+    /**
+     * Triaged: the card Needs you shows (Needs a reply or FYI; null for an Action, or a message with nothing worth a card)
+     * and the request cards an Action or a voice note made.
+     */
+    data class Read(
+        val card: os.meka.core.domain.TriageCard?,
+        val requests: List<os.meka.core.domain.RequestCard> = emptyList(),
+    ) : TriageRead()
+    /** Couldn't ask: offline, AI off, the month's budget spent; [line] says which. Not stored, so it is tried again. */
+    data class Unavailable(val line: String) : TriageRead()
 }
 
 /** What [MekaCore.readRequest] did with one captured message. */
@@ -317,6 +343,21 @@ class HttpSyncTransport(
             resp.status.value == 404 -> return os.meka.core.wire.MessageRequestCodec.Response(AskCodec.Response.OFF)
             resp.status.value == 403 -> return os.meka.core.wire.MessageRequestCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/message-request")
+        }
+        return codec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun messageTriage(request: os.meka.core.wire.MessageTriageCodec.Request): os.meka.core.wire.MessageTriageCodec.Response {
+        val codec = os.meka.core.wire.MessageTriageCodec
+        val body = codec.encodeRequest(request)
+        prepare() // the AI routes require the device's signing key on the server
+        val resp = send("/v1/ai/message-triage", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/message-triage")
+            // A server without the route (older, or no AI key): nothing is triaged.
+            resp.status.value == 404 -> return os.meka.core.wire.MessageTriageCodec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.MessageTriageCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/message-triage")
         }
         return codec.decodeResponse(resp.bodyAsText())
     }
