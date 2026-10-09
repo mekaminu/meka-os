@@ -139,4 +139,37 @@ class WatchFaceTest {
         assertEquals(6f, WatchFaceRules.rimStrokeDp(DayRingHeader.WIDE_DP))
         near(150 / 2f - 3f - 2f, WatchFaceRules.rimRadiusDp(DayRingHeader.WIDE_DP))
     }
+
+    @Test
+    fun theBedsideFaceIsLargerWithAHeavierRim() {
+        // Slice 2: the bedside clock's face (150–260 dp) reads across a dark room.
+        assertEquals(8f, WatchFaceRules.rimStrokeDp(FoldModeRules.BEDSIDE_RING_MAX_DP.toInt()))
+        assertEquals(8f, WatchFaceRules.rimStrokeDp(WatchFaceRules.LARGE_MIN_DP))
+        assertEquals(6f, WatchFaceRules.rimStrokeDp(WatchFaceRules.LARGE_MIN_DP - 1))
+        near(260 / 2f - 4f - 2f, WatchFaceRules.rimRadiusDp(260))
+    }
+
+    @Test
+    fun atTheBedsideQuietHoursStillTheFaceButTheHandsKeepTime() {
+        // Today: sweeps; power saving: once a minute; reduced motion: still.
+        assertEquals(DayRingLiveMode.SWEEP, WatchFaceRules.liveMode(reduced = false, powerSave = false, bedside = false, quiet = true))
+        assertEquals(DayRingLiveMode.MINUTE, WatchFaceRules.liveMode(reduced = false, powerSave = true, bedside = false, quiet = false))
+        // Bedside: sweeps outside quiet hours; in quiet hours no second hand or breath, redrawn each minute.
+        assertEquals(DayRingLiveMode.SWEEP, WatchFaceRules.liveMode(reduced = false, powerSave = false, bedside = true, quiet = false))
+        assertEquals(DayRingLiveMode.MINUTE, WatchFaceRules.liveMode(reduced = false, powerSave = false, bedside = true, quiet = true))
+        assertEquals(DayRingLiveMode.STILL, WatchFaceRules.liveMode(reduced = true, powerSave = false, bedside = true, quiet = true))
+        // The face dims with the clock in quiet hours.
+        assertEquals(1f, WatchFaceRules.bedsideAlpha(quiet = false))
+        assertEquals(DayRingLive.BEDSIDE_QUIET_ALPHA, WatchFaceRules.bedsideAlpha(quiet = true))
+    }
+
+    @Test
+    fun theBedsideRimBreathesMoreSlowly() {
+        // Both start at the bottom of the breath; Today's peaks at 2.5 s, the bedside's at 4 s.
+        near(DayRingLive.GLOW_LOW, WatchFaceRules.breath(0, bedside = false))
+        near(DayRingLive.GLOW_LOW, WatchFaceRules.breath(0, bedside = true))
+        near(DayRingLive.GLOW_HIGH, WatchFaceRules.breath(2_500, bedside = false))
+        near(DayRingLive.GLOW_HIGH, WatchFaceRules.breath(4_000, bedside = true))
+        assertTrue(WatchFaceRules.breath(2_500, bedside = true) < DayRingLive.GLOW_HIGH - 0.05f)
+    }
 }

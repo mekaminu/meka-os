@@ -114,8 +114,37 @@ object WatchFaceRules {
     /** The 12 hour markers, 12 o'clock first. */
     fun markers(): List<WatchMarker> = (0 until 12).map { h -> WatchMarker(if (h == 0) 12 else h, h * 30f, h % 3 == 0) }
 
-    /** The rim's stroke on a dial of [sizeDp] (thinner on the closed Fold's compact face). */
-    fun rimStrokeDp(sizeDp: Int): Float = if (sizeDp < DayRingHeader.CENTRE_MIN_DP) COMPACT_RIM_STROKE_DP else RIM_STROKE_DP
+    /**
+     * The rim's stroke on a dial of [sizeDp]: thinner on the closed Fold's compact face, heavier on the bedside clock's
+     * large face (from [LARGE_MIN_DP]) so it reads across a dark room.
+     */
+    fun rimStrokeDp(sizeDp: Int): Float = when {
+        sizeDp < DayRingHeader.CENTRE_MIN_DP -> COMPACT_RIM_STROKE_DP
+        sizeDp >= LARGE_MIN_DP -> LARGE_RIM_STROKE_DP
+        else -> RIM_STROKE_DP
+    }
+
+    /** From this size the face is the bedside clock's large one ([FoldModeRules.bedsideRingDp] is 150–260 dp). */
+    const val LARGE_MIN_DP = 200
+    const val LARGE_RIM_STROKE_DP = 8f
+
+    /**
+     * How the face lives (Fold review 2026-10-09 07:26, item 2, slice 2): on Today as the Day ring does; at the bedside
+     * as the bedside ring did — in quiet hours nothing moves in a dark bedroom (no second hand, breath or shimmer), the
+     * face redrawn once a minute so the hour and minute hands still keep time.
+     */
+    fun liveMode(reduced: Boolean, powerSave: Boolean, bedside: Boolean, quiet: Boolean): DayRingLiveMode =
+        if (bedside) DayRingLive.bedsideMode(reduced, powerSave, quiet) else DayRingLive.mode(reduced, powerSave)
+
+    /** The rim's breath now: Today's 5 s, the bedside clock's calmer 8 s ([DayRingLive.bedsideGlow]). */
+    fun breath(epochMs: Long, bedside: Boolean): Float =
+        if (bedside) DayRingLive.bedsideGlow(epochMs) else DayRingLive.glow(epochMs)
+
+    /** How bright the whole bedside face is: dimmed with the clock's colours in quiet hours. */
+    fun bedsideAlpha(quiet: Boolean): Float = if (quiet) DayRingLive.BEDSIDE_QUIET_ALPHA else 1f
+
+    /** The bedside face's tap opens the whole day over the clock, titled so (the pane's back line returns to it). */
+    const val BEDSIDE_SHEET_BACK = "‹ Clock"
 
     /** The rim's radius on a dial of [sizeDp]: half the dial less half the rim stroke and a 2 dp inset. */
     fun rimRadiusDp(sizeDp: Int): Float = sizeDp / 2f - rimStrokeDp(sizeDp) / 2f - 2f

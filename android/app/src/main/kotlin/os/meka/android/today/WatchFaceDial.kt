@@ -82,6 +82,12 @@ fun WatchFaceDial(
     modifier: Modifier = Modifier,
     size: Dp = 150.dp,
     onOpen: (() -> Unit)? = null,
+    /**
+     * The bedside clock's large face (slice 2): a calmer 8 s breath, and in [quiet] hours no second hand, breath or
+     * shimmer — redrawn each minute so the hands keep time ([WatchFaceRules.liveMode]).
+     */
+    bedside: Boolean = false,
+    quiet: Boolean = false,
 ) {
     val sizeDp = size.value.toInt()
     val expressive = Meka.expressiveMotion
@@ -146,7 +152,8 @@ fun WatchFaceDial(
             }
         }
         // The hands, the breathing rim, the shimmer and the second hand on a layer of their own.
-        WatchFaceLiveLayer(face, landed = play == DayRingPlay.STILL || elapsed >= total, needle = needle, size = size)
+        WatchFaceLiveLayer(face, landed = play == DayRingPlay.STILL || elapsed >= total, needle = needle, size = size,
+            bedside = bedside, quiet = quiet)
     }
 }
 
@@ -158,11 +165,11 @@ fun WatchFaceDial(
  * redraw once a minute, with no second hand or breath.
  */
 @Composable
-private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, size: Dp) {
+private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, size: Dp, bedside: Boolean, quiet: Boolean) {
     val context = LocalContext.current
     val reduced = Meka.reducedMotion
     val powerSave = remember { MotionPrefs.powerSave(context) }
-    val mode = DayRingLive.mode(reduced, powerSave)
+    val mode = WatchFaceRules.liveMode(reduced, powerSave, bedside, quiet)
     val resumed by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val front = resumed.isAtLeast(Lifecycle.State.RESUMED)
     val clock = remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -189,7 +196,7 @@ private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, 
         val radius = WatchFaceRules.rimRadiusDp(sizeDp).dp.toPx()
         val sweeping = landed && mode == DayRingLiveMode.SWEEP
         val fadeIn = if (sweeping) DayRingLive.handFade(now - landedAt) else 1f
-        val glow = if (sweeping) DayRingLive.glow(now) else 0.8f
+        val glow = if (sweeping) WatchFaceRules.breath(now, bedside) else 0.8f
         fun box(r: Float) = Pair(Offset(center.x - r, center.y - r), Size(r * 2, r * 2))
         if (landed) {
             // The brass rim's edge, breathing 60 % → 100 %, with a soft blur reaching 8 dp out.
@@ -279,18 +286,22 @@ private fun DrawScope.drawHand(color: Color, degrees: Float, length: Float, base
  * itself in quickly as the pane springs up (the opening's quick draw).
  */
 @Composable
-fun DayRingSheet(ring: DayRing, tiles: List<DayTile>, onOpenArc: (DayArc) -> Unit, onClose: () -> Unit) {
+fun DayRingSheet(
+    ring: DayRing, tiles: List<DayTile>, onOpenArc: ((DayArc) -> Unit)?, onClose: () -> Unit,
+    /** The back line: "Close" over Today, "‹ Clock" over the bedside clock. */
+    backLabel: String = "Close",
+) {
     val reduced = Meka.reducedMotion
     val play = remember { if (reduced) DayRingPlay.STILL else DayRingPlay.QUICK }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.l),
     ) {
-        Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
+        Text(backLabel, style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
         Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0))) {
             Text("Your whole day", style = MekaType.greeting, color = Meka.colors.textPrimary)
-            Text("Midnight at the top · tap an arc to open it", style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+            Text(if (onOpenArc != null) "Midnight at the top · tap an arc to open it" else "Midnight at the top", style = MekaType.itemMeta, color = Meka.colors.textSecondary,
                 modifier = Modifier.padding(top = MekaSpace.xxs))
         }
         BoxWithConstraints(Modifier.fillMaxWidth().appear(rememberAppearance(1)), contentAlignment = Alignment.Center) {

@@ -82,14 +82,15 @@ import os.meka.android.news.NewsPane
 import os.meka.android.news.NewsTickerStrip
 import os.meka.android.news.rememberTickerMode
 import os.meka.android.today.BriefPane
-import os.meka.android.today.DayRingHero
+import os.meka.android.today.DayRingSheet
+import os.meka.android.today.WatchFaceDial
 import os.meka.android.today.ShutdownPane
 import os.meka.core.domain.BedsideOpens
 import os.meka.core.domain.BedsideTickerRules
 import os.meka.core.domain.BedsideView
-import os.meka.core.domain.DayRing
-import os.meka.core.domain.DayRingLive
 import os.meka.core.domain.DayRingPlay
+import os.meka.core.domain.WatchFace
+import os.meka.core.domain.WatchFaceRules
 import os.meka.core.domain.FoldMode
 import os.meka.core.domain.FoldModeRules
 import os.meka.core.domain.NewsTicker
@@ -109,16 +110,18 @@ import os.meka.core.facade.MekaCore
  * drifting on the charger and is calm on battery, follows Appearance → News ticker, and fades away in quiet hours; a
  * story springs the News pane up on it (the match opens News itself).
  *
- * Beside the time sits Today's Day ring, larger (Living Today, slice 5; [FoldModeRules.bedsideRingDp]): the same arcs,
- * work band, fast and living second hand, breathing slower ([DayRingLive.bedsideGlow], 8 s); in quiet hours it
- * quietens with the clock ([DayRingLive.BEDSIDE_QUIET_ALPHA]) and its hand stops ([DayRingLive.bedsideMode]), the ring
- * redrawn once a minute. After Shut down its centre shows tomorrow's first thing, as on Today.
+ * Beside the time sits Today's watch face, large (Fold review 2026-10-09 07:26, item 2, slice 2;
+ * [FoldModeRules.bedsideRingDp], a heavier rim from [WatchFaceRules.LARGE_MIN_DP]): the gold hour and minute hands,
+ * the next 12 hours as arcs on the rim, the sweeping second hand, breathing slower ([DayRingLive.bedsideGlow], 8 s);
+ * in quiet hours it quietens with the clock ([WatchFaceRules.bedsideAlpha]) and the second hand, breath and shimmer
+ * stop ([WatchFaceRules.liveMode]), the face redrawn once a minute so the hands keep time. Tapping it springs the whole
+ * 24-hour Day ring up over the clock ([DayRingSheet], "‹ Clock" or Back drops it away).
  *
  * Talk without tapping the mic (slice 3): a mic beside the alarm line springs the Talk pane up over the clock already
  * listening ([BedsideTalkPane]: Ask's field and orb, the same on-device recogniser and yes-before-anything); "‹ Clock"
  * or Back drops it away. While it is up the screen leaves quiet hours' dimming so the answer can be read.
  *
- * Motion: the clock fades up and the lower lines stagger in; the ring draws itself in (the quick draw) as the clock
+ * Motion: the clock fades up and the lower lines stagger in; the face draws itself in (the quick draw) as the clock
  * appears; changed digits roll up each minute; dimming blends the colours across; the strip fades in and out. Reduced
  * motion: cross-fades, the ring drawn at once and still, the strip a still card with ‹ ›.
  */
@@ -145,7 +148,9 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
     }
     // Quiet hours: as dim as the screen goes; otherwise the phone's own brightness.
     var talkOpen by remember { mutableStateOf(false) }
-    val dimScreen = v.dim && !talkOpen
+    // The whole day's 24-hour ring, sprung up by tapping the watch face; it lifts the quiet-hours dimming like Talk.
+    var dayOpen by remember { mutableStateOf(false) }
+    val dimScreen = v.dim && !talkOpen && !dayOpen
     DisposableEffect(activity, dimScreen) {
         val window = activity?.window
         window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = if (dimScreen) 0.01f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE } }
@@ -164,12 +169,13 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
     if (newsOpen != null) newsShown = newsOpen
     BackHandler(enabled = newsOpen != null) { newsOpen = null }
     BackHandler(enabled = talkOpen && newsOpen == null) { talkOpen = false }
+    BackHandler(enabled = dayOpen && !talkOpen && newsOpen == null) { dayOpen = false }
     val talkApp = context.applicationContext as? os.meka.android.MekaApplication
     val density = LocalDensity.current
     var topInWindow by remember { mutableIntStateOf(0) }
     var heightPx by remember { mutableIntStateOf(0) }
     var widthPx by remember { mutableIntStateOf(0) }
-    // Today's Day ring, kept current by the shell's minute tick.
+    // Today's watch face and Day ring, kept current by the shell's minute tick.
     val today by core.today.collectAsState()
     Box(
         Modifier.fillMaxSize().background(Meka.colors.background)
@@ -183,7 +189,7 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
         val gap = with(density) { hingePx.toDp() }
         Column(Modifier.fillMaxSize()) {
             val ringSize = FoldModeRules.bedsideRingDp(upper.value, with(density) { widthPx.toDp() }.value)?.dp
-            ClockHalf(v, today.dayRing.takeIf { today.timeline.dateLabel.isNotEmpty() }, ringSize, Modifier.fillMaxWidth().height(upper).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
+            ClockHalf(v, today.watchFace.takeIf { today.timeline.dateLabel.isNotEmpty() }, ringSize, onOpenDay = { dayOpen = true }, modifier = Modifier.fillMaxWidth().height(upper).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
             Box(Modifier.height(gap))
             DayHalf(
                 v, Modifier.fillMaxWidth().weight(1f).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
@@ -199,6 +205,9 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
         }
         MekaPane(visible = open == BedsideOpens.BRIEF) { BriefPane(core, onClose = { open = null }) }
         MekaPane(visible = open == BedsideOpens.SHUTDOWN) { ShutdownPane(core, onClose = { open = null }) }
+        MekaPane(visible = dayOpen) {
+            DayRingSheet(today.dayRing, today.dayTiles, onOpenArc = null, onClose = { dayOpen = false }, backLabel = WatchFaceRules.BEDSIDE_SHEET_BACK)
+        }
         MekaPane(visible = talkOpen) { BedsideTalkPane(core, onClose = { talkOpen = false }) }
         MekaPane(visible = newsOpen != null) {
             newsShown?.let { start ->
@@ -233,22 +242,23 @@ private fun BedsideNews(
 }
 
 /**
- * The clock half: the time and date, with the Day ring beside them when the half holds it ([ringSize] non-null). The
- * ring draws itself in once as the clock appears (the quick draw; reduced motion: at once), then lives.
+ * The clock half: the time and date, with the watch face beside them when the half holds it ([ringSize] non-null). The
+ * face draws itself in once as the clock appears (the quick draw; reduced motion: at once), then lives; a tap (tick
+ * haptic, the press) opens the whole day ([onOpenDay]).
  */
 @Composable
-private fun ClockHalf(v: BedsideView, ring: DayRing?, ringSize: Dp?, modifier: Modifier) {
+private fun ClockHalf(v: BedsideView, face: WatchFace?, ringSize: Dp?, onOpenDay: () -> Unit, modifier: Modifier) {
     val reduced = Meka.reducedMotion
     val primary by animateColorAsState(if (v.dim) Meka.colors.textTertiary else Meka.colors.textPrimary, MekaMotion.themeBlend(reduced), label = "clock")
     val secondary by animateColorAsState(if (v.dim) Meka.colors.textTertiary else Meka.colors.textSecondary, MekaMotion.themeBlend(reduced), label = "date")
-    val ringAlpha by animateFloatAsState(if (v.dim) DayRingLive.BEDSIDE_QUIET_ALPHA else 1f, MekaMotion.themeBlend(reduced), label = "ringDim")
+    val ringAlpha by animateFloatAsState(WatchFaceRules.bedsideAlpha(v.dim), MekaMotion.themeBlend(reduced), label = "ringDim")
     var play by remember { mutableStateOf(if (reduced) DayRingPlay.STILL else DayRingPlay.QUICK) }
     Row(modifier, horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        if (ring != null && ringSize != null) {
-            DayRingHero(
-                ring, play, played = { play = DayRingPlay.STILL },
-                modifier = Modifier.width(ringSize).graphicsLayer { alpha = ringAlpha },
-                size = ringSize, bedside = true, quiet = v.dim,
+        if (face != null && ringSize != null) {
+            WatchFaceDial(
+                face, play, played = { play = DayRingPlay.STILL },
+                modifier = Modifier.graphicsLayer { alpha = ringAlpha },
+                size = ringSize, onOpen = onOpenDay, bedside = true, quiet = v.dim,
             )
             Spacer(Modifier.width(MekaSpace.xl))
         }
