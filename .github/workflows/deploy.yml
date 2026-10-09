@@ -96,8 +96,10 @@ jobs:
           fi
           tools/ci-run.sh ./gradlew :backend:installDist
           aws ecr get-login-password | docker login --username AWS --password-stdin "${REPO%%/*}"
-          docker buildx create --use >/dev/null
-          tools/ci-run.sh docker buildx build --platform linux/arm64 -t "$REPO:$SHA" --push backend
+          # The engine's own builder (no buildx container: booting one pulls moby/buildkit from Docker Hub, which timed
+          # out twice on 2026-10-09). No RUN steps, so the arm64 image builds on this x86 runner without emulation.
+          tools/ci-run.sh docker build --platform linux/arm64 -t "$REPO:$SHA" backend
+          tools/ci-run.sh docker push "$REPO:$SHA"
 
       - name: Deploy service stack
         working-directory: infra
