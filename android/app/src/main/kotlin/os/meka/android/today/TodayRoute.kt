@@ -179,6 +179,8 @@ fun TodayRoute(
     var showPlan by rememberSaveable { mutableStateOf(false) }
     var showShutdown by rememberSaveable { mutableStateOf(false) }
     var showBrief by rememberSaveable { mutableStateOf(false) }
+    /** The brief was opened by dismissing the wake alarm, so it reads itself aloud (Weather and a voice, slice 8). */
+    var briefReadAloud by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     // News over Today from the command centre (news ticker, slice 2): "" = the place, an id = that story; null = closed.
     var newsOpen by rememberSaveable { mutableStateOf<String?>(null) }
@@ -193,7 +195,7 @@ fun TodayRoute(
     // Dismissing the wake alarm (Alarms, slice 1): the brief springs up over Today.
     val alarmBrief = widgetApp?.openBrief?.collectAsState()?.value ?: false
     LaunchedEffect(alarmBrief) {
-        if (alarmBrief) { showBrief = true; widgetApp?.openBrief?.value = false }
+        if (alarmBrief) { briefReadAloud = !showBrief; showBrief = true; widgetApp?.openBrief?.value = false }
     }
     val newsPlace by core.newsPlace.collectAsState()
     // The news ticker under the header (news ticker, slice 2): the per-device choice from Appearance.
@@ -346,7 +348,9 @@ fun TodayRoute(
                 PlanPane(core, landing = landing, onApplying = { landing = it }, undo = eventUndo, onClose = { showPlan = false })
             }
             MekaPane(visible = showShutdown) { ShutdownPane(core, onClose = { showShutdown = false }) }
-            MekaPane(visible = showBrief) { BriefPane(core, onClose = { showBrief = false }) }
+            MekaPane(visible = showBrief) {
+                BriefPane(core, onClose = { showBrief = false; briefReadAloud = false }, readAloud = briefReadAloud)
+            }
             MekaPane(visible = eventOpen != null) {
                 eventShown?.let { e -> EventDetailPane(core, e, onClose = { eventOpen = null }, undo = eventUndo) }
             }

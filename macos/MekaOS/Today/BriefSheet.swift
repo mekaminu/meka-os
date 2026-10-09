@@ -13,6 +13,8 @@ struct BriefSheet: View {
     @Environment(\.openURL) private var openURL
     let palette: MekaPalette
     @State private var closing = false
+    /// Listen (Weather and a voice, slice 8): MEKA reads the brief aloud in its voice, else the Mac's own.
+    @State private var speaker = MekaSpeaker()
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.s) {
@@ -25,6 +27,16 @@ struct BriefSheet: View {
                 if let weather = v.weatherLine {
                     Text(weather).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(0)
                 }
+                Button { toggleListen(v) } label: {
+                    Text(speaker.speaking ? "■  Stop" : "▶  Listen")
+                        .font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                        .contentTransition(.opacity)
+                }
+                .buttonStyle(.borderless)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: speaker.speaking)
+                .help(speaker.speaking ? "Stop reading" : "Read the brief aloud")
+                .accessibilityLabel(speaker.speaking ? "Stop reading the brief" : "Read the brief aloud")
+                .staggeredAppear(0)
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         SectionLabel("Today", palette).staggeredAppear(1)
@@ -129,12 +141,26 @@ struct BriefSheet: View {
         }
         .padding(MekaSpace.l)
         .frame(width: 480)
+        .onAppear { speaker.attach(model) }
+        .onDisappear { speaker.stop() }
+    }
+
+    /// Listen reads the brief aloud (light haptic); Stop ends it (tick haptic).
+    private func toggleListen(_ v: MorningBriefView) {
+        if speaker.speaking {
+            MekaHaptics.tick()
+            speaker.stop()
+        } else {
+            MekaHaptics.light()
+            speaker.say(BriefSpeech.shared.script(v: v, name: "Meka"))
+        }
     }
 
     /// The check pops (a spring) with a light haptic, holds a moment, then the sheet goes.
     private func gotIt() {
         withAnimation(reduceMotion ? MekaMotion.appear(reduced: true) : .spring(response: 0.35, dampingFraction: 0.6)) { closing = true }
         MekaHaptics.light()
+        speaker.stop()
         Task { @MainActor in
             await model.briefSeen()
             try? await Task.sleep(for: .milliseconds(600))

@@ -515,6 +515,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(SpeechRules.shared.usageLine(state: "off", month: nil, usedChars: 0, capChars: 0, voice: nil, deviceChosen: false))
     }
 
+    /// The spoken morning brief (Weather and a voice, slice 8): the script the brief sheet's Listen reads reaches Swift.
+    func testBriefSpeechReachesSwift() {
+        XCTAssertEqual(BriefSpeech.shared.script(v: MorningBriefView.companion.EMPTY, name: "Meka"),
+                       "Good morning, Meka. Nothing's planned yet. That's your morning.")
+        XCTAssertEqual(BriefSpeech.shared.spokenDate(label: "Fri 9 Oct"), "Friday 9 October")
+        XCTAssertEqual(BriefSpeech.shared.clean(text: "9–15°, light rain from 15:00 — take a coat"),
+                       "9 to 15 degrees, light rain from 15:00, take a coat")
+    }
+
     func testMotionCheckReachesSwift() {
         let off = MotionCheckRules.shared.mac(stored: nil, reduceMotion: true, lowPower: false)
         XCTAssertEqual(off.rows.map(\.label), ["MEKA Motion", "Reduce Motion", "Low Power Mode"])

@@ -1,6 +1,7 @@
 package os.meka.android.today
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
@@ -25,6 +26,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,8 +38,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
@@ -47,7 +54,9 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.goals.Chips
+import os.meka.android.ask.MekaSpeaker
 import os.meka.core.domain.BriefHeadline
+import os.meka.core.domain.BriefSpeech
 import os.meka.core.domain.BriefLine
 import os.meka.core.domain.DueState
 import os.meka.core.domain.MorningBriefView
@@ -70,10 +79,23 @@ private const val GOT_IT_HOLD_MS = 600L
  * away. Reduced motion: cross-fades only.
  */
 @Composable
-fun BriefPane(core: MekaCore, onClose: () -> Unit) {
+fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
     val v by core.briefView.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
+    val context = LocalContext.current
+    // Listen (Weather and a voice, slice 8): MEKA reads the brief aloud in its voice, else the phone's own.
+    val speaker = remember { MekaSpeaker(context, core, scope) }
+    DisposableEffect(speaker) { onDispose { speaker.release() } }
+    fun listen() = speaker.say(BriefSpeech.script(core.briefView.value))
+    // After the wake alarm the brief reads itself once it has something to say.
+    var autoRead by rememberSaveable { mutableStateOf(readAloud) }
+    LaunchedEffect(autoRead, v.dateLabel) {
+        if (autoRead && v.dateLabel.isNotEmpty()) {
+            autoRead = false
+            listen()
+        }
+    }
     var closing by remember { mutableStateOf(false) }
     var topicsOpen by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
@@ -96,6 +118,9 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit) {
                     color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
                 // Today's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
                 v.weatherLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
+                ListenPill(speaking = speaker.speaking, modifier = Modifier.padding(top = MekaSpace.s)) {
+                    if (speaker.speaking) { haptics.tick(); speaker.stop() } else { haptics.light(); listen() }
+                }
             }
         }
 
@@ -181,6 +206,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit) {
                     BriefButton("Got it", filled = true) {
                         closing = true
                         haptics.light()
+                        speaker.stop()
                         scope.launch {
                             runCatching { core.briefSeen("Fold") }
                             delay(GOT_IT_HOLD_MS)
@@ -191,6 +217,24 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit) {
                     BriefButton("Done", filled = false) { onClose() }
                 }
             }
+        }
+    }
+}
+
+/**
+ * "▶ Listen" under the date, "■ Stop" while MEKA reads; the label cross-fades as it changes, the pill presses in.
+ * Reduced motion: the same short cross-fade.
+ */
+@Composable
+private fun ListenPill(speaking: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+            .semantics { stateDescription = if (speaking) "Reading the brief aloud" else "" }
+            .clickable(role = Role.Button, onClickLabel = if (speaking) "Stop reading" else "Read the brief aloud") { onClick() }
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    ) {
+        Crossfade(targetState = speaking, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "listen") { on ->
+            Text(if (on) "■  Stop" else "▶  Listen", style = MekaType.itemMeta, color = Meka.colors.accent)
         }
     }
 }
