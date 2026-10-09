@@ -72,6 +72,8 @@ fun HabitChipsRow(chips: List<HabitChip>, play: Boolean, tick: (HabitChip) -> Un
                             else -> colors.textPrimary
                         },
                     )
+                    // An N-a-week habit's goes this week ("1/2"); a daily one has none.
+                    chip.count?.let { Text(it, style = MekaType.caption, color = colors.textTertiary, maxLines = 1) }
                 }
             }
         }

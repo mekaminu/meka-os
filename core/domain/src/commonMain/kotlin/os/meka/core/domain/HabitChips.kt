@@ -13,6 +13,8 @@ data class HabitChip(
     val behind: Boolean,
     /** "Tick Stretch for today" / "Untick Stretch for today" (the whole name, for a screen reader). */
     val tickLabel: String,
+    /** "1/2" for an N-a-week habit (this week's goes); null for a daily one. */
+    val count: String? = null,
 )
 
 /**
@@ -32,6 +34,7 @@ object HabitChipRules {
             done = h.doneToday,
             behind = !h.doneToday && h.pace == HabitPace.BEHIND,
             tickLabel = NeedsYouMeanwhileRules.tickLabel(h),
+            count = h.countLabel,
         )
     }
 

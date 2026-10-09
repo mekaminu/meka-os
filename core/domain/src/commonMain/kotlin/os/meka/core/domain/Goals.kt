@@ -11,8 +11,11 @@ import os.meka.core.sync.fv
  * - A Habit has a weekly target (1–7 times, Monday to Sunday), a preferred time of day and a length in minutes.
  *   Each tick is a `habit_completion` with the id `<habitId>.d<epochDay>`, so ticking the same day on the Fold and the
  *   Mac while both are offline ends up as one tick, and unticking is just `done = false`.
- * - Pace: by the end of each day of the week you should have done your share of the week's target (pro rata from the
- *   day the habit was added). Behind = short of yesterday's share; Due = today's go keeps you on pace.
+ * - Pace, daily habits: by the end of each day you should have done that day (pro rata from the day the habit was
+ *   added). Behind = a day missed; Due = today's go keeps you on pace.
+ * - Pace, N-a-week habits (Fold review 2026-10-09 13:45, item 1): days off are never misses. On track while the week
+ *   can still be met with a spare day; Due once the days left (today included) are no more than one more than the goes
+ *   left ("1 left — 2 days to go"); Behind only once the week can no longer be met.
  * - Streaks: a daily habit counts days in a row; any other target counts weeks in a row that met it.
  * - A Goal's progress is counted from what's linked to it (tasks done, habits' share of this week), or set by hand when
  *   nothing is linked.
@@ -59,6 +62,12 @@ data class HabitItem(
     /** "Hevy"; null without a link. */
     val appName: String? get() = appLink?.let { SessionRules.appName(it) }
     val needsRoomToday: Boolean get() = pace == HabitPace.BEHIND || pace == HabitPace.DUE
+    /** N a week (not every day): shown as the week's goes, never as a daily strip (Fold review 2026-10-09 13:45). */
+    val weekly: Boolean get() = targetPerWeek < 7
+    /** Goes filled of [weekTarget] this week (the slots: two rings, one filled). */
+    val slotsFilled: Int get() = doneThisWeek.coerceIn(0, weekTarget)
+    /** "1/2" on Today's chip for an N-a-week habit; null for a daily one. */
+    val countLabel: String? get() = if (weekly) "$slotsFilled/$weekTarget" else null
     /** "Push · Pull · Legs", "No rotation". */
     val rotationLabel: String get() = SessionRules.rotationLabel(rotation)
 }
@@ -164,6 +173,7 @@ object GoalRules {
 
     /** Where a habit stands today (see the file comment). */
     fun pace(target: Int, doneThisWeek: Int, doneToday: Boolean, today: Long, createdDay: Long): HabitPace {
+        if (target < 7) return weeklyPace(target, doneThisWeek, doneToday, today, createdDay)
         val ws = weekStart(today)
         val start = maxOf(ws, minOf(createdDay, today))
         val span = (ws + 7 - start).toInt()
@@ -179,6 +189,29 @@ object GoalRules {
             else -> HabitPace.ON_TRACK
         }
     }
+
+    /** Days left in the week, today included (Monday 7 … Sunday 1). */
+    fun daysLeft(today: Long): Int = (weekStart(today) + 7 - today).toInt()
+
+    /** Goes still needed this week (never below 0). */
+    fun goesLeft(target: Int, doneThisWeek: Int, today: Long, createdDay: Long): Int =
+        maxOf(0, weekTarget(target, today, createdDay) - doneThisWeek)
+
+    /** N-a-week habits: slack-based, so a day off is never a miss (see the file comment). */
+    fun weeklyPace(target: Int, doneThisWeek: Int, doneToday: Boolean, today: Long, createdDay: Long): HabitPace {
+        val left = goesLeft(target, doneThisWeek, today, createdDay)
+        val days = daysLeft(today)
+        return when {
+            doneToday -> HabitPace.DONE_TODAY
+            left == 0 -> HabitPace.WEEK_MET
+            left > days -> HabitPace.BEHIND
+            left >= days - 1 -> HabitPace.DUE
+            else -> HabitPace.ON_TRACK
+        }
+    }
+
+    /** "1 left — 2 days to go", "2 left — 1 day to go". */
+    fun leftLine(left: Int, days: Int): String = "$left left — $days ${if (days == 1) "day" else "days"} to go"
 
     /**
      * Daily habits: days in a row up to today (or yesterday, while today is still open). Other targets: weeks in a
@@ -203,12 +236,21 @@ object GoalRules {
         return n
     }
 
-    fun habitMeta(pace: HabitPace, done: Int, weekTarget: Int, target: Int): String = when (pace) {
+    fun habitMeta(pace: HabitPace, done: Int, weekTarget: Int, target: Int, today: Long? = null): String =
+        if (target < 7 && today != null) weeklyMeta(pace, done, weekTarget, today) else when (pace) {
         HabitPace.DONE_TODAY -> if (target >= 7) "Done today" else "Done today · $done of $weekTarget this week"
         HabitPace.WEEK_MET -> "Week done · $done of $weekTarget"
         HabitPace.BEHIND -> "Behind · $done of $weekTarget this week"
         HabitPace.DUE -> if (target >= 7) "To do today" else "Today keeps you on pace · $done of $weekTarget"
         HabitPace.ON_TRACK -> "On track · $done of $weekTarget this week"
+    }
+
+    /** N-a-week habits: never "Behind"; the goes left and the days to go once the week is tight. */
+    fun weeklyMeta(pace: HabitPace, done: Int, weekTarget: Int, today: Long): String = when (pace) {
+        HabitPace.DONE_TODAY -> "Done today · $done of $weekTarget this week"
+        HabitPace.WEEK_MET -> "Week done · $done of $weekTarget"
+        HabitPace.DUE, HabitPace.BEHIND -> leftLine(maxOf(0, weekTarget - done), daysLeft(today))
+        HabitPace.ON_TRACK -> "$done of $weekTarget this week"
     }
 
     fun streakLine(streak: Int, unit: String): String? = if (streak < 2) null else "$streak-$unit streak"
@@ -463,7 +505,7 @@ class Goals(
                 streak = streak,
                 streakUnit = unit,
                 week = (0..6).map { (ws + it) in days },
-                meta = GoalRules.habitMeta(pace, doneWeek, weekTarget, target),
+                meta = GoalRules.habitMeta(pace, doneWeek, weekTarget, target, today),
                 streakLine = GoalRules.streakLine(streak, unit),
                 hasConflict = replica.conflictsFor(EntityTypes.HABIT, id).isNotEmpty(),
                 booked = s[HabitFields.BOOK_SLOTS].boolOrNull == true,

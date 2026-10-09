@@ -55,4 +55,14 @@ class HabitChipsTest {
         assertEquals(listOf(DayTileKind.NEXT_EVENT, DayTileKind.RENEWALS), strip.map { it.kind })
         assertFalse(HabitChipRules.stripTiles(listOf(tiles[1])).any())
     }
+
+    @Test
+    fun aWeeklyHabitsChipCarriesTheWeeksGoes() {
+        // Fold review 2026-10-09 13:45, item 1: "1/2" beside a twice-a-week habit's name; a daily one has none.
+        val weekly = habit("g", HabitPace.DUE).copy(targetPerWeek = 2, weekTarget = 2, doneThisWeek = 1)
+        val daily = habit("s", HabitPace.DUE).copy(targetPerWeek = 7, weekTarget = 7)
+        val chips = HabitChipRules.build(goals(weekly, daily))
+        assertEquals("1/2", chips.first { it.id == "g" }.count)
+        assertEquals(null, chips.first { it.id == "s" }.count)
+    }
 }

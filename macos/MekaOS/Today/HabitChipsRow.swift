@@ -30,6 +30,10 @@ struct HabitChipsRow: View {
                 TickRingView(done: chip.done, palette: palette).frame(width: 18, height: 18)
                 Text(chip.title).font(MekaType.body).lineLimit(1)
                     .foregroundStyle(chip.done ? palette.textSecondary : (chip.behind ? palette.accent : palette.textPrimary))
+                // An N-a-week habit's goes this week ("1/2"); a daily one has none.
+                if let count = chip.count {
+                    Text(count).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                }
             }
             .padding(.leading, MekaSpace.xs)
             .padding(.trailing, MekaSpace.s)

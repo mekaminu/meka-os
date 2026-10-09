@@ -120,12 +120,17 @@ private struct HabitRowView: View {
                             Text(line).font(MekaType.caption).foregroundStyle(palette.accent).contentTransition(.opacity)
                         }
                         HStack(spacing: MekaSpace.s) {
-                            HStack(spacing: 3) {
-                                ForEach(Array(habit.week.enumerated()), id: \.offset) { _, on in
-                                    Circle().fill(on.boolValue ? palette.accent : palette.surfaceRaised).frame(width: 6, height: 6)
+                            if habit.weekly {
+                                WeekSlotsView(filled: Int(habit.slotsFilled), total: Int(habit.weekTarget),
+                                              week: habit.week.map(\.boolValue), palette: palette, reduceMotion: reduceMotion)
+                            } else {
+                                HStack(spacing: 3) {
+                                    ForEach(Array(habit.week.enumerated()), id: \.offset) { _, on in
+                                        Circle().fill(on.boolValue ? palette.accent : palette.surfaceRaised).frame(width: 6, height: 6)
+                                    }
                                 }
+                                .accessibilityLabel("\(habit.week.filter { $0.boolValue }.count) days ticked this week")
                             }
-                            .accessibilityLabel("\(habit.week.filter { $0.boolValue }.count) days ticked this week")
                             if habit.streak >= 2 {
                                 HStack(spacing: 0) {
                                     Text("\(habit.streak)")
@@ -423,5 +428,37 @@ struct GoalMenu: View {
             .menuIndicator(.hidden)
             .padding(.top, MekaSpace.m)
         }
+    }
+}
+
+/// An N-a-week habit's week (Fold review 2026-10-09 13:45, item 1), the Mac twin of the Fold's `WeekSlots`: one ring
+/// per go this week, filled as they're done, then the week's days as faint ticks only where it was done, so a day off
+/// never reads as a miss.
+struct WeekSlotsView: View {
+    let filled: Int
+    let total: Int
+    let week: [Bool]
+    let palette: MekaPalette
+    let reduceMotion: Bool
+
+    var body: some View {
+        HStack(spacing: MekaSpace.xs) {
+            HStack(spacing: 3) {
+                ForEach(0..<max(total, 0), id: \.self) { i in
+                    let on = i < filled
+                    Circle().fill(on ? palette.accent : Color.clear)
+                        .overlay(Circle().strokeBorder(on ? palette.accent : palette.textTertiary, lineWidth: 1.5))
+                        .frame(width: 9, height: 9)
+                }
+            }
+            HStack(spacing: 2) {
+                ForEach(Array(week.enumerated()), id: \.offset) { _, on in
+                    Circle().fill(on ? palette.textTertiary : Color.clear).frame(width: 4, height: 4)
+                }
+            }
+        }
+        .animation(MekaMotion.complete(reduced: reduceMotion), value: filled)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(filled) of \(total) this week")
     }
 }

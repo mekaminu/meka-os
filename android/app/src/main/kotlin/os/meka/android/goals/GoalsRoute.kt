@@ -12,6 +12,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -208,7 +209,7 @@ private fun HabitRow(
                 // A booked habit's week: "Booked Today 17:45 · Thu 17:45".
                 h.sessionLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
                 Row(Modifier.padding(top = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
-                    WeekDots(h.week)
+                    if (h.weekly) WeekSlots(h.slotsFilled, h.weekTarget, h.week) else WeekDots(h.week)
                     if (h.streak >= 2) {
                         Spacer(Modifier.width(MekaSpace.s))
                         RollingNumber(h.streak)
@@ -305,6 +306,37 @@ private fun WeekDots(week: List<Boolean>) {
         week.forEach { on ->
             val c by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.complete(Meka.reducedMotion), label = "dot")
             Box(Modifier.size(6.dp).clip(CircleShape).background(c))
+        }
+    }
+}
+
+/**
+ * An N-a-week habit's week (Fold review 2026-10-09 13:45, item 1): one ring per go this week, filled as they're done
+ * (the colour blends on the complete spring), then the week's days as faint ticks only where it was done, so a day
+ * off never reads as a miss.
+ */
+@Composable
+private fun WeekSlots(filled: Int, total: Int, week: List<Boolean>) {
+    val reduced = Meka.reducedMotion
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.semantics { contentDescription = "$filled of $total this week" },
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            repeat(total) { i ->
+                val on = i < filled
+                val fill by animateColorAsState(if (on) Meka.colors.accent else Color.Transparent, MekaMotion.complete(reduced), label = "slot")
+                Box(
+                    Modifier.size(9.dp).clip(CircleShape).background(fill)
+                        .border(1.5.dp, if (on) Meka.colors.accent else Meka.colors.textTertiary, CircleShape),
+                )
+            }
+        }
+        Spacer(Modifier.width(MekaSpace.xs))
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            week.forEach { on ->
+                Box(Modifier.size(4.dp).clip(CircleShape).background(if (on) Meka.colors.textTertiary else Color.Transparent))
+            }
         }
     }
 }

@@ -764,6 +764,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(SpeechRules.shared.seconds(ms: 1_834), "1.8 s")
     }
 
+    /// N-a-week habits (Fold review 2026-10-09 13:45, item 1): never "Behind" for a day off, the week's goes as slots.
+    func testWeeklyHabitPaceReachesSwift() {
+        let rules = GoalRules.shared
+        let monday: Int64 = 4 // 1970-01-05
+        XCTAssertEqual(rules.weeklyPace(target: 2, doneThisWeek: 0, doneToday: false, today: monday + 2, createdDay: monday), .onTrack)
+        XCTAssertEqual(rules.weeklyPace(target: 2, doneThisWeek: 1, doneToday: false, today: monday + 5, createdDay: monday), .due)
+        XCTAssertEqual(rules.leftLine(left: 1, days: 2), "1 left — 2 days to go")
+        XCTAssertEqual(rules.weeklyMeta(pace: .onTrack, done: 1, weekTarget: 2, today: monday + 2), "1 of 2 this week")
+    }
+
     /// The messages assistant's cards (V1, messages slice 3): the Mac copies, never sends.
     func testTriageReplyRulesReachSwift() {
         let rules = TriageReplyRules.shared

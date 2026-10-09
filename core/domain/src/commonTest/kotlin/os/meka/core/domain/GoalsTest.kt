@@ -47,14 +47,58 @@ class GoalsTest {
     }
 
     @Test
-    fun threeAWeekIsDueMondayOnTrackTuesdayAndBehindWhenItSlips() {
+    fun threeAWeekIsOnTrackWhileTheWeekCanStillBeMetAndDueOnlyWhenItIsTight() {
+        // Fold review 2026-10-09 13:45, item 1: days off are never misses for an N-a-week habit.
         val target = 3
         val monday = today()
-        assertEquals(HabitPace.DUE, GoalRules.pace(target, 0, false, monday, monday))
-        assertEquals(HabitPace.ON_TRACK, GoalRules.pace(target, 1, false, monday + 1, monday))
-        assertEquals(HabitPace.DUE, GoalRules.pace(target, 1, false, monday + 2, monday))
-        assertEquals(HabitPace.BEHIND, GoalRules.pace(target, 0, false, monday + 2, monday))
+        assertEquals(HabitPace.ON_TRACK, GoalRules.pace(target, 0, false, monday, monday))
+        assertEquals(HabitPace.ON_TRACK, GoalRules.pace(target, 0, false, monday + 2, monday)) // Wed, none yet: 3 left, 5 days
+        assertEquals(HabitPace.ON_TRACK, GoalRules.pace(target, 1, false, monday + 3, monday)) // Thu: 2 left, 4 days
+        assertEquals(HabitPace.DUE, GoalRules.pace(target, 1, false, monday + 4, monday)) // Fri: 2 left, 3 days
+        assertEquals(HabitPace.DUE, GoalRules.pace(target, 0, false, monday + 4, monday)) // Fri: 3 left, 3 days
+        assertEquals(HabitPace.BEHIND, GoalRules.pace(target, 0, false, monday + 5, monday)) // Sat: 3 left, 2 days
         assertEquals(HabitPace.WEEK_MET, GoalRules.pace(target, 3, false, monday + 4, monday))
+        assertEquals(HabitPace.DONE_TODAY, GoalRules.pace(target, 1, true, monday + 6, monday))
+    }
+
+    @Test
+    fun twiceAWeekSaysHowManyAreLeftOnlyOnceTheWeekIsTight() {
+        val h = g.addHabit("Gym", perWeek = 2)
+        assertEquals("0 of 2 this week", habit(h).meta)
+        assertTrue(habit(h).weekly)
+        assertEquals("0/2", habit(h).countLabel)
+        g.setHabitDone(h, true)
+        assertEquals("Done today · 1 of 2 this week", habit(h).meta)
+        assertEquals(1, habit(h).slotsFilled)
+        repeat(5) { nextDay() } // Saturday: 1 left, Sat + Sun to go
+        assertEquals(HabitPace.DUE, habit(h).pace)
+        assertEquals("1 left — 2 days to go", habit(h).meta)
+        assertEquals("1/2", habit(h).countLabel)
+        nextDay() // Sunday
+        assertEquals("1 left — 1 day to go", habit(h).meta)
+        g.setHabitDone(h, true)
+        nextDay() // Monday: a fresh week, nothing missed
+        assertEquals(HabitPace.ON_TRACK, habit(h).pace)
+        assertEquals("0 of 2 this week", habit(h).meta)
+        assertEquals(1, habit(h).streak) // last week met; this one still open
+    }
+
+    @Test
+    fun aWeeklyHabitAddedMidweekIsNeverBehindForTheDaysBeforeItExisted() {
+        repeat(4) { nextDay() } // Friday
+        val h = g.addHabit("Swim", perWeek = 3)
+        val item = habit(h)
+        assertEquals(2, item.weekTarget) // ceil(3 × 3/7)
+        assertEquals(HabitPace.DUE, item.pace) // 2 left, Fri–Sun
+        assertEquals("2 left — 3 days to go", item.meta)
+        assertNull(g.habits().single().takeIf { it.pace == HabitPace.BEHIND })
+    }
+
+    @Test
+    fun aDailyHabitKeepsItsStripAndHasNoCount() {
+        val h = g.addHabit("Stretch", perWeek = 7)
+        assertFalse(habit(h).weekly)
+        assertNull(habit(h).countLabel)
     }
 
     @Test
