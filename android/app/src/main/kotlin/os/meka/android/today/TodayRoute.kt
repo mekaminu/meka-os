@@ -282,6 +282,8 @@ fun TodayRoute(
     // Also keyed on the booked sessions: answering "Did you go?" changes the card but not Today.
     val sessions by core.sessionsView.collectAsState()
     val nowView = remember(today, sessions) { core.coverNow() }
+    // Up next as the same card on the open Fold (Fold review 2026-10-09, item 3).
+    val upNextView = remember(today) { core.upNextCard() }
     val talkApp = androidx.compose.ui.platform.LocalContext.current.applicationContext as? os.meka.android.MekaApplication
     val nowHandlers = NowHandlers(
         complete = actions.complete, tomorrow = actions.snooze, openTask = actions.select,
@@ -290,6 +292,11 @@ fun TodayRoute(
         didntGo = { id -> scope.launch { runCatching { core.sessionMissed(id) } } },
         // The cover screen's mic (Talk without tapping the mic, slice 3): Ask, already listening.
         talk = { os.meka.android.ask.talkFromCover(talkApp) },
+    )
+    // The open Fold's Up next card: the same taps, no mic (Ask's is a tab away) and no Needs you line.
+    val upNextHandlers = NowHandlers(
+        complete = actions.complete, tomorrow = actions.snooze, openTask = actions.select,
+        openEvent = { eventOpen = it }, openNeedsYou = null,
     )
 
     // Insets are applied once, by the app shell.
@@ -325,6 +332,7 @@ fun TodayRoute(
                         reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } },
                         openEvent = { eventOpen = it }, eventHandlers = eventHandlers,
                         now = if (twoPane) null else nowView, nowHandlers = nowHandlers,
+                        upNext = upNextView, upNextHandlers = upNextHandlers,
                         ticker = ticker, tickerMode = tickerMode, core = core,
                         openStory = { id -> newsOpen = id }, openMatch = { eventOpen = it }) }
                 },
@@ -521,6 +529,9 @@ private fun TodayPane(
     /** The closed Fold's cover screen (Fold modes, slice 3): the "now" card heads Today in place of Up next. */
     now: NowView? = null,
     nowHandlers: NowHandlers? = null,
+    /** Up next as the closed Fold's card (Fold review 2026-10-09, item 3); shown where the "now" card isn't. */
+    upNext: NowView? = null,
+    upNextHandlers: NowHandlers? = null,
     ticker: NewsTicker = NewsTicker.EMPTY,
     tickerMode: TickerMode = TickerMode.OFF,
     core: MekaCore? = null,
@@ -690,19 +701,31 @@ private fun TodayPane(
                         titleModifier = { id -> rowMotion(id).let { m -> if (m.shareTitle) Modifier.sharedTitle(SharedMotion.taskKey(id), m.titleVisible) else Modifier } },
                     )
                 }
-            } else if (today.upNext != null || today.timeline.nextEvent != null) {
+            } else if (today.timeline.nextEvent != null && (upNext == null || upNextHandlers == null)) {
+                // The Up next card carries its own label, so the section label only heads a lone next event.
                 item(key = "h-next") { SectionLabel("Up next", Modifier.animateItem().appear(rememberAppearance(2, play))) }
             }
-            // The next event within the hour: "Call with Tunde in 25 min" (the "now" card carries it on the cover screen).
+            val upNextCard = upNext?.takeIf { nowCard == null && upNextHandlers != null }
+            if (upNextCard != null && upNextHandlers != null) {
+                // One stable slot: when up next changes, the card's content cross-slides instead of the row swapping.
+                // The closed Fold's card (UP NEXT, title, line, Done · Tomorrow · Open) on every screen.
+                item(key = "upnext") {
+                    NowCard(
+                        upNextCard, upNextHandlers,
+                        Modifier.padding(bottom = if (today.timeline.nextEvent != null) MekaSpace.xs else 0.dp)
+                            .animateItem().appear(rememberAppearance(2, play)),
+                        titleModifier = { id -> rowMotion(id).let { m -> if (m.shareTitle) Modifier.sharedTitle(SharedMotion.taskKey(id), m.titleVisible) else Modifier } },
+                    )
+                }
+            }
+            // The next event within the hour: "Call with Tunde in 25 min", under Up next's card as the cover screen's
+            // "Then: …" is (the "now" card carries it there).
             if (nowCard == null) today.timeline.nextEvent?.let { e ->
                 item(key = "nextevent") {
-                    NextEventCard(e, Modifier.padding(bottom = MekaSpace.xs).animateItem().appear(rememberAppearance(2, play)), openEvent)
+                    NextEventCard(e, Modifier.animateItem().appear(rememberAppearance(2, play)), openEvent)
                 }
-                if (today.upNext == null) item(key = "s-nextevent") { Spacer(Modifier.height(MekaSpace.l)) }
             }
-            if (nowCard == null) today.upNext?.let { t ->
-                // One stable slot: when up next changes, the card's content cross-slides instead of the row swapping.
-                item(key = "upnext") { UpNextCard(t, actions, rowMotion, Modifier.animateItem().appear(rememberAppearance(2, play))) }
+            if (nowCard == null && (upNextCard != null || today.timeline.nextEvent != null)) {
                 item(key = "s-next") { Spacer(Modifier.height(MekaSpace.l)) }
             }
             // The Gym (booked habits): today's session, "Did you go?" once it's over, or where it was rebooked.
@@ -792,40 +815,6 @@ private fun SyncLine(sync: SyncStatus) {
 @Composable
 internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(text.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = modifier.padding(bottom = MekaSpace.xxs))
-}
-
-@Composable
-private fun UpNextCard(t: Task, actions: TodayActions, rowMotion: (String) -> RowMotion, modifier: Modifier) {
-    val reduced = Meka.reducedMotion
-    // Up next changes: the new item slides in from the right as the old one slides out left (cross-fade when reduced).
-    AnimatedContent(
-        targetState = t,
-        contentKey = { it.id },
-        transitionSpec = {
-            if (reduced) fadeIn(MekaMotion.replan(true)) togetherWith fadeOut(MekaMotion.replan(true))
-            else (slideInHorizontally(MekaMotion.replan(false)) { it / 4 } + fadeIn(MekaMotion.appear(false))) togetherWith
-                (slideOutHorizontally(MekaMotion.replan(false)) { -it / 4 } + fadeOut(MekaMotion.appear(false)))
-        },
-        label = "upnext",
-        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised),
-    ) { task ->
-        Row(
-            Modifier
-                .containerOrigin(task.id)
-                .fillMaxWidth()
-                .clickable { actions.select(task.id) }
-                .padding(MekaSpace.l),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                val m = rowMotion(task.id)
-                Text(task.title, style = MekaType.upNextTitle, color = Meka.colors.textPrimary,
-                    modifier = if (m.shareTitle) Modifier.sharedTitle(SharedMotion.taskKey(task.id), m.titleVisible) else Modifier)
-                meta(task)?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
-            }
-            CompleteButton(task, actions.complete)
-        }
-    }
 }
 
 @Composable

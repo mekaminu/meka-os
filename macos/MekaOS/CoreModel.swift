@@ -1251,6 +1251,13 @@ final class CoreModel {
         return core?.coverNow()
     }
 
+    /// Up next as the menu bar's card in Today's window too (Fold review 2026-10-09, item 3): "UP NEXT", the title, its
+    /// line and Done · Tomorrow · Open. Read from Today; nil when nothing is up next.
+    var upNextCard: NowView? {
+        _ = today // observed: the card redraws whenever Today does
+        return core?.upNextCard()
+    }
+
     /// What runs outside the app (Outside the app, slice 1): beside MEKA's mark in the menu bar, the next event's
     /// countdown from half an hour before ("12 min", then "Now") or a running fast ("14 h 12 m"). Read from Today and the
     /// fast, so it follows Today's minute refresh. nil when nothing is going on.

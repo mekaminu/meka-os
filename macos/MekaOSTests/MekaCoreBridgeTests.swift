@@ -448,6 +448,27 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertGreaterThan(look.blurAlpha(i: 0, glow: 1), look.blurAlpha(i: 3, glow: 1))
     }
 
+    /// Fold review 2026-10-09, item 3: Up next is the menu bar's card in Today's window too.
+    func testUpNextCardReachesSwift() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "upnext-\(UUID().uuidString).db", deviceKey: nil
+        )
+        XCTAssertNil(core.upNextCard())
+        let id = try await core.addTask(title: "Send the invoice")
+        let card = try XCTUnwrap(core.upNextCard())
+        XCTAssertEqual(card.kind, NowKind.task)
+        XCTAssertEqual(card.label, CoverNowRules.shared.UP_NEXT_LABEL)
+        XCTAssertEqual(card.title, "Send the invoice")
+        XCTAssertEqual(card.task?.id, id)
+        XCTAssertTrue(card.offers(action: NowAction.done))
+        XCTAssertTrue(card.offers(action: NowAction.tomorrow))
+        XCTAssertTrue(card.offers(action: NowAction.openTask))
+        XCTAssertNil(card.thenLine)
+        XCTAssertNil(card.needsYouLine)
+    }
+
     /// Living Today, slice 3: the ring carries the day — the work band, the arc on now, a fast, clicking an arc.
     func testDayRingCarriesTheDayInSwift() {
         let call = DayArc(id: "e-call", kind: .event, startMinute: 600, endMinute: 660, past: false, current: true)

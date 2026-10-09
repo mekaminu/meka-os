@@ -188,23 +188,27 @@ struct TodayView: View {
                             }
                             Spacer().frame(height: MekaSpace.l)
                         }
-                        if today.upNext != nil || today.timeline.nextEvent != nil {
+                        // Up next is the menu bar's card here too (Fold review 2026-10-09, item 3): it carries its own
+                        // "UP NEXT", so the section label only heads a lone next event.
+                        let upNextCard = model.upNextCard
+                        if upNextCard == nil && today.timeline.nextEvent != nil {
                             SectionLabel("Up next", palette).staggeredAppear(2, play: play)
                         }
-                        // The next event within the hour: "Call with Tunde in 25 min".
-                        if let e = today.timeline.nextEvent {
-                            NextEventCard(next: e, palette: palette)
-                                .padding(.bottom, today.upNext == nil ? MekaSpace.l : MekaSpace.xs)
-                                .transition(.opacity)
-                                .staggeredAppear(2, play: play)
-                        }
-                        if let next = today.upNext {
+                        if let card = upNextCard, let next = card.task {
                             // Up next changes: the new card pushes in from the right (cross-fade with Reduce Motion).
-                            UpNextCard(task: next, palette: palette)
+                            UpNextCard(card: card, palette: palette)
                                 .id(next.id)
                                 .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.push(from: .trailing))
+                                .padding(.bottom, today.timeline.nextEvent == nil ? MekaSpace.l : MekaSpace.xs)
                                 .staggeredAppear(2, play: play)
-                            Spacer().frame(height: MekaSpace.l)
+                        }
+                        // The next event within the hour: "Call with Tunde in 25 min", under Up next's card as the menu
+                        // bar's "Then: …" is.
+                        if let e = today.timeline.nextEvent {
+                            NextEventCard(next: e, palette: palette)
+                                .padding(.bottom, MekaSpace.l)
+                                .transition(.opacity)
+                                .staggeredAppear(2, play: play)
                         }
                         // The Gym (booked habits): today's session, "Did you go?" once it's over, or where it was rebooked.
                         if !(model.sessions?.cards ?? []).isEmpty {
@@ -627,23 +631,23 @@ private struct PlanSheet: View {
     }
 }
 
+/// Up next (Fold review 2026-10-09, item 3): the menu bar's "now" card face — "UP NEXT", the title (semibold 22 pt),
+/// its line and Done · Tomorrow · Open — instead of a bare title with a ring. A tap (or Open) grows the task's detail
+/// out of the card; Done completes it as the ring did.
 private struct UpNextCard: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
-    let task: MekaTask
+    let card: NowView
     let palette: MekaPalette
     @State private var frame: CGRect = .zero
 
     var body: some View {
-        HStack {
-            Text(task.title).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary)
-            Spacer()
-            CompleteButton(task: task, palette: palette)
-        }
-        .padding(MekaSpace.l)
-        .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surfaceRaised))
+        NowCardFace(
+            v: card, palette: palette,
+            openTask: { id in model.select(id, reduced: reduceMotion, origin: frame) },
+            openEvent: { e in model.openEvent = e }
+        )
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
-        .onTapGesture { model.select(task.id, reduced: reduceMotion, origin: frame) }
         .mekaHoverLift()
     }
 }

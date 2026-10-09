@@ -194,9 +194,7 @@ object CoverNowRules {
             }
             NowKind.TASK -> {
                 val t = task!!
-                val row = tl.rows.firstOrNull { it.kind == TimelineKind.TASK && it.task?.id == t.id }
-                val line = if (row != null) listOfNotNull("At ${row.time}", row.detail).joinToString(" · ")
-                else listOfNotNull("Anytime today", t.repeatMeta(cal.epochDayOf(nowMs))?.let { "↻ $it" }).joinToString(" · ")
+                val line = taskLine(t, tl, nowMs, cal)
                 // The next event (within the hour) or, failing that, the next timed thing after the task.
                 val thenEvent = if (sessionFirst) null else nextEvent?.event ?: running
                 val thenLine = when {
@@ -205,11 +203,7 @@ object CoverNowRules {
                     running != null -> "Then: ${running.title} until ${hhmm(running.endAtMs)}"
                     else -> null
                 }
-                NowView(
-                    kind = kind, label = "Up next", lit = false, title = t.title, line = line, event = null, task = t,
-                    join = null, mapsQuery = null, actions = listOf(NowAction.DONE, NowAction.TOMORROW, NowAction.OPEN_TASK),
-                    thenLine = thenLine, thenEvent = thenEvent, thenTask = null, needsYouLine = needs,
-                )
+                taskView(t, line, thenLine, thenEvent, needs)
             }
             NowKind.CLEAR -> {
                 val left = tl.anytime.size
@@ -222,4 +216,31 @@ object CoverNowRules {
             }
         }
     }
+
+    /** The Up next card's label, the same on every screen (Fold review 2026-10-09, item 3). */
+    const val UP_NEXT_LABEL = "Up next"
+
+    /**
+     * Up next as a card on every screen (Fold review 2026-10-09, item 3): the open Fold and the Mac's window show the
+     * closed Fold's card — "UP NEXT", the title, its line ("Anytime today" · "At 14:00 · 30 min") and Done · Tomorrow ·
+     * Open — instead of a bare title with a ring. No "Then" or Needs you lines: those screens list the next event and
+     * Needs you beside it. Null when nothing is up next.
+     */
+    fun upNext(today: Today, nowMs: Long, cal: LocalCalendar): NowView? {
+        val t = today.upNext ?: return null
+        return taskView(t, taskLine(t, today.timeline, nowMs, cal), thenLine = null, thenEvent = null, needs = null)
+    }
+
+    /** "At 14:00 · 30 min · ↻ Every weekday" when the task is on the timeline, else "Anytime today" (and its repeat). */
+    private fun taskLine(t: Task, tl: DayTimeline, nowMs: Long, cal: LocalCalendar): String {
+        val row = tl.rows.firstOrNull { it.kind == TimelineKind.TASK && it.task?.id == t.id }
+        return if (row != null) listOfNotNull("At ${row.time}", row.detail).joinToString(" · ")
+        else listOfNotNull("Anytime today", t.repeatMeta(cal.epochDayOf(nowMs))?.let { "↻ $it" }).joinToString(" · ")
+    }
+
+    private fun taskView(t: Task, line: String, thenLine: String?, thenEvent: CalendarEvent?, needs: String?) = NowView(
+        kind = NowKind.TASK, label = UP_NEXT_LABEL, lit = false, title = t.title, line = line, event = null, task = t,
+        join = null, mapsQuery = null, actions = listOf(NowAction.DONE, NowAction.TOMORROW, NowAction.OPEN_TASK),
+        thenLine = thenLine, thenEvent = thenEvent, thenTask = null, needsYouLine = needs,
+    )
 }

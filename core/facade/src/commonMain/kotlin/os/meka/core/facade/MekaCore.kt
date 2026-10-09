@@ -970,6 +970,13 @@ class MekaCore(
         os.meka.core.domain.CoverNowRules.now(_today.value, nowMs(), ZoneCalendar(timeZone), _sessions.value.cards)
 
     /**
+     * Up next as the closed Fold's card on every screen (Fold review 2026-10-09, item 3): "UP NEXT", the title, its line
+     * and Done · Tomorrow · Open, for the open Fold's Today and the Mac's window. Null when nothing is up next. Pure.
+     */
+    fun upNextCard(): os.meka.core.domain.NowView? =
+        os.meka.core.domain.CoverNowRules.upNext(_today.value, nowMs(), ZoneCalendar(timeZone))
+
+    /**
      * What runs outside the app (Outside the app, slice 1): the next event's countdown from 30 minutes before it and a
      * running fast, for the Fold's ongoing notifications and the Mac's menu bar. Pure and cheap, read from the current
      * Today and fasting views; [OngoingView.nextChangeMs] says when to look again. Nothing is stored.

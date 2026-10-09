@@ -37,6 +37,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.containerOrigin
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.ask.TalkMic
 import os.meka.core.domain.CalendarEvent
@@ -60,7 +61,8 @@ internal class NowHandlers(
 )
 
 /**
- * The "now" card (Fold modes, slice 3): on the closed Fold's cover screen it heads Today in place of Up next. One thing
+ * The "now" card (Fold modes, slice 3): on the closed Fold's cover screen it heads Today in place of Up next; on the open
+ * Fold its task form is Up next itself (Fold review 2026-10-09, item 3), so Up next is the same card on both. One thing
  * (an event or booked session starting or just started, a session asking "Did you go?", Up next, or clear) with its
  * one-tap actions: Join or Maps and Open for an event; Done, Tomorrow and Open for a task; Went and Didn't go for a
  * session on now or over. Under it, "Then: …" and "3 need you ›".
@@ -87,7 +89,8 @@ internal fun NowCard(now: NowView, handlers: NowHandlers, modifier: Modifier = M
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised),
         ) { v ->
             Column(
-                Modifier.fillMaxWidth()
+                // A task's detail grows out of the card (catalogue "Task detail").
+                Modifier.then(v.task?.let { Modifier.containerOrigin(it.id) } ?: Modifier).fillMaxWidth()
                     .clickable(enabled = v.task != null || v.event != null, role = Role.Button) {
                         v.task?.let { handlers.openTask(it.id) } ?: v.event?.let(handlers.openEvent)
                     }
@@ -99,7 +102,8 @@ internal fun NowCard(now: NowView, handlers: NowHandlers, modifier: Modifier = M
                 )
                 Text(v.label.uppercase(), style = MekaType.sectionLabel, color = labelColor)
                 Text(
-                    v.title, style = MekaType.upNextTitle,
+                    // Semibold 22 sp (Fold review 2026-10-09, item 3): one bold line that doesn't shout.
+                    v.title, style = MekaType.nowTitle,
                     color = if (v.kind == NowKind.CLEAR) Meka.colors.textSecondary else Meka.colors.textPrimary,
                     maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = MekaSpace.xxs).then(v.task?.let { titleModifier(it.id) } ?: Modifier),

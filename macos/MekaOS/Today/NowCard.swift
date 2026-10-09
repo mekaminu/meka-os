@@ -11,7 +11,6 @@ struct NowCard: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.colorScheme) private var scheme
     @Environment(\.mekaReduceMotion) private var reduceMotion
-    @Environment(\.openURL) private var openURL
     @Environment(\.openWindow) private var openWindow
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
 
@@ -42,17 +41,52 @@ struct NowCard: View {
     }
 
     private func card(_ v: NowView) -> some View {
+        NowCardFace(v: v, palette: palette, openTask: { openTask($0) }, openEvent: { openEvent($0) })
+    }
+
+    private static func key(_ v: NowView) -> String { "\(v.kind.name):\(v.task?.id ?? v.event?.id ?? v.session?.habitId ?? "")" }
+
+    private func openTask(_ id: String) {
+        bringForward {
+            model.go(to: .today, reduced: reduceMotion)
+            model.select(id, reduced: reduceMotion)
+        }
+    }
+
+    private func openEvent(_ e: CalendarEvent) { bringForward { model.openEvent = e } }
+
+    /// Brings MEKA's window forward (opening it if it was closed), then does what was asked there.
+    private func bringForward(_ then: () -> Void) {
+        NSApp.activate()
+        if !NSApp.windows.contains(where: { $0.isVisible && $0.canBecomeMain }) { openWindow(id: "today") }
+        then()
+    }
+}
+
+/// The "now" card's face: label, title, line and its one-tap chips. The menu bar's card and Today's Up next (Fold review
+/// 2026-10-09, item 3: Up next is the same card on every screen) both draw it; they differ only in where a task or an
+/// event opens. Buttons press in (0.97) with a light haptic.
+struct NowCardFace: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.openURL) private var openURL
+    let v: NowView
+    let palette: MekaPalette
+    let openTask: (String) -> Void
+    let openEvent: (CalendarEvent) -> Void
+
+    var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             Text(v.label.uppercased()).font(MekaType.sectionLabel)
                 .foregroundStyle(v.lit ? palette.accent : palette.textTertiary)
-            Text(v.title).font(MekaType.upNextTitle).lineLimit(2)
+            // Semibold 22 pt (Fold review 2026-10-09, item 3): one bold line that doesn't shout.
+            Text(v.title).font(MekaType.nowTitle).lineLimit(2)
                 .foregroundStyle(v.kind == NowKind.clear ? palette.textSecondary : palette.textPrimary)
             if let line = v.line {
                 Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
             }
             if !v.actions.isEmpty {
                 HStack(spacing: MekaSpace.s) {
-                    ForEach(v.actions, id: \.name) { a in chip(a, v) }
+                    ForEach(v.actions, id: \.name) { a in chip(a) }
                 }
                 .padding(.top, MekaSpace.s)
             }
@@ -66,7 +100,7 @@ struct NowCard: View {
         }
     }
 
-    private func chip(_ a: NowAction, _ v: NowView) -> some View {
+    private func chip(_ a: NowAction) -> some View {
         let primary = a == NowAction.join || a == NowAction.done || a == NowAction.went || (a == NowAction.maps && v.join == nil)
         return Button {
             // Went and Didn't go give their own haptics (light / tick) in the model, as from Today's session card.
@@ -92,7 +126,7 @@ struct NowCard: View {
         .buttonStyle(MekaPressStyle())
     }
 
-    private static func label(_ a: NowAction, _ v: NowView) -> String {
+    static func label(_ a: NowAction, _ v: NowView) -> String {
         switch a {
         case NowAction.join: return v.join?.label ?? "Join"
         case NowAction.maps: return "Directions"
@@ -102,23 +136,5 @@ struct NowCard: View {
         case NowAction.didntGo: return "Didn't go"
         default: return "Open"
         }
-    }
-
-    private static func key(_ v: NowView) -> String { "\(v.kind.name):\(v.task?.id ?? v.event?.id ?? v.session?.habitId ?? "")" }
-
-    private func openTask(_ id: String) {
-        bringForward {
-            model.go(to: .today, reduced: reduceMotion)
-            model.select(id, reduced: reduceMotion)
-        }
-    }
-
-    private func openEvent(_ e: CalendarEvent) { bringForward { model.openEvent = e } }
-
-    /// Brings MEKA's window forward (opening it if it was closed), then does what was asked there.
-    private func bringForward(_ then: () -> Void) {
-        NSApp.activate()
-        if !NSApp.windows.contains(where: { $0.isVisible && $0.canBecomeMain }) { openWindow(id: "today") }
-        then()
     }
 }

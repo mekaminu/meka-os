@@ -85,6 +85,8 @@ enum MekaType {
     static let itemMetaTracking: CGFloat = 0.00
     static let upNextTitle = Font.system(size: 26, weight: .semibold)
     static let upNextTitleTracking: CGFloat = -0.39
+    static let nowTitle = Font.system(size: 22, weight: .semibold)
+    static let nowTitleTracking: CGFloat = -0.22
     static let body = Font.system(size: 17, weight: .regular)
     static let bodyTracking: CGFloat = 0.00
     static let caption = Font.system(size: 13, weight: .regular)
