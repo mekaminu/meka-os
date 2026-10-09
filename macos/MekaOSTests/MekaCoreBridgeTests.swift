@@ -431,8 +431,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(live.mode(reduced: false, powerSave: false), DayRingLiveMode.sweep)
         XCTAssertEqual(live.mode(reduced: false, powerSave: true), DayRingLiveMode.minute)
         XCTAssertEqual(live.mode(reduced: true, powerSave: false), DayRingLiveMode.still)
-        XCTAssertEqual(live.TAIL_SEGMENTS, 14)
+        XCTAssertEqual(live.TAIL_SEGMENTS, 20)
+        XCTAssertEqual(live.TAIL_DEGREES, 60)
         XCTAssertGreaterThan(live.tailAlpha(i: 0), live.tailAlpha(i: 5))
+    }
+
+    /// Fold review 2026-10-09, item 2: the brighter ring's numbers reach the Mac's dial.
+    func testDayRingLookReachesSwift() {
+        let look = DayRingLook.shared
+        XCTAssertEqual(look.TRACK_STROKE_DP, 3)
+        XCTAssertEqual(look.TRACK_ALPHA, 0.55, accuracy: 0.001)
+        XCTAssertEqual(look.HOUR_MARK_ALPHA, 0.5, accuracy: 0.001)
+        XCTAssertEqual(look.HAND_STROKE_DP, 2.5, accuracy: 0.001)
+        XCTAssertEqual(look.edgeAlpha(glow: 0.6), 0.6, accuracy: 0.001)
+        XCTAssertEqual(look.blurOffsetDp(i: look.EDGE_BLUR_LAYERS - 1), look.EDGE_BLUR_DP, accuracy: 0.001)
+        XCTAssertGreaterThan(look.blurAlpha(i: 0, glow: 1), look.blurAlpha(i: 3, glow: 1))
     }
 
     /// Living Today, slice 3: the ring carries the day — the work band, the arc on now, a fast, clicking an arc.

@@ -403,10 +403,10 @@ object DayRingLive {
     const val SHIMMER_BAND_DEGREES = 50f
 
     /** How long the comet tail behind the hand reaches (degrees of the dial). */
-    const val TAIL_DEGREES = 42f
+    const val TAIL_DEGREES = 60f
 
     /** Segments the tail is drawn in, each fainter than the one before. */
-    const val TAIL_SEGMENTS = 14
+    const val TAIL_SEGMENTS = 20
 
     /** How long the now dot's pop lasts after the minute turns, and how far it swells at most. */
     const val NOW_POP_MS = 600L
@@ -485,7 +485,7 @@ object DayRingLive {
     /** Opacity of tail segment [i] (0 = next to the hand, brightest), fading to nothing at the tail's end. */
     fun tailAlpha(i: Int): Float {
         val f = 1f - i.toFloat() / TAIL_SEGMENTS
-        return (f * f * 0.55f).coerceIn(0f, 1f)
+        return (f * f * DayRingLook.TAIL_PEAK_ALPHA).coerceIn(0f, 1f)
     }
 
     /** How long until the ring next needs drawing in [mode]: the next frame while sweeping, the next minute else. */
@@ -522,4 +522,53 @@ object DayRingHeader {
 
     /** The track's radius (what taps are measured against): half the dial, less half the stroke and a 2 dp inset. */
     fun trackRadiusDp(sizeDp: Int): Float = sizeDp / 2f - strokeDp(sizeDp) / 2f - 2f
+}
+
+/**
+ * How bright the Day ring is drawn (Fold review 2026-10-09, item 2: "brighter ring"). Shared by the Fold and the Mac so
+ * both dials read the same. Every colour here is the theme's brass (`accent`), so Light gets the darker brass for free.
+ */
+object DayRingLook {
+    /** The track (the brass mark the arcs sit on): 3 dp at 55 % brass (was 1.5 dp at 28 % grey). */
+    const val TRACK_STROKE_DP = 3f
+    const val TRACK_ALPHA = 0.55f
+
+    /** The hour marks (ticks at 00 · 06 · 12 · 18, dots between) at 50 % brass. */
+    const val HOUR_MARK_ALPHA = 0.5f
+
+    /** The breathing edge: a 1.5 dp brass line whose alpha is the breath itself (60 % → 100 %), and a soft outer blur. */
+    const val EDGE_STROKE_DP = 1.5f
+    const val EDGE_BLUR_DP = 8f
+
+    /** Layers the blur is drawn in (concentric rings outside the edge, each fainter). */
+    const val EDGE_BLUR_LAYERS = 6
+
+    /** The blur's brightest layer (just outside the edge) at the top of the breath. */
+    const val EDGE_BLUR_PEAK_ALPHA = 0.22f
+
+    /** The second hand: 2.5 dp, with a 3 dp tip bead and a faint halo round the bead. */
+    const val HAND_STROKE_DP = 2.5f
+    const val HAND_TIP_DP = 3f
+    const val HAND_TIP_HALO_DP = 6f
+    const val HAND_TIP_HALO_ALPHA = 0.28f
+
+    /** The comet tail's brightest segment (right behind the hand); it fades as a square to nothing. */
+    const val TAIL_PEAK_ALPHA = 0.7f
+    const val TAIL_STROKE_DP = 3.5f
+
+    /** The edge line's alpha for a breath of [glow] (DayRingLive.glow: 0.6 → 1.0). */
+    fun edgeAlpha(glow: Float): Float = glow.coerceIn(0f, 1f)
+
+    /** How far outside the edge blur layer [i] sits (dp), evenly across [EDGE_BLUR_DP]. */
+    fun blurOffsetDp(i: Int): Float = EDGE_BLUR_DP * (i + 1) / EDGE_BLUR_LAYERS
+
+    /** Blur layer [i]'s alpha for a breath of [glow]: brightest next to the edge, falling to nothing at [EDGE_BLUR_DP]. */
+    fun blurAlpha(i: Int, glow: Float): Float {
+        if (i < 0 || i >= EDGE_BLUR_LAYERS) return 0f
+        val f = 1f - i.toFloat() / EDGE_BLUR_LAYERS
+        return (f * f * EDGE_BLUR_PEAK_ALPHA * glow).coerceIn(0f, 1f)
+    }
+
+    /** Each blur layer's stroke: wide enough that neighbouring layers overlap into one soft glow. */
+    fun blurStrokeDp(): Float = EDGE_BLUR_DP / EDGE_BLUR_LAYERS * 1.6f
 }

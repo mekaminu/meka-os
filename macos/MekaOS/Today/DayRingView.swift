@@ -100,7 +100,9 @@ struct DayRingView: View {
                 }
                 // The mark: the dial's track, drawing itself round from the top.
                 if mark > 0 {
-                    ctx.stroke(arcPath(from: 0, sweep: 360 * mark), with: .color(palette.textTertiary.opacity(0.28)), lineWidth: 1.5)
+                    // Brass, 3 pt at 55 % (DayRingLook: Fold review 2026-10-09, the brighter ring).
+                    ctx.stroke(arcPath(from: 0, sweep: 360 * mark), with: .color(palette.accent.opacity(Double(DayRingLook.shared.TRACK_ALPHA))),
+                               lineWidth: CGFloat(DayRingLook.shared.TRACK_STROKE_DP))
                 }
                 // The hour marks: a tick at 00 · 06 · 12 · 18, a fine dot just inside the track at every other hour. On
                 // the first open they fade in one by one behind the drawing mark; the quick draw brings them up with it.
@@ -111,11 +113,11 @@ struct DayRingView: View {
                         var tick = Path()
                         tick.move(to: point(Double(h) * 15, radius - 4))
                         tick.addLine(to: point(Double(h) * 15, radius + 4))
-                        ctx.stroke(tick, with: .color(palette.textTertiary.opacity(0.5 * show)), lineWidth: 1)
+                        ctx.stroke(tick, with: .color(palette.accent.opacity(Double(DayRingLook.shared.HOUR_MARK_ALPHA) * show)), lineWidth: 1)
                     } else {
                         let p = point(Double(h) * 15, radius - stroke / 2 - 3)
                         ctx.fill(Path(ellipseIn: CGRect(x: p.x - 0.9, y: p.y - 0.9, width: 1.8, height: 1.8)),
-                                 with: .color(palette.textTertiary.opacity(0.4 * show)))
+                                 with: .color(palette.accent.opacity(Double(DayRingLook.shared.HOUR_MARK_ALPHA) * show)))
                     }
                 }
                 // Work hours: a faint band along the track (not booked, so not an arc), coming up with the mark.
@@ -238,9 +240,13 @@ struct DayRingLiveLayer: View {
         let nowDegrees = Double(ring.nowDegrees)
         let onNow = ring.arcs.filter { $0.current }.map { (Double($0.startDegrees), Double($0.sweepDegrees)) }
         let accent = palette.accent
+        let look = DayRingLook.shared
+        // The canvas reaches past the dial by the edge's blur (negative padding below) so the soft glow isn't clipped.
+        let bleed = CGFloat(look.EDGE_BLUR_DP) + 2
         return Canvas { ctx, canvasSize in
-            let stroke = CGFloat(DayRingHeader.shared.strokeDp(sizeDp: Int32(min(canvasSize.width, canvasSize.height))))
-            let radius = min(canvasSize.width, canvasSize.height) / 2 - stroke / 2 - 2
+            let dial = min(canvasSize.width, canvasSize.height) - bleed * 2
+            let stroke = CGFloat(DayRingHeader.shared.strokeDp(sizeDp: Int32(dial)))
+            let radius = dial / 2 - stroke / 2 - 2
             let c = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
             func point(_ degrees: Double, _ r: CGFloat) -> CGPoint {
                 let a = (degrees - 90) * .pi / 180
@@ -252,9 +258,14 @@ struct DayRingLiveLayer: View {
                 return p
             }
             let edge = radius + stroke / 2 + 1
-            // The brass edge and its soft halo, breathing.
-            ctx.stroke(arc(edge + 1.5, from: 0, sweep: 360), with: .color(accent.opacity(0.10 * glow * fadeIn)), lineWidth: 4)
-            ctx.stroke(arc(edge, from: 0, sweep: 360), with: .color(accent.opacity(0.55 * glow * fadeIn)), lineWidth: 1)
+            // The brass edge, breathing 60 % → 100 %, with a soft blur reaching 8 pt out (layered rings, DayRingLook).
+            let blurStroke = CGFloat(look.blurStrokeDp())
+            for i in 0..<Int(look.EDGE_BLUR_LAYERS) {
+                ctx.stroke(arc(edge + CGFloat(look.blurOffsetDp(i: Int32(i))), from: 0, sweep: 360),
+                           with: .color(accent.opacity(Double(look.blurAlpha(i: Int32(i), glow: Float(glow))) * fadeIn)), lineWidth: blurStroke)
+            }
+            ctx.stroke(arc(edge, from: 0, sweep: 360), with: .color(accent.opacity(Double(look.edgeAlpha(glow: Float(glow))) * fadeIn)),
+                       lineWidth: CGFloat(look.EDGE_STROKE_DP))
             // The arc on now glows with the ring's breath (Living Today, slice 3): a soft wider halo over it.
             for (from, sweep) in onNow {
                 ctx.stroke(arc(radius, from: from, sweep: sweep), with: .color(accent.opacity(0.30 * glow * fadeIn)),
@@ -278,14 +289,18 @@ struct DayRingLiveLayer: View {
             let step = Double(live.TAIL_DEGREES) / Double(segments)
             for i in 0..<segments {
                 ctx.stroke(arc(radius, from: hand - step * Double(i + 1), sweep: step + 0.4),
-                           with: .color(accent.opacity(Double(live.tailAlpha(i: Int32(i))) * fadeIn)), lineWidth: 3)
+                           with: .color(accent.opacity(Double(live.tailAlpha(i: Int32(i))) * fadeIn)), lineWidth: CGFloat(look.TAIL_STROKE_DP))
             }
             var line = Path()
             line.move(to: point(hand, radius - stroke * 1.2))
             line.addLine(to: point(hand, radius + stroke * 0.9))
-            ctx.stroke(line, with: .color(accent.opacity(fadeIn)), style: StrokeStyle(lineWidth: 1.25, lineCap: .round))
+            ctx.stroke(line, with: .color(accent.opacity(fadeIn)), style: StrokeStyle(lineWidth: CGFloat(look.HAND_STROKE_DP), lineCap: .round))
             let bead = point(hand, radius)
-            ctx.fill(Path(ellipseIn: CGRect(x: bead.x - 2.5, y: bead.y - 2.5, width: 5, height: 5)), with: .color(accent.opacity(fadeIn)))
+            let halo = CGFloat(look.HAND_TIP_HALO_DP)
+            ctx.fill(Path(ellipseIn: CGRect(x: bead.x - halo, y: bead.y - halo, width: halo * 2, height: halo * 2)),
+                     with: .color(accent.opacity(Double(look.HAND_TIP_HALO_ALPHA) * fadeIn)))
+            let tipR = CGFloat(look.HAND_TIP_DP)
+            ctx.fill(Path(ellipseIn: CGRect(x: bead.x - tipR, y: bead.y - tipR, width: tipR * 2, height: tipR * 2)), with: .color(accent.opacity(fadeIn)))
             // The now dot pops as the minute turns.
             if pop > 1 {
                 let tip = point(nowDegrees, radius + stroke * 0.7)
@@ -293,6 +308,7 @@ struct DayRingLiveLayer: View {
                 ctx.fill(Path(ellipseIn: CGRect(x: tip.x - r, y: tip.y - r, width: r * 2, height: r * 2)), with: .color(accent))
             }
         }
+        .padding(-bleed)
     }
 }
 

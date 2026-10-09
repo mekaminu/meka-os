@@ -62,6 +62,7 @@ import androidx.lifecycle.compose.currentStateAsState
 import kotlinx.coroutines.delay
 import os.meka.android.designsystem.MotionPrefs
 import os.meka.core.domain.DayRingLive
+import os.meka.core.domain.DayRingLook
 import os.meka.core.domain.DayRingLiveMode
 import java.util.TimeZone
 import kotlin.math.cos
@@ -153,8 +154,9 @@ fun DayRingHero(
                 val arcSize = Size(this.size.width - inset * 2, this.size.height - inset * 2)
                 val topLeft = Offset(inset, inset)
                 val radius = arcSize.width / 2
-                // The mark: the dial's track, drawing itself round from the top.
-                drawArc(colors.textTertiary.copy(alpha = 0.28f), -90f, 360f * mark, false, topLeft, arcSize, style = Stroke(1.5.dp.toPx()))
+                // The mark: the dial's track, drawing itself round from the top — brass, 3 dp at 55 % (DayRingLook).
+                drawArc(colors.accent.copy(alpha = colors.accent.alpha * DayRingLook.TRACK_ALPHA), -90f, 360f * mark, false, topLeft,
+                    arcSize, style = Stroke(DayRingLook.TRACK_STROKE_DP.dp.toPx()))
                 // The hour marks: a tick at 00 · 06 · 12 · 18, a fine dot just inside the track at every other hour. On
                 // the first open they fade in one by one behind the drawing mark; the quick draw brings them up with it.
                 for (h in 0 until 24) {
@@ -164,13 +166,13 @@ fun DayRingHero(
                     if (h % 6 == 0) {
                         val outer = radius + 4.dp.toPx()
                         val inner = radius - 4.dp.toPx()
-                        drawLine(colors.textTertiary.copy(alpha = 0.5f * show),
+                        drawLine(colors.accent.copy(alpha = DayRingLook.HOUR_MARK_ALPHA * show),
                             Offset(center.x + (cos(a) * inner).toFloat(), center.y + (sin(a) * inner).toFloat()),
                             Offset(center.x + (cos(a) * outer).toFloat(), center.y + (sin(a) * outer).toFloat()),
                             strokeWidth = 1.dp.toPx())
                     } else {
                         val r = radius - stroke / 2 - 3.dp.toPx()
-                        drawCircle(colors.textTertiary.copy(alpha = 0.4f * show), radius = 0.9.dp.toPx(),
+                        drawCircle(colors.accent.copy(alpha = DayRingLook.HOUR_MARK_ALPHA * show), radius = 0.9.dp.toPx(),
                             center = Offset(center.x + (cos(a) * r).toFloat(), center.y + (sin(a) * r).toFloat()))
                     }
                 }
@@ -310,9 +312,14 @@ private fun DayRingLiveLayer(
             else -> DayRingLive.glow(now)
         }
         val edge = radius + stroke / 2 + 1.dp.toPx()
-        // The brass edge and its soft halo, breathing.
-        drawCircle(colors.accent.copy(alpha = 0.10f * glow), edge + 1.5.dp.toPx(), center, style = Stroke(4.dp.toPx()), alpha = fadeIn)
-        drawCircle(colors.accent.copy(alpha = 0.55f * glow), edge, center, style = Stroke(1.dp.toPx()), alpha = fadeIn)
+        // The brass edge, breathing 60 % → 100 %, with a soft blur reaching 8 dp out (layered rings, DayRingLook).
+        val blurStroke = DayRingLook.blurStrokeDp().dp.toPx()
+        for (i in 0 until DayRingLook.EDGE_BLUR_LAYERS) {
+            drawCircle(colors.accent.copy(alpha = DayRingLook.blurAlpha(i, glow)), edge + DayRingLook.blurOffsetDp(i).dp.toPx(), center,
+                style = Stroke(blurStroke), alpha = fadeIn)
+        }
+        drawCircle(colors.accent.copy(alpha = DayRingLook.edgeAlpha(glow)), edge, center,
+            style = Stroke(DayRingLook.EDGE_STROKE_DP.dp.toPx()), alpha = fadeIn)
         fun box(r: Float) = Pair(Offset(center.x - r, center.y - r), Size(r * 2, r * 2))
         // The arc on now glows with the ring's breath (Living Today, slice 3): a soft wider halo over it.
         ring.arcs.filter { it.current }.forEach { arc ->
@@ -339,13 +346,14 @@ private fun DayRingLiveLayer(
         val step = DayRingLive.TAIL_DEGREES / DayRingLive.TAIL_SEGMENTS
         for (i in 0 until DayRingLive.TAIL_SEGMENTS) {
             drawArc(colors.accent.copy(alpha = DayRingLive.tailAlpha(i) * fadeIn), hand - step * (i + 1) - 90f, step + 0.4f,
-                false, tl, sz, style = Stroke(3.dp.toPx()))
+                false, tl, sz, style = Stroke(DayRingLook.TAIL_STROKE_DP.dp.toPx()))
         }
         val a = Math.toRadians(hand - 90.0)
         fun at(r: Float) = Offset(center.x + (cos(a) * r).toFloat(), center.y + (sin(a) * r).toFloat())
         drawLine(colors.accent.copy(alpha = fadeIn), at(radius - stroke * 1.2f), at(radius + stroke * 0.9f),
-            strokeWidth = 1.25.dp.toPx(), cap = StrokeCap.Round)
-        drawCircle(colors.accent.copy(alpha = fadeIn), 2.5.dp.toPx(), at(radius))
+            strokeWidth = DayRingLook.HAND_STROKE_DP.dp.toPx(), cap = StrokeCap.Round)
+        drawCircle(colors.accent.copy(alpha = DayRingLook.HAND_TIP_HALO_ALPHA * fadeIn), DayRingLook.HAND_TIP_HALO_DP.dp.toPx(), at(radius))
+        drawCircle(colors.accent.copy(alpha = fadeIn), DayRingLook.HAND_TIP_DP.dp.toPx(), at(radius))
         // The now dot pops as the minute turns.
         val pop = DayRingLive.nowPop(now)
         if (pop > 1f) {
