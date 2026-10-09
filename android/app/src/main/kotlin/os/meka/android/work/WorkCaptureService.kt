@@ -17,9 +17,9 @@ import os.meka.core.domain.Capture
 import os.meka.core.domain.CaptureApp
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.CapturedItem
+import os.meka.core.domain.GroupDigestRules
 import os.meka.core.domain.MessageTriageRules
 import os.meka.core.domain.RequestWatchRules
-import os.meka.core.domain.TriageSettings
 import os.meka.core.facade.RequestRead
 import os.meka.core.facade.TriageRead
 
@@ -38,7 +38,8 @@ import os.meka.core.facade.TriageRead
  * and comes back as a Needs you card (Needs a reply with a drafted reply, an Action, FYI); a busy group's chatter is kept
  * on this phone, sealed, for the digest, with no AI. Each message is triaged once.
  *
- * It never replies on its own, never marks anything read and never dismisses the original notification. While a
+ * It never replies on its own and never marks anything read. The only notifications it dismisses are a Digest group's
+ * chatter once every message in it is kept for the digest (slice 4: the group stops sitting in the shade). While a
  * message's notification shows, its Reply action is held in memory ([LiveReplies]) so Send on its Needs you card (Meka's
  * tap, slice 3) answers through Android's own Reply.
  */
@@ -69,6 +70,11 @@ class WorkCaptureService : NotificationListenerService() {
             // After the work path, so an urgent alert never waits on the AI.
             readRequests(meka, items)
             triage(meka, items)
+            // A notification wholly from Digest groups, every message kept on this phone: cleared, so the group
+            // stops sitting in the shade (slice 4). Mentions, 1:1 chats and Normal groups are never cleared.
+            if (GroupDigestRules.clearsNotification(items, meka.captures.triageSettings.value, meka.captures.digestKept())) {
+                runCatching { cancelNotification(sbn.key) }
+            }
         }
     }
 
@@ -88,8 +94,8 @@ class WorkCaptureService : NotificationListenerService() {
     /** The messages assistant: one message at a time (under the same lock, so a re-post is never triaged twice). */
     private suspend fun triage(meka: MekaApplication, items: List<CapturedItem>) = requestLock.withLock {
         val store = meka.captures
-        // Work mode → Messages (slice 5) will hold Meka's group modes and never-to-AI list; until then the defaults.
-        val settings = TriageSettings()
+        // Each group's mode as switched on its digest card (slice 4); the never-to-AI list comes with slice 5's screen.
+        val settings = store.triageSettings.value
         val toTriage = MessageTriageRules.toTriage(items, settings, store.triageSeen(), System.currentTimeMillis())
         val digest = mutableListOf<CapturedItem>()
         val done = mutableListOf<String>()

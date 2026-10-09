@@ -13,10 +13,13 @@ import os.meka.core.domain.Capture
 import os.meka.core.domain.CaptureApp
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.CapturedItem
+import os.meka.core.domain.GroupDigestRules
+import os.meka.core.domain.GroupMode
 import os.meka.core.domain.MessageTriageRules
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.RequestWatch
 import os.meka.core.domain.RequestWatchRules
+import os.meka.core.domain.TriageSettings
 import java.io.File
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -59,6 +62,17 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
      */
     private val _digest = MutableStateFlow<List<CapturedItem>>(emptyList())
     val digest: StateFlow<List<CapturedItem>> = _digest.asStateFlow()
+
+    /**
+     * The messages assistant's settings (slice 4): each group's mode switched on its digest card (Digest unless
+     * changed); the never-to-AI list arrives with slice 5's screen. Stays on this phone.
+     */
+    private val _triageSettings = MutableStateFlow(TriageSettings())
+    val triageSettings: StateFlow<TriageSettings> = _triageSettings.asStateFlow()
+
+    /** When Meka last caught up with each digest group (group key → when), so the digest shows only what's new. */
+    private val _digestSeen = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val digestSeen: StateFlow<Map<String, Long>> = _digestSeen.asStateFlow()
 
     init {
         synchronized(lock) { load() }
@@ -105,6 +119,25 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
         save()
     }
 
+    /** The ids kept for the digest (to tell whether a notification's messages are all safely kept). */
+    fun digestKept(): Set<String> = synchronized(lock) { _digest.value.mapTo(HashSet()) { it.id } }
+
+    /** Sets [group]'s mode from its digest card (Digest · Normal · Ignore). */
+    fun setGroupMode(group: String, mode: GroupMode) = synchronized(lock) {
+        _triageSettings.value = _triageSettings.value.copy(groupModes = GroupDigestRules.setMode(_triageSettings.value.groupModes, group, mode))
+        save()
+    }
+
+    /** Caught up with [groupKeys] now: their cards leave until something new comes. */
+    fun caughtUp(groupKeys: Collection<String>) = synchronized(lock) {
+        if (groupKeys.isEmpty()) return@synchronized
+        _digestSeen.value = GroupDigestRules.caughtUp(_digestSeen.value, groupKeys, nowMs())
+        save()
+    }
+
+    /** Takes back a "Caught up" (the undo bar): [before] as it was. */
+    fun restoreDigestSeen(before: Map<String, Long>) = synchronized(lock) { _digestSeen.value = before; save() }
+
     private fun load() {
         val bytes = try { file.readFully() } catch (e: java.io.FileNotFoundException) { return }
         val json = try { JSONObject(String(open(bytes), Charsets.UTF_8)) } catch (e: Exception) {
@@ -137,6 +170,14 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
             json.optJSONArray("digest")?.let { a -> (0 until a.length()).mapNotNull { readItem(a.getJSONObject(it)) } }.orEmpty(),
             nowMs(),
         )
+        _triageSettings.value = TriageSettings(
+            groupModes = json.optJSONObject("groupModes")?.let { o -> o.keys().asSequence().associateWith { GroupMode.of(o.optString(it)) } }.orEmpty(),
+        )
+        _digestSeen.value = GroupDigestRules.caughtUp(
+            json.optJSONObject("digestSeen")?.let { o -> o.keys().asSequence().associateWith { o.optLong(it) } }.orEmpty(),
+            emptyList(),
+            nowMs(),
+        )
     }
 
     private fun save() {
@@ -151,6 +192,8 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
             .put("requestSeen", JSONObject().also { o -> requestSeen.forEach { (id, at) -> o.put(id, at) } })
             .put("triageSeen", JSONObject().also { o -> triageSeen.forEach { (id, at) -> o.put(id, at) } })
             .put("digest", JSONArray().also { a -> _digest.value.forEach { a.put(writeItem(it)) } })
+            .put("groupModes", JSONObject().also { o -> _triageSettings.value.groupModes.forEach { (g, m) -> o.put(g, m.wire) } })
+            .put("digestSeen", JSONObject().also { o -> _digestSeen.value.forEach { (g, at) -> o.put(g, at) } })
         val sealed = seal(json.toString().toByteArray(Charsets.UTF_8))
         val out = file.startWrite()
         try { out.write(sealed); file.finishWrite(out) } catch (e: Exception) { file.failWrite(out); throw e }

@@ -131,6 +131,8 @@ internal class DecisionMoves(
     val onTriage: (TriageCard, TriageChoice) -> Unit = { _, _ -> },
     /** "Send all 3": each easy reply's draft, as its card shows it, on Meka's one tap. */
     val onSendAll: (List<TriageCard>) -> Unit = {},
+    /** The undo bar, for the group digest's Caught up and group switches (slice 4). */
+    val undoLine: (String, (suspend () -> Unit)?) -> Unit = { _, _ -> },
 ) {
     val setAside: List<String> get() = aside.value
 }
@@ -223,7 +225,7 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 if (sent > 0) undo.show(TriageReplyRules.sentAllLine(sent), null)
                 Unit
             }
-        })
+        }, undoLine = { line, back -> undo.show(line, back) })
     }
 }
 
@@ -243,6 +245,9 @@ internal fun NeedsYouColumn(
     val sendAll = remember(triage, live) { TriageReplyRules.sendAll(triage, live) }
     // Meka's edits of MEKA's drafts, by message id, so Send and "Send all" send what each card shows.
     val edits = remember { mutableStateMapOf<String, String>() }
+    // Busy groups' chatter, kept on this phone (V1, messages slice 4): open at the top from 12:30 and 18:30, else a line.
+    val captures = (LocalContext.current.applicationContext as MekaApplication).captures
+    val digest = rememberGroupDigest(captures)
     val goals by core.goalsView.collectAsState()
     val lists by core.listsView.collectAsState()
     val meanwhile = remember(goals, lists) { NeedsYouMeanwhileRules.build(goals, lists) }
@@ -265,6 +270,12 @@ internal fun NeedsYouColumn(
         }
         item(key = "after-work") {
             AfterWorkCard(core, Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(1, play))) { openAfterWork() }
+        }
+        digest?.takeIf { it.due }?.let { d ->
+            item(key = "group-digest") {
+                GroupDigestSection(d, captures, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(2, play)))
+            }
         }
         // Messages that need a reply (with MEKA's draft), then FYIs (V1, messages slice 3), above the requests: "Send all"
         // first when two or more short replies can go; each card staggers in after the after-work card and folds away
@@ -290,6 +301,13 @@ internal fun NeedsYouColumn(
             item(key = "request-${card.id}") {
                 RequestCardView(card, { moves.onRequest(card, it) },
                     Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(2 + triage.size + i, play)))
+            }
+        }
+        // Between digests, groups with news are one quiet line under the cards that Meka can open on demand.
+        digest?.takeIf { !it.due }?.let { d ->
+            item(key = "group-digest") {
+                GroupDigestSection(d, captures, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(2 + triage.size + requests.size, play)))
             }
         }
         if (cards.isEmpty() && requests.isEmpty() && triage.isEmpty()) {
