@@ -149,6 +149,7 @@ import os.meka.core.facade.MekaCore
 import os.meka.core.domain.ReviewCard
 import os.meka.android.review.ReviewCardTile
 import os.meka.core.domain.GoalsView
+import os.meka.core.domain.HabitChipRules
 import kotlinx.coroutines.flow.StateFlow
 import os.meka.core.sync.SyncStatus
 import java.time.Instant
@@ -575,6 +576,12 @@ private fun TodayPane(
     // Not on the closed Fold's cover screen: the card waits for the main screen.
     val motionCard = if (now == null) motion.card else null
     val pull = rememberPullToSync { core?.syncNow() }
+    // Today's habits as chips under the ticker (Fold review 2026-10-09 07:26, item 3); the tiles strip drops its habits tile.
+    val goalsNow by actions.goals.collectAsState()
+    val habitChips = remember(goalsNow) { HabitChipRules.build(goalsNow) }
+    val stripTiles = remember(today.dayTiles) { HabitChipRules.stripTiles(today.dayTiles) }
+    val chipHaptics = rememberMekaHaptics()
+    val chipScope = rememberCoroutineScope()
     Column(modifier.imePadding()) {
         // Pull to sync (motion pass 2, slice 3): pulling Today down past its top fills a brass ring; letting go syncs.
         PullToSyncBox(pull, Modifier.weight(1f).fillMaxWidth()) {
@@ -634,9 +641,20 @@ private fun TodayPane(
                     if (core != null && TickerRules.shown(tickerMode, ticker)) {
                         NewsTickerStrip(core, ticker, tickerMode, Modifier.padding(top = MekaSpace.s), openStory = openStory, openMatch = openMatch)
                     }
+                    // Today's habits: compact chips to tick, hidden when there are none.
+                    if (core != null && habitChips.isNotEmpty()) {
+                        HabitChipsRow(
+                            habitChips, play,
+                            tick = { chip ->
+                                chipHaptics.light()
+                                chipScope.launch { runCatching { core.setHabitDone(chip.id, !chip.done) } }
+                            },
+                            modifier = Modifier.padding(top = MekaSpace.s),
+                        )
+                    }
                     // The ring's live tiles, a slim row under the ticker (they left the dial with the move).
                     if (today.timeline.dateLabel.isNotEmpty()) {
-                        DayTilesStrip(today.dayTiles, ringPlay, today.watchFace.arcs.size, Modifier.padding(top = MekaSpace.s))
+                        DayTilesStrip(stripTiles, ringPlay, today.watchFace.arcs.size, Modifier.padding(top = MekaSpace.s))
                     }
                 }
             }

@@ -384,6 +384,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(core.goalsView.value.habits.first { $0.id == id }?.doneToday, false)
     }
 
+    /// Today's habit chips (Fold review 2026-10-09 07:26, item 3): none without habits, and the strip under the
+    /// header leaves its habits tile to the chips.
+    func testHabitChipsReachSwift() {
+        XCTAssertTrue(HabitChipRules.shared.build(goals: nil).isEmpty)
+        XCTAssertEqual(HabitChipRules.shared.shortTitle(title: "Read 20 pages of a novel"), "Read 20 pages of…")
+        let tiles = [DayTile(kind: .habits, value: 0, total: 1, label: "habits today"),
+                     DayTile(kind: .renewals, value: 2, total: 0, label: "renewals due")]
+        XCTAssertEqual(HabitChipRules.shared.stripTiles(tiles: tiles).map(\.kind), [.renewals])
+    }
+
     /// The Day ring's live tiles (the opening moment, part 2): their words reach Swift.
     func testDayTilesReachSwift() {
         XCTAssertEqual(DayTileRules.shared.valueText(kind: .nextEvent, shown: 100, total: 0), "1 h 40")

@@ -134,10 +134,20 @@ struct TodayView: View {
                                       size: CGFloat(DayRingHeader.shared.WIDE_DP), onOpen: { showDayRing = true })
                     }
                     }
-                    // The ring's live tiles, a slim row under the header (they left the dial with the move).
-                    if let today = model.today, !today.timeline.dateLabel.isEmpty, !today.dayTiles.isEmpty {
-                        DayTilesStrip(tiles: today.dayTiles, play: ringPlay ?? .still, arcs: today.watchFace.arcs.count, palette: palette)
+                    // Today's habits as chips to tick (Fold review 2026-10-09 07:26, item 3); none, no row.
+                    let habitChips = HabitChipRules.shared.build(goals: model.goals)
+                    if !habitChips.isEmpty {
+                        HabitChipsRow(chips: habitChips, palette: palette, play: play)
                             .padding(.top, MekaSpace.s)
+                    }
+                    // The ring's live tiles, a slim row under the header (they left the dial with the move); the
+                    // habits tile is left to the chips.
+                    if let today = model.today, !today.timeline.dateLabel.isEmpty {
+                        let stripTiles = HabitChipRules.shared.stripTiles(tiles: today.dayTiles)
+                        if !stripTiles.isEmpty {
+                            DayTilesStrip(tiles: stripTiles, play: ringPlay ?? .still, arcs: today.watchFace.arcs.count, palette: palette)
+                                .padding(.top, MekaSpace.s)
+                        }
                     }
                     Spacer().frame(height: MekaSpace.l)
 
