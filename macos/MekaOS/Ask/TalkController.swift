@@ -56,24 +56,14 @@ final class TalkController {
     @ObservationIgnored private var clock: Task<Void, Never>?
     private let meter = OSAllocatedUnfairLock<Float>(initialState: -160)
 
-    private let synthesizer = AVSpeechSynthesizer()
-    private let speechDone = SpeechDone()
-    private let clipDone = ClipDone()
-    @ObservationIgnored private var voice: AVSpeechSynthesisVoice?
-    /// This Mac's own voice, speed and pitch (the voice picker's, kept on the Mac).
-    @ObservationIgnored private var voiceSettings = DeviceVoiceSettings.companion.DEFAULT
+    /// MEKA's voice, else the Mac's own (the brief's speaker too; re-reads the picker's Mac voice before each line).
+    private let speaker = MekaSpeaker()
     /// Bumped by every line and every stop, so a line that was cut short doesn't move the conversation on.
     @ObservationIgnored private var utterance = 0
-    @ObservationIgnored private var speaking: Task<Void, Never>?
-    @ObservationIgnored private var player: AVAudioPlayer?
-    /// The Mac's own lines being said, by id, resumed when each is over (or stopped).
-    @ObservationIgnored private var deviceWaiting: [Int: CheckedContinuation<Void, Never>] = [:]
-    @ObservationIgnored private var deviceLine = 0
 
     func attach(_ model: CoreModel) {
         self.model = model
-        speechDone.onFinish = { [weak self] id in self?.deviceLineSaid(id) }
-        synthesizer.delegate = speechDone
+        speaker.attach(model)
     }
 
     /// Starts a conversation: asks for the microphone and speech recognition the first time.
@@ -90,8 +80,6 @@ final class TalkController {
                 return
             }
             guard gen == generation else { return }
-            voiceSettings = DeviceVoiceStore.load()
-            voice = DeviceVoiceStore.voice(voiceSettings)
             Task { await model?.warmVoice() } // MEKA's common lines in its voice, fetched once
             apply(TalkFlow.shared.start())
         }
@@ -324,138 +312,25 @@ final class TalkController {
         engine = nil
     }
 
-    // MARK: Speaking (on the device only)
+    // MARK: Speaking (MekaSpeaker)
 
-    /// Says `text`: piece by piece (`SpeechRules.pieces`) in MEKA's voice, fetching the next piece while one plays;
-    /// the Mac's own voice says whatever is left when a piece doesn't come in time, the server refuses, or a clip won't
-    /// play. Only Strings and Data cross between here and the core.
+    /// Says `text` through `MekaSpeaker`: piece by piece in MEKA's voice, the Mac's own voice for whatever is left.
+    /// Only Strings and Data cross between here and the core.
     private func say(_ text: String) {
-        stopSaying()
         utterance += 1
         let id = utterance
-        let pieces = SpeechRules.shared.pieces(text: text)
-        speaking = Task { [weak self] in
-            guard let self else { return }
-            var i = 0
-            var next: Task<Data?, Never>?
-            if let first = pieces.first { next = Task { await self.model?.speechClip(first, first: true) } }
-            while i < pieces.count {
-                guard let clip = await next?.value, !Task.isCancelled else { break }
-                if i + 1 < pieces.count {
-                    let piece = pieces[i + 1]
-                    next = Task { await self.model?.speechClip(piece, first: false) }
-                } else {
-                    next = nil
-                }
-                guard await self.play(clip) else { break }
-                i += 1
-            }
-            next?.cancel()
-            guard !Task.isCancelled else { return }
-            if i < pieces.count { await self.sayOnDevice(pieces[i...].joined(separator: " ")) }
-            guard !Task.isCancelled else { return }
-            self.finishedSaying(id)
-        }
+        speaker.say(text) { [weak self] in self?.finishedSaying(id) }
     }
 
     /// Stops whatever is being said, in either voice.
     private func stopSaying() {
         utterance += 1
-        speaking?.cancel()
-        speaking = nil
-        player?.stop()
-        player = nil
-        clipDone.cancelAll()
-        synthesizer.stopSpeaking(at: .immediate)
-        let waiting = deviceWaiting
-        deviceWaiting = [:]
-        waiting.values.forEach { $0.resume() }
-    }
-
-    /// Plays one MP3 clip to the end. False when it can't be played (the Mac's voice takes over) or was stopped.
-    private func play(_ data: Data) async -> Bool {
-        guard let p = try? AVAudioPlayer(data: data) else { return false }
-        player = p
-        p.delegate = clipDone
-        let key = ObjectIdentifier(p)
-        let ok = await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
-            clipDone.expect(key, c)
-            if !p.play() { clipDone.finish(key, ok: false) }
-        }
-        if player === p { player = nil }
-        return ok
-    }
-
-    /// Says `text` with the Mac's own voice and waits until it has been said (or stopped).
-    private func sayOnDevice(_ text: String) async {
-        deviceLine += 1
-        let id = deviceLine
-        let u = AVSpeechUtterance(string: text)
-        u.voice = voice
-        DeviceVoiceStore.style(u, voiceSettings)
-        speechDone.expect(ObjectIdentifier(u), id: id)
-        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-            deviceWaiting[id] = c
-            synthesizer.speak(u)
-        }
-    }
-
-    /// The synthesiser finished the Mac's line `id`.
-    private func deviceLineSaid(_ id: Int) {
-        deviceWaiting.removeValue(forKey: id)?.resume()
+        speaker.stop()
     }
 
     /// The line `id` finished: listen again, unless it was cut short since.
     private func finishedSaying(_ id: Int) {
         guard id == utterance, phase == .speaking else { return }
         apply(TalkFlow.shared.spoke(s: session))
-    }
-}
-
-/// The synthesiser's delegate: says which line finished, as an Int, on the main actor.
-nonisolated final class SpeechDone: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
-    private let lines = OSAllocatedUnfairLock<[ObjectIdentifier: Int]>(initialState: [:])
-    /// Set once on the main actor before anything is spoken.
-    nonisolated(unsafe) var onFinish: (@MainActor @Sendable (Int) -> Void)?
-
-    func expect(_ utterance: ObjectIdentifier, id: Int) {
-        lines.withLock { $0 = [utterance: id] }
-    }
-
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        guard let id = lines.withLock({ $0[ObjectIdentifier(utterance)] }) else { return }
-        guard let finish = onFinish else { return }
-        Task { @MainActor in finish(id) }
-    }
-}
-
-/// The clip player's delegate: resumes whoever waits on a clip, once, with whether it played to the end.
-nonisolated final class ClipDone: NSObject, AVAudioPlayerDelegate, @unchecked Sendable {
-    private let waiting = OSAllocatedUnfairLock<[ObjectIdentifier: CheckedContinuation<Bool, Never>]>(initialState: [:])
-
-    func expect(_ player: ObjectIdentifier, _ c: CheckedContinuation<Bool, Never>) {
-        waiting.withLock { $0[player] = c }
-    }
-
-    func finish(_ player: ObjectIdentifier, ok: Bool) {
-        waiting.withLock { $0.removeValue(forKey: player) }?.resume(returning: ok)
-    }
-
-    /// Stopped: every clip still playing counts as not played (AVAudioPlayer's stop() calls no delegate).
-    func cancelAll() {
-        let all = waiting.withLock { w -> [CheckedContinuation<Bool, Never>] in
-            let v = Array(w.values)
-            w.removeAll()
-            return v
-        }
-        all.forEach { $0.resume(returning: false) }
-    }
-
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        finish(ObjectIdentifier(player), ok: flag)
-    }
-
-    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: (any Error)?) {
-        finish(ObjectIdentifier(player), ok: false)
     }
 }
