@@ -42,6 +42,7 @@ import os.meka.core.domain.EntityTypes
 import os.meka.core.sync.ServerOpStore
 import os.meka.core.sync.SyncService
 import os.meka.core.wire.AskCodec
+import os.meka.core.wire.MessageRequestCodec
 import os.meka.core.wire.SpeechCodec
 import os.meka.core.wire.WireCodec
 import os.meka.core.wire.WireFormatException
@@ -278,6 +279,16 @@ fun Application.mekaSync(
                 val request = AskCodec.decodeRequest(body)
                 val answer = withContext(Dispatchers.IO) { askService.ask(request) }
                 call.respondText(AskCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+            // Requests from people Meka watches: one message's text, the sender's label and the time; proposals back.
+            // Nothing is kept or logged.
+            val requestService = MessageRequestService(ai.provider)
+            post("/v1/ai/message-request") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = MessageRequestCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { requestService.read(request) }
+                call.respondText(MessageRequestCodec.encodeResponse(answer), ContentType.Application.Json)
             }
         }
 
