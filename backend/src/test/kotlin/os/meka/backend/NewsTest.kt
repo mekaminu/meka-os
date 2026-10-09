@@ -233,4 +233,46 @@ class NewsTest {
         assertTrue(read.all { it.source == "Sport" && it.topic == "barca" && it.summary!!.startsWith("El Barça prepara") })
         assertEquals(10, read.map { it.id }.toSet().size)
     }
+
+    @Test
+    fun spanishFeedsAreMarkedAndWiderFeedsKeepOnlyBarca() {
+        val p = PublicNewsFeeds(
+            listOf(
+                NewsFeed("barca", "Mundo Deportivo", "https://md.example/barca.xml", lang = "es"),
+                NewsFeed("barca", "BBC Sport", "https://bbc.example/european.xml", match = PublicNewsFeeds.BARCA_TITLE),
+            ),
+        ) { url ->
+            if (url.startsWith("https://md.")) rss(paperItem("mundodeportivo.com", "pedri", "Pedri vuelve a entrenar", "Tue, 06 Oct 2026 05:00:00 GMT"))
+            else rss(
+                item("a1", "Barcelona held by Getafe", "Tue, 06 Oct 2026 06:00:00 GMT"),
+                item("a2", "Bayern win again", "Tue, 06 Oct 2026 06:10:00 GMT"),
+                item("a3", "Flick: Barça must be braver", "Tue, 06 Oct 2026 06:20:00 GMT"),
+            )
+        }
+        val items = p.headlines("barca")
+        assertEquals(listOf("Flick: Barça must be braver", "Barcelona held by Getafe", "Pedri vuelve a entrenar"), items.map { it.title })
+        assertEquals(listOf(null, null, "es"), items.map { it.lang })
+
+        val store = InMemoryIntegrationStore(knownHouseholds = listOf("home"))
+        val ops = InMemoryServerOpStore()
+        val integrations = Integrations(store, ops, emptyMap(), { null }, noCipher, "https://meka.example", { now }, news = listOf(p).associateBy { it.id })
+        integrations.syncAll()
+        val r = Replica("home", "fold", HlcClock("fold", { now }), InMemoryReplicaStore(), MekaSchema) { "d" + System.nanoTime() }
+        r.applyRemoteBatch(ops.after("home", 0, 10_000).map { it.op })
+        val news = News(r)
+        assertEquals(3, news.everything().size)
+        assertEquals(listOf("Barcelona held by Getafe", "Flick: Barça must be braver"), news.all().map { it.title }.sorted()) // English only by default
+        assertEquals("es", news.everything().single { it.source == "Mundo Deportivo" }.lang)
+    }
+
+    @Test
+    fun theDefaultFeedsAreEnglishFirstWithTheSpanishOnesMarked() {
+        val spanish = PublicNewsFeeds.DEFAULT_FEEDS.filter { it.lang == "es" }.map { it.source }
+        assertEquals(listOf("Mundo Deportivo", "Sport", "Google News"), spanish)
+        assertTrue(PublicNewsFeeds.DEFAULT_FEEDS.filter { it.topic == "barca" && it.lang == "en" }.size >= 3)
+        assertTrue(PublicNewsFeeds.DEFAULT_FEEDS.all { it.url.startsWith("https://") })
+        assertTrue(PublicNewsFeeds.DEFAULT_FEEDS.filter { it.topic == "spain" }.any { it.lang == "en" })
+        assertTrue(PublicNewsFeeds.BARCA_TITLE.containsMatchIn("Barça v Getafe"))
+        assertTrue(!PublicNewsFeeds.BARCA_TITLE.containsMatchIn("Barcaldine floods"))
+    }
 }

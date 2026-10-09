@@ -164,3 +164,6 @@ One app-written `context_mode` entity, id `weather_place` (additive, LWW; either
 
 ## Addendum, 2026-10-09: MEKA's voice
 One app-written `context_mode` entity, id `voice` (additive, LWW; either app sets it): `name` — the voice Talk, the spoken brief and the call assistant use on every device: a Polly voice name ("Amy", a capital then lower-case letters), `device` for the device's own text-to-speech voice (nothing sent), or Null/absent for the server's default voice. Clips the server says are kept in memory on the device only (per voice and words), never stored or synced.
+
+## Addendum, 2026-10-09: news in English by default
+Two additive fields. `headline.lang` (server-written): the story's language when it isn't English ("es"), from the server's feed list; absent = English. `context_mode` id `news` gains `newsSpanish` (app-written, Bool, LWW): News → Spanish sources; absent or false = off. With it off, every place news is read (the News place, the ticker, the widgets, the brief and its spoken version) leaves out stories marked with a language; with it on, Spanish ones show in their topics' lanes as before. Old apps ignore both fields (they see every story, as before).

@@ -58,12 +58,15 @@ struct NewsSheet: View {
                 ForEach(place.topics, id: \.id) { t in
                     Toggle(t.label, isOn: Binding(get: { t.chosen }, set: { model.setNewsTopic(t.id, on: $0) }))
                 }
+                // English only by default (Fold review 2026-10-09 07:26): Spanish sources are a switch, off.
+                Divider()
+                Toggle("Spanish sources", isOn: Binding(get: { place.spanishSources }, set: { model.setNewsSpanish(on: $0) }))
             }
             .menuStyle(.borderlessButton).fixedSize()
         }
-        Text("Barça: Mundo Deportivo, Sport and Google News · AI: The Verge, TechCrunch, MIT Technology Review and OpenAI · "
-             + "Tech news: Hacker News (200+ points) · the rest: BBC News. Refreshed hourly by your server; nothing about you is sent.")
+        Text("Spanish sources: " + place.spanishLine + " · " + place.sourcesCaption)
             .font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(0)
+            .contentTransition(.opacity).animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: place.spanishSources)
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 if let md = place.matchday {

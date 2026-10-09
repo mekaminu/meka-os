@@ -138,10 +138,19 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                             haptics.tick()
                             scope.launch { runCatching { core.setNewsTopic(t.id, !t.chosen) } }
                         }
+                        // English only by default (Fold review 2026-10-09 07:26): Spanish sources are a switch, off.
+                        Box(Modifier.padding(top = MekaSpace.m)) {
+                            Chips("Spanish sources", listOf("Off" to !place.spanishSources, "On" to place.spanishSources)) { i ->
+                                val on = i == 1
+                                if (on != place.spanishSources) {
+                                    haptics.tick()
+                                    scope.launch { runCatching { core.setNewsSpanish(on) } }
+                                }
+                            }
+                        }
+                        Text(place.spanishLine, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
                         Text(
-                            "Shown here and in the morning brief. Barça: Mundo Deportivo, Sport and Google News · AI: The Verge, " +
-                                "TechCrunch, MIT Technology Review and OpenAI · Tech news: Hacker News (200+ points) · the rest: BBC News. " +
-                                "Refreshed every hour by your server; nothing about you is sent.",
+                            place.sourcesCaption,
                             style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs),
                         )
                     }

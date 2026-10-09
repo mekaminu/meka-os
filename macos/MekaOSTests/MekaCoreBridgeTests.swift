@@ -264,6 +264,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(place.lanes.isEmpty)
         XCTAssertEqual(place.emptyLine, "No headlines in the last two days · they refresh every hour")
         XCTAssertEqual(place.topics.filter(\.chosen).map(\.id), ["barca", "ai", "top", "world", "technology"])
+        // English only by default (Fold review 2026-10-09 07:26); the Spanish sources switch reaches Swift and syncs.
+        XCTAssertFalse(place.spanishSources)
+        XCTAssertEqual(place.spanishLine, "Off · English only")
+        try await core.setNewsSpanish(on: true)
+        XCTAssertTrue(core.newsPlace.value.spanishSources)
+        XCTAssertTrue(core.newsPlace.value.sourcesCaption.contains("Mundo Deportivo"))
+        try await core.setNewsSpanish(on: false)
+        XCTAssertFalse(core.newsPlace.value.spanishSources)
         // Slice 2: no fixture today, so no matchday line; nothing to show under Coming up either.
         XCTAssertNil(place.matchday)
         XCTAssertNil(CommandCentreRules.shared.newsGlance(place: place, maxItems: CommandCentreRules.shared.NEWS_ALONE))

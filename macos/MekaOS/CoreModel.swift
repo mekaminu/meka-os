@@ -856,6 +856,8 @@ final class CoreModel {
 
     /// Shows or hides a news topic's headlines in the brief; synced with the Fold.
     func setNewsTopic(_ id: String, on: Bool) { MekaHaptics.tick(); run { try await $0.setNewsTopic(topicId: id, on: on) } }
+    /// News → Spanish sources (off = English only everywhere news shows); synced.
+    func setNewsSpanish(on: Bool) { MekaHaptics.tick(); run { try await $0.setNewsSpanish(on: on) } }
 
     // MARK: Activity log
 

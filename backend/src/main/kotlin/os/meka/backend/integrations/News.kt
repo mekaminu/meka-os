@@ -25,6 +25,8 @@ data class RemoteHeadline(
     val source: String? = null, val summary: String? = null,
     /** The story's picture as the feed names it (https only; see [NewsImages]); null when it names none. */
     val imageUrl: String? = null,
+    /** The story's language when it isn't English ("es"; build plan, Fold review 2026-10-09 07:26 item 1); null = English. */
+    val lang: String? = null,
 )
 
 /**
@@ -87,9 +89,14 @@ class BbcNewsRss internal constructor(private val fetch: (String) -> String) : N
 
 /**
  * One public feed for one topic. [aggregator]: items name their own publisher (Google News). [summaries]: false when
- * the feed's descriptions aren't about the story (Hacker News's are link lists and points).
+ * the feed's descriptions aren't about the story (Hacker News's are link lists and points). [lang]: the feed's
+ * language, written on every item that isn't English so the apps can leave it out (English only by default, Fold
+ * review 2026-10-09 07:26). [match]: a wider feed (all of La Liga) keeps only the items whose title matches.
  */
-data class NewsFeed(val topic: String, val source: String, val url: String, val aggregator: Boolean = false, val summaries: Boolean = true)
+data class NewsFeed(
+    val topic: String, val source: String, val url: String, val aggregator: Boolean = false, val summaries: Boolean = true,
+    val lang: String = "en", val match: Regex? = null,
+)
 
 /**
  * AI, tech and Barça news (build plan "News ticker", slice 1): several public RSS/Atom feeds per topic, read like the
@@ -114,7 +121,9 @@ class PublicNewsFeeds internal constructor(
         require(mine.isNotEmpty()) { "unknown topic" }
         var failed = 0
         val all = mine.flatMap { f ->
-            runCatching { Rss.parseAny(fetch(f.url)).map { tidy(it, f) } }.getOrElse { failed++; emptyList() }
+            runCatching {
+                Rss.parseAny(fetch(f.url)).map { tidy(it, f) }.filter { h -> f.match?.containsMatchIn(h.title) ?: true }
+            }.getOrElse { failed++; emptyList() }
         }
         if (failed == mine.size) error("no feed for $topic could be read")
         val seen = HashSet<String>()
@@ -123,21 +132,32 @@ class PublicNewsFeeds internal constructor(
 
     /** The publisher on every item; Google News's " - Mundo Deportivo" title suffix moved into the source. */
     private fun tidy(h: RemoteHeadline, f: NewsFeed): RemoteHeadline {
-        if (!f.aggregator) return h.copy(source = f.source, summary = h.summary.takeIf { f.summaries })
+        val lang = f.lang.lowercase().takeIf { it != "en" }
+        if (!f.aggregator) return h.copy(source = f.source, summary = h.summary.takeIf { f.summaries }, lang = lang)
         val publisher = h.source?.takeIf { it.isNotBlank() }
         val title = publisher?.let { p -> h.title.removeSuffix(" - $p").trim().ifEmpty { h.title } } ?: h.title
         // Google News descriptions are only a list of links: no summary from an aggregator.
-        return h.copy(title = title, source = publisher ?: f.source, summary = null)
+        return h.copy(title = title, source = publisher ?: f.source, summary = null, lang = lang)
     }
 
     companion object {
         private const val GOOGLE = "https://news.google.com/rss/search?"
+        /** Barça in a wider feed's titles ("Barcelona", "Barça", "Barca"; whole words). */
+        val BARCA_TITLE = Regex("(?i)\\b(barcelona|bar[cç]a)\\b")
         val DEFAULT_FEEDS = listOf(
-            NewsFeed(NewsTopics.BARCA.id, "Mundo Deportivo", "https://www.mundodeportivo.com/rss/futbol/fc-barcelona.xml"),
-            NewsFeed(NewsTopics.BARCA.id, "Sport", "https://www.sport.es/es/rss/barca/rss.xml"),
+            // English first (Fold review 2026-10-09 07:26): Google News en-GB, BBC Sport's European football and
+            // Football España (Barça stories only), Barca Universal. Verified at every refresh: one that fails is skipped.
             NewsFeed(NewsTopics.BARCA.id, "Google News", GOOGLE + "q=%22FC+Barcelona%22&hl=en-GB&gl=GB&ceid=GB:en", aggregator = true),
-            NewsFeed(NewsTopics.SPAIN.id, "Google News", GOOGLE + "q=%22selecci%C3%B3n+espa%C3%B1ola+de+f%C3%BAtbol%22&hl=es&gl=ES&ceid=ES:es", aggregator = true),
+            NewsFeed(NewsTopics.BARCA.id, "BBC Sport", "https://feeds.bbci.co.uk/sport/football/european/rss.xml", match = BARCA_TITLE),
+            NewsFeed(NewsTopics.BARCA.id, "Barca Universal", "https://barcauniversal.com/feed/"),
+            NewsFeed(NewsTopics.BARCA.id, "Football España", "https://www.football-espana.net/feed", match = BARCA_TITLE),
+            // Spanish sources: still mirrored, marked "es", shown only with News → Spanish sources on.
+            NewsFeed(NewsTopics.BARCA.id, "Mundo Deportivo", "https://www.mundodeportivo.com/rss/futbol/fc-barcelona.xml", lang = "es"),
+            NewsFeed(NewsTopics.BARCA.id, "Sport", "https://www.sport.es/es/rss/barca/rss.xml", lang = "es"),
             NewsFeed(NewsTopics.SPAIN.id, "Google News", GOOGLE + "q=La+Liga&hl=en-GB&gl=GB&ceid=GB:en", aggregator = true),
+            NewsFeed(NewsTopics.SPAIN.id, "Google News", GOOGLE + "q=%22Spain+national+team%22+football&hl=en-GB&gl=GB&ceid=GB:en", aggregator = true),
+            NewsFeed(NewsTopics.SPAIN.id, "Football España", "https://www.football-espana.net/feed"),
+            NewsFeed(NewsTopics.SPAIN.id, "Google News", GOOGLE + "q=%22selecci%C3%B3n+espa%C3%B1ola+de+f%C3%BAtbol%22&hl=es&gl=ES&ceid=ES:es", aggregator = true, lang = "es"),
             NewsFeed(NewsTopics.AI.id, "The Verge", "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"),
             NewsFeed(NewsTopics.AI.id, "TechCrunch", "https://techcrunch.com/category/artificial-intelligence/feed/"),
             NewsFeed(NewsTopics.AI.id, "MIT Technology Review", "https://www.technologyreview.com/topic/artificial-intelligence/feed"),

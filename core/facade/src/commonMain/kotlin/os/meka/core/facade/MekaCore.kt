@@ -837,6 +837,9 @@ class MekaCore(
     /** Shows or hides a news topic in the brief and the News place ([os.meka.core.domain.NewsTopics]); synced. */
     suspend fun setNewsTopic(topicId: String, on: Boolean) = onCore { news.setTopic(topicId, on) }
 
+    /** News → Spanish sources (Fold review 2026-10-09 07:26 item 1): off = English only everywhere news shows; synced. */
+    suspend fun setNewsSpanish(on: Boolean) = onCore { news.setSpanish(on) }
+
     // ---- Weekly review ----
 
     /** Shows the week [offset] weeks from this one (0 this week, -1 last week, back to -12). */

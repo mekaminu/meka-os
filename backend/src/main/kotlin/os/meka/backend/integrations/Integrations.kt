@@ -357,6 +357,8 @@ class Integrations(
                             HeadlineFields.SUMMARY to (h.summary?.take(MAX_SUMMARY)?.let { FieldValue.Text(it) } ?: FieldValue.Null),
                             // The picture's key on this server (images slice), never the publisher's address. Additive.
                             HeadlineFields.IMAGE to (h.imageUrl?.let(pictures::get)?.let { FieldValue.Text(it) } ?: FieldValue.Null),
+                            // The story's language when it isn't English (Fold review 2026-10-09 07:26). Additive.
+                            HeadlineFields.LANG to (h.lang?.let { FieldValue.Text(it.take(8)) } ?: FieldValue.Null),
                         )
                         write(a, slot, h.publishedMs, h.publishedMs, false, prev, desiredFields, EntityTypes.HEADLINE)
                     }

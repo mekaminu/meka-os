@@ -31,6 +31,11 @@ object HeadlineFields {
      * fetch from their own server (`/v1/news/image`), never the publisher's address. Absent when the feed has none.
      */
     const val IMAGE = "image"
+    /**
+     * The story's language when it isn't English ("es"), as the server's feed list names it (Fold review 2026-10-09
+     * 07:26 item 1; additive). Absent = English. Non-English stories show only with [NewsFields.SPANISH] on.
+     */
+    const val LANG = "lang"
 }
 
 /** Which topics the brief shows: one `context_mode` entity, id [News.ENTITY_ID], one LWW field. */
@@ -42,6 +47,8 @@ object NewsFields {
      * neither chosen nor turned off yet, so it follows its default; absent = the first nine (BBC) topics.
      */
     const val KNOWN = "newsTopicsKnown"
+    /** News → Spanish sources (Fold review 2026-10-09 07:26 item 1; additive, LWW): absent = off, English only. */
+    const val SPANISH = "newsSpanish"
 }
 
 data class NewsTopic(val id: String, val label: String)
@@ -86,6 +93,8 @@ data class Headline(
     val summary: String? = null,
     /** The server's key for the story's picture ([HeadlineFields.IMAGE]); null when there is none. */
     val imageKey: String? = null,
+    /** [HeadlineFields.LANG] lower-cased; null = English. */
+    val lang: String? = null,
 ) {
     companion object {
         /** Null for empty slots and anything incomplete. */
@@ -102,6 +111,7 @@ data class Headline(
                 publishedAtMs = at,
                 summary = s[HeadlineFields.SUMMARY].textOrNull?.let(NewsRules::cleanSummary)?.takeIf { it.isNotEmpty() },
                 imageKey = s[HeadlineFields.IMAGE].textOrNull?.takeIf(NewsRules::isImageKey),
+                lang = s[HeadlineFields.LANG].textOrNull?.trim()?.lowercase()?.takeIf { it.isNotEmpty() && it != "en" },
             )
         }
     }
@@ -157,7 +167,13 @@ data class NewsPlace(
     val emptyLine: String?,
     /** Today's Barça fixture while it is still to come or on (only with the Barça topic chosen); null otherwise. */
     val matchday: NewsMatchday? = null,
+    /** News → Spanish sources: off by default (English only). */
+    val spanishSources: Boolean = false,
 ) {
+    /** The switch's line under Topics, and the caption naming every source for what's switched on. */
+    val spanishLine: String get() = NewsRules.spanishLine(spanishSources)
+    val sourcesCaption: String get() = NewsRules.sourcesCaption(spanishSources)
+
     /** Every story in reading order (lane by lane), for Next/Previous. */
     val items: List<NewsItem> get() = lanes.flatMap { it.items }
 
@@ -184,6 +200,24 @@ object NewsRules {
     const val MAX_AGE_IN_PLACE_MS = 48 * 3_600_000L
     /** Headlines per lane in the News place. */
     const val MAX_IN_LANE = 10
+
+    /** Spanish-language sources, named under the switch. */
+    const val SPANISH_SOURCES = "Mundo Deportivo, Sport and Spanish Google News"
+
+    /** "Off · English only" / "On · Mundo Deportivo, Sport and Spanish Google News". */
+    fun spanishLine(on: Boolean): String = if (on) "On · $SPANISH_SOURCES" else "Off · English only"
+
+    /** What the Topics caption says on both apps: every source, the Spanish ones only while they're on. */
+    fun sourcesCaption(spanish: Boolean): String =
+        "Shown here and in the morning brief. Barça: Google News, BBC Sport, Barca Universal and Football España" +
+            (if (spanish) ", with Mundo Deportivo and Sport" else "") +
+            " · AI: The Verge, TechCrunch, MIT Technology Review and OpenAI · Tech news: Hacker News (200+ points) · " +
+            "Spain football: Google News and Football España · the rest: BBC News. Refreshed every hour by your server; " +
+            "nothing about you is sent."
+
+    /** English only unless Spanish sources are on: a story marked with another language is left out. */
+    fun inLanguage(all: List<Headline>, spanish: Boolean): List<Headline> =
+        if (spanish) all.filter { it.lang == null || it.lang == "es" } else all.filter { it.lang == null }
 
     /** Plain one-line text: control characters and anything tag-like removed, whitespace collapsed, length capped. */
     fun clean(s: String): String =
@@ -279,7 +313,7 @@ object NewsRules {
      * The News place: the chosen topics only, the last [MAX_AGE_IN_PLACE_MS], newest first in each lane, each story
      * once across lanes (the same article or the same title from another source), at most [MAX_IN_LANE] per lane.
      */
-    fun place(all: List<Headline>, topics: List<NewsTopicChoice>, nowMs: Long, matchday: NewsMatchday? = null): NewsPlace {
+    fun place(all: List<Headline>, topics: List<NewsTopicChoice>, nowMs: Long, matchday: NewsMatchday? = null, spanish: Boolean = false): NewsPlace {
         val chosen = topics.filter { it.chosen }.map { it.id }
         val order = LEAD.filter { it in chosen } + chosen.filter { it !in LEAD }
         val seenLinks = HashSet<String>()
@@ -299,7 +333,7 @@ object NewsRules {
             chosen.isEmpty() -> "No topics chosen · pick some below"
             else -> "No headlines in the last two days · they refresh every hour"
         }
-        return NewsPlace(lanes, topics, empty, matchday?.takeIf { NewsTopics.BARCA.id in chosen })
+        return NewsPlace(lanes, topics, empty, matchday?.takeIf { NewsTopics.BARCA.id in chosen }, spanish)
     }
 
     /** What the fixtures feed adds to a title whose kick-off isn't set yet. */
@@ -372,7 +406,19 @@ object NewsRules {
 
 /** Mirrored headlines (read-only: the server writes them) and the synced choice of topics. */
 class News(private val replica: Replica) {
-    fun all(): List<Headline> = replica.entities(EntityTypes.HEADLINE).mapNotNull { Headline.from(it) }
+    /** The headlines Meka reads: English only unless [spanish] is on ([NewsRules.inLanguage]). */
+    fun all(): List<Headline> = NewsRules.inLanguage(everything(), spanish())
+
+    /** Every mirrored headline, whatever its language. */
+    fun everything(): List<Headline> = replica.entities(EntityTypes.HEADLINE).mapNotNull { Headline.from(it) }
+
+    /** News → Spanish sources (synced, last switch wins); off unless turned on. */
+    fun spanish(): Boolean = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(NewsFields.SPANISH)?.boolOrNull == true
+
+    fun setSpanish(on: Boolean) {
+        if (spanish() == on) return
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NewsFields.SPANISH to on.fv()))
+    }
 
     fun topics(): List<String> {
         val e = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)
@@ -395,7 +441,7 @@ class News(private val replica: Replica) {
 
     /** The News place over the chosen topics. */
     fun place(nowMs: Long, dayEvents: List<CalendarEvent> = emptyList(), cal: LocalCalendar = LocalCalendar.UTC): NewsPlace =
-        NewsRules.place(all(), choices(), nowMs, NewsRules.matchday(dayEvents, nowMs, cal))
+        NewsRules.place(all(), choices(), nowMs, NewsRules.matchday(dayEvents, nowMs, cal), spanish())
 
     companion object {
         const val ENTITY_ID = "news"
