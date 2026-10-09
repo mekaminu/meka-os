@@ -108,4 +108,26 @@ class HereTest {
         assertTrue(on.statusLine.startsWith("On · "))
         assertTrue("rounded to about 1 km" in on.privacy && "keeps nothing" in on.privacy && "never synced" in on.privacy)
     }
+
+    @Test
+    fun aFixIsUsedForHalfAnHourAndOnlyAwaySaysNearYouOnToday() {
+        val hours = (0 until 24).map { WeatherHour(at(fri, 0) + it * WeatherCodec.HOUR_MS, 11, 2, 10) }
+        val f = WeatherForecast(HereRules.NEAR_YOU, hours, listOf(WeatherDay(fri, 7, 13, 2, 10), WeatherDay(fri + 1, 8, 14, 3, 20)))
+        val t = at(fri, 10)
+        val away = HereFix(Coord(52.21, 0.12), f, away = true, atMs = t)
+        assertEquals("Near you · 11° · partly cloudy, dry today", HereRules.todayLine(away, t + 5 * 60_000L, cal))
+        // 30 minutes on, or a clock gone backwards, and the fix is forgotten: Today goes back to home's line.
+        assertNull(HereRules.todayLine(away, t + HereRules.FIX_FRESH_MS, cal))
+        assertNull(HereRules.todayLine(away, t - 60_000L, cal))
+        // At home or work Today keeps its own line.
+        assertNull(HereRules.todayLine(away.copy(away = false), t, cal))
+        assertNull(HereRules.todayLine(null, t, cal))
+        // An empty answer is no fix.
+        assertNull(HereRules.fresh(away.copy(forecast = WeatherForecast.EMPTY), t))
+        // Ask hears it only for a question about here, and not from a stale fix.
+        assertEquals(3, HereRules.askLinesFor("is it cold outside?", away, t, cal).size)
+        assertEquals(3, HereRules.askLinesFor("weather here?", away.copy(away = false), t, cal).size)
+        assertTrue(HereRules.askLinesFor("weather tomorrow?", away, t, cal).isEmpty())
+        assertTrue(HereRules.askLinesFor("weather here?", away, t + HereRules.FIX_FRESH_MS, cal).isEmpty())
+    }
 }

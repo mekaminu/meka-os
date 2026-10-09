@@ -284,6 +284,22 @@ class Integrations(
         }
     }
 
+    /**
+     * "Where I am now" (Places item 3): the forecast at a device's rounded point, judged against the places this server
+     * forecasts for the household (home, or the town Meka set; work). Null when no weather provider is configured.
+     */
+    fun hereWeather(): HereWeather? {
+        val source = weather.values.firstOrNull() ?: return null
+        return HereWeather(source) { householdId -> knownPlaces(householdId, source) }
+    }
+
+    /** Home's and work's coordinates as they are forecast (a set name only when it was found; the geocoder caches). */
+    internal fun knownPlaces(householdId: String, source: WeatherProvider): List<WeatherLocation> {
+        val home = wantedPlace(householdId)?.let { runCatching { source.locate(it) }.getOrNull() } ?: source.home
+        val work = source.work?.let { default -> wantedWorkPlace(householdId)?.let { runCatching { source.locate(it) }.getOrNull() } ?: default }
+        return listOfNotNull(home, work)
+    }
+
     /** The household's place setting ([WeatherPlaceStore]), normalised; null for home. */
     internal fun wantedPlace(householdId: String): String? =
         runCatching { reader.entity(householdId, EntityTypes.CONTEXT_MODE, WeatherPlaceStore.ENTITY_ID) }.getOrNull()

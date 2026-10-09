@@ -188,6 +188,14 @@ interface SpeechApi {
     suspend fun speechVoices(): os.meka.core.wire.SpeechCodec.Voices
 }
 
+/**
+ * "Where I am now" (Places item 3): the forecast at an approximate point. The point must already be rounded
+ * ([os.meka.core.domain.HereRules.round]); the server refuses anything finer. Available once the device is connected.
+ */
+interface HereApi {
+    suspend fun hereWeather(lat: Double, lon: Double): os.meka.core.wire.HereCodec.Response
+}
+
 /** Account management calls, available once the device is connected. */
 interface AccountsApi {
     /** [editing]: ask the provider for permission to change events too (calendar editing). */
@@ -209,7 +217,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -435,6 +443,21 @@ class HttpSyncTransport(
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/speech/voices")
         }
         return os.meka.core.wire.SpeechCodec.decodeVoices(resp.bodyAsText())
+    }
+
+    override suspend fun hereWeather(lat: Double, lon: Double): os.meka.core.wire.HereCodec.Response {
+        val codec = os.meka.core.wire.HereCodec
+        val body = codec.encodeRequest(codec.Request(lat, lon))
+        prepare() // the route requires the device's signing key on the server
+        val resp = send("/v1/weather/here", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/weather/here")
+            // A server without the route (older, or no weather): Today keeps home's line.
+            resp.status.value == 404 -> return codec.Response(codec.Response.OFF)
+            resp.status.value == 403 -> return codec.Response(codec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/weather/here")
+        }
+        return codec.decodeResponse(resp.bodyAsText())
     }
 
     private companion object {

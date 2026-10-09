@@ -45,6 +45,10 @@ class HttpSyncTransportTest {
     private val requestReply = os.meka.core.wire.MessageRequestCodec.encodeResponse(
         os.meka.core.wire.MessageRequestCodec.Response("answered", listOf(os.meka.core.wire.MessageRequestCodec.Proposal("task", "Pick up dry cleaning", words = "tomorrow"))),
     )
+    private var hereStatus = HttpStatusCode.OK
+    private val hereReply = os.meka.core.wire.HereCodec.encodeResponse(
+        os.meka.core.wire.HereCodec.Response("ok", hours = "497664|12,2,10;12,2,10", days = "2026-10-10=7,13,2,10", away = true),
+    )
     private fun client() = HttpClient(MockEngine { req ->
         requests += req
         when (req.url.encodedPath) {
@@ -56,6 +60,7 @@ class HttpSyncTransportTest {
             "/v1/ai/message-request" -> respond(requestReply, requestStatus, json)
             "/v1/ai/message-triage" -> respond(triageReply, triageStatus, json)
             "/v1/ai/group-digest" -> respond(digestReply, digestStatus, json)
+            "/v1/weather/here" -> respond(hereReply, hereStatus, json)
             else -> respond("", HttpStatusCode.NotFound)
         }
     })
@@ -124,6 +129,22 @@ class HttpSyncTransportTest {
         assertEquals("off", t.speak("Anything else?", null).state)
         // The voices route isn't on this test server either: off, not an error.
         assertEquals("off", t.speechVoices().state)
+    }
+
+    @Test
+    fun whereIAmNowSendsTheRoundedPointSignedAndAServerWithoutTheRouteSaysOff() = runTest {
+        val t = HttpSyncTransport(client(), "https://meka.example", RecordingKey()) { "s".repeat(64) }
+        val r = t.hereWeather(52.21, 0.12)
+        assertEquals("ok", r.state)
+        assertTrue(r.away)
+        val req = requests.last()
+        assertEquals("/v1/weather/here", req.url.encodedPath)
+        assertEquals(os.meka.core.wire.HereCodec.Request(52.21, 0.12), os.meka.core.wire.HereCodec.decodeRequest((req.body as TextContent).text))
+        assertTrue(req.headers[RequestSigning.HEADER_SIGNATURE] != null)
+        hereStatus = HttpStatusCode.NotFound
+        assertEquals("off", t.hereWeather(52.21, 0.12).state)
+        hereStatus = HttpStatusCode.Forbidden
+        assertEquals("failed", t.hereWeather(52.21, 0.12).state)
     }
 
     @Test

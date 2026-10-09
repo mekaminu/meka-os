@@ -171,6 +171,9 @@ class MekaCore(
     private var newsImagesApi: NewsImagesApi? = transport as? NewsImagesApi
     private var aiApi: AiApi? = transport as? AiApi
     private var speechApi: SpeechApi? = transport as? SpeechApi
+    private var hereApi: HereApi? = transport as? HereApi
+    /** "Where I am now" (Places item 3): the last answer, in memory only (never stored or synced), on the core thread. */
+    private var hereFix: os.meka.core.domain.HereFix? = null
     /** MEKA's voice: the synced choice, the clips said so far (in memory, newest last) and a pause after a refusal. */
     private val mekaVoice = os.meka.core.domain.MekaVoiceStore(replica)
     private val speechClips = LinkedHashMap<String, String>()
@@ -1524,7 +1527,7 @@ class MekaCore(
         syncMutex.withLock { 
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
-            speechApi = transport as? SpeechApi
+            speechApi = transport as? SpeechApi; hereApi = transport as? HereApi
         }
         startSync()
     }
@@ -1708,9 +1711,11 @@ class MekaCore(
         val context = onCore {
             // Work's lines (Places item 2) are kept: home's hourly lines make room for them.
             val workLines = os.meka.core.domain.PlacesRules.workAskLines(workWeather.forecast(), nowMs(), cal)
+            // Where Meka is (Places item 3): only for a question about "here", from a fix taken in the last 30 minutes.
+            val hereLines = os.meka.core.domain.HereRules.askLinesFor(q, hereFix, nowMs(), cal)
             os.meka.core.domain.AskRules.context(_today.value, nowMs(), cal,
                 os.meka.core.domain.WeatherRules.askLines(weather.forecast(), nowMs(), cal)
-                    .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size) + workLines)
+                    .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - hereLines.size) + hereLines + workLines)
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -1881,6 +1886,56 @@ class MekaCore(
      * ([os.meka.core.domain.SpeechRules.timingLine]: "Time to MEKA's voice · 1.8 s · 0.9 s · late"); null before the
      * first clip. Kept in memory only, never sent.
      */
+    // ---- Where I am now (build plan "Places…", item 3) ----
+
+    /**
+     * Whether the app may ask the phone for an approximate fix now ([os.meka.core.domain.HereRules.shouldLocate]): the
+     * switch is on, the phone allows it, and a question is about "here" or Today is opening ([question] null), with no
+     * fix from the last 30 minutes.
+     */
+    suspend fun hereShouldLocate(on: Boolean, permitted: Boolean, question: String?): Boolean = onCore {
+        os.meka.core.domain.HereRules.shouldLocate(on, permitted, question, hereFix?.atMs, nowMs())
+    }
+
+    /**
+     * Asks the server for the forecast where Meka is. The point is rounded to about 1 km here, before anything is sent
+     * ([os.meka.core.domain.HereRules.round]); the answer is kept in memory for 30 minutes (Today's line reads "Near
+     * you · …" while it is away from home and work; Ask hears it for a question about here). Never stored, never synced.
+     * Returns true when a forecast came back. Never throws for a missing answer (offline, no route, a refusal).
+     */
+    suspend fun hereWeather(lat: Double, lon: Double): Boolean {
+        val point = os.meka.core.domain.HereRules.round(lat, lon) ?: return false
+        val api = hereApi ?: return false
+        val r = try { api.hereWeather(point.lat, point.lon) } catch (e: CancellationException) { throw e } catch (e: Exception) { return false }
+        if (r.state != os.meka.core.wire.HereCodec.Response.OK) return false
+        val forecast = os.meka.core.domain.WeatherForecast(
+            os.meka.core.domain.HereRules.NEAR_YOU,
+            os.meka.core.domain.WeatherCodec.decodeHours(r.hours),
+            os.meka.core.domain.WeatherCodec.decodeDays(r.days),
+        )
+        if (forecast.isEmpty) return false
+        onCore {
+            hereFix = os.meka.core.domain.HereFix(point, forecast, r.away, nowMs())
+            refresh()
+        }
+        return true
+    }
+
+    /** The switch went off (or the phone took the permission back): the fix is dropped and Today shows home again. */
+    suspend fun forgetHere() {
+        onCore {
+            if (hereFix != null) {
+                hereFix = null
+                refresh()
+            }
+            Unit
+        }
+    }
+
+    /** The settings row (Ask → More → Settings → Where I am now); the switch itself is kept on each device. */
+    fun hereSetting(on: Boolean, permitted: Boolean): os.meka.core.domain.HereSettingView =
+        os.meka.core.domain.HereRules.setting(on, permitted)
+
     suspend fun voiceTimingLine(): String? = onCore { os.meka.core.domain.SpeechRules.timingLine(speechTimings.toList()) }
 
     private fun speechTimed(atMs: Long, ms: Long, outcome: os.meka.core.domain.SpeechTiming.Outcome) {
@@ -2154,7 +2209,11 @@ class MekaCore(
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
             news.all(), news.choices(), holidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal)).copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal))
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))
-        _weather.value = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted(), workForecast, workPlace.wanted(), office)
+        val weatherNow = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted(), workForecast, workPlace.wanted(), office)
+        // Away from home and work with a fresh fix (Places item 3): Today's line says where Meka is.
+        val hereLine = os.meka.core.domain.HereRules.todayLine(hereFix, nowMs(), cal)
+        _weather.value = if (hereLine == null) weatherNow
+        else weatherNow.copy(nowLine = hereLine, nowSpoken = hereLine.replace("°", " degrees"))
         _review.value = review.view(reviewOffset, all, dayEvents, _goals.value, fasting.ended()) { day ->
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }

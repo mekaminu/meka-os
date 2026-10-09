@@ -19,6 +19,12 @@ import kotlin.math.sqrt
  */
 data class Coord(val lat: Double, val lon: Double)
 
+/**
+ * The last "where I am now" answer, kept in memory on the device only (never synced, never stored): the rounded point
+ * that was sent, the forecast the server sent back, whether that point is away from home and work, and when.
+ */
+data class HereFix(val at: Coord, val forecast: WeatherForecast, val away: Boolean, val atMs: Long)
+
 /** The settings row's words (Ask → More → Settings → Where I am now). */
 data class HereSettingView(
     val on: Boolean,
@@ -117,6 +123,27 @@ object HereRules {
         WeatherRules.nowLine(f, nowMs, cal)?.let { "$NEAR_YOU · $it" }
 
     const val NEAR_YOU = "Near you"
+
+    /** A fix younger than [FIX_FRESH_MS] (and not from the future) is still used; an older one is forgotten. */
+    fun fresh(fix: HereFix?, nowMs: Long): HereFix? =
+        fix?.takeIf { nowMs >= it.atMs && nowMs - it.atMs < FIX_FRESH_MS && !it.forecast.isEmpty }
+
+    /**
+     * Today's weather line with a fix: "Near you · 12° · …" while a fresh fix is away from home and work; null (Today
+     * keeps home's or both places' line) otherwise.
+     */
+    fun todayLine(fix: HereFix?, nowMs: Long, cal: LocalCalendar): String? =
+        fresh(fix, nowMs)?.takeIf { it.away }?.let { nowLine(it.forecast, nowMs, cal) }
+
+    /**
+     * What Ask hears about where Meka is: only for a question about here ([asksAboutHere]) and a fresh fix. At home or
+     * at work the fix adds nothing new, but the question still gets an answer from it (the lines say "approximate").
+     */
+    fun askLinesFor(question: String, fix: HereFix?, nowMs: Long, cal: LocalCalendar): List<String> {
+        if (!asksAboutHere(question)) return emptyList()
+        val f = fresh(fix, nowMs) ?: return emptyList()
+        return askLines(f.forecast, nowMs, cal)
+    }
 
     /**
      * Where Meka is, as Ask MEKA hears it (after home's and work's lines): now, the rest of today and tomorrow, saying

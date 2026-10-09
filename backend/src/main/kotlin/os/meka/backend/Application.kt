@@ -32,6 +32,7 @@ import os.meka.backend.integrations.PostgresNewsImageStore
 import os.meka.backend.integrations.EspnTeamFixtures
 import os.meka.backend.integrations.GoogleCalendar
 import os.meka.backend.integrations.GovUkBankHolidays
+import os.meka.backend.integrations.HereWeather
 import os.meka.backend.integrations.OpenMeteoWeather
 import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.KmsTokenCipher
@@ -46,6 +47,7 @@ import os.meka.core.sync.SyncService
 import os.meka.core.wire.AskCodec
 import os.meka.core.wire.MessageRequestCodec
 import os.meka.core.wire.GroupDigestCodec
+import os.meka.core.wire.HereCodec
 import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
 import os.meka.core.wire.WireCodec
@@ -86,6 +88,8 @@ fun Application.mekaSync(
     ai: AiLayer? = null,
     /** MEKA's voice (Amazon Polly, V1); null leaves the speech routes out. */
     speech: SpeechService? = null,
+    /** "Where I am now" (Places item 3): the forecast at a rounded point; null leaves the route out. */
+    here: HereWeather? = integrations?.hereWeather(),
 ) {
     val sync = SyncService(opStore)
 
@@ -341,6 +345,18 @@ fun Application.mekaSync(
                     val spoken = mp3?.let { said.response.copy(audio = java.util.Base64.getEncoder().encodeToString(it)) } ?: said.response
                     call.respondText(SpeechCodec.encodeResponse(spoken), ContentType.Application.Json)
                 }
+            }
+        }
+
+        if (here != null) {
+            // "Where I am now": a rounded point (about 1 km; anything finer is refused) in, that point's forecast and
+            // whether it is away from home and work out. Keyed devices only. The point is neither stored nor logged.
+            post("/v1/weather/here") {
+                val body = call.boundedBody()
+                val caller = call.device(devices, verifier, body, requireKey = true)
+                val request = HereCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { here.at(caller.householdId, request) }
+                call.respondText(HereCodec.encodeResponse(answer), ContentType.Application.Json)
             }
         }
 
