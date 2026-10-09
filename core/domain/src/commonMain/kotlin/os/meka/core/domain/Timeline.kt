@@ -44,6 +44,11 @@ data class TimelineRow(
     val startMs: Long,
     /** The booked session, for a [TimelineKind.SESSION] row. */
     val session: BookedSession? = null,
+    /**
+     * A planned task whose time has gone by and isn't done ([LateTaskRules.isLate]): its line starts "Since 09:15" and
+     * is lit in the accent colour (Fold review 2026-10-09 13:45, item 3).
+     */
+    val late: Boolean = false,
 )
 
 /** The next event within the hour, shown in Up next: "Call with Tunde in 25 min". */
@@ -190,9 +195,12 @@ object TimelineRules {
             }
             planned.filter { it.scheduledAtMs != null && it.scheduledAtMs in today }.forEach { t ->
                 val start = t.scheduledAtMs!!
-                val detail = taskDetail(t, today.epochDay)
+                val late = LateTaskRules.isLate(t, nowMs)
+                val detail = taskDetail(t, today.epochDay).let { d ->
+                    if (late) listOfNotNull(LateTaskRules.sinceLabel(hhmm(start)), d).joinToString(" · ") else d
+                }
                 val end = start + (t.estimateMinutes ?: DEFAULT_TASK_MIN) * MIN_MS
-                add(Item(TimelineRow("t-" + t.id, TimelineKind.TASK, hhmm(start), t.title, detail, t, null, false, start), start, end, false))
+                add(Item(TimelineRow("t-" + t.id, TimelineKind.TASK, hhmm(start), t.title, detail, t, null, false, start, late = late), start, end, false))
             }
             sessions.filter { it.startMs in today && it.endMs > nowMs }.forEach { s ->
                 val running = s.startMs <= nowMs

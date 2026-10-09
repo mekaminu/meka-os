@@ -114,6 +114,7 @@ struct NowCardFace: View {
             case NowAction.openTask: if let id = v.task?.id { openTask(id) }
             case NowAction.went: if let id = v.session?.habitId { model.sessionWent(id) }
             case NowAction.didntGo: if let id = v.session?.habitId { model.sessionMissed(id) }
+            case NowAction.later: if let id = v.task?.id { model.moveLater(id) }
             default: break
             }
         } label: {
@@ -134,6 +135,7 @@ struct NowCardFace: View {
         case NowAction.tomorrow: return "Tomorrow"
         case NowAction.went: return "Went"
         case NowAction.didntGo: return "Didn't go"
+        case NowAction.later: return LateTaskRules.shared.MOVE_LATER
         default: return "Open"
         }
     }

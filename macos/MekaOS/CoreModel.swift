@@ -1265,6 +1265,16 @@ final class CoreModel {
         run { try await $0.snooze(taskId: id, days: 1) }
     }
 
+    /// "Move to later" on a late planned task (Fold review 2026-10-09 13:45, item 3): re-planned to the first free
+    /// stretch from now; the undo bar says where it went ("Moved “Send the invoice” to 15:30") and Undo puts it back.
+    func moveLater(_ id: String) {
+        guard let core else { return }
+        Task {
+            guard let move = try? await core.moveLater(taskId: id) else { return }
+            offerEventUndo(move.line, .later(move))
+        }
+    }
+
     func addStep(_ taskID: String, _ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -1439,6 +1449,7 @@ final class CoreModel {
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
         case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
+        case .later(let move): run { try await $0.undoMoveLater(move: move) }
         case .ask(let done, let card):
             guard let undo = done.undo else { break }
             askUndone = AskUndone(n: (askUndone?.n ?? 0) + 1, cards: [card])
@@ -1685,6 +1696,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case eventEdit(String)
         /// Plan my day's blocks on their way to the calendar (slice 2e): taken back; the tasks stay planned.
         case planBlocks([String])
+        /// "Move to later": Undo puts the task back at its old time.
+        case later(LaterMove)
         /// An Ask card (V1 AI layer, slice 3b): what it did is taken back; the Int is the card's place in the answer.
         case ask(AskDone, Int)
         /// A spoken yes (Talk to MEKA): everything it did is taken back, newest first; the Ints are the cards' places.

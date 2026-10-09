@@ -67,9 +67,11 @@ class TimelineTest {
 
     @Test
     fun overdueTimeOnAPlannedTaskKeepsItVisibleAboveNow() {
-        // A planned task whose time has passed isn't folded: it still needs doing. (Up next takes the next one.)
+        // A planned task whose time has passed isn't folded: it still needs doing, and it leads Up next (Fold review
+        // 2026-10-09 13:45, item 3), marked late.
         val t = TodayProjection.project(listOf(task("morning", scheduled = at(8)), task("later", scheduled = at(15))), at(10), day)
-        assertEquals("later", t.upNext!!.id)
+        assertEquals("morning", t.upNext!!.id)
+        assertTrue(t.timeline.rows.first().late)
         assertEquals(listOf("t-morning", "now", "t-later"), t.timeline.rows.map { if (it.kind == TimelineKind.GAP) "gap" else it.id })
         assertEquals("5 h free until later", t.timeline.rows[1].detail)
     }

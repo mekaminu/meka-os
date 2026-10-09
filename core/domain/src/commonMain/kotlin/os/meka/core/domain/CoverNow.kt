@@ -43,6 +43,12 @@ enum class NowAction {
 
     /** Answers a booked session "Didn't go": it's rebooked, never nagged. */
     DIDNT_GO,
+
+    /**
+     * "Move to later" on a late planned task ([LateTaskRules]): re-plans it to [NowView.laterAtMs], the first free
+     * stretch from now.
+     */
+    LATER,
 }
 
 /**
@@ -73,6 +79,10 @@ data class NowView(
     val needsYouLine: String?,
     /** The booked session, for [NowKind.SESSION]: [NowAction.WENT] and [NowAction.DIDNT_GO] answer it. */
     val session: SessionCard? = null,
+    /** A late planned task ([LateTaskRules]): the label is lit and the line starts "Since 09:15". */
+    val late: Boolean = false,
+    /** Where [NowAction.LATER] puts the task; null when it isn't offered. */
+    val laterAtMs: Long? = null,
 ) {
     /** For Swift: whether an action is offered. */
     fun offers(action: NowAction): Boolean = action in actions
@@ -203,7 +213,7 @@ object CoverNowRules {
                     running != null -> "Then: ${running.title} until ${hhmm(running.endAtMs)}"
                     else -> null
                 }
-                taskView(t, line, thenLine, thenEvent, needs)
+                taskView(t, line, thenLine, thenEvent, needs, today.upNextLate(nowMs), today.upNextLaterMs)
             }
             NowKind.CLEAR -> {
                 val left = tl.anytime.size
@@ -228,19 +238,39 @@ object CoverNowRules {
      */
     fun upNext(today: Today, nowMs: Long, cal: LocalCalendar): NowView? {
         val t = today.upNext ?: return null
-        return taskView(t, taskLine(t, today.timeline, nowMs, cal), thenLine = null, thenEvent = null, needs = null)
+        return taskView(
+            t, taskLine(t, today.timeline, nowMs, cal), thenLine = null, thenEvent = null, needs = null,
+            late = today.upNextLate(nowMs), laterAtMs = today.upNextLaterMs,
+        )
     }
 
-    /** "At 14:00 · 30 min · ↻ Every weekday" when the task is on the timeline, else "Anytime today" (and its repeat). */
+    /**
+     * "At 14:00 · 30 min · ↻ Every weekday" when the task is on the timeline ("Since 09:15 · 30 min" once it's late),
+     * else "Anytime today" (and its repeat).
+     */
     private fun taskLine(t: Task, tl: DayTimeline, nowMs: Long, cal: LocalCalendar): String {
         val row = tl.rows.firstOrNull { it.kind == TimelineKind.TASK && it.task?.id == t.id }
-        return if (row != null) listOfNotNull("At ${row.time}", row.detail).joinToString(" · ")
+        return if (row != null && row.late) row.detail ?: LateTaskRules.sinceLabel(row.time)
+        else if (row != null) listOfNotNull("At ${row.time}", row.detail).joinToString(" · ")
         else listOfNotNull("Anytime today", t.repeatMeta(cal.epochDayOf(nowMs))?.let { "↻ $it" }).joinToString(" · ")
     }
 
-    private fun taskView(t: Task, line: String, thenLine: String?, thenEvent: CalendarEvent?, needs: String?) = NowView(
-        kind = NowKind.TASK, label = UP_NEXT_LABEL, lit = false, title = t.title, line = line, event = null, task = t,
-        join = null, mapsQuery = null, actions = listOf(NowAction.DONE, NowAction.TOMORROW, NowAction.OPEN_TASK),
-        thenLine = thenLine, thenEvent = thenEvent, thenTask = null, needsYouLine = needs,
-    )
+    /**
+     * Done · Tomorrow · Open; a late planned task (lit) offers Done · Move to later · Tomorrow instead (the card itself
+     * opens it), or Done · Tomorrow · Open when today has no room left.
+     */
+    private fun taskView(
+        t: Task, line: String, thenLine: String?, thenEvent: CalendarEvent?, needs: String?,
+        late: Boolean = false, laterAtMs: Long? = null,
+    ): NowView {
+        val later = laterAtMs.takeIf { late }
+        val actions = if (later != null) listOf(NowAction.DONE, NowAction.LATER, NowAction.TOMORROW)
+        else listOf(NowAction.DONE, NowAction.TOMORROW, NowAction.OPEN_TASK)
+        return NowView(
+            kind = NowKind.TASK, label = UP_NEXT_LABEL, lit = late, title = t.title, line = line, event = null, task = t,
+            join = null, mapsQuery = null, actions = actions,
+            thenLine = thenLine, thenEvent = thenEvent, thenTask = null, needsYouLine = needs,
+            late = late, laterAtMs = later,
+        )
+    }
 }

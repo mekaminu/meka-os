@@ -292,11 +292,18 @@ fun TodayRoute(
     // Up next as the same card on the open Fold (Fold review 2026-10-09, item 3).
     val upNextView = remember(today) { core.upNextCard() }
     val talkApp = androidx.compose.ui.platform.LocalContext.current.applicationContext as? os.meka.android.MekaApplication
+    // "Move to later" on a late planned task (Fold review 2026-10-09 13:45, item 3): re-planned, Undo on the bar.
+    val moveLater: (String) -> Unit = { id ->
+        scope.launch {
+            runCatching { core.moveLater(id) }.getOrNull()?.let { mv -> eventUndo.show(mv.line) { core.undoMoveLater(mv) } }
+        }
+    }
     val nowHandlers = NowHandlers(
         complete = actions.complete, tomorrow = actions.snooze, openTask = actions.select,
         openEvent = { eventOpen = it }, openNeedsYou = null, // Needs you is listed just above it on the cover screen
         went = { id -> scope.launch { runCatching { core.sessionWent(id, null) } } },
         didntGo = { id -> scope.launch { runCatching { core.sessionMissed(id) } } },
+        later = moveLater,
     )
     // The mic sits at the capture bar's end on every screen (Fold review 2026-10-09 07:26, item 5), not on a card:
     // Ask, already listening.
@@ -304,7 +311,7 @@ fun TodayRoute(
     // The open Fold's Up next card: the same taps and no Needs you line.
     val upNextHandlers = NowHandlers(
         complete = actions.complete, tomorrow = actions.snooze, openTask = actions.select,
-        openEvent = { eventOpen = it }, openNeedsYou = null,
+        openEvent = { eventOpen = it }, openNeedsYou = null, later = moveLater,
     )
 
     // Insets are applied once, by the app shell.
@@ -825,7 +832,7 @@ private fun TodayPane(
                             TimelineKind.TASK -> r.task?.let { t ->
                                 // The Up next task's title travels from its card, so its timeline row doesn't share it.
                                 val motion = if (t.id == today.upNext?.id) RowMotion() else rowMotion(t.id)
-                                TaskRow(t, actions, motion = motion, modifier = m, time = r.time, timelineLine = r.detail)
+                                TaskRow(t, actions, motion = motion, modifier = m, time = r.time, timelineLine = r.detail, late = r.late)
                             }
                             TimelineKind.GAP -> GapRow(r, m)
                             TimelineKind.NOW -> NowLine(r, m)
@@ -899,6 +906,8 @@ internal fun TaskRow(
     t: Task, actions: TodayActions, reason: NeedsYouReason? = null, motion: RowMotion = RowMotion(), modifier: Modifier = Modifier,
     /** On the timeline: the time column on the left and the core's line ("30 min · ↻ Every weekday") under the title. */
     time: String? = null, timelineLine: String? = null,
+    /** A planned task whose time has gone by: its line ("Since 09:15 · 30 min") is lit in the accent colour. */
+    late: Boolean = false,
 ) {
     // Just landed from the plan: lit softly, then settles.
     val glow by animateColorAsState(
@@ -922,7 +931,11 @@ internal fun TaskRow(
                 null -> if (time != null) timelineLine else meta(t)
             }
             line?.let {
-                val color = if (reason == NeedsYouReason.CONFLICT || reason == NeedsYouReason.OVERDUE) Meka.colors.critical else Meka.colors.textSecondary
+                val color = when {
+                    reason == NeedsYouReason.CONFLICT || reason == NeedsYouReason.OVERDUE -> Meka.colors.critical
+                    late && reason == null && time != null -> Meka.colors.accent
+                    else -> Meka.colors.textSecondary
+                }
                 Text(it, style = MekaType.itemMeta, color = color)
             }
         }

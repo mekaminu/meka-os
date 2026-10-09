@@ -397,6 +397,38 @@ class MekaCore(
     suspend fun delete(taskId: String) = onCore { tasks.delete(taskId); followBlocks(listOf(taskId)); Unit }
 
     /**
+     * "Move to later" on a late planned task (Fold review 2026-10-09 13:45, item 3; [os.meka.core.domain.LateTaskRules]):
+     * re-plans it to the first free stretch from now, around today's events, booked sessions and the other planned
+     * tasks. Returns what the undo bar needs ("Moved “Send the invoice” to 15:30"), or null when the task has no time or
+     * today has no room left (nothing changes).
+     */
+    suspend fun moveLater(taskId: String): os.meka.core.domain.LaterMove? = onCore {
+        val now = nowMs()
+        val day = dayWindow(now)
+        val all = tasks.all()
+        val t = all.firstOrNull { it.id == taskId } ?: return@onCore null
+        val from = t.scheduledAtMs ?: return@onCore null
+        val open = all.filter {
+            (it.lifecycle == os.meka.core.domain.Lifecycle.ACTIVE || it.lifecycle == os.meka.core.domain.Lifecycle.INBOX) &&
+                !it.waitsForItsDay(day.epochDay)
+        }
+        val to = os.meka.core.domain.LateTaskRules.laterSlot(
+            t, open, visibleEvents(all), _sessions.value.todayBlocks(day.epochDay, now), now, day,
+        ) ?: return@onCore null
+        tasks.edit(taskId, TaskEdit(scheduledAtMs = to))
+        followBlocks(listOf(taskId))
+        val hhmm = os.meka.core.domain.LocalClock.formatMinute(ZoneCalendar(timeZone).minuteOfDay(to))
+        os.meka.core.domain.LaterMove(taskId, from, to, os.meka.core.domain.LateTaskRules.movedLine(t.title, hhmm))
+    }
+
+    /** Undo on "Moved … to 15:30": the task goes back to the time it had. */
+    suspend fun undoMoveLater(move: os.meka.core.domain.LaterMove) = onCore {
+        tasks.edit(move.taskId, TaskEdit(scheduledAtMs = move.fromMs))
+        followBlocks(listOf(move.taskId))
+        Unit
+    }
+
+    /**
      * A suggested plan for the rest of today (DayPlanner v1), making room first for habits that are behind or due,
      * and keeping meals free around a fast. Changes nothing until [applyPlan].
      */

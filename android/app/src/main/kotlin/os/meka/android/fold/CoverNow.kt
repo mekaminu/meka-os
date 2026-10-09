@@ -53,14 +53,16 @@ internal class NowHandlers(
     /** A booked session's "Went" and "Didn't go" (by habit id), as from Today's session card. */
     val went: (String) -> Unit = {},
     val didntGo: (String) -> Unit = {},
+    /** "Move to later" on a late planned task (by task id): re-planned to the first free stretch, with Undo. */
+    val later: (String) -> Unit = {},
 )
 
 /**
  * The "now" card (Fold modes, slice 3): on the closed Fold's cover screen it heads Today in place of Up next; on the open
  * Fold its task form is Up next itself (Fold review 2026-10-09, item 3), so Up next is the same card on both. One thing
  * (an event or booked session starting or just started, a session asking "Did you go?", Up next, or clear) with its
- * one-tap actions: Join or Maps and Open for an event; Done, Tomorrow and Open for a task; Went and Didn't go for a
- * session on now or over. Under it, "Then: …" and "3 need you ›".
+ * one-tap actions: Join or Maps and Open for an event; Done, Tomorrow and Open for a task (Done, Move to later and
+ * Tomorrow once a planned task's time has gone by, its label lit); Went and Didn't go for a session on now or over. Under it, "Then: …" and "3 need you ›".
  *
  * Motion: when the thing changes, the content cross-slides like Up next (the old one out left, the new one in from the
  * right); chips press in (0.97) and give a light haptic; Done and Tomorrow let the card slide on to what's next.
@@ -156,6 +158,7 @@ private fun NowChip(a: NowAction, v: NowView, handlers: NowHandlers) {
         NowAction.TOMORROW -> "Tomorrow"
         NowAction.WENT -> "Went"
         NowAction.DIDNT_GO -> "Didn't go"
+        NowAction.LATER -> os.meka.core.domain.LateTaskRules.MOVE_LATER
     }
     Text(
         label, style = MekaType.caption,
@@ -173,6 +176,7 @@ private fun NowChip(a: NowAction, v: NowView, handlers: NowHandlers) {
                     NowAction.OPEN_TASK -> v.task?.let { handlers.openTask(it.id) }
                     NowAction.WENT -> v.session?.let { handlers.went(it.habitId) }
                     NowAction.DIDNT_GO -> v.session?.let { handlers.didntGo(it.habitId) }
+                    NowAction.LATER -> v.task?.let { handlers.later(it.id) }
                 }
             }
             .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),

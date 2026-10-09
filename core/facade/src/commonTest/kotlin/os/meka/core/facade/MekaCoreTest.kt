@@ -868,6 +868,36 @@ class MekaCoreTest {
     }
 
     @Test
+    fun aLatePlannedTaskLeadsUpNextAndMovesToLaterWithUndo() = runTest {
+        // Monday 21 Sep 2026, 15:13 in London (Fold review 2026-10-09 13:45, item 3).
+        val a = core("android"); val m = core("mac")
+        a.addTask("Read the RFC")
+        val id = a.addTask("add mutation to PM Autopilot")
+        val planned = now - 2 * 3_600_000L // 13:13
+        a.schedule(id, planned)
+        assertEquals(id, a.today.value.upNext?.id, "the late planned task leads Up next, not the anytime one")
+        val card = a.upNextCard()!!
+        assertTrue(card.late && card.lit)
+        assertEquals("Since 13:13", card.line)
+        assertEquals(
+            listOf(os.meka.core.domain.NowAction.DONE, os.meka.core.domain.NowAction.LATER, os.meka.core.domain.NowAction.TOMORROW),
+            card.actions,
+        )
+        val move = a.moveLater(id)!!
+        assertEquals("Moved “add mutation to PM Autopilot” to 15:15", move.line)
+        assertEquals(planned, move.fromMs)
+        assertEquals(move.toMs, card.laterAtMs)
+        assertEquals(move.toMs, a.today.value.upNext?.scheduledAtMs)
+        assertTrue(!a.upNextCard()!!.late)
+        a.syncNow(); m.syncNow()
+        assertEquals(move.toMs, m.today.value.upNext?.scheduledAtMs)
+        a.undoMoveLater(move)
+        assertEquals(planned, a.today.value.upNext?.scheduledAtMs)
+        // An anytime task has no time to move.
+        assertEquals(null, a.moveLater(a.today.value.yourDay.single().id))
+    }
+
+    @Test
     fun sundayEveningBooksNextWeekIntoGoals() = runTest {
         // Monday 21 Sep 2026, 15:13 in London; on to Sunday 27 Sep at 17:13, then 18:13.
         val a = core("android")

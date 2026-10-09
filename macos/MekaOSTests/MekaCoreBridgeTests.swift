@@ -784,6 +784,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(rules.BOOK_OFFER_CAPTION.isEmpty)
     }
 
+    /// A late planned task (Fold review 2026-10-09 13:45, item 3): "Since 09:15", Move to later and the undo line.
+    func testLateTaskRulesReachSwift() {
+        let rules = LateTaskRules.shared
+        XCTAssertEqual(rules.sinceLabel(hhmm: "09:15"), "Since 09:15")
+        XCTAssertEqual(rules.MOVE_LATER, "Move to later")
+        XCTAssertEqual(rules.movedLine(title: "Send the invoice", hhmm: "15:30"), "Moved “Send the invoice” to 15:30")
+        XCTAssertEqual(NowAction.later.name, "LATER")
+    }
+
     /// The messages assistant's cards (V1, messages slice 3): the Mac copies, never sends.
     func testTriageReplyRulesReachSwift() {
         let rules = TriageReplyRules.shared

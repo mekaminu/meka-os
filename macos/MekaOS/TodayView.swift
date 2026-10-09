@@ -358,7 +358,7 @@ struct TodayView: View {
         switch r.kind {
         case .event: TimelineEventRow(row: r, past: false, palette: palette).eventActions(r.event, palette: palette)
         case .task:
-            if let t = r.task { TaskRow(task: t, reason: nil, palette: palette, time: r.time, timelineLine: r.detail) }
+            if let t = r.task { TaskRow(task: t, reason: nil, palette: palette, time: r.time, timelineLine: r.detail, late: r.late) }
         case .gap: GapRow(row: r, palette: palette)
         case .now: NowLine(row: r, palette: palette)
         case .session: SessionTimelineRow(row: r, palette: palette)
@@ -401,13 +401,16 @@ struct TaskRow: View {
     /// On the timeline: the time column on the left and the core's line ("30 min · ↻ Every weekday") under the title.
     let time: String?
     let timelineLine: String?
+    /// A planned task whose time has gone by: its line ("Since 09:15 · 30 min") is lit in the accent colour.
+    let late: Bool
 
-    init(task: MekaTask, reason: NeedsYouReason?, palette: MekaPalette, time: String? = nil, timelineLine: String? = nil) {
+    init(task: MekaTask, reason: NeedsYouReason?, palette: MekaPalette, time: String? = nil, timelineLine: String? = nil, late: Bool = false) {
         self.task = task
         self.reason = reason
         self.palette = palette
         self.time = time
         self.timelineLine = timelineLine
+        self.late = late
     }
 
     var body: some View {
@@ -420,7 +423,8 @@ struct TaskRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(task.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let line = subtitle {
-                    Text(line).font(MekaType.itemMeta).foregroundStyle(isAlert ? palette.critical : palette.textSecondary)
+                    Text(line).font(MekaType.itemMeta)
+                        .foregroundStyle(isAlert ? palette.critical : (late && reason == nil && time != nil ? palette.accent : palette.textSecondary))
                 }
             }
             Spacer()

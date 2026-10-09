@@ -42,7 +42,7 @@ class TodayTest {
     }
 
     @Test
-    fun upNextIsNextScheduledThenHighestPriorityUnscheduled() {
+    fun upNextIsAPlannedTaskWhoseTimeHasComeThenNextScheduledThenHighestPriorityUnscheduled() {
         val t = TodayProjection.project(
             listOf(
                 task("past", scheduled = now - 3_600_000),
@@ -52,8 +52,14 @@ class TodayTest {
             ),
             now, day,
         )
-        assertEquals("soon", t.upNext!!.id)
-        assertEquals(listOf("past", "later", "p5"), t.yourDay.map { it.id })
+        // Fold review 2026-10-09 13:45, item 3: the planned task whose time has gone by leads.
+        assertEquals("past", t.upNext!!.id)
+        assertEquals(listOf("soon", "later", "p5"), t.yourDay.map { it.id })
+        val onTime = TodayProjection.project(
+            listOf(task("later", scheduled = now + 7_200_000), task("soon", scheduled = now + 600_000), task("p5", priority = 5)), now, day,
+        )
+        assertEquals("soon", onTime.upNext!!.id)
+        assertEquals(listOf("later", "p5"), onTime.yourDay.map { it.id })
     }
 
     @Test

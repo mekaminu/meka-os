@@ -29,7 +29,15 @@ data class Today(
      * its rim ([WatchFaceRules]). Filled in by the facade, which sees tomorrow's events and work too.
      */
     val watchFace: WatchFace = WatchFace.EMPTY,
+    /**
+     * Where "Move to later" would put the Up next task when it's late ([LateTaskRules.laterSlot]); null when it isn't
+     * late or today has no room left.
+     */
+    val upNextLaterMs: Long? = null,
 ) {
+    /** The Up next task is a planned task whose time has gone by ([LateTaskRules.isLate]). */
+    fun upNextLate(nowMs: Long): Boolean = upNext?.let { LateTaskRules.isLate(it, nowMs) } ?: false
+
     /** Timed events that have not ended yet: what's still ahead of you today. */
     fun upcomingEvents(nowMs: Long): List<CalendarEvent> = events.filter { !it.allDay && it.endAtMs > nowMs }
 
@@ -107,7 +115,9 @@ object TodayProjection {
         val unscheduled = rest.filter { it.scheduledAtMs == null && (it.dueAtMs == null || it.dueAtMs in today) }
             .sortedWith(compareByDescending<Task> { it.priority }.thenBy { it.createdAtMs })
 
-        val upNext = scheduledToday.firstOrNull { it.scheduledAtMs!! >= nowMs } ?: unscheduled.firstOrNull()
+        // A planned task whose time has come leads (the earliest, late or not: Fold review 2026-10-09 13:45, item 3),
+        // then the next planned one, then anytime.
+        val upNext = scheduledToday.firstOrNull() ?: unscheduled.firstOrNull()
         val yourDay = (scheduledToday + unscheduled).filter { it.id != upNext?.id }
         val doneToday = tasks.filter { it.lifecycle == Lifecycle.DONE && it.completedAtMs != null && it.completedAtMs in today }
             .sortedByDescending { it.completedAtMs }
@@ -136,6 +146,9 @@ object TodayProjection {
             calendar = calendar,
             work = workBlocks,
         )
-        return Today(needs, upNext, yourDay, doneToday, todaysEvents, timeline, ring)
+        val later = upNext?.takeIf { LateTaskRules.isLate(it, nowMs) }?.let { t ->
+            LateTaskRules.laterSlot(t, scheduledToday, todaysEvents, sessions, nowMs, today)
+        }
+        return Today(needs, upNext, yourDay, doneToday, todaysEvents, timeline, ring, upNextLaterMs = later)
     }
 }
