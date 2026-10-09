@@ -1440,8 +1440,12 @@ struct AskUndone: Equatable {
 }
 
 /// What the calendar-action undo bar offers.
+/// Equal when it is the same offer (each has its own id; its message and action never change). `Action` isn't
+/// Equatable: `talk` carries the core's `AskUndo`, a Kotlin sealed interface that Swift sees as a protocol.
 struct EventUndoOffer: Identifiable, Equatable {
-    enum Action: Equatable {
+    static func == (a: EventUndoOffer, b: EventUndoOffer) -> Bool { a.id == b.id && a.message == b.message }
+
+    enum Action {
         case deleteTask(String)
         /// Delete in the task detail: the task comes back.
         case restoreTask(String)
