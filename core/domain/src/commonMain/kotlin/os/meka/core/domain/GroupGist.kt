@@ -39,13 +39,16 @@ object GroupGistRules {
     fun groups(
         cards: List<GroupDigestCard>, items: List<CapturedItem>, seen: Map<String, Long>, gisted: Set<String>,
         timeOf: (Long) -> String,
+        settings: TriageSettings = TriageSettings(),
     ): List<Group> = cards.asSequence()
-        .filter { it.count >= MIN_MESSAGES && it.groupKey !in gisted }
+        // Work mode → Messages: a group kept from MEKA's AI is never gisted, and a person kept from it is left out.
+        .filter { it.count >= MIN_MESSAGES && it.groupKey !in gisted && !settings.isPrivate(it.title) }
         .take(MAX_GROUPS)
         .map { card ->
             val since = seen[card.groupKey] ?: 0L
             val lines = items.asSequence()
-                .filter { it.atMs > since && it.conversation != null && GroupDigestRules.groupKey(it) == card.groupKey && !it.text.isNullOrBlank() }
+                .filter { it.atMs > since && it.conversation != null && GroupDigestRules.groupKey(it) == card.groupKey && !it.text.isNullOrBlank() &&
+                        !settings.isPrivate(it.personName) }
                 .distinctBy { it.id }.sortedBy { it.atMs }.toList().takeLast(MAX_LINES)
                 .map { Line(it.personName.trim().take(60), timeOf(it.atMs), cut(it.text!!, MAX_LINE_CHARS)) }
             Group(card.groupKey, card.title, lines)

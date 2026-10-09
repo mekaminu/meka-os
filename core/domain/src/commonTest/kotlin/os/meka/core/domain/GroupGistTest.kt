@@ -41,6 +41,18 @@ class GroupGistTest {
     }
 
     @Test
+    fun aGroupOrPersonKeptFromTheAiIsNeverSent() {
+        // Work mode → Messages: the group kept from the AI isn't sent at all.
+        val keptGroup = TriageSettings(neverToAi = setOf("Barça Lads"))
+        assertTrue(GroupGistRules.groups(cards, items, emptyMap(), emptySet(), ::hhmm, keptGroup).isEmpty())
+        // A person kept from the AI: the group still goes, without their lines.
+        val keptFemi = TriageSettings(neverToAi = setOf("femi"))
+        val sent = GroupGistRules.groups(cards, items, emptyMap(), emptySet(), ::hhmm, keptFemi).single()
+        assertEquals(5, sent.lines.size)
+        assertTrue(sent.lines.none { it.from == "Femi" })
+    }
+
+    @Test
     fun theAnswerIsCheckedAgainstWhatWasSent() {
         val sent = GroupGistRules.groups(cards, items, emptyMap(), emptySet(), ::hhmm)
         val raw = listOf(

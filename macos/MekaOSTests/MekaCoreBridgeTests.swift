@@ -896,6 +896,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(empty.moreLine)
     }
 
+    /// Messages assistant, slice 5: Work mode → Messages' lines reach Swift (the Mac shows them; the Fold keeps the list).
+    func testMessagesSetupReachesSwift() {
+        let rules = MessagesSetupRules.shared
+        XCTAssertTrue(rules.statusLine(listening: nil, aiOn: nil).contains("Work mode → Messages"))
+        XCTAssertFalse(rules.statusLit(listening: nil, aiOn: KotlinBoolean(bool: false)))
+        XCTAssertTrue(rules.PRIVACY.contains { $0.contains("without your tap") })
+        XCTAssertTrue(rules.COST.contains("monthly cap"))
+        XCTAssertFalse(rules.LIMITS.isEmpty)
+    }
+
     /// Calendar editing, slice 2b: the Add event sheet's form steps and view reach Swift.
     func testPlanCalendarRulesReachSwift() {
         let google = EditAccount(provider: "google", email: "me@gmail.com")

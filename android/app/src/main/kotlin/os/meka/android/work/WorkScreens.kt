@@ -88,8 +88,8 @@ import os.meka.android.designsystem.sharedTitleInPane
 private const val STEP_MINUTES = 15
 
 /**
- * Work mode settings (build plan M1): the switch, work hours, notification access, alerts and the two people
- * lists. The switch and hours sync with the Mac; the lists and everything held stay on this phone.
+ * Work mode settings (build plan M1): the switch, work hours, notification access, alerts, the two people
+ * lists and Messages (the messages assistant's setup). The switch and hours sync with the Mac; the lists and everything held stay on this phone.
  */
 @Composable
 fun WorkPane(core: MekaCore, onClose: () -> Unit) {
@@ -242,6 +242,8 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
             notifiesNow = { notify.notifiesNow(it) },
             setNotifyNow = { name, on -> scope.launch { core.setRequestNotifyNow(name, on) } },
         )
+        Spacer(Modifier.height(MekaSpace.m))
+        MessagesSetupSection(core, store, listening, 8)
         Spacer(Modifier.height(MekaSpace.xl))
     }
 }

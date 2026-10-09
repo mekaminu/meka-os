@@ -14,6 +14,7 @@ struct WorkSheet: View {
     @State private var start = 9 * 60
     @State private var end = 17 * 60 + 30
     @State private var enabled = true
+    @State private var showMessageDetails = false
 
     private static let dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     private static let step = 15
@@ -84,6 +85,8 @@ struct WorkSheet: View {
                 .padding(.top, MekaSpace.s)
                 .staggeredAppear(4)
 
+            messages.staggeredAppear(5)
+
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
@@ -95,6 +98,32 @@ struct WorkSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.switchedManually)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.callAssistant)
         .onAppear(perform: load)
+    }
+
+    /// Work mode → Messages (V1, messages assistant slice 5): the Fold reads the messages and keeps the never-to-AI
+    /// list, so the Mac shows what the assistant sends, what it costs and what it can't see.
+    private var messages: some View {
+        let rules = MessagesSetupRules.shared
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text("MESSAGES").font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textTertiary)
+            Text(rules.statusLine(listening: nil, aiOn: nil))
+                .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            DisclosureGroup(isExpanded: $showMessageDetails) {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    ForEach(rules.PRIVACY + [rules.COST] + rules.LIMITS, id: \.self) { line in
+                        Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.top, MekaSpace.xxs)
+            } label: {
+                Text("Privacy, cost and limits").font(MekaType.itemMeta).foregroundStyle(palette.accent)
+            }
+        }
+        .padding(.top, MekaSpace.s)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: showMessageDetails)
     }
 
     private func stepper(_ label: String, value: Binding<Int>) -> some View {

@@ -20,6 +20,7 @@ import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.RequestWatch
 import os.meka.core.domain.RequestWatchRules
 import os.meka.core.domain.TriageSettings
+import os.meka.core.domain.MessagesSetupRules
 import java.io.File
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -65,7 +66,7 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
 
     /**
      * The messages assistant's settings (slice 4): each group's mode switched on its digest card (Digest unless
-     * changed); the never-to-AI list arrives with slice 5's screen. Stays on this phone.
+     * changed) and the people and groups kept from MEKA's AI (slice 5, Work mode → Messages). Stays on this phone.
      */
     private val _triageSettings = MutableStateFlow(TriageSettings())
     val triageSettings: StateFlow<TriageSettings> = _triageSettings.asStateFlow()
@@ -128,6 +129,14 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
         save()
     }
 
+    /** Keeps [name] (a person or a group) from MEKA's AI, or lets them back (Work mode → Messages). */
+    fun setNeverToAi(name: String, on: Boolean) = synchronized(lock) {
+        _triageSettings.value = _triageSettings.value.copy(
+            neverToAi = MessagesSetupRules.setNeverToAi(_triageSettings.value.neverToAi, name, on),
+        )
+        save()
+    }
+
     /** Caught up with [groupKeys] now: their cards leave until something new comes. */
     fun caughtUp(groupKeys: Collection<String>) = synchronized(lock) {
         if (groupKeys.isEmpty()) return@synchronized
@@ -172,6 +181,7 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
         )
         _triageSettings.value = TriageSettings(
             groupModes = json.optJSONObject("groupModes")?.let { o -> o.keys().asSequence().associateWith { GroupMode.of(o.optString(it)) } }.orEmpty(),
+            neverToAi = json.optJSONArray("neverToAi")?.let { a -> (0 until a.length()).mapTo(LinkedHashSet()) { a.getString(it) } }.orEmpty(),
         )
         _digestSeen.value = GroupDigestRules.caughtUp(
             json.optJSONObject("digestSeen")?.let { o -> o.keys().asSequence().associateWith { o.optLong(it) } }.orEmpty(),
@@ -193,6 +203,7 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
             .put("triageSeen", JSONObject().also { o -> triageSeen.forEach { (id, at) -> o.put(id, at) } })
             .put("digest", JSONArray().also { a -> _digest.value.forEach { a.put(writeItem(it)) } })
             .put("groupModes", JSONObject().also { o -> _triageSettings.value.groupModes.forEach { (g, m) -> o.put(g, m.wire) } })
+            .put("neverToAi", JSONArray(_triageSettings.value.neverToAi.toList()))
             .put("digestSeen", JSONObject().also { o -> _digestSeen.value.forEach { (g, at) -> o.put(g, at) } })
         val sealed = seal(json.toString().toByteArray(Charsets.UTF_8))
         val out = file.startWrite()

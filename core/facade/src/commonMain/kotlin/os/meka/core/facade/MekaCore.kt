@@ -881,7 +881,7 @@ class MekaCore(
                 // Only groups with news since this slot began weren't caught up after it: the digest is due for them.
                 .filter { (merged[it.groupKey] ?: 0L) < slotMs && it.groupKey !in gisted }
             if (cards.isEmpty()) return@onCore null
-            val groups = rules.groups(cards, items, merged, gisted) { LocalClock.formatMinute(cal.minuteOfDay(it)) }
+            val groups = rules.groups(cards, items, merged, gisted, { LocalClock.formatMinute(cal.minuteOfDay(it)) }, settings)
             GistPlan(slotMs, slotMinute, today, minute, cards, groups, items)
         } ?: return GistRead.NotDue
         if (plan.groups.isEmpty()) return GistRead.Read(onCore { plan.saveAll(emptyMap()) }, emptyList())
