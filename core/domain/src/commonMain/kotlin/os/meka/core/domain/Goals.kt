@@ -100,6 +100,10 @@ data class GoalsView(
     val behind: Int get() = habits.count { it.pace == HabitPace.BEHIND }
     val dueToday: Int get() = habits.count { it.pace == HabitPace.DUE }
     val doneToday: Int get() = habits.count { it.doneToday }
+    /** "Add Gym" is offered (no booked habit, and none already named gym/workout/training). */
+    val offersAddGym: Boolean get() = SessionRules.offersAddGym(habits)
+    /** The hand-made gym habit to offer "Let MEKA book “gym”" on; null when there is none or a habit is already booked. */
+    val bookOffer: HabitItem? get() = SessionRules.bookOffer(habits)
 
     /** "1 habit behind · 2 to do today"; "All habits on track" or null with no habits. */
     val paceLine: String? get() {

@@ -134,6 +134,42 @@ object SessionRules {
         emptyList(), listOf("Push", "Pull", "Legs"), listOf("Upper", "Lower"), listOf("Full body A", "Full body B"),
     )
 
+    /** Words that make a hand-made habit a gym habit (Fold review 2026-10-09 13:45, item 2). */
+    val GYM_WORDS: Set<String> = setOf("gym", "gyms", "workout", "workouts", "training", "lifting", "weights")
+    /** Under this, a hand-made habit's length is too short for a session: it becomes the Gym's hour. */
+    const val MIN_SESSION_MINUTES = 30
+    const val GYM_MINUTES = 60
+    const val BOOK_OFFER_CAPTION =
+        "Keeps its ticks and streak: MEKA books its sessions around your calendar and work, and rebooks a missed one."
+
+    /**
+     * A habit Meka made by hand that is really the Gym: its title has [GYM_WORDS] as a whole word, or "work out", in any
+     * case ("gym", "Gym 💪", "Go to the gym", "Workout", "Training"); "Gymnastics", "Trainingsplan" or "Workshop" don't.
+     */
+    fun isGymLike(title: String): Boolean {
+        val words = title.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+        if (words.any { it in GYM_WORDS }) return true
+        return words.zipWithNext().any { (a, b) -> a == "work" && b == "out" }
+    }
+
+    /** The unbooked gym-like habit Goals offers to book, while no habit is booked yet; null otherwise. */
+    fun bookOffer(habits: List<HabitItem>): HabitItem? =
+        if (habits.any { it.booked }) null else habits.firstOrNull { isGymLike(it.title) }
+
+    /** "Add Gym" is offered only while no habit is booked and none is already a gym habit made by hand. */
+    fun offersAddGym(habits: List<HabitItem>): Boolean = habits.none { it.booked || isGymLike(it.title) }
+
+    /** "Let MEKA book “gym”" — the habit's own name, shortened at a word past [MAX_LABEL] characters. */
+    fun bookOfferLabel(title: String): String {
+        val t = title.trim()
+        val short = if (t.length <= MAX_LABEL) t else t.take(MAX_LABEL + 1).substringBeforeLast(' ').ifEmpty { t.take(MAX_LABEL) } + "…"
+        return "Let MEKA book “$short”"
+    }
+
+    /** What booking a hand-made habit changes besides "Book my sessions": an hour when it was shorter, evenings when "Any time". */
+    fun bookedMinutes(minutes: Int): Int = if (minutes < MIN_SESSION_MINUTES) GYM_MINUTES else minutes
+    fun bookedTiming(timing: HabitTiming): HabitTiming = if (timing == HabitTiming.ANYTIME) HabitTiming.EVENING else timing
+
     fun rotationLabel(r: List<String>): String = if (r.isEmpty()) "No rotation" else r.joinToString(" · ")
     fun rotationAt(index: Int): List<String> = ROTATIONS[index.coerceIn(0, ROTATIONS.size - 1)]
 

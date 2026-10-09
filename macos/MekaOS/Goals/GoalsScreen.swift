@@ -35,8 +35,22 @@ struct GoalsScreen: View {
                     HabitRowView(habit: h, goals: model.goals?.goals ?? [], expanded: open == h.id, palette: palette) { toggle(h.id) }
                 }
                 AddHabitRow(palette: palette).padding(.top, MekaSpace.s)
-                // The Gym: one click adds it with its sessions booked (offered until a booked habit exists).
-                if !(model.goals?.habits ?? []).contains(where: { $0.booked }) {
+                // A hand-made gym/workout/training habit: book it in place, keeping its ticks (Fold review 13:45, item 2).
+                if let offer = model.goals?.bookOffer {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Button(SessionRules.shared.bookOfferLabel(title: offer.title)) {
+                            model.letMekaBook(offer.id)
+                            open = offer.id
+                        }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                        Text(SessionRules.shared.BOOK_OFFER_CAPTION)
+                            .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    }
+                    .padding(.top, MekaSpace.s)
+                    .transition(.opacity)
+                }
+                // The Gym: one click adds it with its sessions booked (offered until a booked or gym-named habit exists).
+                if model.goals?.offersAddGym ?? true {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Button("Add Gym") { model.addGym() }
                             .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)

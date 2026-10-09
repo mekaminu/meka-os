@@ -499,4 +499,31 @@ class SessionsTest {
         assertEquals(at(mon, 17, 45), w.next.countdownToMs)
         assertEquals(at(mon, 17, 45), w.nextChangeMs) // it starts
     }
+
+    private fun habit(id: String, title: String, booked: Boolean = false) = HabitItem(
+        id, title, 3, HabitTiming.ANYTIME, 15, null, 0, 3, false, HabitPace.ON_TRACK, 0, "week",
+        List(7) { false }, "0 of 3 this week", null, false, booked = booked,
+    )
+
+    @Test
+    fun aHandMadeGymHabitIsOfferedBookingInsteadOfAddGym() {
+        assertTrue(listOf("gym", "Gym 💪", "Go to the gym", "Workout", "training", "Weights", "work out", "GYM-session").all { SessionRules.isGymLike(it) })
+        assertTrue(listOf("Gymnastics", "Workshop", "Trainingsplan", "Read", "work outline").none { SessionRules.isGymLike(it) })
+        val handMade = listOf(habit("r", "Read"), habit("g", "gym"))
+        assertEquals("g", SessionRules.bookOffer(handMade)?.id)
+        assertTrue(!SessionRules.offersAddGym(handMade))
+        // Nothing gym-like: Add Gym as before, no offer.
+        assertTrue(SessionRules.offersAddGym(listOf(habit("r", "Read"))))
+        assertNull(SessionRules.bookOffer(listOf(habit("r", "Read"))))
+        // Once a habit is booked, neither.
+        val booked = listOf(habit("b", "Gym", booked = true), habit("t", "Training"))
+        assertNull(SessionRules.bookOffer(booked))
+        assertTrue(!SessionRules.offersAddGym(booked))
+        assertEquals("Let MEKA book “gym”", SessionRules.bookOfferLabel(" gym "))
+        assertEquals("Let MEKA book “Go to the gym after work…”", SessionRules.bookOfferLabel("Go to the gym after work every evening"))
+        assertEquals(60, SessionRules.bookedMinutes(15))
+        assertEquals(45, SessionRules.bookedMinutes(45))
+        assertEquals(HabitTiming.EVENING, SessionRules.bookedTiming(HabitTiming.ANYTIME))
+        assertEquals(HabitTiming.MORNING, SessionRules.bookedTiming(HabitTiming.MORNING))
+    }
 }

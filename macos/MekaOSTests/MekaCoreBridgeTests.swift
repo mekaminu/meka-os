@@ -774,6 +774,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.weeklyMeta(pace: .onTrack, done: 1, weekTarget: 2, today: monday + 2), "1 of 2 this week")
     }
 
+    /// A hand-made gym habit is offered booking instead of a second "Add Gym" (Fold review 2026-10-09 13:45, item 2).
+    func testGymBookOfferReachesSwift() {
+        let rules = SessionRules.shared
+        XCTAssertTrue(rules.isGymLike(title: "gym"))
+        XCTAssertFalse(rules.isGymLike(title: "Gymnastics"))
+        XCTAssertEqual(rules.bookOfferLabel(title: "gym"), "Let MEKA book “gym”")
+        XCTAssertEqual(rules.bookedMinutes(minutes: 15), 60)
+        XCTAssertFalse(rules.BOOK_OFFER_CAPTION.isEmpty)
+    }
+
     /// The messages assistant's cards (V1, messages slice 3): the Mac copies, never sends.
     func testTriageReplyRulesReachSwift() {
         let rules = TriageReplyRules.shared

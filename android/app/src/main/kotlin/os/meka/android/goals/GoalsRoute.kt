@@ -151,8 +151,17 @@ fun GoalsRoute(core: MekaCore) {
         item(key = "add-habit") {
             AddHabit { title, perWeek, timing -> act { core.addHabit(title, perWeek, timing, GoalRules.DEFAULT_MINUTES, null) } }
         }
-        // The Gym: one tap adds it with its sessions booked around the calendar (offered until a booked habit exists).
-        if (view.habits.none { it.booked }) item(key = "add-gym") {
+        // A habit Meka made by hand named gym/workout/training: book it in place, keeping its ticks (Fold review 13:45, item 2).
+        view.bookOffer?.let { h ->
+            item(key = "book-${h.id}") {
+                Column(Modifier.animateItem().padding(top = MekaSpace.s)) {
+                    Action(SessionRules.bookOfferLabel(h.title)) { haptics.light(); act { core.letMekaBook(h.id); open = h.id } }
+                    Text(SessionRules.BOOK_OFFER_CAPTION, style = MekaType.caption, color = Meka.colors.textTertiary)
+                }
+            }
+        }
+        // The Gym: one tap adds it with its sessions booked around the calendar (offered until a booked or gym-named habit exists).
+        if (view.offersAddGym) item(key = "add-gym") {
             Column(Modifier.animateItem().padding(top = MekaSpace.s)) {
                 Action("Add Gym") { haptics.light(); act { open = core.addGym() } }
                 Text(

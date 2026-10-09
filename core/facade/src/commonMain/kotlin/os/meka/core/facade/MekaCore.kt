@@ -977,6 +977,18 @@ class MekaCore(
         goals.setHabitBooked(id, true)
         id
     }
+    /**
+     * "Let MEKA book “gym”" (Fold review 2026-10-09 13:45, item 2): a hand-made gym habit becomes the booked Gym in place,
+     * so its ticks, streak and goal stay: sessions booked, an hour when it was shorter than half an hour, evenings when
+     * it was "Any time"; its target is kept.
+     */
+    suspend fun letMekaBook(id: String) = onCore {
+        val h = goals.habits().firstOrNull { it.id == id } ?: return@onCore
+        val minutes = os.meka.core.domain.SessionRules.bookedMinutes(h.minutes)
+        val timing = os.meka.core.domain.SessionRules.bookedTiming(h.timing)
+        if (minutes != h.minutes || timing != h.timing) goals.editHabit(id, timing = timing, minutes = minutes)
+        goals.setHabitBooked(id, true)
+    }
     /** "Book my sessions": MEKA books the habit's sessions into the week around the calendar and work. */
     suspend fun setHabitBooked(id: String, on: Boolean) = onCore { goals.setHabitBooked(id, on) }
     /** The rotation preset at [index] in [os.meka.core.domain.SessionRules.ROTATIONS] (0: none). */

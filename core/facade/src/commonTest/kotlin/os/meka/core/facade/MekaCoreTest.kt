@@ -842,6 +842,32 @@ class MekaCoreTest {
     }
 
     @Test
+    fun aHandMadeGymHabitIsBookedInPlaceKeepingItsTicks() = runTest {
+        // Monday 21 Sep 2026, 15:13 in London (Fold review 2026-10-09 13:45, item 2).
+        val a = core("android"); val m = core("mac")
+        val id = a.addHabit("gym", 2, os.meka.core.domain.HabitTiming.ANYTIME, 15, null)
+        a.setHabitDone(id, true)
+        assertTrue(!a.goalsView.value.offersAddGym, "no separate Add Gym beside a habit called gym")
+        assertEquals(id, a.goalsView.value.bookOffer?.id)
+        assertEquals("Let MEKA book “gym”", os.meka.core.domain.SessionRules.bookOfferLabel(a.goalsView.value.bookOffer!!.title))
+        a.letMekaBook(id)
+        val h = a.goalsView.value.habits.single()
+        assertEquals(id, h.id)
+        assertTrue(h.booked)
+        assertEquals(60, h.minutes)
+        assertEquals(os.meka.core.domain.HabitTiming.EVENING, h.timing)
+        assertEquals(2, h.targetPerWeek)
+        assertTrue(h.doneToday, "its tick today is kept")
+        assertEquals(1, h.doneThisWeek)
+        assertTrue(h.sessionLine != null)
+        assertEquals(null, a.goalsView.value.bookOffer)
+        assertTrue(!a.goalsView.value.offersAddGym)
+        a.syncNow(); m.syncNow()
+        assertTrue(m.goalsView.value.habits.single().booked)
+        assertEquals(null, m.goalsView.value.bookOffer)
+    }
+
+    @Test
     fun sundayEveningBooksNextWeekIntoGoals() = runTest {
         // Monday 21 Sep 2026, 15:13 in London; on to Sunday 27 Sep at 17:13, then 18:13.
         val a = core("android")

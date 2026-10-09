@@ -1080,6 +1080,8 @@ final class CoreModel {
 
     /// Adds "Gym" (three times a week, evenings, an hour) with its sessions booked into the week.
     func addGym() { MekaHaptics.light(); run { _ = try await $0.addGym() } }
+    /// "Let MEKA book “gym”": a hand-made gym habit becomes the booked Gym in place, keeping its ticks.
+    func letMekaBook(_ id: String) { MekaHaptics.light(); run { try await $0.letMekaBook(id: id) } }
     /// "Book my sessions" on or off.
     func setHabitBooked(_ id: String, _ on: Bool) { MekaHaptics.tick(); run { try await $0.setHabitBooked(id: id, on: on) } }
     /// The rotation preset at `index` in `SessionRules.ROTATIONS` (0: none).
