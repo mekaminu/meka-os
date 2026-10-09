@@ -78,6 +78,7 @@ import os.meka.core.domain.ContactNumbers
 import os.meka.core.domain.HeldPreview
 import os.meka.core.domain.HeldPreviewRow
 import os.meka.core.domain.HeldPreviewRules
+import os.meka.core.domain.VoiceRecordingRules
 import os.meka.core.domain.LocalClock
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.PersonSummary
@@ -266,6 +267,8 @@ fun AfterWorkPane(
     blocked: BlockedCallersView = BlockedCallersView.EMPTY,
     onBlock: (PersonSummary) -> Unit = {},
     onReport: (String) -> Unit = {},
+    /** A kept voice message's recording (polish 8c), fetched from MEKA's server when Play is pressed. */
+    audio: suspend (String) -> ByteArray? = { null },
 ) {
     val haptics = rememberMekaHaptics()
     var open by rememberSaveable { mutableStateOf<String?>(null) }
@@ -281,13 +284,16 @@ fun AfterWorkPane(
         // Email-triage style: people sort into place with a stagger.
         summary.people.forEachIndexed { i, p ->
             val key = p.items.first().personKey
-            PersonCard(p, expanded = open == key, Modifier.appear(rememberAppearance(i + 1)), blocked.has(p.blockNumber), onBlock, onReport) {
+            PersonCard(p, expanded = open == key, Modifier.appear(rememberAppearance(i + 1)), blocked.has(p.blockNumber), onBlock, onReport, audio) {
                 open = if (open == key) null else key
             }
         }
         Spacer(Modifier.height(MekaSpace.m))
         if (!summary.isEmpty) PillButton("Done", filled = true) { haptics.light(); onDone() }
         Text("Done clears MEKA's copy on the Fold and the Mac. WhatsApp and Messages are untouched.", style = MekaType.caption, color = Meka.colors.textTertiary)
+        if (summary.people.any { p -> p.items.any { it.hasAudio } }) {
+            Text(VoiceRecordingRules.PRIVACY, style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
         Spacer(Modifier.height(MekaSpace.xl))
     }
 }
@@ -393,7 +399,8 @@ fun AfterWorkHost(onClose: () -> Unit) {
         onClose()
     }, onClose = onClose, blocked = blocked,
         onBlock = { p -> scope.launch { runCatching { app.core.blockHeldCaller(p) } } },
-        onReport = { number -> reportScamCall(context, number) })
+        onReport = { number -> reportScamCall(context, number) },
+        audio = { id -> app.core.voiceMessageAudio(id) })
 }
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
@@ -407,6 +414,7 @@ private fun PersonCard(
     isBlocked: Boolean,
     onBlock: (PersonSummary) -> Unit,
     onReport: (String) -> Unit,
+    audio: suspend (String) -> ByteArray?,
     onTap: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -438,6 +446,7 @@ private fun PersonCard(
                         Column(Modifier.weight(1f)) {
                             item.conversation?.let { Text("in $it", style = MekaType.caption, color = Meka.colors.textTertiary) }
                             Text(body, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+                            if (item.hasAudio) VoiceMessagePlayer(item.id, audio)
                         }
                     }
                 }

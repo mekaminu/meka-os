@@ -8,12 +8,14 @@ import os.meka.core.domain.BankHolidayFields
 import os.meka.core.domain.BankHolidayStore
 import os.meka.core.domain.CallAssistantRules
 import os.meka.core.domain.CallAssistantScript
+import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeldMessageFields
 import os.meka.core.domain.MekaVoiceFields
 import os.meka.core.domain.MekaVoiceRules
 import os.meka.core.domain.MekaVoiceStore
 import os.meka.core.domain.Urgency
+import os.meka.core.domain.VoiceRecordingRules
 import os.meka.core.domain.WorkFields
 import os.meka.core.domain.WorkMode
 import os.meka.core.sync.FieldValue
@@ -111,6 +113,12 @@ interface VoiceProvider {
 
     /** Deletes a recording from the phone service once it has been transcribed. Returns whether it is gone. */
     fun deleteRecording(recording: String): Boolean
+
+    /**
+     * The recording's audio as MP3 (call assistant polish 8c), fetched before the phone service's copy is deleted;
+     * null when it can't be had. Never larger than [VoiceRecordingRules.MAX_BYTES].
+     */
+    fun fetchRecording(recording: String): ByteArray? = null
 }
 
 /**
@@ -175,6 +183,8 @@ class CallAssistant(
     private val onWritten: (householdId: String) -> Unit = {},
     /** An urgent message: wake the devices now, at high priority. */
     private val onUrgent: (householdId: String) -> Unit = {},
+    /** Where callers' recordings are kept (polish 8c); null keeps none (the phone service's copy is still deleted). */
+    private val recordings: RecordingStore? = null,
 ) {
     private val clock = HlcClock(Integrations.SERVER_DEVICE, now)
 
@@ -223,6 +233,54 @@ class CallAssistant(
         }
     }
 
+    /**
+     * Keeps the caller's recording (polish 8c): once the phone service has transcribed (or failed to transcribe) the
+     * message, fetch the audio from it, keep it in MEKA's bucket and write [HeldMessageFields.AUDIO] so both apps offer
+     * Play. Runs before the phone service's copy is deleted. Nothing is kept for a message Meka already dismissed, or
+     * when no store is configured. Returns whether a recording is now kept.
+     */
+    fun keepRecording(provider: VoiceProvider, event: VoiceEvent.Transcribed): Boolean {
+        val store = recordings ?: return false
+        val recording = event.recording ?: return false
+        val hh = household() ?: return false
+        val id = CallAssistantRules.heldId(provider.id, event.callId)
+        if (!exists(hh, id) || cleared(hh, id)) return false
+        val key = VoiceRecordingRules.key(hh, id) ?: return false
+        if (fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.AUDIO) == FieldValue.Bool(true)) return true
+        val audio = provider.fetchRecording(recording)?.takeIf { it.isNotEmpty() && it.size <= VoiceRecordingRules.MAX_BYTES } ?: return false
+        store.put(key, audio)
+        // Done may have been tapped while it was being fetched: then it isn't kept after all.
+        if (cleared(hh, id)) {
+            store.delete(key)
+            return false
+        }
+        if (write(hh, id, mapOf(HeldMessageFields.AUDIO to true.fv()))) runCatching { onWritten(hh) }
+        return true
+    }
+
+    /**
+     * A household's recording for a device to play: only a voice message that isn't cleared, was kept and is under 30
+     * days old ([VoiceRecordingRules.playable]). Null otherwise, including for another household's message.
+     */
+    fun recording(householdId: String, heldId: String): ByteArray? {
+        val store = recordings ?: return null
+        val key = VoiceRecordingRules.key(householdId, heldId) ?: return null
+        fun field(f: String) = fields.latest(householdId, EntityTypes.HELD_MESSAGE, heldId, f)
+        val kind = (field(HeldMessageFields.KIND) as? FieldValue.Text)?.value?.let { k -> CaptureKind.entries.firstOrNull { it.name == k } }
+        val at = (field(HeldMessageFields.AT) as? FieldValue.Int64)?.value
+        val playable = VoiceRecordingRules.playable(
+            kind, audio = field(HeldMessageFields.AUDIO) == FieldValue.Bool(true),
+            cleared = field(HeldMessageFields.CLEARED) == FieldValue.Bool(true), atMs = at, nowMs = now(),
+        )
+        return if (playable) store.get(key) else null
+    }
+
+    /** Done on a device (polish 8c): the dismissed messages' recordings are deleted at once. */
+    fun forgetRecordings(householdId: String, heldIds: Collection<String>) {
+        val store = recordings ?: return
+        for (id in heldIds) VoiceRecordingRules.key(householdId, id)?.let { key -> runCatching { store.delete(key) } }
+    }
+
     /** MEKA's voice for this call's household ([CallVoice.choose]). Never throws: Polly unreachable reads as off. */
     fun voice(): CallVoice {
         val hh = household() ?: return CallVoice.DEFAULT
@@ -265,6 +323,8 @@ class CallAssistant(
 
     private fun exists(hh: String, id: String) = ops.find(hh, opId(id, HeldMessageFields.KIND)) != null
 
+    private fun cleared(hh: String, id: String) = fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.CLEARED) == FieldValue.Bool(true)
+
     /** Appends the fields not written before; returns whether anything was written. */
     private fun write(hh: String, id: String, values: Map<String, FieldValue>, type: String = EntityTypes.HELD_MESSAGE): Boolean = ops.transaction {
         var appended = false
@@ -294,6 +354,9 @@ class VoiceRoutes(val assistant: CallAssistant, providers: List<VoiceProvider>, 
     val providers: Map<String, VoiceProvider> = providers.associateBy { it.id }
 }
 
+/** A GET's answer, no redirects followed ([TwilioVoice.fetchRecording]). */
+class HttpFetched(val status: Int, val body: ByteArray, val location: String? = null)
+
 /** `a=1&b=x+y` as the phone service posts it (form-encoded; `+` is a space). Repeated keys keep the last. */
 fun parseForm(body: String): Map<String, String> = body.split('&').filter { it.isNotEmpty() }.associate { pair ->
     val i = pair.indexOf('=')
@@ -314,6 +377,8 @@ class TwilioVoice(
     private val accountSid: () -> String? = { null },
     /** DELETE [url] with [headers]; returns the HTTP status. */
     private val delete: (url: String, headers: Map<String, String>) -> Int = { url, headers -> jdkDelete(url, headers) },
+    /** GET [url] with [headers], no redirects followed: the status, the body (at most [VoiceRecordingRules.MAX_BYTES] + 1 bytes) and `Location`. */
+    private val get: (url: String, headers: Map<String, String>) -> HttpFetched = { url, headers -> jdkGet(url, headers) },
 ) : VoiceProvider {
     override val id = ID
 
@@ -377,6 +442,23 @@ class TwilioVoice(
         return status == 204 || status == 404 // 404: already gone
     }
 
+    override fun fetchRecording(recording: String): ByteArray? {
+        if (!recordingSid.matches(recording)) return null
+        val sid = accountSid()?.trim()?.takeIf { accountSidPattern.matches(it) } ?: return null
+        val token = authToken()?.takeIf { it.isNotBlank() } ?: return null
+        val auth = Base64.getEncoder().encodeToString("$sid:$token".toByteArray(Charsets.UTF_8))
+        val first = runCatching {
+            get("https://api.twilio.com/2010-04-01/Accounts/$sid/Recordings/$recording.mp3", mapOf("Authorization" to "Basic $auth"))
+        }.getOrNull() ?: return null
+        // Twilio may answer with a short-lived signed address for the media: follow it once, without the credentials.
+        val answer = if (first.status in 300..399) {
+            val to = first.location?.takeIf { it.startsWith("https://") } ?: return null
+            runCatching { get(to, emptyMap()) }.getOrNull() ?: return null
+        } else first
+        if (answer.status != 200) return null
+        return answer.body.takeIf { it.isNotEmpty() && it.size <= VoiceRecordingRules.MAX_BYTES }
+    }
+
     companion object {
         const val ID = "twilio"
         /** Words the speech recogniser should expect after "is it urgent?". */
@@ -387,6 +469,15 @@ class TwilioVoice(
         val GENERATIVE_VOICES = setOf("Amy")
         private val recordingSid = Regex("^RE[0-9a-fA-F]{32}$")
         private val accountSidPattern = Regex("^AC[0-9a-fA-F]{32}$")
+
+        fun jdkGet(url: String, headers: Map<String, String>): HttpFetched {
+            val req = java.net.http.HttpRequest.newBuilder(java.net.URI(url)).timeout(java.time.Duration.ofSeconds(30)).GET()
+            headers.forEach { (k, v) -> req.header(k, v) }
+            val client = java.net.http.HttpClient.newBuilder().followRedirects(java.net.http.HttpClient.Redirect.NEVER).build()
+            val resp = client.send(req.build(), java.net.http.HttpResponse.BodyHandlers.ofInputStream())
+            val body = resp.body().use { it.readNBytes(VoiceRecordingRules.MAX_BYTES + 1) }
+            return HttpFetched(resp.statusCode(), body, resp.headers().firstValue("Location").orElse(null))
+        }
 
         fun jdkDelete(url: String, headers: Map<String, String>): Int {
             val req = java.net.http.HttpRequest.newBuilder(java.net.URI(url)).timeout(java.time.Duration.ofSeconds(15)).DELETE()

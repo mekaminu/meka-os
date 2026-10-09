@@ -33,6 +33,11 @@ struct AfterWorkSheet: View {
             Text("Done clears MEKA's copy here and on the Fold. WhatsApp and Messages are untouched.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
+            if summary?.people.contains(where: { $0.items.contains(where: { $0.hasAudio }) }) == true {
+                Text(VoiceRecordingRules.shared.PRIVACY)
+                    .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
@@ -81,6 +86,9 @@ struct AfterWorkSheet: View {
                                     .font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .textSelection(.enabled)
+                                if item.hasAudio {
+                                    VoiceMessagePlayerView(id: item.id, palette: palette)
+                                }
                             }
                         }
                     }

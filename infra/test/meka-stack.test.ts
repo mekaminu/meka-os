@@ -36,6 +36,14 @@ describe('MekaStack security and cost invariants (ADR-004)', () => {
     t.allResourcesProperties('AWS::SQS::Queue', { KmsMasterKeyId: Match.anyValue() });
   });
 
+  test("callers' recordings are kept at most 30 days (the bucket's backstop to deleting on Done)", () => {
+    t.hasResourceProperties('AWS::S3::Bucket', {
+      LifecycleConfiguration: { Rules: Match.arrayWith([Match.objectLike({
+        Id: 'VoiceRecordings', Prefix: 'voice/', Status: 'Enabled', ExpirationInDays: 30, NoncurrentVersionExpiration: { NoncurrentDays: 1 },
+      })]) },
+    });
+  });
+
   test('CloudWatch Logs may use the key, but only for this account and region log groups', () => {
     t.hasResourceProperties('AWS::KMS::Key', {
       KeyPolicy: { Statement: Match.arrayWith([Match.objectLike({

@@ -43,6 +43,8 @@ import os.meka.backend.integrations.SecretsManagerOAuthClients
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.HeldMessageFields
+import os.meka.core.sync.FieldValue
 import os.meka.core.sync.ServerOpStore
 import os.meka.core.sync.SyncService
 import os.meka.core.wire.AskCodec
@@ -52,6 +54,7 @@ import os.meka.core.wire.HealthCodec
 import os.meka.core.wire.HereCodec
 import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
+import os.meka.core.wire.VoiceMessageCodec
 import os.meka.core.wire.WireCodec
 import os.meka.core.wire.WireFormatException
 import javax.sql.DataSource
@@ -160,6 +163,14 @@ fun Application.mekaSync(
             // Wake the household's other devices so they pull now (coalesced; sent off the request).
             if (push != null && resp.acknowledged.isNotEmpty()) withContext(Dispatchers.IO) { runCatching { push.changed(who) } }
             if (calendarWriter != null && req.ops.any { it.entityType == EntityTypes.EVENT_EDIT }) calendarWriter.poke()
+            // Done on the after-work summary: the dismissed voice messages' recordings are deleted now (polish 8c).
+            if (voice != null) {
+                val dismissed = req.ops.filter {
+                    it.entityType == EntityTypes.HELD_MESSAGE && it.field == HeldMessageFields.CLEARED && it.value == FieldValue.Bool(true) &&
+                        it.opId in resp.acknowledged
+                }.map { it.entityId }.distinct()
+                if (dismissed.isNotEmpty()) background { voice.assistant.forgetRecordings(who.householdId, dismissed) }
+            }
             call.respondText(WireCodec.encodePushResponse(resp), ContentType.Application.Json)
         }
 
@@ -388,12 +399,34 @@ fun Application.mekaSync(
                 val event = provider.parse(call.parameters["step"].orEmpty(), form)
                     ?: return@post call.respondText("unknown step", status = HttpStatusCode.NotFound)
                 val reply = withContext(Dispatchers.IO) { voice.assistant.handle(provider.id, event) }
-                // Transcribed (or failed): the recording has done its job; delete it from the phone service, off the request.
-                if (event is VoiceEvent.Transcribed) event.recording?.let { rec -> background { runCatching { provider.deleteRecording(rec) } } }
+                // Transcribed (or failed): keep the recording in MEKA's own bucket (polish 8c), then delete the phone
+                // service's copy, off the request (in that order, so it is fetched before it goes).
+                if (event is VoiceEvent.Transcribed) event.recording?.let { rec ->
+                    val log = call.application.environment.log
+                    background {
+                        runCatching { voice.assistant.keepRecording(provider, event) }
+                            .onFailure { log.warn("recording not kept: ${it::class.simpleName}") } // no identifiers
+                        runCatching { provider.deleteRecording(rec) }
+                    }
+                }
                 if (event is VoiceEvent.Recorded && reply is VoiceReply.AskUrgent) call.application.environment.log.info("voice message taken") // no identifiers
                 val callVoice = if (reply == VoiceReply.Done || reply == VoiceReply.Busy) CallVoice.DEFAULT else withContext(Dispatchers.IO) { voice.assistant.voice() }
                 val (type, text) = provider.render(reply, voice.publicUrl, callVoice)
                 call.respondText(text, ContentType.parse(type))
+            }
+        }
+
+        if (voice != null) {
+            // A caller's recording (polish 8c): raw MP3 for a keyed device of the household, only while the message is
+            // in the summary and under 30 days old; 404 otherwise. The id is the only thing sent; nothing is logged.
+            post(VoiceMessageCodec.PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val id = VoiceMessageCodec.decodeRequest(body)
+                val audio = withContext(Dispatchers.IO) { voice.assistant.recording(who.householdId, id) }
+                    ?: return@post call.respondText("no recording", status = HttpStatusCode.NotFound)
+                call.response.header("Cache-Control", "no-store")
+                call.respondBytes(audio, ContentType.parse(VoiceMessageCodec.AUDIO_TYPE))
             }
         }
 
@@ -610,6 +643,8 @@ fun voiceFromEnv(opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?,
         ops = opStore, fields = FieldReader { hh, type, id, field -> opStore.latestValue(hh, type, id, field) }, household = { devices.soleHousehold() },
         speechVoices = { speech?.offered().orEmpty() },
         onWritten = { hh -> push?.serverChanged(hh) }, onUrgent = { hh -> push?.urgent(hh) },
+        // Callers' recordings (polish 8c) in MEKA's own private bucket; none kept without one.
+        recordings = System.getenv("MEKA_BLOB_BUCKET")?.takeIf { it.isNotBlank() }?.let { S3RecordingStore(it) },
     )
     return VoiceRoutes(assistant, listOf(TwilioVoice.fromSecret(secret)), publicUrl)
 }

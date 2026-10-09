@@ -204,6 +204,14 @@ interface HealthApi {
     suspend fun householdHealth(): os.meka.core.wire.HealthCodec.Response?
 }
 
+/**
+ * A caller's recording (call assistant polish 8c): `POST /v1/voice-message/audio` with the held message's id. The MP3's
+ * bytes, or null when the server keeps none (or is older and has no route).
+ */
+interface VoiceMessageApi {
+    suspend fun voiceMessageAudio(id: String): ByteArray?
+}
+
 /** Account management calls, available once the device is connected. */
 interface AccountsApi {
     /** [editing]: ask the provider for permission to change events too (calendar editing). */
@@ -225,7 +233,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi, VoiceMessageApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -315,6 +323,25 @@ class HttpSyncTransport(
                 Base64.decode(WireCodec.decodeChunkData(resp.bodyAsText()))
             } catch (e: IllegalArgumentException) {
                 throw TransportException("malformed picture", e)
+            }
+        }
+    }
+
+    override suspend fun voiceMessageAudio(id: String): ByteArray? {
+        val codec = os.meka.core.wire.VoiceMessageCodec
+        val body = codec.encodeRequest(id)
+        prepare() // the route requires the device's signing key on the server
+        val resp = send(codec.PATH, body)
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.PATH}")
+            // 404: no recording kept (or an older server); 403: this device's key isn't registered yet.
+            resp.status.value == 404 || resp.status.value == 403 -> null
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.PATH}")
+            resp.contentType()?.match(AUDIO_MPEG) != true -> null
+            else -> {
+                val size = resp.contentLength()
+                if (size != null && size > codec.MAX_AUDIO_BYTES) return null
+                resp.readRawBytes().takeIf { it.isNotEmpty() && it.size <= codec.MAX_AUDIO_BYTES }
             }
         }
     }

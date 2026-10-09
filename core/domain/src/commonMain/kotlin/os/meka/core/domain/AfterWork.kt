@@ -48,6 +48,8 @@ data class CapturedItem(
      * the block list. Null for a sender a notification named.
      */
     val callerNumber: String? = null,
+    /** MEKA's server keeps this voice message's recording, so it can be played ([VoiceRecordingRules.playable]). */
+    val hasAudio: Boolean = false,
 ) {
     val personKey: String get() = People.key(personName)
 
@@ -382,6 +384,11 @@ object HeldMessageFields {
     const val AWAY = "away"
     /** The phone service couldn't transcribe a voice message (Bool, written once by the server). Absent = not known. Added 2026-10-09. */
     const val NO_TRANSCRIPT = "noTranscript"
+    /**
+     * MEKA's server keeps the caller's recording ([VoiceRecordingRules]; Bool, written once by the server). Absent = no
+     * recording. Added 2026-10-10.
+     */
+    const val AUDIO = "audio"
     /** "Done" on either device: gone from the summary on both. */
     const val CLEARED = "cleared"
     const val CLEARED_AT = "clearedAtMs"
@@ -439,6 +446,9 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
                 transcribing = kind == CaptureKind.VOICE_MESSAGE && text == null && !noTranscript &&
                     nowMs() - at < CallAssistantRules.TRANSCRIBING_MS,
                 noTranscript = noTranscript,
+                hasAudio = VoiceRecordingRules.playable(
+                    kind, e[HeldMessageFields.AUDIO].boolOrNull == true, cleared = false, atMs = at, nowMs = nowMs(),
+                ),
             )
         }.sortedWith(compareBy<CapturedItem>({ it.atMs }, { it.id })).takeLast(Capture.MAX_ITEMS)
     }

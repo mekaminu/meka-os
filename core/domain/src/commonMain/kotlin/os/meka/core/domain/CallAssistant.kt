@@ -168,3 +168,57 @@ object CallAssistantRules {
     fun toAlert(items: List<CapturedItem>, alerted: Set<String>, nowMs: Long): List<CapturedItem> =
         items.filter { it.kind == CaptureKind.VOICE_MESSAGE && it.isUrgent && it.atMs >= nowMs - ALERT_WINDOW_MS && it.id !in alerted }
 }
+
+/**
+ * Callers' recordings (call assistant polish 8c, Meka 2026-10-09: "can I not listen to it?"). Once the phone service
+ * has transcribed a voice message, MEKA's server fetches the recording, keeps it encrypted in MEKA's own private
+ * bucket (SSE-KMS with MEKA's key, no public address) and deletes the phone service's copy; then it writes
+ * [HeldMessageFields.AUDIO] so both apps offer ▶ Play. Devices fetch the audio only over a signed request, keep it in
+ * memory while it plays and never save it. Kept [KEEP_MS] at most (a bucket lifecycle rule is the backstop), and
+ * deleted at once when Meka taps Done. Non-AI, pure.
+ */
+object VoiceRecordingRules {
+    /** How long a recording is kept (and offered) after the call. */
+    const val KEEP_MS = 30L * 24 * 60 * 60_000L
+    /** Largest recording kept: two minutes of the phone service's MP3 is well under 1 MB. */
+    const val MAX_BYTES = 5 * 1024 * 1024
+    /** Where recordings live in the bucket; the lifecycle rule is on this prefix. */
+    const val PREFIX = "voice/"
+
+    const val PLAY = "▶ Play"
+    const val STOP = "■ Stop"
+    const val LOADING = "Loading…"
+    const val FAILED = "Couldn't play this message"
+    const val PRIVACY = "Recordings are kept encrypted on MEKA's server for 30 days, and deleted when you tap Done."
+
+    private val heldIdPattern = Regex("^h[0-9a-f]{16}$")
+    private val householdPattern = Regex("^[A-Za-z0-9_-]{1,64}$")
+
+    /** A held message's id as the server makes them ([HeldMessages.entityId]); anything else is refused. */
+    fun isHeldId(id: String): Boolean = heldIdPattern.matches(id)
+
+    /** The bucket key of a household's recording, or null for an id or household that couldn't be one. */
+    fun key(householdId: String, heldId: String): String? {
+        if (!householdPattern.matches(householdId) || !isHeldId(heldId)) return null
+        return "$PREFIX$householdId/$heldId.mp3"
+    }
+
+    /** Whether a recording is offered: a voice message, not cleared, kept ([HeldMessageFields.AUDIO]) and under [KEEP_MS] old. */
+    fun playable(kind: CaptureKind?, audio: Boolean, cleared: Boolean, atMs: Long?, nowMs: Long): Boolean =
+        kind == CaptureKind.VOICE_MESSAGE && audio && !cleared && atMs != null && nowMs - atMs in 0 until KEEP_MS
+
+    /** "0:12 / 0:40" while playing (whole seconds; a length not known yet shows only where it is). */
+    fun progressLine(positionMs: Long, durationMs: Long): String {
+        val at = clock(positionMs)
+        return if (durationMs > 0) "$at / ${clock(durationMs)}" else at
+    }
+
+    /** 0..1 of the way through, for the bar. */
+    fun fraction(positionMs: Long, durationMs: Long): Float =
+        if (durationMs <= 0) 0f else (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
+
+    private fun clock(ms: Long): String {
+        val s = (ms.coerceAtLeast(0) / 1000).toInt()
+        return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
+    }
+}

@@ -1176,6 +1176,14 @@ final class CoreModel {
     /// Takes a number (its row's key) off the block list.
     /// Block on a held message from someone nobody knows (call assistant polish 8b b): the person crosses into the
     /// core once; light haptic when it's on the list.
+    /// A kept voice message's recording (call assistant polish 8c): the MP3 from MEKA's server over a signed request,
+    /// played from memory and never saved. Nil when none is kept or the server can't be reached. Only Strings cross.
+    func voiceMessageAudio(_ id: String) async -> Data? {
+        guard let core else { return nil }
+        guard let b64 = try? await core.voiceMessageAudioBase64(id: id), let data = Data(base64Encoded: b64) else { return nil }
+        return data
+    }
+
     func blockHeldCaller(_ person: PersonSummary) {
         guard let core else { return }
         Task {

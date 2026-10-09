@@ -141,6 +141,14 @@ export class MekaStack extends cdk.Stack {
       enforceSSL: true,
       versioned: true,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
+      // Callers' recordings (call assistant polish 8c): the service deletes one when Meka taps Done; this is the
+      // backstop, so nothing under voice/ outlives 30 days (and no older version lingers past a day).
+      lifecycleRules: [{
+        id: 'VoiceRecordings',
+        prefix: 'voice/',
+        expiration: cdk.Duration.days(30),
+        noncurrentVersionExpiration: cdk.Duration.days(1),
+      }],
     });
 
     const repo = props.repo;

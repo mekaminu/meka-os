@@ -1060,6 +1060,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CallScreeningRules.shared.ONE_SCREENER_LINES.count, 3)
     }
 
+    func testVoiceRecordingReachesSwift() {
+        // Call assistant polish 8c: the player's line and bar, and only a held id is ever asked for.
+        let rules = VoiceRecordingRules.shared
+        XCTAssertEqual(rules.progressLine(positionMs: 12_400, durationMs: 40_000), "0:12 / 0:40")
+        XCTAssertEqual(rules.fraction(positionMs: 20_000, durationMs: 40_000), 0.5)
+        XCTAssertTrue(rules.isHeldId(id: "h0123456789abcdef"))
+        XCTAssertFalse(rules.isHeldId(id: "../x"))
+        XCTAssertEqual(rules.KEEP_MS, 30 * 24 * 60 * 60_000)
+        XCTAssertTrue(rules.PRIVACY.contains("30 days"))
+    }
+
     func testSignInLineReachesSwift() {
         // Reliability first, item 2: the line Today shows for a sign-in on its last day, with Reconnect.
         let line = SignInLine(text: "Google sign-in ends tomorrow at 14:05 · Reconnect", detail: SignInRules.shared.PRODUCTION_HINT,

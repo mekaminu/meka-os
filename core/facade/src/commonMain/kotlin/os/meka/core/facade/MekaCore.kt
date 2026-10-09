@@ -179,6 +179,7 @@ class MekaCore(
     private var speechApi: SpeechApi? = transport as? SpeechApi
     private var hereApi: HereApi? = transport as? HereApi
     private var healthApi: HealthApi? = transport as? HealthApi
+    private var voiceMessageApi: VoiceMessageApi? = transport as? VoiceMessageApi
     /** "Where I am now" (Places item 3): the last answer, in memory only (never stored or synced), on the core thread. */
     private var hereFix: os.meka.core.domain.HereFix? = null
     /** MEKA's voice: the synced choice, the clips said so far (in memory, newest last) and a pause after a refusal. */
@@ -1597,6 +1598,7 @@ class MekaCore(
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
             speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; healthApi = transport as? HealthApi
+            voiceMessageApi = transport as? VoiceMessageApi
         }
         startSync()
     }
@@ -1872,6 +1874,25 @@ class MekaCore(
     /** [newsImage] as base64, for the Mac (Swift turns it into `Data` without copying byte by byte). */
     suspend fun newsImageBase64(key: String): String? =
         newsImage(key)?.let { kotlin.io.encoding.Base64.encode(it) }
+
+    // ---- Callers' recordings (call assistant polish 8c) ----
+
+    /**
+     * A held voice message's recording as MP3, fetched from this household's server over a signed request; null when
+     * the message isn't in the summary, has no recording kept, or the server can't be reached. Never cached or saved:
+     * the app plays it from memory and lets it go.
+     */
+    suspend fun voiceMessageAudio(id: String): ByteArray? {
+        if (!os.meka.core.domain.VoiceRecordingRules.isHeldId(id)) return null
+        if (_afterWork.value.people.none { p -> p.items.any { it.id == id && it.hasAudio } }) return null
+        val api = voiceMessageApi ?: return null
+        val bytes = try { api.voiceMessageAudio(id) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        return bytes?.takeIf { it.isNotEmpty() && it.size <= os.meka.core.domain.VoiceRecordingRules.MAX_BYTES }
+    }
+
+    /** [voiceMessageAudio] as base64, for the Mac (Swift turns it into `Data`). */
+    suspend fun voiceMessageAudioBase64(id: String): String? =
+        voiceMessageAudio(id)?.let { kotlin.io.encoding.Base64.encode(it) }
 
     // ---- Ask MEKA (build plan V1, AI layer slice 3; ADR-006) ----
 
