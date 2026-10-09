@@ -68,6 +68,8 @@ data class MorningBriefView(
      * line (with Open) in the card's place until noon; null otherwise.
      */
     val readElsewhereLine: String? = null,
+    /** Today's weather under the date (Weather slice 2): "9–15°, light rain from 15:00 — take a coat"; set by the facade. */
+    val weatherLine: String? = null,
 ) {
     companion object {
         val EMPTY = MorningBriefView(

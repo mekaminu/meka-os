@@ -167,6 +167,12 @@ fun DayRingHero(
                     drawArc(colors.textTertiary.copy(alpha = (if (band.current) 0.26f else 0.16f) * mark), band.startDegrees - 90f,
                         band.sweepDegrees, false, topLeft, arcSize, style = Stroke(4.dp.toPx(), cap = StrokeCap.Butt))
                 }
+                // Rain still to come today (Weather slice 2): a faint blue tint along the track, a shade brighter while
+                // it's raining now, coming up with the mark.
+                ring.rain.forEach { band ->
+                    drawArc(colors.rain.copy(alpha = (if (band.current) 0.42f else 0.26f) * mark), band.startDegrees - 90f,
+                        band.sweepDegrees, false, topLeft, arcSize, style = Stroke(3.dp.toPx(), cap = StrokeCap.Butt))
+                }
                 // A running fast: an inner arc from when it began round to its goal, filling as it counts up.
                 ring.fast?.let { f ->
                     val r = radius - stroke * 1.9f

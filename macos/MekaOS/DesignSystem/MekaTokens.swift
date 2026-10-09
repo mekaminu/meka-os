@@ -21,6 +21,7 @@ struct MekaPalette {
     let calendar3: Color
     let calendar4: Color
     let calendar5: Color
+    let rain: Color
 }
 
 extension MekaPalette {
@@ -43,7 +44,8 @@ extension MekaPalette {
         calendar2: Color(.sRGB, red: 0.7059, green: 0.6118, blue: 0.9490, opacity: 1),
         calendar3: Color(.sRGB, red: 0.9098, green: 0.6353, blue: 0.4157, opacity: 1),
         calendar4: Color(.sRGB, red: 0.4902, green: 0.7020, blue: 0.9098, opacity: 1),
-        calendar5: Color(.sRGB, red: 0.7176, green: 0.7686, blue: 0.4157, opacity: 1)
+        calendar5: Color(.sRGB, red: 0.7176, green: 0.7686, blue: 0.4157, opacity: 1),
+        rain: Color(.sRGB, red: 0.4980, green: 0.6980, blue: 0.8980, opacity: 1)
     )
 }
 
@@ -67,7 +69,8 @@ extension MekaPalette {
         calendar2: Color(.sRGB, red: 0.4157, green: 0.3098, blue: 0.7608, opacity: 1),
         calendar3: Color(.sRGB, red: 0.6510, green: 0.3529, blue: 0.1098, opacity: 1),
         calendar4: Color(.sRGB, red: 0.1765, green: 0.4353, blue: 0.6824, opacity: 1),
-        calendar5: Color(.sRGB, red: 0.4000, green: 0.4392, blue: 0.1176, opacity: 1)
+        calendar5: Color(.sRGB, red: 0.4000, green: 0.4392, blue: 0.1176, opacity: 1),
+        rain: Color(.sRGB, red: 0.1843, green: 0.4235, blue: 0.6588, opacity: 1)
     )
 }
 

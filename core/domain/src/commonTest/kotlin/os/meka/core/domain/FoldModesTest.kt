@@ -117,6 +117,18 @@ class FoldModesTest {
     }
 
     @Test
+    fun theClockSaysTheWeatherForTheDayItShows() {
+        // Weather slice 2: the morning reads today's, the evening tomorrow's, each after the day's first line.
+        val morning = bedside(at(wed, 7, 10), b = brief.copy(offered = true, weatherLine = "9–15°, light rain from 15:00 — take a coat",
+            waitingLine = "Waiting on 3 things"))
+        assertEquals(listOf("2 events · 4 tasks · first at 09:30", "9–15°, light rain from 15:00 — take a coat", "Work 09:00–17:30"), morning.lines)
+        val evening = bedside(at(wed, 21, 0), s = shutdown.copy(evening = true, tomorrow = shutdown.tomorrow.copy(weatherLine = "7–13°, cloudy")))
+        assertEquals(listOf("First thing 09:00 Standup · 3 events · 2 tasks", "7–13°, cloudy", "Work 09:00–17:30"), evening.lines)
+        val early = bedside(at(wed, 5, 0), b = brief.copy(startMinute = 7 * 60, weatherLine = "9–15°, cloudy"))
+        assertEquals(listOf("2 events · 4 tasks · first at 09:30", "9–15°, cloudy", "Work 09:00–17:30"), early.lines)
+    }
+
+    @Test
     fun afterMidnightItShowsWhatTodayHolds() {
         // 02:00: the evening flag belongs to yesterday's view; today's brief hasn't started.
         val v = bedside(at(wed, 2, 0), b = brief.copy(startMinute = 7 * 60))

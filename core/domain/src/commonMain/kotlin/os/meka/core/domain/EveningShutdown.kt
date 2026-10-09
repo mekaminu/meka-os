@@ -46,6 +46,8 @@ data class TomorrowPreview(
     val first: TomorrowRow? = null,
     /** Tomorrow at a glance, for Today in the evening: "Tomorrow: first thing 09:00 Standup · 3 events · 2 tasks". */
     val glance: String = ShutdownRules.GLANCE_EMPTY,
+    /** Tomorrow's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat"; set by the facade. */
+    val weatherLine: String? = null,
 )
 
 data class ShutdownView(

@@ -146,6 +146,7 @@ private fun blend(a: MekaColors, b: MekaColors, t: Float): MekaColors = when (t)
         calendar3 = lerp(a.calendar3, b.calendar3, t),
         calendar4 = lerp(a.calendar4, b.calendar4, t),
         calendar5 = lerp(a.calendar5, b.calendar5, t),
+        rain = lerp(a.rain, b.rain, t),
     )
 }
 

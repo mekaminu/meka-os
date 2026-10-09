@@ -94,6 +94,8 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit) {
                     modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(SharedMotion.BRIEF)))
                 Text(listOfNotNull(v.dateLabel, v.workLine).joinToString(" · "), style = MekaType.itemMeta,
                     color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
+                // Today's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
+                v.weatherLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
             }
         }
 

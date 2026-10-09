@@ -192,6 +192,8 @@ private fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
     Column(modifier) {
         SectionLabel(p.label)
         p.workLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        // Tomorrow's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
+        p.weatherLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
         // The summary rolls over to its new value as items are carried in.
         AnimatedContent(
             targetState = p.summary,

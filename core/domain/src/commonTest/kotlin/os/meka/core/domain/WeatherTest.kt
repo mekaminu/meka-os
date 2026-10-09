@@ -127,4 +127,29 @@ class WeatherTest {
         assertEquals(f, WeatherStore(m.replica).forecast())
         assertEquals(WeatherForecast.EMPTY, WeatherStore(world.device("other").replica).forecast())
     }
+
+    @Test
+    fun aDaysGlanceDropsTheLabelForPlacesThatAlreadyNameTheDay() {
+        val f = forecast(*dry(24), *dry(15), *wet(3), *dry(6))
+        assertEquals("9–15°, light rain from 15:00 — take a coat", WeatherRules.dayGlance(f, sat, cal))
+        assertEquals("7–13°, cloudy", WeatherRules.dayGlance(forecast(*dry(24)), sat + 1, cal))
+        assertNull(WeatherRules.dayGlance(f, sat + 5, cal))
+    }
+
+    @Test
+    fun rainStillToComeTodayBecomesBandsOnTheDayRing() {
+        // Wet 06–08 (over by 10:00), 16–19 and 22–24.
+        val f = forecast(*dry(6), *wet(2), *dry(8), *wet(3), *dry(3), *wet(2), *dry(24))
+        assertEquals(listOf(DayBand(16 * 60, 19 * 60), DayBand(22 * 60, 24 * 60)), WeatherRules.rainBands(f, at(fri, 10), cal))
+        // Raining now: the band is current; tomorrow's rain isn't on today's ring.
+        assertEquals(listOf(DayBand(16 * 60, 19 * 60, current = true), DayBand(22 * 60, 24 * 60)), WeatherRules.rainBands(f, at(fri, 17, 30), cal))
+        assertEquals(listOf(DayBand(6 * 60, 8 * 60, current = true), DayBand(16 * 60, 19 * 60), DayBand(22 * 60, 24 * 60)),
+            WeatherRules.rainBands(f, at(fri, 7), cal))
+        assertTrue(WeatherRules.rainBands(forecast(*dry(24), *wet(24)), at(fri, 10), cal).isEmpty())
+        assertTrue(WeatherRules.rainBands(WeatherForecast.EMPTY, at(fri, 10), cal).isEmpty())
+        // A screen reader hears it after the ring's own line.
+        val ring = DayRing(emptyList(), 10 * 60, 0, 0, rain = WeatherRules.rainBands(f, at(fri, 10), cal))
+        assertTrue(ring.spokenLine.endsWith(" Rain from 16:00."), ring.spokenLine)
+        assertTrue(ring.copy(rain = listOf(DayBand(600, 660, current = true))).spokenLine.endsWith(" Raining now."))
+    }
 }

@@ -80,6 +80,11 @@ data class DayRing(
      * and as a hollow brass mark on the track ([DayRingRules.tomorrow]); null until then. Set by the facade.
      */
     val tomorrow: DayRingTomorrow? = null,
+    /**
+     * Today's rain still to come as a faint blue tint on the track (Weather slice 2; [WeatherRules.rainBands]), brighter
+     * while it's raining now. Set by the facade, which holds the forecast.
+     */
+    val rain: List<DayBand> = emptyList(),
 ) {
     val nowDegrees: Float get() = DayRingRules.degrees(nowMinute)
 
@@ -317,7 +322,10 @@ object DayRingRules {
             else -> "$booked things booked"
         }
         val over = if (past > 0) ", $past over" else ""
-        return "Your day: $things$over. Now ${LocalClock.formatMinute(ring.nowMinute)}. ${line(ring.freeMinutes, ring.toDo, ring.nowMinute)}."
+        val rain = ring.rain.firstOrNull()?.let {
+            if (it.current) " Raining now." else " Rain from ${LocalClock.formatMinute(it.startMinute)}."
+        }.orEmpty()
+        return "Your day: $things$over. Now ${LocalClock.formatMinute(ring.nowMinute)}. ${line(ring.freeMinutes, ring.toDo, ring.nowMinute)}.$rain"
     }
 
     /**

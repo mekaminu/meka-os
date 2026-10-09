@@ -111,6 +111,10 @@ class AskMekaFacadeTest {
         c.syncNow()
         assertEquals("13° · light rain from 19:00", c.weatherView.value.nowLine)
         assertEquals("Tomorrow 8–15°, cloudy", c.weatherView.value.tomorrowLine)
+        // Weather slice 2: the brief's today, the shutdown's (and the bedside clock's) tomorrow, rain on the Day ring.
+        assertEquals("9–14°, light rain from 19:00 — take a coat", c.briefView.value.weatherLine)
+        assertEquals("8–15°, cloudy", c.shutdownView.value.tomorrow.weatherLine)
+        assertEquals(listOf(os.meka.core.domain.DayBand(19 * 60, 20 * 60)), c.today.value.dayRing.rain)
 
         c.addTask("Book dentist")
         c.askMeka("what's the weather tomorrow?")

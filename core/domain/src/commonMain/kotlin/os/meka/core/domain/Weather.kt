@@ -201,7 +201,7 @@ object WeatherRules {
     /** [label] then the day's range and what its waking hours do; the hours when known, else the day's own summary. */
     fun dayLine(label: String, f: WeatherForecast, day: Long, cal: LocalCalendar): String? {
         val d = f.days.firstOrNull { it.epochDay == day } ?: return null
-        val head = "$label ${d.minC}–${d.maxC}°"
+        val head = "$label ${d.minC}–${d.maxC}°".trim()
         val waking = f.hours.filter { cal.epochDayOf(it.startMs) == day && cal.minuteOfDay(it.startMs) in DAY_FROM_MIN until DAY_TO_MIN }
         if (waking.isNotEmpty()) {
             val wet = waking.filter(::isWet)
@@ -216,6 +216,39 @@ object WeatherRules {
             "$head, ${if (wetCode(d.code)) words(d.code) else "rain"} likely${if (snowy(d.code)) " — wrap up" else " — take a coat"}"
         } else "$head, ${if (wetCode(d.code)) "mostly dry" else words(d.code)}"
     }
+
+    /**
+     * A day's line with no label, for a place that already names the day (Weather slice 2): the morning brief under
+     * today's date, the shutdown's and the bedside clock's "Tomorrow · Sat 10 Oct". "9–15°, light rain from 15:00 — take a
+     * coat"; null when the day isn't in the forecast.
+     */
+    fun dayGlance(f: WeatherForecast, day: Long, cal: LocalCalendar): String? = dayLine("", f, day, cal)
+
+    /**
+     * Today's wet hours still to come as faint bands on the Day ring's track (Weather slice 2): each run of wet hours
+     * ([isWet]) that ends after now, merged, clipped to today; [DayBand.current] while it's raining now. Empty when dry.
+     */
+    fun rainBands(f: WeatherForecast, nowMs: Long, cal: LocalCalendar): List<DayBand> {
+        val today = cal.epochDayOf(nowMs)
+        val nowMin = cal.minuteOfDay(nowMs)
+        val out = mutableListOf<DayBand>()
+        var start = -1
+        var end = -1
+        fun close() {
+            if (start >= 0 && end > nowMin) out += DayBand(start, end, current = nowMin in start until end)
+            start = -1
+        }
+        f.hours.sortedBy { it.startMs }.filter { cal.epochDayOf(it.startMs) == today }.forEach { h ->
+            val from = cal.minuteOfDay(h.startMs)
+            val to = minOf(from + 60, MINUTES_PER_DAY)
+            if (!isWet(h)) { close(); return@forEach }
+            if (start >= 0 && from == end) end = to else { close(); start = from; end = to }
+        }
+        close()
+        return out
+    }
+
+    private const val MINUTES_PER_DAY = 24 * 60
 
     /** One hour as Ask hears it and a row would say it: "16:00 14° light rain, 70 % chance of rain". */
     fun hourLine(h: WeatherHour, cal: LocalCalendar): String =

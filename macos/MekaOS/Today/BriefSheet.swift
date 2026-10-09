@@ -21,6 +21,10 @@ struct BriefSheet: View {
                 Text([v.dateLabel, v.workLine].compactMap { $0 }.joined(separator: " · "))
                     .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     .staggeredAppear(0)
+                // Today's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
+                if let weather = v.weatherLine {
+                    Text(weather).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(0)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         SectionLabel("Today", palette).staggeredAppear(1)

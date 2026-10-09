@@ -1433,7 +1433,13 @@ class MekaCore(
         val goalsNow = goals.view(all).withSessions(_sessions.value)
         val projected = project(all, dayEvents)
         val today = dayWindow(nowMs())
-        val shutdownNow = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), holidays)
+        // The forecast (Weather slice 2): Today's line, the brief's today, the shutdown's tomorrow, rain on the Day ring.
+        val forecast = weather.forecast()
+        val todayDay = cal.epochDayOf(nowMs())
+        val shutdownRaw = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), holidays)
+        val shutdownNow = shutdownRaw.copy(
+            tomorrow = shutdownRaw.tomorrow.copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal)),
+        )
         // The live tiles under the Day ring: next event, a running fast, habits today, renewals due.
         // A running fast also shows as the Day ring's inner arc (Living Today, slice 3); once the day is shut down the
         // ring looks ahead to tomorrow's first commitment (Living Today, item 1).
@@ -1441,6 +1447,7 @@ class MekaCore(
             dayRing = projected.dayRing.copy(
                 fast = os.meka.core.domain.DayRingRules.fastArc(fastingNow.current, nowMs(), cal),
                 tomorrow = os.meka.core.domain.DayRingRules.tomorrow(shutdownNow),
+                rain = os.meka.core.domain.WeatherRules.rainBands(forecast, nowMs(), cal),
             ),
             dayTiles = os.meka.core.domain.DayTileRules.build(
                 projected.events, nowMs(), dayWindow(nowMs()), fastingNow.current, goalsNow.habits, listsNow.renewals.dueCount,
@@ -1458,9 +1465,9 @@ class MekaCore(
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
-            news.all(), news.choices(), holidays)
+            news.all(), news.choices(), holidays).copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal))
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))
-        _weather.value = os.meka.core.domain.WeatherRules.view(weather.forecast(), nowMs(), cal)
+        _weather.value = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal)
         _review.value = review.view(reviewOffset, all, dayEvents, _goals.value, fasting.ended()) { day ->
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }

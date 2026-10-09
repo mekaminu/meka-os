@@ -131,17 +131,17 @@ object FoldModeRules {
         val (heading, lines, opens) = when (section) {
             BedsideSection.MORNING -> Triple(
                 "Morning brief",
-                listOfNotNull(brief.daySummary, brief.workLine, brief.waitingLine, brief.fastingLine),
+                listOfNotNull(brief.daySummary, brief.weatherLine, brief.workLine, brief.waitingLine, brief.fastingLine),
                 BedsideOpens.BRIEF,
             )
             BedsideSection.EVENING -> Triple(
                 shutdown.tomorrow.label,
-                listOfNotNull(shutdown.tomorrow.glance.removePrefix(GLANCE_PREFIX).replaceFirstChar { it.uppercase() }, shutdown.tomorrow.workLine),
+                listOfNotNull(shutdown.tomorrow.glance.removePrefix(GLANCE_PREFIX).replaceFirstChar { it.uppercase() }, shutdown.tomorrow.weatherLine, shutdown.tomorrow.workLine),
                 BedsideOpens.SHUTDOWN,
             )
             BedsideSection.EARLY -> Triple(
                 "Today · $shortDay",
-                listOfNotNull(brief.daySummary, brief.workLine),
+                listOfNotNull(brief.daySummary, brief.weatherLine, brief.workLine),
                 null,
             )
             BedsideSection.DAY -> {

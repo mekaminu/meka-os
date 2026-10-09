@@ -70,6 +70,7 @@ struct DayRingView: View {
         let toDo = MotionMath.countUpValue(from: 0, to: Int(ring.toDo), fraction: count)
         let arcs = ring.arcs
         let work = ring.work
+        let rain = ring.rain
         let fast = ring.fast
         // After Shut down: tomorrow's first thing (Living Today, item 1).
         let tomorrowDegrees: Double? = ring.tomorrow?.degrees.map { Double($0.floatValue) }
@@ -114,6 +115,13 @@ struct DayRingView: View {
                     ctx.stroke(arcPath(from: Double(band.startDegrees), sweep: Double(band.sweepDegrees)),
                                with: .color(palette.textTertiary.opacity((band.current ? 0.26 : 0.16) * mark)),
                                style: StrokeStyle(lineWidth: 4, lineCap: .butt))
+                }
+                // Rain still to come today (Weather slice 2): a faint blue tint along the track, a shade brighter while
+                // it's raining now, coming up with the mark.
+                for band in rain {
+                    ctx.stroke(arcPath(from: Double(band.startDegrees), sweep: Double(band.sweepDegrees)),
+                               with: .color(palette.rain.opacity((band.current ? 0.42 : 0.26) * mark)),
+                               style: StrokeStyle(lineWidth: 3, lineCap: .butt))
                 }
                 // A running fast: an inner arc from when it began round to its goal, filling as it counts up.
                 if let f = fast {

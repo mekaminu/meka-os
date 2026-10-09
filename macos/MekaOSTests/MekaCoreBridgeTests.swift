@@ -402,7 +402,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let arc = DayArc(id: "e-x", kind: .event, startMinute: 600, endMinute: 660, past: false, current: false)
         XCTAssertEqual(arc.startDegrees, 150, accuracy: 1e-4)
         XCTAssertEqual(arc.sweepDegrees, 15, accuracy: 1e-4)
-        let ring = DayRing(arcs: [arc], nowMinute: 630, freeMinutes: 225, toDo: 4, work: [], fast: nil, tomorrow: nil)
+        let ring = DayRing(arcs: [arc], nowMinute: 630, freeMinutes: 225, toDo: 4, work: [], fast: nil, tomorrow: nil, rain: [])
         XCTAssertEqual(ring.line, "3 h 45 free · 4 to do")
         XCTAssertEqual(ring.spokenLine, "Your day: 1 thing booked. Now 10:30. 3 h 45 free · 4 to do.")
     }
@@ -430,7 +430,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let gym = DayArc(id: "s-gym", kind: .session, startMinute: 1065, endMinute: 1125, past: false, current: false)
         let band = DayBand(startMinute: 540, endMinute: 1050, current: true)
         let fast = DayFastArc(startDegrees: 301.25, sweepDegrees: 240, progress: 0.75, reachedGoal: false)
-        let ring = DayRing(arcs: [call, gym], nowMinute: 630, freeMinutes: 120, toDo: 2, work: [band], fast: fast, tomorrow: nil)
+        let ring = DayRing(arcs: [call, gym], nowMinute: 630, freeMinutes: 120, toDo: 2, work: [band], fast: fast, tomorrow: nil, rain: [])
         XCTAssertTrue(gym.highlighted)
         XCTAssertFalse(call.highlighted)
         XCTAssertEqual(ring.work.first?.sweepDegrees ?? 0, 127.5, accuracy: 0.01)
@@ -447,13 +447,13 @@ final class MekaCoreBridgeTests: XCTestCase {
     /// Living Today, item 1: once the day is shut down the ring looks ahead to tomorrow's first thing.
     func testDayRingLooksAheadToTomorrowInSwift() {
         let tomorrow = DayRingTomorrow(minute: KotlinInt(int: 570), title: "Standup")
-        let ring = DayRing(arcs: [], nowMinute: 1290, freeMinutes: 0, toDo: 0, work: [], fast: nil, tomorrow: tomorrow)
+        let ring = DayRing(arcs: [], nowMinute: 1290, freeMinutes: 0, toDo: 0, work: [], fast: nil, tomorrow: tomorrow, rain: [])
         XCTAssertEqual(ring.tomorrow?.degrees?.floatValue ?? -1, 142.5, accuracy: 0.01)
         XCTAssertEqual(ring.centreLine(free: 0), "Tomorrow 09:30")
         XCTAssertEqual(ring.centreCaption(toDo: 0), "Standup")
         XCTAssertEqual(ring.spokenLine, "Day shut down. Tomorrow: first thing 09:30 Standup.")
         XCTAssertEqual(DayRingRules.shared.clockMinute(time: "09:30")?.intValue, 570)
-        let today = DayRing(arcs: [], nowMinute: 1350, freeMinutes: 0, toDo: 0, work: [], fast: nil, tomorrow: nil)
+        let today = DayRing(arcs: [], nowMinute: 1350, freeMinutes: 0, toDo: 0, work: [], fast: nil, tomorrow: nil, rain: [])
         XCTAssertEqual(today.centreLine(free: 0), "Evening")
     }
 
@@ -481,6 +481,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(WeatherRules.shared.words(code: 61), "light rain")
         XCTAssertTrue(WeatherRules.shared.isWet(h: hours[1]))
         XCTAssertFalse(WeatherRules.shared.isWet(h: hours[0]))
+        // Weather slice 2: rain on the Day ring is a band of the track, two hours = 30°.
+        let rain = DayBand(startMinute: 960, endMinute: 1080, current: false)
+        XCTAssertEqual(rain.sweepDegrees, 30, accuracy: 0.01)
+        XCTAssertEqual(rain.startDegrees, 240, accuracy: 0.01)
     }
 
     func testMotionCheckReachesSwift() {
