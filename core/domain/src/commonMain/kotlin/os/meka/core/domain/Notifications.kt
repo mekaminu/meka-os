@@ -62,6 +62,8 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     TASK_REMINDER("Task reminders", NoticeTier.HEADS_UP),
     /** A fixture's kick-off moved (the fixtures feed, seen by the server). */
     FIXTURE_MOVED("Kick-off changes", NoticeTier.HEADS_UP),
+    /** A calendar sign-in about to end or already expired (Reliability first, item 2; [SignInRules]). */
+    SIGN_IN("Calendar sign-ins", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -408,6 +410,7 @@ object Governor {
         NoticeSource.EVENT_REMINDER -> plural(n, "event reminder")
         NoticeSource.TASK_REMINDER -> plural(n, "task reminder")
         NoticeSource.FIXTURE_MOVED -> plural(n, "kick-off") + " moved"
+        NoticeSource.SIGN_IN -> plural(n, "sign-in") + " to renew"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -443,6 +446,7 @@ object NoticeSources {
         forecast: WeatherForecast = WeatherForecast.EMPTY,
         requests: List<RequestCard> = emptyList(),
         settings: NotificationSettings = NotificationSettings.DEFAULT,
+        signIns: List<SignIn> = emptyList(),
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -545,6 +549,7 @@ object NoticeSources {
         out += TaskReminderRules.notices(tasks, nowMs, cal)
         // Rain at today's plans you go out for (Weather), summed in the next digest.
         out += WeatherRules.notices(forecast, events, marks, sessions, nowMs, cal)
+        out += SignInRules.notices(signIns, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.
         out += requestNotices(requests, settings)
         return out

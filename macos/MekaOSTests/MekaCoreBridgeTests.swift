@@ -1051,4 +1051,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(BlockedCallerRules.shared.keyOf(number: "abc"))
         XCTAssertEqual(CallScreeningRules.shared.ASSISTANT_NUMBER, "01767 667246")
     }
+
+    func testSignInLineReachesSwift() {
+        // Reliability first, item 2: the line Today shows for a sign-in on its last day, with Reconnect.
+        let line = SignInLine(text: "Google sign-in ends tomorrow at 14:05 · Reconnect", detail: SignInRules.shared.PRODUCTION_HINT,
+                              critical: false, provider: "google", account: "meka@gmail.com", editing: true, spoken: "")
+        XCTAssertFalse(line.critical)
+        XCTAssertTrue(line.detail.contains("#17"))
+        XCTAssertEqual(SignInRules.shared.entityId(key: "accAbc"), "sign_in.accabc")
+        XCTAssertEqual(NoticeSource.signIn.label, "Calendar sign-ins")
+    }
 }

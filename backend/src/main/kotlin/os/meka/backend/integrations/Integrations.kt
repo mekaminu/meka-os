@@ -15,6 +15,9 @@ import os.meka.core.domain.LineStatusCodec
 import os.meka.core.domain.LineStatusFields
 import os.meka.core.domain.LineStatusStore
 import os.meka.core.domain.RouteRules
+import os.meka.core.domain.SignInFields
+import os.meka.core.domain.SignInRules
+import os.meka.core.domain.SignInState
 import os.meka.core.domain.PlacesRules
 import os.meka.core.domain.WeatherCodec
 import os.meka.core.domain.WeatherFields
@@ -128,7 +131,7 @@ class Integrations(
         val canEdit = pending.editing && grants(tokens.scope, p.writeScope)
         val email = p.accountEmail(tokens.accessToken).lowercase()
         val enc = cipher.encrypt(refresh.toByteArray(), context(pending.householdId, provider))
-        val id = store.transaction { store.upsertAccount(pending.householdId, provider, email, enc, canEdit) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
+        val id = store.transaction { store.upsertAccount(pending.householdId, provider, email, enc, canEdit, grantedAtMs = now()) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
         return CallbackResult.Connected(provider, email, id, canEdit, pending.editing)
     }
 
@@ -147,6 +150,47 @@ class Integrations(
     fun syncAll() {
         runCatching { ensureFeeds() }
         for (a in store.syncableAccounts()) runCatching { syncAccount(a.id) }
+        runCatching { noteSignIns() }
+    }
+
+    /**
+     * Reliability first, item 2: writes each signed-in calendar account's state into its own
+     * `context_mode/sign_in.<key>` entity ([SignInRules]): fine, ending within the day (a Google sign-in made while
+     * MEKA's Google app is in Testing lasts 7 days) or expired (the provider refused it: `needs_reconnect`). Only
+     * changes are written; a changed state wakes the household's devices so Today's line and the heads-up follow.
+     */
+    fun noteSignIns() {
+        for (hh in store.households()) {
+            var changed = false
+            for (a in store.accounts(hh)) {
+                if (a.provider !in providers) continue
+                runCatching { if (applySignIn(a)) changed = true }
+            }
+            if (changed) runCatching { onChanged(hh) }
+        }
+    }
+
+    /** Writes one account's sign-in state when it changed; returns whether the state itself changed. */
+    internal fun applySignIn(a: AccountRow): Boolean = store.transaction {
+        ops.transaction {
+            store.lockAccount(a.id)
+            val entityId = SignInRules.entityId(a.id)
+            val prev = store.mirror(a.householdId, a.id)[entityId]
+            val prevState = prev?.fieldOps?.get(SignInFields.STATE)?.second?.removePrefix("s:")
+            val seenExpired = if (prevState == SignInState.EXPIRED.name) {
+                prev?.fieldOps?.get(SignInFields.UNTIL)?.second?.takeIf { it.startsWith("i:") }?.removePrefix("i:")?.toLongOrNull()
+            } else null
+            val (state, until) = SignInRules.state(a.provider, a.status, a.grantedAtMs, now(), seenExpired)
+            val desired = linkedMapOf(
+                SignInFields.PROVIDER to FieldValue.Text(a.provider),
+                SignInFields.ACCOUNT to FieldValue.Text(a.email),
+                SignInFields.STATE to FieldValue.Text(state.name),
+                SignInFields.UNTIL to (until?.let { FieldValue.Int64(it) } ?: FieldValue.Null),
+                SignInFields.EDIT to FieldValue.Bool(a.canEdit),
+            )
+            write(a, entityId, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
+            prevState != null && prevState != state.name || prevState == null && state != SignInState.OK
+        }
     }
 
     /** Every household follows the default feeds (owner's stated MVP need). Idempotent. */

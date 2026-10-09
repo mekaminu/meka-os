@@ -631,7 +631,7 @@ object Migrations {
         1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql", 4 to "/db/V4__event_mirror_end.sql",
         5 to "/db/V5__app_release.sql", 6 to "/db/V6__push_token.sql", 7 to "/db/V7__news_image.sql",
         8 to "/db/V8__calendar_editing.sql", 9 to "/db/V9__event_edits.sql", 10 to "/db/V10__ai_usage.sql",
-        11 to "/db/V11__speech_usage.sql",
+        11 to "/db/V11__speech_usage.sql", 12 to "/db/V12__sign_ins.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

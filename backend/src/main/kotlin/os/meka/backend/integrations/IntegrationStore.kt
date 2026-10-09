@@ -27,6 +27,8 @@ data class AccountRow(
     val lastSyncAtMs: Long?,
     /** The provider granted the write scope and the owner hasn't stopped editing (calendar editing). */
     val canEdit: Boolean = false,
+    /** When the owner last signed in (Reliability first, item 2); null for accounts signed in before it was recorded. */
+    val grantedAtMs: Long? = null,
 )
 
 /** What the server last wrote for one mirrored event: per field, the op id and an encoded value. */
@@ -52,7 +54,12 @@ interface IntegrationStore {
      * Inserts or updates by (household, provider, email); returns the account id. [canEdit] is what this sign-in
      * granted, so a read-only reconnect also turns editing off.
      */
-    fun upsertAccount(householdId: String, provider: String, email: String, refreshTokenEnc: ByteArray, canEdit: Boolean = false, newId: () -> String): String
+    fun upsertAccount(
+        householdId: String, provider: String, email: String, refreshTokenEnc: ByteArray, canEdit: Boolean = false,
+        /** A sign-in's time (the OAuth consent); null (feeds) leaves what was recorded. */
+        grantedAtMs: Long? = null,
+        newId: () -> String,
+    ): String
     /** Stop editing: the account goes back to read-only. Returns false when there's no such account. */
     fun stopEditing(householdId: String, provider: String, email: String): Boolean
     fun account(id: String): AccountRow?
@@ -87,10 +94,10 @@ class InMemoryIntegrationStore(private val knownHouseholds: List<String> = empty
     @Synchronized override fun <T> transaction(block: () -> T): T = block()
     @Synchronized override fun saveState(state: String, p: PendingConnect) { states[state] = p }
     @Synchronized override fun takeState(state: String) = states.remove(state)
-    @Synchronized override fun upsertAccount(householdId: String, provider: String, email: String, refreshTokenEnc: ByteArray, canEdit: Boolean, newId: () -> String): String {
+    @Synchronized override fun upsertAccount(householdId: String, provider: String, email: String, refreshTokenEnc: ByteArray, canEdit: Boolean, grantedAtMs: Long?, newId: () -> String): String {
         val existing = accounts.values.firstOrNull { it.householdId == householdId && it.provider == provider && it.email == email }
         val id = existing?.id ?: newId()
-        accounts[id] = AccountRow(id, householdId, provider, email, refreshTokenEnc, "ok", existing?.lastSyncAtMs, canEdit)
+        accounts[id] = AccountRow(id, householdId, provider, email, refreshTokenEnc, "ok", existing?.lastSyncAtMs, canEdit, grantedAtMs ?: existing?.grantedAtMs)
         return id
     }
     @Synchronized override fun stopEditing(householdId: String, provider: String, email: String): Boolean {
@@ -135,27 +142,29 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
         }
     }
 
-    override fun upsertAccount(householdId: String, provider: String, email: String, refreshTokenEnc: ByteArray, canEdit: Boolean, newId: () -> String): String = c { c ->
+    override fun upsertAccount(householdId: String, provider: String, email: String, refreshTokenEnc: ByteArray, canEdit: Boolean, grantedAtMs: Long?, newId: () -> String): String = c { c ->
         c.prepareStatement(
-            """INSERT INTO integration_account(id, household_id, provider, email, refresh_token_enc, can_edit) VALUES (?,?,?,?,?,?)
+            """INSERT INTO integration_account(id, household_id, provider, email, refresh_token_enc, can_edit, granted_at) VALUES (?,?,?,?,?,?,?)
                ON CONFLICT (household_id, provider, email) DO UPDATE SET refresh_token_enc = EXCLUDED.refresh_token_enc,
-                 can_edit = EXCLUDED.can_edit, status = 'ok', last_error = NULL, updated_at = now()
+                 can_edit = EXCLUDED.can_edit, status = 'ok', last_error = NULL, updated_at = now(),
+                 granted_at = COALESCE(EXCLUDED.granted_at, integration_account.granted_at)
                RETURNING id""",
         ).use { st ->
             st.setString(1, newId()); st.setString(2, householdId); st.setString(3, provider); st.setString(4, email); st.setBytes(5, refreshTokenEnc)
             st.setBoolean(6, canEdit)
+            if (grantedAtMs != null) st.setTimestamp(7, Timestamp(grantedAtMs)) else st.setNull(7, java.sql.Types.TIMESTAMP)
             st.executeQuery().use { rs -> rs.next(); rs.getString(1) }
         }
     }
 
     private fun query(sql: String, vararg args: String): List<AccountRow> = c { c ->
-        c.prepareStatement("SELECT id, household_id, provider, email, refresh_token_enc, status, last_sync_at, can_edit FROM integration_account $sql").use { st ->
+        c.prepareStatement("SELECT id, household_id, provider, email, refresh_token_enc, status, last_sync_at, can_edit, granted_at FROM integration_account $sql").use { st ->
             args.forEachIndexed { i, a -> st.setString(i + 1, a) }
             st.executeQuery().use { rs ->
                 buildList {
                     while (rs.next()) add(AccountRow(
                         rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getBytes(5), rs.getString(6),
-                        rs.getTimestamp(7)?.time, rs.getBoolean(8),
+                        rs.getTimestamp(7)?.time, rs.getBoolean(8), rs.getTimestamp(9)?.time,
                     ))
                 }
             }

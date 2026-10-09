@@ -601,6 +601,9 @@ private fun TodayPane(
     // Weather for home (weather item, slice 1): a quiet line under the date.
     val weatherFlow = remember(core) { core?.weatherView ?: MutableStateFlow(WeatherView.EMPTY) }
     val weather by weatherFlow.collectAsState()
+    // Calendar sign-ins about to end or expired (Reliability first, item 2): one line with Reconnect.
+    val signInFlow = remember(core) { core?.signInLine ?: MutableStateFlow(emptyList<os.meka.core.domain.SignInLine>()) }
+    val signIn by signInFlow.collectAsState()
     val motion = Meka.motion
     // Not on the closed Fold's cover screen: the card waits for the main screen.
     val motionCard = if (now == null) motion.card else null
@@ -686,6 +689,7 @@ private fun TodayPane(
                             battery = BatteryCare.view(batteryContext, batteryWatching)
                         }, Modifier.padding(top = MekaSpace.xs))
                     }
+                    if (core != null) signIn.firstOrNull()?.let { SignInLineView(it, core, Modifier.padding(top = MekaSpace.xxs)) }
                     // News ticker (news ticker, slice 2): one line of drifting cards under the header; calm by default
                     // (two loops, then it rests). Off in Appearance hides it.
                     if (core != null && TickerRules.shown(tickerMode, ticker)) {

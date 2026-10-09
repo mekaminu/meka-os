@@ -141,6 +141,7 @@ class MekaCore(
     private val workPlace = os.meka.core.domain.WorkPlaceStore(replica)
     // Places item 4: the route's train lines (TfL status, server-written).
     private val lineStatus = os.meka.core.domain.LineStatusStore(replica)
+    private val signIns = os.meka.core.domain.SignInStore(replica)
     private val review = WeeklyReview(replica, nowMs, ZoneCalendar(timeZone))
     /** The week the review screen shows (null: the default for today); a screen choice, not synced. */
     private var reviewOffset: Int? = null
@@ -258,6 +259,14 @@ class MekaCore(
      * (Open-Meteo, Biggleswade). Empty until the first forecast arrives; moves with the clock.
      */
     val weatherView: StateFlow<os.meka.core.domain.WeatherView> = _weather.asStateFlow()
+
+    private val _signIn = MutableStateFlow<List<os.meka.core.domain.SignInLine>>(emptyList())
+    /**
+     * Today's sign-in line (Reliability first, item 2): the most urgent calendar sign-in that is about to end or already
+     * expired, as the server last wrote it ([os.meka.core.domain.SignInRules]); empty while every sign-in is fine. Tap
+     * Reconnect: [startConnect] with the line's provider and `editing`.
+     */
+    val signInLine: StateFlow<List<os.meka.core.domain.SignInLine>> = _signIn.asStateFlow()
 
     private val _newsPlace = MutableStateFlow(os.meka.core.domain.NewsPlace.EMPTY)
     /**
@@ -2263,6 +2272,7 @@ class MekaCore(
             .copy(route = os.meka.core.domain.RouteRules.todayLine(lineStatus.snapshot(), office, nowMs(), cal))
         // Away from home and work with a fresh fix (Places item 3): Today's line says where Meka is.
         val hereLine = os.meka.core.domain.HereRules.todayLine(hereFix, nowMs(), cal)
+        _signIn.value = listOfNotNull(os.meka.core.domain.SignInRules.line(signIns.all(), nowMs(), cal))
         _weather.value = if (hereLine == null) weatherNow
         else weatherNow.copy(nowLine = hereLine, nowSpoken = hereLine.replace("°", " degrees"))
         _review.value = review.view(reviewOffset, all, dayEvents, _goals.value, fasting.ended()) { day ->
@@ -2315,7 +2325,7 @@ class MekaCore(
         NoticeSources.collect(
             _lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card,
             currentEvents(), _eventMarks.value, _sessions.value, all, weather.forecast(),
-            requests = requestCards.open(), settings = notifyPrefs.settings(),
+            requests = requestCards.open(), settings = notifyPrefs.settings(), signIns = signIns.all(),
         )
 
     /** The watch face's next 12 hours: events, planned tasks, the week's booked sessions, today's and tomorrow's work. */

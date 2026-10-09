@@ -112,6 +112,11 @@ struct TodayView: View {
                             .accessibilityLabel(route.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // A calendar sign-in about to end or expired (Reliability first, item 2): one line, Reconnect.
+                    if let line = model.signInLines.first {
+                        SignInLineView(line: line, palette: palette)
+                            .staggeredAppear(0, play: play)
+                    }
                     if !model.isConnected || model.signedOut {
                         Button(model.signedOut ? "Reconnect this Mac" : "This Mac isn't syncing yet · Connect") { model.showConnect = true }
                             .buttonStyle(MekaPressStyle())

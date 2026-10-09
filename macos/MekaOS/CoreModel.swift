@@ -51,6 +51,8 @@ final class CoreModel {
     private(set) var brief: MorningBriefView?
     /// Weather for home (weather item, slice 1): Today's quiet line under the date ("14° · light rain from 16:00").
     private(set) var weather: WeatherView?
+    /// Calendar sign-ins about to end or expired (Reliability first, item 2): Today's line with Reconnect; empty when fine.
+    private(set) var signInLines: [SignInLine] = []
     var showBrief = false
     /// Appearance → Play the opening: Today replays its opening (Day ring, tiles, greeting, stagger), then clears it.
     var openingRequested = false
@@ -230,6 +232,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await w in core.weatherView { self?.weather = w }
+        })
+        observers.append(Task { [weak self] in
+            for await l in core.signInLine { self?.signInLines = l }
         })
         observers.append(Task { [weak self] in
             for await n in core.newsPlace { self?.newsPlace = n }
