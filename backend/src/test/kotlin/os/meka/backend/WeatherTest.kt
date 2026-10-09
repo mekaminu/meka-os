@@ -197,11 +197,13 @@ class WeatherTest {
         fun pull() { val page = ops.after("home", cursor, 10_000); r.applyRemoteBatch(page.map { it.op }); page.lastOrNull()?.let { cursor = it.seq } }
         val deviceClock = HlcClock("fold", { now })
         var n = 0
+        // What the Fold pushes: each change chained on its last, as a device does.
         fun setPlace(name: String?) = ops.transaction {
+            val base = if (n == 0) emptyList() else listOf("fold${n - 1}")
             ops.append(os.meka.core.sync.Op(
                 "fold${n++}", "home", os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.WeatherPlaceStore.ENTITY_ID,
                 os.meka.core.domain.WeatherPlaceFields.NAME, name?.let { os.meka.core.sync.FieldValue.Text(it) } ?: os.meka.core.sync.FieldValue.Null,
-                deviceClock.now(), emptyList(), "fold",
+                deviceClock.now(), base, "fold",
             ))
         }
 
