@@ -154,8 +154,8 @@ class MessageRequestFacadeTest {
         val done = assertNotNull(c.acceptRequest(card.id))
         assertEquals("Thu 15 Oct: work from home", done.line)
         val thu = c.calendarView.value.sections.first { it.title == "Thu 15 Oct" }
-        assertEquals("Work from home 09:00–17:30", thu.workLine)
+        assertEquals("Work from home 09:00–15:30", thu.workLine) // Thursday is the short day
         assertTrue(c.undoRequest(done))
-        assertEquals("Work 09:00–17:30", c.calendarView.value.sections.first { it.title == "Thu 15 Oct" }.workLine)
+        assertEquals("Work 09:00–15:30", c.calendarView.value.sections.first { it.title == "Thu 15 Oct" }.workLine)
     }
 }

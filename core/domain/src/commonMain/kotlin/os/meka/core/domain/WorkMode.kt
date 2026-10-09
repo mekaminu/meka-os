@@ -43,34 +43,95 @@ data class LocalClock(val isoDayOfWeek: Int, val minuteOfDay: Int) {
     }
 }
 
-/**
- * Work hours. A shift that ends at or before its start crosses midnight (it belongs to the day it starts on).
- * [enabled] = false means only the manual switch puts MEKA in work mode.
- */
-data class WorkSchedule(val days: Set<Int>, val startMinute: Int, val endMinute: Int, val enabled: Boolean = true) {
+/** One weekday's own hours when they differ from the usual ones (Thursday's short day, 09:00–15:30). */
+data class DayHours(val startMinute: Int, val endMinute: Int) {
     init {
-        require(days.all { it in 1..7 }) { "days are ISO 1..7" }
         require(startMinute in 0 until LocalClock.MINUTES_PER_DAY && endMinute in 0 until LocalClock.MINUTES_PER_DAY) { "minutes must be 0..1439" }
     }
 
     val crossesMidnight: Boolean get() = endMinute < startMinute
 
-    fun isScheduled(c: LocalClock): Boolean {
-        if (!enabled || days.isEmpty() || startMinute == endMinute) return false
-        return if (!crossesMidnight) {
-            c.isoDayOfWeek in days && c.minuteOfDay >= startMinute && c.minuteOfDay < endMinute
-        } else {
-            (c.isoDayOfWeek in days && c.minuteOfDay >= startMinute) || (previousDay(c.isoDayOfWeek) in days && c.minuteOfDay < endMinute)
-        }
+    /** "09:00–15:30" */
+    val label: String get() = "${LocalClock.formatMinute(startMinute)}–${LocalClock.formatMinute(endMinute)}"
+}
+
+/** One work day in Work mode's hours editor: "Thu" · "09:00–15:30 · own hours". */
+data class WorkDayRow(
+    val isoDay: Int,
+    val dayShort: String,
+    val name: String,
+    val startMinute: Int,
+    val endMinute: Int,
+    /** Its hours differ from the usual ones (lit in the accent). */
+    val own: Boolean,
+    val line: String,
+)
+
+/**
+ * Work hours. A shift that ends at or before its start crosses midnight (it belongs to the day it starts on).
+ * [enabled] = false means only the manual switch puts MEKA in work mode.
+ *
+ * [startMinute]–[endMinute] are the usual hours; [dayHours] holds the weekdays whose hours differ (Places item 1,
+ * Meka 2026-10-09: "short day Thursday 09:00–15:30"). An override only counts for a day in [days].
+ */
+data class WorkSchedule(
+    val days: Set<Int>,
+    val startMinute: Int,
+    val endMinute: Int,
+    val enabled: Boolean = true,
+    val dayHours: Map<Int, DayHours> = emptyMap(),
+) {
+    init {
+        require(days.all { it in 1..7 }) { "days are ISO 1..7" }
+        require(dayHours.keys.all { it in 1..7 }) { "days are ISO 1..7" }
+        require(startMinute in 0 until LocalClock.MINUTES_PER_DAY && endMinute in 0 until LocalClock.MINUTES_PER_DAY) { "minutes must be 0..1439" }
     }
+
+    /** The usual hours (the days without their own). */
+    val usual: DayHours get() = DayHours(startMinute, endMinute)
+
+    /** [isoDay]'s hours: its own when it has them, else the usual ones (whether or not it is a work day). */
+    fun hoursOn(isoDay: Int): DayHours = dayHours[isoDay]?.takeIf { isoDay in days } ?: usual
+
+    fun startOn(isoDay: Int): Int = hoursOn(isoDay).startMinute
+    fun endOn(isoDay: Int): Int = hoursOn(isoDay).endMinute
+    fun crossesMidnightOn(isoDay: Int): Boolean = hoursOn(isoDay).crossesMidnight
+
+    /** Whether [isoDay] is a work day with a real shift (start ≠ end). */
+    fun worksOn(isoDay: Int): Boolean = enabled && isoDay in days && hoursOn(isoDay).let { it.startMinute != it.endMinute }
+
+    /** The usual hours' night-shift test; per day, [crossesMidnightOn]. */
+    val crossesMidnight: Boolean get() = endMinute < startMinute
+
+    /** The overrides that actually differ and fall on a work day. */
+    val ownHours: Map<Int, DayHours> get() = dayHours.filter { (d, h) -> d in days && h != usual }
+
+    fun isScheduled(c: LocalClock): Boolean {
+        if (!enabled || days.isEmpty()) return false
+        val today = c.isoDayOfWeek
+        if (worksOn(today)) {
+            val h = hoursOn(today)
+            if (c.minuteOfDay >= h.startMinute && (h.crossesMidnight || c.minuteOfDay < h.endMinute)) return true
+        }
+        val yesterday = previousDay(today)
+        if (worksOn(yesterday)) {
+            val h = hoursOn(yesterday)
+            if (h.crossesMidnight && c.minuteOfDay < h.endMinute) return true
+        }
+        return false
+    }
+
+    /** Every minute at which some day's shift starts or ends, ascending. */
+    val boundaries: List<Int> get() =
+        (listOf(startMinute, endMinute) + ownHours.values.flatMap { listOf(it.startMinute, it.endMinute) }).distinct().sorted()
 
     /** The next local time at which [isScheduled] flips, up to a week ahead; null when it never changes. */
     fun nextChange(c: LocalClock): LocalClock? {
         val now = isScheduled(c)
-        val boundaries = listOf(startMinute, endMinute).distinct().sorted()
+        val marks = boundaries
         for (offset in 0..7) {
             val day = (c.isoDayOfWeek - 1 + offset) % 7 + 1
-            for (m in boundaries) {
+            for (m in marks) {
                 if (offset == 0 && m <= c.minuteOfDay) continue
                 if (offset == 7 && m > c.minuteOfDay) continue
                 val candidate = LocalClock(day, m)
@@ -80,24 +141,72 @@ data class WorkSchedule(val days: Set<Int>, val startMinute: Int, val endMinute:
         return null
     }
 
-    /** "Mon–Fri · 09:00–17:30"; "No set hours" when disabled. */
+    /** "Mon–Fri · 09:00–17:30"; with a short day "Mon–Fri · 09:00–17:30 · Thu 09:00–15:30"; "No set hours" when disabled. */
     val summary: String get() {
         if (!enabled || days.isEmpty()) return "No set hours"
-        return "${describeDays(days)} · ${LocalClock.formatMinute(startMinute)}–${LocalClock.formatMinute(endMinute)}"
+        val own = ownHours.entries.sortedBy { it.key }.joinToString("") { (d, h) -> " · ${LocalClock.DAY_SHORT[d - 1]} ${h.label}" }
+        return "${describeDays(days)} · ${usual.label}$own"
     }
 
-    fun encode(): String = "${days.sorted().joinToString(",")};$startMinute;$endMinute;${if (enabled) 1 else 0}"
+    /** One line for MEKA's AI and plain text: "Mon–Fri 09:00–17:30, Thu 09:00–15:30"; "" when there are no set hours. */
+    val plainLine: String get() {
+        if (!enabled || days.isEmpty()) return ""
+        return (listOf("${describeDays(days)} ${usual.label}") +
+            ownHours.entries.sortedBy { it.key }.map { (d, h) -> "${LocalClock.DAY_SHORT[d - 1]} ${h.label}" }).joinToString(", ")
+    }
+
+    /**
+     * "days;start;end;on" with no days of their own (as before 2026-10-09); "days;start;end;on;4=540-930,…" with them.
+     * A schedule that matches the old default is written with an empty fifth part, so it reads back as chosen rather
+     * than as the never-set default ([WorkMode.schedule] treats the bare old default as unset).
+     */
+    fun encode(): String {
+        val base = "${days.sorted().joinToString(",")};$startMinute;$endMinute;${if (enabled) 1 else 0}"
+        // Every day's own hours are kept, a day off's too, so turning that day back on brings them back.
+        val own = dayHours.filterValues { it != usual }.entries.sortedBy { it.key }.joinToString(",") { (d, h) -> "$d=${h.startMinute}-${h.endMinute}" }
+        return if (own.isEmpty() && base != LEGACY_DEFAULT) base else "$base;$own"
+    }
+
+    /** Work mode's per-day editor: one row per work day, Monday first. */
+    val weekRows: List<WorkDayRow> get() = days.sorted().map { d ->
+        val h = hoursOn(d)
+        val own = d in ownHours
+        WorkDayRow(d, LocalClock.DAY_SHORT[d - 1], DAY_NAMES[d - 1], h.startMinute, h.endMinute, own,
+            if (own) "${h.label} · own hours" else "${h.label} · usual")
+    }
+
+    /** The same hours with [isoDay] on its own [hours]; the usual hours (or null) drop the day's own. */
+    fun withDayHours(isoDay: Int, hours: DayHours?): WorkSchedule {
+        require(isoDay in 1..7) { "days are ISO 1..7" }
+        val next = if (hours == null || hours == usual) dayHours - isoDay else dayHours + (isoDay to hours)
+        return copy(dayHours = next)
+    }
 
     companion object {
-        /** Until Meka sets his own hours: weekdays, 09:00–17:30. */
-        val DEFAULT = WorkSchedule(setOf(1, 2, 3, 4, 5), 9 * 60, 17 * 60 + 30, true)
+        /** Until Meka sets his own hours: weekdays 09:00–17:30, Thursday 09:00–15:30 (Meka, 2026-10-09 12:54). */
+        val DEFAULT = WorkSchedule(setOf(1, 2, 3, 4, 5), 9 * 60, 17 * 60 + 30, true, mapOf(4 to DayHours(9 * 60, 15 * 60 + 30)))
+
+        val DAY_NAMES = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+        /** Weekdays 09:00–17:30, every day alike (the default before per-day hours). */
+        val WEEKDAYS = WorkSchedule(setOf(1, 2, 3, 4, 5), 9 * 60, 17 * 60 + 30, true)
+
+        /** The default as stored before per-day hours: read as never set, so it becomes [DEFAULT]. */
+        const val LEGACY_DEFAULT = "1,2,3,4,5;540;1050;1"
 
         fun decode(s: String?): WorkSchedule? {
             val parts = s?.split(';') ?: return null
-            if (parts.size != 4) return null
+            if (parts.size != 4 && parts.size != 5) return null
             return try {
                 val days = if (parts[0].isBlank()) emptySet() else parts[0].split(',').map { it.trim().toInt() }.toSet()
-                WorkSchedule(days, parts[1].toInt(), parts[2].toInt(), parts[3] == "1")
+                val own = if (parts.size == 5 && parts[4].isNotBlank()) {
+                    parts[4].split(',').associate { entry ->
+                        val (d, range) = entry.split('=').also { require(it.size == 2) { "day=start-end" } }
+                        val (a, b) = range.split('-').also { require(it.size == 2) { "start-end" } }
+                        d.trim().toInt() to DayHours(a.trim().toInt(), b.trim().toInt())
+                    }
+                } else emptyMap()
+                WorkSchedule(days, parts[1].toInt(), parts[2].toInt(), parts[3] == "1", own)
             } catch (e: IllegalArgumentException) { // NumberFormatException is one; so is a failed require
                 null
             }
@@ -180,7 +289,7 @@ object WorkModeRules {
         val atWork = active?.on ?: scheduled
         val change = datedChange(schedule, holidays, epochDay, minute, atWork)
         val whenText = change?.let { (d, m) -> describeDated(d, m, epochDay, minute) }
-        val holiday = holidays.title(epochDay)?.takeIf { !atWork && schedule.enabled && clock.isoDayOfWeek in schedule.days }
+        val holiday = holidays.title(epochDay)?.takeIf { !atWork && schedule.worksOn(clock.isoDayOfWeek) }
         val line = when {
             atWork && whenText != null -> "At work until $whenText"
             atWork -> "At work"
@@ -192,19 +301,23 @@ object WorkModeRules {
 
     /** Whether the schedule has MEKA at work at [minute] on [epochDay], bank holidays off. */
     fun scheduledOn(schedule: WorkSchedule, holidays: HolidayCalendar, epochDay: Long, minute: Int): Boolean {
-        if (!schedule.isScheduled(LocalClock(CivilDate.isoDayOfWeek(epochDay), minute))) return false
-        val shiftDay = if (schedule.crossesMidnight && minute < schedule.endMinute) epochDay - 1 else epochDay
+        val iso = CivilDate.isoDayOfWeek(epochDay)
+        if (!schedule.isScheduled(LocalClock(iso, minute))) return false
+        // Inside today's own shift, it is today's; otherwise it is last night's shift running on.
+        val todays = schedule.worksOn(iso) && minute >= schedule.startOn(iso) &&
+            (schedule.crossesMidnightOn(iso) || minute < schedule.endOn(iso))
+        val shiftDay = if (todays) epochDay else epochDay - 1
         return !holidays.isHoliday(shiftDay)
     }
 
     /** A work day: the schedule has a shift starting that day and it isn't a bank holiday. */
     fun isWorkDay(schedule: WorkSchedule, holidays: HolidayCalendar, epochDay: Long): Boolean =
-        schedule.enabled && schedule.startMinute != schedule.endMinute && CivilDate.isoDayOfWeek(epochDay) in schedule.days && !holidays.isHoliday(epochDay)
+        schedule.worksOn(CivilDate.isoDayOfWeek(epochDay)) && !holidays.isHoliday(epochDay)
 
     /** The next (day, minute) at which [scheduledOn] differs from [atWork], up to five weeks ahead (a run of holidays). */
     private fun datedChange(schedule: WorkSchedule, holidays: HolidayCalendar, day: Long, minute: Int, atWork: Boolean): Pair<Long, Int>? {
-        if (!schedule.enabled || schedule.days.isEmpty() || schedule.startMinute == schedule.endMinute) return null
-        val boundaries = listOf(schedule.startMinute, schedule.endMinute).distinct().sorted()
+        if (!schedule.enabled || (1..7).none { schedule.worksOn(it) }) return null
+        val boundaries = schedule.boundaries
         for (offset in 0..35) {
             val d = day + offset
             for (m in boundaries) {
@@ -300,18 +413,23 @@ data class WorkHours(
 
     /** "Work 09:00–17:30" (or "Work from home 09:00–17:30") on a work day; null otherwise. */
     fun line(epochDay: Long): String? =
-        if (isWorkDay(epochDay)) "${title(epochDay)} ${LocalClock.formatMinute(schedule.startMinute)}–${LocalClock.formatMinute(schedule.endMinute)}" else null
+        if (isWorkDay(epochDay)) "${title(epochDay)} ${hoursOn(epochDay).label}" else null
+
+    /** [epochDay]'s hours (its weekday's own, else the usual ones). */
+    fun hoursOn(epochDay: Long): DayHours = schedule.hoursOn(CivilDate.isoDayOfWeek(epochDay))
 
     /** The work on [epochDay] (its window from [calendar]), in time order: at most a night shift's tail and a shift. */
     fun blocks(epochDay: Long, calendar: LocalCalendar): List<WorkBlock> = buildList {
         val dayStart = calendar.toEpochMs(epochDay, 0)
         val dayEnd = calendar.toEpochMs(epochDay + 1, 0)
-        if (schedule.crossesMidnight && schedule.endMinute > 0 && isWorkDay(epochDay - 1)) {
-            add(WorkBlock(dayStart, calendar.toEpochMs(epochDay, schedule.endMinute), schedule.startMinute, schedule.endMinute, title(epochDay - 1)))
+        val last = hoursOn(epochDay - 1)
+        if (last.crossesMidnight && last.endMinute > 0 && isWorkDay(epochDay - 1)) {
+            add(WorkBlock(dayStart, calendar.toEpochMs(epochDay, last.endMinute), last.startMinute, last.endMinute, title(epochDay - 1)))
         }
         if (isWorkDay(epochDay)) {
-            val end = if (schedule.crossesMidnight) dayEnd else calendar.toEpochMs(epochDay, schedule.endMinute)
-            add(WorkBlock(calendar.toEpochMs(epochDay, schedule.startMinute), end, schedule.startMinute, schedule.endMinute, title(epochDay)))
+            val h = hoursOn(epochDay)
+            val end = if (h.crossesMidnight) dayEnd else calendar.toEpochMs(epochDay, h.endMinute)
+            add(WorkBlock(calendar.toEpochMs(epochDay, h.startMinute), end, h.startMinute, h.endMinute, title(epochDay)))
         }
     }
 
@@ -341,8 +459,12 @@ class WorkMode(
     private val holidays: () -> HolidayCalendar = { HolidayCalendar.NONE },
     private val nowMs: () -> Long,
 ) {
-    fun schedule(): WorkSchedule =
-        WorkSchedule.decode(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SCHEDULE)?.textOrNull) ?: WorkSchedule.DEFAULT
+    /** The stored schedule; the default when never set (or stored as the old default, before per-day hours). */
+    fun schedule(): WorkSchedule {
+        val stored = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SCHEDULE)?.textOrNull
+        if (stored == WorkSchedule.LEGACY_DEFAULT) return WorkSchedule.DEFAULT
+        return WorkSchedule.decode(stored) ?: WorkSchedule.DEFAULT
+    }
 
     fun currentSwitch(): WorkSwitch? = WorkSwitch.decode(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SWITCH)?.textOrNull)
 
@@ -381,7 +503,8 @@ class WorkMode(
     }
 
     fun setSchedule(s: WorkSchedule) {
-        if (s == schedule() && replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SCHEDULE)?.textOrNull != null) return
+        val stored = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SCHEDULE)?.textOrNull
+        if (stored != null && stored == s.encode()) return
         replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.SCHEDULE to s.encode().fv()))
     }
 

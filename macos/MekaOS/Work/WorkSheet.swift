@@ -15,6 +15,7 @@ struct WorkSheet: View {
     @State private var end = 17 * 60 + 30
     @State private var enabled = true
     @State private var showMessageDetails = false
+    @State private var openDay: Int?
 
     private static let dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     private static let step = 15
@@ -56,8 +57,9 @@ struct WorkSheet: View {
                 }
             }
             .staggeredAppear(2)
-            stepper("Start", value: $start).staggeredAppear(2)
-            stepper("End", value: $end).staggeredAppear(2)
+            stepper("Usual start", value: $start).staggeredAppear(2)
+            stepper("Usual end", value: $end).staggeredAppear(2)
+            eachDay.staggeredAppear(2)
             Toggle("Use these hours (off: the switch only)", isOn: Binding(get: { enabled }, set: { enabled = $0; save() }))
                 .staggeredAppear(2)
 
@@ -124,6 +126,72 @@ struct WorkSheet: View {
         }
         .padding(.top, MekaSpace.s)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: showMessageDetails)
+    }
+
+    /// Hours → each day (Places item 1): one row per work day, lit when it has its own hours; clicking a row unfolds
+    /// its Start/End steppers in place (expand spring, the chevron turns); "Same as usual" clears them.
+    @ViewBuilder private var eachDay: some View {
+        if let s = model.work?.schedule, s.enabled, !s.days.isEmpty {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text("Each day").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                ForEach(s.weekRows, id: \.isoDay) { row in
+                    dayRow(row)
+                }
+            }
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: openDay)
+        }
+    }
+
+    private func dayRow(_ row: WorkDayRow) -> some View {
+        let day = Int(row.isoDay)
+        let start = Int(row.startMinute), end = Int(row.endMinute)
+        let open = openDay == day
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Button {
+                MekaHaptics.tick()
+                openDay = open ? nil : day
+            } label: {
+                HStack {
+                    Text(row.dayShort).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).frame(width: 44, alignment: .leading)
+                    Text(row.line).font(MekaType.itemMeta)
+                        .foregroundStyle(row.own ? palette.accent : palette.textSecondary)
+                        .contentTransition(.opacity)
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(palette.accent)
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(MekaPressStyle())
+            .accessibilityLabel("\(row.name): \(row.line)")
+            if open {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    dayStepper("\(row.dayShort) start", value: start) { model.setWorkDayHours(isoDay: day, startMinute: $0, endMinute: end) }
+                    dayStepper("\(row.dayShort) end", value: end) { model.setWorkDayHours(isoDay: day, startMinute: start, endMinute: $0) }
+                    if row.own {
+                        Button("Same as usual") { model.clearWorkDayHours(isoDay: day) }
+                            .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent).font(MekaType.caption)
+                    }
+                }
+                .padding(.leading, MekaSpace.m)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: row.line)
+    }
+
+    private func dayStepper(_ label: String, value: Int, onChange: @escaping (Int) -> Void) -> some View {
+        Stepper(
+            value: Binding(get: { value }, set: { onChange($0) }),
+            in: 0...(24 * 60 - Self.step), step: Self.step
+        ) {
+            HStack {
+                Text(label).foregroundStyle(palette.textSecondary)
+                Spacer()
+                Text(Self.hhmm(value)).monospacedDigit().foregroundStyle(palette.textPrimary)
+            }
+            .font(MekaType.itemMeta)
+        }
     }
 
     private func stepper(_ label: String, value: Binding<Int>) -> some View {

@@ -766,9 +766,7 @@ class MekaCore(
             sentAt = LocalClock.formatMinute(cal.minuteOfDay(item.atMs)),
             date = os.meka.core.domain.AskRules.isoDate(today),
             now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(now))}",
-            work = if (schedule.enabled && schedule.days.isNotEmpty()) {
-                "${os.meka.core.domain.WorkSchedule.describeDays(schedule.days)} ${LocalClock.formatMinute(schedule.startMinute)}–${LocalClock.formatMinute(schedule.endMinute)}"
-            } else "",
+            work = schedule.plainLine.let { if (it.length <= os.meka.core.wire.MessageRequestCodec.MAX_WORK) it else it.take(os.meka.core.wire.MessageRequestCodec.MAX_WORK).substringBeforeLast(", ") },
         )
     }
 
@@ -1381,9 +1379,20 @@ class MekaCore(
      */
     suspend fun setWeatherPlace(name: String): Boolean = onCore { weatherPlace.set(name).also { refresh() } }
 
-    /** Work hours. [days] are ISO (1 = Monday); minutes are local minutes of the day. */
+    /**
+     * Work hours: the work days and the usual hours. [days] are ISO (1 = Monday); minutes are local minutes of the
+     * day. Each day's own hours ([setWorkDayHours]) are kept.
+     */
     suspend fun setWorkSchedule(days: List<Int>, startMinute: Int, endMinute: Int, enabled: Boolean) =
-        onCore { work.setSchedule(WorkSchedule(days.toSet(), startMinute, endMinute, enabled)) }
+        onCore { work.setSchedule(WorkSchedule(days.toSet(), startMinute, endMinute, enabled, work.schedule().dayHours)) }
+
+    /** [isoDay]'s own hours (Thursday's short day); the usual hours clear them. */
+    suspend fun setWorkDayHours(isoDay: Int, startMinute: Int, endMinute: Int) =
+        onCore { work.setSchedule(work.schedule().withDayHours(isoDay, os.meka.core.domain.DayHours(startMinute, endMinute))) }
+
+    /** [isoDay] back to the usual hours. */
+    suspend fun clearWorkDayHours(isoDay: Int) =
+        onCore { work.setSchedule(work.schedule().withDayHours(isoDay, null)) }
 
     /** Fresh work-mode state for background callers (the notification listener), not waiting for a [tick]. */
     suspend fun currentWorkMode(): WorkModeState = onCore { work.state(localClock(), todayEpochDay()).also { _workMode.value = it } }

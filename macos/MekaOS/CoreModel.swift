@@ -704,6 +704,20 @@ final class CoreModel {
         run { try await $0.setWorkSchedule(days: list, startMinute: Int32(startMinute), endMinute: Int32(endMinute), enabled: enabled) }
     }
 
+    /// One weekday's own hours (Thursday's short day); the usual hours clear them. Only Ints cross to the core.
+    func setWorkDayHours(isoDay: Int, startMinute: Int, endMinute: Int) {
+        MekaHaptics.tick()
+        let d = Int32(isoDay), a = Int32(startMinute), b = Int32(endMinute)
+        run { try await $0.setWorkDayHours(isoDay: d, startMinute: a, endMinute: b) }
+    }
+
+    /// A weekday back on the usual hours.
+    func clearWorkDayHours(isoDay: Int) {
+        MekaHaptics.tick()
+        let d = Int32(isoDay)
+        run { try await $0.clearWorkDayHours(isoDay: d) }
+    }
+
     // MARK: Lists
 
     /// Due chases and decision reviews: they count in the Needs you badge.

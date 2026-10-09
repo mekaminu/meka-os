@@ -246,14 +246,16 @@ object SessionRules {
             val lead = if (e.isFixture) FIXTURE_LEAD_MIN else BUFFER_MIN
             DayPlanner.Slot(e.startAtMs - lead * min, e.endAtMs + BUFFER_MIN * min)
         }.toMutableList()
-        if (work != null && work.startMinute != work.endMinute) {
+        if (work != null) {
             if (WorkModeRules.isWorkDay(work, holidays, day)) {
-                val shiftEnd = if (work.crossesMidnight) cal.toEpochMs(day + 1, work.endMinute) else cal.toEpochMs(day, work.endMinute)
-                out += DayPlanner.Slot(cal.toEpochMs(day, work.startMinute) - BUFFER_MIN * min, shiftEnd + BUFFER_MIN * min)
+                val h = work.hoursOn(CivilDate.isoDayOfWeek(day))
+                val shiftEnd = if (h.crossesMidnight) cal.toEpochMs(day + 1, h.endMinute) else cal.toEpochMs(day, h.endMinute)
+                out += DayPlanner.Slot(cal.toEpochMs(day, h.startMinute) - BUFFER_MIN * min, shiftEnd + BUFFER_MIN * min)
             }
             // Last night's shift running into this morning.
-            if (work.crossesMidnight && WorkModeRules.isWorkDay(work, holidays, day - 1)) {
-                out += DayPlanner.Slot(start, cal.toEpochMs(day, work.endMinute) + BUFFER_MIN * min)
+            val last = work.hoursOn(CivilDate.isoDayOfWeek(day - 1))
+            if (last.crossesMidnight && WorkModeRules.isWorkDay(work, holidays, day - 1)) {
+                out += DayPlanner.Slot(start, cal.toEpochMs(day, last.endMinute) + BUFFER_MIN * min)
             }
         }
         return out

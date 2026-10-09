@@ -8,7 +8,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class WorkModeTest {
-    private val weekdays = WorkSchedule.DEFAULT // Mon–Fri 09:00–17:30
+    private val weekdays = WorkSchedule.WEEKDAYS // Mon–Fri 09:00–17:30
     private fun at(day: Int, h: Int, m: Int = 0) = LocalClock(day, h * 60 + m)
 
     @Test

@@ -85,7 +85,7 @@ class RequestAcceptTest {
         fold.sync(); mac.sync()
         assertEquals(setOf(thu15), macWork.homeDays(fri))
 
-        val hours = WorkHours(WorkSchedule.DEFAULT, homeDays = macWork.homeDays(fri))
+        val hours = WorkHours(WorkSchedule.WEEKDAYS, homeDays = macWork.homeDays(fri))
         assertEquals("Work from home 09:00–17:30", hours.line(thu15))
         assertEquals("Work 09:00–17:30", hours.line(thu15 + 1))
         assertEquals(listOf("Work from home"), hours.blocks(thu15, cal).map { it.title })
@@ -101,7 +101,7 @@ class RequestAcceptTest {
     @Test
     fun todaysSummarySaysWorkingFromHome() {
         val now = cal.toEpochMs(thu15, 10 * 60)
-        val hours = WorkHours(WorkSchedule.DEFAULT, homeDays = setOf(thu15))
+        val hours = WorkHours(WorkSchedule.WEEKDAYS, homeDays = setOf(thu15))
         val t = TodayProjection.project(emptyList(), now, CalendarAgenda.window(thu15, cal), emptyList(), cal, work = hours)
         assertEquals("Work from home", t.timeline.rows.first { it.kind == TimelineKind.WORK }.title)
         assertEquals("Working from home until 17:30", TimelineRules.summary(t.timeline))

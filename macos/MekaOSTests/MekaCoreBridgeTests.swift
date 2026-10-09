@@ -1012,4 +1012,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(rules.matches(view: view, typed: "dentist", canAsk: true))
         XCTAssertTrue(rules.idleLine(canAsk: true, mac: true).hasSuffix("click."))
     }
+
+    /// Places item 1: each weekday's own hours (Thursday's short day) reach Swift.
+    func testWorkDayHoursReachSwift() {
+        let s = WorkSchedule.companion.DEFAULT
+        XCTAssertEqual(s.summary, "Mon–Fri · 09:00–17:30 · Thu 09:00–15:30")
+        let rows = s.weekRows
+        XCTAssertEqual(rows.map { $0.dayShort }, ["Mon", "Tue", "Wed", "Thu", "Fri"])
+        XCTAssertTrue(rows[3].own)
+        XCTAssertEqual(rows[3].line, "09:00–15:30 · own hours")
+        XCTAssertEqual(rows[0].line, "09:00–17:30 · usual")
+    }
 }

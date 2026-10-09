@@ -85,7 +85,7 @@ import os.meka.android.shell.SharedMotion
 import os.meka.android.shell.MoreItem
 import os.meka.android.designsystem.sharedTitleInPane
 
-private const val STEP_MINUTES = 15
+internal const val STEP_MINUTES = 15
 
 /**
  * Work mode settings (build plan M1): the switch, work hours, notification access, alerts, the two people
@@ -172,8 +172,11 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
-        TimeStepper("Start", schedule.startMinute, Modifier.appear(rememberAppearance(2))) { save(schedule.copy(startMinute = it)) }
-        TimeStepper("End", schedule.endMinute, Modifier.appear(rememberAppearance(2))) { save(schedule.copy(endMinute = it)) }
+        TimeStepper("Usual start", schedule.startMinute, Modifier.appear(rememberAppearance(2))) { save(schedule.copy(startMinute = it)) }
+        TimeStepper("Usual end", schedule.endMinute, Modifier.appear(rememberAppearance(2))) { save(schedule.copy(endMinute = it)) }
+        WorkDayHoursSection(schedule, Modifier.appear(rememberAppearance(2)),
+            onSet = { d, a, b -> scope.launch { core.setWorkDayHours(d, a, b) } },
+            onClear = { d -> scope.launch { core.clearWorkDayHours(d) } })
         Text(
             if (schedule.enabled) "Using these hours · tap to use the switch only" else "Switch only · tap to use these hours",
             style = MekaType.caption, color = Meka.colors.accent,
@@ -466,7 +469,7 @@ private fun DayChip(isoDay: Int, on: Boolean, onToggle: () -> Unit) {
 }
 
 @Composable
-private fun TimeStepper(label: String, minute: Int, modifier: Modifier, onChange: (Int) -> Unit) {
+internal fun TimeStepper(label: String, minute: Int, modifier: Modifier, onChange: (Int) -> Unit) {
     val day = LocalClock.MINUTES_PER_DAY
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))

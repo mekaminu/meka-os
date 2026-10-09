@@ -197,6 +197,22 @@ class MekaCoreTest {
     }
 
     @Test
+    fun aDaysOwnHoursSyncAndTheUsualHoursKeepThem() = runTest {
+        // Monday 21 Sept 2026, 15:13 in London. Thursday is the short day by default (Meka, 2026-10-09).
+        val fold = core("fold"); val mac = core("mac")
+        assertEquals("Mon–Fri · 09:00–17:30 · Thu 09:00–15:30", fold.workMode.value.schedule.summary)
+        mac.setWorkDayHours(1, 9 * 60, 16 * 60) // Monday short too
+        mac.syncNow(); fold.syncNow()
+        assertEquals("At work until 16:00", fold.currentWorkMode().line)
+        assertEquals(listOf("Mon", "Tue", "Wed", "Thu", "Fri"), fold.workMode.value.schedule.weekRows.map { it.dayShort })
+        assertTrue(fold.workMode.value.schedule.weekRows.first().own)
+        fold.setWorkSchedule(listOf(1, 2, 3, 4, 5), 8 * 60, 17 * 60, true) // the usual hours move; Mon and Thu keep theirs
+        assertEquals("Mon–Fri · 08:00–17:00 · Mon 09:00–16:00 · Thu 09:00–15:30", fold.workMode.value.schedule.summary)
+        fold.clearWorkDayHours(1)
+        assertEquals("At work until 17:00", fold.currentWorkMode().line)
+    }
+
+    @Test
     fun aBankHolidayFromTheServerKeepsWorkModeOffOnBothDevices() = runTest {
         // 1_790_000_000_000 ms is Monday 21 Sept 2026, 15:13 in London: a work day, unless the server says it's a holiday.
         val fold = core("fold"); val mac = core("mac")

@@ -15,7 +15,7 @@ class WorkHoursTest {
     private fun at(day: Long, h: Int, m: Int = 0) = cal.toEpochMs(day, h * 60 + m)
     private fun window(day: Long) = CalendarAgenda.window(day, cal)
 
-    private val weekdays = WorkHours(WorkSchedule.DEFAULT) // Mon–Fri 09:00–17:30
+    private val weekdays = WorkHours(WorkSchedule.WEEKDAYS) // Mon–Fri 09:00–17:30
 
     private fun ev(id: String, from: Long, to: Long, allDay: Boolean = false) = CalendarEvent(id, id, from, to, allDay, null, "google", null, null)
 
@@ -75,9 +75,9 @@ class WorkHoursTest {
     @Test
     fun weekendsBankHolidaysAndAWorkOffDayHaveNoBlock() {
         assertEquals(listOf(), rows(today(at(sat10, 10), day = sat10)))
-        val holiday = WorkHours(WorkSchedule.DEFAULT, HolidayCalendar(mapOf(thu8 to "Made-up Day")))
+        val holiday = WorkHours(WorkSchedule.WEEKDAYS, HolidayCalendar(mapOf(thu8 to "Made-up Day")))
         assertEquals(listOf(), rows(today(at(thu8, 8), work = holiday)))
-        val sick = WorkHours(WorkSchedule.DEFAULT, offDay = thu8)
+        val sick = WorkHours(WorkSchedule.WEEKDAYS, offDay = thu8)
         assertEquals(listOf(), rows(today(at(thu8, 10), work = sick)))
         assertEquals(listOf(), rows(today(at(thu8, 8), work = null)))
     }
@@ -86,9 +86,9 @@ class WorkHoursTest {
     fun aManualWorkOffDuringTheShiftTakesTodaysBlockAway() {
         val clock = LocalClock(4, 10 * 60)
         val nowMs = at(thu8, 10)
-        val off = WorkModeRules.state(WorkSchedule.DEFAULT, WorkSwitch(false, nowMs, true), clock, nowMs, thu8)
+        val off = WorkModeRules.state(WorkSchedule.WEEKDAYS, WorkSwitch(false, nowMs, true), clock, nowMs, thu8)
         assertEquals(thu8, WorkHours.of(off, HolidayCalendar.NONE, thu8).offDay)
-        val scheduled = WorkModeRules.state(WorkSchedule.DEFAULT, null, clock, nowMs, thu8)
+        val scheduled = WorkModeRules.state(WorkSchedule.WEEKDAYS, null, clock, nowMs, thu8)
         assertNull(WorkHours.of(scheduled, HolidayCalendar.NONE, thu8).offDay)
     }
 
@@ -141,7 +141,7 @@ class WorkHoursTest {
 
     @Test
     fun aBankHolidayInTheCalendarHasNoWorkLine() {
-        val hours = WorkHours(WorkSchedule.DEFAULT, HolidayCalendar(mapOf(thu8 + 1 to "Made-up Day")))
+        val hours = WorkHours(WorkSchedule.WEEKDAYS, HolidayCalendar(mapOf(thu8 + 1 to "Made-up Day")))
         val v = CalendarAgenda.build(emptyList(), emptyList(), at(thu8, 8), cal, days = 3, work = hours)
         assertEquals("Work 09:00–17:30", v.sections[0].workLine)
         assertNull(v.sections[1].workLine)
@@ -175,7 +175,7 @@ class WorkHoursTest {
         assertEquals(listOf("w-540", "now:Work until 17:30 · 4 anytime tasks"), rows(today(at(thu8, 13, 44), tasks = four)))
         assertEquals(listOf("w-540", "now:Work until 17:30 · 1 anytime task"), rows(today(at(thu8, 13, 44), tasks = four.take(1))))
         // A home day says so.
-        val home = WorkHours(WorkSchedule.DEFAULT, homeDays = setOf(thu8))
+        val home = WorkHours(WorkSchedule.WEEKDAYS, homeDays = setOf(thu8))
         assertEquals("now:Work from home until 17:30 · 4 anytime tasks", rows(today(at(thu8, 13, 44), work = home, tasks = four)).last())
         // An event running past the end of work: free after it, with the tasks.
         val late = ev("Late call", at(thu8, 17), at(thu8, 18, 15))

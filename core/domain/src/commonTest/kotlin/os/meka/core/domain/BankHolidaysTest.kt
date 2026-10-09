@@ -9,7 +9,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class BankHolidaysTest {
-    private val weekdays = WorkSchedule.DEFAULT // Mon–Fri 09:00–17:30
+    private val weekdays = WorkSchedule.WEEKDAYS // Mon–Fri 09:00–17:30
     private fun day(y: Int, m: Int, d: Int) = CivilDate.toEpochDay(y, m, d)
     private val christmas = day(2026, 12, 25) // a Friday
     private val boxingSubstitute = day(2026, 12, 28) // Monday

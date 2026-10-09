@@ -91,9 +91,10 @@ object ShutdownRules {
 
     /** The minute the shutdown is offered on local day [epochDay]: the end of work on a work day, else 18:00. */
     fun startMinute(schedule: WorkSchedule, epochDay: Long, holidays: HolidayCalendar = HolidayCalendar.NONE): Int {
-        val workDay = schedule.enabled && CivilDate.isoDayOfWeek(epochDay) in schedule.days && !schedule.crossesMidnight &&
-            !holidays.isHoliday(epochDay)
-        return if (workDay && schedule.endMinute in WORK_END_RANGE) schedule.endMinute else DEFAULT_START_MIN
+        val iso = CivilDate.isoDayOfWeek(epochDay)
+        val h = schedule.hoursOn(iso)
+        val workDay = schedule.enabled && iso in schedule.days && !h.crossesMidnight && !holidays.isHoliday(epochDay)
+        return if (workDay && h.endMinute in WORK_END_RANGE) h.endMinute else DEFAULT_START_MIN
     }
 
     /**

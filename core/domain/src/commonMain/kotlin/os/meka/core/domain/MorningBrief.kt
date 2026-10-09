@@ -119,9 +119,10 @@ object BriefRules {
      * Shared by the brief and the shutdown's tomorrow preview.
      */
     fun workLine(schedule: WorkSchedule, holidays: HolidayCalendar, epochDay: Long): String? {
-        if (!schedule.enabled || CivilDate.isoDayOfWeek(epochDay) !in schedule.days) return null
+        val iso = CivilDate.isoDayOfWeek(epochDay)
+        if (!schedule.enabled || iso !in schedule.days) return null
         holidays.title(epochDay)?.let { return "$it · no work" }
-        return "Work ${LocalClock.formatMinute(schedule.startMinute)}–${LocalClock.formatMinute(schedule.endMinute)}"
+        return "Work ${schedule.hoursOn(iso).label}"
     }
 
     /** When the brief starts when quiet hours don't say otherwise. */
