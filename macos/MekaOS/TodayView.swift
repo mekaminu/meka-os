@@ -117,6 +117,9 @@ struct TodayView: View {
                         SignInLineView(line: line, palette: palette)
                             .staggeredAppear(0, play: play)
                     }
+                    // Anything else MEKA depends on that needs a look (Reliability first, item 3): one line, opens Health.
+                    HealthTodayLine(palette: palette)
+                        .staggeredAppear(0, play: play)
                     if !model.isConnected || model.signedOut {
                         Button(model.signedOut ? "Reconnect this Mac" : "This Mac isn't syncing yet · Connect") { model.showConnect = true }
                             .buttonStyle(MekaPressStyle())

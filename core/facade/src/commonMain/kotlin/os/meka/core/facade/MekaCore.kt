@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -177,6 +178,7 @@ class MekaCore(
     private var aiApi: AiApi? = transport as? AiApi
     private var speechApi: SpeechApi? = transport as? SpeechApi
     private var hereApi: HereApi? = transport as? HereApi
+    private var healthApi: HealthApi? = transport as? HealthApi
     /** "Where I am now" (Places item 3): the last answer, in memory only (never stored or synced), on the core thread. */
     private var hereFix: os.meka.core.domain.HereFix? = null
     /** MEKA's voice: the synced choice, the clips said so far (in memory, newest last) and a pause after a refusal. */
@@ -1582,7 +1584,7 @@ class MekaCore(
         syncMutex.withLock { 
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
-            speechApi = transport as? SpeechApi; hereApi = transport as? HereApi
+            speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; healthApi = transport as? HealthApi
         }
         startSync()
     }
@@ -1634,6 +1636,84 @@ class MekaCore(
             .map { os.meka.core.domain.EditAccount(it.provider, it.email) }
             .distinct()
     }
+
+    // ---- Health (Reliability first, item 3) ----
+
+    /** The last good sync this run (the Health screen's "last synced"). */
+    private var lastSyncedMs: Long? = null
+    private val _health = MutableStateFlow<os.meka.core.domain.HealthView?>(null)
+
+    /** The Health screen as last checked ([refreshHealth]); null until checked once. Today reads its [todayLine]. */
+    val healthView: StateFlow<os.meka.core.domain.HealthView?> = _health.asStateFlow()
+
+    /**
+     * Checks everything MEKA depends on ([os.meka.core.domain.HealthRules]): this device's own facts ([device]), the
+     * replica, and the server's three answers (household health, the calendar list, the AI's status), asked together.
+     * Today calls it on open ([force] false: at most every [os.meka.core.domain.HealthRules.TODAY_REFRESH_MS]); the
+     * Health screen forces it. Never throws: an answer that didn't come is "Couldn't check".
+     */
+    suspend fun refreshHealth(device: os.meka.core.domain.DeviceHealth, force: Boolean = true): os.meka.core.domain.HealthView {
+        val last = _health.value
+        if (!force && last != null && nowMs() - last.checkedAtMs < os.meka.core.domain.HealthRules.TODAY_REFRESH_MS) {
+            return refreshHealthLocal(device, last)
+        }
+        val connected = isConnected
+        val (server, accounts, ai) = kotlinx.coroutines.coroutineScope {
+            val s = async { runCatchingNotCancel { healthApi?.householdHealth() } }
+            val a = async { runCatchingNotCancel { accountsApi?.accounts() } }
+            val i = async { if (aiApi == null) null else aiStatus().takeIf { it != os.meka.core.domain.AskRules.STATUS_UNKNOWN } }
+            Triple(s.await(), a.await(), i.await())
+        }
+        accounts?.let(::rememberEditing)
+        val names = onCore { eventActions.calendarNames() }
+        val facts = onCore {
+            healthFacts(device, connected,
+                server?.let { os.meka.core.domain.ServerHealth(it.push, it.calls, it.speech, it.atMs) },
+                accounts?.map { os.meka.core.domain.HealthAccount(it.provider, it.email, os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names), it.status, it.lastSyncAtMs) },
+                ai)
+        }
+        val view = os.meka.core.domain.HealthRules.view(facts, ZoneCalendar(timeZone))
+        _health.value = view
+        return view
+    }
+
+    /** Between server checks, Today's open re-reads this device's own facts against what the server last said. */
+    private suspend fun refreshHealthLocal(device: os.meka.core.domain.DeviceHealth, last: os.meka.core.domain.HealthView): os.meka.core.domain.HealthView {
+        lastHealthServer ?: return last
+        val facts = onCore { healthFacts(device, isConnected, lastHealthServer?.server, lastHealthServer?.accounts, lastHealthServer?.ai) }
+        val view = os.meka.core.domain.HealthRules.view(facts, ZoneCalendar(timeZone)).copy(checkedAtMs = last.checkedAtMs)
+        _health.value = view
+        return view
+    }
+
+    private class HealthServerFacts(val server: os.meka.core.domain.ServerHealth?, val accounts: List<os.meka.core.domain.HealthAccount>?, val ai: os.meka.core.domain.AiStatusView?)
+    private var lastHealthServer: HealthServerFacts? = null
+
+    private fun healthFacts(
+        device: os.meka.core.domain.DeviceHealth, connected: Boolean, server: os.meka.core.domain.ServerHealth?,
+        accounts: List<os.meka.core.domain.HealthAccount>?, ai: os.meka.core.domain.AiStatusView?,
+    ): os.meka.core.domain.HealthFacts {
+        lastHealthServer = HealthServerFacts(server, accounts, ai)
+        val sync = _sync.value
+        val lastVoice = replica.entities(os.meka.core.domain.EntityTypes.HELD_MESSAGE)
+            .filter { it[os.meka.core.domain.HeldMessageFields.KIND].textOrNull == os.meka.core.domain.CaptureKind.VOICE_MESSAGE.name }
+            .mapNotNull { it[os.meka.core.domain.HeldMessageFields.AT].longOrNull }
+            .maxOrNull()
+        return os.meka.core.domain.HealthFacts(
+            device = device, connected = connected, lastSyncedMs = lastSyncedMs,
+            syncTrouble = when (sync) {
+                is SyncStatus.Failing -> sync.reason
+                is SyncStatus.Offline -> if (sync.pending > 0) "Offline · ${sync.pending} change${if (sync.pending == 1) "" else "s"} waiting" else "Offline"
+                else -> null
+            },
+            syncFailing = sync is SyncStatus.Failing,
+            server = server, accounts = accounts, signIns = signIns.all(), ai = ai,
+            callAssistantOn = _workMode.value.callAssistant, lastVoiceMessageMs = lastVoice, nowMs = nowMs(),
+        )
+    }
+
+    private suspend fun <T> runCatchingNotCancel(block: suspend () -> T): T? =
+        try { block() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
 
     // ---- Calendar editing: Add event (slice 2b) ----
 
@@ -2184,6 +2264,7 @@ class MekaCore(
         return try {
             val report = client.syncOnce()
             failures = 0
+            lastSyncedMs = nowMs()
             _sync.value = if (report.rejected.isEmpty()) SyncStatus.Synced(nowMs())
             else SyncStatus.Failing("${report.rejected.size} change(s) were refused by the server", replica.pendingPushCount())
             refresh()

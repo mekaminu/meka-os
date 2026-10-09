@@ -196,6 +196,14 @@ interface HereApi {
     suspend fun hereWeather(lat: Double, lon: Double): os.meka.core.wire.HereCodec.Response
 }
 
+/**
+ * The Health screen's server half (Reliability first, item 3): `POST /v1/health/household`. Null from an older server
+ * without the route (the screen then says "Couldn't check" for what only the server knows).
+ */
+interface HealthApi {
+    suspend fun householdHealth(): os.meka.core.wire.HealthCodec.Response?
+}
+
 /** Account management calls, available once the device is connected. */
 interface AccountsApi {
     /** [editing]: ask the provider for permission to change events too (calendar editing). */
@@ -217,7 +225,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -458,6 +466,18 @@ class HttpSyncTransport(
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/weather/here")
         }
         return codec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun householdHealth(): os.meka.core.wire.HealthCodec.Response? {
+        prepare() // the route requires the device's signing key on the server
+        val resp = send("/v1/health/household", os.meka.core.wire.HealthCodec.encodeRequest())
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/health/household")
+            // An older server without the route, or this device's key isn't registered yet.
+            resp.status.value == 404 || resp.status.value == 403 -> null
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/health/household")
+            else -> os.meka.core.wire.HealthCodec.decodeResponse(resp.bodyAsText())
+        }
     }
 
     private companion object {

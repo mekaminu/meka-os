@@ -61,6 +61,9 @@ class Push(
         if (t.token.isEmpty()) store.remove(who) else store.put(who, t.service, t.token)
     }
 
+    /** Whether [who] has a push address (the Health screen's "Instant updates"). */
+    fun hasAddress(who: DeviceIdentity): Boolean = store.household(who.householdId).any { it.deviceId == who.deviceId }
+
     /** [from] stored ops: wake every other device of its household that has an address. */
     fun changed(from: DeviceIdentity) = wake(from.householdId, except = from.deviceId)
 

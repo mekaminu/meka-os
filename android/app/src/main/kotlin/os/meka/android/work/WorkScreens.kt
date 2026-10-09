@@ -500,7 +500,7 @@ private fun PillButton(label: String, filled: Boolean, onClick: () -> Unit) {
 private fun hasNotificationAccess(context: Context) =
     NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
 
-private fun openListenerSettings(context: Context) {
+internal fun openListenerSettings(context: Context) {
     val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
         .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, ComponentName(context, WorkCaptureService::class.java).flattenToString())
     runCatching { context.startActivity(detail) }

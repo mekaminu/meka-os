@@ -48,6 +48,7 @@ import os.meka.core.sync.SyncService
 import os.meka.core.wire.AskCodec
 import os.meka.core.wire.MessageRequestCodec
 import os.meka.core.wire.GroupDigestCodec
+import os.meka.core.wire.HealthCodec
 import os.meka.core.wire.HereCodec
 import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
@@ -394,6 +395,21 @@ fun Application.mekaSync(
                 val (type, text) = provider.render(reply, voice.publicUrl, callVoice)
                 call.respondText(text, ContentType.parse(type))
             }
+        }
+
+        // The Health screen's server half (Reliability first, item 3): what only the server knows, for the signed-in
+        // device. Never a secret, token or address; keyed devices only, the publisher is refused.
+        post("/v1/health/household") {
+            val body = call.boundedBody()
+            val who = call.device(devices, verifier, body, requireKey = true)
+            HealthCodec.decodeRequest(body)
+            val pushState = when {
+                push == null -> HealthCodec.Response.PUSH_OFF
+                withContext(Dispatchers.IO) { push.hasAddress(who) } -> HealthCodec.Response.PUSH_ON
+                else -> HealthCodec.Response.PUSH_MISSING
+            }
+            val health = HealthCodec.Response(pushState, calls = voice != null, speech = speech != null, atMs = System.currentTimeMillis())
+            call.respondText(HealthCodec.encodeResponse(health), ContentType.Application.Json)
         }
 
         // Long-poll for an open app: answers as soon as the household has ops after the cursor, else empty after

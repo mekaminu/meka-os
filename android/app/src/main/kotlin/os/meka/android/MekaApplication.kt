@@ -71,6 +71,8 @@ class MekaApplication : Application() {
     val openAfterWork = MutableStateFlow(false)
     /** Dismissing the wake alarm: Today opens the morning brief, then clears it. */
     val openBrief = MutableStateFlow(false)
+    /** Today's health line → Ask → More → Health (Reliability first, item 3). */
+    val openHealth = MutableStateFlow(false)
     /** Appearance → "Play the opening": Today replays its opening (Day ring, tiles, greeting, stagger), then clears it. */
     val playOpening = MutableStateFlow(false)
     /** The wake alarm (Alarms, slice 1), registered with Android whenever the core's next alarm changes. */

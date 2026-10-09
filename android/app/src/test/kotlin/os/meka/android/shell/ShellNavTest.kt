@@ -71,7 +71,7 @@ class ShellNavTest {
         assertEquals(listOf("Lists", "Goals and habits", "Review", "Vault"), sections[0].items.map { it.label })
         assertEquals(listOf("Morning brief", "News", "Shut down the day"), sections[1].items.map { it.label })
         assertEquals(
-            listOf("Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Activity", "Your data"),
+            listOf("Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Health", "Activity", "Your data"),
             sections[2].items.map { it.label },
         )
         // The same rows as the flat list, in the same order; the places are exactly the Places section.
@@ -93,6 +93,17 @@ class ShellNavTest {
         assertEquals(14, ShellNav.moreRowStep(2, 7))
         // Each label comes before its own rows.
         for (s in 0..2) assertTrue(ShellNav.moreLabelStep(s) < ShellNav.moreRowStep(s, 0))
+    }
+
+    @Test
+    fun healthSaysItsSummaryAndIsLitWhenSomethingNeedsALook() {
+        // Reliability first, item 3.
+        assertEquals("Is everything MEKA needs working?", ShellNav.moreLine(MoreItem.HEALTH, 0))
+        assertEquals("2 things need a look", ShellNav.moreLine(MoreItem.HEALTH, 0, health = "2 things need a look"))
+        assertTrue(ShellNav.moreLit(MoreItem.HEALTH, 0, healthAttention = 2))
+        assertFalse(ShellNav.moreLit(MoreItem.HEALTH, 3, healthAttention = 0))
+        // Health shows before this device is connected (it says so), unlike Calendars.
+        assertTrue(MoreItem.HEALTH in ShellNav.more(connected = false))
     }
 
     @Test

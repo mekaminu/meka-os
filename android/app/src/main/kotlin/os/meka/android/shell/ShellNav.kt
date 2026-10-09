@@ -65,6 +65,7 @@ enum class MoreItem(val label: String, val line: String, val destination: ShellD
     VOICE("MEKA's voice", "How MEKA sounds in Talk, the brief and calls", null, MoreGroup.SETTINGS),
     TALK("Talk", "The side button and your headphones", null, MoreGroup.SETTINGS),
     CALENDARS("Calendars", "Connected accounts and feeds", null, MoreGroup.SETTINGS),
+    HEALTH("Health", "Is everything MEKA needs working?", null, MoreGroup.SETTINGS),
     ACTIVITY("Activity", "What MEKA did and why", null, MoreGroup.SETTINGS),
     YOUR_DATA("Your data", "Export everything as one file", null, MoreGroup.SETTINGS),
 }
@@ -104,16 +105,20 @@ object ShellNav {
     /**
      * Stagger steps for More (40 ms apart, after the title 0, field 1): each section starts one step after the one
      * before began rather than after its last row, so the list settles quickly; a label leads its rows by one step.
-     * Places: label 2, rows 3–6 · Daily: label 4, rows 5–7 · Settings: label 6, rows 7–14.
+     * Places: label 2, rows 3–6 · Daily: label 4, rows 5–7 · Settings: label 6, rows 7–15.
      */
     fun moreLabelStep(section: Int): Int = 2 + 2 * section
 
     fun moreRowStep(section: Int, row: Int): Int = moreLabelStep(section) + 1 + row
 
-    /** A More row's line: Lists says what's due when something is ("2 need you"), else the fixed words. */
-    fun moreLine(item: MoreItem, listsDue: Int, atWork: Boolean = false): String = when {
+    /**
+     * A More row's line: Lists says what's due when something is ("2 need you"), Health its summary once checked
+     * ("2 things need a look"), else the fixed words.
+     */
+    fun moreLine(item: MoreItem, listsDue: Int, atWork: Boolean = false, health: String? = null): String = when {
         item == MoreItem.LISTS && listsDue > 0 -> "$listsDue need${if (listsDue == 1) "s" else ""} you · ${item.line}"
         item == MoreItem.WORK -> workLine(atWork)
+        item == MoreItem.HEALTH && health != null -> health
         else -> item.line
     }
 
@@ -124,7 +129,8 @@ object ShellNav {
     fun workLine(atWork: Boolean): String = "${if (atWork) "At work" else "Off work"} · ${MoreItem.WORK.line}"
 
     /** Whether a More row's line is lit in the accent colour. */
-    fun moreLit(item: MoreItem, listsDue: Int): Boolean = item == MoreItem.LISTS && listsDue > 0
+    fun moreLit(item: MoreItem, listsDue: Int, healthAttention: Int = 0): Boolean =
+        (item == MoreItem.LISTS && listsDue > 0) || (item == MoreItem.HEALTH && healthAttention > 0)
 
     /** A tab's icon; the places behind Ask aren't in the bar, so they have none. */
     fun glyph(d: ShellDestination): TabGlyph? = when (d) {

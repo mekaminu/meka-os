@@ -34,8 +34,8 @@ struct AskScreen: View {
                             if ShellNav.unfoldsInPlace(item) {
                                 AppearanceRow(palette: palette)
                             } else {
-                                MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue, atWork: model.work?.atWork == true),
-                                        lit: ShellNav.moreLit(item, listsDue: model.listsDue), palette: palette) { open(item) }
+                                MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue, atWork: model.work?.atWork == true, health: model.health?.summary),
+                                        lit: ShellNav.moreLit(item, listsDue: model.listsDue, healthAttention: Int(model.health?.attention ?? 0)), palette: palette) { open(item) }
                             }
                         }
                         .staggeredAppear(ShellNav.moreRowStep(s, i))
@@ -63,6 +63,7 @@ struct AskScreen: View {
         case .calendars: model.showCalendars = true
         case .voice: model.showVoice = true
         case .talk: model.showTalk = true
+        case .health: model.showHealth = true
         case .lists, .goals, .review, .vault, .appearance: break
         }
     }

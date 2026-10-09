@@ -102,6 +102,7 @@ fun AskRoute(
 ) {
     val lists by core.listsView.collectAsState()
     val work by core.workMode.collectAsState()
+    val health by core.healthView.collectAsState()
     // Appearance unfolds its three choices in its own row.
     var appearanceOpen by rememberSaveable { mutableStateOf(false) }
     var pane by rememberSaveable { mutableStateOf<MoreItem?>(null) }
@@ -113,6 +114,12 @@ fun AskRoute(
     val closeSearch = { showSearch = false; searchEpoch += 1 }
     val sections = ShellNav.moreSections(connected)
     val undo = rememberEventUndo()
+    // Today's health line → Open Health (Reliability first, item 3).
+    val healthApp = LocalContext.current.applicationContext as? os.meka.android.MekaApplication
+    val openHealth by remember(healthApp) { healthApp?.openHealth ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
+    LaunchedEffect(openHealth) {
+        if (openHealth) { pane = MoreItem.HEALTH; healthApp?.openHealth?.value = false }
+    }
     // Back closes whatever sprang up over Ask before it leaves the app.
     BackHandler(enabled = pane != null || showSearch) { if (showSearch) closeSearch() else pane = null }
 
@@ -152,7 +159,7 @@ fun AskRoute(
                     if (ShellNav.unfoldsInPlace(item)) {
                         AppearanceRow(appearanceOpen, Modifier.appear(rememberAppearance(step)), openTopics = { pane = MoreItem.NEWS }, playOpening = playOpening) { appearanceOpen = !appearanceOpen }
                     } else {
-                        MoreRow(item, ShellNav.moreLine(item, lists.dueCount, work.atWork), ShellNav.moreLit(item, lists.dueCount),
+                        MoreRow(item, ShellNav.moreLine(item, lists.dueCount, work.atWork, health?.summary), ShellNav.moreLit(item, lists.dueCount, health?.attention ?: 0),
                             pane == item, Modifier.appear(rememberAppearance(step))) {
                             val d = item.destination
                             if (d != null) openPlace(d) else pane = item
@@ -171,6 +178,15 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.CALENDARS) { CalendarsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.VOICE) { VoicePane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.TALK) { TalkPane(onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.HEALTH) {
+            HealthPane(core, onClose = { pane = null }, openPane = { f ->
+                pane = when (f) {
+                    os.meka.core.domain.HealthFix.CALENDARS -> MoreItem.CALENDARS
+                    os.meka.core.domain.HealthFix.WORK -> MoreItem.WORK
+                    else -> pane
+                }
+            })
+        }
         MekaPane(visible = showSearch) {
             SearchPane(core, onClose = closeSearch, openItem = { item -> showSearch = false; openItem(item) },
                 initialQuery = searchSeed, initialTask = searchTask)

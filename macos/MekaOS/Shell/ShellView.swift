@@ -62,6 +62,8 @@ struct ShellView: View {
         .sheet(isPresented: Binding(get: { model.showVoice }, set: { model.showVoice = $0 })) { VoiceSheet(palette: palette) }
         // Talk (Ask → More): ⌥Space and the mic, and why it stays safe.
         .sheet(isPresented: Binding(get: { model.showTalk }, set: { model.showTalk = $0 })) { TalkSheet(palette: palette) }
+        // Health (Ask → More, and Today's health line): everything MEKA depends on, with the next step.
+        .sheet(isPresented: Binding(get: { model.showHealth }, set: { model.showHealth = $0 })) { HealthSheet(palette: palette) }
         // Opened from Today's header or Ask's More list, so they live on the shell.
         .sheet(isPresented: Binding(get: { model.showCalendars }, set: { model.showCalendars = $0 })) { CalendarsSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showWork }, set: { model.showWork = $0 })) { WorkSheet(palette: palette) }

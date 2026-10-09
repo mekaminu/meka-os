@@ -1061,4 +1061,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(SignInRules.shared.entityId(key: "accAbc"), "sign_in.accabc")
         XCTAssertEqual(NoticeSource.signIn.label, "Calendar sign-ins")
     }
+
+    func testHealthReachesSwift() {
+        // Reliability first, item 3: a row as the core makes it (the Mac's fixes: HealthSheetTests).
+        let reconnect = HealthRow(key: "calendar:google:meka@gmail.com", title: "Calendar · Personal", line: "Google sign-in expired",
+                                  state: .bad, fix: .reconnect, fixLabel: "Reconnect", provider: "google", account: "meka@gmail.com", editing: true)
+        XCTAssertTrue(reconnect.needsLook)
+        XCTAssertEqual(reconnect.fix, .reconnect)
+        let battery = HealthRow(key: "battery", title: "Battery", line: "Samsung may put MEKA to sleep",
+                                state: .warn, fix: .battery, fixLabel: "Keep MEKA awake", provider: nil, account: nil, editing: false)
+        XCTAssertTrue(battery.needsLook)
+        XCTAssertEqual(HealthRules.shared.TODAY_REFRESH_MS, 15 * 60_000)
+    }
 }

@@ -118,6 +118,11 @@ final class CoreModel {
     var showVoice = false
     /// Ask → More → Talk (Talk without tapping the mic): how to start talking on the Mac.
     var showTalk = false
+    /// Ask → More → Health (Reliability first, item 3), also from Today's health line.
+    var showHealth = false
+    /// The Health screen as last checked; Today shows its `todayLine`. Nil until checked once.
+    private(set) var health: HealthView?
+    private(set) var checkingHealth = false
     private(set) var exportSummary: ExportSummary?
     /// Your data's line on how MEKA's database on this Mac is protected (encrypted, or FileVault only).
     private(set) var databaseLine: String?
@@ -235,6 +240,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await l in core.signInLine { self?.signInLines = l }
+        })
+        observers.append(Task { [weak self] in
+            for await h in core.healthView { self?.health = h }
         })
         observers.append(Task { [weak self] in
             for await n in core.newsPlace { self?.newsPlace = n }
@@ -923,6 +931,20 @@ final class CoreModel {
     private(set) var aiStatus: AiStatusView?
     /// The last Ask card whose Undo was pressed, so Ask shows it again.
     private(set) var askUndone: AskUndone?
+
+    // MARK: Health (Reliability first, item 3)
+
+    /// Checks everything MEKA depends on. `force` false (Today's open) asks the server at most every quarter hour.
+    /// The Mac's own facts are made here and handed to the core once.
+    func refreshHealth(force: Bool = true) async {
+        guard let core else { return }
+        checkingHealth = true
+        defer { checkingHealth = false }
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        let device = DeviceHealth(mac: true, batteryExempt: nil, batteryStopped: false, notificationAccess: nil,
+                                  lastNotificationMs: nil, callRoleHeld: nil, version: version, updateReady: false)
+        _ = try? await core.refreshHealth(device: device, force: force)
+    }
 
     func refreshAiStatus() async {
         guard let core, !signedOut else { aiStatus = AskRules.shared.STATUS_NOT_CONNECTED; return }

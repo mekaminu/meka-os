@@ -60,13 +60,23 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(sections.map(\.group.label), ["Places", "Daily", "Settings"])
         XCTAssertEqual(sections[0].items.map(\.label), ["Lists", "Goals and habits", "Review", "Vault"])
         XCTAssertEqual(sections[1].items.map(\.label), ["Morning brief", "News", "Shut down the day"])
-        XCTAssertEqual(sections[2].items.map(\.label), ["Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Activity", "Your data"])
+        XCTAssertEqual(sections[2].items.map(\.label), ["Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Health", "Activity", "Your data"])
         XCTAssertEqual(sections.flatMap(\.items), ShellNav.more(connected: true))
         XCTAssertTrue(sections[0].items.allSatisfy { $0.destination != nil })
         XCTAssertTrue(sections.dropFirst().flatMap(\.items).allSatisfy { $0.destination == nil })
         let offline = ShellNav.moreSections(connected: false)
         XCTAssertEqual(offline.count, 3)
         XCTAssertFalse(offline[2].items.contains(.calendars))
+    }
+
+    @MainActor
+    func testHealthSaysItsSummaryAndIsLit() {
+        // Reliability first, item 3.
+        XCTAssertEqual(ShellNav.moreLine(.health, listsDue: 0), "Is everything MEKA needs working?")
+        XCTAssertEqual(ShellNav.moreLine(.health, listsDue: 0, health: "2 things need a look"), "2 things need a look")
+        XCTAssertTrue(ShellNav.moreLit(.health, listsDue: 0, healthAttention: 1))
+        XCTAssertFalse(ShellNav.moreLit(.health, listsDue: 2))
+        XCTAssertTrue(ShellNav.more(connected: false).contains(.health))
     }
 
     @MainActor
