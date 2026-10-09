@@ -121,8 +121,12 @@ struct AfterWorkCard: View {
     var body: some View {
         if let summary = model.afterWork, !summary.isEmpty {
             if model.work?.atWork == true {
-                Text("\(model.work?.line ?? "At work") · \(summary.itemCount) held for later")
-                    .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                if let preview = model.heldPreview {
+                    HeldPreviewView(preview: preview, palette: palette)
+                } else {
+                    Text("\(model.work?.line ?? "At work") · \(summary.itemCount) held for later")
+                        .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
             } else {
                 Button { model.showAfterWork = true } label: {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -139,6 +143,60 @@ struct AfterWorkCard: View {
                 }
                 .buttonStyle(MekaPressStyle())
                 .mekaHoverLift()
+            }
+        }
+    }
+}
+
+/// "At work · 3 held for later" (Fold review 2026-10-09, item 5): clicking it unfolds what's held in place — sender ·
+/// first line · time, newest first, at most five — with the expand spring and a tick haptic; the chevron turns. A
+/// preview only: nothing is marked read or cleared (the after-work summary and its Done are unchanged).
+/// Reduce Motion: cross-fades.
+struct HeldPreviewView: View {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let preview: HeldPreview
+    let palette: MekaPalette
+    @State private var open = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Button {
+                MekaHaptics.tick()
+                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open.toggle() }
+            } label: {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(preview.label).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(palette.accent)
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(MekaPressStyle())
+            .disabled(preview.isEmpty)
+            .accessibilityHint(open ? HeldPreviewRules.shared.HIDE_HINT : HeldPreviewRules.shared.SHOW_HINT)
+
+            if open && !preview.isEmpty {
+                VStack(alignment: .leading, spacing: MekaSpace.s) {
+                    ForEach(Array(preview.rows.enumerated()), id: \.element.id) { i, r in
+                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                            HStack(spacing: MekaSpace.xs) {
+                                Text(r.who).font(MekaType.itemMeta.weight(.semibold)).foregroundStyle(palette.textPrimary).lineLimit(1)
+                                Text("\(r.app.label) · \(r.time)").font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                            }
+                            Text(r.line).font(MekaType.body).foregroundStyle(r.urgent ? palette.critical : palette.textSecondary).lineLimit(2)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .staggeredAppear(i)
+                    }
+                    if let more = preview.moreLine {
+                        Text(more).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(preview.rows.count)
+                    }
+                    Text(preview.caption).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+                .padding(MekaSpace.m)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
     }

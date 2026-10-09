@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -45,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -68,6 +70,9 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AfterWorkSummary
 import os.meka.core.domain.CallScreeningRules
+import os.meka.core.domain.HeldPreview
+import os.meka.core.domain.HeldPreviewRow
+import os.meka.core.domain.HeldPreviewRules
 import os.meka.core.domain.LocalClock
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.PersonSummary
@@ -278,11 +283,12 @@ fun AfterWorkCard(core: MekaCore, modifier: Modifier = Modifier, onOpen: () -> U
     val lists by store.lists.collectAsState()
     val work by core.workMode.collectAsState()
     if (synced.isEmpty) return
+    val summary = remember(synced, lists) { synced.withLists(lists) }
     if (work.atWork) {
-        Text("${work.line} · ${synced.itemCount} held for later", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = modifier)
+        val preview = remember(summary, work) { core.heldPreview(summary) }
+        HeldPreviewLine(preview, modifier)
         return
     }
-    val summary = remember(synced, lists) { synced.withLists(lists) }
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onOpen() }.padding(MekaSpace.m),
@@ -292,6 +298,59 @@ fun AfterWorkCard(core: MekaCore, modifier: Modifier = Modifier, onOpen: () -> U
         if (summary.urgentPeople > 0) {
             Text("${summary.urgentPeople} urgent", style = MekaType.caption.copy(fontWeight = FontWeight.SemiBold), color = Meka.colors.critical)
         }
+    }
+}
+
+/**
+ * "At work · 3 held for later" (Fold review 2026-10-09, item 5): tapping it unfolds what's held in place — sender ·
+ * first line · time, newest first, at most five — with the expand spring and a tick haptic; the chevron turns. A
+ * preview only: nothing is marked read or cleared (the after-work summary and its Done are unchanged).
+ */
+@Composable
+internal fun HeldPreviewLine(preview: HeldPreview, modifier: Modifier = Modifier) {
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    var open by rememberSaveable { mutableStateOf(false) }
+    val turn by animateFloatAsState(if (open) 90f else 0f, if (reduced) MekaMotion.appear<Float>(true) else MekaMotion.expand<Float>(false), label = "held-chevron")
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s))
+                .clickable(role = Role.Button, enabled = !preview.isEmpty) { haptics.tick(); open = !open }
+                .semantics { contentDescription = preview.label + ". " + if (open) HeldPreviewRules.HIDE_HINT else HeldPreviewRules.SHOW_HINT }
+                .padding(vertical = MekaSpace.xs),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            Text(preview.label, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f, fill = false))
+            Text("›", style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.rotate(turn))
+        }
+        AnimatedVisibility(
+            visible = open && !preview.isEmpty,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut() else shrinkVertically(MekaMotion.expand(false)) + fadeOut(),
+        ) {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+            ) {
+                preview.rows.forEachIndexed { i, r -> HeldPreviewRowView(r, Modifier.appear(rememberAppearance(i))) }
+                preview.moreLine?.let {
+                    Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(preview.rows.size)))
+                }
+                Text(preview.caption, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeldPreviewRowView(r: HeldPreviewRow, modifier: Modifier) {
+    Column(modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Text(r.who, style = MekaType.itemMeta.copy(fontWeight = FontWeight.SemiBold), color = Meka.colors.textPrimary, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+            Text("${r.app.label} · ${r.time}", style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1)
+        }
+        Text(r.line, style = MekaType.body, color = if (r.urgent) Meka.colors.critical else Meka.colors.textSecondary, maxLines = 2)
     }
 }
 

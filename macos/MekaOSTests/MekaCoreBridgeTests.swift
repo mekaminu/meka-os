@@ -874,6 +874,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TimelineRules.shared.restLabel(until: nil, work: nil, anytime: 0), "Nothing else planned today")
     }
 
+    /// Fold review 2026-10-09, item 5: "3 held for later" unfolds a preview; its words reach Swift.
+    func testHeldPreviewReachesSwift() {
+        let rules = HeldPreviewRules.shared
+        XCTAssertEqual(rules.label(workLine: "At work until 17:30", count: 3), "At work until 17:30 · 3 held for later")
+        XCTAssertEqual(rules.moreLine(more: 2), "+2 more — all of them after work")
+        XCTAssertEqual(rules.firstLine(text: "Can you grab milk?\nAnd bread"), "Can you grab milk?")
+        XCTAssertTrue(rules.CAPTION.contains("nothing is marked read"))
+        let empty = HeldPreview(label: "At work · 0 held for later", rows: [], more: 0)
+        XCTAssertTrue(empty.isEmpty)
+        XCTAssertNil(empty.moreLine)
+    }
+
     /// Calendar editing, slice 2b: the Add event sheet's form steps and view reach Swift.
     func testPlanCalendarRulesReachSwift() {
         let google = EditAccount(provider: "google", email: "me@gmail.com")

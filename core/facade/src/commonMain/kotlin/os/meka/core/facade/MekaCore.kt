@@ -1285,6 +1285,14 @@ class MekaCore(
         os.meka.core.domain.CoverNowRules.upNext(_today.value, nowMs(), ZoneCalendar(timeZone))
 
     /**
+     * What "3 held for later" unfolds to in Needs you during work (Fold review 2026-10-09, item 5): sender · first line ·
+     * time, newest first, at most five. [summary] is the one the device shows (the Fold passes its lists-applied copy;
+     * the Mac passes [afterWork]'s). A preview only: nothing is marked read or cleared. Pure.
+     */
+    fun heldPreview(summary: os.meka.core.domain.AfterWorkSummary): os.meka.core.domain.HeldPreview =
+        os.meka.core.domain.HeldPreviewRules.build(summary, _workMode.value.line, nowMs(), ZoneCalendar(timeZone))
+
+    /**
      * What runs outside the app (Outside the app, slice 1): the next event's countdown from 30 minutes before it and a
      * running fast, for the Fold's ongoing notifications and the Mac's menu bar. Pure and cheap, read from the current
      * Today and fasting views; [OngoingView.nextChangeMs] says when to look again. Nothing is stored.

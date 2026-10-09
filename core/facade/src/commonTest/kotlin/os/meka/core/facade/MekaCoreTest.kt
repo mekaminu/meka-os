@@ -89,6 +89,12 @@ class MekaCoreTest {
         a.syncNow(); m.syncNow()
         assertEquals("1 person · 1 message", m.afterWork.value.headline)
         assertTrue(m.afterWork.value.people.single().isFamily)
+        // Fold review 2026-10-09, item 5: the "held for later" line unfolds a preview; looking clears nothing.
+        val preview = m.heldPreview(m.afterWork.value)
+        assertTrue(preview.label.endsWith(" · 1 held for later"))
+        assertEquals("Mum", preview.rows.single().who)
+        assertEquals("call me", preview.rows.single().line)
+        assertEquals("1 person · 1 message", m.afterWork.value.headline)
         assertEquals(1, m.clearAfterWork())
         m.syncNow(); a.syncNow()
         assertTrue(a.afterWork.value.isEmpty)

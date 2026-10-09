@@ -1307,6 +1307,14 @@ final class CoreModel {
         return core?.upNextCard()
     }
 
+    /// What "3 held for later" unfolds to in Needs you during work (Fold review 2026-10-09, item 5): sender · first line ·
+    /// time, newest first, at most five. A preview only: nothing is marked read. Nil when nothing is held.
+    var heldPreview: HeldPreview? {
+        _ = work // observed: the label follows work mode's line
+        guard let core, let summary = afterWork, !summary.isEmpty else { return nil }
+        return core.heldPreview(summary: summary)
+    }
+
     /// What runs outside the app (Outside the app, slice 1): beside MEKA's mark in the menu bar, the next event's
     /// countdown from half an hour before ("12 min", then "Now") or a running fast ("14 h 12 m"). Read from Today and the
     /// fast, so it follows Today's minute refresh. nil when nothing is going on.
