@@ -74,6 +74,9 @@ data class MorningBriefView(
     /** Today's weather under the date (Weather slice 2): "9–15°, light rain from 15:00 — take a coat"; set by the facade. */
     val weatherLine: String? = null,
 ) {
+    /** [day] as the brief pane draws it (Fold review 2026-10-09 07:26, item 7): see [BriefRules.dayLine]. */
+    val dayLines: List<BriefDayLine> get() = day.map(BriefRules::dayLine)
+
     companion object {
         val EMPTY = MorningBriefView(
             offered = false, seenToday = false, startMinute = BriefRules.DEFAULT_START_MIN, greeting = "Good morning",
@@ -84,8 +87,33 @@ data class MorningBriefView(
     }
 }
 
+/**
+ * One row of the brief's Today section as the pane draws it (Fold review 2026-10-09 07:26, item 7): every row's title
+ * sits on one left edge in the regular `body` weight, after a 22 dp lead — a tick circle for a task ([taskId] set;
+ * tapping it completes the task), a small dot for an event — and the time moves into [caption] ("09:30 · Room 4",
+ * "All day", "14:00 · ↻ Daily", "Overdue"). [lit] colours the caption in the accent (an overdue task). [spoken] is
+ * the screen reader's label.
+ */
+data class BriefDayLine(
+    val id: String,
+    val taskId: String?,
+    val title: String,
+    val caption: String?,
+    val lit: Boolean,
+    val spoken: String,
+)
+
 /** Pure rules, unit-tested without a replica. */
 object BriefRules {
+    /** A brief row ([TomorrowRow]: events "e-<id>", tasks "t-<id>") as the pane draws it. */
+    fun dayLine(r: TomorrowRow): BriefDayLine {
+        val taskId = if (!r.isEvent && r.id.startsWith("t-")) r.id.removePrefix("t-") else null
+        val caption = listOfNotNull(r.time, r.detail).joinToString(" · ").ifEmpty { null }
+        val lit = taskId != null && r.detail?.startsWith("Overdue") == true
+        val spoken = listOfNotNull(if (taskId != null) "Task" else "Event", r.title, caption).joinToString(", ")
+        return BriefDayLine(r.id, taskId, r.title, caption, lit, spoken)
+    }
+
     /**
      * "Work 09:00–17:30" on a work day; on a bank holiday that would have been one, "Christmas Day · no work"; else null.
      * Shared by the brief and the shutdown's tomorrow preview.

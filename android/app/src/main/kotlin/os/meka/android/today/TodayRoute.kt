@@ -930,25 +930,29 @@ internal fun TaskRow(
  * animateItem. Motion → Off: shown done at once and completed straight away.
  */
 @Composable
-internal fun CompleteButton(t: Task, onComplete: (String) -> Unit) {
-    var pressed by remember(t.id) { mutableStateOf(false) }
+internal fun CompleteButton(t: Task, onComplete: (String) -> Unit) = CompleteButton(t.id, t.title, onComplete)
+
+/** [CompleteButton] for a task known by its id and title (the brief's Today rows), [size] across. */
+@Composable
+internal fun CompleteButton(id: String, title: String, onComplete: (String) -> Unit, size: androidx.compose.ui.unit.Dp = 28.dp) {
+    var pressed by remember(id) { mutableStateOf(false) }
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
-    val draw = remember(t.id) { Animatable(0f) }
+    val draw = remember(id) { Animatable(0f) }
     val done by rememberUpdatedState(onComplete)
     LaunchedEffect(pressed) {
         if (!pressed) return@LaunchedEffect
         val ms = MotionMath.checkDrawMs(reduced)
         if (ms == 0) draw.snapTo(1f) else draw.animateTo(1f, tween(ms, easing = LinearEasing))
-        done(t.id)
+        done(id)
     }
     CheckRing(
         fraction = draw.value,
         rest = Meka.colors.textTertiary, accent = Meka.colors.accent, onAccent = Meka.colors.onAccent,
         modifier = Modifier
-            .size(28.dp)
+            .size(size)
             .clip(CircleShape)
-            .semantics { contentDescription = "Complete ${t.title}" }
+            .semantics { contentDescription = "Complete $title" }
             .clickable(role = Role.Checkbox) {
                 if (!pressed) {
                     pressed = true

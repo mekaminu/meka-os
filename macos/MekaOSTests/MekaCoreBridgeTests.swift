@@ -684,6 +684,18 @@ final class MekaCoreBridgeTests: XCTestCase {
                        "9 to 15 degrees, light rain from 15:00, take a coat")
     }
 
+    /// Fold review 2026-10-09 07:26, item 7: the brief's Today rows (one left edge; a task carries its id for the tick).
+    func testBriefDayLinesReachSwift() {
+        let task = BriefRules.shared.dayLine(r: TomorrowRow(id: "t-milk", time: nil, title: "Buy milk", isEvent: false, detail: "Overdue"))
+        XCTAssertEqual(task.taskId, "milk")
+        XCTAssertEqual(task.caption, "Overdue")
+        XCTAssertTrue(task.lit)
+        let event = BriefRules.shared.dayLine(r: TomorrowRow(id: "e-1", time: "09:30", title: "Standup", isEvent: true, detail: nil))
+        XCTAssertNil(event.taskId)
+        XCTAssertEqual(event.spoken, "Event, Standup, 09:30")
+        XCTAssertTrue(MorningBriefView.companion.EMPTY.dayLines.isEmpty)
+    }
+
     /// Morning brief read aloud: every headline shown is read ("From BBC Sport: …"), and a long read keeps MEKA's voice.
     func testBriefReadsEveryHeadlineInMekasVoice() {
         let shown = [

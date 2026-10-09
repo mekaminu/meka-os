@@ -195,15 +195,17 @@ fun MekaPane(visible: Boolean, origin: (() -> Bounds?)?, content: @Composable ()
                 if (opened != null) {
                     ContainerSheet(this@AnimatedVisibility, row ?: opened, content)
                 } else {
+                    val dark = Meka.theme.isDark
+                    val topRadius = if (MotionMath.sheetTopRounded(dark)) MekaRadius.l else 0.dp
                     Box(
-                        Modifier.fillMaxSize().padding(top = MekaSpace.xs)
+                        Modifier.fillMaxSize().padding(top = MotionMath.sheetTopGapDp(dark).dp)
                             .animateEnterExit(
                                 enter = if (reduced) fadeIn(MekaMotion.expand(true)) else
                                     slideInVertically(MekaMotion.expand(false)) { it / 3 } + fadeIn(MekaMotion.appear(false)),
                                 exit = if (reduced) fadeOut(MekaMotion.expand(true)) else
                                     slideOutVertically(MekaMotion.expand(false)) { it / 3 } + fadeOut(MekaMotion.appear(false)),
                             )
-                            .clip(RoundedCornerShape(topStart = MekaRadius.l, topEnd = MekaRadius.l))
+                            .clip(RoundedCornerShape(topStart = topRadius, topEnd = topRadius))
                             .background(Meka.colors.background),
                     ) { content() }
                 }
@@ -222,10 +224,11 @@ private fun ContainerSheet(scope: AnimatedVisibilityScope, row: Bounds, content:
     // Where the sheet sits in the root, so the row can be put in its coordinates; written on placement, read on draw.
     val at = remember { floatArrayOf(0f, 0f) }
     val density = LocalDensity.current
+    val dark = Meka.theme.isDark
     val rowRadius = with(density) { MekaRadius.m.toPx() }
-    val sheetRadius = with(density) { MekaRadius.l.toPx() }
+    val sheetRadius = if (MotionMath.sheetTopRounded(dark)) with(density) { MekaRadius.l.toPx() } else 0f
     Box(
-        Modifier.fillMaxSize().padding(top = MekaSpace.xs)
+        Modifier.fillMaxSize().padding(top = MotionMath.sheetTopGapDp(dark).dp)
             .onPlaced { c -> val p = c.positionInRoot(); at[0] = p.x; at[1] = p.y }
             .graphicsLayer {
                 val p = progress

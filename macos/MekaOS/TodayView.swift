@@ -685,28 +685,42 @@ private struct UpNextCard: View {
 struct CompleteButton: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
-    let task: MekaTask
+    let id: String
+    let title: String
     let palette: MekaPalette
+    var size: CGFloat = 22
     @State private var began: Date?
+
+    init(task: MekaTask, palette: MekaPalette) {
+        self.init(id: task.id, title: task.title, palette: palette)
+    }
+
+    /// A task known by its id and title (the brief's Today rows, Fold review 2026-10-09 07:26, item 7).
+    init(id: String, title: String, palette: MekaPalette, size: CGFloat = 22) {
+        self.id = id
+        self.title = title
+        self.palette = palette
+        self.size = size
+    }
 
     var body: some View {
         Button {
             guard began == nil else { return }
             began = Date()
             MekaHaptics.light()
-            let id = task.id
+            let taskId = id
             let draw = MotionMath.checkDraw(reduced: reduceMotion)
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(Int(draw * 1000) + 50))
-                model.complete(id)
+                model.complete(taskId)
             }
         } label: {
             CheckRingView(palette: palette, began: began)
-                .frame(width: 22, height: 22)
+                .frame(width: size, height: size)
                 .contentShape(Circle())
         }
         .buttonStyle(MekaPressStyle())
-        .accessibilityLabel("Complete \(task.title)")
+        .accessibilityLabel("Complete \(title)")
     }
 }
 

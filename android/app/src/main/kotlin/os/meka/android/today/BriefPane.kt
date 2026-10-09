@@ -20,7 +20,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,6 +44,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -55,6 +62,7 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.goals.Chips
 import os.meka.android.ask.MekaSpeaker
+import os.meka.core.domain.BriefDayLine
 import os.meka.core.domain.BriefHeadline
 import os.meka.core.domain.BriefSpeech
 import os.meka.core.domain.BriefLine
@@ -130,7 +138,11 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
                 Text(v.daySummary, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
             }
         }
-        items(v.day, key = { "d-" + it.id }) { r -> TomorrowLine(r, Modifier.animateItem().appear(rememberAppearance(1))) }
+        // Fold review 2026-10-09 07:26, item 7: titles on one left edge in the regular weight, a tick circle for a
+        // task (completes it like Today's rows: ring, check, light haptic, then the row leaves), a dot for an event.
+        items(v.dayLines, key = { "d-" + it.id }) { r ->
+            BriefDayRow(r, Modifier.animateItem().appear(rememberAppearance(1))) { id -> scope.launch { runCatching { core.complete(id) } } }
+        }
 
         val waitingLine = v.waitingLine
         if (waitingLine != null) {
@@ -235,6 +247,36 @@ private fun ListenPill(speaking: Boolean, modifier: Modifier = Modifier, onClick
     ) {
         Crossfade(targetState = speaking, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "listen") { on ->
             Text(if (on) "■  Stop" else "▶  Listen", style = MekaType.itemMeta, color = Meka.colors.accent)
+        }
+    }
+}
+
+/** Test tag on each of the brief's Today rows (BriefDayRowTest). */
+internal const val BRIEF_DAY_ROW_TAG = "brief-day-row"
+
+/** The lead slot every brief row's title follows: a task's tick circle or an event's dot. */
+private val BRIEF_LEAD = 22.dp
+
+/**
+ * One row of the brief's Today section (Fold review 2026-10-09 07:26, item 7; [BriefDayLine]): the 22 dp lead (a
+ * task's tick circle, tappable, or an event's small dot), then the title in `body` and the caption (the time and
+ * detail; an overdue task's lit in the accent). No time column, so nothing is indented into empty space.
+ */
+@Composable
+internal fun BriefDayRow(r: BriefDayLine, modifier: Modifier = Modifier, onComplete: (String) -> Unit) {
+    Row(
+        modifier.fillMaxWidth().testTag(BRIEF_DAY_ROW_TAG).padding(vertical = MekaSpace.xs),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(Modifier.size(BRIEF_LEAD).offset(y = 1.dp), contentAlignment = Alignment.Center) {
+            val taskId = r.taskId
+            if (taskId != null) CompleteButton(taskId, r.title, onComplete, size = BRIEF_LEAD)
+            else Box(Modifier.size(6.dp).clip(CircleShape).background(Meka.colors.textTertiary))
+        }
+        Spacer(Modifier.width(MekaSpace.m))
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
+            Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            r.caption?.let { Text(it, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textTertiary) }
         }
     }
 }

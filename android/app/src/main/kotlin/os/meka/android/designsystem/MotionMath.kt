@@ -101,6 +101,16 @@ object MotionMath {
     /** How much longer (ms) the ring keeps spinning after a sync that took [elapsedMs], so a quick sync is still seen. */
     fun ringHoldMs(elapsedMs: Long): Long = (MekaChoreography.syncSpinPeriodMs - elapsedMs).coerceAtLeast(0L)
 
+    /**
+     * The gap (dp) between the top of the screen and a pane's sheet, where the dimmed screen behind shows as a sliver.
+     * Fold review 2026-10-09 07:26, item 7: in Light the dimmed sliver read as a grey band under the light status bar,
+     * so in Light the sheet starts flush (and square at the top, [sheetTopRounded]); Dark keeps the sliver.
+     */
+    fun sheetTopGapDp(dark: Boolean): Float = if (dark) 8f else 0f
+
+    /** Whether a pane's sheet rounds its top corners: only with a gap above it ([sheetTopGapDp]), else no dim wedges show. */
+    fun sheetTopRounded(dark: Boolean): Boolean = sheetTopGapDp(dark) > 0f
+
     /** Opacity of the dim behind a pane springing up ([progress] 0 → 1); the same with Motion → Off (it fades either way). */
     fun scrimAlpha(progress: Float): Float = MekaChoreography.sheetScrimOpacity * progress.coerceIn(0f, 1f)
 

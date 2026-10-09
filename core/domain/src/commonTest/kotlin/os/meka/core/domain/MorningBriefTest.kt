@@ -262,4 +262,42 @@ class MorningBriefTest {
         world.clock.nowMs = at(today(), 12, 30)
         assertTrue(notices().none { it.source == NoticeSource.BRIEF })
     }
+
+    @Test
+    fun dayLinesPutEveryTitleOnOneEdgeWithTheTimeInTheCaption() {
+        // Fold review 2026-10-09 07:26, item 7: no time column; tasks get a tick circle, events a dot.
+        val event = BriefRules.dayLine(TomorrowRow("e-ev1", "09:30", "Standup", true, "Room 4"))
+        assertNull(event.taskId)
+        assertEquals("09:30 · Room 4", event.caption)
+        assertFalse(event.lit)
+        assertEquals("Event, Standup, 09:30 · Room 4", event.spoken)
+
+        val allDay = BriefRules.dayLine(TomorrowRow("e-ev2", "All day", "School inset day", true, null))
+        assertEquals("All day", allDay.caption)
+
+        val planned = BriefRules.dayLine(TomorrowRow("t-task-7", "14:00", "Call the garage", false, "↻ Daily"))
+        assertEquals("task-7", planned.taskId)
+        assertEquals("14:00 · ↻ Daily", planned.caption)
+        assertFalse(planned.lit)
+
+        val overdue = BriefRules.dayLine(TomorrowRow("t-t2", null, "Pay the nursery", false, "Overdue · ↻ Monthly"))
+        assertEquals("t2", overdue.taskId)
+        assertEquals("Overdue · ↻ Monthly", overdue.caption)
+        assertTrue(overdue.lit)
+        assertEquals("Task, Pay the nursery, Overdue · ↻ Monthly", overdue.spoken)
+
+        val bare = BriefRules.dayLine(TomorrowRow("t-t3", null, "Milk", false, null))
+        assertNull(bare.caption)
+        assertEquals("Task, Milk", bare.spoken)
+    }
+
+    @Test
+    fun theBriefsDayLinesFollowItsRows() {
+        val v = MorningBriefView.EMPTY.copy(day = listOf(
+            TomorrowRow("e-1", "09:00", "Standup", true, null),
+            TomorrowRow("t-2", null, "Milk", false, "Due 17:00"),
+        ))
+        assertEquals(listOf("e-1", "t-2"), v.dayLines.map { it.id })
+        assertEquals(listOf(null, "2"), v.dayLines.map { it.taskId })
+    }
 }

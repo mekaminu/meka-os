@@ -128,6 +128,15 @@ class MotionMathTest {
     }
 
     @Test
+    fun inLightAPaneStartsFlushSoNoGreyBandShowsAboveIt() {
+        // Fold review 2026-10-09 07:26, item 7: the dimmed sliver read as a grey band under Light's status bar.
+        assertEquals(0f, MotionMath.sheetTopGapDp(dark = false))
+        assertFalse(MotionMath.sheetTopRounded(dark = false))
+        assertEquals(8f, MotionMath.sheetTopGapDp(dark = true))
+        assertTrue(MotionMath.sheetTopRounded(dark = true))
+    }
+
+    @Test
     fun completingATaskSweepsTheRingThenFillsThenStrokesTheCheck() {
         assertEquals(420, MotionMath.checkDrawMs(reduced = false))
         assertEquals(0, MotionMath.checkDrawMs(reduced = true))

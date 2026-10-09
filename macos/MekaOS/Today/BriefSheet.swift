@@ -43,8 +43,10 @@ struct BriefSheet: View {
                         Text(v.daySummary).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                             .contentTransition(.opacity)
                             .staggeredAppear(1)
-                        ForEach(v.day, id: \.id) { r in
-                            TomorrowLine(row: r, palette: palette).staggeredAppear(1)
+                        // Fold review 2026-10-09 07:26, item 7: titles on one left edge in the regular weight, a
+                        // tick circle for a task (completes it like Today's rows), a dot for an event.
+                        ForEach(v.dayLines, id: \.id) { r in
+                            BriefDayRow(line: r, palette: palette).staggeredAppear(1)
                         }
 
                         if let waitingLine = v.waitingLine {
@@ -112,7 +114,7 @@ struct BriefSheet: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .animation(MekaMotion.replan(reduced: reduceMotion), value: v.day.map(\.id))
+                    .animation(MekaMotion.replan(reduced: reduceMotion), value: v.dayLines.map(\.id))
                     .animation(MekaMotion.replan(reduced: reduceMotion), value: v.headlines.map(\.id))
                 }
                 .frame(maxHeight: 460)
@@ -241,5 +243,38 @@ struct BriefCard: View {
         }
         .buttonStyle(MekaPressStyle())
         .mekaHoverLift()
+    }
+}
+
+/// One row of the brief's Today section (Fold review 2026-10-09 07:26, item 7; core `BriefDayLine`): a 22 pt lead (a
+/// task's tick circle, which completes it with the ring-and-check draw, or an event's small dot), then the title in
+/// `body` and the caption (time and detail; an overdue task's lit in the accent). No time column.
+struct BriefDayRow: View {
+    let line: BriefDayLine
+    let palette: MekaPalette
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: MekaSpace.m) {
+            Group {
+                if let taskId = line.taskId {
+                    CompleteButton(id: taskId, title: line.title, palette: palette)
+                } else {
+                    Circle().fill(palette.textTertiary).frame(width: 6, height: 6)
+                        .frame(width: 22, height: 22)
+                }
+            }
+            .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + 5 }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(line.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                if let c = line.caption {
+                    Text(c).font(MekaType.caption).foregroundStyle(line.lit ? palette.accent : palette.textTertiary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(line.spoken)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, MekaSpace.xs)
+        .padding(.horizontal, MekaSpace.xs)
     }
 }
