@@ -1101,7 +1101,10 @@ class MekaCore(
         val list = try { accountsApi?.accounts() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
         // Offline keeps what was known: the server checks again before sending anything.
         list?.let(::rememberEditing)
-        return list ?: emptyList()
+        val accounts = list ?: return emptyList()
+        // Each signed-in account is titled like its main calendar, with Meka's own name for it when he gave one.
+        val names = onCore { eventActions.calendarNames() }
+        return accounts.map { it.copy(title = os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names)) }
     }
 
     private fun rememberEditing(accounts: List<ConnectedAccount>) {

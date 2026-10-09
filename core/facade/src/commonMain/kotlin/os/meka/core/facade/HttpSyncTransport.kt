@@ -29,8 +29,15 @@ data class ConnectedAccount(
     val provider: String, val email: String, val status: String, val lastSyncAtMs: Long?,
     /** MEKA may add and change events here (calendar editing; the owner allowed it). */
     val canEdit: Boolean = false,
+    /**
+     * The row's title (Meka's screenshot 2026-10-09 09:01): a feed's name, or a signed-in account's main calendar name
+     * ("Personal", "Hotmail", or Meka's own); [MekaCore.connectedAccounts] fills Meka's names in.
+     */
+    val title: String = os.meka.core.domain.CalendarAccountRules.title(provider, email),
 ) {
     val needsReconnect: Boolean get() = status == "needs_reconnect"
+    /** "Google · meka@gmail.com · synced 08:29" · "Headlines · synced 08:29"; [syncedAt] as the device writes the time. */
+    fun statusLine(syncedAt: String?): String = os.meka.core.domain.CalendarAccountRules.statusLine(provider, email, status, syncedAt)
     /** The line about editing under the account, or null (feeds, or the reconnect line says enough). */
     val editingLine: String? get() = os.meka.core.domain.CalendarAccessRules.line(provider, canEdit, needsReconnect)
     /** Allow editing · Stop editing · none. */

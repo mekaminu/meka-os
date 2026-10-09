@@ -752,8 +752,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(CalendarAccessRules.shared.action(provider: "fixtures", canEdit: false, needsReconnect: false))
         XCTAssertEqual(CalendarAccessRules.shared.line(provider: "google", canEdit: false, needsReconnect: false), "Read-only · MEKA only reads this calendar")
         XCTAssertTrue(CalendarAccessRules.shared.reconnectAsksEditing(canEdit: true))
-        let a = ConnectedAccount(provider: "google", email: "me@gmail.com", status: "ok", lastSyncAtMs: nil, canEdit: true)
+        let a = ConnectedAccount(provider: "google", email: "me@gmail.com", status: "ok", lastSyncAtMs: nil, canEdit: true, title: "Personal")
         XCTAssertEqual(a.editingAction, .stopEditing)
+    }
+
+    /// Meka's screenshot 2026-10-09 09:01: Calendars titles accounts like their main calendar; "news_more" reads Headlines.
+    func testCalendarAccountLinesReachSwift() {
+        XCTAssertEqual(CalendarAccountRules.shared.providerLabel(provider: "news_more"), "Headlines")
+        XCTAssertEqual(CalendarAccountRules.shared.title(provider: "microsoft", email: "me@hotmail.co.uk", names: [:]), "Hotmail")
+        let a = ConnectedAccount(provider: "google", email: "me@gmail.com", status: "ok", lastSyncAtMs: nil, canEdit: false,
+                                 title: CalendarAccountRules.shared.title(provider: "google", email: "me@gmail.com", names: [:]))
+        XCTAssertEqual(a.title, "Personal")
+        XCTAssertEqual(a.statusLine(syncedAt: "08:29"), "Google · me@gmail.com · synced 08:29")
     }
 
     /// Calendar editing, slice 2b: the Add event sheet's form steps and view reach Swift.

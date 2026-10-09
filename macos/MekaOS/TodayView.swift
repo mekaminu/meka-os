@@ -481,7 +481,9 @@ struct CalendarsSheet: View {
                 ForEach(Array(accounts.enumerated()), id: \.element) { i, a in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(a.email).font(MekaType.itemTitle)
+                            // Titled like its main calendar ("Personal", "Hotmail", Meka's own) or the feed's name;
+                            // the address and "Headlines" (never "news_more") under it (Meka's screenshot 2026-10-09 09:01).
+                            Text(a.title).font(MekaType.itemTitle)
                             Text(status(a)).font(MekaType.caption)
                                 .foregroundStyle(a.needsReconnect ? palette.critical : palette.textTertiary)
                             // Calendar editing: read-only or editing allowed; the line cross-fades as it changes.
@@ -558,11 +560,8 @@ struct CalendarsSheet: View {
     }
 
     private func status(_ a: ConnectedAccount) -> String {
-        if a.needsReconnect { return "Access expired · Reconnect" }
-        if a.status == "error" { return "Couldn't sync last time · retrying" }
-        guard let ms = a.lastSyncAtMs?.int64Value else { return "\(CoreModel.providerName(a.provider)) · first sync in progress" }
-        let d = Date(timeIntervalSince1970: Double(ms) / 1000)
-        return "\(CoreModel.providerName(a.provider)) · synced \(d.formatted(date: .omitted, time: .shortened))"
+        let synced = a.lastSyncAtMs.map { Date(timeIntervalSince1970: Double($0.int64Value) / 1000).formatted(date: .omitted, time: .shortened) }
+        return a.statusLine(syncedAt: synced)
     }
 }
 

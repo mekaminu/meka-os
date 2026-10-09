@@ -634,7 +634,7 @@ final class CoreModel {
     }
 
     static func providerName(_ p: String) -> String {
-        switch p { case "google": "Google"; case "microsoft": "Outlook"; case "fixtures": "Fixtures"; case "news": "Headlines"; case "bank_holidays": "Bank holidays"; case "weather": "Weather"; default: p }
+        CalendarAccountRules.shared.providerLabel(provider: p)
     }
 
     // MARK: Notifications

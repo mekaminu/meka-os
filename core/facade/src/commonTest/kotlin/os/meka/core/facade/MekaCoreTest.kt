@@ -932,6 +932,25 @@ class MekaCoreTest {
     }
 
     @Test
+    fun calendarsTitlesEachAccountLikeItsMainCalendar() = runTest {
+        // Meka's screenshot 2026-10-09 09:01: the rows showed the address and "news_more".
+        val server = EditingTransport(
+            listOf(
+                ConnectedAccount("google", "meka@gmail.com", "ok", null),
+                ConnectedAccount("microsoft", "meka@hotmail.co.uk", "ok", null),
+                ConnectedAccount("news_more", "AI, tech and Barça news", "ok", null),
+            ),
+        )
+        val fold = core("android", server)
+        assertEquals(listOf("Personal", "Hotmail", "AI, tech and Barça news"), fold.connectedAccounts().map { it.title })
+        fold.renameCalendar("google|meka@gmail.com|meka@gmail.com", "Home")
+        val accounts = fold.connectedAccounts()
+        assertEquals("Home", accounts[0].title)
+        assertEquals("Google · meka@gmail.com · synced 08:29", accounts[0].statusLine("08:29"))
+        assertEquals("Headlines · first sync in progress", accounts[2].statusLine(null))
+    }
+
+    @Test
     fun addEventWaitsForAnAccountThatCanEditThenBecomesAnEditBothDevicesSee() = runTest {
         val server = EditingTransport(
             listOf(

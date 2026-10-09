@@ -1058,7 +1058,7 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
     key(task.id) { Box(Modifier.appear(rememberAppearance(6))) { DetailActions(task, actions) } }
 }
 
-internal fun providerLabel(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Outlook"; "fixtures" -> "Fixtures"; "news" -> "Headlines"; "bank_holidays" -> "Bank holidays"; "weather" -> "Weather"; else -> p }
+internal fun providerLabel(p: String) = os.meka.core.domain.CalendarAccountRules.providerLabel(p)
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 

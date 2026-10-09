@@ -78,12 +78,14 @@ object CalendarRules {
 
     /**
      * The name without Meka's own: Google names an account's main calendar after its address ("meka@gmail.com"),
-     * which reads as noise in the Calendar key and on rows, so that one is "Personal"; any other the provider's name.
+     * which reads as noise in the Calendar key and on rows, so that one is "Personal"; Microsoft calls its main calendar
+     * plain "Calendar", so that one is "Hotmail" or "Outlook" ([CalendarAccountRules.outlookName]); any other the
+     * provider's name. Calendars titles each account the same way ([CalendarAccountRules.title]).
      */
     fun defaultName(e: CalendarEvent): String? {
         val n = e.calendarName?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        val account = e.account?.trim().orEmpty()
-        return if ('@' in n && n.equals(account, ignoreCase = true)) PERSONAL else n
+        if (!CalendarAccountRules.isMainCalendar(e.provider, e.account, n)) return n
+        return if (e.provider == "google") PERSONAL else CalendarAccountRules.outlookName(e.account)
     }
 
     /** What a rename stores: trimmed, inner spaces collapsed, at most [MAX_NAME]; null (back to the default) when blank. */

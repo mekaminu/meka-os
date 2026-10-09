@@ -121,7 +121,7 @@ class EventDetailTest {
         assertEquals("FC Barcelona · Fixture", fixture.calendarLine)
         assertTrue(fixture.isFixture)
         val outlook = EventDetails.build(ev(0, 1, provider = "microsoft", calendarName = "Calendar"), 0, cal)
-        assertEquals("Calendar · Outlook · meka@gmail.com", outlook.calendarLine)
+        assertEquals("Outlook · meka@gmail.com", outlook.calendarLine)
     }
 
     @Test

@@ -146,10 +146,12 @@ object EventDetails {
             }
         }
 
+        val calName = if (e.isFixture) e.calendarName?.takeIf { it.isNotBlank() } else CalendarRules.name(e)
         val calendarLine = listOfNotNull(
-            if (e.isFixture) e.calendarName?.takeIf { it.isNotBlank() } else CalendarRules.name(e),
+            calName,
             when (e.provider) {
-                "microsoft" -> "Outlook"
+                // An Outlook account's main calendar is already called "Outlook" ([CalendarAccountRules.outlookName]).
+                "microsoft" -> "Outlook".takeUnless { calName == it }
                 "fixtures" -> "Fixture"
                 else -> null
             },

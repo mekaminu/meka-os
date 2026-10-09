@@ -176,14 +176,10 @@ private val syncedFmt = DateTimeFormatter.ofPattern("HH:mm")
 private fun AccountRow(a: ConnectedAccount, modifier: Modifier = Modifier, onReconnect: () -> Unit, onEditing: () -> Unit) {
     Row(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)) {
         Column(Modifier.weight(1f)) {
-            Text(a.email, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-            val status = when {
-                a.needsReconnect -> "Access expired · tap Reconnect"
-                a.status == "error" -> "Couldn't sync last time · retrying"
-                a.lastSyncAtMs != null -> "${providerLabel(a.provider)} · synced " +
-                    syncedFmt.format(Instant.ofEpochMilli(a.lastSyncAtMs!!).atZone(ZoneId.systemDefault()))
-                else -> "${providerLabel(a.provider)} · first sync in progress"
-            }
+            // Titled like its main calendar ("Personal", "Hotmail", Meka's own name) or the feed's name; the address and
+            // "Headlines" (never "news_more") on the line under it (Meka's screenshot 2026-10-09 09:01).
+            Text(a.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+            val status = a.statusLine(a.lastSyncAtMs?.let { syncedFmt.format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault())) })
             Text(status, style = MekaType.caption, color = if (a.needsReconnect) Meka.colors.critical else Meka.colors.textTertiary)
             // Calendar editing: read-only or editing allowed; the line cross-fades as it changes.
             a.editingLine?.let { line ->
