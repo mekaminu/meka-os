@@ -90,7 +90,18 @@ struct TodayView: View {
                     // The opening moment (motion pass 2, slice 7): the Day ring under the header.
                     if let today = model.today, !today.timeline.dateLabel.isEmpty {
                         DayRingView(ring: today.dayRing, play: ringPlay ?? .still, played: { ringPlay = .still }, palette: palette,
-                                    tiles: today.dayTiles)
+                                    tiles: today.dayTiles,
+                                    // Click an arc to open it: an event's detail, a planned task's detail (Living Today, slice 3).
+                                    onOpenArc: { arc in
+                                        switch arc.kind {
+                                        case .event:
+                                            if let e = today.events.first(where: { "e-" + $0.id == arc.id }) { model.openEvent = e }
+                                        case .task:
+                                            model.select(String(arc.id.dropFirst(2)), reduced: reduceMotion)
+                                        default:
+                                            break // a session's row in the timeline carries its actions
+                                        }
+                                    })
                             .padding(.top, MekaSpace.s)
                     }
                     Spacer().frame(height: MekaSpace.l)

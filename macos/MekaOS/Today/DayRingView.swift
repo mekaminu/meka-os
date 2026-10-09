@@ -15,6 +15,8 @@ struct DayRingView: View {
     var size: CGFloat = 184
     /// The live tiles under the dial (the opening moment, part 2): next event, fast, habits, renewals.
     var tiles: [DayTile] = []
+    /// Clicking an arc on the ring opens it (Living Today, slice 3); nil: the ring doesn't answer clicks.
+    var onOpenArc: ((DayArc) -> Void)? = nil
     @Environment(\.mekaExpressiveMotion) private var expressive
     @State private var began = Date()
 
@@ -27,6 +29,8 @@ struct DayRingView: View {
                     // Living Today: once the opening has landed the ring stays alive on a layer of its own.
                     .overlay(DayRingLiveLayer(ring: ring, landed: play == .still, palette: palette))
                     .frame(width: size, height: size)
+                    .contentShape(Circle())
+                    .onTapGesture(coordinateSpace: .local) { p in openArc(at: p) }
                     .frame(maxWidth: .infinity)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(ring.spokenLine)
@@ -48,6 +52,16 @@ struct DayRingView: View {
         }
     }
 
+    /// A click on the ring opens the arc under it (the angle from the centre picks it; free time opens nothing).
+    private func openArc(at p: CGPoint) {
+        guard let onOpenArc else { return }
+        let radius = Float(size / 2 - 10 / 2 - 2) // the track, as the dial draws it
+        guard let deg = DayRingRules.shared.tapDegrees(dx: Float(p.x - size / 2), dy: Float(p.y - size / 2), radius: radius),
+              let arc = DayRingRules.shared.arcAt(ring: ring, degrees: deg.floatValue) else { return }
+        MekaHaptics.tick()
+        onOpenArc(arc)
+    }
+
     private func dial(elapsed: Double) -> some View {
         let mark = MotionMath.dayRingMark(elapsed: elapsed, play: play, expressive: expressive)
         let needle = MotionMath.dayRingNeedle(elapsed: elapsed, play: play, expressive: expressive)
@@ -55,6 +69,8 @@ struct DayRingView: View {
         let free = MotionMath.countUpValue(from: 0, to: Int(ring.freeMinutes), fraction: count)
         let toDo = MotionMath.countUpValue(from: 0, to: Int(ring.toDo), fraction: count)
         let arcs = ring.arcs
+        let work = ring.work
+        let fast = ring.fast
         return ZStack {
             Canvas { ctx, canvasSize in
                 let stroke: CGFloat = 10
@@ -89,13 +105,36 @@ struct DayRingView: View {
                                  with: .color(palette.textTertiary.opacity(0.4 * show)))
                     }
                 }
-                // The day's arcs, growing clockwise from their starts.
+                // Work hours: a faint band along the track (not booked, so not an arc), coming up with the mark.
+                for band in work {
+                    ctx.stroke(arcPath(from: Double(band.startDegrees), sweep: Double(band.sweepDegrees)),
+                               with: .color(palette.textTertiary.opacity((band.current ? 0.26 : 0.16) * mark)),
+                               style: StrokeStyle(lineWidth: 4, lineCap: .butt))
+                }
+                // A running fast: an inner arc from when it began round to its goal, filling as it counts up.
+                if let f = fast {
+                    let r = radius - stroke * 1.9
+                    func inner(_ sweep: Double) -> Path {
+                        var p = Path()
+                        p.addArc(center: c, radius: r, startAngle: .degrees(Double(f.startDegrees) - 90),
+                                 endAngle: .degrees(Double(f.startDegrees) - 90 + sweep), clockwise: false)
+                        return p
+                    }
+                    ctx.stroke(inner(Double(f.sweepDegrees) * mark), with: .color(palette.accent.opacity(0.16)),
+                               style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    if f.filledDegrees > 0 {
+                        ctx.stroke(inner(Double(f.filledDegrees) * count), with: .color(palette.accent.opacity(f.reachedGoal ? 1 : 0.85)),
+                                   style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    }
+                }
+                // The day's arcs, growing clockwise from their starts; the gym's booked sessions wider, to stand out.
                 for (i, arc) in arcs.enumerated() {
                     let grow = MotionMath.dayRingArc(elapsed: elapsed, index: i, play: play, expressive: expressive)
                     guard grow > 0 else { continue }
                     let alpha: Double = arc.past ? 0.38 : (arc.kind == .task ? 0.7 : 1)
                     ctx.stroke(arcPath(from: Double(arc.startDegrees), sweep: Double(arc.sweepDegrees) * grow),
-                               with: .color(palette.accent.opacity(alpha)), style: StrokeStyle(lineWidth: stroke, lineCap: .butt))
+                               with: .color(palette.accent.opacity(alpha)),
+                               style: StrokeStyle(lineWidth: arc.highlighted && !arc.past ? stroke * 1.4 : stroke, lineCap: .butt))
                 }
                 // The now needle, with a brass dot at its tip.
                 if needle > 0 {
@@ -167,6 +206,7 @@ struct DayRingLiveLayer: View {
         let hand = Double(live.handDegrees(epochMs: ms))
         let pop = sweeping ? Double(live.nowPop(epochMs: ms)) : 1
         let nowDegrees = Double(ring.nowDegrees)
+        let onNow = ring.arcs.filter { $0.current }.map { (Double($0.startDegrees), Double($0.sweepDegrees)) }
         let accent = palette.accent
         return Canvas { ctx, canvasSize in
             let stroke: CGFloat = 10
@@ -185,6 +225,11 @@ struct DayRingLiveLayer: View {
             // The brass edge and its soft halo, breathing.
             ctx.stroke(arc(edge + 1.5, from: 0, sweep: 360), with: .color(accent.opacity(0.10 * glow * fadeIn)), lineWidth: 4)
             ctx.stroke(arc(edge, from: 0, sweep: 360), with: .color(accent.opacity(0.55 * glow * fadeIn)), lineWidth: 1)
+            // The arc on now glows with the ring's breath (Living Today, slice 3): a soft wider halo over it.
+            for (from, sweep) in onNow {
+                ctx.stroke(arc(radius, from: from, sweep: sweep), with: .color(accent.opacity(0.30 * glow * fadeIn)),
+                           style: StrokeStyle(lineWidth: stroke + 8, lineCap: .round))
+            }
             guard sweeping else { return }
             // The hour's shimmer: a band of light running once round the edge.
             if let s = shimmer {

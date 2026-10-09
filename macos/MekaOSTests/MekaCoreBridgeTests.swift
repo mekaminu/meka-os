@@ -399,10 +399,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(DayRingRules.shared.onReturn(lastFullEpochDay: KotlinLong(longLong: 100), todayEpochDay: 100, awayMs: 14_999, reduced: false))
         XCTAssertEqual(DayRingRules.shared.onReturn(lastFullEpochDay: KotlinLong(longLong: 99), todayEpochDay: 100, awayMs: 1_000, reduced: false), DayRingPlay.full)
         XCTAssertNil(DayRingRules.shared.onReturn(lastFullEpochDay: nil, todayEpochDay: 100, awayMs: 60_000, reduced: true))
-        let arc = DayArc(id: "e-x", kind: .event, startMinute: 600, endMinute: 660, past: false)
+        let arc = DayArc(id: "e-x", kind: .event, startMinute: 600, endMinute: 660, past: false, current: false)
         XCTAssertEqual(arc.startDegrees, 150, accuracy: 1e-4)
         XCTAssertEqual(arc.sweepDegrees, 15, accuracy: 1e-4)
-        let ring = DayRing(arcs: [arc], nowMinute: 630, freeMinutes: 225, toDo: 4)
+        let ring = DayRing(arcs: [arc], nowMinute: 630, freeMinutes: 225, toDo: 4, work: [], fast: nil)
         XCTAssertEqual(ring.line, "3 h 45 free · 4 to do")
         XCTAssertEqual(ring.spokenLine, "Your day: 1 thing booked. Now 10:30. 3 h 45 free · 4 to do.")
     }
@@ -422,6 +422,26 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(live.mode(reduced: true, powerSave: false), DayRingLiveMode.still)
         XCTAssertEqual(live.TAIL_SEGMENTS, 14)
         XCTAssertGreaterThan(live.tailAlpha(i: 0), live.tailAlpha(i: 5))
+    }
+
+    /// Living Today, slice 3: the ring carries the day — the work band, the arc on now, a fast, clicking an arc.
+    func testDayRingCarriesTheDayInSwift() {
+        let call = DayArc(id: "e-call", kind: .event, startMinute: 600, endMinute: 660, past: false, current: true)
+        let gym = DayArc(id: "s-gym", kind: .session, startMinute: 1065, endMinute: 1125, past: false, current: false)
+        let band = DayBand(startMinute: 540, endMinute: 1050, current: true)
+        let fast = DayFastArc(startDegrees: 301.25, sweepDegrees: 240, progress: 0.75, reachedGoal: false)
+        let ring = DayRing(arcs: [call, gym], nowMinute: 630, freeMinutes: 120, toDo: 2, work: [band], fast: fast)
+        XCTAssertTrue(gym.highlighted)
+        XCTAssertFalse(call.highlighted)
+        XCTAssertEqual(ring.work.first?.sweepDegrees ?? 0, 127.5, accuracy: 0.01)
+        XCTAssertEqual(ring.fast?.filledDegrees ?? 0, 180, accuracy: 0.01)
+        let rules = DayRingRules.shared
+        let up = rules.tapDegrees(dx: 0, dy: -100, radius: 100)
+        XCTAssertEqual(up?.floatValue ?? -1, 0, accuracy: 0.01)
+        XCTAssertNil(rules.tapDegrees(dx: 0, dy: -30, radius: 100))
+        XCTAssertEqual(rules.arcAt(ring: ring, degrees: 157.5)?.id, "e-call")
+        XCTAssertEqual(rules.arcAt(ring: ring, degrees: 270)?.id, "s-gym")
+        XCTAssertNil(rules.arcAt(ring: ring, degrees: 60))
     }
 
     /// Calendar colours (Fold review 2026-10-08, item 9): fixtures wear Barça's colour, the rest take five hues.

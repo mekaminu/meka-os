@@ -20,12 +20,42 @@ data class DayArc(
     val endMinute: Int,
     /** Over already (drawn dimmer). */
     val past: Boolean,
+    /** On now (started, not over): the living ring makes it glow with its breath (Living Today, slice 3). */
+    val current: Boolean = false,
 ) {
+    /** Booked sessions (the gym) stand out on the ring: a wider, brighter arc. */
+    val highlighted: Boolean get() = kind == DayArcKind.SESSION
     /** Where the arc starts, clockwise from midnight at the top. */
     val startDegrees: Float get() = DayRingRules.degrees(startMinute)
 
     /** How far round it runs (at least [DayRingRules.MIN_SWEEP_DEGREES], so a 5-minute call still shows). */
     val sweepDegrees: Float get() = maxOf(DayRingRules.degrees(endMinute) - startDegrees, DayRingRules.MIN_SWEEP_DEGREES)
+}
+
+/**
+ * A faint band on the Day ring's track: today's work hours on a work day ([WorkBlock]), clipped to the day. Not an arc
+ * (it isn't booked), so it never counts as a thing to do and can't be tapped.
+ */
+data class DayBand(val startMinute: Int, val endMinute: Int, /** At work now. */ val current: Boolean = false) {
+    val startDegrees: Float get() = DayRingRules.degrees(startMinute)
+    val sweepDegrees: Float get() = maxOf(DayRingRules.degrees(endMinute) - startDegrees, 0f)
+}
+
+/**
+ * A running fast as an inner arc on the Day ring (Living Today, slice 3): drawn from when the fast began round to its
+ * goal on the same 24-hour dial (a 16 h fast that began 20:05 runs from 20:05 round past midnight to 12:05), filling
+ * as it goes. A fast of 24 h or more (extended) uses the whole inner circle from the top, filled by its progress.
+ */
+data class DayFastArc(
+    val startDegrees: Float,
+    /** The whole fast to its goal: at most 360. */
+    val sweepDegrees: Float,
+    /** Share of the goal done, 0 to 1. */
+    val progress: Float,
+    val reachedGoal: Boolean,
+) {
+    /** The filled part of [sweepDegrees]. */
+    val filledDegrees: Float get() = sweepDegrees * progress.coerceIn(0f, 1f)
 }
 
 /**
@@ -41,6 +71,10 @@ data class DayRing(
     val freeMinutes: Int,
     /** Open tasks left today: Needs you, Up next, the timeline's planned tasks and Anytime today. */
     val toDo: Int,
+    /** Work hours as a faint band on the track (work days only). */
+    val work: List<DayBand> = emptyList(),
+    /** A running fast as an inner arc; set by the facade, which holds the fasting view ([DayRingRules.fastArc]). */
+    val fast: DayFastArc? = null,
 ) {
     val nowDegrees: Float get() = DayRingRules.degrees(nowMinute)
 
@@ -114,23 +148,74 @@ object DayRingRules {
             else -> calendar.minuteOfDay(ms)
         }
         val now = minute(nowMs).coerceAtMost(MINUTES - 1)
+        fun on(start: Long, end: Long) = nowMs in start until end
         data class Item(val arc: DayArc, val event: Boolean)
         val items = buildList {
             events.filter { !it.allDay && it.overlaps(today) }.forEach { e ->
-                add(Item(DayArc("e-" + e.id, DayArcKind.EVENT, minute(e.startAtMs), minute(e.endAtMs), e.endAtMs <= nowMs), true))
+                add(Item(DayArc("e-" + e.id, DayArcKind.EVENT, minute(e.startAtMs), minute(e.endAtMs), e.endAtMs <= nowMs, on(e.startAtMs, e.endAtMs)), true))
             }
             planned.filter { it.scheduledAtMs != null && it.scheduledAtMs in today }.forEach { t ->
                 val start = t.scheduledAtMs!!
                 val end = start + (t.estimateMinutes ?: TimelineRules.DEFAULT_TASK_MIN) * MIN_MS
-                add(Item(DayArc("t-" + t.id, DayArcKind.TASK, minute(start), minute(end), end <= nowMs), false))
+                add(Item(DayArc("t-" + t.id, DayArcKind.TASK, minute(start), minute(end), end <= nowMs, on(start, end)), false))
             }
             sessions.filter { it.startMs in today }.forEach { s ->
-                add(Item(DayArc("s-" + s.habitId, DayArcKind.SESSION, minute(s.startMs), minute(s.endMs), s.endMs <= nowMs), true))
+                add(Item(DayArc("s-" + s.habitId, DayArcKind.SESSION, minute(s.startMs), minute(s.endMs), s.endMs <= nowMs, on(s.startMs, s.endMs)), true))
             }
         }
         val arcs = items.sortedWith(compareBy<Item> { it.arc.startMinute }.thenBy { !it.event }.thenBy { it.arc.id }).map { it.arc }
         val busy = work.map { minute(it.startMs) to minute(it.endMs) }
-        return DayRing(arcs, now, freeMinutes(arcs, now, busy), toDo)
+        val bands = work.filter { it.endMs > today.startMs && it.startMs < today.endMs }
+            .map { DayBand(minute(it.startMs), minute(it.endMs), on(it.startMs, it.endMs)) }
+            .filter { it.endMinute > it.startMinute }
+        return DayRing(arcs, now, freeMinutes(arcs, now, busy), toDo, bands)
+    }
+
+    /**
+     * A running fast as the ring's inner arc, or null when none is running (or it hasn't started yet). A fast shorter
+     * than a day sits at its own clock times; a day or longer fills the whole inner circle from the top.
+     */
+    fun fastArc(fast: FastNow?, nowMs: Long, calendar: LocalCalendar): DayFastArc? {
+        if (fast == null || nowMs < fast.startedAtMs) return null
+        val goalMs = maxOf(fast.goalAtMs - fast.startedAtMs, MIN_MS)
+        val progress = fast.progress(nowMs).coerceIn(0f, 1f)
+        val reached = fast.reachedGoal || nowMs >= fast.goalAtMs
+        return if (goalMs >= MINUTES * MIN_MS) {
+            DayFastArc(0f, 360f, progress, reached)
+        } else {
+            DayFastArc(degrees(calendar.minuteOfDay(fast.startedAtMs)), goalMs.toFloat() / (MINUTES * MIN_MS) * 360f, progress, reached)
+        }
+    }
+
+    /** How far either side of an arc a tap still opens it, in degrees (a 5-minute call is only 2° wide). */
+    const val TAP_SLOP_DEGREES = 6f
+
+    /**
+     * Where on the dial a tap landed, as degrees clockwise from the top, or null when it's off the ring: [dx], [dy] are
+     * from the dial's centre (y down) and [radius] is the track's; the ring answers from 60 % to 125 % of it, so the
+     * centre's text and the space outside stay clear.
+     */
+    fun tapDegrees(dx: Float, dy: Float, radius: Float): Float? {
+        if (radius <= 0f) return null
+        val d = kotlin.math.sqrt(dx * dx + dy * dy)
+        if (d < radius * 0.6f || d > radius * 1.25f) return null
+        val deg = (kotlin.math.atan2(dx.toDouble(), -dy.toDouble()) * 180.0 / PI).toFloat()
+        return if (deg < 0f) deg + 360f else deg
+    }
+
+    /**
+     * The arc a tap at [degrees] opens (Living Today, slice 3: tap an arc to open it): the arcs whose span, widened by
+     * [TAP_SLOP_DEGREES] each side, holds the tap; one on now first, then one still to come, then the one whose middle
+     * is nearest. Null: free time (nothing opens).
+     */
+    fun arcAt(ring: DayRing, degrees: Float): DayArc? {
+        fun gap(a: Float, b: Float): Float { val d = ((a - b) % 360f + 360f) % 360f; return minOf(d, 360f - d) }
+        return ring.arcs.filter { arc ->
+            val into = ((degrees - arc.startDegrees) % 360f + 360f) % 360f
+            into <= arc.sweepDegrees + TAP_SLOP_DEGREES || 360f - into <= TAP_SLOP_DEGREES
+        }.minWithOrNull(
+            compareBy<DayArc> { !it.current }.thenBy { it.past }.thenBy { gap(degrees, it.startDegrees + it.sweepDegrees / 2) },
+        )
     }
 
     /** Minutes of the waking day left from [nowMinute] that no arc (and no [busy] stretch, such as work) covers. */

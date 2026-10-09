@@ -1422,7 +1422,9 @@ class MekaCore(
         val goalsNow = goals.view(all).withSessions(_sessions.value)
         val projected = project(all, dayEvents)
         // The live tiles under the Day ring: next event, a running fast, habits today, renewals due.
+        // A running fast also shows as the Day ring's inner arc (Living Today, slice 3).
         _today.value = projected.copy(
+            dayRing = projected.dayRing.copy(fast = os.meka.core.domain.DayRingRules.fastArc(fastingNow.current, nowMs(), cal)),
             dayTiles = os.meka.core.domain.DayTileRules.build(
                 projected.events, nowMs(), dayWindow(nowMs()), fastingNow.current, goalsNow.habits, listsNow.renewals.dueCount,
             ),

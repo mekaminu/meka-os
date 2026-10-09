@@ -44,6 +44,10 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.MotionMath
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.DayArc
 import os.meka.core.domain.DayArcKind
 import os.meka.core.domain.DayTile
 import os.meka.core.domain.DayRing
@@ -80,6 +84,8 @@ fun DayRingHero(
     tiles: List<DayTile> = emptyList(),
     /** Test hook (the motion workflow): called on every drawn frame of the living ring with the hand's angle and the glow. */
     onLiveFrame: ((handDegrees: Float, glow: Float) -> Unit)? = null,
+    /** Tapping an arc on the ring opens it (Living Today, slice 3); null: the ring doesn't answer taps. */
+    onOpenArc: ((DayArc) -> Unit)? = null,
 ) {
     val expressive = Meka.expressiveMotion
     val total = remember(play) { MotionMath.dayRingTotalMs(ring.arcs.size, play, expressive, tiles.size) }
@@ -99,9 +105,28 @@ fun DayRingHero(
     val free = MotionMath.countUpValue(0, ring.freeMinutes, count)
     val toDo = MotionMath.countUpValue(0, ring.toDo, count)
 
+    val haptics = rememberMekaHaptics()
+    val currentRing by rememberUpdatedState(ring)
+    val open by rememberUpdatedState(onOpenArc)
+    val dial = size
     Column(modifier.fillMaxWidth().padding(vertical = MekaSpace.s), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = ring.spokenLine },
+            Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = ring.spokenLine }
+                .then(
+                    if (onOpenArc == null) Modifier else Modifier.pointerInput(dial) {
+                        // Tap an arc to open it: the angle from the dial's centre picks the arc (free time opens nothing).
+                        detectTapGestures { p ->
+                            // The track's radius, as the dial draws it (10 dp stroke, inset by half of it plus 2 dp).
+                            val radius = (dial.toPx() - 2 * (5.dp.toPx() + 2.dp.toPx())) / 2
+                            val deg = DayRingRules.tapDegrees(p.x - this.size.width / 2f, p.y - this.size.height / 2f, radius)
+                                ?: return@detectTapGestures
+                            DayRingRules.arcAt(currentRing, deg)?.let { arc ->
+                                haptics.tick()
+                                open?.invoke(arc)
+                            }
+                        }
+                    },
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Canvas(Modifier.size(size)) {
@@ -131,7 +156,24 @@ fun DayRingHero(
                             center = Offset(center.x + (cos(a) * r).toFloat(), center.y + (sin(a) * r).toFloat()))
                     }
                 }
-                // The day's arcs, growing clockwise from their starts.
+                // Work hours: a faint band along the track (not booked, so not an arc), coming up with the mark.
+                ring.work.forEach { band ->
+                    drawArc(colors.textTertiary.copy(alpha = (if (band.current) 0.26f else 0.16f) * mark), band.startDegrees - 90f,
+                        band.sweepDegrees, false, topLeft, arcSize, style = Stroke(4.dp.toPx(), cap = StrokeCap.Butt))
+                }
+                // A running fast: an inner arc from when it began round to its goal, filling as it counts up.
+                ring.fast?.let { f ->
+                    val r = radius - stroke * 1.9f
+                    val tl = Offset(center.x - r, center.y - r)
+                    val sz = Size(r * 2, r * 2)
+                    drawArc(colors.accent.copy(alpha = 0.16f), f.startDegrees - 90f, f.sweepDegrees * mark, false, tl, sz,
+                        style = Stroke(3.dp.toPx(), cap = StrokeCap.Round))
+                    if (f.filledDegrees > 0f) {
+                        drawArc(colors.accent.copy(alpha = if (f.reachedGoal) 1f else 0.85f), f.startDegrees - 90f, f.filledDegrees * count,
+                            false, tl, sz, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round))
+                    }
+                }
+                // The day's arcs, growing clockwise from their starts; the gym's booked sessions wider, to stand out.
                 ring.arcs.forEachIndexed { i, arc ->
                     val grow = MotionMath.dayRingArc(elapsed, i, play, expressive)
                     if (grow <= 0f) return@forEachIndexed
@@ -142,7 +184,7 @@ fun DayRingHero(
                     }
                     drawArc(
                         colors.accent.copy(alpha = colors.accent.alpha * alpha), arc.startDegrees - 90f, arc.sweepDegrees * grow,
-                        false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt),
+                        false, topLeft, arcSize, style = Stroke(if (arc.highlighted && !arc.past) stroke * 1.4f else stroke, cap = StrokeCap.Butt),
                     )
                 }
                 // The now needle: from inside the arcs out past them, with a brass dot at its tip.
@@ -233,8 +275,14 @@ private fun DayRingLiveLayer(ring: DayRing, landed: Boolean, size: Dp, onFrame: 
         // The brass edge and its soft halo, breathing.
         drawCircle(colors.accent.copy(alpha = 0.10f * glow), edge + 1.5.dp.toPx(), center, style = Stroke(4.dp.toPx()), alpha = fadeIn)
         drawCircle(colors.accent.copy(alpha = 0.55f * glow), edge, center, style = Stroke(1.dp.toPx()), alpha = fadeIn)
-        if (!sweeping) return@Canvas
         fun box(r: Float) = Pair(Offset(center.x - r, center.y - r), Size(r * 2, r * 2))
+        // The arc on now glows with the ring's breath (Living Today, slice 3): a soft wider halo over it.
+        ring.arcs.filter { it.current }.forEach { arc ->
+            val (tl, sz) = box(radius)
+            drawArc(colors.accent.copy(alpha = 0.30f * glow * fadeIn), arc.startDegrees - 90f, arc.sweepDegrees, false, tl, sz,
+                style = Stroke(stroke + 8.dp.toPx(), cap = StrokeCap.Round))
+        }
+        if (!sweeping) return@Canvas
         // The hour's shimmer: a band of light running once round the edge.
         DayRingLive.shimmer(now, TimeZone.getDefault().getOffset(now).toLong())?.let { s ->
             val head = 360f * s

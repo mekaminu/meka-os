@@ -152,6 +152,7 @@ import os.meka.core.domain.GoalsView
 import kotlinx.coroutines.flow.StateFlow
 import os.meka.core.sync.SyncStatus
 import java.time.Instant
+import os.meka.core.domain.DayArcKind
 import os.meka.core.domain.DayRingPlay
 import java.time.LocalDate
 import java.time.LocalTime
@@ -554,7 +555,15 @@ private fun TodayPane(
             // Shown on the closed Fold too (Meka uses it most and had never seen the ring), a little smaller there.
             if (today.timeline.dateLabel.isNotEmpty()) item(key = "dayring") {
                 DayRingHero(today.dayRing, ringPlay, ringPlayed, Modifier.padding(bottom = MekaSpace.l),
-                    size = if (now == null) 196.dp else 168.dp, tiles = today.dayTiles)
+                    size = if (now == null) 196.dp else 168.dp, tiles = today.dayTiles,
+                    // Tap an arc to open it: an event's detail, a planned task's detail (Living Today, slice 3).
+                    onOpenArc = { arc ->
+                        when (arc.kind) {
+                            DayArcKind.EVENT -> today.events.firstOrNull { "e-" + it.id == arc.id }?.let(openEvent)
+                            DayArcKind.TASK -> actions.select(arc.id.removePrefix("t-"))
+                            DayArcKind.SESSION -> Unit // the session's row in the timeline carries its actions
+                        }
+                    })
             }
             // Motion pass 2: with the phone's animations off and nothing chosen in Appearance → Motion, a one-time card.
             motionCard?.let { card ->
