@@ -407,6 +407,8 @@ enum class TalkProblem(val line: String, val macLine: String) {
     ),
     BUSY("The microphone is busy. Try again in a moment.", "The microphone is busy. Try again in a moment."),
     FAILED("Couldn't hear that. Tap the mic to try again.", "Couldn't hear that. Click the mic to try again."),
+    /** "Listen when I open MEKA" found the room too loud (TalkOnOpenRules), so MEKA didn't listen. */
+    TOO_NOISY("Too noisy — tap to talk", "Too noisy — click to talk"),
 }
 
 object TalkVoice {

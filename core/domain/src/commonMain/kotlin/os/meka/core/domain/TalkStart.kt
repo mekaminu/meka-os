@@ -13,8 +13,11 @@ package os.meka.core.domain
  *
  * Slice 3: [BEDSIDE], the mic on the bedside clock (the Fold half folded on a table), which springs a Talk pane up over
  * the clock already listening; [COVER], the mic on the closed Fold's now card, which opens Ask already listening.
+ *
+ * Slice 4: [OPEN], MEKA opened from the launcher with "Listen when I open MEKA" on ([TalkOnOpenRules]): a room check
+ * first, then a short listening window.
  */
-enum class TalkStart { SIDE_BUTTON, HEADSET_BUTTON, WIDGET, HEADPHONES, CAR, BEDSIDE, COVER }
+enum class TalkStart { SIDE_BUTTON, HEADSET_BUTTON, WIDGET, HEADPHONES, CAR, BEDSIDE, COVER, OPEN }
 
 /** One section of the Talk pane: its small label, a [status] line ([lit]: in the accent, set up), and [steps]. */
 data class TalkSetupSection(
@@ -69,6 +72,20 @@ object TalkStartRules {
         bluetoothAudio -> TalkStart.HEADPHONES
         else -> null
     }
+
+    /**
+     * [onOpen] with "Listen when I open MEKA" ([listenOnOpen], off by default): a launcher open that headphones or the
+     * car didn't already start listens too ([TalkStart.OPEN]), but only once the microphone is allowed ([micAllowed]):
+     * an open never pops a permission prompt. Never from a notification (not a launcher open).
+     */
+    fun openStart(
+        fromLauncher: Boolean,
+        bluetoothAudio: Boolean,
+        carMode: Boolean,
+        listenOnOpen: Boolean,
+        micAllowed: Boolean,
+    ): TalkStart? = onOpen(fromLauncher, bluetoothAudio, carMode)
+        ?: if (fromLauncher && listenOnOpen && micAllowed) TalkStart.OPEN else null
 
     /** The home screen's Talk widget: its one line and the description the launcher's widget list shows. */
     const val WIDGET_LABEL = "Talk to MEKA"
@@ -166,4 +183,69 @@ object TalkStartRules {
             ),
         )
     }
+}
+
+// ---- "Listen when I open MEKA" (Talk without tapping the mic, slice 4) ----
+
+/**
+ * "Listen when I open MEKA" (off by default; kept on the device, not synced): opening MEKA from the launcher measures
+ * the room for [ROOM_CHECK_MS]; above about [NOISY_DBA] it doesn't listen and says "Too noisy — tap to talk"
+ * ([TalkProblem.TOO_NOISY]); otherwise a quiet chime and Ask listens for up to [WINDOW_MS]: if no speech has begun by
+ * then, listening stops and Today comes back. The recogniser's own end-of-speech still stops it on silence. Nothing is
+ * kept from the room check: it is a level, never audio. (Non-AI, pure.)
+ */
+object TalkOnOpenRules {
+    const val WINDOW_MS = 6_000L
+    const val ROOM_CHECK_MS = 300L
+    /** About a busy café or a loud television; a quiet room is ~30–40, conversation ~55–60. */
+    const val NOISY_DBA = 60.0
+    /**
+     * A phone microphone's full scale in dB SPL, roughly: 16-bit 0 dBFS ≈ 90 dB. Uncalibrated and unweighted, so the
+     * level is an estimate ("about dBA"), good enough to tell a quiet room from a noisy one.
+     */
+    const val FULL_SCALE_DB = 90.0
+    /** Below this the room reads as silent (a dead or muted microphone gives all zeros). */
+    const val FLOOR_DB = 20.0
+
+    const val LABEL = "When I open MEKA"
+    const val TURN_ON = "Turn on"
+    const val TURN_OFF = "Turn off"
+
+    /**
+     * The room's level from [samples] (16-bit PCM read for [ROOM_CHECK_MS]): the RMS in dB below full scale, moved up by
+     * [FULL_SCALE_DB] and floored at [FLOOR_DB]. Null when nothing was read (the room couldn't be measured: listen).
+     */
+    fun roomLevel(samples: ShortArray, count: Int = samples.size): Double? {
+        val n = count.coerceIn(0, samples.size)
+        if (n == 0) return null
+        var sum = 0.0
+        for (i in 0 until n) {
+            val v = samples[i].toDouble()
+            sum += v * v
+        }
+        val rms = kotlin.math.sqrt(sum / n)
+        if (rms < 1.0) return FLOOR_DB
+        return maxOf(FLOOR_DB, 20.0 * kotlin.math.log10(rms / 32768.0) + FULL_SCALE_DB)
+    }
+
+    /** Too noisy to listen on open: show "Too noisy — tap to talk" instead. An unmeasured room isn't. */
+    fun tooNoisy(level: Double?): Boolean = level != null && level > NOISY_DBA
+
+    /** The listening window is over with nothing said ([speechBegan] false): stop, and Today comes back. */
+    fun windowLapsed(startedAtMs: Long, nowMs: Long, speechBegan: Boolean): Boolean =
+        !speechBegan && nowMs - startedAtMs >= WINDOW_MS
+
+    /** The Talk pane's section on the Fold, with its switch ([TURN_ON] / [TURN_OFF]); lit while on. */
+    fun section(on: Boolean): TalkSetupSection = TalkSetupSection(
+        LABEL,
+        if (on) "On: opening MEKA from the home screen listens for a few seconds, so you can just talk."
+        else "Off: opening MEKA shows Today and waits for you.",
+        lit = on,
+        steps = listOf(
+            "It checks the room first: if it's noisy it says “Too noisy — tap to talk” instead of listening.",
+            "A quiet chime marks listening. Say nothing for 6 seconds and Today comes back.",
+            "Opening MEKA from a notification never starts listening.",
+        ),
+        action = if (on) TURN_OFF else TURN_ON,
+    )
 }

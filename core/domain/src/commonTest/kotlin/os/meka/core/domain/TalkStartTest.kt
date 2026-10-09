@@ -100,3 +100,69 @@ class TalkStartTest {
         assertTrue(TalkStartRules.setup(mac = true).sections.none { it.label.contains("Bedside") })
     }
 }
+
+/** Talk without tapping the mic, slice 4: "Listen when I open MEKA" (off by default). */
+class TalkOnOpenTest {
+    @Test
+    fun listenOnOpenStartsOnlyFromTheLauncherWithTheSettingOnAndTheMicAllowed() {
+        assertEquals(TalkStart.OPEN, TalkStartRules.openStart(fromLauncher = true, bluetoothAudio = false, carMode = false, listenOnOpen = true, micAllowed = true))
+        // Off by default: nothing.
+        assertNull(TalkStartRules.openStart(fromLauncher = true, bluetoothAudio = false, carMode = false, listenOnOpen = false, micAllowed = true))
+        // A notification (not a launcher open) never listens.
+        assertNull(TalkStartRules.openStart(fromLauncher = false, bluetoothAudio = true, carMode = true, listenOnOpen = true, micAllowed = true))
+        // No microphone yet: an open never asks for it.
+        assertNull(TalkStartRules.openStart(fromLauncher = true, bluetoothAudio = false, carMode = false, listenOnOpen = true, micAllowed = false))
+        // Headphones and the car keep their own start.
+        assertEquals(TalkStart.HEADPHONES, TalkStartRules.openStart(fromLauncher = true, bluetoothAudio = true, carMode = false, listenOnOpen = true, micAllowed = true))
+        assertEquals(TalkStart.CAR, TalkStartRules.openStart(fromLauncher = true, bluetoothAudio = true, carMode = true, listenOnOpen = false, micAllowed = false))
+        assertEquals(TalkStart.OPEN, TalkStartRules.fromOpen(TalkStartRules.openValue(TalkStart.OPEN)))
+    }
+
+    @Test
+    fun theRoomCheckTellsAQuietRoomFromANoisyOne() {
+        assertNull(TalkOnOpenRules.roomLevel(ShortArray(0)))
+        assertEquals(TalkOnOpenRules.FLOOR_DB, TalkOnOpenRules.roomLevel(ShortArray(4800)))
+        // Full scale ≈ 90.
+        val full = TalkOnOpenRules.roomLevel(ShortArray(100) { 32767 })!!
+        assertTrue(full > 89.9 && full <= 90.0, "$full")
+        // A quiet room: RMS ~100 → about 40.
+        val quiet = TalkOnOpenRules.roomLevel(ShortArray(4800) { if (it % 2 == 0) 100 else -100 })!!
+        assertTrue(quiet in 39.0..41.0, "$quiet")
+        assertFalse(TalkOnOpenRules.tooNoisy(quiet))
+        // A loud café: RMS ~2000 → about 66.
+        val loud = TalkOnOpenRules.roomLevel(ShortArray(4800) { if (it % 2 == 0) 2000 else -2000 })!!
+        assertTrue(loud in 65.0..67.0, "$loud")
+        assertTrue(TalkOnOpenRules.tooNoisy(loud))
+        // Only what was read counts.
+        val part = ShortArray(10) { if (it < 5) 2000 else 0 }
+        assertTrue(TalkOnOpenRules.roomLevel(part, 5)!! > 60.0)
+        assertFalse(TalkOnOpenRules.tooNoisy(null)) // couldn't measure: listen
+        assertFalse(TalkOnOpenRules.tooNoisy(60.0))
+        assertEquals("Too noisy — tap to talk", TalkProblem.TOO_NOISY.line)
+    }
+
+    @Test
+    fun saySomethingWithinSixSecondsOrTodayComesBack() {
+        assertFalse(TalkOnOpenRules.windowLapsed(1_000, 6_999, speechBegan = false))
+        assertTrue(TalkOnOpenRules.windowLapsed(1_000, 7_000, speechBegan = false))
+        assertFalse(TalkOnOpenRules.windowLapsed(1_000, 20_000, speechBegan = true))
+        assertEquals(300L, TalkOnOpenRules.ROOM_CHECK_MS)
+    }
+
+    @Test
+    fun theTalkPaneSectionHasItsSwitchAndLightsWhenOn() {
+        val off = TalkOnOpenRules.section(on = false)
+        assertEquals("When I open MEKA", off.label)
+        assertFalse(off.lit)
+        assertEquals("Turn on", off.action)
+        assertTrue(off.status.startsWith("Off"))
+        assertTrue(off.steps.any { "Too noisy — tap to talk" in it })
+        assertTrue(off.steps.any { "notification" in it })
+        val on = TalkOnOpenRules.section(on = true)
+        assertTrue(on.lit)
+        assertEquals("Turn off", on.action)
+        assertTrue(on.status.startsWith("On"))
+        // The shared setup is unchanged; the Fold adds this section itself.
+        assertFalse(TalkStartRules.setup(mac = false).sections.any { it.label == "When I open MEKA" })
+    }
+}

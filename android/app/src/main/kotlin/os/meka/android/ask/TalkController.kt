@@ -12,12 +12,14 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.core.domain.AskCard
 import os.meka.core.domain.AskOutcome
 import os.meka.core.domain.TalkDid
 import os.meka.core.domain.TalkEffect
 import os.meka.core.domain.TalkFlow
+import os.meka.core.domain.TalkOnOpenRules
 import os.meka.core.domain.TalkOrb
 import os.meka.core.domain.TalkPhase
 import os.meka.core.domain.TalkProblem
@@ -80,11 +82,46 @@ class TalkController(
         if (active) return
         generation++
         problem = null
+        speechBegan = false
         heard = ""
         said = ""
         speaker.prepare()
         scope.launch { core.warmVoice() } // MEKA's common lines in its voice, fetched once
         apply(TalkFlow.start())
+    }
+
+    /** Speech began (or words were heard) since the last [start]: the open's listening window doesn't close. */
+    private var speechBegan = false
+
+    /**
+     * "Listen when I open MEKA" (slice 4): the room check first; too noisy → "Too noisy — tap to talk" under the resting
+     * orb (a tap starts as usual); otherwise the quiet chime and listening, for up to [TalkOnOpenRules.WINDOW_MS]: if
+     * nothing has been said by then it stops and [onLapsed] runs (Ask hands back to Today).
+     */
+    fun startOnOpen(onLapsed: () -> Unit) {
+        if (active) return
+        val gen = ++generation
+        scope.launch {
+            val room = TalkAutoListen.roomLevel(context)
+            if (gen != generation || active) return@launch
+            if (TalkOnOpenRules.tooNoisy(room)) {
+                problem = TalkProblem.TOO_NOISY
+                return@launch
+            }
+            TalkAutoListen.chime()
+            delay(CHIME_GAP_MS) // so the recogniser doesn't hear the chime
+            if (gen != generation || active) return@launch
+            start()
+            val started = generation
+            val at = System.currentTimeMillis()
+            delay(TalkOnOpenRules.WINDOW_MS)
+            if (started == generation && phase == TalkPhase.LISTENING &&
+                TalkOnOpenRules.windowLapsed(at, System.currentTimeMillis(), speechBegan)
+            ) {
+                stop()
+                onLapsed()
+            }
+        }
     }
 
     /** The orb tapped: while MEKA speaks, stop and listen; otherwise end. */
@@ -98,8 +135,8 @@ class TalkController(
 
     /** The screen left, the app went to the background, a call: everything stops at once. */
     fun stop() {
+        generation++ // also drops a room check or chime still on its way ("Listen when I open MEKA")
         if (!active) return
-        generation++
         apply(TalkFlow.stop(session))
     }
 
@@ -117,6 +154,11 @@ class TalkController(
         recognizer?.destroy()
         recognizer = null
         speaker.release()
+    }
+
+    private companion object {
+        /** The chime's length and a little more before the recogniser opens. */
+        const val CHIME_GAP_MS = 220L
     }
 
     private fun apply(step: TalkStep) {
@@ -196,7 +238,7 @@ class TalkController(
 
     private val listener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {}
-        override fun onBeginningOfSpeech() {}
+        override fun onBeginningOfSpeech() { speechBegan = true }
         override fun onRmsChanged(rmsdB: Float) {
             if (phase == TalkPhase.LISTENING) level = TalkOrb.smooth(level, TalkOrb.level(rmsdB))
         }
@@ -207,7 +249,7 @@ class TalkController(
         override fun onPartialResults(partialResults: Bundle?) {
             if (phase != TalkPhase.LISTENING) return
             partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                ?.takeIf { it.isNotBlank() }?.let { heard = it }
+                ?.takeIf { it.isNotBlank() }?.let { heard = it; speechBegan = true }
         }
 
         override fun onResults(results: Bundle?) {

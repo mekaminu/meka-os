@@ -1,10 +1,13 @@
 package os.meka.android.ask
 
+import android.Manifest
 import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -46,6 +49,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
+import os.meka.core.domain.TalkOnOpenRules
 import os.meka.core.domain.TalkSetupSection
 import os.meka.core.domain.TalkStartRules
 
@@ -54,7 +58,8 @@ import os.meka.core.domain.TalkStartRules
  * button: whether MEKA is the phone's digital assistant app (Android's role manager, re-read each time MEKA comes back
  * to the front, so returning from Settings updates it) and the steps to make it so, with "Open default apps"; the
  * headphones and the car (slice 2: opening MEKA with Bluetooth audio or in car mode listens); the Talk widget (slice 2);
- * and the safety line. The words are the core's [TalkStartRules].
+ * and the safety line. The words are the core's [TalkStartRules]. Slice 4: "When I open MEKA" ([TalkOnOpenRules.section],
+ * kept on this phone, off by default) with Turn on / Turn off; turning it on asks for the microphone if needed.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; sections stagger in 40 ms apart; the side
  * button's status line blends to the accent once MEKA is the assistant; Open default apps presses in with a tick haptic.
@@ -72,6 +77,14 @@ fun TalkPane(onClose: () -> Unit) {
         onDispose { lifecycle.removeObserver(obs) }
     }
     val view = TalkStartRules.setup(mac = false, assistantHeld = held, samsung = Build.MANUFACTURER.equals("samsung", ignoreCase = true))
+    var listenOnOpen by remember { mutableStateOf(TalkAutoListen.listenOnOpen(context)) }
+    fun setListen(on: Boolean) {
+        TalkAutoListen.setListenOnOpen(context, on)
+        listenOnOpen = on
+    }
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok -> if (ok) setListen(true) }
+    // "When I open MEKA" sits after the side button (the other way to start without the mic).
+    val sections = view.sections.toMutableList().apply { add(minOf(1, size), TalkOnOpenRules.section(listenOnOpen)) }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
@@ -82,10 +95,15 @@ fun TalkPane(onClose: () -> Unit) {
         Text(view.title, style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.TALK)).appear(rememberAppearance(0)))
         Text(view.intro, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
-        view.sections.forEachIndexed { i, s ->
+        sections.forEachIndexed { i, s ->
             TalkSection(s, Modifier.appear(rememberAppearance(i + 1))) {
                 haptics.tick()
-                openDefaultApps(context)
+                when {
+                    s.label != TalkOnOpenRules.LABEL -> openDefaultApps(context)
+                    listenOnOpen -> setListen(false)
+                    TalkAutoListen.micAllowed(context) -> setListen(true)
+                    else -> askMic.launch(Manifest.permission.RECORD_AUDIO)
+                }
             }
         }
     }

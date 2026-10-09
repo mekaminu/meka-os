@@ -151,7 +151,11 @@ fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modi
         if (talkNow == null) return@LaunchedEffect
         lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
         app?.talkNow?.value = null
-        if (!talk.active) startTalking()
+        if (talk.active) return@LaunchedEffect
+        if (talkNow == os.meka.core.domain.TalkStart.OPEN) {
+            // "Listen when I open MEKA" (slice 4): the room check, then a short window; nothing said → Today again.
+            talk.startOnOpen { app?.openDestination?.value = os.meka.android.shell.ShellDestination.TODAY }
+        } else startTalking()
     }
 
     fun ask() {

@@ -1,17 +1,28 @@
 package os.meka.android.ask
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.app.UiModeManager
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.media.AudioDeviceInfo
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioRecord
+import android.media.MediaRecorder
+import android.media.ToneGenerator
 import android.widget.RemoteViews
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import os.meka.android.MainActivity
 import os.meka.android.R
+import os.meka.core.domain.TalkOnOpenRules
 import os.meka.core.domain.TalkStart
 import os.meka.core.domain.TalkStartRules
 
@@ -35,11 +46,69 @@ object TalkAutoListen {
         intent != null && intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER) &&
             !intent.hasExtra(MainActivity.EXTRA_OPEN)
 
-    /** Where this launcher open should start talking from, or null (most opens: Ask waits for the mic). */
+    /**
+     * Where this launcher open should start talking from, or null (most opens: Ask waits for the mic). Slice 4: with
+     * "Listen when I open MEKA" on and the microphone already allowed, any launcher open → [TalkStart.OPEN].
+     */
     fun onOpen(context: Context, intent: Intent?): TalkStart? {
         val launcher = fromLauncher(intent)
         if (!launcher) return null
-        return TalkStartRules.onOpen(launcher, bluetoothAudio(context), carMode(context))
+        return TalkStartRules.openStart(launcher, bluetoothAudio(context), carMode(context), listenOnOpen(context), micAllowed(context))
+    }
+
+    // ---- "Listen when I open MEKA" (slice 4): kept on this phone, off by default ----
+
+    private const val PREFS = "meka.talk"
+    private const val KEY_LISTEN_ON_OPEN = "listen_on_open"
+
+    fun listenOnOpen(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_LISTEN_ON_OPEN, false)
+
+    fun setListenOnOpen(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_LISTEN_ON_OPEN, on).apply()
+    }
+
+    fun micAllowed(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * The room check: reads the microphone for [TalkOnOpenRules.ROOM_CHECK_MS] and returns its level
+     * ([TalkOnOpenRules.roomLevel]; a number, never audio, nothing kept). Null when it couldn't be measured.
+     */
+    @SuppressLint("MissingPermission") // checked first
+    suspend fun roomLevel(context: Context): Double? = withContext(Dispatchers.IO) {
+        if (!micAllowed(context)) return@withContext null
+        runCatching {
+            val rate = 16_000
+            val want = (rate * TalkOnOpenRules.ROOM_CHECK_MS / 1000).toInt()
+            val min = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+            if (min <= 0) return@runCatching null
+            val rec = AudioRecord(MediaRecorder.AudioSource.MIC, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(min, want * 2))
+            try {
+                if (rec.state != AudioRecord.STATE_INITIALIZED) return@runCatching null
+                rec.startRecording()
+                val buf = ShortArray(want)
+                var got = 0
+                while (got < want) {
+                    val n = rec.read(buf, got, want - got)
+                    if (n <= 0) break
+                    got += n
+                }
+                rec.stop()
+                TalkOnOpenRules.roomLevel(buf, got)
+            } finally {
+                rec.release()
+            }
+        }.getOrNull()
+    }
+
+    /** The quiet chime that marks listening (a short, soft acknowledgement tone at a low volume). */
+    fun chime() {
+        runCatching {
+            val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 30)
+            tone.startTone(ToneGenerator.TONE_PROP_ACK, 120)
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ tone.release() }, 400)
+        }
     }
 
     private fun bluetoothAudio(context: Context): Boolean = runCatching {
