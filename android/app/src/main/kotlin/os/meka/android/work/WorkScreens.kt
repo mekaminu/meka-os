@@ -282,12 +282,13 @@ fun AfterWorkPane(summary: AfterWorkSummary, onDone: () -> Unit, onClose: () -> 
 /** A calm card for Needs you: what's waiting after work, or how much is being held during it. */
 @Composable
 fun AfterWorkCard(core: MekaCore, modifier: Modifier = Modifier, onOpen: () -> Unit) {
-    val store = (LocalContext.current.applicationContext as MekaApplication).captures
+    val context = LocalContext.current
+    val store = (context.applicationContext as MekaApplication).captures
     val synced by core.afterWork.collectAsState()
     val lists by store.lists.collectAsState()
     val work by core.workMode.collectAsState()
     if (synced.isEmpty) return
-    val summary = remember(synced, lists) { synced.withLists(lists) }
+    val summary = remember(synced, lists) { synced.withLists(lists, CallerLookup.names(context)) }
     if (work.atWork) {
         val preview = remember(summary, work) { core.heldPreview(summary) }
         HeldPreviewLine(preview, modifier)
@@ -364,11 +365,12 @@ private fun HeldPreviewRowView(r: HeldPreviewRow, modifier: Modifier) {
  */
 @Composable
 fun AfterWorkHost(onClose: () -> Unit) {
-    val app = LocalContext.current.applicationContext as MekaApplication
+    val context = LocalContext.current
+    val app = context.applicationContext as MekaApplication
     val store = app.captures
     val synced by app.core.afterWork.collectAsState()
     val lists by store.lists.collectAsState()
-    val summary = remember(synced, lists) { synced.withLists(lists) }
+    val summary = remember(synced, lists) { synced.withLists(lists, CallerLookup.names(context)) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { app.nudger.dismiss() } // he's reading it: the nudge has done its job
     AfterWorkPane(summary, onDone = {

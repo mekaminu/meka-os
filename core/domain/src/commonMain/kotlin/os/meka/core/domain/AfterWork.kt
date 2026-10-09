@@ -112,6 +112,36 @@ object People {
     }
 }
 
+/**
+ * How a caller known only by number is named (build plan "Call assistant live — polish" 3 and 5): a call from this
+ * phone's own number is Meka testing the assistant ("You · test call"); then a name on his lists; then the phone's
+ * contacts ([contactName], the Fold only: looked up on the phone, never synced or sent); else the number as people
+ * write it ("07700 900123").
+ */
+class CallerNames(
+    /** A number's name in this device's contacts, or null. */
+    private val contactName: (String) -> String? = { null },
+    /** This phone's own numbers (its SIM's, and the owner's own contact card). */
+    ownNumbers: Set<String> = emptySet(),
+) {
+    private val ownKeys = ownNumbers.map(People::key).filter { it.startsWith("tel:") }.toSet()
+
+    fun isOwn(number: String): Boolean = People.key(number) in ownKeys
+
+    fun nameOf(number: String, lists: PeopleLists = PeopleLists()): String = when {
+        isOwn(number) -> TEST_CALL
+        else -> lists.nameForNumber(number)
+            ?: runCatching { contactName(number) }.getOrNull()?.trim()?.take(80)?.takeIf { it.isNotEmpty() && !People.key(it).startsWith("tel:") }
+            ?: BlockedCallerRules.display(number)
+    }
+
+    companion object {
+        const val TEST_CALL = "You \u00b7 test call"
+        /** No contacts or own numbers known (the Mac, the server's view). */
+        val NONE = CallerNames()
+    }
+}
+
 /** Phone numbers read from a contact (build plan "Call assistant live — polish" 7). */
 object ContactNumbers {
     /**
@@ -218,9 +248,13 @@ data class AfterWorkSummary(val people: List<PersonSummary>) {
         const val AWAY_TITLE = "Messages MEKA took"
     }
 
-    /** The same summary with this device's family list applied too (the Fold has the lists; the Mac uses the flags). */
-    fun withLists(lists: PeopleLists): AfterWorkSummary =
-        if (lists.family.isEmpty()) this else AfterWorkSummaries.build(people.flatMap { it.items }, lists)
+    /**
+     * The same summary with this device's family list applied too (the Fold has the lists; the Mac uses the flags),
+     * and callers known only by number named from this device's contacts and own numbers ([names]; the Fold only).
+     */
+    fun withLists(lists: PeopleLists, names: CallerNames = CallerNames.NONE): AfterWorkSummary =
+        if (lists.family.isEmpty() && lists.alwaysNotify.isEmpty() && names === CallerNames.NONE) this
+        else AfterWorkSummaries.build(people.flatMap { it.items }, lists, names)
 
     /** "4 people · 9 messages · 2 missed calls" */
     val headline: String get() = if (isEmpty) "Nothing came in." else listOfNotNull(
@@ -236,8 +270,13 @@ object AfterWorkSummaries {
      * Grouped by person. Urgent people first (latest first), then family, then everyone else by latest. A caller known
      * only by number (the call assistant hears numbers) is shown by their listed name when the lists know the number.
      */
-    fun build(items: List<CapturedItem>, lists: PeopleLists): AfterWorkSummary {
-        val named = items.map { i -> lists.nameForNumber(i.personName)?.let { i.copy(personName = it) } ?: i }
+    fun build(items: List<CapturedItem>, lists: PeopleLists, names: CallerNames = CallerNames.NONE): AfterWorkSummary {
+        val resolved = HashMap<String, String>()
+        val named = items.map { i ->
+            val key = People.key(i.personName)
+            if (!key.startsWith("tel:")) i
+            else i.copy(personName = resolved.getOrPut(key) { names.nameOf(i.personName, lists) })
+        }
         val people = named.groupBy { it.personKey }.values.map { group ->
             val sorted = group.sortedBy { it.atMs }
             PersonSummary(

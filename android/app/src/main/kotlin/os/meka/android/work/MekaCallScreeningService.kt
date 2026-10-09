@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import os.meka.android.MekaApplication
 import os.meka.core.domain.CallScreeningRules
+import os.meka.core.domain.CallerNames
 import os.meka.core.domain.CallSignals
 import os.meka.core.domain.CallVerdict
 
@@ -172,6 +173,42 @@ internal object CallerLookup {
                 found
             } == true
         }.getOrDefault(false)
+    }
+
+    /** A number's name in the phone's contacts, or null (no permission, not a contact). Read here only, never sent. */
+    fun contactName(context: Context, number: String?): String? {
+        if (number.isNullOrBlank() || !granted(context, Manifest.permission.READ_CONTACTS)) return null
+        return runCatching {
+            val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number))
+            context.contentResolver.query(uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME), null, null, null)
+                ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * The phone's own numbers, from the owner's own contact card (Contacts → My profile), so a test call to the
+     * assistant reads "You · test call" (polish 5). Empty without the contacts permission or with no number there.
+     */
+    fun ownNumbers(context: Context): Set<String> {
+        if (!granted(context, Manifest.permission.READ_CONTACTS)) return emptySet()
+        return runCatching {
+            val uri = Uri.withAppendedPath(ContactsContract.Profile.CONTENT_URI, ContactsContract.Contacts.Data.CONTENT_DIRECTORY)
+            context.contentResolver.query(
+                uri, arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
+                "${ContactsContract.Data.MIMETYPE} = ?", arrayOf(ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE), null,
+            )?.use { c -> buildSet { while (c.moveToNext()) c.getString(0)?.takeIf { it.isNotBlank() }?.let { add(it) } } }
+        }.getOrNull().orEmpty()
+    }
+
+    /**
+     * How callers known only by number are named on this phone (polish 3 and 5): its contacts and own numbers. Each
+     * number is looked up once per [CallerNames]; build one per summary.
+     */
+    fun names(context: Context): CallerNames {
+        val app = context.applicationContext
+        if (!granted(app, Manifest.permission.READ_CONTACTS)) return CallerNames.NONE
+        val cache = HashMap<String, String?>()
+        return CallerNames({ n -> cache.getOrPut(os.meka.core.domain.People.key(n)) { contactName(app, n) } }, ownNumbers(app))
     }
 
     /** Whether Meka has let MEKA read contacts and the call log (Work mode → Call assistant → Recognise callers). */

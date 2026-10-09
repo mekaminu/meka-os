@@ -44,7 +44,8 @@ class CallAssistantTest {
         leave("CA2", null, t0 + 10 * hour + 60_000)
         syncAll()
         val mac = HeldMessages(m.replica) { world.clock.nowMs }.summary()
-        assertEquals(listOf("Withheld number", "+44 7700 900123"), mac.people.map { it.personName })
+        // A number nobody has named reads the way people write it (polish 3).
+        assertEquals(listOf("Withheld number", "07700 900123"), mac.people.map { it.personName })
         assertEquals("1 voice message", mac.people[0].line)
         assertEquals("2 people · 2 voice messages", mac.headline)
         assertEquals("Voice message · Transcribing…", mac.people[0].items.single().displayLine)
@@ -91,6 +92,35 @@ class CallAssistantTest {
         assertEquals(1, HeldMessages(m.replica) { world.clock.nowMs }.clear())
         m.sync(); a.sync()
         assertTrue(HeldMessages(a.replica) { world.clock.nowMs }.items().isEmpty())
+    }
+
+    /** Polish 3 and 5: callers named from the Fold's contacts, and Meka's own test call. */
+    @Test
+    fun theFoldNamesCallersFromItsContactsAndItsOwnNumber() {
+        leave("CA1", "+447700900123", t0 + 10 * hour, "Can you call me about the boiler")
+        leave("CA2", "+447700900999", t0 + 10 * hour + 60_000, "Testing")
+        leave("CA3", "+441904618691", t0 + 10 * hour + 120_000)
+        leave("CA4", "+447700900555", t0 + 10 * hour + 180_000)
+        syncAll()
+        val looked = mutableListOf<String>()
+        val contacts = mapOf("tel:7700900123" to "Dave Plumber", "tel:7700900555" to "Mum")
+        val names = CallerNames({ n -> looked += n; contacts[People.key(n)] }, ownNumbers = setOf("07700 900999"))
+        val lists = PeopleLists(family = setOf("Mum")).withNumber("Mum", "07700 900555")
+        val fold = HeldMessages(a.replica) { world.clock.nowMs }.summary().withLists(lists, names)
+        val shown = fold.people.map { it.personName }.toSet()
+        assertEquals(setOf("Dave Plumber", "You · test call", "01904 618691", "Mum"), shown)
+        // Lists win over contacts (Mum is family, found by her listed number); own numbers aren't looked up.
+        assertTrue(fold.people.first { it.personName == "Mum" }.isFamily)
+        assertFalse(looked.any { People.key(it) == "tel:7700900999" || People.key(it) == "tel:7700900555" })
+        // A contacts lookup that fails or returns a number leaves the number shown.
+        assertEquals("07700 900123", CallerNames({ throw IllegalStateException() }).nameOf("+447700900123"))
+        assertEquals("07700 900123", CallerNames({ "+44 7700 900123" }).nameOf("+447700900123"))
+        // The Mac (no contacts) still shows the tidy number, and the same number twice is one person.
+        val mac = HeldMessages(m.replica) { world.clock.nowMs }.summary()
+        assertEquals(4, mac.people.size)
+        assertTrue("07700 900999" in mac.people.map { it.personName })
+        assertTrue(CallerNames(ownNumbers = setOf("+44 7700 900999")).isOwn("07700900999"))
+        assertFalse(CallerNames(ownNumbers = setOf("anonymous")).isOwn("anonymous"))
     }
 
     @Test

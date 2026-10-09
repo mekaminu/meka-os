@@ -38,7 +38,7 @@ class AfterWorkNudger(private val context: Context, private val app: MekaApplica
 
     fun evaluate(state: WorkModeState): Unit = synchronized(lock) {
         val was = if (prefs.contains(KEY_AT_WORK)) prefs.getBoolean(KEY_AT_WORK, false) else null
-        val summary = app.core.afterWork.value.withLists(app.captures.lists.value)
+        val summary = app.core.afterWork.value.withLists(app.captures.lists.value, CallerLookup.names(context))
         if (AfterWorkNudge.shouldNudge(was, state.atWork, summary, app.isOnScreen)) {
             AfterWorkNudge.text(summary)?.let { post(it.title, it.text, it.publicText) }
         }
@@ -54,7 +54,7 @@ class AfterWorkNudger(private val context: Context, private val app: MekaApplica
      */
     fun alertVoiceMessages(): Unit = synchronized(lock) {
         val lists = app.captures.lists.value
-        val items = app.core.afterWork.value.withLists(lists).people.flatMap { it.items }
+        val items = app.core.afterWork.value.withLists(lists, CallerLookup.names(context)).people.flatMap { it.items }
         val alerted = prefs.getStringSet(KEY_VOICE_ALERTED, emptySet()).orEmpty()
         val due = CallAssistantRules.toAlert(items, alerted, System.currentTimeMillis())
         if (due.isEmpty()) return
