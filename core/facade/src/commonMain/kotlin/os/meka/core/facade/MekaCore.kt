@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.atTime
@@ -163,6 +164,12 @@ class MekaCore(
     private var pushApi: PushApi? = transport as? PushApi
     private var newsImagesApi: NewsImagesApi? = transport as? NewsImagesApi
     private var aiApi: AiApi? = transport as? AiApi
+    private var speechApi: SpeechApi? = transport as? SpeechApi
+    /** MEKA's voice: the synced choice, the clips said so far (in memory, newest last) and a pause after a refusal. */
+    private val mekaVoice = os.meka.core.domain.MekaVoiceStore(replica)
+    private val speechClips = LinkedHashMap<String, String>()
+    private var speechQuietUntilMs = 0L
+    private var speechWarmed = false
 
     // Declared before Today: Today's timeline reads the booked sessions.
     private val _sessions = MutableStateFlow(os.meka.core.domain.SessionsView.EMPTY)
@@ -1042,6 +1049,7 @@ class MekaCore(
         syncMutex.withLock { 
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
+            speechApi = transport as? SpeechApi
         }
         startSync()
     }
@@ -1305,6 +1313,72 @@ class MekaCore(
         var any = false
         undos.asReversed().forEach { if (undoAsk(it)) any = true }
         return any
+    }
+
+    // ---- MEKA's voice (Weather and a voice, item 3) ----
+
+    /** The synced "MEKA's voice": a Polly name ("Amy"), "device" for the device's own voice, or null for MEKA's default. */
+    suspend fun mekaVoice(): String? = onCore { mekaVoice.chosen() }
+
+    /** Chooses MEKA's voice on every device (null: MEKA's default). False, and nothing saved, for a name that can't be one. */
+    suspend fun chooseMekaVoice(name: String?): Boolean = onCore { mekaVoice.choose(name) }
+
+    /**
+     * One piece of MEKA's own words ([os.meka.core.domain.SpeechRules.pieces]) said in MEKA's voice: the MP3 as base64,
+     * or null when the device's own voice should say it — the device voice was chosen, not connected, the server has no
+     * voice ("off"), the month's characters are used up ("over"), it failed, or it was slower than
+     * [os.meka.core.domain.SpeechRules.FIRST_AUDIO_MS] for the [first] piece (else
+     * [os.meka.core.domain.SpeechRules.NEXT_AUDIO_MS]). A refusal leaves the server alone for a while
+     * ([os.meka.core.domain.SpeechRules.quietUntil]); clips are kept in memory per voice and words. Never throws.
+     */
+    suspend fun speechClip(text: String, first: Boolean): String? {
+        val api = speechApi ?: return null
+        val words = text.trim().takeIf { it.isNotEmpty() && it.length <= os.meka.core.domain.SpeechRules.MAX_PIECE } ?: return null
+        val voice = onCore { speechVoiceNow() } ?: return null
+        onCore { speechCached(voice.name, words) }?.let { return it }
+        val wait = if (first) os.meka.core.domain.SpeechRules.FIRST_AUDIO_MS else os.meka.core.domain.SpeechRules.NEXT_AUDIO_MS
+        val r = withTimeoutOrNull(wait) {
+            try { api.speak(words, voice.name) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                os.meka.core.wire.SpeechCodec.Response(os.meka.core.wire.SpeechCodec.Response.FAILED)
+            }
+        } ?: return null // slow this time: the device speaks, and the next line asks again
+        return onCore {
+            val audio = r.audio
+            if (r.state == os.meka.core.wire.SpeechCodec.Response.SPOKEN && !audio.isNullOrEmpty()) {
+                speechClips[os.meka.core.domain.SpeechRules.cacheKey(voice.name, words)] = audio
+                while (speechClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechClips.remove(speechClips.keys.first())
+                audio
+            } else {
+                os.meka.core.domain.SpeechRules.quietUntil(r.state, nowMs())?.let { speechQuietUntilMs = it }
+                null
+            }
+        }
+    }
+
+    /**
+     * Fetches MEKA's common lines ([os.meka.core.domain.SpeechRules.COMMON]) once, so they play at once in a
+     * conversation. Does nothing when the device's voice is chosen or the server is resting. Never throws.
+     */
+    suspend fun warmVoice() {
+        if (speechApi == null || onCore { speechWarmed }) return
+        onCore { speechWarmed = true }
+        os.meka.core.domain.SpeechRules.COMMON.forEach { if (speechClip(it, first = false) == null) return }
+    }
+
+    private class SpeechVoice(val name: String?)
+
+    /** The voice to ask the server for now, or null when the device should speak (chosen, or resting after a refusal). */
+    private fun speechVoiceNow(): SpeechVoice? {
+        val chosen = mekaVoice.chosen()
+        if (chosen == os.meka.core.domain.MekaVoiceRules.DEVICE || nowMs() < speechQuietUntilMs) return null
+        return SpeechVoice(chosen)
+    }
+
+    private fun speechCached(voice: String?, words: String): String? {
+        val key = os.meka.core.domain.SpeechRules.cacheKey(voice, words)
+        val clip = speechClips.remove(key) ?: return null
+        speechClips[key] = clip // newest last
+        return clip
     }
 
     /**

@@ -86,6 +86,17 @@ interface AiApi {
     suspend fun aiStatus(): AiStatusReply? = null
 }
 
+/**
+ * MEKA's voice (Weather and a voice, item 3): the server says a piece of MEKA's own words with Amazon Polly. Only
+ * MEKA's words are sent, never Meka's. Available once the device is connected.
+ */
+interface SpeechApi {
+    /** [voice]: a Polly name, or null for the server's default. A server without a voice answers "off". */
+    suspend fun speak(text: String, voice: String?): os.meka.core.wire.SpeechCodec.Response
+    /** The voices the server can speak with and the month's characters. */
+    suspend fun speechVoices(): os.meka.core.wire.SpeechCodec.Voices
+}
+
 /** Account management calls, available once the device is connected. */
 interface AccountsApi {
     /** [editing]: ask the provider for permission to change events too (calendar editing). */
@@ -107,7 +118,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -253,6 +264,32 @@ class HttpSyncTransport(
         }
         val st = AskCodec.decodeStatus(resp.bodyAsText())
         return AiStatusReply(st.state, st.reason, st.spentCents, st.budgetCents, st.level)
+    }
+
+    override suspend fun speak(text: String, voice: String?): os.meka.core.wire.SpeechCodec.Response {
+        val body = os.meka.core.wire.SpeechCodec.encodeRequest(os.meka.core.wire.SpeechCodec.Request(text, voice))
+        prepare() // the speech routes require the device's signing key on the server
+        val resp = send("/v1/speech/speak", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/speech/speak")
+            // A server without MEKA's voice (older, or not configured): the device's own voice speaks.
+            resp.status.value == 404 -> return os.meka.core.wire.SpeechCodec.Response(os.meka.core.wire.SpeechCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.SpeechCodec.Response(os.meka.core.wire.SpeechCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/speech/speak")
+        }
+        return os.meka.core.wire.SpeechCodec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun speechVoices(): os.meka.core.wire.SpeechCodec.Voices {
+        prepare()
+        val resp = send("/v1/speech/voices", os.meka.core.wire.SpeechCodec.encodeVoicesRequest())
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/speech/voices")
+            resp.status.value == 404 -> return os.meka.core.wire.SpeechCodec.Voices(os.meka.core.wire.SpeechCodec.Voices.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.SpeechCodec.Voices(os.meka.core.wire.SpeechCodec.Voices.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/speech/voices")
+        }
+        return os.meka.core.wire.SpeechCodec.decodeVoices(resp.bodyAsText())
     }
 
     private suspend fun post(path: String, body: String): String {

@@ -10,9 +10,10 @@ import Speech
 /// Listening uses `SFSpeechRecognizer` with **on-device recognition required** (`requiresOnDeviceRecognition`):
 /// nothing is recorded, kept or sent away as audio, and a Mac without English on the device says so
 /// (`TalkProblem.noOnDevice`) rather than using Apple's servers. The Mac's recogniser doesn't decide when a question is
-/// over, so `TalkEndpoint` does (a 1.5 s pause after words; 8 s of nothing is silence). Speaking uses
-/// `AVSpeechSynthesizer` with the best installed English voice (`TalkVoice.best`: British first, premium, then
-/// enhanced). Every change still goes through `MekaCore.doTalk` exactly as clicking a card would, with one undo bar.
+/// over, so `TalkEndpoint` does (a 1.5 s pause after words; 8 s of nothing is silence). Speaking uses MEKA's voice
+/// (Amazon Polly through MEKA's own server, `MekaCore.speechClip`: only MEKA's own words are sent), piece by piece,
+/// and falls back to `AVSpeechSynthesizer` with the best installed English voice (`TalkVoice.best`: British first,
+/// premium, then enhanced) when MEKA's voice is off, used up for the month, offline or slow. Every change still goes through `MekaCore.doTalk` exactly as clicking a card would, with one undo bar.
 /// Clicking the orb while MEKA speaks stops it and listens (barge-in by click, as on the Fold); otherwise it ends.
 ///
 /// Main actor throughout. The microphone tap runs on the audio thread and touches only the recognition request and a
@@ -57,12 +58,19 @@ final class TalkController {
 
     private let synthesizer = AVSpeechSynthesizer()
     private let speechDone = SpeechDone()
+    private let clipDone = ClipDone()
     @ObservationIgnored private var voice: AVSpeechSynthesisVoice?
+    /// Bumped by every line and every stop, so a line that was cut short doesn't move the conversation on.
     @ObservationIgnored private var utterance = 0
+    @ObservationIgnored private var speaking: Task<Void, Never>?
+    @ObservationIgnored private var player: AVAudioPlayer?
+    /// The Mac's own lines being said, by id, resumed when each is over (or stopped).
+    @ObservationIgnored private var deviceWaiting: [Int: CheckedContinuation<Void, Never>] = [:]
+    @ObservationIgnored private var deviceLine = 0
 
     func attach(_ model: CoreModel) {
         self.model = model
-        speechDone.onFinish = { [weak self] id in self?.finishedSaying(id) }
+        speechDone.onFinish = { [weak self] id in self?.deviceLineSaid(id) }
         synthesizer.delegate = speechDone
     }
 
@@ -81,6 +89,7 @@ final class TalkController {
             }
             guard gen == generation else { return }
             if voice == nil { voice = Self.bestVoice() }
+            Task { await model?.warmVoice() } // MEKA's common lines in its voice, fetched once
             apply(TalkFlow.shared.start())
         }
     }
@@ -149,12 +158,10 @@ final class TalkController {
             said = speak.text
             say(speak.text)
         } else if effect is TalkEffectStopSpeaking {
-            utterance += 1
-            synthesizer.stopSpeaking(at: .immediate)
+            stopSaying()
         } else if effect is TalkEffectEnd {
             stopListening()
-            utterance += 1
-            synthesizer.stopSpeaking(at: .immediate)
+            stopSaying()
             level = 0
         }
     }
@@ -326,12 +333,82 @@ final class TalkController {
         return AVSpeechSynthesisVoice(identifier: best.name)
     }
 
+    /// Says `text`: piece by piece (`SpeechRules.pieces`) in MEKA's voice, fetching the next piece while one plays;
+    /// the Mac's own voice says whatever is left when a piece doesn't come in time, the server refuses, or a clip won't
+    /// play. Only Strings and Data cross between here and the core.
     private func say(_ text: String) {
+        stopSaying()
         utterance += 1
+        let id = utterance
+        let pieces = SpeechRules.shared.pieces(text: text)
+        speaking = Task { [weak self] in
+            guard let self else { return }
+            var i = 0
+            var next: Task<Data?, Never>?
+            if let first = pieces.first { next = Task { await self.model?.speechClip(first, first: true) } }
+            while i < pieces.count {
+                guard let clip = await next?.value, !Task.isCancelled else { break }
+                if i + 1 < pieces.count {
+                    let piece = pieces[i + 1]
+                    next = Task { await self.model?.speechClip(piece, first: false) }
+                } else {
+                    next = nil
+                }
+                guard await self.play(clip) else { break }
+                i += 1
+            }
+            next?.cancel()
+            guard !Task.isCancelled else { return }
+            if i < pieces.count { await self.sayOnDevice(pieces[i...].joined(separator: " ")) }
+            guard !Task.isCancelled else { return }
+            self.finishedSaying(id)
+        }
+    }
+
+    /// Stops whatever is being said, in either voice.
+    private func stopSaying() {
+        utterance += 1
+        speaking?.cancel()
+        speaking = nil
+        player?.stop()
+        player = nil
+        clipDone.cancelAll()
+        synthesizer.stopSpeaking(at: .immediate)
+        let waiting = deviceWaiting
+        deviceWaiting = [:]
+        waiting.values.forEach { $0.resume() }
+    }
+
+    /// Plays one MP3 clip to the end. False when it can't be played (the Mac's voice takes over) or was stopped.
+    private func play(_ data: Data) async -> Bool {
+        guard let p = try? AVAudioPlayer(data: data) else { return false }
+        player = p
+        p.delegate = clipDone
+        let key = ObjectIdentifier(p)
+        let ok = await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+            clipDone.expect(key, c)
+            if !p.play() { clipDone.finish(key, ok: false) }
+        }
+        if player === p { player = nil }
+        return ok
+    }
+
+    /// Says `text` with the Mac's own voice and waits until it has been said (or stopped).
+    private func sayOnDevice(_ text: String) async {
+        deviceLine += 1
+        let id = deviceLine
         let u = AVSpeechUtterance(string: text)
         u.voice = voice
-        speechDone.expect(ObjectIdentifier(u), id: utterance)
-        synthesizer.speak(u)
+        speechDone.expect(ObjectIdentifier(u), id: id)
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            deviceWaiting[id] = c
+            synthesizer.speak(u)
+        }
+    }
+
+    /// The synthesiser finished the Mac's line `id`.
+    private func deviceLineSaid(_ id: Int) {
+        deviceWaiting.removeValue(forKey: id)?.resume()
     }
 
     /// The line `id` finished: listen again, unless it was cut short since.
@@ -355,5 +432,36 @@ nonisolated final class SpeechDone: NSObject, AVSpeechSynthesizerDelegate, @unch
         guard let id = lines.withLock({ $0[ObjectIdentifier(utterance)] }) else { return }
         guard let finish = onFinish else { return }
         Task { @MainActor in finish(id) }
+    }
+}
+
+/// The clip player's delegate: resumes whoever waits on a clip, once, with whether it played to the end.
+nonisolated final class ClipDone: NSObject, AVAudioPlayerDelegate, @unchecked Sendable {
+    private let waiting = OSAllocatedUnfairLock<[ObjectIdentifier: CheckedContinuation<Bool, Never>]>(initialState: [:])
+
+    func expect(_ player: ObjectIdentifier, _ c: CheckedContinuation<Bool, Never>) {
+        waiting.withLock { $0[player] = c }
+    }
+
+    func finish(_ player: ObjectIdentifier, ok: Bool) {
+        waiting.withLock { $0.removeValue(forKey: player) }?.resume(returning: ok)
+    }
+
+    /// Stopped: every clip still playing counts as not played (AVAudioPlayer's stop() calls no delegate).
+    func cancelAll() {
+        let all = waiting.withLock { w -> [CheckedContinuation<Bool, Never>] in
+            let v = Array(w.values)
+            w.removeAll()
+            return v
+        }
+        all.forEach { $0.resume(returning: false) }
+    }
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        finish(ObjectIdentifier(player), ok: flag)
+    }
+
+    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: (any Error)?) {
+        finish(ObjectIdentifier(player), ok: false)
     }
 }

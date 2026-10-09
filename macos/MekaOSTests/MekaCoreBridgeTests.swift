@@ -502,6 +502,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(WeatherPlaceRules.shared.view(wanted: "Bedford", f: home).pending)
     }
 
+    /// MEKA's voice: Talk cuts a line into the pieces it asks MEKA's server to say, in Swift as on the Fold.
+    func testSpeechPiecesReachSwift() {
+        XCTAssertEqual(SpeechRules.shared.pieces(text: "You've got three things today. Training is at 18:00. Anything else?"),
+                       ["You've got three things today.", "Training is at 18:00. Anything else?"])
+        XCTAssertEqual(SpeechRules.shared.pieces(text: "  "), [])
+        XCTAssertEqual(SpeechRules.shared.FIRST_AUDIO_MS, 1200)
+        XCTAssertEqual(MekaVoiceRules.shared.normalize(name: " device "), MekaVoiceRules.shared.DEVICE)
+    }
+
     func testMotionCheckReachesSwift() {
         let off = MotionCheckRules.shared.mac(stored: nil, reduceMotion: true, lowPower: false)
         XCTAssertEqual(off.rows.map(\.label), ["MEKA Motion", "Reduce Motion", "Low Power Mode"])

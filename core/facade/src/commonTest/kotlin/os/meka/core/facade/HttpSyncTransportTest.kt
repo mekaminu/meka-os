@@ -27,6 +27,10 @@ class HttpSyncTransportTest {
     private val json = headersOf("Content-Type", "application/json")
     private var pushStatus = HttpStatusCode.OK
     private val pushReply = WireCodec.encodePushToken(WireCodec.PushToken("fcm", ""))
+    private var speakStatus = HttpStatusCode.OK
+    private val speakReply = os.meka.core.wire.SpeechCodec.encodeResponse(
+        os.meka.core.wire.SpeechCodec.Response("spoken", audio = "bXAz", format = "mp3", voice = "Amy", engine = "generative"),
+    )
     private fun client() = HttpClient(MockEngine { req ->
         requests += req
         when (req.url.encodedPath) {
@@ -34,6 +38,7 @@ class HttpSyncTransportTest {
             "/v1/devices/key" -> respond(WireCodec.encodeDeviceKey("A".repeat(124)), HttpStatusCode.OK, json)
             "/v1/integrations/google/connect" -> respond("not configured", HttpStatusCode.Conflict)
             "/v1/push/token" -> respond(pushReply, pushStatus, json)
+            "/v1/speech/speak" -> respond(speakReply, speakStatus, json)
             else -> respond("", HttpStatusCode.NotFound)
         }
     })
@@ -87,5 +92,20 @@ class HttpSyncTransportTest {
         pushStatus = HttpStatusCode.NotFound
         assertEquals(false, core.registerPushToken(token))
         assertEquals(false, MekaCore("home", "fold", os.meka.core.sync.InMemoryReplicaStore(), null, kotlin.random.Random(1)).registerPushToken(token))
+    }
+
+    @Test
+    fun mekasWordsAreSentSignedToBeSpokenAndAServerWithoutAVoiceSaysOff() = runTest {
+        val t = HttpSyncTransport(client(), "https://meka.example", RecordingKey()) { "s".repeat(64) }
+        val r = t.speak("Anything else?", "Amy")
+        assertEquals("bXAz", r.audio)
+        val req = requests.last()
+        assertEquals("/v1/speech/speak", req.url.encodedPath)
+        assertEquals(os.meka.core.wire.SpeechCodec.Request("Anything else?", "Amy"), os.meka.core.wire.SpeechCodec.decodeRequest((req.body as TextContent).text))
+        assertTrue(req.headers[RequestSigning.HEADER_SIGNATURE] != null)
+        speakStatus = HttpStatusCode.NotFound
+        assertEquals("off", t.speak("Anything else?", null).state)
+        // The voices route isn't on this test server either: off, not an error.
+        assertEquals("off", t.speechVoices().state)
     }
 }

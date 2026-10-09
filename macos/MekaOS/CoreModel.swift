@@ -945,6 +945,22 @@ final class CoreModel {
         return did
     }
 
+    // MARK: MEKA's voice
+
+    /// One piece of MEKA's own words said in MEKA's voice (Amazon Polly through MEKA's server; only these words are
+    /// sent), as MP3 data, or nil when the Mac's own voice should say it (chosen, offline, off, over the month, slow).
+    func speechClip(_ text: String, first: Bool) async -> Data? {
+        guard let core else { return nil }
+        guard let clip = try? await core.speechClip(text: text, first: first) else { return nil }
+        return Data(base64Encoded: clip)
+    }
+
+    /// Fetches MEKA's common lines in its voice once, so they play at once in a conversation.
+    func warmVoice() async {
+        guard let core else { return }
+        _ = try? await core.warmVoice()
+    }
+
     // MARK: Weekly review
 
     /// Shows the week `offset` weeks from this one (0 this week, -1 last week, back to -12); a tick haptic.
