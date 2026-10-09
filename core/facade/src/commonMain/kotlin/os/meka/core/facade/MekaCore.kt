@@ -631,6 +631,11 @@ class MekaCore(
     suspend fun hideCalendarFromToday(calendarKey: String, label: String) = onCore { eventActions.hideCalendar(calendarKey, label) }
     /** Shows a hidden calendar on Today again (the undo bar, and the Calendars switch). */
     suspend fun showCalendarOnToday(calendarKey: String) = onCore { eventActions.showCalendar(calendarKey) }
+    /**
+     * Renames a calendar in MEKA only (Calendars; the real calendar keeps its name). Blank goes back to the default
+     * name. Synced, last rename wins. Returns the name now shown, or null for the default.
+     */
+    suspend fun renameCalendar(calendarKey: String, name: String): String? = onCore { eventActions.renameCalendar(calendarKey, name) }
     /** Remind me [minutes] before the event (a governor heads-up, CLOCK precision); 0 turns it off. */
     /**
      * The Fold's listener held these at work: they join the synced after-work summary (new ones only; a re-post or a
@@ -1643,7 +1648,7 @@ class MekaCore(
         _search.value = runSearch(all)
         _activity.value = activity.view()
         _calendar.value = CalendarAgenda.build(
-            all, allEvents, nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden,
+            all, marks.forCalendarTab(allEvents), nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden,
             work = os.meka.core.domain.WorkHours.of(workState, holidays, todayEpochDay()),
         )
         _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars, marks.shownCalendars)
@@ -1713,9 +1718,14 @@ class MekaCore(
     private fun currentEvents(): List<os.meka.core.domain.CalendarEvent> {
         val edits = calendarEdits.all()
         // Plan my day's blocks (slice 2e): the task stands for that time, so its block isn't shown twice.
-        return os.meka.core.domain.PlanCalendarRules.withoutTaskBlocks(
+        val list = os.meka.core.domain.PlanCalendarRules.withoutTaskBlocks(
             os.meka.core.domain.PendingEditRules.apply(events.all(), edits, nowMs()), edits,
         )
+        // Meka's own calendar names (Fold review 2026-10-09 07:26, item 9) ride on every event, so each place that
+        // names a calendar (the Calendar key, rows, details, Calendars) says the same thing.
+        val names = eventActions.calendarNames()
+        if (names.isEmpty()) return list
+        return list.map { e -> names[os.meka.core.domain.CalendarRules.key(e)]?.let { e.copy(calendarTitle = it) } ?: e }
     }
 
     /** Calendar events minus those hidden from my day. */

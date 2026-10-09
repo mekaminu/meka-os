@@ -480,4 +480,84 @@ class EventActionsTest {
         ea.showCalendar(CalendarRules.key(events[3]))
         assertEquals(listOf("ev1", "t1", "h2"), ea.marks().visible(events).map { it.id })
     }
+
+    private fun primary(id: String = "p1", account: String = "meka@gmail.com", provider: String = "google", name: String? = account) =
+        CalendarEvent(id, "Dentist", at(tue6, 9), at(tue6, 10), false, null, provider, account, name)
+
+    @Test
+    fun anAccountsMainCalendarIsPersonalNotItsAddress() {
+        // Fold review 2026-10-09 07:26, item 9: Google names the main calendar after the address.
+        assertEquals("Personal", CalendarRules.label(primary()))
+        assertEquals("Personal", CalendarRules.label(primary(name = "Meka@Gmail.com ")))
+        assertEquals("Personal", CalendarRules.name(primary()))
+        // Another calendar keeps its own name, even one named like an address that isn't the account's.
+        assertEquals("Timestripe", CalendarRules.label(ts("t1", "Weekly goals")))
+        assertEquals("kids@group.calendar.google.com", CalendarRules.label(primary(name = "kids@group.calendar.google.com")))
+        assertEquals("Calendar", CalendarRules.label(primary(provider = "microsoft", account = "meka@hotmail.co.uk", name = "Calendar")))
+        assertEquals("Outlook", CalendarRules.label(primary(provider = "microsoft", name = null)))
+        assertEquals("Google Calendar", CalendarRules.label(primary(name = " ")))
+        assertEquals("Fixtures", CalendarRules.label(CalendarEvent("f", "Barça v Getafe", 0, 1, false, null, "fixtures", null, "FC Barcelona", calendarTitle = "Mine")))
+        assertNull(CalendarRules.name(CalendarEvent("f", "Barça v Getafe", 0, 1, false, null, "fixtures", null, "FC Barcelona")))
+        // The rows, the all-day group and the event detail say it too.
+        val allDay = primary().copy(startAtMs = tue6 * 24 * hour, endAtMs = (tue6 + 1) * 24 * hour, allDay = true)
+        val today = TodayProjection.project(emptyList(), at(tue6, 8), DayWindow(at(tue6, 0), at(tue6 + 1, 0), hour), listOf(allDay))
+        assertEquals("Personal", today.timeline.allDayItems.single().calendarLabel)
+        val choice = CalendarRules.choices(listOf(primary()), emptyMap()).single()
+        assertEquals("Personal", choice.label)
+        assertEquals("Google · meka@gmail.com", choice.detail)
+        assertTrue(choice.canRename)
+        assertFalse(choice.renamed)
+    }
+
+    @Test
+    fun renamingACalendarIsMekaOnlySyncedAndBlankGoesBack() {
+        val e = primary()
+        val key = CalendarRules.key(e)
+        assertTrue(ea.calendarNames().isEmpty())
+        assertEquals("Home", ea.renameCalendar(key, "  Home  "))
+        ea.renameCalendar(key, "Home") // the same name: no new op
+        syncBoth()
+        listOf(a, m).forEach { d -> assertEquals(mapOf(key to "Home"), actions(d).calendarNames()) }
+        // The name rides on the event (the facade copies it on) and every label follows; the key doesn't move.
+        val named = e.copy(calendarTitle = actions(m).calendarNames()[key])
+        assertEquals("Home", CalendarRules.label(named))
+        assertEquals(key, CalendarRules.key(named))
+        val row = CalendarRules.choices(listOf(named), emptyMap()).single()
+        assertEquals("Home", row.label)
+        assertEquals("Personal", row.defaultLabel)
+        assertTrue(row.renamed)
+        // A rename doesn't touch On Today: a renamed calendar stays on, a holiday one stays off.
+        assertTrue(ea.marks().hiddenCalendars.isEmpty())
+        val us = hol("h1", "Columbus Day")
+        ea.renameCalendar(CalendarRules.key(us), "US days off")
+        assertTrue(ea.marks().isCalendarHidden(us))
+        // The later rename wins on both devices; blank goes back to "Personal".
+        world.clock.nowMs += 60_000
+        em.renameCalendar(key, "   ")
+        syncBoth()
+        listOf(a, m).forEach { d -> assertNull(actions(d).calendarNames()[key]) }
+        assertEquals("Personal", CalendarRules.label(e.copy(calendarTitle = actions(a).calendarNames()[key])))
+        // Long names are cut; inner spaces collapse.
+        assertEquals("A".repeat(CalendarRules.MAX_NAME), CalendarRules.cleanName("A".repeat(60)))
+        assertEquals("Kids football", CalendarRules.cleanName(" Kids   football "))
+        assertEquals("Calendar renamed Home", CalendarRules.renamedLine("Home", "Personal"))
+        assertEquals("Calendar name back to Personal", CalendarRules.renamedLine(null, "Personal"))
+    }
+
+    @Test
+    fun aHolidayCalendarStaysOutOfTheCalendarTabUntilTurnedOn() {
+        val columbus = hol("h1", "Columbus Day")
+        val timestripe = ts("t1", "Weekly goals")
+        val events = listOf(primary(), timestripe, columbus)
+        // Meka hid Timestripe himself: it stays in the tab. The holiday calendar starts out of it, and out of the key.
+        ea.hideCalendar(CalendarRules.key(timestripe), "Timestripe")
+        assertEquals(listOf("p1", "t1"), ea.marks().forCalendarTab(events).map { it.id })
+        val v = CalendarAgenda.build(emptyList(), ea.marks().forCalendarTab(events), at(tue6, 8), cal)
+        assertEquals(listOf("Personal", "Timestripe"), v.legend.map { it.label })
+        // Turned on: back in the tab and the key.
+        ea.showCalendar(CalendarRules.key(columbus))
+        assertEquals(3, ea.marks().forCalendarTab(events).size)
+        val on = CalendarAgenda.build(emptyList(), ea.marks().forCalendarTab(events), at(tue6, 8), cal)
+        assertEquals(listOf("Holidays in United States", "Personal", "Timestripe"), on.legend.map { it.label })
+    }
 }

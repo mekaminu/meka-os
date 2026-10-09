@@ -147,7 +147,7 @@ object EventDetails {
         }
 
         val calendarLine = listOfNotNull(
-            e.calendarName?.takeIf { it.isNotBlank() },
+            if (e.isFixture) e.calendarName?.takeIf { it.isNotBlank() } else CalendarRules.name(e),
             when (e.provider) {
                 "microsoft" -> "Outlook"
                 "fixtures" -> "Fixture"

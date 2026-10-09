@@ -394,6 +394,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(HabitChipRules.shared.stripTiles(tiles: tiles).map(\.kind), [.renewals])
     }
 
+    /// Fold review 2026-10-09 07:26, item 9: an account's main calendar is "Personal"; Calendars renames in MEKA only.
+    func testCalendarNamesReachSwift() {
+        XCTAssertEqual(CalendarRules.shared.PERSONAL, "Personal")
+        XCTAssertEqual(CalendarRules.shared.cleanName(typed: "  Kids   football "), "Kids football")
+        XCTAssertNil(CalendarRules.shared.cleanName(typed: "   "))
+        XCTAssertEqual(CalendarRules.shared.renamedLine(name: nil, defaultLabel: "Personal"), "Calendar name back to Personal")
+        XCTAssertEqual(Int(CalendarRules.shared.MAX_NAME), 40)
+    }
+
     /// Fold review 2026-10-09 07:26, item 6: Today's section label says what it holds; an empty day has no section.
     func testTodaySectionLabelReachesSwift() {
         XCTAssertEqual(DayTimeline.companion.EMPTY.sectionLabel, "Today")

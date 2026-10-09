@@ -15,6 +15,11 @@ object CalendarMarkFields {
      */
     const val HIDDEN_FROM_TODAY = "hiddenFromToday"
     const val HIDDEN_AT = "hiddenAtMs"
+    /**
+     * Meka's own name for the calendar ("Personal", "Kids"), shown wherever the calendar is named (the Calendar tab's
+     * key, event rows and details, Calendars). Blank or absent: the default name ([CalendarRules.name]). LWW.
+     */
+    const val NAME = "displayName"
 }
 
 /** One calendar in Calendars' "On Today" list. */
@@ -25,7 +30,14 @@ data class CalendarChoice(
     /** "Google · meka@gmail.com" · "FC Barcelona"; null when there's nothing to add. */
     val detail: String?,
     val onToday: Boolean,
-)
+    /** The name MEKA would use without Meka's own ([CalendarRules.defaultName]): the rename field's hint. */
+    val defaultLabel: String = label,
+    /** Whether Meka can rename it (any calendar with events; not the fixtures feed, not a hidden one with none now). */
+    val canRename: Boolean = false,
+) {
+    /** Whether Meka gave it his own name. */
+    val renamed: Boolean get() = canRename && label != defaultLabel
+}
 
 /**
  * Which calendar an event comes from, and "Hide from Today" per calendar (all-day polish, Meka 2026-10-07: eight
@@ -45,10 +57,42 @@ object CalendarRules {
     /** The calendar's name in menus and Calendars. */
     fun label(e: CalendarEvent): String = when {
         e.isFixture -> "Fixtures"
-        !e.calendarName.isNullOrBlank() -> e.calendarName.trim()
-        e.provider == "microsoft" -> "Outlook"
-        else -> "Google Calendar"
+        else -> name(e) ?: if (e.provider == "microsoft") "Outlook" else "Google Calendar"
     }
+
+    /** Shown for an account's own main calendar, which Google names after the address (Fold review 2026-10-09 07:26, item 9). */
+    const val PERSONAL = "Personal"
+
+    /** Longest name Meka can give a calendar. */
+    const val MAX_NAME = 40
+
+    /**
+     * The calendar's name, or null when it has none: Meka's own ([CalendarEvent.calendarTitle]), else [defaultName].
+     * Fixtures have none here ([label] says "Fixtures").
+     */
+    fun name(e: CalendarEvent): String? = when {
+        e.isFixture -> null
+        !e.calendarTitle.isNullOrBlank() -> e.calendarTitle.trim()
+        else -> defaultName(e)
+    }
+
+    /**
+     * The name without Meka's own: Google names an account's main calendar after its address ("meka@gmail.com"),
+     * which reads as noise in the Calendar key and on rows, so that one is "Personal"; any other the provider's name.
+     */
+    fun defaultName(e: CalendarEvent): String? {
+        val n = e.calendarName?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val account = e.account?.trim().orEmpty()
+        return if ('@' in n && n.equals(account, ignoreCase = true)) PERSONAL else n
+    }
+
+    /** What a rename stores: trimmed, inner spaces collapsed, at most [MAX_NAME]; null (back to the default) when blank. */
+    fun cleanName(typed: String): String? =
+        typed.trim().replace(Regex("\\s+"), " ").take(MAX_NAME).trim().takeIf { it.isNotEmpty() }
+
+    /** The undo bar's line after a rename: "Calendar renamed Kids" / "Calendar name back to Personal". */
+    fun renamedLine(name: String?, defaultLabel: String): String =
+        if (name == null) "Calendar name back to $defaultLabel" else "Calendar renamed $name"
 
     /** The `calendar_mark` entity id for [key]: the same on every device. */
     fun markId(key: String): String = "c" + ActivityRules.fnv64("calendar:$key")
@@ -77,7 +121,7 @@ object CalendarRules {
             val holiday = HolidayCalendars.isHolidayKey(k)
             val off = k in hiddenCalendars || (holiday && k !in shownCalendars)
             val detail = if (holiday) listOfNotNull(detail(e), HolidayCalendars.DETAIL).joinToString(" · ") else detail(e)
-            seen[k] = CalendarChoice(k, label(e), detail, !off)
+            seen[k] = CalendarChoice(k, label(e), detail, !off, label(e.copy(calendarTitle = null)), canRename = !e.isFixture)
         }
         for ((k, label) in hiddenCalendars) {
             if (k !in seen) seen[k] = CalendarChoice(k, label.ifBlank { "Calendar" }, null, false)
@@ -98,12 +142,15 @@ object CalendarRules {
  * - Outlook's: "United States holidays", "United Kingdom holidays" (a country from [COUNTRIES]).
  * - A short country code: "UK Holidays", "US Holidays".
  *
+ * Off also keeps one out of the Calendar tab and its key (Fold review 2026-10-09 07:26, item 9: "US Holidays" sat in the
+ * key); turned on, it shows everywhere. Search still finds its events.
+ *
  * Meka's own calendars are never caught: "Holidays", "Family holidays" or "Holiday plans" are not holiday calendars.
  * The fixtures feed never is.
  */
 object HolidayCalendars {
     /** Added to the row's line in Calendars. */
-    const val DETAIL = "Holiday calendar · starts off (UK bank holidays come from GOV.UK)"
+    const val DETAIL = "Holiday calendar · off until you turn it on, Calendar tab too (UK bank holidays come from GOV.UK)"
 
     private val FAITHS = setOf(
         "christian", "orthodox christian", "jewish", "muslim", "islamic", "hindu", "buddhist", "sikh", "religious",

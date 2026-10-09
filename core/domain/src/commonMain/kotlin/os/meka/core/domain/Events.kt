@@ -67,6 +67,11 @@ data class CalendarEvent(
      * empty for a lone event. Never stored.
      */
     val alsoOn: List<CalendarEvent> = emptyList(),
+    /**
+     * Meka's own name for this event's calendar (a `calendar_mark`'s [CalendarMarkFields.NAME], Fold review
+     * 2026-10-09 07:26 item 9), filled in by the facade; null for the default ([CalendarRules.name]). Never stored.
+     */
+    val calendarTitle: String? = null,
 ) {
     /** Every calendar this row stands for, its own first: "Personal" · "Kids" (one entry for a lone event). */
     val calendarLabels: List<String> get() = (listOf(this) + alsoOn).map { CalendarRules.label(it) }.distinct()

@@ -1333,6 +1333,13 @@ final class CoreModel {
         }
     }
 
+    /// Rename in Calendars (Fold review 2026-10-09 07:26, item 9): MEKA's own name for the calendar, synced; empty goes
+    /// back to the default ("Personal" for an account's main calendar). The real calendar keeps its name.
+    func renameCalendar(key: String, name: String) {
+        MekaHaptics.light()
+        run { _ = try await $0.renameCalendar(calendarKey: key, name: name) }
+    }
+
     /// Done on the after-work summary: cleared here and on the Fold. WhatsApp and Messages are untouched.
     func clearAfterWork() {
         MekaHaptics.light()

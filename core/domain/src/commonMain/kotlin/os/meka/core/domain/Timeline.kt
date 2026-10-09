@@ -397,7 +397,7 @@ object AllDayRules {
 
     private fun calendarLabel(e: CalendarEvent): String? = when {
         e.isFixture -> "Fixtures"
-        !e.calendarName.isNullOrBlank() -> e.calendarName
+        CalendarRules.name(e) != null -> CalendarRules.name(e)
         e.provider == "microsoft" -> "Outlook"
         else -> null
     }

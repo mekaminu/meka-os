@@ -148,7 +148,7 @@ object AskRules {
         today.events.forEach { e ->
             val time = if (e.allDay) "all day" else "${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))}–${LocalClock.formatMinute(cal.minuteOfDay(e.endAtMs))}"
             val ended = !e.allDay && e.endAtMs <= nowMs
-            items += AskItem("", AskItemKind.EVENT, line(time, e.title, e.calendarName, e.location, if (ended) "over" else null))
+            items += AskItem("", AskItemKind.EVENT, line(time, e.title, if (e.isFixture) e.calendarName else CalendarRules.name(e), e.location, if (ended) "over" else null))
         }
         // The forecast (weather item): numbers MEKA wrote into words itself, so never untrusted; kept whatever the day holds.
         val forecast = weather.take(WeatherRules.MAX_ASK_LINES).map { AskItem("", AskItemKind.WEATHER, it.take(MAX_LINE)) }

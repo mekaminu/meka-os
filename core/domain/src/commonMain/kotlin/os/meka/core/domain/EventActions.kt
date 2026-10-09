@@ -45,6 +45,13 @@ data class EventMarks(
     fun isCalendarKeyHidden(key: String): Boolean =
         key in hiddenCalendars || (key !in shownCalendars && HolidayCalendars.isHolidayKey(key))
 
+    /**
+     * The events the Calendar tab shows: all of them but a holiday calendar's ([HolidayCalendars]) while Meka hasn't
+     * turned it on (Fold review 2026-10-09 07:26, item 9). A calendar Meka turned off himself stays in the tab.
+     */
+    fun forCalendarTab(events: List<CalendarEvent>): List<CalendarEvent> =
+        events.filter { e -> !HolidayCalendars.isHoliday(e) || CalendarRules.key(e) in shownCalendars }
+
     /** For Swift: the reminder's minutes, or 0 for none. */
     fun reminderOf(eventId: String): Int = reminders[eventId] ?: 0
 
@@ -116,6 +123,32 @@ class EventActions(
      * tab and Search keep them. Last switch on any device wins; [showCalendar] is the undo and the Calendars switch.
      */
     fun hideCalendar(key: String, label: String) = setCalendarHidden(key, label, true)
+
+    /**
+     * Meka's own name for every calendar he renamed: key → name ([CalendarMarkFields.NAME]). Read on its own (no
+     * tasks needed) because every event list is named with it.
+     */
+    fun calendarNames(): Map<String, String> = replica.entities(EntityTypes.CALENDAR_MARK).mapNotNull { c ->
+        val key = c[CalendarMarkFields.KEY].textOrNull ?: return@mapNotNull null
+        val name = c[CalendarMarkFields.NAME].textOrNull?.let { CalendarRules.cleanName(it) } ?: return@mapNotNull null
+        key to name
+    }.toMap()
+
+    /**
+     * Renames the calendar with [key] in MEKA only (Fold review 2026-10-09 07:26, item 9): the real calendar keeps its
+     * name. Blank goes back to the default ([CalendarRules.defaultName]). Synced, last rename wins. Returns the name
+     * stored, or null for the default.
+     */
+    fun renameCalendar(key: String, typed: String): String? {
+        require(key.isNotEmpty()) { "calendar key is empty" }
+        val name = CalendarRules.cleanName(typed)
+        val id = CalendarRules.markId(key)
+        val current = replica.entity(EntityTypes.CALENDAR_MARK, id)?.get(CalendarMarkFields.NAME)?.textOrNull
+            ?.let { CalendarRules.cleanName(it) }
+        if (current == name) return name
+        replica.commitLocal(EntityTypes.CALENDAR_MARK, id, mapOf(CalendarMarkFields.KEY to key.fv(), CalendarMarkFields.NAME to name.fv()))
+        return name
+    }
     fun showCalendar(key: String) = setCalendarHidden(key, null, false)
 
     private fun setCalendarHidden(key: String, label: String?, hidden: Boolean) {

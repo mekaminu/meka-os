@@ -1,6 +1,20 @@
 package os.meka.android.today
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import os.meka.android.goals.fold
+import os.meka.android.goals.unfold
+import os.meka.core.domain.CalendarRules
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
@@ -131,7 +145,11 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
             Text("Turn a calendar off to keep it in the Calendar tab but off Today and your day.",
                 style = MekaType.caption, color = Meka.colors.textTertiary)
             onToday.forEachIndexed { i, c ->
-                CalendarSwitchRow(c, Modifier.appear(rememberAppearance(i))) {
+                CalendarSwitchRow(
+                    c, Modifier.appear(rememberAppearance(i)),
+                    // Rename (Fold review 2026-10-09 07:26, item 9): MEKA's name only; blank goes back to the default.
+                    onRename = { typed -> TypingSaves.launch { runCatching { core.renameCalendar(c.key, typed) } } },
+                ) {
                     haptics.tick()
                     scope.launch {
                         runCatching { if (c.onToday) core.hideCalendarFromToday(c.key, c.label) else core.showCalendarOnToday(c.key) }
@@ -189,22 +207,74 @@ private fun AccountRow(a: ConnectedAccount, modifier: Modifier = Modifier, onRec
     }
 }
 
-/** One calendar with its On/Off pill; the pill's colour blends as it changes. */
+/**
+ * One calendar with its On/Off pill; the pill's colour blends as it changes. "Rename" (a calendar with events, not the
+ * fixtures) unfolds a field under the row in place; Done saves MEKA's own name (blank: back to the default, which the
+ * field shows as its hint), the label cross-fades to it and the field folds away.
+ */
 @Composable
-private fun CalendarSwitchRow(c: CalendarChoice, modifier: Modifier = Modifier, onToggle: () -> Unit) {
+internal fun CalendarSwitchRow(c: CalendarChoice, modifier: Modifier = Modifier, onRename: (String) -> Unit = {}, onToggle: () -> Unit) {
     val pill by animateColorAsState(if (c.onToday) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(Meka.reducedMotion), label = "on-today")
-    Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onToggle() }
-            .semantics { contentDescription = "${c.label} on Today"; selected = c.onToday }
-            .padding(vertical = MekaSpace.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(c.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
-            c.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+    var renaming by rememberSaveable(c.key) { mutableStateOf(false) }
+    val haptics = rememberMekaHaptics()
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onToggle() }
+                .semantics { contentDescription = "${c.label} on Today"; selected = c.onToday }
+                .padding(vertical = MekaSpace.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Crossfade(c.label, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "calendar-name") {
+                    Text(it, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+                }
+                c.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            }
+            if (c.canRename) {
+                Text(if (renaming) "Cancel" else "Rename", style = MekaType.caption, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                        .clickable(role = Role.Button) { haptics.tick(); renaming = !renaming }
+                        .semantics { contentDescription = if (renaming) "Cancel renaming ${c.label}" else "Rename ${c.label}" }
+                        .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs))
+            }
+            Text(if (c.onToday) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(pill).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs))
         }
-        Text(if (c.onToday) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(pill).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs))
+        AnimatedVisibility(renaming, enter = unfold(), exit = fold()) {
+            CalendarNameField(c) { typed ->
+                onRename(typed)
+                haptics.light()
+                renaming = false
+            }
+        }
+    }
+}
+
+/** The rename field: the current name to edit, the default as its hint once cleared; Done saves. */
+@Composable
+private fun CalendarNameField(c: CalendarChoice, onDone: (String) -> Unit) {
+    var text by rememberSaveable(c.key, c.label) { mutableStateOf(if (c.renamed) c.label else "") }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Box(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+        ) {
+            if (text.isEmpty()) Text(c.defaultLabel, style = MekaType.body, color = Meka.colors.textTertiary)
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it.take(CalendarRules.MAX_NAME) },
+                singleLine = true,
+                textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
+                cursorBrush = SolidColor(Meka.colors.accent),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onDone(text) }),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = "Name for ${c.defaultLabel}" },
+            )
+        }
+        Text("Only in MEKA: the calendar keeps its name in ${c.detail?.substringBefore(" · ") ?: "its app"}. Empty goes back to ${c.defaultLabel}.",
+            style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

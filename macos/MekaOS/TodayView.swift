@@ -524,21 +524,8 @@ struct CalendarsSheet: View {
                 Text("Turn a calendar off to keep it in the Calendar section but off Today and your day.")
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 ForEach(Array(model.calendarsOnToday.enumerated()), id: \.element.key) { i, c in
-                    let key = c.key, label = c.label
-                    Toggle(isOn: Binding(
-                        get: { c.onToday },
-                        set: { model.setCalendarOnToday(key: key, label: label, on: $0) }
-                    )) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(label).font(MekaType.itemMeta)
-                            if let detail = c.detail {
-                                Text(detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                            }
-                        }
-                    }
-                    .toggleStyle(.switch)
-                    .tint(palette.accent)
-                    .staggeredAppear(i)
+                    CalendarOnTodayRow(choice: c, palette: palette)
+                        .staggeredAppear(i)
                 }
             }
             // Weather place setting: the town the forecast is for (home unless Meka types another). Synced.
@@ -993,5 +980,67 @@ private struct PlanCalendarToggle: View {
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: setting.line)
         .padding(.top, MekaSpace.s)
+    }
+}
+
+/// One calendar in Calendars' On Today list: its switch, and Rename (Fold review 2026-10-09 07:26, item 9), which
+/// unfolds a field under the row in place; Return saves MEKA's own name (empty: back to the default, the field's
+/// placeholder), the name cross-fades and the field folds away. The real calendar keeps its name.
+private struct CalendarOnTodayRow: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let choice: CalendarChoice
+    let palette: MekaPalette
+    @State private var renaming = false
+    @State private var text = ""
+
+    var body: some View {
+        let key = choice.key, label = choice.label
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            HStack(spacing: MekaSpace.s) {
+                Toggle(isOn: Binding(
+                    get: { choice.onToday },
+                    set: { model.setCalendarOnToday(key: key, label: label, on: $0) }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(label).font(MekaType.itemMeta).id(label).transition(.opacity)
+                        if let detail = choice.detail {
+                            Text(detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        }
+                    }
+                }
+                .toggleStyle(.switch)
+                .tint(palette.accent)
+                if choice.canRename {
+                    Button(renaming ? "Cancel" : "Rename") {
+                        MekaHaptics.tick()
+                        text = choice.renamed ? label : ""
+                        renaming.toggle()
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                    .accessibilityLabel(renaming ? "Cancel renaming \(label)" : "Rename \(label)")
+                }
+            }
+            if renaming {
+                VStack(alignment: .leading, spacing: 2) {
+                    TextField(choice.defaultLabel, text: $text)
+                        .textFieldStyle(.roundedBorder).font(MekaType.body).frame(maxWidth: 260)
+                        .accessibilityLabel("Name for \(choice.defaultLabel)")
+                        .onSubmit {
+                            model.renameCalendar(key: key, name: text)
+                            renaming = false
+                        }
+                        .onChange(of: text) {
+                            let max = Int(CalendarRules.shared.MAX_NAME)
+                            if text.count > max { text = String(text.prefix(max)) }
+                        }
+                    Text("Only in MEKA: the calendar keeps its own name. Empty goes back to \(choice.defaultLabel).")
+                        .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: renaming)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: label)
     }
 }
