@@ -10,6 +10,10 @@ import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.HeadlineFields
+import os.meka.core.domain.WeatherCodec
+import os.meka.core.domain.WeatherFields
+import os.meka.core.domain.WeatherForecast
+import os.meka.core.domain.WeatherStore
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.Op
@@ -37,6 +41,8 @@ class Integrations(
     private val news: Map<String, NewsProvider> = emptyMap(),
     /** Public lists of days off mirrored for work mode (UK bank holidays; no sign-in). */
     private val holidays: Map<String, HolidayProvider> = emptyMap(),
+    /** A public forecast for home, mirrored for Today, the brief and Ask (weather item; no sign-in, no key). */
+    private val weather: Map<String, WeatherProvider> = emptyMap(),
     /** News pictures (images slice): fetched, shrunk and kept by the server; null leaves headlines without pictures. */
     private val images: NewsImages? = null,
     /**
@@ -128,7 +134,8 @@ class Integrations(
 
     /** Every household follows the default feeds (owner's stated MVP need). Idempotent. */
     fun ensureFeeds() {
-        val all = feeds.values.map { it.id to it.label } + news.values.map { it.id to it.source } + holidays.values.map { it.id to it.label }
+        val all = feeds.values.map { it.id to it.label } + news.values.map { it.id to it.source } + holidays.values.map { it.id to it.label } +
+            weather.values.map { it.id to it.label }
         for (hh in store.households()) for ((id, label) in all) {
             if (store.accounts(hh).none { it.provider == id }) {
                 store.transaction { store.upsertAccount(hh, id, label, ByteArray(0)) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
@@ -147,6 +154,7 @@ class Integrations(
         feeds[a.provider]?.let { feed -> return syncFeed(a, feed) }
         news[a.provider]?.let { source -> return syncNews(a, source) }
         holidays[a.provider]?.let { list -> return syncHolidays(a, list) }
+        weather[a.provider]?.let { source -> return syncWeather(a, source) }
         val p = providers[a.provider] ?: return
         val client = clients.get(a.provider) ?: return
         val ctx = context(a.householdId, a.provider)
@@ -231,6 +239,39 @@ class Integrations(
         } catch (e: Exception) {
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
             throw e
+        }
+    }
+
+    /**
+     * The forecast moves through the day: refresh every [WEATHER_PERIOD_MS] (sooner after a failure, at the next poll).
+     * Nobody is woken for it; the devices pick it up at their next sync, like headlines.
+     */
+    private fun syncWeather(a: AccountRow, source: WeatherProvider) {
+        val last = a.lastSyncAtMs
+        if (a.status == "ok" && last != null && now() - last < WEATHER_PERIOD_MS) return
+        try {
+            applyWeather(a, source.forecast())
+            store.transaction { store.markSynced(a.id, now()) }
+        } catch (e: Exception) {
+            store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
+            throw e
+        }
+    }
+
+    /**
+     * Writes the forecast into the household's one `context_mode/weather` entity, field by field and only what changed
+     * (readings are rounded, so a small wobble writes nothing). Returns whether anything was written.
+     */
+    internal fun applyWeather(a: AccountRow, f: WeatherForecast): Boolean = store.transaction {
+        ops.transaction {
+            store.lockAccount(a.id)
+            val desired = linkedMapOf(
+                WeatherFields.HOURS to FieldValue.Text(WeatherCodec.encodeHours(f.hours)),
+                WeatherFields.DAYS to FieldValue.Text(WeatherCodec.encodeDays(f.days)),
+                WeatherFields.PLACE to FieldValue.Text(WeatherCodec.place(f.place)),
+            )
+            val prev = store.mirror(a.householdId, a.id)[WeatherStore.ENTITY_ID]
+            write(a, WeatherStore.ENTITY_ID, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
         }
     }
 
@@ -406,6 +447,7 @@ class Integrations(
         const val NEWS_SLOTS = 4
         const val NEWS_PERIOD_MS = 60 * 60_000L
         const val HOLIDAYS_PERIOD_MS = 7 * 24 * 60 * 60_000L
+        const val WEATHER_PERIOD_MS = 30 * 60_000L
 
         /** Stable per (account, topic, slot): a topic always uses the same few entities. */
         fun newsEntityId(a: AccountRow, topic: String, slot: Int): String = "hl" + Secrets.sha256Hex("${a.id}|$topic|$slot").take(30)

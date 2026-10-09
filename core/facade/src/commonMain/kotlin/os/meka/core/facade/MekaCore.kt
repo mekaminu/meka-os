@@ -133,6 +133,7 @@ class MekaCore(
     private val shutdown = EveningShutdown(replica, tasks, nowMs, ZoneCalendar(timeZone))
     private val brief = MorningBrief(replica, nowMs, ZoneCalendar(timeZone))
     private val news = os.meka.core.domain.News(replica)
+    private val weather = os.meka.core.domain.WeatherStore(replica)
     private val review = WeeklyReview(replica, nowMs, ZoneCalendar(timeZone))
     /** The week the review screen shows (null: the default for today); a screen choice, not synced. */
     private var reviewOffset: Int? = null
@@ -227,6 +228,14 @@ class MekaCore(
      * fast. Offered from the end of quiet hours until noon; synced "Got it". Moves with the clock.
      */
     val briefView: StateFlow<MorningBriefView> = _brief.asStateFlow()
+
+    private val _weather = MutableStateFlow(os.meka.core.domain.WeatherView.EMPTY)
+    /**
+     * Weather for home (weather item, slice 1): Today's header line ("14° · light rain from 16:00") and tomorrow's
+     * ("Tomorrow 9–15°, light rain from 15:00 — take a coat"), from the forecast the server mirrors every 30 minutes
+     * (Open-Meteo, Biggleswade). Empty until the first forecast arrives; moves with the clock.
+     */
+    val weatherView: StateFlow<os.meka.core.domain.WeatherView> = _weather.asStateFlow()
 
     private val _newsPlace = MutableStateFlow(os.meka.core.domain.NewsPlace.EMPTY)
     /**
@@ -1194,7 +1203,9 @@ class MekaCore(
             ?: return os.meka.core.domain.AskOutcome.Unavailable("Ask something first")
         val api = aiApi ?: return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
         val cal = ZoneCalendar(timeZone)
-        val context = onCore { os.meka.core.domain.AskRules.context(_today.value, nowMs(), cal) }
+        val context = onCore {
+            os.meka.core.domain.AskRules.context(_today.value, nowMs(), cal, os.meka.core.domain.WeatherRules.askLines(weather.forecast(), nowMs(), cal))
+        }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
         }
@@ -1449,6 +1460,7 @@ class MekaCore(
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
             news.all(), news.choices(), holidays)
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))
+        _weather.value = os.meka.core.domain.WeatherRules.view(weather.forecast(), nowMs(), cal)
         _review.value = review.view(reviewOffset, all, dayEvents, _goals.value, fasting.ended()) { day ->
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }

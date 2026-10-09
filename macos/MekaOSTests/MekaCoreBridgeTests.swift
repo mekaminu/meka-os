@@ -472,6 +472,17 @@ final class MekaCoreBridgeTests: XCTestCase {
     }
 
     /// Can't see the animations (2026-10-08): the Motion check and the build line reach Swift.
+    /// Weather (slice 1): the server's forecast text decodes in Swift and the words Today's line uses come across.
+    func testWeatherReachesSwift() {
+        let hours = WeatherCodec.shared.decodeHours(s: "497000|14,2,10;12,61,70")
+        XCTAssertEqual(hours.map(\.tempC), [14, 12])
+        XCTAssertEqual(hours.last?.startMs, Int64(497_001) * 3_600_000)
+        XCTAssertEqual(WeatherCodec.shared.decodeDays(s: "2026-10-09=8,15,61,70").first?.maxC, 15)
+        XCTAssertEqual(WeatherRules.shared.words(code: 61), "light rain")
+        XCTAssertTrue(WeatherRules.shared.isWet(h: hours[1]))
+        XCTAssertFalse(WeatherRules.shared.isWet(h: hours[0]))
+    }
+
     func testMotionCheckReachesSwift() {
         let off = MotionCheckRules.shared.mac(stored: nil, reduceMotion: true, lowPower: false)
         XCTAssertEqual(off.rows.map(\.label), ["MEKA Motion", "Reduce Motion", "Low Power Mode"])

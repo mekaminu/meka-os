@@ -25,6 +25,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.rememberUpdatedState
 import os.meka.android.designsystem.CheckRing
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.ui.text.style.TextOverflow
+import os.meka.core.domain.WeatherView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
@@ -502,6 +505,9 @@ private fun TodayPane(
     var allDayOpen by rememberSaveable { mutableStateOf(false) }
     val updater = (LocalContext.current.applicationContext as? MekaApplication)?.updater
     val update by remember(updater) { updater?.state ?: MutableStateFlow<UpdateState>(UpdateState.None) }.collectAsState()
+    // Weather for home (weather item, slice 1): a quiet line under the date.
+    val weatherFlow = remember(core) { core?.weatherView ?: MutableStateFlow(WeatherView.EMPTY) }
+    val weather by weatherFlow.collectAsState()
     val motion = Meka.motion
     // Not on the closed Fold's cover screen: the card waits for the main screen.
     val motionCard = if (now == null) motion.card else null
@@ -523,6 +529,15 @@ private fun TodayPane(
                     if (today.timeline.dateLabel.isNotEmpty()) {
                         Text(today.timeline.dateLabel, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
                             modifier = Modifier.padding(top = MekaSpace.xxs))
+                    }
+                    // "14° · light rain from 16:00": cross-fades as the day moves on; nothing until a forecast arrives.
+                    if (weather.nowLine != null) {
+                        val spoken = "Weather: " + (weather.nowSpoken ?: weather.nowLine)
+                        Crossfade(weather.nowLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "weather-line") { line ->
+                            Text(line.orEmpty(), style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = spoken })
+                        }
                     }
                     SyncLine(sync)
                     if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs))
@@ -926,7 +941,7 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
     key(task.id) { Box(Modifier.appear(rememberAppearance(6))) { DetailActions(task, actions) } }
 }
 
-internal fun providerLabel(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Outlook"; "fixtures" -> "Fixtures"; "news" -> "Headlines"; "bank_holidays" -> "Bank holidays"; else -> p }
+internal fun providerLabel(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Outlook"; "fixtures" -> "Fixtures"; "news" -> "Headlines"; "bank_holidays" -> "Bank holidays"; "weather" -> "Weather"; else -> p }
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 

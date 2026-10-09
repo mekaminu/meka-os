@@ -54,7 +54,8 @@ class AskMekaFacadeTest {
         }
     }
 
-    private val server = Server(SyncService(InMemoryServerOpStore()))
+    private val serverOps = InMemoryServerOpStore()
+    private val server = Server(SyncService(serverOps))
 
     private fun core(transport: SyncTransport? = server) = MekaCore(
         householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = transport,
@@ -88,6 +89,37 @@ class AskMekaFacadeTest {
         assertEquals(id, c.today.value.upNext?.id)
         assertEquals("Moved “Book dentist” to Tomorrow · 09:00", c.doAsk(card).line)
         assertTrue((listOfNotNull(c.today.value.upNext) + c.today.value.yourDay).none { it.id == id })
+    }
+
+    @Test
+    fun theServersForecastShowsOnTodayAndTravelsWithAQuestion() = runTest {
+        val c = core()
+        assertEquals(os.meka.core.domain.WeatherView.EMPTY, c.weatherView.value)
+        // What the server's weather mirror writes: Thursday 8 Oct from 00:00 London (23:00 UTC the day before), rain at 19:00.
+        val midnight = 1_791_414_000_000L
+        val hours = (0 until 48).map { os.meka.core.domain.WeatherHour(midnight + it * 3_600_000L, 13, if (it == 19) 61 else 3, if (it == 19) 80 else 10) }
+        val days = listOf(os.meka.core.domain.WeatherDay(20_734, 9, 14, 61, 80), os.meka.core.domain.WeatherDay(20_735, 8, 15, 3, 10))
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        listOf(
+            os.meka.core.domain.WeatherFields.HOURS to os.meka.core.domain.WeatherCodec.encodeHours(hours),
+            os.meka.core.domain.WeatherFields.DAYS to os.meka.core.domain.WeatherCodec.encodeDays(days),
+            os.meka.core.domain.WeatherFields.PLACE to "Biggleswade",
+        ).forEachIndexed { i, (field, text) ->
+            serverOps.append(os.meka.core.sync.Op("srvwx$i", "hh", os.meka.core.domain.EntityTypes.CONTEXT_MODE,
+                os.meka.core.domain.WeatherStore.ENTITY_ID, field, os.meka.core.sync.FieldValue.Text(text), clock.now(), emptyList(), "server"))
+        }
+        c.syncNow()
+        assertEquals("13° · light rain from 19:00", c.weatherView.value.nowLine)
+        assertEquals("Tomorrow 8–15°, cloudy", c.weatherView.value.tomorrowLine)
+
+        c.addTask("Book dentist")
+        c.askMeka("what's the weather tomorrow?")
+        val ctx = server.asked.single().second
+        assertEquals("t1", ctx.items.first().ref)
+        val weather = ctx.items.filter { it.kind == os.meka.core.domain.AskItemKind.WEATHER }.map { it.line }
+        assertEquals("now in Biggleswade: 13° · light rain from 19:00", weather.first())
+        assertTrue("tomorrow (Fri 9 Oct): 8–15° cloudy, up to 10 % chance of rain" in weather, weather.toString())
+        assertTrue("today 18:00 13° cloudy, 10 % chance of rain" in weather, weather.toString())
     }
 
     @Test

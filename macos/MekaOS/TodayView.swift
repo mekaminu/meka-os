@@ -63,6 +63,14 @@ struct TodayView: View {
                         Text(date).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                             .staggeredAppear(0, play: play)
                     }
+                    // Weather for home: "14° · light rain from 16:00", cross-fading as the day moves on.
+                    if let line = model.weather?.nowLine {
+                        Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+                            .accessibilityLabel("Weather: " + (model.weather?.nowSpoken ?? line))
+                            .staggeredAppear(0, play: play)
+                    }
                     if !model.isConnected || model.signedOut {
                         Button(model.signedOut ? "Reconnect this Mac" : "This Mac isn't syncing yet · Connect") { model.showConnect = true }
                             .buttonStyle(MekaPressStyle())

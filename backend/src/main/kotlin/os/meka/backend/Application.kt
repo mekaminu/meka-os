@@ -30,6 +30,7 @@ import os.meka.backend.integrations.PostgresNewsImageStore
 import os.meka.backend.integrations.EspnTeamFixtures
 import os.meka.backend.integrations.GoogleCalendar
 import os.meka.backend.integrations.GovUkBankHolidays
+import os.meka.backend.integrations.OpenMeteoWeather
 import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.KmsTokenCipher
 import os.meka.backend.integrations.MicrosoftCalendar
@@ -484,6 +485,7 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         feeds = listOf(EspnTeamFixtures()).associateBy { it.id },
         news = listOf(BbcNewsRss(), PublicNewsFeeds()).associateBy { it.id },
         holidays = listOf(GovUkBankHolidays()).associateBy { it.id },
+        weather = listOf(OpenMeteoWeather()).associateBy { it.id },
         images = images,
         onChanged = onChanged,
         ownKeys = OwnKeyReminders(opStore, onWritten = onChanged),

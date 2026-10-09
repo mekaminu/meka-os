@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -112,7 +112,7 @@ object AskRules {
      * Today as MEKA describes it to the model: Needs you first, then Up next and the day's other tasks, what's done and
      * the calendar (finished events included, marked). At most [MAX_ITEMS] lines of at most [MAX_LINE] characters.
      */
-    fun context(today: Today, nowMs: Long, cal: LocalCalendar): AskContext {
+    fun context(today: Today, nowMs: Long, cal: LocalCalendar, weather: List<String> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -150,7 +150,9 @@ object AskRules {
             val ended = !e.allDay && e.endAtMs <= nowMs
             items += AskItem("", AskItemKind.EVENT, line(time, e.title, e.calendarName, e.location, if (ended) "over" else null))
         }
-        val kept = items.take(MAX_ITEMS)
+        // The forecast (weather item): numbers MEKA wrote into words itself, so never untrusted; kept whatever the day holds.
+        val forecast = weather.take(WeatherRules.MAX_ASK_LINES).map { AskItem("", AskItemKind.WEATHER, it.take(MAX_LINE)) }
+        val kept = items.take(MAX_ITEMS - forecast.size) + forecast
         val keptRefs = kept.map { it.ref }.toSet()
         return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty())
     }

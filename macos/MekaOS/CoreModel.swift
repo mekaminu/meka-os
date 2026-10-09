@@ -38,6 +38,8 @@ final class CoreModel {
     private(set) var quickAlarms: [QuickAlarmItem] = []
     /// Morning brief: today at a glance, waiting on, what needs you on your lists. "Got it" syncs with the Fold.
     private(set) var brief: MorningBriefView?
+    /// Weather for home (weather item, slice 1): Today's quiet line under the date ("14° · light rain from 16:00").
+    private(set) var weather: WeatherView?
     var showBrief = false
     /// Appearance → Play the opening: Today replays its opening (Day ring, tiles, greeting, stagger), then clears it.
     var openingRequested = false
@@ -196,6 +198,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await b in core.briefView { self?.brief = b }
+        })
+        observers.append(Task { [weak self] in
+            for await w in core.weatherView { self?.weather = w }
         })
         observers.append(Task { [weak self] in
             for await n in core.newsPlace { self?.newsPlace = n }
@@ -623,7 +628,7 @@ final class CoreModel {
     }
 
     static func providerName(_ p: String) -> String {
-        switch p { case "google": "Google"; case "microsoft": "Outlook"; case "fixtures": "Fixtures"; case "news": "Headlines"; case "bank_holidays": "Bank holidays"; default: p }
+        switch p { case "google": "Google"; case "microsoft": "Outlook"; case "fixtures": "Fixtures"; case "news": "Headlines"; case "bank_holidays": "Bank holidays"; case "weather": "Weather"; default: p }
     }
 
     // MARK: Notifications
