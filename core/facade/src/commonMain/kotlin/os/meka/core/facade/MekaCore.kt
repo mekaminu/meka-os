@@ -153,7 +153,7 @@ class MekaCore(
     private val triageCards = os.meka.core.domain.TriageCards(replica, nowMs, ZoneCalendar(timeZone))
     private val gistStore = os.meka.core.domain.GroupGists(replica, nowMs)
     // Spam call protection (call assistant polish 8b): the synced block list.
-    private val blockedCallers = os.meka.core.domain.BlockedCallers(replica, nowMs, ZoneCalendar(timeZone))
+    private val blockList = os.meka.core.domain.BlockedCallers(replica, nowMs, ZoneCalendar(timeZone))
     // Leave-by alarms are worked out from the calendar on every read (Alarms, slice 3).
     private val alarms = os.meka.core.domain.Alarms(replica, nowMs, ZoneCalendar(timeZone)) {
         os.meka.core.domain.LeaveAlarmRules.alarms(currentEvents(), eventActions.marks(), nowMs(), ZoneCalendar(timeZone))
@@ -1392,13 +1392,13 @@ class MekaCore(
      * Puts [number] on the block list (synced; the Fold rejects its calls silently, any time). [why] is a short note
      * shown with it. Returns false, saving nothing, when it can't be a phone number.
      */
-    suspend fun blockCaller(number: String, why: String?): Boolean = onCore { blockedCallers.block(number, why).also { refresh() } }
+    suspend fun blockCaller(number: String, why: String?): Boolean = onCore { blockList.block(number, why).also { refresh() } }
 
     /** Takes a number ([key], from [blockedCallers]' rows) off the block list; its calls ring again. */
-    suspend fun unblockCaller(key: String): Boolean = onCore { blockedCallers.unblock(key).also { refresh() } }
+    suspend fun unblockCaller(key: String): Boolean = onCore { blockList.unblock(key).also { refresh() } }
 
     /** The Fold, the first time it screens calls: puts the 9 Oct scam number on the list unless it was ever there. */
-    suspend fun seedBlockList(): Boolean = onCore { blockedCallers.seed().also { if (it) refresh() } }
+    suspend fun seedBlockList(): Boolean = onCore { blockList.seed().also { if (it) refresh() } }
 
     /**
      * The Fold's call screening asks this about every incoming call: the call assistant's switch, work mode, quiet
@@ -1415,7 +1415,7 @@ class MekaCore(
         val now = nowMs()
         val quiet = notifyPrefs.settings().quiet.isQuietAt(now, ZoneCalendar(timeZone))
         val decision = os.meka.core.domain.CallScreeningRules.decide(
-            state.callAssistant, state.atWork, number, lists, recent, now, blockedCallers.view().keys, signals.copy(quietHours = quiet),
+            state.callAssistant, state.atWork, number, lists, recent, now, blockList.view().keys, signals.copy(quietHours = quiet),
         )
         os.meka.core.domain.CallScreeningRules.activityLine(decision, number)?.let { (summary, why) ->
             activity.recordScreened(decision.callerKey, now, summary, why)
@@ -2282,7 +2282,7 @@ class MekaCore(
         _requests.value = requestCards.open()
         _triage.value = triageCards.open()
         _groupGists.value = gistStore.open()
-        _blockedCallers.value = blockedCallers.view()
+        _blockedCallers.value = blockList.view()
         _groupDigestCaughtUp.value = gistStore.caughtUpTimes()
         _notifyPreview.value = Governor.preview(currentNotices(all), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
