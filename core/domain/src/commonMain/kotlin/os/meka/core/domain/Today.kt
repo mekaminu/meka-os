@@ -24,6 +24,11 @@ data class Today(
      * today, renewals due ([DayTileRules]). Filled in by the facade, which holds the fasting, goals and lists views.
      */
     val dayTiles: List<DayTile> = emptyList(),
+    /**
+     * The 12-hour watch face in Today's header (Fold review 2026-10-09 07:26, item 2): the next 12 hours of events on
+     * its rim ([WatchFaceRules]). Filled in by the facade, which sees tomorrow's events and work too.
+     */
+    val watchFace: WatchFace = WatchFace.EMPTY,
 ) {
     /** Timed events that have not ended yet: what's still ahead of you today. */
     fun upcomingEvents(nowMs: Long): List<CalendarEvent> = events.filter { !it.allDay && it.endAtMs > nowMs }

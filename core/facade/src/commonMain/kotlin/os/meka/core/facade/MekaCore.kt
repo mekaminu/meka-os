@@ -1607,6 +1607,8 @@ class MekaCore(
             dayTiles = os.meka.core.domain.DayTileRules.build(
                 projected.events, nowMs(), dayWindow(nowMs()), fastingNow.current, goalsNow.habits, listsNow.renewals.dueCount,
             ),
+            // The watch face (Fold review 2026-10-09 07:26, item 2): the next 12 hours, across midnight.
+            watchFace = watchFaceNow(all, dayEvents, cal),
         )
         _lists.value = listsNow
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(_today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone))
@@ -1669,6 +1671,19 @@ class MekaCore(
             _lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card,
             currentEvents(), _eventMarks.value, _sessions.value, all, weather.forecast(),
         )
+
+    /** The watch face's next 12 hours: events, planned tasks, the week's booked sessions, today's and tomorrow's work. */
+    private fun watchFaceNow(
+        all: List<os.meka.core.domain.Task>, dayEvents: List<os.meka.core.domain.CalendarEvent>, cal: ZoneCalendar,
+    ): os.meka.core.domain.WatchFace {
+        val now = nowMs()
+        val day = dayWindow(now).epochDay
+        val hours = work.hours(localClock(), day)
+        return os.meka.core.domain.WatchFaceRules.build(
+            dayEvents, all.filter { !it.waitsForItsDay(day) }, _sessions.value.sessions, now, cal,
+            work = hours.blocks(day, cal) + hours.blocks(day + 1, cal),
+        )
+    }
 
     private fun project(all: List<os.meka.core.domain.Task> = tasks.all(), dayEvents: List<os.meka.core.domain.CalendarEvent> = visibleEvents(all)): Today {
         val now = nowMs()

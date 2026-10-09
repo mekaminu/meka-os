@@ -153,6 +153,7 @@ import kotlinx.coroutines.flow.StateFlow
 import os.meka.core.sync.SyncStatus
 import java.time.Instant
 import os.meka.core.domain.DayArcKind
+import os.meka.core.domain.WatchFace
 import os.meka.core.domain.DayRingPlay
 import os.meka.core.domain.DayArc
 import os.meka.core.domain.DayRing
@@ -182,6 +183,8 @@ fun TodayRoute(
     var showPlan by rememberSaveable { mutableStateOf(false) }
     var showShutdown by rememberSaveable { mutableStateOf(false) }
     var showBrief by rememberSaveable { mutableStateOf(false) }
+    /** The full 24-hour Day ring as a sheet, opened by tapping the watch face (Fold review 2026-10-09 07:26, item 2). */
+    var showDayRing by rememberSaveable { mutableStateOf(false) }
     /** The brief was opened by dismissing the wake alarm, so it reads itself aloud (Weather and a voice, slice 8). */
     var briefReadAloud by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
@@ -325,6 +328,7 @@ fun TodayRoute(
                 list = { m ->
                     key(openings) { TodayPane(today, sync, actions, m, connect, openPlan, !introPlayed, rowMotion,
                         ringPlay = ringPlay, ringPlayed = { ringPlay = DayRingPlay.STILL },
+                        openDayRing = { showDayRing = true },
                         listsNeedsYou = CommandCentreRules.todayListsNeedsYou(layout),
                         shutdown = shutdown, openShutdown = { showShutdown = true }, shutdownOpen = showShutdown,
                         openSearch = { showSearch = true },
@@ -364,6 +368,21 @@ fun TodayRoute(
             MekaPane(visible = showShutdown) { ShutdownPane(core, onClose = { showShutdown = false }) }
             MekaPane(visible = showBrief) {
                 BriefPane(core, onClose = { showBrief = false; briefReadAloud = false }, readAloud = briefReadAloud)
+            }
+            // Tap the watch face: the full 24-hour Day ring springs up; an arc in it closes the sheet and opens its event or task.
+            MekaPane(visible = showDayRing) {
+                DayRingSheet(
+                    today.dayRing, today.dayTiles,
+                    onOpenArc = { arc ->
+                        showDayRing = false
+                        when (arc.kind) {
+                            DayArcKind.EVENT -> today.events.firstOrNull { "e-" + it.id == arc.id }?.let { eventOpen = it }
+                            DayArcKind.TASK -> { selectedId = arc.id.removePrefix("t-") }
+                            DayArcKind.SESSION -> Unit // the session's row in the timeline carries its actions
+                        }
+                    },
+                    onClose = { showDayRing = false },
+                )
             }
             MekaPane(visible = eventOpen != null) {
                 eventShown?.let { e -> EventDetailPane(core, e, onClose = { eventOpen = null }, undo = eventUndo) }
@@ -497,20 +516,21 @@ data class TodayActions(
 
 /**
  * Today's header row (Fold review 2026-10-09, item 1): the greeting, date, weather and links on the left ([left]), the
- * Day ring on the right — [DayRingHeader.WIDE_DP] on the open Fold, a compact [DayRingHeader.COMPACT_DP] dial with no
- * centre text on the closed Fold ([compact]). No [ring] (no day yet): the left side takes the whole row.
+ * watch face on the right (Fold review 2026-10-09 07:26, item 2) — [DayRingHeader.WIDE_DP] on the open Fold, a compact
+ * [DayRingHeader.COMPACT_DP] face on the closed Fold ([compact]). Tapping it opens the full 24-hour Day ring
+ * ([onOpenFace]). No [face] (no day yet): the left side takes the whole row.
  */
 @Composable
 internal fun TodayHeaderRow(
-    ring: DayRing?, compact: Boolean, play: DayRingPlay, played: () -> Unit,
-    onOpenArc: ((DayArc) -> Unit)? = null,
+    face: WatchFace?, compact: Boolean, play: DayRingPlay, played: () -> Unit,
+    onOpenFace: (() -> Unit)? = null,
     left: @Composable () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) { left() }
-        if (ring != null) {
-            DayRingHero(ring, play, played, Modifier.padding(start = MekaSpace.m),
-                size = DayRingHeader.sizeDp(compact).dp, fillWidth = false, onOpenArc = onOpenArc)
+        if (face != null) {
+            WatchFaceDial(face, play, played, Modifier.padding(start = MekaSpace.m),
+                size = DayRingHeader.sizeDp(compact).dp, onOpen = onOpenFace)
         }
     }
 }
@@ -539,6 +559,8 @@ private fun TodayPane(
     openMatch: (CalendarEvent) -> Unit = {},
     ringPlay: DayRingPlay = DayRingPlay.STILL,
     ringPlayed: () -> Unit = {},
+    /** Tapping the watch face opens the full 24-hour Day ring. */
+    openDayRing: () -> Unit = {},
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
@@ -565,21 +587,14 @@ private fun TodayPane(
         ) {
             item(key = "greeting") {
                 Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play))) {
-                    // The Day ring sits in the header, beside the greeting (Fold review 2026-10-09, item 1): greeting,
-                    // date and links on the left, the ring on the right — 150 dp on the open Fold, a compact 96 dp on
-                    // the closed one (no centre text; free time stays in the timeline's now line). The first-open
-                    // moment still draws it in place.
+                    // The watch face sits in the header, beside the greeting (Fold reviews 2026-10-09, 00:10 item 1
+                    // and 07:26 item 2): greeting, date and links on the left, the 12-hour face on the right — 150 dp
+                    // on the open Fold, a compact 96 dp on the closed one. The first-open moment draws it in place.
                     TodayHeaderRow(
-                        ring = today.dayRing.takeIf { today.timeline.dateLabel.isNotEmpty() }, compact = now != null,
+                        face = today.watchFace.takeIf { today.timeline.dateLabel.isNotEmpty() }, compact = now != null,
                         play = ringPlay, played = ringPlayed,
-                        // Tap an arc to open it: an event's detail, a planned task's detail (Living Today, slice 3).
-                        onOpenArc = { arc ->
-                            when (arc.kind) {
-                                DayArcKind.EVENT -> today.events.firstOrNull { "e-" + it.id == arc.id }?.let(openEvent)
-                                DayArcKind.TASK -> actions.select(arc.id.removePrefix("t-"))
-                                DayArcKind.SESSION -> Unit // the session's row in the timeline carries its actions
-                            }
-                        },
+                        // Tap the face: the full 24-hour Day ring as a sheet, its arcs opening their events and tasks.
+                        onOpenFace = openDayRing,
                     ) {
                     // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
                     GreetingText(greeting(), if (now == null) ringPlay else DayRingPlay.STILL)
@@ -621,7 +636,7 @@ private fun TodayPane(
                     }
                     // The ring's live tiles, a slim row under the ticker (they left the dial with the move).
                     if (today.timeline.dateLabel.isNotEmpty()) {
-                        DayTilesStrip(today.dayTiles, ringPlay, today.dayRing.arcs.size, Modifier.padding(top = MekaSpace.s))
+                        DayTilesStrip(today.dayTiles, ringPlay, today.watchFace.arcs.size, Modifier.padding(top = MekaSpace.s))
                     }
                 }
             }

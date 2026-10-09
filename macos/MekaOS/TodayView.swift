@@ -19,6 +19,10 @@ struct TodayView: View {
     @State private var resignedAt: Date?
     /// Appearance → Play the opening bumps this: Today's column is rebuilt so its stagger plays again.
     @State private var openings = 0
+    /// The full 24-hour Day ring as a sheet, opened by clicking the watch face (Fold review 2026-10-09 07:26, item 2).
+    @State private var showDayRing = false
+    /// The arc clicked in that sheet, opened once the sheet has gone.
+    @State private var dayRingArc: DayArc?
     private var play: Bool { !introPlayed }
     private static let sections = 6 // greeting, needs you, up next, your day (header), your day (rows), done
 
@@ -50,6 +54,28 @@ struct TodayView: View {
         .background(palette.background)
         .sheet(isPresented: $model.showConnect) { ConnectSheet(palette: palette) }
         .sheet(isPresented: $model.showPlan) { PlanSheet(palette: palette) }
+        .sheet(isPresented: $showDayRing, onDismiss: openAfterDayRing) {
+            if let today = model.today {
+                DayRingSheet(ring: today.dayRing, tiles: today.dayTiles, palette: palette,
+                             onOpenArc: { arc in dayRingArc = arc; showDayRing = false },
+                             onClose: { showDayRing = false })
+            }
+        }
+    }
+
+    /// An arc clicked in the Day ring sheet: the sheet goes, then (once it has gone, one sheet at a time) its event's
+    /// or task's detail opens.
+    private func openAfterDayRing() {
+        guard let arc = dayRingArc, let today = model.today else { return }
+        dayRingArc = nil
+        switch arc.kind {
+        case .event:
+            if let e = today.events.first(where: { "e-" + $0.id == arc.id }) { model.openEvent = e }
+        case .task:
+            model.select(String(arc.id.dropFirst(2)), reduced: reduceMotion)
+        default:
+            break // a session's row in the timeline carries its actions
+        }
     }
 
     private var todayColumn: some View {
@@ -101,27 +127,16 @@ struct TodayView: View {
                     }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    // The opening moment (motion pass 2, slice 7): the Day ring, drawn in place in the header.
+                    // The watch face (Fold review 2026-10-09 07:26, item 2), drawn in place in the header by the
+                    // opening; a click opens the full 24-hour Day ring as a sheet.
                     if let today = model.today, !today.timeline.dateLabel.isEmpty {
-                        DayRingView(ring: today.dayRing, play: ringPlay ?? .still, played: { ringPlay = .still }, palette: palette,
-                                    size: CGFloat(DayRingHeader.shared.WIDE_DP),
-                                    // Click an arc to open it: an event's detail, a planned task's detail (Living Today, slice 3).
-                                    onOpenArc: { arc in
-                                        switch arc.kind {
-                                        case .event:
-                                            if let e = today.events.first(where: { "e-" + $0.id == arc.id }) { model.openEvent = e }
-                                        case .task:
-                                            model.select(String(arc.id.dropFirst(2)), reduced: reduceMotion)
-                                        default:
-                                            break // a session's row in the timeline carries its actions
-                                        }
-                                    },
-                                    fillsWidth: false)
+                        WatchFaceView(face: today.watchFace, play: ringPlay ?? .still, played: { ringPlay = .still }, palette: palette,
+                                      size: CGFloat(DayRingHeader.shared.WIDE_DP), onOpen: { showDayRing = true })
                     }
                     }
                     // The ring's live tiles, a slim row under the header (they left the dial with the move).
                     if let today = model.today, !today.timeline.dateLabel.isEmpty, !today.dayTiles.isEmpty {
-                        DayTilesStrip(tiles: today.dayTiles, play: ringPlay ?? .still, arcs: today.dayRing.arcs.count, palette: palette)
+                        DayTilesStrip(tiles: today.dayTiles, play: ringPlay ?? .still, arcs: today.watchFace.arcs.count, palette: palette)
                             .padding(.top, MekaSpace.s)
                     }
                     Spacer().frame(height: MekaSpace.l)

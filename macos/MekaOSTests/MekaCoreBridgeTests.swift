@@ -632,6 +632,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TalkProblem.tooNoisy.macLine, "Too noisy — click to talk")
     }
 
+    /// Fold review 2026-10-09 07:26, item 2: the watch face's hands, markers and rim reach Swift.
+    func testWatchFaceReachesSwift() {
+        let rules = WatchFaceRules.shared
+        let hands = rules.hands(minuteOfDay: 7 * 60 + 21, msIntoMinute: 0, secondEpochMs: 15_000)
+        XCTAssertEqual(hands.hourDegrees, 220.5, accuracy: 0.01)
+        XCTAssertEqual(hands.minuteDegrees, 126, accuracy: 0.01)
+        XCTAssertEqual(hands.secondDegrees, 90, accuracy: 0.01)
+        XCTAssertEqual(rules.markers().filter { $0.major }.map(\.hour), [12, 3, 6, 9])
+        XCTAssertEqual(rules.rimStrokeDp(sizeDp: DayRingHeader.shared.COMPACT_DP), 4)
+        XCTAssertEqual(WatchFace.companion.EMPTY.spokenLine, "Watch face. Next 12 hours: nothing booked. Tap for your whole day.")
+        XCTAssertTrue(WatchFace.companion.EMPTY.arcs.isEmpty)
+    }
+
     /// Under "Nothing needs you" (Fold reviews 2026-10-09): the core's habits / Waiting on / renewals reach Swift.
     func testNeedsYouMeanwhileReachesSwift() {
         let m = NeedsYouMeanwhileRules.shared.build(goals: nil, lists: nil)
