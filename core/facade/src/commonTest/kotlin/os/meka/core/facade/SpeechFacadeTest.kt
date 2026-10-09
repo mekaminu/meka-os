@@ -50,7 +50,7 @@ class SpeechFacadeTest {
         val c = core()
         assertEquals("bXAz29", c.speechClip("You've got three things today.", first = true))
         assertEquals("bXAz29", c.speechClip(" You've got three things today. ", first = false))
-        assertEquals(listOf("You've got three things today." to null), server.said) // asked once, then from memory
+        assertEquals(listOf<Pair<String, String?>>("You've got three things today." to null), server.said) // asked once, then from memory
         // The chosen voice is asked for (and cached apart from the default's).
         assertTrue(c.chooseMekaVoice("Brian"))
         assertEquals("Brian", c.mekaVoice())
