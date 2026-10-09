@@ -93,6 +93,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
     val work by core.workMode.collectAsState()
     val lists by store.lists.collectAsState()
     val watch by store.watch.collectAsState()
+    val notify by core.notificationSettings.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -231,7 +232,11 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         Spacer(Modifier.height(MekaSpace.s))
         PeopleSection(ListKind.ALWAYS, lists, store::setLists, 6) { pick(ListKind.ALWAYS) }
         Spacer(Modifier.height(MekaSpace.m))
-        RequestWatchSection(lists, watch, listening, 7, store::setWatch)
+        RequestWatchSection(
+            lists, watch, listening, 7, store::setWatch,
+            notifiesNow = { notify.notifiesNow(it) },
+            setNotifyNow = { name, on -> scope.launch { core.setRequestNotifyNow(name, on) } },
+        )
         Spacer(Modifier.height(MekaSpace.xl))
     }
 }

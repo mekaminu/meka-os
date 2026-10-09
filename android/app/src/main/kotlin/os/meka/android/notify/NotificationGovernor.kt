@@ -211,7 +211,7 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
             val (name, importance, about) = when (tier) {
                 NoticeTier.CRITICAL -> Triple("Critical", NotificationManager.IMPORTANCE_HIGH, "Rare: things that can't wait, even in quiet hours.")
                 NoticeTier.ACTION -> Triple("Needs a decision", NotificationManager.IMPORTANCE_HIGH, "Approvals and choices only you can make; held during quiet hours.")
-                NoticeTier.HEADS_UP -> Triple("Heads-ups", NotificationManager.IMPORTANCE_DEFAULT, "Event reminders, cancel-by dates, your fasting goal, the morning brief and the evening shutdown.")
+                NoticeTier.HEADS_UP -> Triple("Heads-ups", NotificationManager.IMPORTANCE_DEFAULT, "Event reminders, cancel-by dates, your fasting goal, the morning brief, the evening shutdown and requests from people you chose to hear from straight away.")
                 else -> Triple("Digests", NotificationManager.IMPORTANCE_LOW, "The midday and evening round-up of what's due.")
             }
             nm.createNotificationChannel(NotificationChannel(id, name, importance).apply { description = about })

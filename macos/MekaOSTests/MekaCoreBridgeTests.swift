@@ -700,6 +700,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(none)
     }
 
+    /// Requests' notices (V1): the Notifications sheet lists the source, and "Straight away" (set on the Fold) syncs
+    /// into the Mac's settings, so the Mac's governor posts that person's requests at once too.
+    func testRequestNoticesReachSwift() async throws {
+        let labels = (0..<Int(NotifyRules.shared.sourceCount)).map {
+            NotifyRules.shared.sourceLabel(s: NotifyRules.shared.sourceAt(index: Int32($0)))
+        }
+        XCTAssertTrue(labels.contains("Requests from people you watch"))
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "request-now-\(UUID().uuidString).db", deviceKey: nil
+        )
+        try await core.setRequestNotifyNow(name: "Wife", on: true)
+        XCTAssertTrue(core.notificationSettings.value.notifiesNow(name: "wife"))
+        XCTAssertEqual(RequestWatchRules.shared.notifyLabel(on: true), "Straight away")
+    }
+
     /// The spoken morning brief (Weather and a voice, slice 8): the script the brief sheet's Listen reads reaches Swift.
     func testBriefSpeechReachesSwift() {
         XCTAssertEqual(BriefSpeech.shared.script(v: MorningBriefView.companion.EMPTY, name: "Meka"),

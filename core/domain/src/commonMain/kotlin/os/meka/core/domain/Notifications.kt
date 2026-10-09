@@ -67,7 +67,12 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     REVIEW("Decisions to review", NoticeTier.DIGEST),
     OVERDUE("Overdue tasks", NoticeTier.DIGEST),
     /** Rain or snow due at today's plans you go out for (Weather): "Light rain at 17:30 — Training at SG18". */
-    WEATHER("Weather for your plans", NoticeTier.DIGEST);
+    WEATHER("Weather for your plans", NoticeTier.DIGEST),
+    /**
+     * A request card from someone Meka watches (V1, requests): summed in the next digest, or a heads-up straight away
+     * for the people he marked "Notify straight away" ([NotificationSettings.requestNow]).
+     */
+    REQUEST("Requests from people you watch", NoticeTier.DIGEST);
 
     companion object {
         /** The tiers a source can be set to in the settings screen. */
@@ -144,10 +149,14 @@ data class NotificationSettings(
     /** Local minutes of the day, ascending; empty means no digests. */
     val digestMinutes: List<Int> = DEFAULT_DIGESTS,
     val tiers: Map<NoticeSource, NoticeTier> = emptyMap(),
+    /** Watched people whose requests are a heads-up straight away rather than digest items (names as Meka set them). */
+    val requestNow: Set<String> = emptySet(),
 ) {
     val digestsOn: Boolean get() = digestMinutes.isNotEmpty()
     fun tierFor(source: NoticeSource): NoticeTier = tiers[source] ?: source.defaultTier
     fun hasDigest(minute: Int): Boolean = minute in digestMinutes
+    /** Whether a request from [name] is a heads-up straight away (spelling and case don't matter). */
+    fun notifiesNow(name: String): Boolean = People.key(name).let { k -> requestNow.any { People.key(it) == k } }
 
     companion object {
         const val MIDDAY = 12 * 60 + 30
@@ -161,6 +170,13 @@ data class NotificationSettings(
             minute < 17 * 60 -> "Midday digest"
             else -> "Evening digest"
         }
+
+        /** One name per line, sorted, cleaned; empty for nobody. */
+        fun encodeRequestNow(names: Set<String>): String =
+            names.mapNotNull(RequestWatchRules::clean).distinctBy(People::key).sortedBy { it.lowercase() }.joinToString("\n")
+
+        fun decodeRequestNow(s: String?): Set<String> =
+            s.orEmpty().split('\n').mapNotNull(RequestWatchRules::clean).distinctBy(People::key).toSet()
 
         fun encodeDigests(minutes: List<Int>): String = minutes.sorted().joinToString(",")
 
@@ -397,6 +413,7 @@ object Governor {
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
         NoticeSource.OVERDUE -> plural(n, "overdue task")
         NoticeSource.WEATHER -> "rain on " + plural(n, "plan")
+        NoticeSource.REQUEST -> plural(n, "request")
     }
 }
 
@@ -424,6 +441,8 @@ object NoticeSources {
         sessions: SessionsView = SessionsView.EMPTY,
         tasks: List<Task> = emptyList(),
         forecast: WeatherForecast = WeatherForecast.EMPTY,
+        requests: List<RequestCard> = emptyList(),
+        settings: NotificationSettings = NotificationSettings.DEFAULT,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -526,7 +545,28 @@ object NoticeSources {
         out += TaskReminderRules.notices(tasks, nowMs, cal)
         // Rain at today's plans you go out for (Weather), summed in the next digest.
         out += WeatherRules.notices(forecast, events, marks, sessions, nowMs, cal)
+        // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.
+        out += requestNotices(requests, settings)
         return out
+    }
+
+    /** A heads-up for a request older than this is stale (it still waits in Needs you). */
+    const val REQUEST_HEADS_UP_STALE_MS = 3 * 60 * 60_000L
+
+    /**
+     * One notice per open request card, due when the message came: "From Wife · 14:02" · "Add task: Pick up dry
+     * cleaning · Tomorrow". A digest item while the card is open, or a heads-up straight away (stale after
+     * [REQUEST_HEADS_UP_STALE_MS]) when its sender is in [NotificationSettings.requestNow]. Never the message's text:
+     * only the proposal, so the quote stays in the app.
+     */
+    fun requestNotices(cards: List<RequestCard>, settings: NotificationSettings): List<Notice> = cards.map { c ->
+        val now = c.personKey.isNotEmpty() && settings.requestNow.any { People.key(it) == c.personKey }
+        Notice(
+            key = "request:${c.id}", source = NoticeSource.REQUEST,
+            tier = if (now) NoticeTier.HEADS_UP else NoticeTier.DIGEST,
+            title = c.from, text = c.action, atMs = c.atMs, target = NoticeTarget.NEEDS_YOU,
+            expiresAtMs = if (now) c.atMs + REQUEST_HEADS_UP_STALE_MS else null,
+        )
     }
 }
 
@@ -538,6 +578,8 @@ object NotificationFields {
     const val DIGESTS = "digestTimes"
     /** "SHUTDOWN=DIGEST,…": sources moved to a lower tier. */
     const val TIERS = "noticeTiers"
+    /** Watched people whose requests notify straight away, one name per line (V1, requests; ADR-008 addendum). */
+    const val REQUEST_NOW = "requestNotifyNow"
 }
 
 class NotificationPrefs(private val replica: Replica) {
@@ -547,7 +589,19 @@ class NotificationPrefs(private val replica: Replica) {
         quiet = QuietHours.decode(field(NotificationFields.QUIET)) ?: QuietHours.DEFAULT,
         digestMinutes = NotificationSettings.decodeDigests(field(NotificationFields.DIGESTS)) ?: NotificationSettings.DEFAULT_DIGESTS,
         tiers = NotificationSettings.decodeTiers(field(NotificationFields.TIERS)),
+        requestNow = NotificationSettings.decodeRequestNow(field(NotificationFields.REQUEST_NOW)),
     )
+
+    /** "Notify straight away" beside a watched person (Work mode → Watch for requests from), on every device. */
+    fun setRequestNow(name: String, on: Boolean) {
+        val n = RequestWatchRules.clean(name) ?: return
+        val current = settings().requestNow
+        if (on && current.any { People.key(it) == People.key(n) }) return
+        val without = current.filterNot { People.key(it) == People.key(n) }.toSet()
+        val encoded = NotificationSettings.encodeRequestNow(if (on) without + n else without)
+        if ((field(NotificationFields.REQUEST_NOW) ?: "") == encoded) return
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NotificationFields.REQUEST_NOW to encoded.fv()))
+    }
 
     fun setQuietHours(q: QuietHours) {
         if (field(NotificationFields.QUIET) == q.encode()) return

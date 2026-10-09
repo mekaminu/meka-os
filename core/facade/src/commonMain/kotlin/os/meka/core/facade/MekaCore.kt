@@ -1025,6 +1025,13 @@ class MekaCore(
     suspend fun setNoticeTier(source: NoticeSource, tier: NoticeTier) = onCore { notifyPrefs.setTier(source, tier) }
 
     /**
+     * "Notify straight away" beside a watched person (Work mode → Watch for requests from; V1 requests): [name]'s
+     * request cards become a heads-up when they arrive instead of a digest item, on every device (synced in
+     * [notificationSettings]'s `requestNow`). "Requests from people you watch" set lower still wins.
+     */
+    suspend fun setRequestNotifyNow(name: String, on: Boolean) = onCore { notifyPrefs.setRequestNow(name, on) }
+
+    /**
      * What this device should post now. [state] is what the last call returned ([GovernorResult.stateEncoded]),
      * kept on the device; [device] is this device's own choice. The platform posts, stores the new state and sets an
      * inexact alarm for [GovernorResult.nextWakeMs].
@@ -1823,6 +1830,7 @@ class MekaCore(
         NoticeSources.collect(
             _lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card,
             currentEvents(), _eventMarks.value, _sessions.value, all, weather.forecast(),
+            requests = requestCards.open(), settings = notifyPrefs.settings(),
         )
 
     /** The watch face's next 12 hours: events, planned tasks, the week's booked sessions, today's and tomorrow's work. */

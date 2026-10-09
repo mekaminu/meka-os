@@ -127,6 +127,8 @@ class MekaApplication : Application() {
                 core.notificationSettings.map { }, governor.device.map { },
                 // Event reminders: a reminder set or changed, or an event moved on the server.
                 core.eventMarks.map { }, core.calendarView.map { },
+                // A request card read from a watched person's message (digest item, or a heads-up straight away).
+                core.requests.map { it.map { c -> c.id } }.distinctUntilChanged().map { },
             ).debounce(GOVERNOR_SETTLE_MS).collect { runCatching { governor.run() } }
         }
         // Ongoing notifications follow Today and the fast, but only re-post when what they show changes (Today moves

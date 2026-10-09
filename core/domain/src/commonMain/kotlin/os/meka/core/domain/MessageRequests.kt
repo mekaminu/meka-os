@@ -62,6 +62,8 @@ data class RequestCard(
     val declineLabel: String,
     /** One sentence for TalkBack / VoiceOver. */
     val spoken: String,
+    /** When the message came (its notification's time): when the card's heads-up is due. */
+    val atMs: Long = 0L,
 )
 
 object MessageRequestRules {
@@ -167,6 +169,7 @@ object MessageRequestRules {
             changeLabel = if (p.kind == RequestKind.WORK_FROM_HOME) null else "Change",
             declineLabel = p.kind.decline,
             spoken = "${message.personName.trim()} wrote $quote. $action?",
+            atMs = message.atMs,
         )
     }
 

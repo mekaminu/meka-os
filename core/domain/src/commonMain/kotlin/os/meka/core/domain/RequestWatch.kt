@@ -25,6 +25,8 @@ object RequestWatchRules {
     const val TITLE = "Watch for requests from"
     const val HINT = "When someone here asks you to do something, MEKA turns it into a card in Needs you: " +
         "Add · Change · Not a task. Family is always watched. All day, not only at work."
+    const val NOTIFY_HINT = "A request waits for the midday or evening digest. \"Straight away\" makes that person's " +
+        "requests notify as they arrive, on the phone and the Mac (quiet hours still hold)."
     const val GROUPS_HINT = "Group chats are skipped unless you name one here (as it's called in WhatsApp)."
     const val LIMITS = "MEKA only sees what Android's notification shows: very long messages may be cut, voice notes " +
         "and photos can't be read (you get a reminder to listen instead), and a message you read first on another " +
@@ -98,6 +100,12 @@ object RequestWatchRules {
     /** [seen] (id → when it was read) without the ones older than [SEEN_RETENTION_MS]. */
     fun pruneSeen(seen: Map<String, Long>, nowMs: Long): Map<String, Long> =
         seen.filterValues { it >= nowMs - SEEN_RETENTION_MS }
+
+    /** The pill beside a watched person. */
+    fun notifyLabel(on: Boolean): String = if (on) "Straight away" else "In digest"
+
+    /** For TalkBack / VoiceOver: "Notify straight away for Wife, on". */
+    fun notifySpoken(name: String, on: Boolean): String = "Notify straight away for $name, ${if (on) "on" else "off"}"
 
     private fun joinNames(names: List<String>): String = when {
         names.size == 1 -> names[0]
