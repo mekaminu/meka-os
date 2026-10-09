@@ -283,6 +283,57 @@ object WeatherRules {
 
     const val MAX_ASK_LINES = 24
 
+    /** Rain from this long before a plan starts counts (the walk or drive there). */
+    const val NUDGE_LEAD_MS = 30 * 60_000L
+    private const val MAX_PLACE_CHARS = 40
+
+    /**
+     * Weather nudges (Weather item 1: "Rain at 17:30 — Training at SG18"): one [NoticeSource.WEATHER] notice for each of
+     * today's plans still to come that you go out for — a timed event with a place and no video link, not a fixture
+     * (watched, not attended) and not hidden from my day, and every booked session — when an hour from
+     * [NUDGE_LEAD_MS] before it starts until it ends is wet ([isWet]). Digest by default (the governor sums them in the
+     * next digest while the plan is still ahead), due from the start of the day and stale once the plan starts; keyed
+     * by the plan and its start, so a moved plan is told again and a dry forecast simply stops producing it.
+     */
+    fun notices(
+        f: WeatherForecast,
+        events: List<CalendarEvent>,
+        marks: EventMarks,
+        sessions: SessionsView,
+        nowMs: Long,
+        cal: LocalCalendar,
+    ): List<Notice> {
+        if (f.hours.isEmpty()) return emptyList()
+        val today = cal.epochDayOf(nowMs)
+        val dayStart = cal.toEpochMs(today, 0)
+        data class Plan(val key: String, val what: String, val place: String?, val startMs: Long, val endMs: Long)
+        val plans = marks.visible(events)
+            .filter { !it.allDay && !it.isFixture && it.startAtMs > nowMs && cal.epochDayOf(it.startAtMs) == today }
+            .filter { !it.location.isNullOrBlank() && it.joinUrl.isNullOrBlank() }
+            .map { Plan("event:${it.id}", it.title.trim().ifEmpty { "Your plan" }, it.location, it.startAtMs, it.endAtMs) } +
+            sessions.sessions.filter { it.day == today && it.startMs > nowMs }
+                .map { s -> Plan("session:${s.habitId}", listOfNotNull(s.title, s.label).joinToString(" · "), null, s.startMs, s.endMs) }
+        return plans.distinctBy { it.key to it.startMs }.sortedBy { it.startMs }.mapNotNull { p ->
+            val wet = f.hours.sortedBy { it.startMs }.firstOrNull { h ->
+                h.startMs + WeatherCodec.HOUR_MS > p.startMs - NUDGE_LEAD_MS && h.startMs < maxOf(p.endMs, p.startMs + 1) && isWet(h)
+            } ?: return@mapNotNull null
+            val atMs = maxOf(wet.startMs, p.startMs)
+            val where = p.place?.let(::shortPlace)?.let { " at $it" }.orEmpty()
+            Notice(
+                key = "weather:${p.key}:${p.startMs}", source = NoticeSource.WEATHER, tier = NoticeTier.DIGEST,
+                title = "${wetWords(wet).replaceFirstChar { it.uppercaseChar() }} at ${clock(atMs, cal)} — ${p.what}$where",
+                text = "", atMs = dayStart, target = NoticeTarget.TODAY, expiresAtMs = p.startMs,
+            )
+        }
+    }
+
+    /** A calendar place as a nudge says it: up to its first comma, at most [MAX_PLACE_CHARS] characters. */
+    fun shortPlace(location: String): String? {
+        val first = location.replace(Regex("[\\r\\n]+"), " ").substringBefore(',').trim()
+        if (first.isEmpty()) return null
+        return if (first.length <= MAX_PLACE_CHARS) first else first.take(MAX_PLACE_CHARS - 1).trimEnd() + "…"
+    }
+
     private fun clock(ms: Long, cal: LocalCalendar) = LocalClock.formatMinute(cal.minuteOfDay(ms))
 }
 

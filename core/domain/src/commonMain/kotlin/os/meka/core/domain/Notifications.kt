@@ -65,7 +65,9 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
-    OVERDUE("Overdue tasks", NoticeTier.DIGEST);
+    OVERDUE("Overdue tasks", NoticeTier.DIGEST),
+    /** Rain or snow due at today's plans you go out for (Weather): "Light rain at 17:30 — Training at SG18". */
+    WEATHER("Weather for your plans", NoticeTier.DIGEST);
 
     companion object {
         /** The tiers a source can be set to in the settings screen. */
@@ -394,6 +396,7 @@ object Governor {
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
         NoticeSource.OVERDUE -> plural(n, "overdue task")
+        NoticeSource.WEATHER -> "rain on " + plural(n, "plan")
     }
 }
 
@@ -420,6 +423,7 @@ object NoticeSources {
         marks: EventMarks = EventMarks.NONE,
         sessions: SessionsView = SessionsView.EMPTY,
         tasks: List<Task> = emptyList(),
+        forecast: WeatherForecast = WeatherForecast.EMPTY,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -520,6 +524,8 @@ object NoticeSources {
         out += SessionRules.notices(sessions, cal)
         // Remind me, set on tasks.
         out += TaskReminderRules.notices(tasks, nowMs, cal)
+        // Rain at today's plans you go out for (Weather), summed in the next digest.
+        out += WeatherRules.notices(forecast, events, marks, sessions, nowMs, cal)
         return out
     }
 }

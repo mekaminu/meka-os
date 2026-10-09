@@ -152,4 +152,83 @@ class WeatherTest {
         assertTrue(ring.spokenLine.endsWith(" Rain from 16:00."), ring.spokenLine)
         assertTrue(ring.copy(rain = listOf(DayBand(600, 660, current = true))).spokenLine.endsWith(" Raining now."))
     }
+
+    private fun event(id: String, title: String, h: Int, m: Int = 0, place: String? = "SG18 Sports Ground, Biggleswade", mins: Int = 60,
+                      provider: String = "google", join: String? = null, allDay: Boolean = false) =
+        CalendarEvent(id, title, at(fri, h, m), at(fri, h, m) + mins * 60_000L, allDay, place, provider, "me@x", "Personal", joinUrl = join)
+
+    @Test
+    fun rainAtTodaysPlansYouGoOutForIsANudgeInTheNextDigest() {
+        // Dry until 17:00, light rain 17:00–20:00, dry after.
+        val f = forecast(*dry(17), *wet(3), *dry(4))
+        val training = event("t", "Training", 17, 30)
+        val events = listOf(
+            training,
+            event("call", "Standup", 18, join = "https://meet.example/abc"),   // a video call: you don't go out
+            event("home", "Dinner", 18, place = null),                          // no place
+            event("cl", "Barça v Sevilla", 19, provider = "fixtures"),          // watched, not attended
+            event("all", "Away day", 0, allDay = true),
+            event("lunch", "Lunch with Ade", 12),                               // dry
+            event("late", "Five-a-side", 19, 45),                               // rain until 20:00
+            event("hidden", "Choir", 18),
+        )
+        val marks = EventMarks(setOf("hidden"), emptyMap())
+        val gym = BookedSession("h1", "Gym", "Push", fri, at(fri, 16, 45), at(fri, 17, 45), "Today 16:45")
+        val sessions = SessionsView(emptyList(), listOf(gym), emptyMap())
+        val n = WeatherRules.notices(f, events, marks, sessions, at(fri, 9), cal)
+        assertEquals(
+            listOf("Light rain at 17:00 — Gym · Push", "Light rain at 17:30 — Training at SG18 Sports Ground", "Light rain at 19:45 — Five-a-side at SG18 Sports Ground"),
+            n.map { it.title },
+        )
+        val t = n[1]
+        assertEquals(NoticeSource.WEATHER, t.source)
+        assertEquals(NoticeTier.DIGEST, t.tier)
+        assertEquals("weather:event:t:${at(fri, 17, 30)}", t.key)
+        assertEquals(at(fri, 0), t.atMs)
+        assertEquals(at(fri, 17, 30), t.expiresAtMs)
+
+        // The midday digest sums them; by the evening digest (18:00) only the one still ahead is left.
+        val settings = NotificationSettings.DEFAULT
+        val midday = Governor.evaluate(n, settings, DeviceAlerts.ALL, GovernorState(), at(fri, 12, 30), cal)
+        assertEquals("Midday digest · 3 things", midday.digest?.title)
+        assertEquals("rain on 3 plans", midday.digest?.summary)
+        assertEquals("Light rain at 17:30 — Training at SG18 Sports Ground", midday.digest?.lines?.get(1))
+        assertTrue(midday.post.isEmpty())
+        val evening = Governor.evaluate(WeatherRules.notices(f, events, marks, sessions, at(fri, 18), cal), settings, DeviceAlerts.ALL, midday.state, at(fri, 18), cal)
+        assertEquals(listOf("Light rain at 19:45 — Five-a-side at SG18 Sports Ground"), evening.digest?.lines)
+        // Lowered to app only, nothing is posted.
+        val off = settings.copy(tiers = mapOf(NoticeSource.WEATHER to NoticeTier.SILENT))
+        assertNull(Governor.evaluate(n, off, DeviceAlerts.ALL, GovernorState(), at(fri, 12, 30), cal).digest)
+    }
+
+    @Test
+    fun aDryForecastOrNoForecastNudgesNothingAndRainJustBeforeYouLeaveCounts() {
+        val events = listOf(event("t", "Training", 18))
+        assertTrue(WeatherRules.notices(forecast(*dry(24)), events, EventMarks.NONE, SessionsView.EMPTY, at(fri, 9), cal).isEmpty())
+        assertTrue(WeatherRules.notices(WeatherForecast.EMPTY, events, EventMarks.NONE, SessionsView.EMPTY, at(fri, 9), cal).isEmpty())
+        // Rain 17:00–18:00 only: the walk there at 17:30 is wet, so it's told at the start.
+        val before = WeatherRules.notices(forecast(*dry(17), *wet(1), *dry(6)), events, EventMarks.NONE, SessionsView.EMPTY, at(fri, 9), cal)
+        assertEquals(listOf("Light rain at 18:00 — Training at SG18 Sports Ground"), before.map { it.title })
+        // Rain from 16:00 to 17:00 is over before you leave (17:30).
+        assertTrue(WeatherRules.notices(forecast(*dry(16), *wet(1), *dry(7)), events, EventMarks.NONE, SessionsView.EMPTY, at(fri, 9), cal).isEmpty())
+        // Snow says so; a started plan isn't told; tomorrow's plans wait for tomorrow.
+        val snow = forecast(*dry(18), *Array(2) { Triple(0, 73, 80) }, *dry(4))
+        assertEquals("Snow at 18:00 — Training at SG18 Sports Ground", WeatherRules.notices(snow, events, EventMarks.NONE, SessionsView.EMPTY, at(fri, 9), cal).single().title)
+        assertTrue(WeatherRules.notices(snow, events, EventMarks.NONE, SessionsView.EMPTY, at(fri, 18, 5), cal).isEmpty())
+        assertTrue(WeatherRules.notices(snow, events, EventMarks.NONE, SessionsView.EMPTY, at(fri - 1, 9), cal).isEmpty())
+        // A long place is cut at its first comma and to 40 characters.
+        assertEquals("SG18", WeatherRules.shortPlace("SG18, Biggleswade"))
+        assertEquals(40, WeatherRules.shortPlace("A".repeat(60))!!.length)
+        assertNull(WeatherRules.shortPlace(" , x"))
+    }
+
+    @Test
+    fun theNudgesComeThroughTheNoticeSources() {
+        val f = forecast(*dry(17), *wet(3), *dry(4))
+        val ns = NoticeSources.collect(
+            ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, CalendarAgenda.let { TodayProjection.project(emptyList(), at(fri, 9), it.window(fri, cal), emptyList(), cal) },
+            at(fri, 9), cal, events = listOf(event("t", "Training", 17, 30)), forecast = f,
+        )
+        assertEquals(listOf("Light rain at 17:30 — Training at SG18 Sports Ground"), ns.filter { it.source == NoticeSource.WEATHER }.map { it.title })
+    }
 }

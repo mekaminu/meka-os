@@ -1512,7 +1512,7 @@ class MekaCore(
     private fun currentNotices(all: List<os.meka.core.domain.Task> = tasks.all()) =
         NoticeSources.collect(
             _lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card,
-            currentEvents(), _eventMarks.value, _sessions.value, all,
+            currentEvents(), _eventMarks.value, _sessions.value, all, weather.forecast(),
         )
 
     private fun project(all: List<os.meka.core.domain.Task> = tasks.all(), dayEvents: List<os.meka.core.domain.CalendarEvent> = visibleEvents(all)): Today {
