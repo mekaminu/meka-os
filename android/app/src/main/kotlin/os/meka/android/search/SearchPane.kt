@@ -80,10 +80,16 @@ private const val SETTLE_MS = 120L
  */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun SearchPane(core: MekaCore, onClose: () -> Unit, openItem: (OpenItem) -> Unit) {
+fun SearchPane(
+    core: MekaCore, onClose: () -> Unit, openItem: (OpenItem) -> Unit,
+    /** What was typed in Ask's field ("See all 12 matches", a task match). */
+    initialQuery: String = "",
+    /** A task match tapped in Ask: its detail opens over the results. */
+    initialTask: String? = null,
+) {
     val v by core.searchView.collectAsState()
-    var query by rememberSaveable { mutableStateOf("") }
-    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var query by rememberSaveable { mutableStateOf(initialQuery) }
+    var selectedId by rememberSaveable { mutableStateOf(initialTask) }
     var unfolded by rememberSaveable { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
@@ -95,7 +101,8 @@ fun SearchPane(core: MekaCore, onClose: () -> Unit, openItem: (OpenItem) -> Unit
         if (query.isNotBlank()) delay(SETTLE_MS)
         core.search(query)
     }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    // From a task match the detail is what's wanted, not the keyboard.
+    LaunchedEffect(Unit) { if (initialTask == null) runCatching { focus.requestFocus() } }
 
     val close = { scope.launch { core.search("") }; onClose() }
     val tap: (SearchHit) -> Unit = { hit ->

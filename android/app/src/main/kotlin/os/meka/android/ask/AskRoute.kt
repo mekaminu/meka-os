@@ -86,8 +86,8 @@ import os.meka.core.facade.MekaCore
 
 /**
  * ASK (build plan M1, Four tabs, one front door). The fourth tab and the front door to everything that isn't a tab.
- * The field asks MEKA in your own words ([AskMekaSection], V1 AI layer slice 3b) with Search one tap beside it (the
- * field opens Search everything while asking can't work). Below it, More
+ * One field asks MEKA in your own words (Return; [AskMekaSection], V1 AI layer slice 3b) and searches as you type, the
+ * best matches under it and "See all" opening Search everything (Fold review 2026-10-09 07:26, item 8). Below it, More
  * lists, in three sections (Places · Daily · Settings), every place behind Ask (Lists, Goals and habits, Review,
  * Vault: they open with the shell's forward slide and keep Ask lit) and the panes, which spring up over Ask as they
  * do over Today. Motion: the title, field and More's sections stagger in 40 ms apart (each section a step after the
@@ -106,10 +106,15 @@ fun AskRoute(
     var appearanceOpen by rememberSaveable { mutableStateOf(false) }
     var pane by rememberSaveable { mutableStateOf<MoreItem?>(null) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
+    // What Ask's field hands Search everything: the query typed and a task to open over the results.
+    var searchSeed by rememberSaveable { mutableStateOf("") }
+    var searchTask by rememberSaveable { mutableStateOf<String?>(null) }
+    var searchEpoch by rememberSaveable { mutableStateOf(0) }
+    val closeSearch = { showSearch = false; searchEpoch += 1 }
     val sections = ShellNav.moreSections(connected)
     val undo = rememberEventUndo()
     // Back closes whatever sprang up over Ask before it leaves the app.
-    BackHandler(enabled = pane != null || showSearch) { if (showSearch) showSearch = false else pane = null }
+    BackHandler(enabled = pane != null || showSearch) { if (showSearch) closeSearch() else pane = null }
 
     Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
         LazyColumn(
@@ -122,8 +127,15 @@ fun AskRoute(
                     modifier = Modifier.padding(bottom = MekaSpace.m).appear(rememberAppearance(0)))
             }
             item(key = "field") {
-                // Ask MEKA (V1 AI layer, slice 3b): the field asks in your own words; Search sits beside it.
-                AskMekaSection(core, undo, openSearch = { showSearch = true }, modifier = Modifier.appear(rememberAppearance(1)))
+                // Ask MEKA (V1 AI layer, slice 3b): one field asks in your own words (Return) and searches as you type
+                // (Fold review 2026-10-09 07:26, item 8); the matches open where they live, "See all" opens Search.
+                AskMekaSection(
+                    core, undo,
+                    openSearch = { q, task -> searchSeed = q; searchTask = task; showSearch = true },
+                    modifier = Modifier.appear(rememberAppearance(1)),
+                    openItem = openItem,
+                    searchEpoch = searchEpoch,
+                )
             }
             // More in sections (Fold review 2026-10-08, item 10): Places · Daily · Settings, a small label over each;
             // each section staggers in one step after the one before began.
@@ -160,7 +172,8 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.VOICE) { VoicePane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.TALK) { TalkPane(onClose = { pane = null }) }
         MekaPane(visible = showSearch) {
-            SearchPane(core, onClose = { showSearch = false }, openItem = { item -> showSearch = false; openItem(item) })
+            SearchPane(core, onClose = closeSearch, openItem = { item -> showSearch = false; openItem(item) },
+                initialQuery = searchSeed, initialTask = searchTask)
         }
         // An Ask card's undo bar ("Added “Milk” · Undo") rises at the foot of Ask.
         EventUndoBar(undo, Modifier.align(Alignment.BottomCenter))

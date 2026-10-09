@@ -80,6 +80,8 @@ final class CoreModel {
     var showSearch = false
     /// What the command bar's "Search for …" hands to the search sheet; taken (and cleared) when the sheet opens.
     var searchSeed: String?
+    /// A task match clicked in Ask's field: the search sheet opens with its detail chosen beside the results.
+    var searchChosenSeed: String?
     /// The ⌘K command bar over MEKA's window (Outside the app).
     var showCommandBar = false
     /// A search result Lists or Goals should open (its tab and unfolded row); cleared once shown.

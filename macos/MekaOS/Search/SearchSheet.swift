@@ -72,6 +72,8 @@ struct SearchSheet: View {
             fieldFocused = true
             // "Search for …" from the command bar opens the sheet with what was typed there.
             if let seed = model.searchSeed { query = seed; model.searchSeed = nil }
+            // A task match from Ask's field: its detail shows beside the results.
+            if let c = model.searchChosenSeed { chosen = c; model.searchChosenSeed = nil; fieldFocused = false }
             model.search(query)
         }
         .task(id: query) {

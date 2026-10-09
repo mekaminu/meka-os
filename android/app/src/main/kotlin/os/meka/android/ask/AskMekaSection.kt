@@ -2,7 +2,6 @@ package os.meka.android.ask
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -56,7 +55,15 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.testTag
+import os.meka.android.shell.OpenItem
+import os.meka.core.domain.AskFieldRules
+import os.meka.core.domain.AskMatch
+import os.meka.core.domain.AskMatches
+import os.meka.core.domain.AskReturn
+import os.meka.core.domain.SearchTarget
 import os.meka.android.calendar.EventUndo
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -83,20 +90,34 @@ private sealed interface AskShown {
 }
 
 /**
- * Ask MEKA on the Fold (build plan V1, AI layer slice 3b). The field asks MEKA in your own words; Search stays one tap
- * away beside it (and is the field itself while asking can't work: AI off, the month's budget used up, not connected).
+ * Ask MEKA on the Fold (build plan V1, AI layer slice 3b). One field (Fold review 2026-10-09 07:26, item 8): Return
+ * asks MEKA in your own words, and while typing the best matches from Search everything show under it ([AskFieldRules];
+ * a task opens its detail over Search, a list item, goal or habit opens its place, "See all 12 matches" opens Search);
+ * the mic sits inside the field at its right end. While asking can't work (AI off, the month's budget used up, not
+ * connected) the field only searches and Return opens Search everything.
  * Under the field, MEKA's AI and the month's spend ("On · $1.20 of $20 this month", lit when it needs a look). Asking
  * shows the question, a thinking shimmer, then the answer's lines fading in one after another and up to three cards
  * rising under them; a card does nothing until tapped (light haptic), then leaves and the undo bar rises with what it
  * did and Undo. Motion per the catalogue's Assistant row; reduced motion cross-fades.
  *
- * Talk to MEKA (V1 voice slice 2): the mic beside the field starts a spoken conversation ([TalkController]; the
+ * Talk to MEKA (V1 voice slice 2): the mic in the field starts a spoken conversation ([TalkController]; the
  * microphone permission is asked the first time). The voice orb takes the field's place under it, the live transcript
  * types in, MEKA's answers show here as typed ones do (their cards can still be tapped) and are said aloud; a spoken
  * yes folds the cards away with one undo bar. Tapping the orb while MEKA speaks interrupts it; otherwise it ends.
  */
 @Composable
-fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modifier: Modifier = Modifier) {
+fun AskMekaSection(
+    core: MekaCore, undo: EventUndo,
+    /** Opens Search everything with [query] typed, and the task [taskId]'s detail over it when given. */
+    openSearch: (query: String, taskId: String?) -> Unit,
+    modifier: Modifier = Modifier,
+    /** Opens a list item, goal or habit where it lives. */
+    openItem: (OpenItem) -> Unit = {},
+    /** False where the field only asks (the bedside's Talk pane). */
+    matches: Boolean = true,
+    /** Bumped when Search everything closes, so the field searches its own text again. */
+    searchEpoch: Int = 0,
+) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val keyboard = LocalSoftwareKeyboardController.current
@@ -105,6 +126,8 @@ fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modi
     var shown by remember { mutableStateOf<AskShown>(AskShown.Idle) }
     var done by remember { mutableStateOf(setOf<Int>()) }
     var asks by remember { mutableStateOf(0) }
+    // The question MEKA is answering (or last answered); the matches step aside for it until the field changes.
+    var asked by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(asks) { status = core.aiStatus() }
     val canAsk = status?.canAsk != false
     val reduced = Meka.reducedMotion
@@ -113,6 +136,7 @@ fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modi
         TalkController(
             context, core, scope,
             onAnswer = { q, out ->
+                asked = q
                 done = emptySet()
                 shown = AskShown.Answer(q, out, asks + 1)
                 asks += 1
@@ -163,6 +187,7 @@ fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modi
         keyboard?.hide()
         haptics.light()
         shown = AskShown.Thinking(q)
+        asked = q
         done = emptySet()
         scope.launch {
             val out = core.askMeka(q)
@@ -188,52 +213,77 @@ fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modi
         }
     }
 
+    // The field searches as you type (Fold review 2026-10-09 07:26, item 8): the best matches show under it.
+    val view by core.searchView.collectAsState()
+    var lastMatches by remember { mutableStateOf<AskMatches?>(null) }
+    val searching = matches && AskFieldRules.showMatches(text, asked)
+    LaunchedEffect(text, searching, searchEpoch) {
+        if (!searching) { if (lastMatches != null) { lastMatches = null; core.search("") }; return@LaunchedEffect }
+        delay(AskFieldRules.SETTLE_MS)
+        core.search(text)
+    }
+    val fresh = AskFieldRules.matches(view, text, canAsk)
+    // Until the new matches arrive the last ones stay (no flicker while typing).
+    LaunchedEffect(fresh, searching) { if (searching && fresh != null) lastMatches = fresh }
+
+    fun openMatch(m: AskMatch) {
+        if (!m.opens) return
+        keyboard?.hide()
+        haptics.light()
+        if (m.hit.target == SearchTarget.TASK) openSearch(text, m.hit.id)
+        else { scope.launch { core.search("") }; openItem(OpenItem(m.hit.target, m.hit.id)) }
+    }
+
+    fun onReturn() {
+        when (AskFieldRules.onReturn(text, canAsk)) {
+            AskReturn.ASK -> ask()
+            AskReturn.SEARCH -> { keyboard?.hide(); openSearch(text, null) }
+            AskReturn.NOTHING -> Unit
+        }
+    }
+
     Column(modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            Box(
-                Modifier.weight(1f).heightIn(min = 52.dp)
-                    .clip(RoundedCornerShape(MekaRadius.pill))
-                    .background(Meka.colors.surfaceRaised)
-                    .then(if (canAsk) Modifier else Modifier.clickable(role = Role.Button, onClick = openSearch))
-                    .padding(horizontal = MekaSpace.l),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                if (canAsk) {
-                    if (text.isEmpty()) Text("Ask MEKA…", style = MekaType.body, color = Meka.colors.textTertiary)
-                    BasicTextField(
-                        value = text,
-                        onValueChange = { text = it.take(AskRules.MAX_QUESTION) },
-                        singleLine = true,
-                        textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
-                        cursorBrush = SolidColor(Meka.colors.accent),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = { ask() }),
-                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Ask MEKA" },
-                    )
-                } else {
-                    Text("Search everything", style = MekaType.itemMeta, color = Meka.colors.textTertiary,
-                        modifier = Modifier.semantics { contentDescription = "Search everything" })
-                }
+        // One field: it asks (Return) and searches (as you type); the mic sits inside it at the right end.
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                .clip(RoundedCornerShape(MekaRadius.pill))
+                .background(Meka.colors.surfaceRaised)
+                .padding(start = MekaSpace.l, end = MekaSpace.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (text.isEmpty()) Text(AskFieldRules.placeholder(canAsk), style = MekaType.body, color = Meka.colors.textTertiary)
+                BasicTextField(
+                    value = text,
+                    onValueChange = { text = it.take(AskRules.MAX_QUESTION) },
+                    singleLine = true,
+                    textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
+                    cursorBrush = SolidColor(Meka.colors.accent),
+                    keyboardOptions = KeyboardOptions(imeAction = if (canAsk) ImeAction.Send else ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSend = { onReturn() }, onSearch = { onReturn() }),
+                    modifier = Modifier.fillMaxWidth().testTag(ASK_FIELD_TAG)
+                        .semantics { contentDescription = AskFieldRules.fieldLabel(canAsk) },
+                )
             }
             if (canAsk) {
-                // The mic: starts talking (or ends it), the orb's resting look.
+                // The mic: starts talking (or ends it), the orb's resting look, inside the field.
                 VoiceOrb(
-                    TalkPhase.ENDED, 0f, size = 44.dp,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                    TalkPhase.ENDED, 0f, size = 36.dp,
+                    modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
                         .clickable(role = Role.Button) { if (talk.active) { haptics.tick(); talk.stop() } else startTalking() }
+                        .testTag(ASK_MIC_TAG)
                         .semantics { contentDescription = if (talk.active) "Stop talking to MEKA" else "Talk to MEKA" },
                 )
-                val sendable = AskRules.question(text) != null && shown !is AskShown.Thinking
-                val bg by animateColorAsState(if (sendable) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.themeBlend(reduced), label = "ask-send")
-                Text("Ask", style = MekaType.itemMeta, color = if (sendable) Meka.colors.onAccent else Meka.colors.textTertiary,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-                        .clickable(enabled = sendable, role = Role.Button) { ask() }
-                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s))
-                Text("Search", style = MekaType.itemMeta, color = Meka.colors.accent,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                        .clickable(role = Role.Button, onClick = openSearch)
-                        .semantics { contentDescription = "Search everything" }
-                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s))
+            }
+        }
+        // The matches unfold under the field (expand spring) and glide as they narrow.
+        AnimatedVisibility(
+            visible = searching && lastMatches != null,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            lastMatches?.let { m ->
+                AskMatchList(m, onOpen = { openMatch(it) }, onSeeAll = { keyboard?.hide(); haptics.tick(); openSearch(text, null) })
             }
         }
         // MEKA's AI and the month's spend; cross-fades as it changes.
@@ -262,9 +312,8 @@ fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modi
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             when (val s = shown) {
-                AskShown.Idle -> Text(
-                    if (canAsk) "Ask about your day, or ask MEKA to add, move or tick off a task, start a fast or set a timer. Nothing happens until you tap."
-                    else "Tasks, events, lists, goals and habits.",
+                AskShown.Idle -> if (!searching) Text(
+                    AskFieldRules.idleLine(canAsk),
                     style = MekaType.caption, color = Meka.colors.textTertiary,
                 )
                 is AskShown.Thinking -> {
@@ -295,6 +344,46 @@ fun AskMekaSection(core: MekaCore, undo: EventUndo, openSearch: () -> Unit, modi
                 }
             }
         }
+    }
+}
+
+const val ASK_FIELD_TAG = "ask-field"
+const val ASK_MIC_TAG = "ask-mic"
+const val ASK_MATCH_TAG = "ask-match"
+
+/**
+ * The best matches for what's typed: the title, then "Task · Planned today 14:00"; a task, list item, goal or habit
+ * opens with a tap; "See all 12 matches" opens Search everything; a row joining slides in with the item motion.
+ */
+@Composable
+internal fun AskMatchList(m: AskMatches, onOpen: (AskMatch) -> Unit, onSeeAll: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(
+        Modifier.fillMaxWidth().padding(top = MekaSpace.s).animateContentSize(MekaMotion.replan(reduced)),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        m.rows.forEachIndexed { i, row ->
+            key(row.hit.kind.name + row.hit.id) {
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+                        .then(if (row.opens) Modifier.clickable(role = Role.Button) { onOpen(row) } else Modifier)
+                        .testTag(ASK_MATCH_TAG)
+                        .semantics(mergeDescendants = true) { contentDescription = row.spoken }
+                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s)
+                        .appear(rememberAppearance(i)),
+                ) {
+                    Text(row.hit.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1)
+                    Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1)
+                }
+            }
+        }
+        m.seeAll?.let { line ->
+            Text(line, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onSeeAll)
+                    .padding(horizontal = MekaSpace.xxs, vertical = MekaSpace.s))
+        }
+        m.empty?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary,
+            modifier = Modifier.padding(horizontal = MekaSpace.xxs, vertical = MekaSpace.xs)) }
     }
 }
 

@@ -835,4 +835,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(back.boolValue)
         XCTAssertNil(core.today.value.upNext)
     }
+
+    /// Ask's one field (Fold review 2026-10-09 07:26, item 8): the matches, Return and the words reach Swift.
+    func testAskFieldReachesSwift() {
+        let rules = AskFieldRules.shared
+        XCTAssertEqual(rules.placeholder(canAsk: true), "Ask or search…")
+        XCTAssertEqual(rules.onReturn(typed: "dentist", canAsk: false), AskReturn.search)
+        XCTAssertEqual(rules.onReturn(typed: "what's on", canAsk: true), AskReturn.ask)
+        XCTAssertTrue(rules.showMatches(typed: "dentist", asked: nil))
+        XCTAssertFalse(rules.showMatches(typed: "what's on", asked: "what's on"))
+        let hit = SearchHit(id: "t1", kind: .task, title: "Dentist", detail: "Planned today 14:00", snippet: nil,
+                            target: .task, task: nil, score: 5)
+        let view = SearchView(query: "den", groups: [SearchGroup(kind: .task, label: "Tasks", hits: [hit], more: 0)], total: 3)
+        let m = rules.matches(view: view, typed: "den", canAsk: true)
+        XCTAssertEqual(m?.rows.first?.line, "Task · Planned today 14:00")
+        XCTAssertEqual(m?.seeAll, "See all 3 matches")
+        XCTAssertNil(rules.matches(view: view, typed: "dentist", canAsk: true))
+        XCTAssertTrue(rules.idleLine(canAsk: true, mac: true).hasSuffix("click."))
+    }
 }
