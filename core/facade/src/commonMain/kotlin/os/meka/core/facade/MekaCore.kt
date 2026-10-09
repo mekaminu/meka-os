@@ -613,8 +613,13 @@ class MekaCore(
     suspend fun addPrepTask(event: os.meka.core.domain.CalendarEvent): String = onCore { eventActions.addPrep(event) }
     /** Hides an event from my day (timeline, planner, brief, shutdown, review); the Calendar tab still lists it. */
     suspend fun hideEvent(eventId: String) = onCore { eventActions.hide(eventId) }
-    /** Shows a hidden event in my day again (also the Undo for [hideEvent]). */
-    suspend fun showEvent(eventId: String) = onCore { eventActions.show(eventId) }
+    /**
+     * Shows a hidden event in my day again (also the Undo for [hideEvent]); for a row standing for the same event on
+     * several calendars ([os.meka.core.domain.DuplicateEvents]) every one of them, so the row comes back.
+     */
+    suspend fun showEvent(eventId: String) = onCore {
+        os.meka.core.domain.DuplicateEvents.idsWith(eventId, currentEvents()).forEach { eventActions.show(it) }
+    }
     /** "Make it a task" on an all-day entry that reads like a to-do: a task with its title, and the entry leaves Today. */
     suspend fun makeAllDayTask(event: os.meka.core.domain.CalendarEvent): String = onCore { eventActions.makeTask(event) }
     /** Undo for [makeAllDayTask]: the task goes and the entry is back in Today. */

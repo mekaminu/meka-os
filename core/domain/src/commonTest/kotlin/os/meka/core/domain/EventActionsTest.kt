@@ -114,7 +114,8 @@ class EventActionsTest {
         assertTrue(ea.marks().isHidden("ev1"))
         syncBoth()
         assertTrue(em.marks().isHidden("ev1"))
-        assertEquals(listOf("ev2"), em.marks().visible(listOf(ev(), ev("ev2"))).map { it.id })
+        // A different event (the same one on two calendars would be one row, DuplicateEventsTest).
+        assertEquals(listOf("ev2"), em.marks().visible(listOf(ev(), ev("ev2", title = "Dentist"))).map { it.id })
 
         // Offline on both: Android shows it, then the Mac hides it again later; the later tap wins everywhere.
         ea.show("ev1")

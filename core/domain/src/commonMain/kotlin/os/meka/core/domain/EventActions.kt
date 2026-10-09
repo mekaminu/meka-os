@@ -54,12 +54,14 @@ data class EventMarks(
     /** For Swift: whether the event's leave-by rings as an alarm. */
     fun leaveRingsOf(eventId: String): Boolean = eventId in leaveAlarms
 
-    /** The events that count for the day: everything not hidden, one by one or by its calendar. */
+    /**
+     * The events that count for the day: everything not hidden, one by one or by its calendar, with the same event on
+     * several calendars as one row ([DuplicateEvents]); hiding any one of a merged row's events hides the row.
+     */
     fun visible(events: List<CalendarEvent>): List<CalendarEvent> {
         val byCalendar = HashMap<String, Boolean>()
-        return events.filter { e ->
-            e.id !in hidden && !byCalendar.getOrPut(CalendarRules.key(e)) { isCalendarKeyHidden(CalendarRules.key(e)) }
-        }
+        val shown = events.filter { e -> !byCalendar.getOrPut(CalendarRules.key(e)) { isCalendarKeyHidden(CalendarRules.key(e)) } }
+        return DuplicateEvents.merge(shown).filter { !DuplicateEvents.hiddenIn(it, hidden) }
     }
 
     companion object {

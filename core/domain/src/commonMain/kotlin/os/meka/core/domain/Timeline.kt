@@ -157,7 +157,7 @@ object TimelineRules {
             dayEvents.filter { !it.allDay }.forEach { e ->
                 val start = maxOf(e.startAtMs, today.startMs)
                 val time = if (e.startAtMs < today.startMs) "Until ${hhmm(e.endAtMs)}" else "${hhmm(e.startAtMs)}–${hhmm(e.endAtMs)}"
-                val detail = listOfNotNull(e.location, providerLabel(e.provider)).joinToString(" · ").ifEmpty { null }
+                val detail = eventDetail(e)
                 val running = e.startAtMs <= nowMs && e.endAtMs > nowMs
                 add(Item(TimelineRow("e-" + e.id, TimelineKind.EVENT, time, e.title, detail, null, e, running, start), start, e.endAtMs, true))
             }
@@ -269,6 +269,15 @@ object TimelineRules {
         t.repeatMeta(epochDay)?.let { add("↻ $it") }
     }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
+    /**
+     * "Camp Nou · Outlook"; a row standing for the same event on several calendars lists them all: "SG18 · Personal ·
+     * Kids" ([DuplicateEvents]).
+     */
+    fun eventDetail(e: CalendarEvent): String? {
+        val source = if (e.alsoOn.isEmpty()) listOfNotNull(providerLabel(e.provider)) else e.calendarLabels
+        return (listOfNotNull(e.location) + source).joinToString(" · ").ifEmpty { null }
+    }
+
     private fun providerLabel(p: String): String? = when (p) {
         "microsoft" -> "Outlook"
         "fixtures" -> "Fixtures"
@@ -299,7 +308,8 @@ object AllDayRules {
     /** Rows for [events] (already sorted), with the calendar named once in the label when they all share one. */
     fun group(events: List<CalendarEvent>, todayEpochDay: Long): Group {
         val keys = events.map { CalendarRules.key(it) }.distinct()
-        val shared = if (keys.size == 1) calendarLabel(events.first()) else null
+        // A merged row ([DuplicateEvents]) names its calendars itself, so the label can't speak for it.
+        val shared = if (keys.size == 1 && events.none { it.alsoOn.isNotEmpty() }) calendarLabel(events.first()) else null
         if (shared == null) return Group(LABEL, events.map { item(it, todayEpochDay) })
         return Group("$LABEL · $shared", events.map { item(it, todayEpochDay, showCalendar = false) })
     }
@@ -318,7 +328,8 @@ object AllDayRules {
         // All-day bounds are UTC midnights with an exclusive end: the last day is the one before.
         val lastDay = (e.endAtMs - 1).floorDiv(CivilDate.DAY_MS)
         val until = if (lastDay > todayEpochDay) "until ${CivilDate.shortLabel(lastDay)}" else null
-        val line = listOfNotNull(if (showCalendar) calendarLabel(e) else null, until).joinToString(" · ").ifEmpty { null }
+        val calendars = if (e.alsoOn.isEmpty()) calendarLabel(e) else e.calendarLabels.joinToString(" · ")
+        val line = listOfNotNull(if (showCalendar) calendars else null, until).joinToString(" · ").ifEmpty { null }
         return AllDayItem(e, line, !e.isFixture && looksLikeTodo(e.title))
     }
 

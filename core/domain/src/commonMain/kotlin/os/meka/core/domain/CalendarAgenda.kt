@@ -169,8 +169,10 @@ object CalendarAgenda {
             (it.lifecycle == Lifecycle.ACTIVE || it.lifecycle == Lifecycle.INBOX) && it.scheduledAtMs != null
         }
 
-        val shown = events.filter { it.id !in hidden }
-        val hiddenEvents = events.filter { it.id in hidden }
+        // The same event on several calendars is one row ([DuplicateEvents]); hiding any of them hides the row.
+        val merged = DuplicateEvents.merge(events)
+        val shown = merged.filter { !DuplicateEvents.hiddenIn(it, hidden) }
+        val hiddenEvents = merged.filter { DuplicateEvents.hiddenIn(it, hidden) }
 
         data class Day(val epochDay: Long, val allDay: List<CalendarEvent>, val ended: List<TimelineRow>, val rows: List<TimelineRow>, val events: Int, val fixtures: Int, val tasks: Int, val hidden: List<CalendarEvent>) {
             val count get() = allDay.size + ended.size + rows.count { it.kind != TimelineKind.NOW }
@@ -366,9 +368,10 @@ object CalendarAgenda {
 
     private fun eventDetail(e: CalendarEvent): String? = listOfNotNull(
         e.location,
-        when (e.provider) {
-            "microsoft" -> "Outlook"
-            "fixtures" -> "Fixture"
+        when {
+            e.alsoOn.isNotEmpty() -> e.calendarLabels.joinToString(" · ") // one row for several calendars
+            e.provider == "microsoft" -> "Outlook"
+            e.provider == "fixtures" -> "Fixture"
             else -> null // Google is the default calendar and needs no label
         },
     ).joinToString(" · ").ifEmpty { null }

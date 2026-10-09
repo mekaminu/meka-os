@@ -62,7 +62,18 @@ data class CalendarEvent(
      * the event as that edit leaves it ([PendingEditRules]); null for the mirror as it is. Never stored.
      */
     val pendingEditId: String? = null,
+    /**
+     * The same event on Meka's other calendars, folded into this row ([DuplicateEvents], Fold review 2026-10-09 item 5);
+     * empty for a lone event. Never stored.
+     */
+    val alsoOn: List<CalendarEvent> = emptyList(),
 ) {
+    /** Every calendar this row stands for, its own first: "Personal" · "Kids" (one entry for a lone event). */
+    val calendarLabels: List<String> get() = (listOf(this) + alsoOn).map { CalendarRules.label(it) }.distinct()
+
+    /** For Swift: the other calendars' names, "Kids · Training"; null for a lone event. */
+    val alsoOnLine: String? get() = calendarLabels.drop(1).takeIf { it.isNotEmpty() }?.joinToString(" · ")
+
     /** An event Meka added in MEKA that isn't in the mirror yet ([PendingEditRules.PROVISIONAL_PREFIX]). */
     val isProvisional: Boolean get() = PendingEditRules.isProvisional(id)
 

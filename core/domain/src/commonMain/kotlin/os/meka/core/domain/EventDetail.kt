@@ -154,6 +154,8 @@ object EventDetails {
                 else -> null
             },
             e.account?.takeIf { it.isNotBlank() && e.provider != "fixtures" },
+            // One row for the same event on several calendars ([DuplicateEvents]): "Personal · … · also on Kids".
+            e.alsoOnLine?.let { "also on $it" },
         ).joinToString(" · ").ifEmpty { null }
 
         val location = e.location?.trim()?.takeIf { it.isNotEmpty() }
@@ -176,7 +178,7 @@ object EventDetails {
             notes = notes,
             join = join,
             isFixture = e.isFixture,
-            hidden = marks.isHidden(e.id),
+            hidden = DuplicateEvents.hiddenIn(e, marks.hidden),
             prepTaskId = prep?.id,
             prepLine = prep?.let { prepLine(it, today, calendar) },
             // A provisional event (added in MEKA, not yet in the mirror) has no MEKA actions until the real one lands.
