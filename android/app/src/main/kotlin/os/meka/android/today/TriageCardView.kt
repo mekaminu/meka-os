@@ -73,7 +73,7 @@ internal fun TriageCardView(
             modifier = Modifier.semantics { contentDescription = card.spoken })
         Text(card.gist, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 3, overflow = TextOverflow.Ellipsis)
         card.draft?.let { draft ->
-            Box(
+            Column(
                 Modifier.padding(top = MekaSpace.xs).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s))
                     .background(Meka.colors.surface).padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
             ) {
@@ -82,16 +82,18 @@ internal fun TriageCardView(
                 }
                 // Edit unfolds the reply as a field in place (the expand spring; reduced motion: cross-fade).
                 AnimatedVisibility(editing, enter = unfold(), exit = fold()) {
-                    if (reply.isEmpty()) Text(TriageReplyRules.REPLY_HINT, style = MekaType.body, color = Meka.colors.textTertiary)
-                    BasicTextField(
-                        value = reply,
-                        onValueChange = { onReply(it.take(TriageReplyRules.MAX_REPLY)) },
-                        textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
-                        cursorBrush = SolidColor(Meka.colors.accent),
-                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                        modifier = Modifier.fillMaxWidth().testTag("triage-reply-${card.id}")
-                            .semantics { contentDescription = "Reply to ${TriageReplyRules.who(card)}" },
-                    )
+                    Box {
+                        if (reply.isEmpty()) Text(TriageReplyRules.REPLY_HINT, style = MekaType.body, color = Meka.colors.textTertiary)
+                        BasicTextField(
+                            value = reply,
+                            onValueChange = { onReply(it.take(TriageReplyRules.MAX_REPLY)) },
+                            textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
+                            cursorBrush = SolidColor(Meka.colors.accent),
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                            modifier = Modifier.fillMaxWidth().testTag("triage-reply-${card.id}")
+                                .semantics { contentDescription = "Reply to ${TriageReplyRules.who(card)}" },
+                        )
+                    }
                 }
             }
         }
