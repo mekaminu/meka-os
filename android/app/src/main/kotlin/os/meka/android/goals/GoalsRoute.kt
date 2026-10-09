@@ -35,6 +35,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -70,6 +72,8 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.today.SectionLabel
+import os.meka.android.today.TypingSaves
+import os.meka.core.domain.TextAutosave
 import os.meka.core.domain.GoalHorizon
 import os.meka.core.domain.GoalItem
 import os.meka.core.domain.GoalRules
@@ -140,7 +144,7 @@ fun GoalsRoute(core: MekaCore) {
                 delete = { open = null; act { core.deleteHabit(h.id) } },
                 book = { on -> haptics.tick(); act { core.setHabitBooked(h.id, on) } },
                 rotate = { i -> haptics.tick(); act { core.setHabitRotation(h.id, i) } },
-                appLink = { link, done -> act { done(core.setHabitAppLink(h.id, link)) } },
+                appLink = { link, done -> TypingSaves.launch { done(core.setHabitAppLink(h.id, link)) } },
             )
         }
         item(key = "add-habit") {
@@ -250,6 +254,14 @@ private fun AppLinkField(current: String?, name: String?, save: (String, (Boolea
     val reduced = Meka.reducedMotion
     var text by rememberSaveable(current) { mutableStateOf(current.orEmpty()) }
     var bad by rememberSaveable(current) { mutableStateOf(false) }
+    // Typing is never lost (TextAutosave): a changed link saves when the settings close, as if Done had been pressed
+    // (one that isn't a web address is refused there as on Done, and the old one stays).
+    val typed by rememberUpdatedState(text)
+    val saved by rememberUpdatedState(current)
+    val saveLink by rememberUpdatedState(save)
+    DisposableEffect(Unit) {
+        onDispose { TextAutosave.pendingAdd(typed)?.let { if (it != saved) saveLink(it) { } } }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Text("Workout app", style = MekaType.caption, color = Meka.colors.textTertiary)
         Field("Link to your workout app · hevy.com (optional)", text, { text = it.take(SessionRules.MAX_LINK); bad = false }) {

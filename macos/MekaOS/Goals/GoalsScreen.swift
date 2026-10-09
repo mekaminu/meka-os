@@ -237,6 +237,11 @@ private struct AppLinkField: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
         .onAppear { text = habit.appLink ?? "" }
         .onChange(of: habit.appLink) { text = habit.appLink ?? "" }
+        // Typing is never lost (TextAutosave): a changed link saves when the settings close, as if Return had been
+        // pressed (one that isn't a web address is refused there as on Return, and the old one stays).
+        .onDisappear {
+            if let link = TextAutosave.shared.pendingAdd(typed: text), link != (habit.appLink ?? "") { save(link) }
+        }
     }
 
     private func save(_ link: String) {

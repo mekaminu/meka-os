@@ -44,6 +44,11 @@ struct StepsList: View {
     let palette: MekaPalette
     @State private var newStep = ""
 
+    private func addPending(to id: String) {
+        if let step = TextAutosave.shared.pendingAdd(typed: newStep) { model.addStep(id, step) }
+        newStep = ""
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             SectionLabel(task.isRepeating ? "Routine steps" : "Steps", palette)
@@ -56,6 +61,10 @@ struct StepsList: View {
                 .textFieldStyle(.plain)
                 .font(MekaType.body)
                 .onSubmit { model.addStep(task.id, newStep); newStep = "" }
+                // A step typed but not yet added is added when the detail closes or shows another task, as if
+                // Return had been pressed (TextAutosave: typing is never lost).
+                .onChange(of: task.id) { oldId, _ in addPending(to: oldId) }
+                .onDisappear { addPending(to: task.id) }
         }
     }
 }

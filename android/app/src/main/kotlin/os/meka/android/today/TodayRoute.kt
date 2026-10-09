@@ -63,9 +63,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -420,7 +417,7 @@ internal fun todayActions(
     },
     complete = { id -> scope.launch { core.complete(id); if (selected() == id) setSelected(null) } },
     select = { id -> setSelected(id) },
-    rename = { id, t -> scope.launch { runCatching { core.rename(id, t) } } },
+    rename = { id, t -> TypingSaves.launch { core.rename(id, t) } },
     delete = { id ->
         scope.launch {
             val title = core.today.value.let { t -> (t.needsYou.map { it.task } + listOfNotNull(t.upNext) + t.yourDay) }.firstOrNull { it.id == id }?.title
@@ -434,7 +431,7 @@ internal fun todayActions(
     setRepeat = { id, rule -> scope.launch { runCatching { core.setRepeat(id, rule) } } },
     skip = { id -> scope.launch { runCatching { core.skipOccurrence(id) }; if (selected() == id) setSelected(null) } },
     snooze = { id -> scope.launch { runCatching { core.snooze(id, 1) }; if (selected() == id) setSelected(null) } },
-    addStep = { id, text -> scope.launch { runCatching { core.addStep(id, text) } } },
+    addStep = { id, text -> TypingSaves.launch { core.addStep(id, text) } },
     setStepDone = { stepId, done -> scope.launch { core.setStepDone(stepId, done) } },
     removeStep = { stepId -> scope.launch { core.removeStep(stepId) } },
     someday = { id -> scope.launch { runCatching { core.moveToSomeday(id, SomedayKind.IDEA) }; if (selected() == id) setSelected(null) } },
@@ -442,7 +439,7 @@ internal fun todayActions(
     setGoal = { id, goalId -> scope.launch { runCatching { core.setTaskGoal(id, goalId) } } },
     whenOf = { t -> core.taskWhen(t) },
     setWhen = { id, day, minute -> scope.launch { runCatching { core.setWhen(id, day, minute) } } },
-    setNotes = { id, notes -> scope.launch { runCatching { core.setNotes(id, notes) } } },
+    setNotes = { id, notes -> TypingSaves.launch { core.setNotes(id, notes) } },
     reminderOf = { t -> core.taskReminder(t) },
     setReminder = { id, at -> scope.launch { runCatching { core.setReminder(id, at) } } },
 )
@@ -893,33 +890,10 @@ internal fun DetailPane(task: Task?, conflicts: List<ConflictChoice>, actions: T
 
 @Composable
 private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, actions: TodayActions) {
-    var title by remember(task.id, task.title) { mutableStateOf(task.title) }
-    // The title saves itself (Meka, 2026-10-08: an edit was lost on Close because only the keyboard's Done saved it):
-    // shortly after typing stops, when the field loses focus, on Done, and when the detail closes. A blank title is
-    // never saved (the old one stays).
-    val latestTitle by rememberUpdatedState(title)
-    val latestTask by rememberUpdatedState(task)
-    val saveTitle = {
-        val t = latestTitle.trim()
-        if (t.isNotEmpty() && t != latestTask.title) actions.rename(latestTask.id, t)
-    }
-    LaunchedEffect(task.id, title) {
-        if (title.trim() != task.title) { delay(TITLE_AUTOSAVE_MS); saveTitle() }
-    }
-    DisposableEffect(task.id) { onDispose { saveTitle() } }
-    val focus = LocalFocusManager.current
-    BasicTextField(
-        value = title,
-        onValueChange = { title = it.replace('\n', ' ') },
-        singleLine = false,
-        textStyle = MekaType.upNextTitle.copy(color = Meka.colors.textPrimary),
-        cursorBrush = SolidColor(Meka.colors.accent),
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { saveTitle(); focus.clearFocus() }),
+    // The title saves itself (Meka, 2026-10-08: an edit was lost on Close because only the keyboard's Done saved it).
+    TaskTitleField(task.id, task.title, onSave = { id, t -> actions.rename(id, t) },
         // On the closed Fold the title arrives from the row that was tapped (a no-op outside a pane).
-        modifier = Modifier.fillMaxWidth().padding(vertical = MekaSpace.m).sharedTitleInPane(SharedMotion.taskKey(task.id))
-            .onFocusChanged { if (!it.isFocused) saveTitle() },
-    )
+        modifier = Modifier.fillMaxWidth().padding(vertical = MekaSpace.m).sharedTitleInPane(SharedMotion.taskKey(task.id)))
     meta(task)?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
 
     Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
@@ -953,8 +927,6 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
 }
 
 internal fun providerLabel(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Outlook"; "fixtures" -> "Fixtures"; "news" -> "Headlines"; "bank_holidays" -> "Bank holidays"; else -> p }
-
-private const val TITLE_AUTOSAVE_MS = 800L
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 

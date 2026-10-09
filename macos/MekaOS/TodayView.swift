@@ -759,46 +759,54 @@ private struct DetailContent: View {
     let task: MekaTask?
     let palette: MekaPalette
     @State private var title = ""
+    /// Something typed here hasn't been saved yet.
+    @State private var dirty = false
     @State private var pendingSave: Task<Void, Never>?
+    @FocusState private var titleFocused: Bool
 
-    private func saveTitle(_ task: MekaTask) { saveTitle(id: task.id) }
-
-    /// Saves the typed title onto the task it was typed for, if it changed and isn't blank.
+    /// Saves what was typed onto the task it was typed for, if it changed and isn't blank (`TextAutosave`).
     private func saveTitle(id: String) {
-        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty else { return }
-        if let current = model.allTasks.first(where: { $0.id == id }), current.title == t { return }
-        model.rename(id, to: t)
+        pendingSave?.cancel()
+        pendingSave = nil
+        guard dirty else { return }
+        dirty = false
+        let saved = model.allTasks.first(where: { $0.id == id })?.title ?? ""
+        if let t = TextAutosave.shared.titleToSave(typed: title, saved: saved) { model.rename(id, to: t) }
+    }
+
+    /// Typing: the title saves itself 0.8 s (`TextAutosave.DELAY_MS`) after the last keystroke.
+    private func typed(_ text: String, id: String) {
+        title = text.replacingOccurrences(of: "\n", with: " ")
+        dirty = true
+        pendingSave?.cancel()
+        pendingSave = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled else { return }
+            saveTitle(id: id)
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
             if let task {
-                // The title saves itself (Meka, 2026-10-08): shortly after typing stops, on Return, when another
-                // task is shown and when the detail goes away. A blank title is never saved.
-                TextField("Title", text: $title)
+                // The title saves itself (Meka, 2026-10-08): shortly after typing stops, on Return, when it loses
+                // focus, when another task is shown and when the detail goes away. A blank title is never saved; a
+                // save landing mid-typing leaves the field as typed ("Buy " keeps its space before "milk").
+                TextField("Title", text: Binding(get: { title }, set: { typed($0, id: task.id) }))
                     .textFieldStyle(.plain)
                     .font(MekaType.upNextTitle)
-                    .onSubmit { saveTitle(task) }
-                    .onAppear { title = task.title }
+                    .focused($titleFocused)
+                    .onSubmit { saveTitle(id: task.id) }
+                    .onAppear { title = task.title; dirty = false }
                     .onChange(of: task.id) { oldId, _ in
                         saveTitle(id: oldId)
                         title = task.title
                     }
                     .onChange(of: task.title) { _, newTitle in
-                        if pendingSave == nil { title = newTitle }
+                        if TextAutosave.shared.adoptSaved(typed: title, saved: newTitle, dirty: dirty) { title = newTitle }
                     }
-                    .onChange(of: title) { _, _ in
-                        pendingSave?.cancel()
-                        let id = task.id
-                        pendingSave = Task { @MainActor in
-                            try? await Task.sleep(for: .milliseconds(800))
-                            guard !Task.isCancelled else { return }
-                            saveTitle(id: id)
-                            pendingSave = nil
-                        }
-                    }
-                    .onDisappear { saveTitle(task) }
+                    .onChange(of: titleFocused) { _, focused in if !focused { saveTitle(id: task.id) } }
+                    .onDisappear { saveTitle(id: task.id) }
 
                 ForEach(model.conflicts.filter { $0.taskId == task.id }, id: \.field) { c in
                     Text("EDITED ON TWO DEVICES").font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)

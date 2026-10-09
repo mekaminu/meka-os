@@ -27,6 +27,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -51,6 +53,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.TextAutosave
 import os.meka.core.domain.ChecklistItem
 import os.meka.core.domain.RepeatChoice
 import os.meka.core.domain.Task
@@ -107,7 +110,13 @@ internal fun RepeatSection(task: Task, actions: TodayActions) {
 internal fun StepsSection(task: Task, actions: TodayActions) {
     SectionLabel(if (task.isRepeating) "Routine steps" else "Steps", Modifier.padding(top = MekaSpace.l))
     task.checklist.forEach { step -> key(step.id) { StepRow(step, actions) } }
-    var text by rememberSaveable(task.id) { mutableStateOf("") }
+    // Not saveable: leaving (an unfold included) adds what was typed, so it mustn't come back to be added twice.
+    val textState = remember(task.id) { mutableStateOf("") }
+    var text by textState
+    // A step typed but not yet added is added when the detail closes or shows another task, as if Done had been
+    // pressed ([TextAutosave]: typing is never lost). Reads this task's own field, not the next task's.
+    val add by rememberUpdatedState(actions.addStep)
+    DisposableEffect(task.id) { onDispose { TextAutosave.pendingAdd(textState.value)?.let { add(task.id, it) } } }
     Box(Modifier.fillMaxWidth().padding(vertical = MekaSpace.s)) {
         if (text.isEmpty()) Text("Add a step…", style = MekaType.body, color = Meka.colors.textTertiary)
         BasicTextField(
