@@ -146,7 +146,7 @@ class MekaCore(
     private val held = os.meka.core.domain.HeldMessages(replica, nowMs)
     private val requestCards = os.meka.core.domain.RequestCards(replica, nowMs, ZoneCalendar(timeZone))
     private val triageCards = os.meka.core.domain.TriageCards(replica, nowMs, ZoneCalendar(timeZone))
-    private val groupGists = os.meka.core.domain.GroupGists(replica, nowMs)
+    private val gistStore = os.meka.core.domain.GroupGists(replica, nowMs)
     // Leave-by alarms are worked out from the calendar on every read (Alarms, slice 3).
     private val alarms = os.meka.core.domain.Alarms(replica, nowMs, ZoneCalendar(timeZone)) {
         os.meka.core.domain.LeaveAlarmRules.alarms(currentEvents(), eventActions.marks(), nowMs(), ZoneCalendar(timeZone))
@@ -874,9 +874,9 @@ class MekaCore(
             val slotMinute = if (minute >= os.meka.core.domain.GroupDigestRules.EVENING_MINUTE) {
                 os.meka.core.domain.GroupDigestRules.EVENING_MINUTE
             } else os.meka.core.domain.GroupDigestRules.LUNCH_MINUTE
-            val synced = groupGists.caughtUpTimes()
+            val synced = gistStore.caughtUpTimes()
             val merged = (seen.keys + synced.keys).associateWith { k -> maxOf(seen[k] ?: 0L, synced[k] ?: 0L) }
-            val gisted = groupGists.gisted(slotMs)
+            val gisted = gistStore.gisted(slotMs)
             val cards = os.meka.core.domain.GroupDigestRules.cards(items, settings, merged)
                 // Only groups with news since this slot began weren't caught up after it: the digest is due for them.
                 .filter { (merged[it.groupKey] ?: 0L) < slotMs && it.groupKey !in gisted }
@@ -954,17 +954,17 @@ class MekaCore(
     ) {
         /** A card for every group in the due digest, with its gist when it has one; returns the groups written. */
         fun saveAll(gists: Map<String, String?>): List<String> =
-            cards.filter { groupGists.save(it, slotMs, slotMinute, gists[it.groupKey]) }.map { it.groupKey }
+            cards.filter { gistStore.save(it, slotMs, slotMinute, gists[it.groupKey]) }.map { it.groupKey }
     }
 
     /**
      * Caught up with these digest groups (V1, messages slice 4b): their synced cards leave Needs you on both devices. Returns
      * what to hand [undoCatchUpGroupDigest] for the undo bar.
      */
-    suspend fun catchUpGroupDigest(groupKeys: List<String>): GroupDigestUndo = onCore { GroupDigestUndo(groupGists.caughtUp(groupKeys)) }
+    suspend fun catchUpGroupDigest(groupKeys: List<String>): GroupDigestUndo = onCore { GroupDigestUndo(gistStore.caughtUp(groupKeys)) }
 
     /** Takes back a Caught up: the cards come back on both devices. */
-    suspend fun undoCatchUpGroupDigest(undo: GroupDigestUndo) = onCore { groupGists.undo(undo.before) }
+    suspend fun undoCatchUpGroupDigest(undo: GroupDigestUndo) = onCore { gistStore.undo(undo.before) }
 
     /** Not now on a triage card: gone from Needs you on every device, its gist and draft blanked. */
     suspend fun dismissTriage(messageId: String): Boolean =
@@ -2141,8 +2141,8 @@ class MekaCore(
         _afterWork.value = held.summary()
         _requests.value = requestCards.open()
         _triage.value = triageCards.open()
-        _groupGists.value = groupGists.open()
-        _groupDigestCaughtUp.value = groupGists.caughtUpTimes()
+        _groupGists.value = gistStore.open()
+        _groupDigestCaughtUp.value = gistStore.caughtUpTimes()
         _notifyPreview.value = Governor.preview(currentNotices(all), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(
