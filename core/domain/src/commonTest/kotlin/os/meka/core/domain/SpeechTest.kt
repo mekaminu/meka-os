@@ -159,4 +159,50 @@ class SpeechTest {
         assertEquals(SpeechRules.Miss.PIECE_ON_DEVICE, SpeechRules.onMiss(reading = true, resting = false))
         assertEquals(SpeechRules.Miss.REST_ON_DEVICE, SpeechRules.onMiss(reading = true, resting = true))
     }
+
+    @Test
+    fun aLateAnswerInAConversationHoldsInMekasVoiceInsteadOfSwitching() {
+        val now = 1_000_000L
+        // MEKA's voice was heard a minute ago: hold ("One moment…" then up to 6 s more).
+        assertTrue(SpeechRules.holds(reading = false, resting = false, lastMekaVoiceMs = now - 60_000, nowMs = now))
+        // The first answer of a conversation (nothing heard, or heard long ago) still falls back after its wait.
+        assertFalse(SpeechRules.holds(reading = false, resting = false, lastMekaVoiceMs = null, nowMs = now))
+        assertFalse(SpeechRules.holds(reading = false, resting = false, lastMekaVoiceMs = now - 121_000, nowMs = now))
+        // A refusal won't come right by waiting; the brief keeps its own piece-by-piece fallback.
+        assertFalse(SpeechRules.holds(reading = false, resting = true, lastMekaVoiceMs = now - 1_000, nowMs = now))
+        assertFalse(SpeechRules.holds(reading = true, resting = false, lastMekaVoiceMs = now - 1_000, nowMs = now))
+        // The request's budget: the usual wait, plus the hold when it may hold.
+        assertEquals(4_000L, SpeechRules.waitMs(first = true, reading = false))
+        assertEquals(6_000L, SpeechRules.waitMs(first = false, reading = false))
+        assertEquals(5_000L, SpeechRules.waitMs(first = true, reading = true))
+        assertEquals(10_000L, SpeechRules.budgetMs(first = true, reading = false, hold = true))
+        assertEquals(4_000L, SpeechRules.budgetMs(first = true, reading = false, hold = false))
+        // The hold line is fetched with the common lines, so it plays at once, and it is one piece.
+        assertTrue(SpeechRules.HOLD_LINE in SpeechRules.COMMON)
+        assertEquals(listOf(SpeechRules.HOLD_LINE), SpeechRules.pieces(SpeechRules.HOLD_LINE))
+    }
+
+    @Test
+    fun activityShowsHowQuicklyMekasVoiceAnsweredNewestFirst() {
+        assertNull(SpeechRules.timingLine(emptyList()))
+        val spoken = SpeechTiming.Outcome.SPOKEN
+        assertEquals("Time to MEKA's voice · 1.8 s", SpeechRules.timingLine(listOf(SpeechTiming(1, 1_834, spoken))))
+        val line = SpeechRules.timingLine(
+            listOf(
+                SpeechTiming(1, 900, spoken),
+                SpeechTiming(2, 4_000, SpeechTiming.Outcome.LATE),
+                SpeechTiming(3, 2_400, spoken),
+                SpeechTiming(4, 120, SpeechTiming.Outcome.FAILED),
+                SpeechTiming(5, 1_250, spoken),
+            ),
+        )
+        assertEquals("Time to MEKA's voice · 1.3 s · no answer · 2.4 s · late · 0.9 s · middle 1.3 s", line)
+        // Only the last ten.
+        val many = (1..14).map { SpeechTiming(it.toLong(), it * 100L, spoken) }
+        val ten = SpeechRules.timingLine(many)!!
+        assertTrue(ten.startsWith("Time to MEKA's voice · 1.4 s · 1.3 s"))
+        assertFalse(" 0.4 s" in ten)
+        assertEquals("0.1 s", SpeechRules.seconds(10))
+        assertEquals("12.0 s", SpeechRules.seconds(11_960))
+    }
 }

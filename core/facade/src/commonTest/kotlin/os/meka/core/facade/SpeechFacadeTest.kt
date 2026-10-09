@@ -197,4 +197,40 @@ class SpeechFacadeTest {
         assertTrue(c.chooseMekaVoice("device"))
         assertTrue(c.speechResting())
     }
+
+    @Test
+    fun aHoldingPieceWaitsLongerAndTheHoldLinePlaysFromMemoryOnly() = runTest {
+        val c = core()
+        // Not fetched yet: no hold clip, and asking for it never reaches the server.
+        assertNull(c.speechHoldClip())
+        assertTrue(server.said.isEmpty())
+        c.warmVoice()
+        assertEquals("bXAz" + os.meka.core.domain.SpeechRules.HOLD_LINE.length, c.speechHoldClip())
+        val asked = server.said.size
+        // 7 s to answer: too slow without a hold (4 s), in time with one (4 s + 6 s).
+        server.slowMs = 7_000
+        assertNull(c.speechClip("Your dentist moved to Friday.", first = true, reading = false, hold = false))
+        assertEquals("bXAz" + "Your dentist moved to Friday.".length, c.speechClip("Your dentist moved to Friday.", first = true, reading = false, hold = true))
+        assertEquals(asked + 2, server.said.size)
+        // The device's own voice chosen: no hold clip either.
+        assertTrue(c.chooseMekaVoice("device"))
+        assertNull(c.speechHoldClip())
+    }
+
+    @Test
+    fun activitySaysHowQuicklyMekasVoiceAnsweredOnThisDevice() = runTest {
+        val c = core()
+        assertNull(c.voiceTimingLine())
+        server.answer = { now += 1_800; SpeechCodec.Response(SpeechCodec.Response.SPOKEN, audio = "bXAz", format = "mp3") }
+        c.speechClip("First.", first = true)
+        c.speechClip("First.", first = true) // from memory: not counted
+        assertEquals("Time to MEKA's voice · 1.8 s", c.voiceTimingLine())
+        server.slowMs = 4_500
+        assertNull(c.speechClip("Slow.", first = true))
+        assertEquals("Time to MEKA's voice · late · 1.8 s", c.voiceTimingLine())
+        server.slowMs = 0
+        server.answer = { now += 300; SpeechCodec.Response(SpeechCodec.Response.OFF) }
+        assertNull(c.speechClip("Off.", first = true))
+        assertTrue(c.voiceTimingLine()!!.startsWith("Time to MEKA's voice · no answer · late · 1.8 s"))
+    }
 }

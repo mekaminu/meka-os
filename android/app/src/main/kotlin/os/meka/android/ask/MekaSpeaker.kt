@@ -7,6 +7,7 @@ import android.media.MediaPlayer
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Base64
@@ -20,6 +21,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import os.meka.core.domain.DeviceVoice
 import os.meka.core.domain.DeviceVoiceRules
 import os.meka.core.domain.DeviceVoiceSettings
@@ -63,6 +65,8 @@ class MekaSpeaker(
     private var player: MediaPlayer? = null
     /** This phone's own voice, speed and pitch (kept on the phone only). */
     private var settings: DeviceVoiceSettings = DeviceVoiceStore.load(context)
+    /** When MEKA's own voice was last heard (wall clock), so a late answer in the same conversation holds. */
+    private var lastMekaVoiceMs: Long? = null
 
     /** Starts the phone's own speech engine early, so a fallback line doesn't wait for it. */
     fun prepare() { ensureTts() }
@@ -71,7 +75,9 @@ class MekaSpeaker(
      * Says [text], stopping anything already being said; [onDone] runs once it has all been said (or couldn't be),
      * never when it was stopped or replaced. A long [reading] (the morning brief) waits longer for its first piece
      * ([SpeechRules.firstWaitMs]) and, when one piece is late, lets the phone say only that piece before MEKA's voice
-     * carries on ([SpeechRules.onMiss]).
+     * carries on ([SpeechRules.onMiss]). In a conversation where MEKA's voice has been heard ([SpeechRules.holds]) a
+     * late piece never switches voice at once: MEKA says "One moment…" in its own voice (from memory) and waits up to
+     * [SpeechRules.HOLD_AUDIO_MS] more before the phone's voice takes over.
      */
     fun say(text: String, reading: Boolean = false, onDone: () -> Unit = {}) {
         stop()
@@ -81,17 +87,44 @@ class MekaSpeaker(
         speaking = true
         job = scope.launch {
             val pieces = SpeechRules.pieces(text)
+            var held = false
+
+            suspend fun fetch(k: Int): Pending? {
+                val p = pieces.getOrNull(k) ?: return null
+                val hold = SpeechRules.holds(reading, core.speechResting(), lastMekaVoiceMs, System.currentTimeMillis())
+                val first = k == 0
+                return Pending(async { core.speechClip(p, first, reading, hold) }, SystemClock.elapsedRealtime(), first, hold)
+            }
+
+            // A piece that may hold: its usual wait, then "One moment…" (once a line) and the rest of its budget.
+            suspend fun clipOf(p: Pending): String? {
+                if (!p.hold) return p.clip.await()
+                val left = SpeechRules.waitMs(p.first, reading) - (SystemClock.elapsedRealtime() - p.startedAt)
+                val inTime = if (left > 0) withTimeoutOrNull(left) { p.clip.await() } else null
+                if (inTime != null || p.clip.isCompleted) return inTime ?: p.clip.await()
+                if (!held) {
+                    held = true
+                    core.speechHoldClip()?.let { play(it) }
+                }
+                return p.clip.await()
+            }
+
             var i = 0
-            var next: Deferred<String?>? = pieces.firstOrNull()?.let { p -> async { core.speechClip(p, true, reading) } }
+            var next = fetch(0)
             while (i < pieces.size) {
-                val clip = next?.await()
-                next = pieces.getOrNull(i + 1)?.let { p -> async { core.speechClip(p, false, reading) } }
-                if (clip != null && play(clip)) { i++; continue }
+                val clip = next?.let { clipOf(it) }
+                if (clip != null) lastMekaVoiceMs = System.currentTimeMillis() // heard in this conversation
+                next = fetch(i + 1)
+                if (clip != null && play(clip)) {
+                    lastMekaVoiceMs = System.currentTimeMillis()
+                    i++
+                    continue
+                }
                 if (SpeechRules.onMiss(reading, core.speechResting()) == SpeechRules.Miss.REST_ON_DEVICE) break
                 sayOnDevice(pieces[i])
                 i++
             }
-            next?.cancel()
+            next?.clip?.cancel()
             if (i < pieces.size) sayOnDevice(pieces.drop(i).joinToString(" "))
             if (id == line) {
                 speaking = false
@@ -99,6 +132,9 @@ class MekaSpeaker(
             }
         }
     }
+
+    /** One piece's clip on its way: when it was asked for, whether it is the line's first, and whether it may hold. */
+    private class Pending(val clip: Deferred<String?>, val startedAt: Long, val first: Boolean, val hold: Boolean)
 
     /**
      * ▶ Sample in the voice picker: [VoicePickerRules.SAMPLE] in the server's [voice] (a Polly name), or in the phone's

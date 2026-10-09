@@ -751,6 +751,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(SpeechRules.shared.onMiss(reading: false, resting: false) == .restOnDevice)
     }
 
+    /// Voice never switches mid-conversation (2026-10-09): the hold rule, its budget and Activity's timing line reach Swift.
+    func testVoiceHoldReachesSwift() {
+        let now: Int64 = 1_000_000
+        XCTAssertTrue(SpeechRules.shared.holds(reading: false, resting: false, lastMekaVoiceMs: KotlinLong(longLong: now - 60_000), nowMs: now))
+        XCTAssertFalse(SpeechRules.shared.holds(reading: false, resting: false, lastMekaVoiceMs: nil, nowMs: now))
+        XCTAssertFalse(SpeechRules.shared.holds(reading: true, resting: false, lastMekaVoiceMs: KotlinLong(longLong: now), nowMs: now))
+        XCTAssertEqual(SpeechRules.shared.waitMs(first: true, reading: false), 4_000)
+        XCTAssertEqual(SpeechRules.shared.budgetMs(first: true, reading: false, hold: true), 10_000)
+        XCTAssertEqual(SpeechRules.shared.HOLD_LINE, "One moment…")
+        XCTAssertNil(SpeechRules.shared.timingLine(timings: []))
+        XCTAssertEqual(SpeechRules.shared.seconds(ms: 1_834), "1.8 s")
+    }
+
     func testMotionCheckReachesSwift() {
         let off = MotionCheckRules.shared.mac(stored: nil, reduceMotion: true, lowPower: false)
         XCTAssertEqual(off.rows.map(\.label), ["MEKA Motion", "Reduce Motion", "Low Power Mode"])

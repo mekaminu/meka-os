@@ -53,8 +53,8 @@ import os.meka.android.designsystem.sharedTitleInPane
  * what is still as MEKA left it). Opened from Today's header.
  *
  * Motion: the pane springs up (MekaPane); day sections stagger in 40 ms apart; Undo gives a light haptic and the
- * row's line cross-fades to "Undone at 09:12"; MEKA's voice line (the month's characters) fades in once the server
- * answers. Reduced motion: cross-fades.
+ * row's line cross-fades to "Undone at 09:12"; MEKA's voice lines (how quickly it answered on this phone lately, the
+ * month's characters) fade in once known. Reduced motion: cross-fades.
  */
 @Composable
 fun ActivityPane(core: MekaCore, onClose: () -> Unit) {
@@ -65,7 +65,12 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit) {
     var note by remember { mutableStateOf<String?>(null) }
     // MEKA's voice this month ("MEKA's voice · Amy · 12,400 of 1,000,000 characters in October"); null: nothing to say.
     var voiceLine by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { voiceLine = runCatching { core.voiceUsageLine() }.getOrNull() }
+    // How quickly MEKA's voice answered on this phone lately ("Time to MEKA's voice · 1.8 s · 0.9 s · late"); null: none yet.
+    var timingLine by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        timingLine = runCatching { core.voiceTimingLine() }.getOrNull()
+        voiceLine = runCatching { core.voiceUsageLine() }.getOrNull()
+    }
     val reduced = Meka.reducedMotion
 
     Column(
@@ -84,6 +89,13 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit) {
             targetState = voiceLine,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "activity-voice",
+        ) { line ->
+            if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
+        }
+        AnimatedContent(
+            targetState = timingLine,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "activity-voice-timing",
         ) { line ->
             if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
         }

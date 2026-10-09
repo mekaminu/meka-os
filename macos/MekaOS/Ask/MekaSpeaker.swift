@@ -31,6 +31,8 @@ final class MekaSpeaker {
     @ObservationIgnored private var player: AVAudioPlayer?
     @ObservationIgnored private var deviceWaiting: [Int: CheckedContinuation<Void, Never>] = [:]
     @ObservationIgnored private var deviceLine = 0
+    /// When MEKA's own voice was last heard (wall clock, ms), so a late answer in the same conversation holds.
+    @ObservationIgnored private var lastMekaVoiceMs: Int64?
 
     func attach(_ model: CoreModel) {
         self.model = model
@@ -41,7 +43,9 @@ final class MekaSpeaker {
     /// Says `text`, stopping anything already being said. `done` runs once the whole line has been said (in either
     /// voice), never when it was cut short by `stop()` or another line. A long `reading` (the morning brief) waits
     /// longer for its first piece and, when one piece is late, lets the Mac say only that piece before MEKA's voice
-    /// carries on (`SpeechRules.onMiss`).
+    /// carries on (`SpeechRules.onMiss`). In a conversation where MEKA's voice has been heard (`SpeechRules.holds`) a
+    /// late piece never switches voice at once: MEKA says "One moment…" in its own voice (from memory) and waits up to
+    /// `SpeechRules.HOLD_AUDIO_MS` more before the Mac's voice takes over.
     func say(_ text: String, reading: Bool = false, done: (@MainActor @Sendable () -> Void)? = nil) {
         stop()
         line += 1
@@ -51,19 +55,30 @@ final class MekaSpeaker {
         let pieces = SpeechRules.shared.pieces(text: text)
         task = Task { [weak self] in
             guard let self else { return }
+            var held = false
             var i = 0
-            var next: Task<Data?, Never>?
-            if let first = pieces.first { next = Task { await self.model?.speechClip(first, first: true, reading: reading) } }
+            var next = await self.fetch(pieces, 0, reading: reading)
             while i < pieces.count {
-                let clip = await next?.value
-                guard !Task.isCancelled else { break }
-                if i + 1 < pieces.count {
-                    let piece = pieces[i + 1]
-                    next = Task { await self.model?.speechClip(piece, first: false, reading: reading) }
-                } else {
-                    next = nil
+                var clip: Data?
+                if let p = next {
+                    clip = await self.clipOf(p, reading: reading)
+                    if clip == nil && p.hold && !p.box.done && !Task.isCancelled {
+                        // Late: "One moment…" in MEKA's voice (once a line), then the rest of the piece's budget.
+                        if !held {
+                            held = true
+                            if let line = await self.model?.speechHoldClip() { _ = await self.play(line) }
+                        }
+                        clip = await p.clip.value
+                    }
                 }
-                if let clip, await self.play(clip) { i += 1; continue }
+                guard !Task.isCancelled else { break }
+                if clip != nil { self.lastMekaVoiceMs = Self.nowMs() } // heard in this conversation
+                next = await self.fetch(pieces, i + 1, reading: reading)
+                if let clip, await self.play(clip) {
+                    self.lastMekaVoiceMs = Self.nowMs()
+                    i += 1
+                    continue
+                }
                 guard !Task.isCancelled else { break }
                 let resting = await self.model?.speechResting() ?? true
                 if SpeechRules.shared.onMiss(reading: reading, resting: resting) == .restOnDevice { break }
@@ -71,7 +86,7 @@ final class MekaSpeaker {
                 guard !Task.isCancelled else { break }
                 i += 1
             }
-            next?.cancel()
+            next?.clip.cancel()
             guard !Task.isCancelled else { return }
             if i < pieces.count { await self.sayOnDevice(pieces[i...].joined(separator: " ")) }
             guard !Task.isCancelled, id == self.line else { return }
@@ -79,6 +94,50 @@ final class MekaSpeaker {
             done?()
         }
     }
+
+    /// One piece's clip on its way: when it was asked for, whether it is the line's first, and whether it may hold.
+    private struct Pending {
+        let clip: Task<Data?, Never>
+        let box: ClipBox
+        let startedAt: ContinuousClock.Instant
+        let first: Bool
+        let hold: Bool
+    }
+
+    /// Whether a piece's clip has come back (set on the main actor by the clip's own task).
+    @MainActor private final class ClipBox {
+        var done = false
+    }
+
+    /// Asks for piece `k` (nil past the end); it may hold when MEKA's voice was heard in this conversation.
+    private func fetch(_ pieces: [String], _ k: Int, reading: Bool) async -> Pending? {
+        guard k < pieces.count else { return nil }
+        let piece = pieces[k]
+        let first = k == 0
+        let resting = await model?.speechResting() ?? true
+        let heard = lastMekaVoiceMs.map { KotlinLong(longLong: $0) }
+        let hold = SpeechRules.shared.holds(reading: reading, resting: resting, lastMekaVoiceMs: heard, nowMs: Self.nowMs())
+        let box = ClipBox()
+        let clip = Task { [weak self] () -> Data? in
+            let d = await self?.model?.speechClip(piece, first: first, reading: reading, hold: hold)
+            box.done = true
+            return d
+        }
+        return Pending(clip: clip, box: box, startedAt: ContinuousClock.now, first: first, hold: hold)
+    }
+
+    /// A piece's clip: awaited to the end when it can't hold; else only for its usual wait (nil if still on its way,
+    /// and `box.done` false says so).
+    private func clipOf(_ p: Pending, reading: Bool) async -> Data? {
+        guard p.hold else { return await p.clip.value }
+        let wait = Duration.milliseconds(SpeechRules.shared.waitMs(first: p.first, reading: reading))
+        while !p.box.done && ContinuousClock.now < p.startedAt + wait && !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return p.box.done ? await p.clip.value : nil
+    }
+
+    private static func nowMs() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
 
     /// ▶ Sample in the voice picker: `VoicePickerRules.SAMPLE` in the server's `voice` (a Polly name), or in the Mac's
     /// own voice for "device" or when the clip can't be had or played. Stops anything already being said.

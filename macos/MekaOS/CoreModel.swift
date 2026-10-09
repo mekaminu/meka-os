@@ -973,9 +973,17 @@ final class CoreModel {
     /// One piece of MEKA's own words said in MEKA's voice (Amazon Polly through MEKA's server; only these words are
     /// sent), as MP3 data, or nil when the Mac's own voice should say it (chosen, offline, off, over the month, slow).
     /// A long `reading` (the morning brief) waits longer for its first piece (`SpeechRules.firstWaitMs`).
-    func speechClip(_ text: String, first: Bool, reading: Bool = false) async -> Data? {
+    /// A `hold` piece may take up to `SpeechRules.HOLD_AUDIO_MS` longer while "One moment…" plays (`SpeechRules.holds`).
+    func speechClip(_ text: String, first: Bool, reading: Bool = false, hold: Bool = false) async -> Data? {
         guard let core else { return nil }
-        guard let clip = try? await core.speechClip(text: text, first: first, reading: reading) else { return nil }
+        guard let clip = try? await core.speechClip(text: text, first: first, reading: reading, hold: hold) else { return nil }
+        return Data(base64Encoded: clip)
+    }
+
+    /// "One moment…" in MEKA's voice, only when already fetched with the common lines (never asks the server).
+    func speechHoldClip() async -> Data? {
+        guard let core else { return nil }
+        guard let clip = try? await core.speechHoldClip() else { return nil }
         return Data(base64Encoded: clip)
     }
 
@@ -990,8 +998,13 @@ final class CoreModel {
     /// October"); nil until the server answers or when there is nothing to say. Only a String crosses back.
     private(set) var voiceUsageLine: String?
 
+    /// How quickly MEKA's voice answered on this Mac lately ("Time to MEKA's voice · 1.8 s · 0.9 s · late"); nil
+    /// before the first clip. Kept in memory only.
+    private(set) var voiceTimingLine: String?
+
     func refreshVoiceUsage() async {
-        guard let core, !signedOut else { voiceUsageLine = nil; return }
+        guard let core, !signedOut else { voiceUsageLine = nil; voiceTimingLine = nil; return }
+        voiceTimingLine = (try? await core.voiceTimingLine()) ?? nil
         voiceUsageLine = (try? await core.voiceUsageLine()) ?? nil
     }
 

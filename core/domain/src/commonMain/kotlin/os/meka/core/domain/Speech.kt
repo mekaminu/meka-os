@@ -43,6 +43,64 @@ object SpeechRules {
      */
     fun onMiss(reading: Boolean, resting: Boolean): Miss =
         if (reading && !resting) Miss.PIECE_ON_DEVICE else Miss.REST_ON_DEVICE
+
+    /** How long a device waits for a piece before it misses (or holds): the first piece's wait, else [NEXT_AUDIO_MS]. */
+    fun waitMs(first: Boolean, reading: Boolean): Long = if (first) firstWaitMs(reading) else NEXT_AUDIO_MS
+
+    /**
+     * What MEKA says, in its own (cached) voice, when a piece is late in a conversation where its voice has already
+     * been heard, instead of switching to the device's voice mid-conversation (Meka, 2026-10-09: "never switch voice").
+     */
+    const val HOLD_LINE = "One moment…"
+    /** After [HOLD_LINE] the device keeps waiting up to this much longer for the late piece before its own voice speaks. */
+    const val HOLD_AUDIO_MS = 6_000L
+    /** MEKA's voice heard within this counts as the same conversation (a holding pause, not a new start). */
+    const val CONVERSATION_GAP_MS = 120_000L
+
+    /**
+     * Whether a piece of a conversation's line may hold ([HOLD_LINE], then up to [HOLD_AUDIO_MS] more) when late: never
+     * in a long [reading] (the brief has [onMiss]'s piece-by-piece fallback), never while the server is [resting] (it
+     * refused: waiting won't help), and only once MEKA's voice was heard in this conversation — at [lastMekaVoiceMs],
+     * within [CONVERSATION_GAP_MS] of [nowMs] — so the first answer of a conversation still falls back after its wait.
+     */
+    fun holds(reading: Boolean, resting: Boolean, lastMekaVoiceMs: Long?, nowMs: Long): Boolean =
+        !reading && !resting && lastMekaVoiceMs != null && nowMs - lastMekaVoiceMs in 0..CONVERSATION_GAP_MS
+
+    /** The longest a piece's request may run: its [waitMs], plus [HOLD_AUDIO_MS] when it may [hold]. */
+    fun budgetMs(first: Boolean, reading: Boolean, hold: Boolean): Long =
+        waitMs(first, reading) + if (hold) HOLD_AUDIO_MS else 0L
+
+    /** Clip timings kept for Activity (in memory on the device, never sent). */
+    const val TIMINGS_KEPT = 10
+
+    /**
+     * Activity's line about how quickly MEKA's voice answered on this device: the last [TIMINGS_KEPT] clips fetched
+     * from the server ([timings] oldest first, as they happened), newest first ("Time to MEKA's voice · 1.8 s · 0.9 s · late · no answer"), then the middle of the
+     * spoken ones ("· middle 1.4 s") when there are three or more. Clips played from memory aren't counted. Null when
+     * nothing was fetched yet.
+     */
+    fun timingLine(timings: List<SpeechTiming>): String? {
+        val last = timings.takeLast(TIMINGS_KEPT).asReversed()
+        if (last.isEmpty()) return null
+        val parts = last.map { t ->
+            when (t.outcome) {
+                SpeechTiming.Outcome.SPOKEN -> seconds(t.ms)
+                SpeechTiming.Outcome.LATE -> "late"
+                SpeechTiming.Outcome.FAILED -> "no answer"
+            }
+        }
+        val spoken = last.filter { it.outcome == SpeechTiming.Outcome.SPOKEN }.map { it.ms }.sorted()
+        val middle = if (spoken.size >= 3) " · middle ${seconds(spoken[spoken.size / 2])}" else ""
+        return "$TIMING_LABEL · ${parts.joinToString(" · ")}$middle"
+    }
+
+    /** 1834 → "1.8 s"; under a tenth reads "0.1 s". */
+    fun seconds(ms: Long): String {
+        val tenths = ((ms.coerceAtLeast(0) + 50) / 100).coerceAtLeast(1)
+        return "${tenths / 10}.${tenths % 10} s"
+    }
+
+    const val TIMING_LABEL = "Time to MEKA's voice"
     /** The server refuses more than this per piece (SpeechCodec.MAX_TEXT). */
     const val MAX_PIECE = 600
     /** Sentences after the first are joined up to about this many characters, so a reply is one or two requests. */
@@ -56,7 +114,7 @@ object SpeechRules {
     const val FAILED_QUIET_MS = 60_000L
 
     /** Lines MEKA says often, fetched once when a conversation starts so they play at once. */
-    val COMMON: List<String> = listOf(TalkRules.ANYTHING_ELSE, TalkRules.LEFT_IT, TalkRules.NOT_HEARD_CARD)
+    val COMMON: List<String> = listOf(HOLD_LINE, TalkRules.ANYTHING_ELSE, TalkRules.LEFT_IT, TalkRules.NOT_HEARD_CARD)
 
     /**
      * [text] in the pieces it is spoken in: the first sentence alone (so the first audio comes quickly), then the rest
@@ -212,6 +270,15 @@ object SpeechRules {
         val doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
         return era * 146_097 + doe - 719_468
     }
+}
+
+/**
+ * How one clip request to MEKA's voice went on this device (kept in memory for Activity's [SpeechRules.timingLine]):
+ * at [atMs], answered in [ms] ([Outcome.SPOKEN]), given up after its budget ([Outcome.LATE]) or refused/unreachable
+ * ([Outcome.FAILED]).
+ */
+data class SpeechTiming(val atMs: Long, val ms: Long, val outcome: Outcome) {
+    enum class Outcome { SPOKEN, LATE, FAILED }
 }
 
 /**

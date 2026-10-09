@@ -171,6 +171,7 @@ class MekaCore(
     private val speechClips = LinkedHashMap<String, String>()
     private var speechQuietUntilMs = 0L
     private var speechWarmed = false
+    private val speechTimings = ArrayDeque<os.meka.core.domain.SpeechTiming>()
 
     // Declared before Today: Today's timeline reads the booked sessions.
     private val _sessions = MutableStateFlow(os.meka.core.domain.SessionsView.EMPTY)
@@ -1507,28 +1508,65 @@ class MekaCore(
      * [speechClip] for a long [reading] (the morning brief): its first piece may take up to
      * [os.meka.core.domain.SpeechRules.READ_FIRST_AUDIO_MS] ([os.meka.core.domain.SpeechRules.firstWaitMs]).
      */
-    suspend fun speechClip(text: String, first: Boolean, reading: Boolean): String? {
+    suspend fun speechClip(text: String, first: Boolean, reading: Boolean): String? = speechClip(text, first, reading, hold = false)
+
+    /**
+     * [speechClip] that may [hold]: the request runs up to [os.meka.core.domain.SpeechRules.HOLD_AUDIO_MS] past its
+     * usual wait ([os.meka.core.domain.SpeechRules.budgetMs]), while the device says
+     * [os.meka.core.domain.SpeechRules.HOLD_LINE] ([speechHoldClip]) once the usual wait is over, so a late answer in
+     * a conversation stays in MEKA's voice ([os.meka.core.domain.SpeechRules.holds]). Each request's time to answer is
+     * kept for Activity ([voiceTimingLine]). Never throws (a cancelled request is simply not counted).
+     */
+    suspend fun speechClip(text: String, first: Boolean, reading: Boolean, hold: Boolean): String? {
         val api = speechApi ?: return null
         val words = text.trim().takeIf { it.isNotEmpty() && it.length <= os.meka.core.domain.SpeechRules.MAX_PIECE } ?: return null
         val voice = onCore { speechVoiceNow() } ?: return null
         onCore { speechCached(voice.name, words) }?.let { return it }
-        val wait = if (first) os.meka.core.domain.SpeechRules.firstWaitMs(reading) else os.meka.core.domain.SpeechRules.NEXT_AUDIO_MS
+        val wait = os.meka.core.domain.SpeechRules.budgetMs(first, reading, hold)
+        val started = nowMs()
         val r = withTimeoutOrNull(wait) {
             try { api.speak(words, voice.name) } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 os.meka.core.wire.SpeechCodec.Response(os.meka.core.wire.SpeechCodec.Response.FAILED)
             }
-        } ?: return null // slow this time: the device speaks, and the next line asks again
+        }
+        if (r == null) { // slow this time: the device speaks, and the next line asks again
+            onCore { speechTimed(started, wait, os.meka.core.domain.SpeechTiming.Outcome.LATE) }
+            return null
+        }
         return onCore {
             val audio = r.audio
             if (r.state == os.meka.core.wire.SpeechCodec.Response.SPOKEN && !audio.isNullOrEmpty()) {
+                speechTimed(started, nowMs() - started, os.meka.core.domain.SpeechTiming.Outcome.SPOKEN)
                 speechClips[os.meka.core.domain.SpeechRules.cacheKey(voice.name, words)] = audio
                 while (speechClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechClips.remove(speechClips.keys.first())
                 audio
             } else {
+                speechTimed(started, nowMs() - started, os.meka.core.domain.SpeechTiming.Outcome.FAILED)
                 os.meka.core.domain.SpeechRules.quietUntil(r.state, nowMs())?.let { speechQuietUntilMs = it }
                 null
             }
         }
+    }
+
+    /**
+     * [os.meka.core.domain.SpeechRules.HOLD_LINE] in MEKA's voice, only when it is already on the device (fetched with
+     * the common lines by [warmVoice]); null otherwise, and the device then waits without a word. Never asks the server.
+     */
+    suspend fun speechHoldClip(): String? = onCore {
+        val voice = speechVoiceNow() ?: return@onCore null
+        speechCached(voice.name, os.meka.core.domain.SpeechRules.HOLD_LINE)
+    }
+
+    /**
+     * Activity's line about how quickly MEKA's voice answered on this device lately
+     * ([os.meka.core.domain.SpeechRules.timingLine]: "Time to MEKA's voice · 1.8 s · 0.9 s · late"); null before the
+     * first clip. Kept in memory only, never sent.
+     */
+    suspend fun voiceTimingLine(): String? = onCore { os.meka.core.domain.SpeechRules.timingLine(speechTimings.toList()) }
+
+    private fun speechTimed(atMs: Long, ms: Long, outcome: os.meka.core.domain.SpeechTiming.Outcome) {
+        speechTimings.addLast(os.meka.core.domain.SpeechTiming(atMs, ms, outcome))
+        while (speechTimings.size > os.meka.core.domain.SpeechRules.TIMINGS_KEPT) speechTimings.removeFirst()
     }
 
     /**
