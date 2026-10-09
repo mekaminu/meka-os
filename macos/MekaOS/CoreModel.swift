@@ -16,6 +16,8 @@ final class CoreModel {
     private(set) var work: WorkModeState?
     /// "While you were at work": what the Fold held during work mode, synced (Needs Meka #10). Done clears both.
     private(set) var afterWork: AfterWorkSummary?
+    /// Spam call protection's block list (call assistant polish 8b), synced with the Fold, which does the blocking.
+    private(set) var blockedCallers: BlockedCallersView?
     var showAfterWork = false
     /// Requests from people Meka watches (V1, requests slice 4): the Fold read them, the cards sync; Add · Change ·
     /// Not a task here clears them there too.
@@ -182,6 +184,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await s in core.afterWork { self?.afterWork = s }
+        })
+        observers.append(Task { [weak self] in
+            for await b in core.blockedCallers { self?.blockedCallers = b }
         })
         observers.append(Task { [weak self] in
             for await r in core.requests { self?.requests = r }
@@ -1106,6 +1111,21 @@ final class CoreModel {
     func setHabitBooked(_ id: String, _ on: Bool) { MekaHaptics.tick(); run { try await $0.setHabitBooked(id: id, on: on) } }
     /// The rotation preset at `index` in `SessionRules.ROTATIONS` (0: none).
     func setHabitRotation(_ id: String, _ index: Int) { MekaHaptics.tick(); run { try await $0.setHabitRotation(id: id, index: Int32(index)) } }
+    /// Puts a number on the block list (synced; the Fold rejects its calls silently). False (nothing saved) when it
+    /// can't be a phone number. Only Strings cross to the core.
+    func blockCaller(_ number: String) async -> Bool {
+        guard let core else { return false }
+        do {
+            let ok = try await core.blockCaller(number: number, why: nil).boolValue
+            if ok { MekaHaptics.light() } else { MekaHaptics.tick() }
+            return ok
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+    /// Takes a number (its row's key) off the block list.
+    func unblockCaller(_ key: String) { MekaHaptics.tick(); run { _ = try await $0.unblockCaller(key: key) } }
     /// Weather place setting (Calendars → Weather): the town the forecast is for; blank or "Biggleswade" is home.
     /// False (nothing saved) for a name that can't be a town. The server follows it at its next poll.
     func setWeatherPlace(_ name: String) async -> Bool {

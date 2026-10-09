@@ -152,6 +152,8 @@ class MekaCore(
     private val requestCards = os.meka.core.domain.RequestCards(replica, nowMs, ZoneCalendar(timeZone))
     private val triageCards = os.meka.core.domain.TriageCards(replica, nowMs, ZoneCalendar(timeZone))
     private val gistStore = os.meka.core.domain.GroupGists(replica, nowMs)
+    // Spam call protection (call assistant polish 8b): the synced block list.
+    private val blockedCallers = os.meka.core.domain.BlockedCallers(replica, nowMs, ZoneCalendar(timeZone))
     // Leave-by alarms are worked out from the calendar on every read (Alarms, slice 3).
     private val alarms = os.meka.core.domain.Alarms(replica, nowMs, ZoneCalendar(timeZone)) {
         os.meka.core.domain.LeaveAlarmRules.alarms(currentEvents(), eventActions.marks(), nowMs(), ZoneCalendar(timeZone))
@@ -345,6 +347,10 @@ class MekaCore(
     private val _groupDigestCaughtUp = MutableStateFlow<Map<String, Long>>(emptyMap())
     /** When Meka caught up with each digest group on either device (group key → when), for the Fold's own digest. */
     val groupDigestCaughtUp: StateFlow<Map<String, Long>> = _groupDigestCaughtUp.asStateFlow()
+
+    private val _blockedCallers = MutableStateFlow(os.meka.core.domain.BlockedCallersView.EMPTY)
+    /** Work mode → Blocked numbers: the synced block list, newest first (spam call protection). */
+    val blockedCallers: StateFlow<os.meka.core.domain.BlockedCallersView> = _blockedCallers.asStateFlow()
 
     private val _workMode = MutableStateFlow(work.state(localClock(), todayEpochDay()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
@@ -1380,6 +1386,44 @@ class MekaCore(
     /** The call assistant's one switch (synced; the Fold screens calls during work while it is on). */
     suspend fun setCallAssistant(on: Boolean) = onCore { work.setCallAssistant(on); refresh() }
 
+    // ---- Spam call protection (call assistant polish 8b) ----
+
+    /**
+     * Puts [number] on the block list (synced; the Fold rejects its calls silently, any time). [why] is a short note
+     * shown with it. Returns false, saving nothing, when it can't be a phone number.
+     */
+    suspend fun blockCaller(number: String, why: String?): Boolean = onCore { blockedCallers.block(number, why).also { refresh() } }
+
+    /** Takes a number ([key], from [blockedCallers]' rows) off the block list; its calls ring again. */
+    suspend fun unblockCaller(key: String): Boolean = onCore { blockedCallers.unblock(key).also { refresh() } }
+
+    /** The Fold, the first time it screens calls: puts the 9 Oct scam number on the list unless it was ever there. */
+    suspend fun seedBlockList(): Boolean = onCore { blockedCallers.seed().also { if (it) refresh() } }
+
+    /**
+     * The Fold's call screening asks this about every incoming call: the call assistant's switch, work mode, quiet
+     * hours (filled in here) and the block list decide, with what the phone knows about the caller ([signals]: contacts,
+     * recent calls, the network's caller check; never sent anywhere). A call spam protection stopped goes in Activity.
+     */
+    suspend fun screenIncomingCall(
+        number: String?,
+        lists: os.meka.core.domain.PeopleLists,
+        recent: List<os.meka.core.domain.ScreenedCall>,
+        signals: os.meka.core.domain.CallSignals,
+    ): os.meka.core.domain.CallDecision = onCore {
+        val state = work.state(localClock(), todayEpochDay())
+        val now = nowMs()
+        val quiet = notifyPrefs.settings().quiet.isQuietAt(now, ZoneCalendar(timeZone))
+        val decision = os.meka.core.domain.CallScreeningRules.decide(
+            state.callAssistant, state.atWork, number, lists, recent, now, blockedCallers.view().keys, signals.copy(quietHours = quiet),
+        )
+        os.meka.core.domain.CallScreeningRules.activityLine(decision, number)?.let { (summary, why) ->
+            activity.recordScreened(decision.callerKey, now, summary, why)
+            _activity.value = activity.view()
+        }
+        decision
+    }
+
     /**
      * Where the forecast is for (Weather place setting, synced): a town name; blank or "Biggleswade" is home. Returns
      * false, saving nothing, for a name that can't be a place. The server follows it at its next poll (a few minutes);
@@ -2238,6 +2282,7 @@ class MekaCore(
         _requests.value = requestCards.open()
         _triage.value = triageCards.open()
         _groupGists.value = gistStore.open()
+        _blockedCallers.value = blockedCallers.view()
         _groupDigestCaughtUp.value = gistStore.caughtUpTimes()
         _notifyPreview.value = Governor.preview(currentNotices(all), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->

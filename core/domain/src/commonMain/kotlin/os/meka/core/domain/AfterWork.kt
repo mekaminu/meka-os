@@ -82,6 +82,10 @@ data class PeopleLists(
         return copy(numbers = numbers + (name to (numbers[name].orEmpty() + n)))
     }
 
+    /** Adds every one of a contact's [numbers] to [name] (in E.164 where it is a UK number; blanks and repeats dropped). */
+    fun withNumbers(name: String, numbers: List<String?>): PeopleLists =
+        numbers.mapNotNull { ContactNumbers.e164(it) }.distinctBy(People::key).fold(this) { l, n -> l.withNumber(name, n) }
+
     /** Drops numbers of names on neither list. */
     fun pruned(): PeopleLists = copy(numbers = numbers.filterKeys { it in family || it in alwaysNotify })
 }
@@ -96,6 +100,29 @@ object People {
         if (looksLikeNumber) return "tel:" + digits.takeLast(10)
         return t.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
     }
+}
+
+/** Phone numbers read from a contact (build plan "Call assistant live — polish" 7). */
+object ContactNumbers {
+    /**
+     * A number as "+447700900123": UK national ("07700 900123") and 0044 forms become +44; other international numbers
+     * keep their +; anything with fewer than 6 digits, or letters, is null.
+     */
+    fun e164(raw: String?): String? {
+        val t = raw?.trim().orEmpty()
+        if (t.isEmpty() || t.any { it.isLetter() }) return null
+        val digits = t.filter { it.isDigit() }
+        if (digits.length < 6) return null
+        return when {
+            t.startsWith("+") -> "+$digits"
+            digits.startsWith("00") -> "+" + digits.drop(2)
+            digits.startsWith("0") && digits.length == 11 -> "+44" + digits.drop(1)
+            else -> digits
+        }
+    }
+
+    /** The Work screen's warning when a picked contact has no number at all (their calls can't be recognised). */
+    const val NO_NUMBER = "No number — their calls won't be recognised"
 }
 
 enum class BreakThrough(val label: String) { URGENT("Urgent"), ALWAYS_NOTIFY("Always notify") }

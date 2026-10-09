@@ -30,6 +30,11 @@
          Calendars → Weather. One fix on demand while MEKA is open (Today opening, a question about "here"); never in
          the background, never fine location. The point is rounded to about 1 km before it leaves the phone. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Spam call protection (call assistant polish 7, 8b): asked for in Work mode → Call assistant → "Recognise
+         callers". Read on the phone only, never sent: contacts so a contact's calls are never stopped and a picked
+         family member's every number is kept; the call log so anyone Meka called in the last 90 days is never stopped. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
 
     <!-- Talk to MEKA: see the speech recogniser and the text-to-speech engine on Android 11+ (package visibility). -->
     <queries>

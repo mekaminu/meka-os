@@ -53,6 +53,11 @@ enum class ActivityKind {
      * is undone in its five seconds; after that it is changed again from the event).
      */
     CALENDAR,
+    /**
+     * A call spam protection stopped on the Fold: blocked (on the block list) or sent to the assistant (failed the
+     * network's caller check, or withheld in quiet hours). Nothing to undo; unblocking is in Work mode. Added 2026-10-09.
+     */
+    SCREENED,
 }
 
 /** One field MEKA changed: what it was, and what MEKA set. */
@@ -379,6 +384,7 @@ object ActivityRules {
             week.count { it.kind == ActivityKind.CHANGED }.takeIf { it > 0 }?.let { plural(it, "change") },
             week.count { it.kind == ActivityKind.PUBLISHED }.takeIf { it > 0 }?.let { plural(it, "phone build") },
             week.count { it.kind == ActivityKind.CALENDAR }.takeIf { it > 0 }?.let { plural(it, "calendar edit") },
+            week.count { it.kind == ActivityKind.SCREENED }.takeIf { it > 0 }?.let { plural(it, "call stopped", "calls stopped") },
         )
         val weekLine = if (parts.isEmpty()) "Nothing this week" else "This week: " + parts.joinToString(" · ")
         return ActivityView(if (shown.isEmpty()) "" else weekLine, days, EMPTY_LINE)
@@ -453,6 +459,16 @@ class ActivityLog(
             val (summary, detail, why) = ActivityRules.noticeSummary(n)
             write(id, ActivityKind.REMINDED, summary, detail, why, "notice:${n.source.name}")
         }
+    }
+
+    /**
+     * A call spam protection stopped on this device (the Fold's screening). [callId] is the number's key and the
+     * time, so a retried screening doesn't log twice.
+     */
+    fun recordScreened(callKey: String, atMs: Long, summary: String, why: String) {
+        val id = "s" + ActivityRules.fnv64("screened:$callKey:$atMs")
+        if (replica.entity(EntityTypes.AGENT_ACTION, id) != null) return
+        write(id, ActivityKind.SCREENED, summary, null, why, "calls")
     }
 
     /** A digest this device just posted. */

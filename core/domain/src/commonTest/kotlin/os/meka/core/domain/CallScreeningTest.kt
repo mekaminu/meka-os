@@ -96,7 +96,7 @@ class CallScreeningTest {
         assertEquals("Off · calls ring as usual", CallScreeningRules.statusLine(false, true, true))
         assertEquals("On · allow MEKA to screen calls on the Fold", CallScreeningRules.statusLine(true, true, false))
         assertEquals("Screening calls · family, always-notify and repeat callers ring", CallScreeningRules.statusLine(true, true, true))
-        assertEquals("On at work · calls ring as usual now", CallScreeningRules.statusLine(true, false, null))
+        assertEquals("On at work · calls ring as usual now · spam goes to the assistant", CallScreeningRules.statusLine(true, false, null))
     }
 
     @Test

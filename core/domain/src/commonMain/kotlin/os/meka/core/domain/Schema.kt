@@ -46,12 +46,14 @@ object EntityTypes {
     const val TRIAGE_CARD = "triage_card"
     /** One busy group's digest card for one slot (count, who wrote, the AI's gist; never the messages, see [GroupGists]). */
     const val GROUP_GIST = "group_gist"
+    /** A number on the call block list (spam protection); id the number's key (see [BlockedCallers]). */
+    const val BLOCKED_CALLER = "blocked_caller"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
-        TRIAGE_CARD, GROUP_GIST,
+        TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER,
     )
 }
 
@@ -266,6 +268,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.TRIAGE_CARD -> MergePolicy.Lww
         // Group digest cards: written once by the Fold; Caught up (and its Undo) on either device, last one wins.
         entityType == EntityTypes.GROUP_GIST -> MergePolicy.Lww
+        // The block list: Block and Unblock on either device, the latest wins.
+        entityType == EntityTypes.BLOCKED_CALLER -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

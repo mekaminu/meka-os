@@ -70,6 +70,7 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AfterWorkSummary
 import os.meka.core.domain.CallScreeningRules
+import os.meka.core.domain.ContactNumbers
 import os.meka.core.domain.HeldPreview
 import os.meka.core.domain.HeldPreviewRow
 import os.meka.core.domain.HeldPreviewRules
@@ -126,14 +127,9 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
     val pickContact = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val kind = adding
         adding = null
-        val picked = result.data?.data?.let { u ->
-            runCatching {
-                context.contentResolver.query(u, arrayOf(Phone.DISPLAY_NAME, Phone.NUMBER), null, null, null)
-                    ?.use { c -> if (c.moveToFirst()) c.getString(0)?.trim() to c.getString(1) else null }
-            }.getOrNull()
-        }
-        val name = picked?.first
-        if (kind != null && !name.isNullOrEmpty()) store.setLists(kind.add(lists, name).withNumber(name, picked?.second))
+        val picked = result.data?.data?.let { u -> PickedContact.read(context, u) }
+        val name = picked?.name
+        if (kind != null && picked != null && !name.isNullOrEmpty()) store.setLists(kind.add(lists, name).withNumbers(name, picked.numbers))
     }
     fun pick(kind: ListKind) {
         adding = kind
@@ -230,10 +226,13 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         }
         Text(
             "At work, family, your always-notify list and anyone who calls twice within 3 minutes ring. Other calls are " +
-                "declined, so your network's \"forward when busy\" takes them: voicemail for now, the assistant once its " +
-                "number is set up. MEKA never answers a call, and declined calls still show as missed calls after work.",
+                "declined, and your network's \"forward when busy\" sends them to MEKA's assistant " +
+                "(${CallScreeningRules.ASSISTANT_NUMBER}), which takes a message. Declined calls still show as missed calls.",
             style = MekaType.caption, color = Meka.colors.textTertiary,
         )
+        Text("Test it: ring ${CallScreeningRules.ASSISTANT_NUMBER} from another phone", style = MekaType.caption, color = Meka.colors.textSecondary)
+        Spacer(Modifier.height(MekaSpace.s))
+        SpamProtectionSection(core, 4)
 
         Spacer(Modifier.height(MekaSpace.m))
         PeopleSection(ListKind.FAMILY, lists, store::setLists, 5) { pick(ListKind.FAMILY) }
@@ -438,7 +437,10 @@ private fun PeopleSection(kind: ListKind, lists: PeopleLists, set: (PeopleLists)
             Column(Modifier.weight(1f)) {
                 Text(name, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
                 if (!lists.hasNumber(name)) {
-                    Text("No number · add again from contacts so their calls ring", style = MekaType.caption, color = Meka.colors.textTertiary)
+                    // Call assistant polish 7: a contact with no number can't be recognised when they call.
+                    Text(ContactNumbers.NO_NUMBER, style = MekaType.caption, color = Meka.colors.critical)
+                    Text("Pick another entry", style = MekaType.caption, color = Meka.colors.accent,
+                        modifier = Modifier.clickable(role = Role.Button) { onAdd() }.padding(vertical = MekaSpace.xxs))
                 }
             }
             Text("Remove", style = MekaType.caption, color = Meka.colors.accent,
@@ -506,5 +508,32 @@ private fun openListenerSettings(context: Context) {
 private fun openAppNotificationSettings(context: Context) {
     runCatching {
         context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+    }
+}
+
+/**
+ * A contact picked from the phone's picker (call assistant polish 7): the entry's name and number, plus every other
+ * number the contact has when Meka let MEKA read contacts (the picker alone grants only the one entry). Read on the
+ * phone only.
+ */
+private class PickedContact(val name: String?, val numbers: List<String?>) {
+    companion object {
+        fun read(context: Context, uri: android.net.Uri): PickedContact? = runCatching {
+            val first = context.contentResolver.query(
+                uri, arrayOf(Phone.DISPLAY_NAME, Phone.NUMBER, Phone.NORMALIZED_NUMBER, Phone.CONTACT_ID), null, null, null,
+            )?.use { c ->
+                if (!c.moveToFirst()) null
+                else Triple(c.getString(0)?.trim(), listOf(c.getString(2), c.getString(1)), c.getLong(3))
+            } ?: return@runCatching null
+            val (name, numbers, contactId) = first
+            val all = if (context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                runCatching {
+                    context.contentResolver.query(
+                        Phone.CONTENT_URI, arrayOf(Phone.NORMALIZED_NUMBER, Phone.NUMBER), "${Phone.CONTACT_ID} = ?", arrayOf(contactId.toString()), null,
+                    )?.use { c -> buildList { while (c.moveToNext()) add(c.getString(0) ?: c.getString(1)) } }
+                }.getOrNull().orEmpty()
+            } else emptyList()
+            PickedContact(name, numbers + all)
+        }.getOrNull()
     }
 }

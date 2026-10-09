@@ -1043,4 +1043,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(RouteRules.shared.words(severity: 9), "minor delays")
         XCTAssertEqual(CalendarAccountRules.shared.providerLabel(provider: "lines"), "Train lines")
     }
+
+    func testBlockListReachesSwift() {
+        XCTAssertEqual(BlockedCallersView.companion.EMPTY.rows.count, 0)
+        XCTAssertEqual(BlockedCallersView.companion.EMPTY.line, BlockedCallerRules.shared.EMPTY_LINE)
+        XCTAssertEqual(BlockedCallerRules.shared.display(number: "+441904618691"), "01904 618691")
+        XCTAssertNil(BlockedCallerRules.shared.keyOf(number: "abc"))
+        XCTAssertEqual(CallScreeningRules.shared.ASSISTANT_NUMBER, "01767 667246")
+    }
 }
