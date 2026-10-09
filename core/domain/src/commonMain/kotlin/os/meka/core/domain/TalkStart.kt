@@ -223,10 +223,39 @@ object TalkOnOpenRules {
             val v = samples[i].toDouble()
             sum += v * v
         }
-        val rms = kotlin.math.sqrt(sum / n)
-        if (rms < 1.0) return FLOOR_DB
-        return maxOf(FLOOR_DB, 20.0 * kotlin.math.log10(rms / 32768.0) + FULL_SCALE_DB)
+        return levelAt(kotlin.math.sqrt(sum / n) / 32768.0)
     }
+
+    /**
+     * The room's level from an RMS already on full scale (0 … 1: the Mac's float samples), as [roomLevel] gives it for
+     * 16-bit ones: below one 16-bit step it reads as silent ([FLOOR_DB]).
+     */
+    fun levelAt(rms: Double): Double {
+        if (rms * 32768.0 < 1.0) return FLOOR_DB
+        return maxOf(FLOOR_DB, 20.0 * kotlin.math.log10(rms) + FULL_SCALE_DB)
+    }
+
+    /** The Mac's room check: too noisy at this full-scale RMS ([levelAt] above [NOISY_DBA]). */
+    fun tooNoisyAt(rms: Double): Boolean = tooNoisy(levelAt(rms))
+
+    /**
+     * A Dock click reaches MEKA as a reopen, also while it's already in front: it counts as opening MEKA only when it
+     * brought MEKA forward, i.e. MEKA wasn't active yet ([msSinceActivated] null) or became active just now (within
+     * [REOPEN_FRESH_MS]; macOS activates the app around the reopen, in either order).
+     */
+    fun reopenFromBackground(msSinceActivated: Long?): Boolean =
+        msSinceActivated == null || msSinceActivated in 0 until REOPEN_FRESH_MS
+
+    const val REOPEN_FRESH_MS = 1_000L
+
+    /**
+     * The Mac's open: launching MEKA plainly ([plainOpen]: from the Dock, Finder or Spotlight, not to open a link, a
+     * file or a notification) or a Dock click that brought it forward ([reopenFromBackground]) listens with the
+     * setting on ([listenOnOpen]) and the microphone and speech recognition already allowed ([micAllowed]); an open
+     * never asks for either.
+     */
+    fun macOpenStart(plainOpen: Boolean, listenOnOpen: Boolean, micAllowed: Boolean): TalkStart? =
+        if (plainOpen && listenOnOpen && micAllowed) TalkStart.OPEN else null
 
     /** Too noisy to listen on open: show "Too noisy — tap to talk" instead. An unmeasured room isn't. */
     fun tooNoisy(level: Double?): Boolean = level != null && level > NOISY_DBA
@@ -235,16 +264,25 @@ object TalkOnOpenRules {
     fun windowLapsed(startedAtMs: Long, nowMs: Long, speechBegan: Boolean): Boolean =
         !speechBegan && nowMs - startedAtMs >= WINDOW_MS
 
-    /** The Talk pane's section on the Fold, with its switch ([TURN_ON] / [TURN_OFF]); lit while on. */
-    fun section(on: Boolean): TalkSetupSection = TalkSetupSection(
+    /**
+     * The Talk pane's section with its switch ([TURN_ON] / [TURN_OFF]); lit while on. The Fold's ([mac] false) and the
+     * Mac's sheet's (launching MEKA or a Dock click while it's in the background; "click to talk").
+     */
+    fun section(on: Boolean, mac: Boolean = false): TalkSetupSection = TalkSetupSection(
         LABEL,
-        if (on) "On: opening MEKA from the home screen listens for a few seconds, so you can just talk."
-        else "Off: opening MEKA shows Today and waits for you.",
+        when {
+            on && mac -> "On: launching MEKA, or clicking it in the Dock while it's in the background, listens for a " +
+                "few seconds, so you can just talk."
+            on -> "On: opening MEKA from the home screen listens for a few seconds, so you can just talk."
+            else -> "Off: opening MEKA shows Today and waits for you."
+        },
         lit = on,
         steps = listOf(
-            "It checks the room first: if it's noisy it says “Too noisy — tap to talk” instead of listening.",
+            "It checks the room first: if it's noisy it says “${if (mac) TalkProblem.TOO_NOISY.macLine else TalkProblem.TOO_NOISY.line}” instead of listening.",
             "A quiet chime marks listening. Say nothing for 6 seconds and Today comes back.",
-            "Opening MEKA from a notification never starts listening.",
+            if (mac) "Opening MEKA from a notification or a link never starts listening, and it never asks for the " +
+                "microphone: allow it once by clicking the mic."
+            else "Opening MEKA from a notification never starts listening.",
         ),
         action = if (on) TURN_OFF else TURN_ON,
     )

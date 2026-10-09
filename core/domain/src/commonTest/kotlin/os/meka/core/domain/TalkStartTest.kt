@@ -165,4 +165,48 @@ class TalkOnOpenTest {
         // The shared setup is unchanged; the Fold adds this section itself.
         assertFalse(TalkStartRules.setup(mac = false).sections.any { it.label == "When I open MEKA" })
     }
+
+    @Test
+    fun theMacMeasuresFloatSamplesTheSameWay() {
+        // The Mac's samples are already on full scale: the same levels as the Fold's 16-bit ones.
+        val fold = TalkOnOpenRules.roomLevel(ShortArray(4800) { if (it % 2 == 0) 2000 else -2000 })!!
+        assertTrue(kotlin.math.abs(fold - TalkOnOpenRules.levelAt(2000.0 / 32768.0)) < 1e-9)
+        assertEquals(TalkOnOpenRules.FLOOR_DB, TalkOnOpenRules.levelAt(0.0))
+        assertEquals(TalkOnOpenRules.FLOOR_DB, TalkOnOpenRules.levelAt(0.5 / 32768.0))
+        assertTrue(TalkOnOpenRules.levelAt(1.0) in 89.9..90.0)
+        assertFalse(TalkOnOpenRules.tooNoisyAt(100.0 / 32768.0)) // ~40: a quiet room
+        assertTrue(TalkOnOpenRules.tooNoisyAt(0.06)) // ~66: a loud café
+    }
+
+    @Test
+    fun theMacListensOnAPlainLaunchOrADockClickThatBroughtItForward() {
+        assertEquals(TalkStart.OPEN, TalkOnOpenRules.macOpenStart(plainOpen = true, listenOnOpen = true, micAllowed = true))
+        // Off by default, a link, file or notification launch, or no mic yet: nothing, and never a prompt.
+        assertNull(TalkOnOpenRules.macOpenStart(plainOpen = true, listenOnOpen = false, micAllowed = true))
+        assertNull(TalkOnOpenRules.macOpenStart(plainOpen = false, listenOnOpen = true, micAllowed = true))
+        assertNull(TalkOnOpenRules.macOpenStart(plainOpen = true, listenOnOpen = true, micAllowed = false))
+        // A Dock click counts only when it brought MEKA forward.
+        assertTrue(TalkOnOpenRules.reopenFromBackground(null))
+        assertTrue(TalkOnOpenRules.reopenFromBackground(0))
+        assertTrue(TalkOnOpenRules.reopenFromBackground(999))
+        assertFalse(TalkOnOpenRules.reopenFromBackground(1_000))
+        assertFalse(TalkOnOpenRules.reopenFromBackground(60_000))
+        assertFalse(TalkOnOpenRules.reopenFromBackground(-5))
+    }
+
+    @Test
+    fun theMacSheetSectionSaysLaunchAndTheDockAndClickToTalk() {
+        val on = TalkOnOpenRules.section(on = true, mac = true)
+        assertTrue(on.lit)
+        assertEquals("Turn off", on.action)
+        assertTrue("Dock" in on.status, on.status)
+        assertTrue(on.steps.any { "Too noisy — click to talk" in it })
+        assertFalse(on.steps.any { "tap" in it })
+        assertTrue(on.steps.any { "never asks for the microphone" in it })
+        val off = TalkOnOpenRules.section(on = false, mac = true)
+        assertEquals("Turn on", off.action)
+        assertTrue(off.status.startsWith("Off"))
+        // The Fold's words stay its own.
+        assertFalse("Dock" in TalkOnOpenRules.section(on = true).status)
+    }
 }

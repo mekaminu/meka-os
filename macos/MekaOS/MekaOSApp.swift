@@ -27,6 +27,8 @@ struct MekaOSApp: App {
                     CaptureInbox.shared.attach { text, subject in model.capture(text, subject: subject) }
                     // Notification buttons pressed while the core was starting are answered now.
                     NotificationActionInbox.shared.attach { model.answerFromNotification($0) }
+                    // "Listen when I open MEKA": a launch that came before the core was ready listens now.
+                    MacTalkOnOpen.shared.attach { model.requestTalkOnOpen(reduced: MotionSetting.reduced) }
                 }
                 // tools/publish-fold.sh hands over the APK it built: mekaos://publish-fold-update?apk=…; the desktop
                 // News widget opens mekaos://news?story=<id>.

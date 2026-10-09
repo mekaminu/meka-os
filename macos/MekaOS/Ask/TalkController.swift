@@ -1,4 +1,5 @@
 @preconcurrency import MekaKit
+import AppKit
 import AVFoundation
 import Observation
 import os
@@ -55,6 +56,15 @@ final class TalkController {
     @ObservationIgnored private var heardAnything = false
     @ObservationIgnored private var clock: Task<Void, Never>?
     private let meter = OSAllocatedUnfairLock<Float>(initialState: -160)
+    /// "Listen when I open MEKA": when the opening's listening began, and what to do if nothing is said in time.
+    @ObservationIgnored private var openAt: Date?
+    @ObservationIgnored private var openLapsed: (() -> Void)?
+    /// The conversation the opening's window belongs to (any later start or stop moves `generation` on and ends it).
+    @ObservationIgnored private var openGen = -1
+    /// The quiet chime that marks listening on open (kept while it plays).
+    @ObservationIgnored private var chimeSound: NSSound?
+    /// After the chime, so the recogniser doesn't hear it.
+    private static let chimeGapMs = 220
 
     /// MEKA's voice, else the Mac's own (the brief's speaker too; re-reads the picker's Mac voice before each line).
     private let speaker = MekaSpeaker()
@@ -85,6 +95,32 @@ final class TalkController {
         }
     }
 
+    /// "Listen when I open MEKA" (the Mac's slice of Talk without tapping the mic): checks the room for 300 ms (a level,
+    /// never audio, nothing kept); too noisy → "Too noisy — click to talk" under the resting orb (a click starts as
+    /// usual); else a quiet chime and listening, and if no speech has begun within 6 s, listening stops and `onLapsed`
+    /// (Today slides back). Only called when the microphone and speech recognition are already allowed: nothing asks.
+    func startOnOpen(onLapsed: @escaping () -> Void) {
+        guard !active else { return }
+        generation += 1
+        problem = nil
+        let gen = generation
+        Task {
+            let rms = await Self.roomRms()
+            guard gen == generation, !active else { return }
+            if let rms, TalkOnOpenRules.shared.tooNoisyAt(rms: rms) {
+                problem = .tooNoisy
+                return
+            }
+            chime()
+            try? await Task.sleep(for: .milliseconds(Self.chimeGapMs))
+            guard gen == generation, !active else { return }
+            start()
+            openGen = generation
+            openAt = nil
+            openLapsed = onLapsed
+        }
+    }
+
     /// The orb clicked: while MEKA speaks, stop and listen; otherwise end.
     func tapOrb() {
         switch phase {
@@ -96,8 +132,10 @@ final class TalkController {
 
     /// Ask left the screen, MEKA went to the background, the mic clicked again: everything stops at once.
     func stop() {
+        generation += 1 // also drops a room check or chime still on its way ("Listen when I open MEKA")
+        openAt = nil
+        openLapsed = nil
         guard active else { return }
-        generation += 1
         apply(TalkFlow.shared.stop(s: session))
     }
 
@@ -159,6 +197,8 @@ final class TalkController {
 
     private func fail(_ p: TalkProblem) {
         problem = p
+        openAt = nil
+        openLapsed = nil
         generation += 1
         apply(TalkFlow.shared.stop(s: session))
     }
@@ -167,7 +207,8 @@ final class TalkController {
 
     // MARK: Listening (on the device only)
 
-    private static func allowed() async -> Bool {
+    /// Asks for the microphone and speech recognition if not yet decided (the Talk sheet's Turn on asks here too).
+    static func allowed() async -> Bool {
         let mic: Bool
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized: mic = true
@@ -211,6 +252,7 @@ final class TalkController {
         heardAnything = false
         listenStarted = Date()
         lastWords = listenStarted
+        if openLapsed != nil && openGen == generation && openAt == nil { openAt = listenStarted } // the window starts now
         meter.withLock { $0 = -160 }
         let gen = generation
         recognizer.queue = .main
@@ -228,6 +270,47 @@ final class TalkController {
                 self.tick()
             }
         }
+    }
+
+    /// The room check: the microphone for `TalkOnOpenRules.ROOM_CHECK_MS`, summed into one full-scale RMS (a number,
+    /// never audio, nothing kept). Nil when it couldn't be measured (then MEKA listens).
+    private static func roomRms() async -> Double? {
+        let engine = AVAudioEngine()
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else { return nil }
+        let sums = OSAllocatedUnfairLock<RoomSums>(initialState: RoomSums())
+        Self.tapRoom(input, format: format, into: sums)
+        engine.prepare()
+        do { try engine.start() } catch {
+            input.removeTap(onBus: 0)
+            return nil
+        }
+        try? await Task.sleep(for: .milliseconds(Int(TalkOnOpenRules.shared.ROOM_CHECK_MS)))
+        engine.stop()
+        input.removeTap(onBus: 0)
+        let total = sums.withLock { $0 }
+        return total.count == 0 ? nil : (total.squares / Double(total.count)).squareRoot()
+    }
+
+    /// The room check's buffers: only the sum of squares and the count are kept. Nonisolated: the audio thread runs it.
+    nonisolated private static func tapRoom(_ input: AVAudioInputNode, format: AVAudioFormat,
+                                             into sums: OSAllocatedUnfairLock<RoomSums>) {
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+            guard let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return }
+            let n = Int(buffer.frameLength)
+            var sum = 0.0
+            for i in 0..<n { sum += Double(samples[i]) * Double(samples[i]) }
+            sums.withLock { $0.squares += sum; $0.count += n }
+        }
+    }
+
+    /// A quiet chime: the system's Tink at a low volume.
+    private func chime() {
+        let sound = NSSound(named: NSSound.Name("Tink"))
+        sound?.volume = 0.3
+        sound?.play()
+        chimeSound = sound
     }
 
     /// The microphone's buffers go to the recogniser and its loudness to the meter. Nonisolated: the tap runs on the
@@ -257,6 +340,18 @@ final class TalkController {
         let target = TalkOrb.shared.levelDbfs(db: meter.withLock { $0 })
         level = TalkOrb.shared.smooth(shown: level, target: target)
         let now = Date()
+        if let at = openAt, let lapsed = openLapsed, openGen == generation {
+            if heardAnything {
+                openAt = nil
+                openLapsed = nil
+            } else if TalkOnOpenRules.shared.windowLapsed(startedAtMs: Int64(at.timeIntervalSince1970 * 1000),
+                                                         nowMs: Int64(now.timeIntervalSince1970 * 1000),
+                                                         speechBegan: false) {
+                stop()
+                lapsed()
+                return
+            }
+        }
         let step = TalkEndpoint.shared.step(
             startedMs: Int64(listenStarted.timeIntervalSince1970 * 1000),
             heardAnything: heardAnything,
@@ -333,4 +428,10 @@ final class TalkController {
         guard id == utterance, phase == .speaking else { return }
         apply(TalkFlow.shared.spoke(s: session))
     }
+}
+
+/// The room check's running sums (Sendable, so the audio thread's tap can add to them under a lock).
+struct RoomSums: Sendable {
+    var squares = 0.0
+    var count = 0
 }

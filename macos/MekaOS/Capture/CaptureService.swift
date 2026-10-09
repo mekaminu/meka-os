@@ -52,5 +52,22 @@ final class MekaAppDelegate: NSObject, NSApplicationDelegate {
         NSUpdateDynamicServices()
         // Went / Didn't go on "Did you go?" (Gym slice 2b); set at launch so a press that launched MEKA arrives.
         UNUserNotificationCenter.current().delegate = MacNotificationActions.shared
+        // "Listen when I open MEKA": a plain launch (not for a link, a file or a notification) may listen.
+        let plain = (notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool) ?? true
+        MainActor.assumeIsolated { MacTalkOnOpen.shared.launched(plain: plain) }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        MainActor.assumeIsolated { MacTalkOnOpen.shared.becameActive() }
+    }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        MainActor.assumeIsolated { MacTalkOnOpen.shared.resignedActive() }
+    }
+
+    /// A Dock click: "Listen when I open MEKA" listens when it brought MEKA forward; the window comes back as usual.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        MainActor.assumeIsolated { MacTalkOnOpen.shared.reopened() }
+        return true
     }
 }

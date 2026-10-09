@@ -559,6 +559,26 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TalkStartRules.shared.fromAction(action: "android.intent.action.ASSIST"), TalkStart.sideButton)
     }
 
+    /// "Listen when I open MEKA" on the Mac: the sheet's section, the open and Dock rules and the room check reach Swift.
+    func testTalkOnOpenReachesSwift() {
+        let on = TalkOnOpenRules.shared.section(on: true, mac: true)
+        XCTAssertEqual(on.label, TalkOnOpenRules.shared.LABEL)
+        XCTAssertEqual(on.action, "Turn off")
+        XCTAssertTrue(on.lit)
+        XCTAssertTrue(on.status.contains("Dock"))
+        XCTAssertEqual(TalkOnOpenRules.shared.section(on: false, mac: true).action, "Turn on")
+        XCTAssertEqual(TalkOnOpenRules.shared.macOpenStart(plainOpen: true, listenOnOpen: true, micAllowed: true)?.name, "OPEN")
+        XCTAssertNil(TalkOnOpenRules.shared.macOpenStart(plainOpen: true, listenOnOpen: false, micAllowed: true))
+        XCTAssertNil(TalkOnOpenRules.shared.macOpenStart(plainOpen: true, listenOnOpen: true, micAllowed: false))
+        XCTAssertTrue(TalkOnOpenRules.shared.reopenFromBackground(msSinceActivated: nil))
+        XCTAssertTrue(TalkOnOpenRules.shared.reopenFromBackground(msSinceActivated: KotlinLong(longLong: 200)))
+        XCTAssertFalse(TalkOnOpenRules.shared.reopenFromBackground(msSinceActivated: KotlinLong(longLong: 5_000)))
+        XCTAssertTrue(TalkOnOpenRules.shared.tooNoisyAt(rms: 0.06))
+        XCTAssertFalse(TalkOnOpenRules.shared.tooNoisyAt(rms: 0.003))
+        XCTAssertTrue(TalkOnOpenRules.shared.windowLapsed(startedAtMs: 0, nowMs: 6_000, speechBegan: false))
+        XCTAssertEqual(TalkProblem.tooNoisy.macLine, "Too noisy — click to talk")
+    }
+
     /// The spoken morning brief (Weather and a voice, slice 8): the script the brief sheet's Listen reads reaches Swift.
     func testBriefSpeechReachesSwift() {
         XCTAssertEqual(BriefSpeech.shared.script(v: MorningBriefView.companion.EMPTY, name: "Meka"),

@@ -109,8 +109,10 @@ struct AskMekaSection: View {
         .onAppear {
             wireTalk()
             takeTalkRequest()
+            takeTalkOnOpen()
         }
         .onChange(of: model.talkRequested) { _, asked in if asked { takeTalkRequest() } }
+        .onChange(of: model.talkOnOpenRequested) { _, asked in if asked { takeTalkOnOpen() } }
         .onDisappear { talk.stop() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in talk.stop() }
     }
@@ -205,6 +207,17 @@ struct AskMekaSection: View {
         toggleTalk()
     }
 
+    /// "Listen when I open MEKA": MEKA was just opened with the setting on: check the room, chime, listen for 6 s; if
+    /// nothing is said, Today slides back.
+    private func takeTalkOnOpen() {
+        guard model.talkOnOpenRequested else { return }
+        model.talkOnOpenRequested = false
+        guard canAsk, !talk.active else { return }
+        focused = false
+        let model = model
+        talk.startOnOpen { model.go(to: .today, reduced: MotionSetting.reduced) }
+    }
+
     private func toggleTalk() {
         if talk.active {
             MekaHaptics.tick()
@@ -244,7 +257,8 @@ private struct TalkPanel: View {
                 VoiceOrbView(phase: talk.phase, level: talk.level, palette: palette)
             }
             .buttonStyle(MekaPressStyle())
-            .disabled(!talk.active)
+            // Resting after "Too noisy — click to talk": a click starts listening as the mic does.
+            .disabled(!talk.active && talk.problem != .tooNoisy)
             .accessibilityLabel("MEKA, \(TalkOrb.shared.label(phase: talk.phase, mac: true))")
             Text(line)
                 .font(MekaType.caption)

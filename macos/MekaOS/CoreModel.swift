@@ -926,6 +926,15 @@ final class CoreModel {
         talkRequested = true
     }
 
+    /// "Listen when I open MEKA" (Talk without tapping the mic, the Mac's slice): MEKA was opened with the setting on,
+    /// so Ask comes forward and checks the room before listening. Ask's section takes it (sets it back to false).
+    var talkOnOpenRequested = false
+
+    func requestTalkOnOpen(reduced: Bool) {
+        go(to: .ask, reduced: reduced)
+        talkOnOpenRequested = true
+    }
+
     /// One spoken question with the conversation so far: only the question and the history cross into the core, once.
     /// Nil when not connected (the conversation says so and ends).
     func talk(_ question: String, history: [TalkTurn]) async -> AskOutcome? {
