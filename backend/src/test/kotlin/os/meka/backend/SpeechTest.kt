@@ -6,6 +6,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import os.meka.core.sync.InMemoryServerOpStore
@@ -154,6 +155,60 @@ class SpeechTest {
         assertEquals(HttpStatusCode.Forbidden, client.post("/v1/speech/speak") { header("Authorization", "Publisher github-build"); setBody(body) }.status)
         assertEquals(HttpStatusCode.Forbidden, client.post("/v1/speech/voices") { header("Authorization", "Bearer $bare"); setBody(voicesBody) }.status)
         assertEquals(1, polly.said.size)
+    }
+
+    @Test
+    fun aDeviceThatAsksGetsRawMp3AndRefusalsStayJson() = testApplication {
+        val devices = InMemoryDeviceRegistry()
+        val foldSecret = devices.enrol("hh", "fold")
+        val foldKey = TestDeviceKey().also { devices.registerKey(DeviceIdentity("hh", "fold"), it.publicB64) }
+        val polly = FakePolly(gb)
+        val usage = InMemorySpeechUsageStore()
+        application { mekaSync(InMemoryServerOpStore(), devices, speech = SpeechService(polly, usage, capChars = 40, nowMs = { now })) }
+
+        val body = SpeechCodec.encodeRequest(SpeechCodec.Request("One moment…", "Brian", binary = true))
+        val ok = client.post("/v1/speech/speak") { with(foldKey) { signed(foldSecret, "/v1/speech/speak", body) } }
+        assertEquals(HttpStatusCode.OK, ok.status)
+        assertEquals("audio/mpeg", ok.headers["Content-Type"]?.substringBefore(';'))
+        assertEquals("Brian", ok.headers[SpeechCodec.HEADER_VOICE])
+        assertEquals("neural", ok.headers[SpeechCodec.HEADER_ENGINE])
+        assertContentEquals("ID3:Brian:One moment…".toByteArray(), ok.readRawBytes())
+        assertEquals(11L, usage.used("2026-10"))
+
+        // Over the month's cap: JSON "over", even though the device asked for MP3.
+        val long = SpeechCodec.encodeRequest(SpeechCodec.Request("b".repeat(30), binary = true))
+        val over = client.post("/v1/speech/speak") { with(foldKey) { signed(foldSecret, "/v1/speech/speak", long) } }
+        assertEquals("application/json", over.headers["Content-Type"]?.substringBefore(';'))
+        assertEquals(SpeechCodec.Response.OVER, SpeechCodec.decodeResponse(over.bodyAsText()).state)
+    }
+
+    @Test
+    fun warmingSaysOneShortLineAndTheListRefreshesOffTheRequestPath() {
+        val polly = FakePolly(gb)
+        val usage = InMemorySpeechUsageStore()
+        val s = SpeechService(polly, usage, nowMs = { now })
+        s.warm()
+        assertEquals(listOf(Triple(SpeechService.WARM_LINE, "Amy", "generative")), polly.said)
+        assertEquals(SpeechService.WARM_LINE.length.toLong(), usage.used("2026-10"))
+        assertEquals(1, polly.listed.size)
+        // A request after warming doesn't read the list again.
+        s.speak(SpeechCodec.Request("Hi."))
+        assertEquals(1, polly.listed.size)
+        // The background refresh reads it, and a failed refresh keeps the old list.
+        polly.voices = gb.filter { it.id != "Amy" }
+        s.refreshVoices()
+        assertEquals("Olivia", s.offered().first().id)
+        polly.fail = true
+        s.refreshVoices()
+        assertEquals("Olivia", s.offered().first().id)
+        // Warming never throws, and without Polly does nothing.
+        s.warm()
+        SpeechService(null, usage).warm()
+        // At the cap it says nothing.
+        val full = InMemorySpeechUsageStore().also { it.add("2026-10", 1_000_000) }
+        val p2 = FakePolly(gb)
+        SpeechService(p2, full, nowMs = { now }).warm()
+        assertTrue(p2.said.isEmpty())
     }
 
     @Test

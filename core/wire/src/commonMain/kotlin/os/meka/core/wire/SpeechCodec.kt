@@ -27,12 +27,28 @@ object SpeechCodec {
     const val MAX_REASON = 200
     /** The base64 of the longest clip the server returns (600 characters ≈ 45 s of 48 kbit/s MP3, with room). */
     const val MAX_AUDIO_B64 = 1_500_000
+    /** The longest clip as raw MP3 (what [MAX_AUDIO_B64] decodes to, rounded down). */
+    const val MAX_AUDIO_BYTES = 1_100_000
+
+    /**
+     * Binary audio (voice slice 2, cutting latency): a request with [Request.binary] gets a spoken clip back as the raw
+     * MP3 body ([AUDIO_TYPE]) with the voice and engine in [HEADER_VOICE] / [HEADER_ENGINE], a quarter smaller than
+     * base64 in JSON and nothing to parse. Every other answer (off · over · failed) stays JSON, and an older server that
+     * ignores the flag answers JSON too, so the device reads whichever comes back.
+     */
+    const val AUDIO_TYPE = "audio/mpeg"
+    const val HEADER_VOICE = "X-Meka-Voice"
+    const val HEADER_ENGINE = "X-Meka-Engine"
+    private const val BINARY = "mp3"
 
     private val VOICE = Regex("[A-Za-z]{2,20}")
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** [voice] is a Polly voice name ("Amy"); null or one the server doesn't offer means the default voice. */
-    data class Request(val text: String, val voice: String? = null)
+    /**
+     * [voice] is a Polly voice name ("Amy"); null or one the server doesn't offer means the default voice. [binary]: send
+     * a spoken clip back as raw MP3 rather than base64 JSON (`"as": "mp3"` on the wire).
+     */
+    data class Request(val text: String, val voice: String? = null, val binary: Boolean = false)
 
     /**
      * [state]: spoken (with [audio], base64 [format] "mp3", and the [voice] and [engine] that said it) · off (no voice on
@@ -82,6 +98,7 @@ object SpeechCodec {
         put("w", WireCodec.VERSION)
         put("text", r.text)
         r.voice?.let { put("voice", it) }
+        if (r.binary) put("as", BINARY)
     }.toString()
 
     fun decodeRequest(body: String): Request = wrap("speech request") {
@@ -92,7 +109,20 @@ object SpeechCodec {
         require(text.none { it.isISOControl() && it != '\n' && it != '\t' }) { "text" }
         val voice = (o["voice"] as? JsonPrimitive)?.takeIf { it.isString }?.content
         require(voice == null || VOICE.matches(voice)) { "voice" }
-        Request(text, voice)
+        val binary = (o["as"] as? JsonPrimitive)?.takeIf { it.isString }?.content == BINARY
+        Request(text, voice, binary)
+    }
+
+    /**
+     * A spoken clip that came back as raw MP3: [audioB64] is its base64 (as the JSON answer carries it, so the apps see
+     * no difference), [voice] and [engine] from the headers. Empty or oversized audio, or a voice header that isn't a
+     * plain name, is a failed answer, never trusted.
+     */
+    fun binaryResponse(audioB64: String, voice: String?, engine: String?): Response {
+        if (audioB64.isEmpty() || audioB64.length > MAX_AUDIO_B64) return Response(Response.FAILED, reason = "MEKA's voice sent an unusable clip")
+        val v = voice?.takeIf { VOICE.matches(it) }
+        val e = engine?.takeIf { it.length <= 20 && it.all { c -> c.isLetter() } }
+        return Response(Response.SPOKEN, audioB64, BINARY, v, e)
     }
 
     /** The voices request carries nothing but the version (it is signed like every device request). */

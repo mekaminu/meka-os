@@ -20,6 +20,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.io.readByteArray
 import io.ktor.server.response.respondText
+import io.ktor.server.response.header
+import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.get
 import os.meka.backend.integrations.BbcNewsRss
 import os.meka.backend.integrations.CalendarWriter
@@ -312,13 +314,22 @@ fun Application.mekaSync(
                 val voices = withContext(Dispatchers.IO) { speech.voices() }
                 call.respondText(SpeechCodec.encodeVoices(voices), ContentType.Application.Json)
             }
-            // A piece of MEKA's own reply said aloud (MP3, base64). The text is neither stored nor logged; only counted.
+            // A piece of MEKA's own reply said aloud: raw MP3 when the device asks for it (voice slice 2), else base64 in
+            // JSON; refusals are always JSON. The text is neither stored nor logged; only counted.
             post("/v1/speech/speak") {
                 val body = call.boundedBody()
                 call.device(devices, verifier, body, requireKey = true)
                 val request = SpeechCodec.decodeRequest(body)
-                val spoken = withContext(Dispatchers.IO) { speech.speak(request) }
-                call.respondText(SpeechCodec.encodeResponse(spoken), ContentType.Application.Json)
+                val said = withContext(Dispatchers.IO) { speech.say(request) }
+                val mp3 = said.mp3
+                if (mp3 != null && request.binary) {
+                    said.response.voice?.let { call.response.header(SpeechCodec.HEADER_VOICE, it) }
+                    said.response.engine?.let { call.response.header(SpeechCodec.HEADER_ENGINE, it) }
+                    call.respondBytes(mp3, ContentType.parse(SpeechCodec.AUDIO_TYPE))
+                } else {
+                    val spoken = mp3?.let { said.response.copy(audio = java.util.Base64.getEncoder().encodeToString(it)) } ?: said.response
+                    call.respondText(SpeechCodec.encodeResponse(spoken), ContentType.Application.Json)
+                }
             }
         }
 
@@ -497,7 +508,7 @@ fun main(args: Array<String>) {
             )?.also { it.start() }
             // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
-            val speech = speechFromEnv(ds)
+            val speech = speechFromEnv(ds)?.also { startSpeechWarm(it) }
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech)
             val ai = aiFromEnv(ds)?.also { startAiCheck(it.health) }
             embeddedServer(Netty, port = port) {

@@ -121,20 +121,57 @@ class SpeechService(
         return SpeechCodec.Voices(SpeechCodec.Voices.ON, list, list.first().id, m, used, capChars)
     }
 
-    fun speak(r: SpeechCodec.Request): SpeechCodec.Response {
-        val e = engine ?: return SpeechCodec.Response(SpeechCodec.Response.OFF, reason = "MEKA's voice isn't set up on this server")
+    /** What [say] did: the answer, and the clip itself as raw MP3 when something was said. */
+    class Said(val response: SpeechCodec.Response, val mp3: ByteArray? = null)
+
+    /**
+     * Says [r]'s words, metered. A spoken [Said] carries the MP3 bytes (the route sends them raw to a device that asked
+     * for [SpeechCodec.Request.binary]) and a response without audio; every other answer has no bytes.
+     */
+    fun say(r: SpeechCodec.Request): Said {
+        val e = engine ?: return Said(SpeechCodec.Response(SpeechCodec.Response.OFF, reason = "MEKA's voice isn't set up on this server"))
         val m = month()
         val chars = r.text.length.toLong()
-        if (usage.used(m) + chars > capChars) return SpeechCodec.Response(SpeechCodec.Response.OVER, reason = OVER)
-        val list = runCatching { offered() }.getOrElse { return SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = UNREACHABLE) }
+        if (usage.used(m) + chars > capChars) return Said(SpeechCodec.Response(SpeechCodec.Response.OVER, reason = OVER))
+        val list = runCatching { offered() }.getOrElse { return Said(SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = UNREACHABLE)) }
         val voice = list.firstOrNull { it.id.equals(r.voice, ignoreCase = true) } ?: list.firstOrNull()
-            ?: return SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = "Amazon Polly has no British voice here")
+            ?: return Said(SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = "Amazon Polly has no British voice here"))
         val audio = runCatching { e.synthesize(r.text, voice.id, voice.engine) }.getOrElse {
-            return SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = UNREACHABLE)
+            return Said(SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = UNREACHABLE))
         }
-        if (audio.isEmpty()) return SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = "Amazon Polly said nothing")
+        if (audio.isEmpty()) return Said(SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = "Amazon Polly said nothing"))
+        if (audio.size > SpeechCodec.MAX_AUDIO_BYTES) return Said(SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = "Amazon Polly's clip was too long"))
         usage.add(m, chars)
-        return SpeechCodec.Response(SpeechCodec.Response.SPOKEN, Base64.getEncoder().encodeToString(audio), "mp3", voice.id, voice.engine)
+        return Said(SpeechCodec.Response(SpeechCodec.Response.SPOKEN, null, "mp3", voice.id, voice.engine), audio)
+    }
+
+    /** [say] as the JSON answer (audio as base64), for devices that didn't ask for raw MP3. */
+    fun speak(r: SpeechCodec.Request): SpeechCodec.Response {
+        val said = say(r)
+        val mp3 = said.mp3 ?: return said.response
+        return said.response.copy(audio = Base64.getEncoder().encodeToString(mp3))
+    }
+
+    /**
+     * Keeps the first words quick (voice slice 2, cutting latency). Called once at start: reads the voice list and says
+     * [WARM_LINE] (a few metered characters, never sent anywhere), so the first real request doesn't pay for the SDK's
+     * first use, DescribeVoices and a new connection to Polly. Then [refreshVoices] every [REFRESH_MS] keeps the list
+     * fresh off the request path. Never throws.
+     */
+    fun warm() {
+        val e = engine ?: return
+        val voice = runCatching { offered() }.getOrNull()?.firstOrNull() ?: return
+        val m = month()
+        if (runCatching { usage.used(m) }.getOrDefault(capChars) + WARM_LINE.length > capChars) return
+        if (runCatching { e.synthesize(WARM_LINE, voice.id, voice.engine) }.isSuccess) runCatching { usage.add(m, WARM_LINE.length.toLong()) }
+    }
+
+    /** Reads the voice list again now (off the request path), keeping the old one if Polly can't be reached. */
+    @Synchronized
+    fun refreshVoices() {
+        val e = engine ?: return
+        val v = runCatching { rank(e.voices(LANGUAGE)) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return
+        cached = nowMs() to v
     }
 
     companion object {
@@ -146,6 +183,10 @@ class SpeechService(
         val PREFERRED = listOf("Amy", "Emma", "Brian", "Arthur")
         const val UNREACHABLE = "Couldn't reach Amazon Polly"
         const val OVER = "This month's voice is used up; MEKA's own voice speaks until the 1st"
+        /** What [warm] says once at start (metered like any clip). */
+        const val WARM_LINE = "Hello."
+        /** How often the background refresh reads the voice list (well inside the six hours a request would wait). */
+        const val REFRESH_MS = 30 * 60_000L
 
         fun rank(voices: List<SpeechVoice>): List<SpeechCodec.Voice> = voices
             .mapNotNull { v ->
@@ -165,6 +206,18 @@ class SpeechService(
                     { it.id },
                 ),
             )
+    }
+}
+
+/** Warms MEKA's voice shortly after start, then refreshes the voice list every [SpeechService.REFRESH_MS]. */
+fun startSpeechWarm(speech: SpeechService, periodMs: Long = SpeechService.REFRESH_MS) {
+    Thread.ofVirtual().name("speech-warm").start {
+        Thread.sleep(5_000)
+        speech.warm()
+        while (true) {
+            Thread.sleep(periodMs)
+            speech.refreshVoices()
+        }
     }
 }
 

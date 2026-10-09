@@ -53,4 +53,28 @@ class SpeechCodecTest {
         SpeechCodec.decodeVoicesRequest(SpeechCodec.encodeVoicesRequest())
         assertFailsWith<WireFormatException> { SpeechCodec.decodeVoicesRequest("{}") }
     }
+
+    @Test
+    fun aDeviceCanAskForRawMp3AndAnOlderRequestStaysJson() {
+        val r = SpeechCodec.Request("One moment…", "Amy", binary = true)
+        assertTrue("\"as\":\"mp3\"" in SpeechCodec.encodeRequest(r))
+        assertEquals(r, SpeechCodec.decodeRequest(SpeechCodec.encodeRequest(r)))
+        // A request without the flag (an older device) gets JSON as before; an unknown "as" is ignored, not refused.
+        assertEquals(false, SpeechCodec.decodeRequest(SpeechCodec.encodeRequest(SpeechCodec.Request("Hi"))).binary)
+        assertEquals(false, SpeechCodec.decodeRequest("""{"w":1,"text":"Hi","as":"wav"}""").binary)
+    }
+
+    @Test
+    fun aRawClipBecomesTheSameAnswerAndAnUnusableOneFails() {
+        val ok = SpeechCodec.binaryResponse("SUQzBAAAAAAA", "Amy", "generative")
+        assertEquals(SpeechCodec.Response(SpeechCodec.Response.SPOKEN, "SUQzBAAAAAAA", "mp3", "Amy", "generative"), ok)
+        // Headers that aren't plain names are dropped, never trusted; the clip still plays.
+        val odd = SpeechCodec.binaryResponse("SUQz", "Amy<script>", "gen-2")
+        assertEquals(SpeechCodec.Response.SPOKEN, odd.state)
+        assertNull(odd.voice)
+        assertNull(odd.engine)
+        assertEquals(SpeechCodec.Response.FAILED, SpeechCodec.binaryResponse("", "Amy", "neural").state)
+        assertEquals(SpeechCodec.Response.FAILED, SpeechCodec.binaryResponse("A".repeat(SpeechCodec.MAX_AUDIO_B64 + 1), "Amy", "neural").state)
+        assertTrue(SpeechCodec.MAX_AUDIO_BYTES * 4 / 3 <= SpeechCodec.MAX_AUDIO_B64)
+    }
 }

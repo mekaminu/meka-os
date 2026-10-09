@@ -28,6 +28,8 @@ class HttpSyncTransportTest {
     private var pushStatus = HttpStatusCode.OK
     private val pushReply = WireCodec.encodePushToken(WireCodec.PushToken("fcm", ""))
     private var speakStatus = HttpStatusCode.OK
+    /** Set: the server answers a spoken clip as raw MP3 (voice slice 2) with these bytes and headers. */
+    private var speakRaw: Pair<ByteArray, io.ktor.http.Headers>? = null
     private val speakReply = os.meka.core.wire.SpeechCodec.encodeResponse(
         os.meka.core.wire.SpeechCodec.Response("spoken", audio = "bXAz", format = "mp3", voice = "Amy", engine = "generative"),
     )
@@ -42,7 +44,7 @@ class HttpSyncTransportTest {
             "/v1/devices/key" -> respond(WireCodec.encodeDeviceKey("A".repeat(124)), HttpStatusCode.OK, json)
             "/v1/integrations/google/connect" -> respond("not configured", HttpStatusCode.Conflict)
             "/v1/push/token" -> respond(pushReply, pushStatus, json)
-            "/v1/speech/speak" -> respond(speakReply, speakStatus, json)
+            "/v1/speech/speak" -> speakRaw?.let { (bytes, h) -> respond(bytes, speakStatus, h) } ?: respond(speakReply, speakStatus, json)
             "/v1/ai/message-request" -> respond(requestReply, requestStatus, json)
             else -> respond("", HttpStatusCode.NotFound)
         }
@@ -106,12 +108,31 @@ class HttpSyncTransportTest {
         assertEquals("bXAz", r.audio)
         val req = requests.last()
         assertEquals("/v1/speech/speak", req.url.encodedPath)
-        assertEquals(os.meka.core.wire.SpeechCodec.Request("Anything else?", "Amy"), os.meka.core.wire.SpeechCodec.decodeRequest((req.body as TextContent).text))
+        assertEquals(os.meka.core.wire.SpeechCodec.Request("Anything else?", "Amy", binary = true), os.meka.core.wire.SpeechCodec.decodeRequest((req.body as TextContent).text))
         assertTrue(req.headers[RequestSigning.HEADER_SIGNATURE] != null)
         speakStatus = HttpStatusCode.NotFound
         assertEquals("off", t.speak("Anything else?", null).state)
         // The voices route isn't on this test server either: off, not an error.
         assertEquals("off", t.speechVoices().state)
+    }
+
+    @Test
+    fun aClipThatComesBackAsRawMp3ReadsAsTheSameAnswer() = runTest {
+        val t = HttpSyncTransport(client(), "https://meka.example", RecordingKey()) { "s".repeat(64) }
+        val mp3 = byteArrayOf(0x49, 0x44, 0x33, 0x04, 0, 0, 0, 0, 0, 0)
+        speakRaw = mp3 to headersOf(
+            "Content-Type" to listOf("audio/mpeg"),
+            os.meka.core.wire.SpeechCodec.HEADER_VOICE to listOf("Brian"),
+            os.meka.core.wire.SpeechCodec.HEADER_ENGINE to listOf("neural"),
+        )
+        val r = t.speak("One moment…", "Brian")
+        assertEquals(os.meka.core.wire.SpeechCodec.Response("spoken", kotlin.io.encoding.Base64.encode(mp3), "mp3", "Brian", "neural"), r)
+        // An oversized body is refused, not played.
+        speakRaw = ByteArray(os.meka.core.wire.SpeechCodec.MAX_AUDIO_BYTES + 1) to headersOf("Content-Type", "audio/mpeg")
+        assertEquals("failed", t.speak("One moment…", "Brian").state)
+        // Refusals stay JSON (and so does every answer from an older server).
+        speakRaw = null
+        assertEquals("bXAz", t.speak("Anything else?", "Amy").audio)
     }
 
     @Test

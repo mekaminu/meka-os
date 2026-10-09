@@ -6,7 +6,9 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
+import io.ktor.http.contentLength
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import os.meka.core.sync.AuthRejectedException
@@ -17,6 +19,7 @@ import os.meka.core.sync.PushResponse
 import os.meka.core.sync.SyncTransport
 import os.meka.core.sync.TransportException
 import os.meka.core.wire.AskCodec
+import os.meka.core.wire.SpeechCodec
 import os.meka.core.wire.WireCodec
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.encoding.Base64
@@ -319,7 +322,8 @@ class HttpSyncTransport(
     }
 
     override suspend fun speak(text: String, voice: String?): os.meka.core.wire.SpeechCodec.Response {
-        val body = os.meka.core.wire.SpeechCodec.encodeRequest(os.meka.core.wire.SpeechCodec.Request(text, voice))
+        // Raw MP3 back (a quarter smaller than base64 JSON, nothing to parse); an older server answers JSON as before.
+        val body = os.meka.core.wire.SpeechCodec.encodeRequest(os.meka.core.wire.SpeechCodec.Request(text, voice, binary = true))
         prepare() // the speech routes require the device's signing key on the server
         val resp = send("/v1/speech/speak", body)
         when {
@@ -329,7 +333,15 @@ class HttpSyncTransport(
             resp.status.value == 403 -> return os.meka.core.wire.SpeechCodec.Response(os.meka.core.wire.SpeechCodec.Response.FAILED, reason = "this device's key isn't registered yet")
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/speech/speak")
         }
-        return os.meka.core.wire.SpeechCodec.decodeResponse(resp.bodyAsText())
+        if (resp.contentType()?.match(AUDIO_MPEG) == true) {
+            val unusable = SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = "MEKA's voice sent an unusable clip")
+            val size = resp.contentLength()
+            if (size != null && size > SpeechCodec.MAX_AUDIO_BYTES) return unusable
+            val bytes = resp.readRawBytes()
+            if (bytes.size > SpeechCodec.MAX_AUDIO_BYTES) return unusable
+            return SpeechCodec.binaryResponse(Base64.encode(bytes), resp.headers[SpeechCodec.HEADER_VOICE], resp.headers[SpeechCodec.HEADER_ENGINE])
+        }
+        return SpeechCodec.decodeResponse(resp.bodyAsText())
     }
 
     override suspend fun speechVoices(): os.meka.core.wire.SpeechCodec.Voices {
@@ -342,6 +354,10 @@ class HttpSyncTransport(
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/speech/voices")
         }
         return os.meka.core.wire.SpeechCodec.decodeVoices(resp.bodyAsText())
+    }
+
+    private companion object {
+        val AUDIO_MPEG = ContentType.parse(SpeechCodec.AUDIO_TYPE)
     }
 
     private suspend fun post(path: String, body: String): String {
