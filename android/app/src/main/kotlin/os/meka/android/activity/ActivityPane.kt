@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,7 +53,8 @@ import os.meka.android.designsystem.sharedTitleInPane
  * what is still as MEKA left it). Opened from Today's header.
  *
  * Motion: the pane springs up (MekaPane); day sections stagger in 40 ms apart; Undo gives a light haptic and the
- * row's line cross-fades to "Undone at 09:12". Reduced motion: cross-fades.
+ * row's line cross-fades to "Undone at 09:12"; MEKA's voice line (the month's characters) fades in once the server
+ * answers. Reduced motion: cross-fades.
  */
 @Composable
 fun ActivityPane(core: MekaCore, onClose: () -> Unit) {
@@ -61,6 +63,10 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit) {
     val haptics = rememberMekaHaptics()
     // What the last undo did, when it wasn't simply "Undone" (that shows on the row itself).
     var note by remember { mutableStateOf<String?>(null) }
+    // MEKA's voice this month ("MEKA's voice · Amy · 12,400 of 1,000,000 characters in October"); null: nothing to say.
+    var voiceLine by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { voiceLine = runCatching { core.voiceUsageLine() }.getOrNull() }
+    val reduced = Meka.reducedMotion
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
@@ -74,6 +80,13 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit) {
             if (view.isEmpty) view.emptyLine else "What MEKA did and why. ${view.weekLine}.",
             style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)),
         )
+        AnimatedContent(
+            targetState = voiceLine,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "activity-voice",
+        ) { line ->
+            if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
+        }
         note?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
         view.days.forEachIndexed { i, day ->
             Column(Modifier.fillMaxWidth().appear(rememberAppearance(i + 1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {

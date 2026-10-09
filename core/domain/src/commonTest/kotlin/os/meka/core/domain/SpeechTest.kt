@@ -75,4 +75,27 @@ class SpeechTest {
         assertNull(MekaVoiceRules.normalize("amy"))
         assertEquals("Arthur", MekaVoiceRules.normalize(" Arthur "))
     }
+
+    @Test
+    fun activitySaysTheMonthsVoiceCharacters() {
+        assertEquals(
+            "MEKA's voice · Amy · 12,400 of 1,000,000 characters in October",
+            SpeechRules.usageLine("on", "2026-10", 12_400, 1_000_000, "Amy", deviceChosen = false),
+        )
+        assertEquals("MEKA's voice · 0 of 1,000,000 characters in January", SpeechRules.usageLine("on", "2027-01", 0, 1_000_000, null, false))
+        // Used up: the device speaks until the 1st (December rolls over to January).
+        assertEquals(
+            "MEKA's voice · December's 1,000,000 characters are used; the device's own voice speaks until 1 Jan",
+            SpeechRules.usageLine("on", "2026-12", 1_000_250, 1_000_000, "Amy", false),
+        )
+        assertEquals("MEKA's voice · the device's own voice, nothing is sent", SpeechRules.usageLine("on", "2026-10", 5, 10, "Amy", deviceChosen = true))
+        // Not on here, or an answer without a month: no line.
+        assertNull(SpeechRules.usageLine("off", "2026-10", 0, 1_000_000, null, false))
+        assertNull(SpeechRules.usageLine("failed", "2026-10", 9, 1_000_000, null, false))
+        assertNull(SpeechRules.usageLine("on", null, 9, 1_000_000, null, false))
+        assertNull(SpeechRules.usageLine("on", "2026-13", 9, 1_000_000, null, false))
+        assertEquals("999", SpeechRules.grouped(999))
+        assertEquals("1,000", SpeechRules.grouped(1_000))
+        assertEquals("1,234,567", SpeechRules.grouped(1_234_567))
+    }
 }

@@ -955,6 +955,15 @@ final class CoreModel {
         return Data(base64Encoded: clip)
     }
 
+    /// Activity's line about MEKA's voice this month ("MEKA's voice · Amy · 12,400 of 1,000,000 characters in
+    /// October"); nil until the server answers or when there is nothing to say. Only a String crosses back.
+    private(set) var voiceUsageLine: String?
+
+    func refreshVoiceUsage() async {
+        guard let core, !signedOut else { voiceUsageLine = nil; return }
+        voiceUsageLine = (try? await core.voiceUsageLine()) ?? nil
+    }
+
     /// Fetches MEKA's common lines in its voice once, so they play at once in a conversation.
     func warmVoice() async {
         guard let core else { return }

@@ -114,6 +114,39 @@ object SpeechRules {
         return daysFromCivil(ny, nm, 1) * DAY_MS
     }
 
+    /**
+     * Activity's line about MEKA's voice this month, from the server's voices answer: [state] ("on", "off", "failed"),
+     * the UTC [month] ("2026-10"), the characters spoken so far against [capChars], and the [voice] Talk uses (the
+     * chosen one when offered, else the server's default). [deviceChosen]: the device's own voice is chosen, so nothing
+     * is sent. Null when there's nothing to say (MEKA's voice isn't on, or the server didn't answer).
+     *
+     * "MEKA's voice · Amy · 12,400 of 1,000,000 characters in October" ·
+     * "MEKA's voice · October's 1,000,000 characters are used; the phone's own voice speaks until 1 Nov" ·
+     * "MEKA's voice · the device's own voice, nothing is sent"
+     */
+    fun usageLine(state: String, month: String?, usedChars: Long, capChars: Long, voice: String?, deviceChosen: Boolean): String? {
+        if (deviceChosen) return "$USAGE_LABEL · the device's own voice, nothing is sent"
+        if (state != ON) return null
+        val m = month?.let(MONTH::matchEntire)?.destructured?.let { (_, mm) -> mm.toInt() }?.takeIf { it in 1..12 } ?: return null
+        val name = MONTHS[m - 1]
+        if (capChars > 0 && usedChars >= capChars) {
+            return "$USAGE_LABEL · $name's ${grouped(capChars)} characters are used; the device's own voice speaks until 1 ${MONTHS[m % 12].take(3)}"
+        }
+        val who = voice?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+        val of = if (capChars > 0) " of ${grouped(capChars)}" else ""
+        return "$USAGE_LABEL$who · ${grouped(usedChars.coerceAtLeast(0))}$of characters in $name"
+    }
+
+    /** 1234567 → "1,234,567". */
+    fun grouped(n: Long): String = n.toString().reversed().chunked(3).joinToString(",").reversed()
+
+    const val USAGE_LABEL = "MEKA's voice"
+    const val ON = "on"
+    private val MONTH = Regex("(\\d{4})-(\\d{2})")
+    private val MONTHS = listOf(
+        "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December",
+    )
+
     /** The cache's key: the voice (or the server's default) and the exact words. */
     fun cacheKey(voice: String?, text: String): String = "${voice ?: ""}|$text"
 

@@ -8,6 +8,9 @@ import os.meka.core.domain.CallAssistantRules
 import os.meka.core.domain.CallAssistantScript
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeldMessageFields
+import os.meka.core.domain.MekaVoiceFields
+import os.meka.core.domain.MekaVoiceRules
+import os.meka.core.domain.MekaVoiceStore
 import os.meka.core.domain.Urgency
 import os.meka.core.domain.WorkFields
 import os.meka.core.domain.WorkMode
@@ -16,6 +19,7 @@ import os.meka.core.sync.HlcClock
 import os.meka.core.sync.Op
 import os.meka.core.sync.ServerOpStore
 import os.meka.core.sync.fv
+import os.meka.core.wire.SpeechCodec
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient
 import java.net.URLDecoder
@@ -86,11 +90,37 @@ interface VoiceProvider {
     /** The event a webhook [step] describes, or null for a step or form it doesn't know. */
     fun parse(step: String, form: Map<String, String>): VoiceEvent?
 
-    /** The reply as the service's markup: content type and body. [baseUrl] is the server's public URL. */
-    fun render(reply: VoiceReply, baseUrl: String): Pair<String, String>
+    /**
+     * The reply as the service's markup: content type and body. [baseUrl] is the server's public URL; [voice] is MEKA's
+     * voice, so callers hear the same voice Meka hears in Talk ([CallAssistant.voice]).
+     */
+    fun render(reply: VoiceReply, baseUrl: String, voice: CallVoice = CallVoice.DEFAULT): Pair<String, String>
 
     /** Deletes a recording from the phone service once it has been transcribed. Returns whether it is gone. */
     fun deleteRecording(recording: String): Boolean
+}
+
+/**
+ * The Polly voice the call assistant speaks with and its engine ("generative" or "neural"): MEKA's voice (build plan V1,
+ * "Weather and a voice", item 3: one voice everywhere, so callers hear the voice Meka chose).
+ */
+data class CallVoice(val name: String, val engine: String) {
+    companion object {
+        /** Before MEKA's voice is known (Polly off or unreachable, nothing chosen): Amy, the server's first choice. */
+        val DEFAULT = CallVoice("Amy", SpeechService.NEURAL)
+
+        /**
+         * The voice for calls: the synced choice ([chosen], a `context_mode/voice` name) when the server offers it,
+         * else the server's default (the first [offered]; also when the device's own voice is chosen, since a caller
+         * can't hear Meka's phone), else the chosen name on the neural engine, else [DEFAULT].
+         */
+        fun choose(chosen: String?, offered: List<SpeechCodec.Voice>): CallVoice {
+            val polly = MekaVoiceRules.normalize(chosen)?.takeIf { it != MekaVoiceRules.DEVICE }
+            offered.firstOrNull { it.id.equals(polly, ignoreCase = true) }?.let { return CallVoice(it.id, it.engine) }
+            offered.firstOrNull()?.let { return CallVoice(it.id, it.engine) }
+            return polly?.let { CallVoice(it, SpeechService.NEURAL) } ?: DEFAULT
+        }
+    }
 }
 
 /** A field's current value (last writer wins by HLC) in a household's synced data; null when never written. */
@@ -126,6 +156,8 @@ class CallAssistant(
     /** The household calls belong to: the server's one household (null when there are none or several). */
     private val household: () -> String?,
     private val now: () -> Long = System::currentTimeMillis,
+    /** The voices MEKA's server can speak with, best first ([SpeechService.offered]); empty while Polly is off. */
+    private val speechVoices: () -> List<SpeechCodec.Voice> = { emptyList() },
     /** Something was written: wake the household's devices. */
     private val onWritten: (householdId: String) -> Unit = {},
     /** An urgent message: wake the devices now, at high priority. */
@@ -163,6 +195,14 @@ class CallAssistant(
                 VoiceReply.Done
             }
         }
+    }
+
+    /** MEKA's voice for this call's household ([CallVoice.choose]). Never throws: Polly unreachable reads as off. */
+    fun voice(): CallVoice {
+        val hh = household() ?: return CallVoice.DEFAULT
+        val chosen = runCatching { fields.latest(hh, EntityTypes.CONTEXT_MODE, MekaVoiceStore.ENTITY_ID, MekaVoiceFields.NAME) }.getOrNull()
+        val offered = runCatching { speechVoices() }.getOrDefault(emptyList())
+        return CallVoice.choose((chosen as? FieldValue.Text)?.value, offered)
     }
 
     /** The one switch (Work screen on either app): off means calls are turned away as busy. Absent = off. */
@@ -242,8 +282,10 @@ class TwilioVoice(
         }
     }
 
-    override fun render(reply: VoiceReply, baseUrl: String): Pair<String, String> {
+    override fun render(reply: VoiceReply, baseUrl: String, voice: CallVoice): Pair<String, String> {
         val base = baseUrl.trimEnd('/')
+        val name = voiceName(voice)
+        fun say(text: String) = sayIn(name, text)
         fun url(step: String) = xml(base + VoiceStep.path(ID, step))
         val s = CallAssistantScript
         val body = when (reply) {
@@ -277,7 +319,10 @@ class TwilioVoice(
 
     companion object {
         const val ID = "twilio"
-        private const val VOICE = "Polly.Amy"
+        /** Twilio's names for the British Polly voices MEKA offers (`Polly.<Name>-Neural`). */
+        val NEURAL_VOICES = setOf("Amy", "Emma", "Brian", "Arthur")
+        /** Those Twilio also offers on Polly's generative engine (`Polly.<Name>-Generative`). */
+        val GENERATIVE_VOICES = setOf("Amy")
         private val recordingSid = Regex("^RE[0-9a-fA-F]{32}$")
         private val accountSidPattern = Regex("^AC[0-9a-fA-F]{32}$")
 
@@ -287,7 +332,17 @@ class TwilioVoice(
             return java.net.http.HttpClient.newHttpClient().send(req.build(), java.net.http.HttpResponse.BodyHandlers.discarding()).statusCode()
         }
 
-        private fun say(text: String) = """<Say voice="$VOICE" language="en-GB">${xml(text)}</Say>"""
+        /**
+         * MEKA's voice as Twilio names it: generative where Twilio has it, else neural; a voice Twilio doesn't offer
+         * says the call in Amy's neural voice rather than failing the call.
+         */
+        fun voiceName(voice: CallVoice): String = when {
+            voice.engine == SpeechService.GENERATIVE && voice.name in GENERATIVE_VOICES -> "Polly.${voice.name}-Generative"
+            voice.name in NEURAL_VOICES -> "Polly.${voice.name}-Neural"
+            else -> "Polly.${CallVoice.DEFAULT.name}-Neural"
+        }
+
+        private fun sayIn(voice: String, text: String) = """<Say voice="$voice" language="en-GB">${xml(text)}</Say>"""
 
         private fun xml(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
 

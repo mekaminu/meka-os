@@ -18,6 +18,8 @@ import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeldMessageFields
 import os.meka.core.domain.HeldMessages
 import os.meka.core.domain.MekaSchema
+import os.meka.core.domain.MekaVoiceFields
+import os.meka.core.domain.MekaVoiceStore
 import os.meka.core.domain.WorkFields
 import os.meka.core.domain.WorkMode
 import os.meka.core.sync.FieldValue
@@ -27,6 +29,8 @@ import os.meka.core.sync.InMemoryReplicaStore
 import os.meka.core.sync.InMemoryServerOpStore
 import os.meka.core.sync.Op
 import os.meka.core.sync.Replica
+import os.meka.core.sync.fv
+import os.meka.core.wire.SpeechCodec
 import java.net.URLEncoder
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -256,5 +260,55 @@ class CallAssistantTest {
         assertEquals("sync", m["data"]!!.jsonObject["t"]!!.jsonPrimitive.content)
         assertEquals("normal", FcmSender.message("tok")["message"]!!.jsonObject["android"]!!.jsonObject["priority"]!!.jsonPrimitive.content)
         assertTrue(CallAssistantScript.GREETING.startsWith("Hi, you've reached Meka's automated assistant."))
+    }
+
+    @Test
+    fun callersHearMekasVoiceTheOneMekaChoseForTalk() = testApplication {
+        // MEKA's server offers generative Amy and neural Emma; the Fold chose Emma (context_mode/voice, synced).
+        val offered = listOf(SpeechCodec.Voice("Amy", "Female", "generative"), SpeechCodec.Voice("Emma", "Female", "neural"))
+        val withVoice = CallAssistant(ops, FieldReader.scanning(ops), household = { devices.soleHousehold() }, now = { nowMs }, speechVoices = { offered })
+        application { mekaSync(ops, devices, voice = VoiceRoutes(withVoice, listOf(TwilioVoice(authToken = { token })), base)) }
+        switch(true)
+        fun choose(name: String?) = ops.append(
+            Op(
+                "v${seq++}", "hh", EntityTypes.CONTEXT_MODE, MekaVoiceStore.ENTITY_ID, MekaVoiceFields.NAME, name.fv(),
+                Hlc(nowMs + 100 + seq, 0, "fold"), emptyList(), "fold",
+            ),
+        )
+        val call = arrayOf("CallSid" to "CA700", "From" to "+447700900123")
+
+        // Nothing chosen: the server's default, on its best engine.
+        assertTrue("""<Say voice="Polly.Amy-Generative" language="en-GB">""" in hook(VoiceStep.INCOMING, *call).bodyAsText())
+        choose("Emma")
+        val greet = hook(VoiceStep.INCOMING, *call).bodyAsText()
+        assertTrue("""<Say voice="Polly.Emma-Neural" language="en-GB">""" in greet, greet)
+        assertFalse("Polly.Amy" in greet)
+        // Every line of the call is in the same voice, through to goodbye.
+        assertTrue("Polly.Emma-Neural" in hook(VoiceStep.RECORDED, *call, "RecordingDuration" to "9").bodyAsText())
+        assertTrue("Polly.Emma-Neural" in hook(VoiceStep.ANSWERED, *call, "Digits" to "2").bodyAsText())
+        // The device's own voice can't reach a caller: the call is in MEKA's default voice.
+        choose("device")
+        assertTrue("Polly.Amy-Generative" in hook(VoiceStep.INCOMING, *call).bodyAsText())
+    }
+
+    @Test
+    fun theCallVoiceFallsBackWithoutFailingTheCall() {
+        val offered = listOf(SpeechCodec.Voice("Amy", "Female", "generative"), SpeechCodec.Voice("Brian", "Male", "neural"))
+        assertEquals(CallVoice("Brian", "neural"), CallVoice.choose("Brian", offered))
+        assertEquals(CallVoice("Amy", "generative"), CallVoice.choose(null, offered))
+        assertEquals(CallVoice("Amy", "generative"), CallVoice.choose("Zed", offered)) // not offered here: the default
+        assertEquals(CallVoice("Amy", "generative"), CallVoice.choose("not a voice!", offered))
+        // Polly off or unreachable: the chosen name on the neural engine, else Amy.
+        assertEquals(CallVoice("Arthur", "neural"), CallVoice.choose("Arthur", emptyList()))
+        assertEquals(CallVoice.DEFAULT, CallVoice.choose("device", emptyList()))
+        assertEquals(CallVoice.DEFAULT, CallVoice.choose(null, emptyList()))
+        // Twilio's names: generative where Twilio has it, else neural; a voice Twilio lacks speaks as Amy, never fails.
+        assertEquals("Polly.Amy-Generative", TwilioVoice.voiceName(CallVoice("Amy", "generative")))
+        assertEquals("Polly.Amy-Neural", TwilioVoice.voiceName(CallVoice("Amy", "neural")))
+        assertEquals("Polly.Arthur-Neural", TwilioVoice.voiceName(CallVoice("Arthur", "generative")))
+        assertEquals("Polly.Amy-Neural", TwilioVoice.voiceName(CallVoice("Zed", "neural")))
+        // Webhooks before a household exists still answer (busy), in no voice at all.
+        val none = CallAssistant(ops, FieldReader.scanning(ops), household = { null }, speechVoices = { error("not asked") })
+        assertEquals(CallVoice.DEFAULT, none.voice())
     }
 }

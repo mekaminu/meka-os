@@ -5,7 +5,8 @@ import SwiftUI
 /// makes for you, newest first by day, each with the rule or setting behind it. A change can be undone here (only what
 /// is still as MEKA left it). Synced with the Fold. Opened from Today's header or File → Activity… (⇧⌘A).
 /// Motion: the sheet scale-fades; day sections stagger in; Undo gives a light haptic and the row's line cross-fades
-/// to "Undone at 09:12". Reduce Motion: cross-fades.
+/// to "Undone at 09:12"; MEKA's voice line (the month's characters) fades in once the server answers. Reduce Motion:
+/// cross-fades.
 struct ActivitySheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -15,6 +16,11 @@ struct ActivitySheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
             Text("Activity").font(MekaType.upNextTitle).staggeredAppear(0)
+            if let line = model.voiceUsageLine {
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
             if let view = model.activity, !view.isEmpty {
                 Text("What MEKA did and why. \(view.weekLine).")
                     .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
@@ -52,6 +58,8 @@ struct ActivitySheet: View {
         .frame(width: 500)
         .background(palette.surface)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.activityNote)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.voiceUsageLine)
+        .task { await model.refreshVoiceUsage() }
     }
 
     private func rowView(_ row: ActivityRow) -> some View {

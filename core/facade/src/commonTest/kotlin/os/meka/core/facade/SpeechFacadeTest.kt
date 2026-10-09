@@ -35,7 +35,11 @@ class SpeechFacadeTest {
             if (down) throw TransportException("offline")
             return answer(text)
         }
-        override suspend fun speechVoices() = SpeechCodec.Voices(SpeechCodec.Voices.ON)
+        var voices = SpeechCodec.Voices(SpeechCodec.Voices.ON)
+        override suspend fun speechVoices(): SpeechCodec.Voices {
+            if (down) throw TransportException("offline")
+            return voices
+        }
     }
 
     private val server = Server(SyncService(InMemoryServerOpStore()))
@@ -104,5 +108,31 @@ class SpeechFacadeTest {
         assertNull(c.speechClip("Later.", first = true))
         now += 3_600_000L
         assertEquals("bXAz", c.speechClip("Later.", first = true))
+    }
+
+    @Test
+    fun activityShowsTheMonthsVoiceCharacters() = runTest {
+        assertNull(core(transport = null).voiceUsageLine()) // not connected
+        val c = core()
+        server.voices = SpeechCodec.Voices(
+            SpeechCodec.Voices.ON,
+            listOf(SpeechCodec.Voice("Amy", "Female", "generative"), SpeechCodec.Voice("Brian", "Male", "neural")),
+            "Amy", "2026-10", 12_400, 1_000_000,
+        )
+        assertEquals("MEKA's voice · Amy · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
+        assertTrue(c.chooseMekaVoice("Brian"))
+        assertEquals("MEKA's voice · Brian · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
+        // A voice this server doesn't offer is said by its default, so that's the one named.
+        assertTrue(c.chooseMekaVoice("Zed"))
+        assertEquals("MEKA's voice · Amy · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
+        server.down = true
+        assertNull(c.voiceUsageLine())
+        // The device's own voice: said without asking the server.
+        assertTrue(c.chooseMekaVoice("device"))
+        assertEquals("MEKA's voice · the device's own voice, nothing is sent", c.voiceUsageLine())
+        server.down = false
+        assertTrue(c.chooseMekaVoice(null))
+        server.voices = SpeechCodec.Voices(SpeechCodec.Voices.OFF)
+        assertNull(c.voiceUsageLine())
     }
 }

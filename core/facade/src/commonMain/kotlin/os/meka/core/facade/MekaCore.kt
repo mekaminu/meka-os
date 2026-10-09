@@ -1365,6 +1365,22 @@ class MekaCore(
         os.meka.core.domain.SpeechRules.COMMON.forEach { if (speechClip(it, first = false) == null) return }
     }
 
+    /**
+     * Activity's line about MEKA's voice this month ([os.meka.core.domain.SpeechRules.usageLine]): the voice and the
+     * month's characters against the cap, from the server's `POST /v1/speech/voices`; null when the voice isn't on
+     * here, the device isn't connected or the server didn't answer. Never throws.
+     */
+    suspend fun voiceUsageLine(): String? {
+        val chosen = onCore { mekaVoice.chosen() }
+        if (chosen == os.meka.core.domain.MekaVoiceRules.DEVICE) {
+            return os.meka.core.domain.SpeechRules.usageLine("", null, 0, 0, null, deviceChosen = true)
+        }
+        val api = speechApi ?: return null
+        val v = try { api.speechVoices() } catch (e: CancellationException) { throw e } catch (e: Exception) { return null }
+        val voice = v.voices.firstOrNull { it.id.equals(chosen, ignoreCase = true) }?.id ?: v.defaultVoice
+        return os.meka.core.domain.SpeechRules.usageLine(v.state, v.month, v.usedChars, v.capChars, voice, deviceChosen = false)
+    }
+
     private class SpeechVoice(val name: String?)
 
     /** The voice to ask the server for now, or null when the device should speak (chosen, or resting after a refusal). */

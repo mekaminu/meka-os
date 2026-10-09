@@ -329,7 +329,8 @@ fun Application.mekaSync(
                 // Transcribed (or failed): the recording has done its job; delete it from the phone service, off the request.
                 if (event is VoiceEvent.Transcribed) event.recording?.let { rec -> background { runCatching { provider.deleteRecording(rec) } } }
                 if (event is VoiceEvent.Recorded && reply == VoiceReply.AskUrgent) call.application.environment.log.info("voice message taken") // no identifiers
-                val (type, text) = provider.render(reply, voice.publicUrl)
+                val callVoice = if (reply == VoiceReply.Done || reply == VoiceReply.Busy) CallVoice.DEFAULT else withContext(Dispatchers.IO) { voice.assistant.voice() }
+                val (type, text) = provider.render(reply, voice.publicUrl, callVoice)
                 call.respondText(text, ContentType.parse(type))
             }
         }
@@ -474,9 +475,9 @@ fun main(args: Array<String>) {
             )?.also { it.start() }
             // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
-            val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push)
-            val ai = aiFromEnv(ds)?.also { startAiCheck(it.health) }
             val speech = speechFromEnv(ds)
+            val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech)
+            val ai = aiFromEnv(ds)?.also { startAiCheck(it.health) }
             embeddedServer(Netty, port = port) {
                 mekaSync(
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
@@ -523,11 +524,12 @@ fun opStoreReader(opStore: PostgresOpStore): EntityReader = object : EntityReade
  * The call assistant's webhooks. Null unless the deployment names the Twilio secret and a public URL; while the secret
  * is still `{}` every webhook is refused (no auth token to check signatures with).
  */
-fun voiceFromEnv(opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?): VoiceRoutes? {
+fun voiceFromEnv(opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?, speech: SpeechService? = null): VoiceRoutes? {
     val secret = System.getenv("MEKA_VOICE_TWILIO_SECRET")?.takeIf { it.isNotBlank() } ?: return null
     val publicUrl = System.getenv("MEKA_PUBLIC_URL")?.takeIf { it.isNotBlank() } ?: return null
     val assistant = CallAssistant(
         ops = opStore, fields = FieldReader { hh, type, id, field -> opStore.latestValue(hh, type, id, field) }, household = { devices.soleHousehold() },
+        speechVoices = { speech?.offered().orEmpty() },
         onWritten = { hh -> push?.serverChanged(hh) }, onUrgent = { hh -> push?.urgent(hh) },
     )
     return VoiceRoutes(assistant, listOf(TwilioVoice.fromSecret(secret)), publicUrl)

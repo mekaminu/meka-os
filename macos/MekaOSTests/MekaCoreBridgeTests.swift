@@ -509,6 +509,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(SpeechRules.shared.pieces(text: "  "), [])
         XCTAssertEqual(SpeechRules.shared.FIRST_AUDIO_MS, 1200)
         XCTAssertEqual(MekaVoiceRules.shared.normalize(name: " device "), MekaVoiceRules.shared.DEVICE)
+        XCTAssertEqual(SpeechRules.shared.usageLine(state: "on", month: "2026-10", usedChars: 12400, capChars: 1000000,
+                                                    voice: "Amy", deviceChosen: false),
+                       "MEKA's voice · Amy · 12,400 of 1,000,000 characters in October")
+        XCTAssertNil(SpeechRules.shared.usageLine(state: "off", month: nil, usedChars: 0, capChars: 0, voice: nil, deviceChosen: false))
     }
 
     func testMotionCheckReachesSwift() {
