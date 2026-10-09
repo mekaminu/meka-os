@@ -144,6 +144,7 @@ class MekaCore(
     private val activity = os.meka.core.domain.ActivityLog(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val eventActions = os.meka.core.domain.EventActions(replica, tasks, nowMs, ZoneCalendar(timeZone))
     private val held = os.meka.core.domain.HeldMessages(replica, nowMs)
+    private val requestCards = os.meka.core.domain.RequestCards(replica, nowMs, ZoneCalendar(timeZone))
     // Leave-by alarms are worked out from the calendar on every read (Alarms, slice 3).
     private val alarms = os.meka.core.domain.Alarms(replica, nowMs, ZoneCalendar(timeZone)) {
         os.meka.core.domain.LeaveAlarmRules.alarms(currentEvents(), eventActions.marks(), nowMs(), ZoneCalendar(timeZone))
@@ -306,6 +307,13 @@ class MekaCore(
      * latest). Synced (Needs Meka #10), so the Mac shows the same summary; Done on either device clears it on both.
      */
     val afterWork: StateFlow<os.meka.core.domain.AfterWorkSummary> = _afterWork.asStateFlow()
+
+    private val _requests = MutableStateFlow<List<os.meka.core.domain.RequestCard>>(emptyList())
+    /**
+     * Requests from people Meka watches (V1, slice 2): the open Needs you cards MEKA proposed from their messages,
+     * oldest first. Synced, so the Mac shows the same cards; Add or Not a task on either device clears both.
+     */
+    val requests: StateFlow<List<os.meka.core.domain.RequestCard>> = _requests.asStateFlow()
 
     private val _workMode = MutableStateFlow(work.state(localClock(), todayEpochDay()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
@@ -645,6 +653,62 @@ class MekaCore(
         onCore { held.hold(items, lists) }
     /** Done on the after-work summary: cleared on every device, texts blanked. WhatsApp and Messages are untouched. */
     suspend fun clearAfterWork(): Int = onCore { held.clear() }
+
+    /**
+     * Requests from people Meka watches (V1, slice 2): reads one message the Fold's listener captured. Only a message
+     * [os.meka.core.domain.MessageRequestRules.shouldRead] allows (the family list or [watching], a 1:1 chat unless its
+     * group is in [groups]) goes anywhere: a voice note becomes "Listen to Wife's voice note" with no AI, a bare photo
+     * nothing, and anything else is sent alone (its text, the sender's label, the time; never a number or another chat)
+     * to `POST /v1/ai/message-request`. The answer's proposals are checked again here and saved as synced Needs you
+     * cards ([requests]); nothing is added, replied to or marked read. Returns the new cards (for the heads-up).
+     */
+    suspend fun readRequest(
+        item: os.meka.core.domain.CapturedItem,
+        lists: os.meka.core.domain.PeopleLists,
+        watching: Set<String>,
+        groups: Set<String> = emptySet(),
+    ): RequestRead {
+        val rules = os.meka.core.domain.MessageRequestRules
+        if (!rules.shouldRead(item, lists, watching, groups)) return RequestRead.Skipped
+        val text = item.text.orEmpty().trim()
+        val message = os.meka.core.domain.RequestMessage(item.id, item.personName.trim(), text, item.atMs)
+        if (rules.isVoiceNote(text)) {
+            return RequestRead.Read(onCore { requestCards.save(message, listOf(rules.voiceNoteProposal(item.personName))) })
+        }
+        if (!rules.worthAsking(text)) return RequestRead.Skipped
+        val api = aiApi ?: return RequestRead.Unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
+        val cal = ZoneCalendar(timeZone)
+        val request = onCore {
+            val now = nowMs()
+            val today = cal.epochDayOf(now)
+            val schedule = work.schedule()
+            os.meka.core.wire.MessageRequestCodec.Request(
+                sender = item.personName.trim().take(os.meka.core.wire.MessageRequestCodec.MAX_SENDER),
+                sentAt = LocalClock.formatMinute(cal.minuteOfDay(item.atMs)),
+                date = os.meka.core.domain.AskRules.isoDate(today),
+                now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(now))}",
+                work = if (schedule.enabled && schedule.days.isNotEmpty()) {
+                    "${os.meka.core.domain.WorkSchedule.describeDays(schedule.days)} ${LocalClock.formatMinute(schedule.startMinute)}–${LocalClock.formatMinute(schedule.endMinute)}"
+                } else "",
+                text = text.take(os.meka.core.wire.MessageRequestCodec.MAX_TEXT),
+            )
+        }
+        val reply = try { api.messageRequest(request) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            return RequestRead.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
+        }
+        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) {
+            return RequestRead.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
+        }
+        return RequestRead.Read(onCore {
+            val raw = reply.proposals.map { os.meka.core.domain.RawRequestProposal(it.kind, it.title, it.date, it.time, it.words) }
+            // The day the message came, not the day it was read: "tomorrow" in last night's message is today.
+            requestCards.save(message, rules.check(raw, cal.epochDayOf(item.atMs), cal.minuteOfDay(item.atMs)))
+        })
+    }
+
+    /** Not a task (Not needed, Not an event) on a request card: gone from Needs you on every device, its text blanked. */
+    suspend fun declineRequest(cardId: String): Boolean =
+        onCore { requestCards.resolve(cardId, os.meka.core.domain.RequestResolution.DECLINED) }
     suspend fun setEventReminder(eventId: String, minutes: Int) = onCore { eventActions.setReminder(eventId, minutes) }
     /** Leave by: a heads-up [travelMinutes] before the event starts (how long it takes to get there); 0 turns it off. */
     suspend fun setEventLeaveBy(eventId: String, travelMinutes: Int) = onCore { eventActions.setLeaveBy(eventId, travelMinutes) }
@@ -1659,6 +1723,7 @@ class MekaCore(
         _editsSeen.value = editsNow
         _editLines.value = os.meka.core.domain.EditLineRules.lines(editsNow, nowMs())
         _afterWork.value = held.summary()
+        _requests.value = requestCards.open()
         _notifyPreview.value = Governor.preview(currentNotices(all), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(

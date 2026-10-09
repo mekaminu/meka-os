@@ -31,6 +31,10 @@ class HttpSyncTransportTest {
     private val speakReply = os.meka.core.wire.SpeechCodec.encodeResponse(
         os.meka.core.wire.SpeechCodec.Response("spoken", audio = "bXAz", format = "mp3", voice = "Amy", engine = "generative"),
     )
+    private var requestStatus = HttpStatusCode.OK
+    private val requestReply = os.meka.core.wire.MessageRequestCodec.encodeResponse(
+        os.meka.core.wire.MessageRequestCodec.Response("answered", listOf(os.meka.core.wire.MessageRequestCodec.Proposal("task", "Pick up dry cleaning", words = "tomorrow"))),
+    )
     private fun client() = HttpClient(MockEngine { req ->
         requests += req
         when (req.url.encodedPath) {
@@ -39,6 +43,7 @@ class HttpSyncTransportTest {
             "/v1/integrations/google/connect" -> respond("not configured", HttpStatusCode.Conflict)
             "/v1/push/token" -> respond(pushReply, pushStatus, json)
             "/v1/speech/speak" -> respond(speakReply, speakStatus, json)
+            "/v1/ai/message-request" -> respond(requestReply, requestStatus, json)
             else -> respond("", HttpStatusCode.NotFound)
         }
     })
@@ -107,5 +112,19 @@ class HttpSyncTransportTest {
         assertEquals("off", t.speak("Anything else?", null).state)
         // The voices route isn't on this test server either: off, not an error.
         assertEquals("off", t.speechVoices().state)
+    }
+
+    @Test
+    fun oneMessageIsSentSignedForProposalsAndAServerWithoutTheRouteSaysOff() = runTest {
+        val t = HttpSyncTransport(client(), "https://meka.example", RecordingKey()) { "s".repeat(64) }
+        val sent = os.meka.core.wire.MessageRequestCodec.Request("Wife", "14:02", "2026-10-09", "Friday 9 October 2026 · 14:03", "", "dry cleaning tomorrow?")
+        val r = t.messageRequest(sent)
+        assertEquals("Pick up dry cleaning", r.proposals.single().title)
+        val req = requests.last()
+        assertEquals("/v1/ai/message-request", req.url.encodedPath)
+        assertEquals(sent, os.meka.core.wire.MessageRequestCodec.decodeRequest((req.body as TextContent).text))
+        assertTrue(req.headers[RequestSigning.HEADER_SIGNATURE] != null)
+        requestStatus = HttpStatusCode.NotFound
+        assertEquals("off", t.messageRequest(sent).state)
     }
 }

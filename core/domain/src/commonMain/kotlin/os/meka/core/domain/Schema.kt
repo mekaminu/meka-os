@@ -40,11 +40,13 @@ object EntityTypes {
     const val ALARM = "alarm"
     /** A change Meka made to a real calendar event, sent by the server after the undo window (see [CalendarEdits]). */
     const val EVENT_EDIT = "event_edit"
+    /** A Needs you card MEKA proposed from a watched person's message (see [RequestCards]); id from the card's id. */
+    const val REQUEST_CARD = "request_card"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
-        AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT,
+        AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
     )
 }
 
@@ -251,6 +253,9 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.ALARM -> MergePolicy.Lww
         // Calendar edits: written once by the device that made them; Undo only ever sets true, the outcome only the server.
         entityType == EntityTypes.EVENT_EDIT -> MergePolicy.Lww
+        // Request cards: written once by the Fold; Add or Not a task on either device clears them for good.
+        entityType == EntityTypes.REQUEST_CARD && field == RequestCardFields.RESOLVED -> MergePolicy.TrueWins
+        entityType == EntityTypes.REQUEST_CARD -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

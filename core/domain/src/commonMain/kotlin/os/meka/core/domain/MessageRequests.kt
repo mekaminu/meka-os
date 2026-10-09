@@ -140,28 +140,32 @@ object MessageRequestRules {
         calendar: LocalCalendar,
     ): List<RequestCard> {
         val person = People.key(message.personName)
-        val from = "From ${message.personName.trim().take(40)} · ${TaskWhenRules.timeLabel(calendar.minuteOfDay(message.atMs))}"
-        val quote = "“${shorten(message.text.replace(Regex("""\s+"""), " ").trim(), QUOTE_CHARS)}”"
         val made = mutableListOf<RequestCard>()
         proposals.forEachIndexed { i, p ->
             val id = "${message.id}#$i"
             if (open.any { it.id == id || (it.personKey == person && sameRequest(it.proposal, p)) }) return@forEachIndexed
             if (made.any { sameRequest(it.proposal, p) }) return@forEachIndexed
-            val action = actionLine(p, today)
-            made += RequestCard(
-                id = id,
-                messageId = message.id,
-                personKey = person,
-                proposal = p,
-                from = from,
-                quote = quote,
-                action = action,
-                detail = detailLine(p),
-                declineLabel = p.kind.decline,
-                spoken = "${message.personName.trim()} wrote $quote. $action?",
-            )
+            made += card(message, i, p, today, calendar)
         }
         return made
+    }
+
+    /** The card for proposal [index] of [message]; also how a stored card is shown again ([RequestCards.open]). */
+    fun card(message: RequestMessage, index: Int, p: RequestProposal, today: Long, calendar: LocalCalendar): RequestCard {
+        val quote = "“${shorten(message.text.replace(Regex("""\s+"""), " ").trim(), QUOTE_CHARS)}”"
+        val action = actionLine(p, today)
+        return RequestCard(
+            id = "${message.id}#$index",
+            messageId = message.id,
+            personKey = People.key(message.personName),
+            proposal = p,
+            from = "From ${message.personName.trim().take(40)} · ${TaskWhenRules.timeLabel(calendar.minuteOfDay(message.atMs))}",
+            quote = quote,
+            action = action,
+            detail = detailLine(p),
+            declineLabel = p.kind.decline,
+            spoken = "${message.personName.trim()} wrote $quote. $action?",
+        )
     }
 
     /** "Add task: Pick up dry cleaning · Tomorrow", "Work from home · Thu 15 Oct", "Add event: Parents' evening · Tue 20 Oct · 18:00". */

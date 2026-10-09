@@ -91,6 +91,24 @@ interface AiApi {
     ): AskReply
     /** Whether MEKA's AI is on and the month's spend; null when the server has no AI layer. */
     suspend fun aiStatus(): AiStatusReply? = null
+
+    /**
+     * Requests from people Meka watches (`POST /v1/ai/message-request`): one message's text, its sender's label and
+     * time; the proposals come back unchecked ([os.meka.core.domain.MessageRequestRules.check] reads them). A server
+     * without the route answers "off".
+     */
+    suspend fun messageRequest(request: os.meka.core.wire.MessageRequestCodec.Request): os.meka.core.wire.MessageRequestCodec.Response =
+        os.meka.core.wire.MessageRequestCodec.Response(AskCodec.Response.OFF)
+}
+
+/** What [MekaCore.readRequest] did with one captured message. */
+sealed class RequestRead {
+    /** Not a message MEKA may read (not watched, a group, a missed call, a bare photo). */
+    data object Skipped : RequestRead()
+    /** Read: the new Needs you cards (none when the message asked for nothing, or only repeated an open card). */
+    data class Read(val cards: List<os.meka.core.domain.RequestCard>) : RequestRead()
+    /** Couldn't ask: offline, AI off, the month's budget spent; [line] says which. */
+    data class Unavailable(val line: String) : RequestRead()
 }
 
 /**
@@ -271,6 +289,21 @@ class HttpSyncTransport(
         }
         val st = AskCodec.decodeStatus(resp.bodyAsText())
         return AiStatusReply(st.state, st.reason, st.spentCents, st.budgetCents, st.level)
+    }
+
+    override suspend fun messageRequest(request: os.meka.core.wire.MessageRequestCodec.Request): os.meka.core.wire.MessageRequestCodec.Response {
+        val codec = os.meka.core.wire.MessageRequestCodec
+        val body = codec.encodeRequest(request)
+        prepare() // the AI routes require the device's signing key on the server
+        val resp = send("/v1/ai/message-request", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/message-request")
+            // A server without the route (older, or no AI key): nothing is read.
+            resp.status.value == 404 -> return codec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return codec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/message-request")
+        }
+        return codec.decodeResponse(resp.bodyAsText())
     }
 
     override suspend fun speak(text: String, voice: String?): os.meka.core.wire.SpeechCodec.Response {
