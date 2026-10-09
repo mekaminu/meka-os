@@ -7,8 +7,11 @@ package os.meka.core.domain
  * side key held, or the navigation bar's assist gesture) with MEKA as the digital assistant app, which Android sends as
  * `android.intent.action.ASSIST`. [HEADSET_BUTTON]: a wired or Bluetooth headset's button held, which Android sends as
  * `android.intent.action.VOICE_COMMAND`. Either opens MEKA on Ask already listening.
+ *
+ * Slice 2, where listening is clearly wanted: [WIDGET], the home screen's Talk widget tapped; [HEADPHONES] and [CAR],
+ * MEKA opened from the launcher while Bluetooth audio is connected or the phone is in car mode ([TalkStartRules.onOpen]).
  */
-enum class TalkStart { SIDE_BUTTON, HEADSET_BUTTON }
+enum class TalkStart { SIDE_BUTTON, HEADSET_BUTTON, WIDGET, HEADPHONES, CAR }
 
 /** One section of the Talk pane: its small label, a [status] line ([lit]: in the accent, set up), and [steps]. */
 data class TalkSetupSection(
@@ -49,6 +52,23 @@ object TalkStartRules {
         else TalkStart.entries.firstOrNull { it.name == open.removePrefix(OPEN_PREFIX) }
 
     const val OPEN_PREFIX = "talk:"
+
+    /**
+     * MEKA was opened from the launcher ([fromLauncher]; never a notification, a widget's other taps or a return from
+     * Recents, which Android doesn't deliver as an open): listen at once when that's clearly wanted. In car mode
+     * ([carMode]) → [TalkStart.CAR]; with Bluetooth audio connected ([bluetoothAudio]: headphones, buds, a car's
+     * hands-free) → [TalkStart.HEADPHONES]; otherwise (the phone's own speaker, a room) → null, Ask waits for the mic.
+     * Nothing is heard until the on-device recogniser starts, with the same yes-before-anything as the mic.
+     */
+    fun onOpen(fromLauncher: Boolean, bluetoothAudio: Boolean, carMode: Boolean): TalkStart? = when {
+        !fromLauncher -> null
+        carMode -> TalkStart.CAR
+        bluetoothAudio -> TalkStart.HEADPHONES
+        else -> null
+    }
+
+    /** The home screen's Talk widget: its one line and the description the launcher's widget list shows. */
+    const val WIDGET_LABEL = "Talk to MEKA"
 
     /**
      * The Talk pane. Fold: whether MEKA is the digital assistant app ([assistantHeld], from Android's role manager) and
@@ -101,10 +121,21 @@ object TalkStartRules {
             listOf(
                 side,
                 TalkSetupSection(
-                    "Headphones",
-                    "Hold the button on your headphones and MEKA opens listening.",
+                    "Headphones and the car",
+                    "Hold the button on your headphones and MEKA opens listening. With Bluetooth headphones on, or in " +
+                        "the car, opening MEKA starts listening too.",
                     lit = false,
-                    steps = listOf("The first time, Android may ask which app should answer: choose MEKA, Always."),
+                    steps = listOf(
+                        "The first time, Android may ask which app should answer: choose MEKA, Always.",
+                        "Opening MEKA from a notification never starts listening.",
+                    ),
+                    action = null,
+                ),
+                TalkSetupSection(
+                    "Home screen",
+                    "Add the Talk widget: one tap opens MEKA listening.",
+                    lit = false,
+                    steps = listOf("Hold an empty spot on the home screen → Widgets → MEKA → $WIDGET_LABEL."),
                     action = null,
                 ),
                 TalkSetupSection("Safety", SAFETY, lit = false, steps = emptyList(), action = null),

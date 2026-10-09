@@ -29,6 +29,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val app = application as MekaApplication
         handleOpen(intent)
+        // Talk without tapping the mic (slice 2): a fresh open from the launcher with Bluetooth audio or in the car
+        // starts listening (not on a rotation or unfold, which bring a saved state).
+        if (savedInstanceState == null) listenOnOpen(intent)
         // MEKA follows its own Motion setting, not the phone's animator scale (MotionClock.kt).
         setContent(parent = mekaRecomposer()) {
             MekaTheme {
@@ -54,6 +57,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleOpen(intent)
+        listenOnOpen(intent)
+    }
+
+    /** Opened from the launcher where listening is clearly wanted (TalkStartRules.onOpen): Ask, already listening. */
+    private fun listenOnOpen(intent: Intent?) {
+        val start = os.meka.android.ask.TalkAutoListen.onOpen(this, intent) ?: return
+        val app = application as MekaApplication
+        app.talkNow.value = start
+        app.openDestination.value = ShellDestination.ASK
     }
 
     /** The after-work nudge opens Needs you with the summary; other MEKA notifications open where they belong. */
@@ -68,7 +80,7 @@ class MainActivity : ComponentActivity() {
             open == OPEN_BRIEF -> app.openBrief.value = true
             // The News widget: Today with News on the story ("" = News itself, which leads with the match).
             open.startsWith(OPEN_NEWS_PREFIX) -> app.openNewsStory.value = open.removePrefix(OPEN_NEWS_PREFIX)
-            // The side button or the headphones' button (TalkStartActivity): Ask, already listening.
+            // The side button or the headphones' button (TalkStartActivity), or the Talk widget: Ask, already listening.
             open.startsWith(TalkStartRules.OPEN_PREFIX) -> TalkStartRules.fromOpen(open)?.let {
                 app.talkNow.value = it
                 app.openDestination.value = ShellDestination.ASK

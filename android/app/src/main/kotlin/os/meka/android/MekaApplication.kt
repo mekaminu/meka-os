@@ -77,7 +77,7 @@ class MekaApplication : Application() {
     val alarms: os.meka.android.alarm.AlarmScheduler by lazy { os.meka.android.alarm.AlarmScheduler(this) }
     /** The News widget's tap: the story to open News on over Today ("" = News itself); null once handled. */
     val openNewsStory = MutableStateFlow<String?>(null)
-    /** The side button or the headphones' button (Talk without tapping the mic): Ask starts listening, then clears it. */
+    /** The side button, the headphones' button, the Talk widget or a launcher open with Bluetooth audio / in the car (Talk without tapping the mic): Ask starts listening, then clears it. */
     val talkNow = MutableStateFlow<os.meka.core.domain.TalkStart?>(null)
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     /** Hardware-held signing key; created on first use (ADR-005). */

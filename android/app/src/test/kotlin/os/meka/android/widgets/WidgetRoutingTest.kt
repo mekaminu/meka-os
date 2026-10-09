@@ -23,6 +23,9 @@ class WidgetRoutingTest {
         assertEquals(ShellDestination.GOALS, WidgetRouting.destination(HomeWidget.FAST))
         assertEquals(3, HomeWidget.entries.map { WidgetRouting.requestCode(it) }.toSet().size)
         HomeWidget.entries.forEach { assertTrue(WidgetRouting.requestCode(it) !in setOf(1, 2)) } // the capture widget's
+        // The Talk widget's tap (Talk without tapping the mic, slice 2) opens the same screen, so its code stays apart.
+        val talk = os.meka.android.ask.TalkAutoListen.WIDGET_REQUEST_CODE
+        assertTrue(talk !in HomeWidget.entries.map { WidgetRouting.requestCode(it) } + listOf(1, 2, 400, 401, 410, 411))
     }
 
     @Test

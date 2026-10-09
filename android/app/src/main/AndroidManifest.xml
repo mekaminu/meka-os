@@ -152,6 +152,16 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/fast_widget_info" />
         </receiver>
+        <!-- Talk widget (Talk without tapping the mic, slice 2): a tap opens Ask already listening. No data, no refresh. -->
+        <receiver
+            android:name=".ask.TalkWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_talk_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/talk_widget_info" />
+        </receiver>
         <receiver
             android:name=".widgets.HomeWidgetAlarmReceiver"
             android:exported="false" />

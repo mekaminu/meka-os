@@ -29,7 +29,7 @@ class TalkStartTest {
     fun notTheAssistantYetSaysHowOnASamsungAndOffersDefaultApps() {
         val v = TalkStartRules.setup(mac = false, assistantHeld = false, samsung = true)
         assertEquals("Talk", v.title)
-        assertEquals(listOf("Side button", "Headphones", "Safety"), v.sections.map { it.label })
+        assertEquals(listOf("Side button", "Headphones and the car", "Home screen", "Safety"), v.sections.map { it.label })
         val side = v.sections[0]
         assertFalse(side.lit)
         assertEquals("Not set up yet: holding the side key opens another assistant.", side.status)
@@ -59,5 +59,29 @@ class TalkStartTest {
         assertTrue(v.sections[0].status.contains("⌥Space"))
         assertTrue(v.sections.all { it.action == null })
         assertTrue(v.sections[1].status.contains("Undo"))
+    }
+
+    @Test
+    fun openingFromTheLauncherListensWithBluetoothAudioOrInTheCarOnly() {
+        assertEquals(TalkStart.HEADPHONES, TalkStartRules.onOpen(fromLauncher = true, bluetoothAudio = true, carMode = false))
+        assertEquals(TalkStart.CAR, TalkStartRules.onOpen(fromLauncher = true, bluetoothAudio = true, carMode = true))
+        assertEquals(TalkStart.CAR, TalkStartRules.onOpen(fromLauncher = true, bluetoothAudio = false, carMode = true))
+        // The phone's own speaker: Ask waits for the mic.
+        assertNull(TalkStartRules.onOpen(fromLauncher = true, bluetoothAudio = false, carMode = false))
+        // A notification (or anything but the launcher) never starts listening, headphones or not.
+        assertNull(TalkStartRules.onOpen(fromLauncher = false, bluetoothAudio = true, carMode = true))
+    }
+
+    @Test
+    fun theWidgetTravelsLikeTheButtonsAndThePaneSaysHowToAddIt() {
+        assertEquals("talk:WIDGET", TalkStartRules.openValue(TalkStart.WIDGET))
+        assertEquals(TalkStart.WIDGET, TalkStartRules.fromOpen("talk:WIDGET"))
+        val v = TalkStartRules.setup(mac = false, assistantHeld = true, samsung = true)
+        val home = v.sections.single { it.label == "Home screen" }
+        assertTrue(home.steps.single().endsWith("Widgets → MEKA → Talk to MEKA."))
+        val phones = v.sections.single { it.label == "Headphones and the car" }
+        assertTrue(phones.status.contains("Bluetooth headphones"))
+        assertTrue(phones.steps.any { it.contains("notification never starts listening") })
+        assertEquals("Safety", v.sections.last().label)
     }
 }

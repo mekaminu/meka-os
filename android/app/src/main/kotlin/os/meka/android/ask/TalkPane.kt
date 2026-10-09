@@ -53,7 +53,8 @@ import os.meka.core.domain.TalkStartRules
  * Ask → More → Talk (Talk without tapping the mic, slice 1): how to start talking to MEKA without the mic. The side
  * button: whether MEKA is the phone's digital assistant app (Android's role manager, re-read each time MEKA comes back
  * to the front, so returning from Settings updates it) and the steps to make it so, with "Open default apps"; the
- * headphones' button; and the safety line. The words are the core's [TalkStartRules].
+ * headphones and the car (slice 2: opening MEKA with Bluetooth audio or in car mode listens); the Talk widget (slice 2);
+ * and the safety line. The words are the core's [TalkStartRules].
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; sections stagger in 40 ms apart; the side
  * button's status line blends to the accent once MEKA is the assistant; Open default apps presses in with a tick haptic.

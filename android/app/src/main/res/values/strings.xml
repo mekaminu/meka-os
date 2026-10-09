@@ -13,6 +13,9 @@
     <string name="widget_needs_you_label">Needs you</string>
     <string name="widget_needs_you_description">How many decisions wait for you, and the first of them</string>
     <string name="widget_fast_label">Fast</string>
+    <!-- Talk widget (Talk without tapping the mic, slice 2); the label is the core's TalkStartRules.WIDGET_LABEL. -->
+    <string name="widget_talk_label">Talk to MEKA</string>
+    <string name="widget_talk_description">One tap opens MEKA listening</string>
     <string name="widget_fast_description">A running fast\'s timer and progress, or your eating window</string>
     <!-- News widget (news ticker slice 3a). -->
     <string name="widget_news_strip_label">News strip</string>
