@@ -921,7 +921,9 @@ final class CoreModel {
     /// Nil when not connected (the conversation says so and ends).
     func talk(_ question: String, history: [TalkTurn]) async -> AskOutcome? {
         guard let core else { return nil }
-        let out = try? await core.talk(question: question, history: history)
+        // Kotlin values are immutable; an array of them isn't Sendable to Swift, so it crosses once, unchecked.
+        nonisolated(unsafe) let turns = history
+        let out = try? await core.talk(question: question, history: turns)
         await refreshAiStatus()
         return out
     }
@@ -930,7 +932,8 @@ final class CoreModel {
     /// all back. The cards cross into the core once; `indices` are their places in the answer on screen.
     func doTalk(_ cards: [AskCard], indices: [Int]) async -> TalkDid? {
         guard let core else { return nil }
-        guard let did = try? await core.doTalk(cards: cards) else { return nil }
+        nonisolated(unsafe) let sent = cards
+        guard let did = try? await core.doTalk(cards: sent) else { return nil }
         if !did.done.isEmpty { MekaHaptics.light() }
         let undos = did.undos
         offerEventUndo(did.barLine, undos.isEmpty ? nil : .talk(undos, indices))
@@ -1305,7 +1308,8 @@ final class CoreModel {
             run { _ = try await $0.undoAsk(undo: undo) }
         case .talk(let undos, let cards):
             askUndone = AskUndone(n: (askUndone?.n ?? 0) + 1, cards: Set(cards))
-            run { _ = try await $0.undoTalk(undos: undos) }
+            nonisolated(unsafe) let sent = undos
+            run { _ = try await $0.undoTalk(undos: sent) }
         }
     }
 
