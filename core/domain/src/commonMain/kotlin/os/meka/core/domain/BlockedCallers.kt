@@ -27,6 +27,9 @@ data class BlockedCallerRow(val key: String, val number: String, val line: Strin
 data class BlockedCallersView(val rows: List<BlockedCallerRow>, val line: String) {
     val keys: Set<String> get() = rows.map { it.key }.toSet()
 
+    /** Whether [number] is on the list now (a held message's Block shows "Blocked" instead). */
+    fun has(number: String?): Boolean = BlockedCallerRules.keyOf(number)?.let { it in keys } == true
+
     companion object { val EMPTY = BlockedCallersView(emptyList(), BlockedCallerRules.EMPTY_LINE) }
 }
 
@@ -68,6 +71,37 @@ object BlockedCallerRules {
         val label = SearchRules.dayLabel(cal.epochDayOf(atMs), cal.epochDayOf(nowMs))
         val day = if (label == "Today" || label == "Yesterday") label.lowercase() else label
         return "Blocked $day" + (why?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: "")
+    }
+
+    /** The free scam-report number on every UK network (Ofcom's 7726: "spam" on a keypad). */
+    const val REPORT_TO = "7726"
+    const val REPORT_LABEL = "Report to 7726"
+    const val BLOCK_LABEL = "Block"
+    const val BLOCKED_LINE = "Blocked · their calls won't ring"
+    /** Under a held message's Block and Report on the Fold: what each does. */
+    const val REPORT_HINT = "Report opens Messages with a text to 7726, your network's free scam line; you send it."
+    /** The Mac can't send texts: what to send from the phone. */
+    fun macReportHint(number: String): String = "To report it, text \u201c${reportText(number)}\u201d to $REPORT_TO from your phone."
+
+    /**
+     * The text a scam call is reported with: 7726 takes "Call" and the number that called, written the UK way with
+     * no spaces ("Call 01904618691"); null for something that isn't a number.
+     */
+    fun reportText(number: String?): String? {
+        keyOf(number) ?: return null
+        return "Call " + display(number!!).filter { it.isDigit() || it == '+' }
+    }
+
+    /** Why a number blocked from a held message is on the list: "Left a message · Fri 9 Oct", "Missed call · today". */
+    fun whyFromHeld(kind: CaptureKind, atMs: Long, nowMs: Long, cal: LocalCalendar): String {
+        val label = SearchRules.dayLabel(cal.epochDayOf(atMs), cal.epochDayOf(nowMs))
+        val day = if (label == "Today" || label == "Yesterday") label.lowercase() else label
+        val what = when (kind) {
+            CaptureKind.VOICE_MESSAGE -> "Left a message"
+            CaptureKind.MISSED_CALL -> "Missed call"
+            CaptureKind.MESSAGE -> "Texted"
+        }
+        return "$what · $day"
     }
 
     fun summary(count: Int): String = when (count) {

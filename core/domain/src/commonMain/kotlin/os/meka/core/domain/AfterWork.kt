@@ -43,6 +43,11 @@ data class CapturedItem(
     val transcribing: Boolean = false,
     /** The phone service said it couldn't transcribe this voice message ([HeldMessageFields.NO_TRANSCRIPT]). */
     val noTranscript: Boolean = false,
+    /**
+     * The caller's number when [personName] was worked out from it ([AfterWorkSummaries.build]): what "Block" puts on
+     * the block list. Null for a sender a notification named.
+     */
+    val callerNumber: String? = null,
 ) {
     val personKey: String get() = People.key(personName)
 
@@ -219,6 +224,18 @@ data class PersonSummary(
     /** Messages left with the call assistant. */
     val voiceMessages: Int = 0,
 ) {
+    /**
+     * The number "Block" and "Report to 7726" act on (call assistant polish 8b b, e): only for a caller nobody knows —
+     * not family, not on a list, not a contact, not this phone (still shown as a number after [CallerNames]) — so a
+     * known person never gets a Block button. Null otherwise.
+     */
+    val blockNumber: String? get() {
+        if (isFamily) return null
+        val number = items.lastOrNull { it.callerNumber != null }?.callerNumber ?: return null
+        if (BlockedCallerRules.keyOf(number) == null) return null
+        return number.takeIf { personName == BlockedCallerRules.display(it) }
+    }
+
     /** "3 messages · 1 voice message · 1 missed call", plain counts until the AI layer writes one line per person. */
     val line: String get() = listOfNotNull(
         plural(messages, "message").takeIf { messages > 0 },
@@ -275,7 +292,10 @@ object AfterWorkSummaries {
         val named = items.map { i ->
             val key = People.key(i.personName)
             if (!key.startsWith("tel:")) i
-            else i.copy(personName = resolved.getOrPut(key) { names.nameOf(i.personName, lists) })
+            else {
+                val number = i.callerNumber ?: i.personName
+                i.copy(personName = resolved.getOrPut(key) { names.nameOf(number, lists) }, callerNumber = number)
+            }
         }
         val people = named.groupBy { it.personKey }.values.map { group ->
             val sorted = group.sortedBy { it.atMs }

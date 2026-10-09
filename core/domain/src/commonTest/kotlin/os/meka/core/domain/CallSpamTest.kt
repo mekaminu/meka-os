@@ -137,4 +137,48 @@ class CallSpamTest {
         assertEquals("Jeanette", l.nameForNumber("01767 600000"))
         assertFalse(PeopleLists(family = setOf("Jeanette")).withNumbers("Jeanette", listOf(null, "")).hasNumber("Jeanette"))
     }
+
+    private fun voice(from: String, at: Long = t, family: Boolean = false) =
+        CapturedItem("v$from$at", CaptureApp.PHONE, CaptureKind.VOICE_MESSAGE, from, "Your account is suspended", null, at, family = family)
+
+    @Test
+    fun onlyACallerNobodyKnowsGetsBlockAndReport() {
+        val names = CallerNames({ n -> if (People.key(n) == People.key("07700900333")) "Tunde" else null }, ownNumbers = setOf("07700 900999"))
+        val s = AfterWorkSummaries.build(
+            listOf(voice("+441904618691"), voice("+447700900111"), voice("+447700900222"), voice("+447700900333"), voice("07700900999"),
+                CapturedItem("m1", CaptureApp.WHATSAPP, CaptureKind.MESSAGE, "Bola", "hi", null, t)),
+            lists, names,
+        )
+        val by = s.people.associate { it.personName to it.blockNumber }
+        assertEquals("+441904618691", by["01904 618691"])
+        assertNull(by["Jeanette"]); assertNull(by["Ada"]); assertNull(by["Tunde"]); assertNull(by[CallerNames.TEST_CALL]); assertNull(by["Bola"])
+        // The Mac (no lists, no contacts) still knows the number, and a family flag from the Fold keeps Block off.
+        val mac = AfterWorkSummaries.build(listOf(voice("+441904618691"), voice("+447700900111", family = true)), PeopleLists())
+        assertEquals("+441904618691", mac.people.single { !it.isFamily }.blockNumber)
+        assertNull(mac.people.single { it.isFamily }.blockNumber)
+        // Re-applying the Fold's lists to a synced summary keeps the caller's number.
+        assertEquals("+441904618691", mac.withLists(lists, names).people.first { it.personName == "01904 618691" }.blockNumber)
+        // A withheld caller can't be blocked.
+        assertNull(AfterWorkSummaries.build(listOf(voice("Unknown")), PeopleLists()).people.single().blockNumber)
+    }
+
+    @Test
+    fun reportingToSevenSevenTwoSixAndWhyItWasBlocked() {
+        assertEquals("Call 01904618691", BlockedCallerRules.reportText("+44 1904 618691"))
+        assertEquals("Call 07700900123", BlockedCallerRules.reportText("07700 900123"))
+        assertNull(BlockedCallerRules.reportText("Unknown"))
+        assertEquals("To report it, text \u201cCall 01904618691\u201d to 7726 from your phone.", BlockedCallerRules.macReportHint("01904618691"))
+        val cal = LocalCalendar.UTC
+        assertEquals("Left a message · today", BlockedCallerRules.whyFromHeld(CaptureKind.VOICE_MESSAGE, t, t + 60_000, cal))
+        assertEquals("Missed call · yesterday", BlockedCallerRules.whyFromHeld(CaptureKind.MISSED_CALL, t - 86_400_000, t, cal))
+        val world = SyncWorld()
+        val d = world.device("fold")
+        val list = BlockedCallers(d.replica, { world.clock.nowMs })
+        assertFalse(list.view().has("01904 618691"))
+        assertTrue(list.block("+441904618691", "Left a message · today"))
+        assertTrue(list.view().has("01904 618691"))
+        assertFalse(list.view().has(null))
+        assertEquals(3, CallScreeningRules.ONE_SCREENER_LINES.size)
+        assertTrue(CallScreeningRules.ONE_SCREENER_LINES.last().contains("Caller ID & spam app"))
+    }
 }

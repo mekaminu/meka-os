@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.provider.ContactsContract.CommonDataKinds.Phone
 import android.provider.Settings
@@ -67,8 +68,11 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
+import os.meka.android.designsystem.MekaHaptics
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AfterWorkSummary
+import os.meka.core.domain.BlockedCallerRules
+import os.meka.core.domain.BlockedCallersView
 import os.meka.core.domain.CallScreeningRules
 import os.meka.core.domain.ContactNumbers
 import os.meka.core.domain.HeldPreview
@@ -255,7 +259,14 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
  * everything they sent. Done clears MEKA's copy only.
  */
 @Composable
-fun AfterWorkPane(summary: AfterWorkSummary, onDone: () -> Unit, onClose: () -> Unit) {
+fun AfterWorkPane(
+    summary: AfterWorkSummary,
+    onDone: () -> Unit,
+    onClose: () -> Unit,
+    blocked: BlockedCallersView = BlockedCallersView.EMPTY,
+    onBlock: (PersonSummary) -> Unit = {},
+    onReport: (String) -> Unit = {},
+) {
     val haptics = rememberMekaHaptics()
     var open by rememberSaveable { mutableStateOf<String?>(null) }
     Column(
@@ -270,7 +281,9 @@ fun AfterWorkPane(summary: AfterWorkSummary, onDone: () -> Unit, onClose: () -> 
         // Email-triage style: people sort into place with a stagger.
         summary.people.forEachIndexed { i, p ->
             val key = p.items.first().personKey
-            PersonCard(p, expanded = open == key, Modifier.appear(rememberAppearance(i + 1))) { open = if (open == key) null else key }
+            PersonCard(p, expanded = open == key, Modifier.appear(rememberAppearance(i + 1)), blocked.has(p.blockNumber), onBlock, onReport) {
+                open = if (open == key) null else key
+            }
         }
         Spacer(Modifier.height(MekaSpace.m))
         if (!summary.isEmpty) PillButton("Done", filled = true) { haptics.light(); onDone() }
@@ -372,20 +385,32 @@ fun AfterWorkHost(onClose: () -> Unit) {
     val lists by store.lists.collectAsState()
     val summary = remember(synced, lists) { synced.withLists(lists, CallerLookup.names(context)) }
     val scope = rememberCoroutineScope()
+    val blocked by app.core.blockedCallers.collectAsState()
     LaunchedEffect(Unit) { app.nudger.dismiss() } // he's reading it: the nudge has done its job
     AfterWorkPane(summary, onDone = {
         scope.launch { runCatching { app.core.clearAfterWork() } }
         store.clear()
         onClose()
-    }, onClose = onClose)
+    }, onClose = onClose, blocked = blocked,
+        onBlock = { p -> scope.launch { runCatching { app.core.blockHeldCaller(p) } } },
+        onReport = { number -> reportScamCall(context, number) })
 }
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 private fun time(ms: Long) = timeFmt.format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))
 
 @Composable
-private fun PersonCard(p: PersonSummary, expanded: Boolean, modifier: Modifier, onTap: () -> Unit) {
+private fun PersonCard(
+    p: PersonSummary,
+    expanded: Boolean,
+    modifier: Modifier,
+    isBlocked: Boolean,
+    onBlock: (PersonSummary) -> Unit,
+    onReport: (String) -> Unit,
+    onTap: () -> Unit,
+) {
     val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onTap() }.padding(MekaSpace.m),
@@ -416,6 +441,7 @@ private fun PersonCard(p: PersonSummary, expanded: Boolean, modifier: Modifier, 
                         }
                     }
                 }
+                p.blockNumber?.let { number -> BlockAndReport(number, isBlocked, haptics, onBlock = { onBlock(p) }, onReport = { onReport(number) }) }
             }
         }
     }
@@ -538,4 +564,35 @@ private class PickedContact(val name: String?, val numbers: List<String?>) {
             PickedContact(name, numbers + all)
         }.getOrNull()
     }
+}
+
+/**
+ * Block · Report to 7726 under a held message from someone nobody knows (call assistant polish 8b b, e). Block presses
+ * in with a light haptic and the row's line cross-fades to "Blocked · their calls won't ring"; Report gives a tick
+ * haptic and hands over to Messages with the text to 7726 filled in (Meka sends it). Reduced motion: cross-fades.
+ */
+@Composable
+private fun BlockAndReport(number: String, isBlocked: Boolean, haptics: MekaHaptics, onBlock: () -> Unit, onReport: () -> Unit) {
+    Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+            Crossfade(isBlocked, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "held-block") { done ->
+                if (done) Text(BlockedCallerRules.BLOCKED_LINE, style = MekaType.caption, color = Meka.colors.textSecondary,
+                    modifier = Modifier.padding(vertical = MekaSpace.xs))
+                else Text(BlockedCallerRules.BLOCK_LABEL, style = MekaType.itemMeta, color = Meka.colors.critical,
+                    modifier = Modifier.clickable(role = Role.Button) { haptics.light(); onBlock() }.padding(vertical = MekaSpace.xs)
+                        .semantics { contentDescription = "Block ${BlockedCallerRules.display(number)}" })
+            }
+            Text(BlockedCallerRules.REPORT_LABEL, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); onReport() }.padding(vertical = MekaSpace.xs))
+        }
+        Text(BlockedCallerRules.REPORT_HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/** Opens Messages with "Call 01904618691" to 7726; Meka presses send. Nothing is sent by MEKA. */
+internal fun reportScamCall(context: Context, number: String) {
+    val text = BlockedCallerRules.reportText(number) ?: return
+    val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + BlockedCallerRules.REPORT_TO))
+        .putExtra("sms_body", text).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
 }

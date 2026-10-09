@@ -1405,6 +1405,18 @@ class MekaCore(
      */
     suspend fun blockCaller(number: String, why: String?): Boolean = onCore { blockList.block(number, why).also { refresh() } }
 
+    /**
+     * "Block" on a held message from someone nobody knows (call assistant polish 8b b): puts [person]'s
+     * [os.meka.core.domain.PersonSummary.blockNumber] on the list with why ("Left a message · today"). False, saving
+     * nothing, for a known caller (no block number).
+     */
+    suspend fun blockHeldCaller(person: os.meka.core.domain.PersonSummary): Boolean = onCore {
+        val number = person.blockNumber ?: return@onCore false
+        val item = person.items.last { it.callerNumber != null }
+        val why = os.meka.core.domain.BlockedCallerRules.whyFromHeld(item.kind, item.atMs, nowMs(), ZoneCalendar(timeZone))
+        blockList.block(number, why).also { refresh() }
+    }
+
     /** Takes a number ([key], from [blockedCallers]' rows) off the block list; its calls ring again. */
     suspend fun unblockCaller(key: String): Boolean = onCore { blockList.unblock(key).also { refresh() } }
 

@@ -1,5 +1,7 @@
 package os.meka.android.work
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -53,6 +55,8 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.BlockedCallerRules
+import os.meka.core.domain.CallScreeningRules
 import os.meka.core.facade.MekaCore
 
 /**
@@ -108,6 +112,8 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
                             Text(row.number, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
                             Text(row.line, style = MekaType.caption, color = Meka.colors.textTertiary)
                         }
+                        Text(BlockedCallerRules.REPORT_LABEL, style = MekaType.caption, color = Meka.colors.textSecondary,
+                            modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); reportScamCall(context, row.number) }.padding(MekaSpace.xs))
                         Text("Unblock", style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clickable(role = Role.Button) {
                                 haptics.tick(); shown = false
@@ -140,6 +146,14 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
         AnimatedVisibility(refused, enter = enter, exit = exit) {
             Text("That isn't a phone number", style = MekaType.caption, color = Meka.colors.critical)
         }
+        Text(CallScreeningRules.ONE_SCREENER_TITLE, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+            modifier = Modifier.padding(top = MekaSpace.xs))
+        CallScreeningRules.ONE_SCREENER_LINES.forEach { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        Text(CallScreeningRules.OPEN_DEFAULT_APPS, style = MekaType.caption, color = Meka.colors.accent,
+            modifier = Modifier.clickable(role = Role.Button) {
+                haptics.tick()
+                runCatching { context.startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            }.padding(vertical = MekaSpace.xxs))
         AnimatedVisibility(!recognising, enter = enter, exit = exit) {
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Text("Recognise callers · let MEKA check your contacts and recent calls, and name who left a message", style = MekaType.itemMeta, color = Meka.colors.accent,

@@ -66,4 +66,21 @@ class CallSpamFacadeTest {
         assertEquals(CallVerdict.BLOCK, c.screenIncomingCall("+447700900555", lists, emptyList(), CallSignals.NONE).verdict)
         assertTrue(c.activityView.value.weekLine.contains("3 calls stopped"), c.activityView.value.weekLine)
     }
+
+    @Test
+    fun blockOnAHeldMessageFromAStrangerPutsItsNumberOnTheList() = runTest {
+        val c = core()
+        val stranger = os.meka.core.domain.CapturedItem("v1", os.meka.core.domain.CaptureApp.PHONE, os.meka.core.domain.CaptureKind.VOICE_MESSAGE,
+            "+441904618691", "This is the police", null, now - 60_000)
+        val jeanette = stranger.copy(id = "v2", personName = "+447700900111")
+        val summary = os.meka.core.domain.AfterWorkSummaries.build(listOf(stranger, jeanette), lists)
+        val known = summary.people.single { it.personName == "Jeanette" }
+        assertFalse(c.blockHeldCaller(known))
+        val p = summary.people.single { it.personName == "01904 618691" }
+        assertTrue(c.blockHeldCaller(p))
+        val row = c.blockedCallers.value.rows.single()
+        assertEquals("01904 618691", row.number)
+        assertEquals("Blocked today · Left a message · today", row.line)
+        assertTrue(c.blockedCallers.value.has(p.blockNumber))
+    }
 }

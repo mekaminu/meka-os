@@ -87,6 +87,10 @@ struct AfterWorkSheet: View {
                 }
                 .padding(.top, MekaSpace.xs)
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                if let number = p.blockNumber {
+                    blockRow(p, number: number)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                }
             } else if let latest = p.latestText {
                 Text(latest).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(2)
             }
@@ -102,6 +106,33 @@ struct AfterWorkSheet: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityHint(expanded ? "Folds away" : "Shows everything they sent")
+    }
+
+    /// Block under a held message from someone nobody knows (call assistant polish 8b b, e): Block presses in with a
+    /// light haptic and the line cross-fades to "Blocked · their calls won't ring"; the Mac can't text, so it says
+    /// what to send to 7726 from the phone (selectable).
+    private func blockRow(_ p: PersonSummary, number: String) -> some View {
+        let rules = BlockedCallerRules.shared
+        let blocked = model.blockedCallers?.has(number: number) == true
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Group {
+                if blocked {
+                    Text(rules.BLOCKED_LINE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                } else {
+                    Button(rules.BLOCK_LABEL) { model.blockHeldCaller(p) }
+                        .buttonStyle(MekaPressStyle())
+                        .foregroundStyle(palette.critical)
+                        .accessibilityLabel("Block \(rules.display(number: number))")
+                }
+            }
+            .contentTransition(.opacity)
+            Text(rules.macReportHint(number: number))
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        }
+        .padding(.top, MekaSpace.xs)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: blocked)
     }
 
     private static let formatter: DateFormatter = {

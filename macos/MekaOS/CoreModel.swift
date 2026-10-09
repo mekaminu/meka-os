@@ -1174,6 +1174,16 @@ final class CoreModel {
         }
     }
     /// Takes a number (its row's key) off the block list.
+    /// Block on a held message from someone nobody knows (call assistant polish 8b b): the person crosses into the
+    /// core once; light haptic when it's on the list.
+    func blockHeldCaller(_ person: PersonSummary) {
+        guard let core else { return }
+        Task {
+            do {
+                if try await core.blockHeldCaller(person: person).boolValue { MekaHaptics.light() }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
     func unblockCaller(_ key: String) { MekaHaptics.tick(); run { _ = try await $0.unblockCaller(key: key) } }
     /// Weather place setting (Calendars → Weather): the town the forecast is for; blank or "Biggleswade" is home.
     /// False (nothing saved) for a name that can't be a town. The server follows it at its next poll.

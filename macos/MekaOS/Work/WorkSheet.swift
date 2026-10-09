@@ -133,6 +133,12 @@ struct WorkSheet: View {
                 }
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
+            Text(CallScreeningRules.shared.ONE_SCREENER_TITLE).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                .padding(.top, MekaSpace.xxs)
+            ForEach(CallScreeningRules.shared.ONE_SCREENER_LINES, id: \.self) { line in
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 TextField("Number to block", text: $blockNumber)
                     .textFieldStyle(.roundedBorder)

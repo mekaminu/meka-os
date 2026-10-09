@@ -1052,6 +1052,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CallScreeningRules.shared.ASSISTANT_NUMBER, "01767 667246")
     }
 
+    func testBlockFromAHeldMessageReachesSwift() {
+        // Call assistant polish 8b b, e and 8: Block on a stranger's message, the 7726 text, the one-screener note.
+        XCTAssertEqual(BlockedCallerRules.shared.reportText(number: "+441904618691"), "Call 01904618691")
+        XCTAssertTrue(BlockedCallerRules.shared.macReportHint(number: "01904618691").contains("7726"))
+        XCTAssertFalse(BlockedCallersView.companion.EMPTY.has(number: "01904 618691"))
+        XCTAssertEqual(CallScreeningRules.shared.ONE_SCREENER_LINES.count, 3)
+    }
+
     func testSignInLineReachesSwift() {
         // Reliability first, item 2: the line Today shows for a sign-in on its last day, with Reconnect.
         let line = SignInLine(text: "Google sign-in ends tomorrow at 14:05 · Reconnect", detail: SignInRules.shared.PRODUCTION_HINT,
