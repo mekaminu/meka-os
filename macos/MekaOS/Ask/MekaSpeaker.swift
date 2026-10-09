@@ -279,7 +279,9 @@ nonisolated final class SpeechDone: NSObject, AVSpeechSynthesizerDelegate, @unch
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        guard let id = lines.withLock({ $0[ObjectIdentifier(utterance)] }) else { return }
+        // The utterance itself isn't Sendable; only its identity crosses into the lock's closure.
+        let key = ObjectIdentifier(utterance)
+        guard let id = lines.withLock({ $0[key] }) else { return }
         guard let finish = onFinish else { return }
         Task { @MainActor in finish(id) }
     }
