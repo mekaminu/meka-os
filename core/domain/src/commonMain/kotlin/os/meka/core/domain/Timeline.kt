@@ -99,6 +99,28 @@ data class DayTimeline(
     /** Nothing timed, nothing all-day, nothing ended: the timeline section can be left out. */
     val hasTimedOrAllDay: Boolean get() = allDay.isNotEmpty() || earlier.isNotEmpty() || rows.isNotEmpty()
 
+    /**
+     * What the section holds, said in its label (Fold review 2026-10-09 07:26, item 6: on the closed Fold a work day's
+     * section started at the foot of the screen, so "TODAY" sat alone over the capture bar and read as empty):
+     * "1 all day · Work 09:00–17:30 · 2 events" · "At work until 17:30 · Gym 18:00" · "1 planned"; at most
+     * [TimelineRules.SUMMARY_PARTS] parts, null when there's nothing ahead to name (the label is then just "Today").
+     */
+    val summary: String? get() = TimelineRules.summary(this)
+
+    /** The section's label: "Today · Work 09:00–17:30 · 2 events", or "Today". */
+    val sectionLabel: String get() = summary?.let { "${TimelineRules.SECTION} · $it" } ?: TimelineRules.SECTION
+
+    /**
+     * Which item carries the label, so the label never stands apart from what it heads (it rides with the first thing
+     * under it): the All day group, else the "3 earlier" fold, else the first row; null when none would show.
+     */
+    val head: DayHead? get() = when {
+        allDayItems.isNotEmpty() -> DayHead.ALL_DAY
+        earlierLabel != null -> DayHead.EARLIER
+        rows.isNotEmpty() -> DayHead.ROW
+        else -> null
+    }
+
     companion object {
         val EMPTY = DayTimeline("", emptyList(), emptyList(), null, emptyList(), emptyList(), null)
     }
@@ -124,7 +146,12 @@ data class DayTimeline(
  *   reads "1 h free before work" and the one after "30 min free after work". Once work is over the row leaves (it
  *   isn't folded into "earlier"). Work isn't offered to Up next and doesn't count as an event ahead.
  */
+/** The first item of Today's timeline section, which carries its label ([DayTimeline.head]). */
+enum class DayHead { ALL_DAY, EARLIER, ROW }
+
 object TimelineRules {
+    const val SECTION = "Today"
+    const val SUMMARY_PARTS = 3
     const val MIN_GAP_MIN = 30
     const val DEFAULT_TASK_MIN = 30
     const val UP_NEXT_WINDOW_MIN = 60
@@ -242,6 +269,26 @@ object TimelineRules {
             anytime = anytime,
             nextEvent = next,
         )
+    }
+
+    /**
+     * [DayTimeline.summary]: the all-day count, work ("Work 09:00–17:30", or "At work until 17:30" while on), the
+     * events still to come or on now, booked sessions by name and start ("Gym 18:00"), then planned tasks; the first
+     * [SUMMARY_PARTS] of them.
+     */
+    fun summary(tl: DayTimeline): String? {
+        val parts = buildList {
+            if (tl.allDayItems.isNotEmpty()) add("${tl.allDayItems.size} all day")
+            tl.rows.filter { it.kind == TimelineKind.WORK }.forEach { w ->
+                add(if (w.running) "At work " + w.time.substringAfter('–').let { "until $it" } else "${w.title} ${w.time}")
+            }
+            tl.rows.count { it.kind == TimelineKind.EVENT }.takeIf { it > 0 }?.let { add(if (it == 1) "1 event" else "$it events") }
+            tl.rows.filter { it.kind == TimelineKind.SESSION }.forEach { s ->
+                add("${s.title.substringBefore(" · ")} ${s.time.substringBefore('–')}")
+            }
+            tl.rows.count { it.kind == TimelineKind.TASK }.takeIf { it > 0 }?.let { add("$it planned") }
+        }
+        return parts.take(SUMMARY_PARTS).joinToString(" · ").ifEmpty { null }
     }
 
     /** "45 min free" · "2 h free" · "1 h 30 free", rounded down to 5 minutes. */

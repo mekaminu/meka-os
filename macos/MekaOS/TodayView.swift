@@ -252,8 +252,10 @@ struct TodayView: View {
                         // more"), finished events folded, events and planned tasks in time order with the now line
                         // and free gaps; then tasks with no time.
                         let tl = today.timeline
-                        if tl.hasTimedOrAllDay {
-                            SectionLabel("Today", palette).staggeredAppear(3, play: play)
+                        // The label says what the section holds ("Today · Work 09:00–17:30 · 2 events"; Fold review
+                        // 2026-10-09 07:26, item 6), as on the Fold.
+                        if tl.head != nil {
+                            SectionLabel(tl.sectionLabel, palette).staggeredAppear(3, play: play)
                             if !tl.allDayItems.isEmpty {
                                 AllDayLabel(label: tl.allDayLabel, palette: palette).staggeredAppear(3, play: play)
                             }

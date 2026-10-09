@@ -394,6 +394,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(HabitChipRules.shared.stripTiles(tiles: tiles).map(\.kind), [.renewals])
     }
 
+    /// Fold review 2026-10-09 07:26, item 6: Today's section label says what it holds; an empty day has no section.
+    func testTodaySectionLabelReachesSwift() {
+        XCTAssertEqual(DayTimeline.companion.EMPTY.sectionLabel, "Today")
+        XCTAssertNil(DayTimeline.companion.EMPTY.head)
+        XCTAssertNil(DayTimeline.companion.EMPTY.summary)
+        XCTAssertEqual(TimelineRules.shared.SECTION, "Today")
+    }
+
     /// The Day ring's live tiles (the opening moment, part 2): their words reach Swift.
     func testDayTilesReachSwift() {
         XCTAssertEqual(DayTileRules.shared.valueText(kind: .nextEvent, shown: 100, total: 0), "1 h 40")

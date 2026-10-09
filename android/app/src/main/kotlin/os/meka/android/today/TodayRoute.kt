@@ -55,6 +55,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import os.meka.core.domain.DayHead
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -587,6 +589,11 @@ private fun TodayPane(
     val stripTiles = remember(today.dayTiles) { HabitChipRules.stripTiles(today.dayTiles) }
     val chipHaptics = rememberMekaHaptics()
     val chipScope = rememberCoroutineScope()
+    // Session cards and quick alarms take a list item only while there is something to show.
+    val sessionsFlow = remember(core) { core?.sessionsView ?: MutableStateFlow(os.meka.core.domain.SessionsView.EMPTY) }
+    val sessionCards = sessionsFlow.collectAsState().value.cards.isNotEmpty()
+    val alarmsFlow = remember(core) { core?.quickAlarms ?: MutableStateFlow<List<os.meka.core.domain.QuickAlarmItem>>(emptyList()) }
+    val quickAlarms = alarmsFlow.collectAsState().value.isNotEmpty()
     Column(modifier.imePadding()) {
         // Pull to sync (motion pass 2, slice 3): pulling Today down past its top fills a brass ring; letting go syncs.
         PullToSyncBox(pull, Modifier.weight(1f).fillMaxWidth()) {
@@ -766,21 +773,26 @@ private fun TodayPane(
             if (nowCard == null && (upNextCard != null || today.timeline.nextEvent != null)) {
                 item(key = "s-next") { Spacer(Modifier.height(MekaSpace.l)) }
             }
-            // The Gym (booked habits): today's session, "Did you go?" once it's over, or where it was rebooked.
-            if (core != null) item(key = "session") {
+            // The Gym (booked habits): today's session, "Did you go?" once it's over, or where it was rebooked. Only when
+            // there is one: an empty item still costs the list's spacing, pushing the timeline further down.
+            if (core != null && sessionCards) item(key = "session") {
                 os.meka.android.goals.SessionCards(core, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(2, play)))
             }
             // Quick alarms and timers typed into capture ("alarm 6:30", "timer 20 min"), each with a cancel ✕.
-            if (core != null) item(key = "quick-alarms") {
+            if (core != null && quickAlarms) item(key = "quick-alarms") {
                 QuickAlarmRows(core, Modifier.animateItem().appear(rememberAppearance(2, play)))
             }
             // One timeline under "Today": the "All day" group first (one row each, at most 3 then "+2 more"), finished
             // events folded, events and planned tasks in time order with the now line and free gaps; then tasks with no time.
+            // The label says what the section holds ("Today · Work 09:00–17:30 · 2 events") and rides with the first
+            // thing under it (Fold review 2026-10-09 07:26, item 6), so it never stands alone over the capture bar.
             val tl = today.timeline
-            if (tl.hasTimedOrAllDay) {
-                item(key = "h-day") { SectionLabel("Today", Modifier.animateItem().appear(rememberAppearance(3, play))) }
-                if (tl.allDayItems.isNotEmpty()) item(key = "allday-label") {
-                    AllDayLabel(tl.allDayLabel, Modifier.animateItem().appear(rememberAppearance(3, play)))
+            val head = tl.head
+            if (head != null) {
+                if (head == DayHead.ALL_DAY) item(key = "allday-label") {
+                    Headed(tl.sectionLabel, Modifier.animateItem().appear(rememberAppearance(3, play))) { m ->
+                        AllDayLabel(tl.allDayLabel, m)
+                    }
                 }
                 items(AllDayRules.shown(tl.allDayItems, allDayOpen), key = { "a-" + it.event.id }) { a ->
                     AllDayRow(a, Modifier.animateItem().appear(rememberAppearance(3, play)), openEvent, eventHandlers)
@@ -792,7 +804,9 @@ private fun TodayPane(
                 }
                 tl.earlierLabel?.let { label ->
                     item(key = "earlier") {
-                        EarlierToggle(label, earlierOpen, { earlierOpen = !earlierOpen }, Modifier.animateItem().appear(rememberAppearance(3, play)))
+                        Headed(tl.sectionLabel.takeIf { head == DayHead.EARLIER }, Modifier.animateItem().appear(rememberAppearance(3, play))) { m ->
+                            EarlierToggle(label, earlierOpen, { earlierOpen = !earlierOpen }, m)
+                        }
                     }
                     if (earlierOpen) {
                         items(tl.earlier, key = { "x-" + it.id }) { r ->
@@ -800,29 +814,31 @@ private fun TodayPane(
                         }
                     }
                 }
-                items(tl.rows, key = { "r-" + it.id }) { r ->
-                    val m = Modifier.animateItem().appear(rememberAppearance(4, play))
-                    when (r.kind) {
-                        TimelineKind.EVENT -> SwipeableEvent(r.event, eventHandlers, m, onOpen = openEvent) { sm ->
-                            TimelineEventRow(r, past = false, modifier = sm)
+                itemsIndexed(tl.rows, key = { _, r -> "r-" + r.id }) { i, r ->
+                    Headed(tl.sectionLabel.takeIf { i == 0 && head == DayHead.ROW }, Modifier.animateItem().appear(rememberAppearance(4, play))) { m ->
+                        when (r.kind) {
+                            TimelineKind.EVENT -> SwipeableEvent(r.event, eventHandlers, m, onOpen = openEvent) { sm ->
+                                TimelineEventRow(r, past = false, modifier = sm)
+                            }
+                            TimelineKind.TASK -> r.task?.let { t ->
+                                // The Up next task's title travels from its card, so its timeline row doesn't share it.
+                                val motion = if (t.id == today.upNext?.id) RowMotion() else rowMotion(t.id)
+                                TaskRow(t, actions, motion = motion, modifier = m, time = r.time, timelineLine = r.detail)
+                            }
+                            TimelineKind.GAP -> GapRow(r, m)
+                            TimelineKind.NOW -> NowLine(r, m)
+                            TimelineKind.SESSION -> SessionTimelineRow(r, m)
+                            TimelineKind.WORK -> WorkTimelineRow(r, m)
                         }
-                        TimelineKind.TASK -> r.task?.let { t ->
-                            // The Up next task's title travels from its card, so its timeline row doesn't share it.
-                            val motion = if (t.id == today.upNext?.id) RowMotion() else rowMotion(t.id)
-                            TaskRow(t, actions, motion = motion, modifier = m, time = r.time, timelineLine = r.detail)
-                        }
-                        TimelineKind.GAP -> GapRow(r, m)
-                        TimelineKind.NOW -> NowLine(r, m)
-                        TimelineKind.SESSION -> SessionTimelineRow(r, m)
-                        TimelineKind.WORK -> WorkTimelineRow(r, m)
                     }
                 }
                 item(key = "s-day") { Spacer(Modifier.height(MekaSpace.l)) }
             }
             if (tl.anytime.isNotEmpty()) {
-                item(key = "h-any") { SectionLabel("Anytime today", Modifier.animateItem().appear(rememberAppearance(4, play))) }
-                items(tl.anytime, key = { "d-" + it.id }) { t ->
-                    TaskRow(t, actions, motion = rowMotion(t.id), modifier = Modifier.animateItem().appear(rememberAppearance(4, play)))
+                itemsIndexed(tl.anytime, key = { _, t -> "d-" + t.id }) { i, t ->
+                    Headed(ANYTIME_LABEL.takeIf { i == 0 }, Modifier.animateItem().appear(rememberAppearance(4, play))) { m ->
+                        TaskRow(t, actions, motion = rowMotion(t.id), modifier = m)
+                    }
                 }
             }
             if (today.doneToday.isNotEmpty()) {
@@ -847,6 +863,24 @@ private fun SyncLine(sync: SyncStatus) {
     }
     AnimatedVisibility(text != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
         Text(text.orEmpty(), style = MekaType.caption, color = Meka.colors.offline, modifier = Modifier.padding(top = MekaSpace.xs))
+    }
+}
+
+/** The label over Today's tasks with no time. */
+internal const val ANYTIME_LABEL = "Anytime today"
+
+/**
+ * A section's label riding with the first thing under it, in one list item (Fold review 2026-10-09 07:26, item 6), so
+ * the label never sits alone at the foot of the screen with its rows out of sight. Null [label]: just the content.
+ * The gap under the label is the list's own spacing, so the section looks as it did with the label as its own item.
+ */
+@Composable
+internal fun Headed(label: String?, modifier: Modifier = Modifier, content: @Composable (Modifier) -> Unit) {
+    if (label == null) { content(modifier); return }
+    Column(modifier) {
+        SectionLabel(label)
+        Spacer(Modifier.height(MekaSpace.xs))
+        content(Modifier)
     }
 }
 
