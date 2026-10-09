@@ -134,6 +134,8 @@ data class WeatherView(
     val place: String,
     /** The place setting (Calendars → Weather): what the field holds and the line under it. */
     val placeChoice: WeatherPlaceView = WeatherPlaceView.HOME,
+    /** The work place setting (Calendars → Weather → Work, Places item 2): Canary Wharf unless Meka types another. */
+    val workChoice: WeatherPlaceView = WeatherPlaceView.WORK,
 ) {
     companion object {
         val EMPTY = WeatherView(null, null, null, "")
@@ -147,6 +149,7 @@ data class WeatherView(
 data class WeatherPlaceView(val name: String, val line: String, val lit: Boolean = false, val pending: Boolean = false) {
     companion object {
         val HOME = WeatherPlaceView(WeatherPlaceRules.HOME, "Forecast for ${WeatherPlaceRules.HOME} · from Open-Meteo")
+        val WORK = WeatherPlaceView(PlacesRules.WORK, PlacesRules.workLine(PlacesRules.WORK))
     }
 }
 
@@ -261,9 +264,9 @@ object WeatherRules {
     fun isWet(h: WeatherHour): Boolean = h.rainChance >= WET_CHANCE || (wetCode(h.code) && h.rainChance >= WET_CODE_CHANCE)
 
     /** What falls in a wet hour: its own words, or "rain" when only the chance says so. */
-    private fun wetWords(h: WeatherHour) = if (wetCode(h.code)) words(h.code) else "rain"
+    internal fun wetWords(h: WeatherHour) = if (wetCode(h.code)) words(h.code) else "rain"
 
-    private fun snowy(code: Int) = code in 71..77 || code in 85..86
+    internal fun snowy(code: Int) = code in 71..77 || code in 85..86
 
     /** The hour that holds [ms], if the forecast has it. */
     fun hourAt(f: WeatherForecast, ms: Long): WeatherHour? {
@@ -271,16 +274,27 @@ object WeatherRules {
         return f.hours.firstOrNull { it.startMs == h }
     }
 
-    fun view(f: WeatherForecast, nowMs: Long, cal: LocalCalendar, wanted: String? = null): WeatherView {
+    fun view(
+        f: WeatherForecast,
+        nowMs: Long,
+        cal: LocalCalendar,
+        wanted: String? = null,
+        /** The work place's forecast and setting, and today's office hours (Places item 2); null when not an office day. */
+        work: WeatherForecast = WeatherForecast.EMPTY,
+        workWanted: String? = null,
+        office: OfficeWindow? = null,
+    ): WeatherView {
         val choice = WeatherPlaceRules.view(wanted, f)
-        if (f.isEmpty) return WeatherView.EMPTY.copy(placeChoice = choice)
-        val now = nowLine(f, nowMs, cal)
+        val workChoice = PlacesRules.workView(workWanted, work)
+        if (f.isEmpty) return WeatherView.EMPTY.copy(placeChoice = choice, workChoice = workChoice)
+        val now = office?.let { PlacesRules.placesLine(f, work, nowMs, it, cal) } ?: nowLine(f, nowMs, cal)
         return WeatherView(
             nowLine = now,
             tomorrowLine = tomorrowLine(f, cal.epochDayOf(nowMs) + 1, cal),
             nowSpoken = now?.replace("°", " degrees"),
             place = f.place,
             placeChoice = choice,
+            workChoice = workChoice,
         )
     }
 
@@ -444,13 +458,13 @@ object WeatherRules {
         return if (first.length <= MAX_PLACE_CHARS) first else first.take(MAX_PLACE_CHARS - 1).trimEnd() + "…"
     }
 
-    private fun clock(ms: Long, cal: LocalCalendar) = LocalClock.formatMinute(cal.minuteOfDay(ms))
+    internal fun clock(ms: Long, cal: LocalCalendar) = LocalClock.formatMinute(cal.minuteOfDay(ms))
 }
 
 /** Reads the mirrored forecast. */
-class WeatherStore(private val replica: Replica) {
+class WeatherStore(private val replica: Replica, private val entityId: String = ENTITY_ID) {
     fun forecast(): WeatherForecast {
-        val e = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID) ?: return WeatherForecast.EMPTY
+        val e = replica.entity(EntityTypes.CONTEXT_MODE, entityId) ?: return WeatherForecast.EMPTY
         return WeatherForecast(
             place = WeatherCodec.place(e[WeatherFields.PLACE]?.textOrNull),
             hours = WeatherCodec.decodeHours(e[WeatherFields.HOURS]?.textOrNull),
@@ -462,5 +476,7 @@ class WeatherStore(private val replica: Replica) {
 
     companion object {
         const val ENTITY_ID = "weather"
+        /** The work place's forecast (Places item 2), written by the server the same way; the apps never write it. */
+        const val WORK_ENTITY_ID = "weather_work"
     }
 }

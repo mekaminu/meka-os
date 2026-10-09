@@ -1023,4 +1023,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rows[3].line, "09:00–15:30 · own hours")
         XCTAssertEqual(rows[0].line, "09:00–17:30 · usual")
     }
+
+    /// Places item 2: work is Canary Wharf by default, and the work field's line reaches Swift.
+    func testPlacesReachSwift() {
+        XCTAssertEqual(PlacesRules.shared.WORK, "Canary Wharf")
+        XCTAssertTrue(PlacesRules.shared.isDefaultWork(name: nil))
+        XCTAssertTrue(PlacesRules.shared.isDefaultWork(name: "canary wharf"))
+        XCTAssertFalse(PlacesRules.shared.isDefaultWork(name: "Cambridge"))
+        XCTAssertEqual(WeatherPlaceView.companion.WORK.line, "Work forecast for Canary Wharf · on office days")
+        XCTAssertEqual(WeatherView.companion.EMPTY.workChoice.name, "Canary Wharf")
+    }
 }

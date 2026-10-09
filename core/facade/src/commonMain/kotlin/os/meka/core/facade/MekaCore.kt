@@ -136,6 +136,9 @@ class MekaCore(
     private val news = os.meka.core.domain.News(replica)
     private val weather = os.meka.core.domain.WeatherStore(replica)
     private val weatherPlace = os.meka.core.domain.WeatherPlaceStore(replica)
+    // Places item 2: the work place's forecast (server-written) and the work place setting (synced).
+    private val workWeather = os.meka.core.domain.WeatherStore(replica, os.meka.core.domain.WeatherStore.WORK_ENTITY_ID)
+    private val workPlace = os.meka.core.domain.WorkPlaceStore(replica)
     private val review = WeeklyReview(replica, nowMs, ZoneCalendar(timeZone))
     /** The week the review screen shows (null: the default for today); a screen choice, not synced. */
     private var reviewOffset: Int? = null
@@ -1380,6 +1383,14 @@ class MekaCore(
     suspend fun setWeatherPlace(name: String): Boolean = onCore { weatherPlace.set(name).also { refresh() } }
 
     /**
+     * Where work is (Places item 2, synced): a town or district name; blank or "Canary Wharf" is the default. Returns
+     * false, saving nothing, for a name that can't be a place. The server forecasts it at its next poll; on office days
+     * Today's weather line and the brief say both places, and the Day ring's rain follows where Meka will be.
+     * [weatherView]'s `workChoice` says when the server has followed.
+     */
+    suspend fun setWorkPlace(name: String): Boolean = onCore { workPlace.set(name).also { refresh() } }
+
+    /**
      * Work hours: the work days and the usual hours. [days] are ISO (1 = Monday); minutes are local minutes of the
      * day. Each day's own hours ([setWorkDayHours]) are kept.
      */
@@ -1695,7 +1706,11 @@ class MekaCore(
         val api = aiApi ?: return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
         val cal = ZoneCalendar(timeZone)
         val context = onCore {
-            os.meka.core.domain.AskRules.context(_today.value, nowMs(), cal, os.meka.core.domain.WeatherRules.askLines(weather.forecast(), nowMs(), cal))
+            // Work's lines (Places item 2) are kept: home's hourly lines make room for them.
+            val workLines = os.meka.core.domain.PlacesRules.workAskLines(workWeather.forecast(), nowMs(), cal)
+            os.meka.core.domain.AskRules.context(_today.value, nowMs(), cal,
+                os.meka.core.domain.WeatherRules.askLines(weather.forecast(), nowMs(), cal)
+                    .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size) + workLines)
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -2100,6 +2115,12 @@ class MekaCore(
         // The forecast (Weather slice 2): Today's line, the brief's today, the shutdown's tomorrow, rain on the Day ring.
         val forecast = weather.forecast()
         val todayDay = cal.epochDayOf(nowMs())
+        // Places item 2: on an office day, both places on Today's line and the brief, and the ring's rain follows Meka.
+        val workForecast = workWeather.forecast()
+        val office = os.meka.core.domain.PlacesRules.officeWindow(
+            os.meka.core.domain.WorkHours.of(workState, holidays, todayDay, work.homeDays(todayDay)), todayDay, cal,
+        )
+        val placesLine = office?.let { os.meka.core.domain.PlacesRules.placesLine(forecast, workForecast, nowMs(), it, cal) }
         val shutdownRaw = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), holidays)
         val shutdownNow = shutdownRaw.copy(
             tomorrow = shutdownRaw.tomorrow.copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal)),
@@ -2111,7 +2132,7 @@ class MekaCore(
             dayRing = projected.dayRing.copy(
                 fast = os.meka.core.domain.DayRingRules.fastArc(fastingNow.current, nowMs(), cal),
                 tomorrow = os.meka.core.domain.DayRingRules.tomorrow(shutdownNow),
-                rain = os.meka.core.domain.WeatherRules.rainBands(forecast, nowMs(), cal),
+                rain = os.meka.core.domain.WeatherRules.rainBands(os.meka.core.domain.PlacesRules.whereYouAre(forecast, workForecast, office), nowMs(), cal),
             ),
             dayTiles = os.meka.core.domain.DayTileRules.build(
                 projected.events, nowMs(), dayWindow(nowMs()), fastingNow.current, goalsNow.habits, listsNow.renewals.dueCount,
@@ -2131,9 +2152,9 @@ class MekaCore(
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
-            news.all(), news.choices(), holidays, os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal)).copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal))
+            news.all(), news.choices(), holidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal)).copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal))
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))
-        _weather.value = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted())
+        _weather.value = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted(), workForecast, workPlace.wanted(), office)
         _review.value = review.view(reviewOffset, all, dayEvents, _goals.value, fasting.ended()) { day ->
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }

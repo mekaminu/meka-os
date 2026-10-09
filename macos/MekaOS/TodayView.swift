@@ -93,9 +93,10 @@ struct TodayView: View {
                         Text(date).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                             .staggeredAppear(0, play: play)
                     }
-                    // Weather for home: "14° · light rain from 16:00", cross-fading as the day moves on.
+                    // Weather for home: "14° · light rain from 16:00", cross-fading as the day moves on; on an office day
+                    // both places (Places item 2), so it may take a second line.
                     if let line = model.weather?.nowLine {
-                        Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                        Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
                             .contentTransition(.opacity)
                             .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
                             .accessibilityLabel("Weather: " + (model.weather?.nowSpoken ?? line))

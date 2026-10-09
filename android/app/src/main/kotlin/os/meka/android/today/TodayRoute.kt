@@ -630,11 +630,12 @@ private fun TodayPane(
                         Text(today.timeline.dateLabel, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
                             modifier = Modifier.padding(top = MekaSpace.xxs))
                     }
-                    // "14° · light rain from 16:00": cross-fades as the day moves on; nothing until a forecast arrives.
+                    // "14° · light rain from 16:00": cross-fades as the day moves on; nothing until a forecast arrives. On
+                    // an office day it says both places (Places item 2), so it may take a second line.
                     if (weather.nowLine != null) {
                         val spoken = "Weather: " + (weather.nowSpoken ?: weather.nowLine)
                         Crossfade(weather.nowLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "weather-line") { line ->
-                            Text(line.orEmpty(), style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1,
+                            Text(line.orEmpty(), style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = spoken })
                         }

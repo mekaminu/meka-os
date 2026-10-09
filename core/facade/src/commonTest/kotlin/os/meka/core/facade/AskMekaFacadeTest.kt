@@ -127,6 +127,48 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun onAnOfficeDayTodaysLineSaysBothPlacesAndAskHearsWork() = runTest {
+        now = 1_791_450_000_000L // Thu 8 Oct 2026, 10:00 in London: at work (Thursday 09:00–15:30)
+        val c = core()
+        val midnight = 1_791_414_000_000L
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        // What the server's weather mirror writes: home (rain at 20:00) and, apart, work (rain at 14:00; Places item 2).
+        fun mirror(entity: String, place: String, temp: Int, rainAt: Int, prefix: String) {
+            val hours = (0 until 48).map { os.meka.core.domain.WeatherHour(midnight + it * 3_600_000L, temp, if (it == rainAt) 61 else 3, if (it == rainAt) 80 else 10) }
+            val days = listOf(os.meka.core.domain.WeatherDay(20_734, 9, 14, 3, 10), os.meka.core.domain.WeatherDay(20_735, 8, 15, 3, 10))
+            listOf(
+                os.meka.core.domain.WeatherFields.HOURS to os.meka.core.domain.WeatherCodec.encodeHours(hours),
+                os.meka.core.domain.WeatherFields.DAYS to os.meka.core.domain.WeatherCodec.encodeDays(days),
+                os.meka.core.domain.WeatherFields.PLACE to place,
+            ).forEachIndexed { i, (field, text) ->
+                serverOps.append(os.meka.core.sync.Op("$prefix$i", "hh", os.meka.core.domain.EntityTypes.CONTEXT_MODE,
+                    entity, field, os.meka.core.sync.FieldValue.Text(text), clock.now(), emptyList(), "server"))
+            }
+        }
+        mirror(os.meka.core.domain.WeatherStore.ENTITY_ID, "Biggleswade", 11, 20, "srvwx")
+        mirror(os.meka.core.domain.WeatherStore.WORK_ENTITY_ID, "Canary Wharf", 15, 14, "srvww")
+        c.syncNow()
+        assertEquals("Biggleswade 11° now · Canary Wharf 15°, light rain from 14:00 — take a coat", c.weatherView.value.nowLine)
+        // The ring's rain follows where Meka will be: work's at 14:00, home's at 20:00.
+        assertEquals(listOf(os.meka.core.domain.DayBand(14 * 60, 15 * 60), os.meka.core.domain.DayBand(20 * 60, 21 * 60)), c.today.value.dayRing.rain)
+
+        c.askMeka("will it rain at work?")
+        val weather = server.asked.single().second.items.filter { it.kind == os.meka.core.domain.AskItemKind.WEATHER }.map { it.line }
+        assertEquals("now in Biggleswade: 11° · light rain from 20:00", weather.first())
+        assertTrue("now at work in Canary Wharf: 15° · light rain from 14:00" in weather, weather.toString())
+
+        // The work place is set from the app and reaches the server.
+        assertEquals("Canary Wharf", c.weatherView.value.workChoice.name)
+        assertTrue(!c.setWorkPlace("<nope>"))
+        assertTrue(c.setWorkPlace("Cambridge"))
+        assertEquals("Finding “Cambridge”… the forecast follows within a few minutes", c.weatherView.value.workChoice.line)
+        c.syncNow()
+        val sent = serverOps.after("hh", 0, 10_000).map { it.op }
+            .single { it.entityId == os.meka.core.domain.WorkPlaceStore.ENTITY_ID && it.field == os.meka.core.domain.WorkPlaceFields.NAME }
+        assertEquals(os.meka.core.sync.FieldValue.Text("Cambridge"), sent.value)
+    }
+
+    @Test
     fun theWeatherPlaceIsSetFromTheAppAndReachesTheServer() = runTest {
         val c = core()
         assertEquals(os.meka.core.domain.WeatherPlaceView.HOME, c.weatherView.value.placeChoice)

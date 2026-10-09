@@ -10,6 +10,7 @@ import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.HeadlineFields
+import os.meka.core.domain.PlacesRules
 import os.meka.core.domain.WeatherCodec
 import os.meka.core.domain.WeatherFields
 import os.meka.core.domain.WeatherForecast
@@ -17,6 +18,8 @@ import os.meka.core.domain.WeatherPlaceFields
 import os.meka.core.domain.WeatherPlaceRules
 import os.meka.core.domain.WeatherPlaceStore
 import os.meka.core.domain.WeatherStore
+import os.meka.core.domain.WorkPlaceFields
+import os.meka.core.domain.WorkPlaceStore
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.Op
@@ -254,14 +257,26 @@ class Integrations(
     private fun syncWeather(a: AccountRow, source: WeatherProvider) {
         // The place setting: a changed name is followed at once, not at the next half hour.
         val wanted = wantedPlace(a.householdId)
-        val asked = store.transaction { store.mirror(a.householdId, a.id) }[WeatherStore.ENTITY_ID]?.fieldOps?.get(WeatherFields.ASKED)?.second
-            ?.takeIf { it.startsWith("s:") }?.removePrefix("s:")
+        val mirror = store.transaction { store.mirror(a.householdId, a.id) }
+        fun askedIn(id: String) = mirror[id]?.fieldOps?.get(WeatherFields.ASKED)?.second?.takeIf { it.startsWith("s:") }?.removePrefix("s:")
+        val asked = askedIn(WeatherStore.ENTITY_ID)
+        // Work (Places item 2): forecast when the provider knows work; a new work place, or none yet, is followed at once.
+        val wantedWork = wantedWorkPlace(a.householdId)
+        val workDue = source.work != null && (mirror[WeatherStore.WORK_ENTITY_ID] == null || askedIn(WeatherStore.WORK_ENTITY_ID) != wantedWork)
         val last = a.lastSyncAtMs
-        if (wanted == asked && a.status == "ok" && last != null && now() - last < WEATHER_PERIOD_MS) return
+        if (wanted == asked && !workDue && a.status == "ok" && last != null && now() - last < WEATHER_PERIOD_MS) return
         try {
             // A name that can't be found forecasts home and says so (the apps light the line); it's not a fault.
             val at = wanted?.let { source.locate(it) }
             applyWeather(a, source.forecast(at ?: source.home), asked = wanted, found = wanted == null || at != null)
+            // Work's forecast never holds up home's: a failure is tried again at the next poll.
+            source.work?.let { default ->
+                runCatching {
+                    val workAt = wantedWork?.let { source.locate(it) }
+                    applyWeather(a, source.forecast(workAt ?: default), asked = wantedWork, found = wantedWork == null || workAt != null,
+                        entityId = WeatherStore.WORK_ENTITY_ID)
+                }
+            }
             store.transaction { store.markSynced(a.id, now()) }
         } catch (e: Exception) {
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
@@ -275,11 +290,23 @@ class Integrations(
             ?.get(WeatherPlaceFields.NAME)?.let { (it as? FieldValue.Text)?.value }
             ?.let(WeatherPlaceRules::normalize)?.takeUnless(WeatherPlaceRules::isHome)
 
+    /** The household's work place setting ([WorkPlaceStore]), normalised; null for the default (Canary Wharf). */
+    internal fun wantedWorkPlace(householdId: String): String? =
+        runCatching { reader.entity(householdId, EntityTypes.CONTEXT_MODE, WorkPlaceStore.ENTITY_ID) }.getOrNull()
+            ?.get(WorkPlaceFields.NAME)?.let { (it as? FieldValue.Text)?.value }
+            ?.let(WeatherPlaceRules::normalize)?.takeUnless(PlacesRules::isDefaultWork)
+
     /**
-     * Writes the forecast into the household's one `context_mode/weather` entity, field by field and only what changed
+     * Writes the forecast into the household's one `context_mode/weather` entity (or [entityId]: work's, Places item 2), field by field and only what changed
      * (readings are rounded, so a small wobble writes nothing). Returns whether anything was written.
      */
-    internal fun applyWeather(a: AccountRow, f: WeatherForecast, asked: String? = null, found: Boolean = true): Boolean = store.transaction {
+    internal fun applyWeather(
+        a: AccountRow,
+        f: WeatherForecast,
+        asked: String? = null,
+        found: Boolean = true,
+        entityId: String = WeatherStore.ENTITY_ID,
+    ): Boolean = store.transaction {
         ops.transaction {
             store.lockAccount(a.id)
             val desired = linkedMapOf(
@@ -291,8 +318,8 @@ class Integrations(
                 WeatherFields.ASKED to (asked?.let { FieldValue.Text(it) } ?: FieldValue.Null),
                 WeatherFields.FOUND to (if (asked == null) FieldValue.Null else FieldValue.Bool(found)),
             )
-            val prev = store.mirror(a.householdId, a.id)[WeatherStore.ENTITY_ID]
-            write(a, WeatherStore.ENTITY_ID, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
+            val prev = store.mirror(a.householdId, a.id)[entityId]
+            write(a, entityId, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
         }
     }
 

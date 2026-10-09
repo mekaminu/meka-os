@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
+import os.meka.core.domain.PlacesRules
 import os.meka.core.domain.WeatherCodec
 import os.meka.core.domain.WeatherDay
 import os.meka.core.domain.WeatherForecast
@@ -28,6 +29,11 @@ interface WeatherProvider {
     val label: String
     /** Home: forecast when no place is set (Weather place setting), at fixed coordinates, no lookup. */
     val home: WeatherLocation
+    /**
+     * Work (Places item 2): forecast too, into `context_mode/weather_work`, when no work place is set; null when this
+     * provider doesn't forecast work.
+     */
+    val work: WeatherLocation? get() = null
     fun forecast(at: WeatherLocation = home): WeatherForecast
     /**
      * A town name Meka typed (Weather place setting) as a place to forecast; null when nothing matches. Only the name is
@@ -50,6 +56,8 @@ class OpenMeteoWeather internal constructor(
     private val latitude: Double = 52.0868,
     private val longitude: Double = -0.2645,
     private val zone: ZoneId = ZoneId.of("Europe/London"),
+    /** Canary Wharf, London (Meka 2026-10-09), at fixed coordinates, no lookup. */
+    override val work: WeatherLocation? = WeatherLocation(PlacesRules.WORK, 51.5054, -0.0235),
 ) : WeatherProvider {
     constructor() : this({ url -> GovUkBankHolidays.httpGet(url) })
 

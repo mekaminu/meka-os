@@ -1119,6 +1119,19 @@ final class CoreModel {
             return false
         }
     }
+    /// Where work is (Places item 2, Calendars → Weather → Work): blank or "Canary Wharf" is the default. False (nothing
+    /// saved) for a name that can't be a place. The server follows it at its next poll.
+    func setWorkPlace(_ name: String) async -> Bool {
+        guard let core else { return false }
+        do {
+            let ok = try await core.setWorkPlace(name: name).boolValue
+            if ok { MekaHaptics.light() } else { MekaHaptics.tick() }
+            return ok
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
     /// The workout app's link ("hevy.com"), opened from Today's card; blank clears it. False when it isn't a web address.
     func setHabitAppLink(_ id: String, _ link: String) async -> Bool {
         guard let core else { return false }
