@@ -25,6 +25,7 @@ dependencies {
     implementation(platform(libs.awssdk.bom))
     implementation(libs.awssdk.kms)
     implementation(libs.awssdk.secretsmanager)
+    implementation(libs.awssdk.polly)
     implementation(libs.awssdk.urlconnection)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)

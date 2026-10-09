@@ -42,6 +42,7 @@ import os.meka.core.domain.EntityTypes
 import os.meka.core.sync.ServerOpStore
 import os.meka.core.sync.SyncService
 import os.meka.core.wire.AskCodec
+import os.meka.core.wire.SpeechCodec
 import os.meka.core.wire.WireCodec
 import os.meka.core.wire.WireFormatException
 import javax.sql.DataSource
@@ -78,6 +79,8 @@ fun Application.mekaSync(
     calendarWriter: CalendarWriter? = null,
     /** The AI layer: the key's health check and the monthly budget (V1); null leaves the route out. */
     ai: AiLayer? = null,
+    /** MEKA's voice (Amazon Polly, V1); null leaves the speech routes out. */
+    speech: SpeechService? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -278,6 +281,25 @@ fun Application.mekaSync(
             }
         }
 
+        if (speech != null) {
+            // MEKA's voice: the British voices this server can speak with and the month's characters. Keyed devices only.
+            post("/v1/speech/voices") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                SpeechCodec.decodeVoicesRequest(body)
+                val voices = withContext(Dispatchers.IO) { speech.voices() }
+                call.respondText(SpeechCodec.encodeVoices(voices), ContentType.Application.Json)
+            }
+            // A piece of MEKA's own reply said aloud (MP3, base64). The text is neither stored nor logged; only counted.
+            post("/v1/speech/speak") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = SpeechCodec.decodeRequest(body)
+                val spoken = withContext(Dispatchers.IO) { speech.speak(request) }
+                call.respondText(SpeechCodec.encodeResponse(spoken), ContentType.Application.Json)
+            }
+        }
+
         if (push != null) {
             // A device's push address (an FCM token), or an empty token to stop waking it. Keyed devices only.
             post("/v1/push/token") {
@@ -454,12 +476,13 @@ fun main(args: Array<String>) {
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push)
             val ai = aiFromEnv(ds)?.also { startAiCheck(it.health) }
+            val speech = speechFromEnv(ds)
             embeddedServer(Netty, port = port) {
                 mekaSync(
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
                     releases = Releases(PostgresReleaseStore(ds), onPublished = { who, r -> releaseActivity.record(who, r) }), push = push,
                     publisher = System.getenv("MEKA_RELEASE_PUBLISHER_SECRET")?.takeIf { it.isNotBlank() }?.let { SecretsManagerPublisherKey(it) },
-                    voice = voice, newsImages = newsImages, calendarWriter = calendarWriter, ai = ai,
+                    voice = voice, newsImages = newsImages, calendarWriter = calendarWriter, ai = ai, speech = speech,
                 )
             }.start(wait = true)
         }
@@ -544,6 +567,7 @@ object Migrations {
         1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql", 4 to "/db/V4__event_mirror_end.sql",
         5 to "/db/V5__app_release.sql", 6 to "/db/V6__push_token.sql", 7 to "/db/V7__news_image.sql",
         8 to "/db/V8__calendar_editing.sql", 9 to "/db/V9__event_edits.sql", 10 to "/db/V10__ai_usage.sql",
+        11 to "/db/V11__speech_usage.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

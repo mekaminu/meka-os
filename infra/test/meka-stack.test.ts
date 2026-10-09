@@ -159,6 +159,15 @@ describe('MekaStack security and cost invariants (ADR-004)', () => {
     for (const s of grants) expect(([] as string[]).concat(s.Action).every((a) => /^secretsmanager:(GetSecretValue|DescribeSecret)$/.test(a))).toBe(true);
   });
 
+  test("MEKA's voice may only synthesise speech and list voices with Polly", () => {
+    t.hasResourceProperties('AWS::ECS::TaskDefinition', {
+      ContainerDefinitions: [Match.objectLike({ Environment: Match.arrayWith([Match.objectLike({ Name: 'MEKA_SPEECH_ENGINE', Value: 'polly' })]) })],
+    });
+    const statements = (Object.values(t.findResources('AWS::IAM::Policy')) as any[]).flatMap((p) => p.Properties.PolicyDocument.Statement);
+    const polly = statements.flatMap((s: any) => ([] as string[]).concat(s.Action)).filter((a) => a.startsWith('polly:'));
+    expect(polly.sort()).toEqual(['polly:DescribeVoices', 'polly:SynthesizeSpeech']);
+  });
+
   test('records the deployed commit only when CI passes one (deploy.yml diffs against it)', () => {
     const sha = '29720ce900d5aa07156abbdf1f420121003b40b9';
     synth({ deployedCommit: sha }).hasOutput('DeployedCommit', { Value: sha });

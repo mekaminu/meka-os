@@ -67,3 +67,9 @@ The backend exists for sync, ingestion (calendar, email, fixtures, news), heavy 
 - When a device stores ops, the household's other devices with an address get one data-only message, `{"t":"sync"}`, normal priority, collapse key `sync`, TTL 1 h. Coalesced per device: at most one wake every 20 s, with one trailing wake at the end of the gap so the last edit always gets through. Sent off the request; a failure only means the device catches up at its next periodic sync.
 - Nothing about the owner's data goes to Google: no titles, ids or counts, only that a device was woken. The change itself travels over the normal signed sync.
 - APNs for the Mac waits on the Apple Developer Program (Needs Meka #6); the Mac app's long-poll keeps it current while it's open.
+
+## Amendment 2026-10-09: MEKA's voice is Amazon Polly in MEKA's own account
+
+- Approved by Meka 2026-10-08 (build plan V1, "Weather and a voice", item 3). No new provider or key: the ECS task role gets `polly:SynthesizeSpeech` and `polly:DescribeVoices` only (Polly has no resource-level scoping for these, so the resource is `*`); env `MEKA_SPEECH_ENGINE=polly` turns the routes on. Infra test pins the two actions.
+- `POST /v1/speech/voices` and `POST /v1/speech/speak` (signed, keyed devices only; the release publisher is refused). Only MEKA's own reply text is sent (≤ 600 characters per request, sentence by sentence), never what Meka said. Polly runs in the service's region (eu-west-2); en-GB voices on their best engine there (generative, else neural; standard-only voices aren't offered).
+- Nothing of the text or audio is stored or logged. `speech_usage` (V11, additive) counts clips and characters per UTC month; at 1M characters the server answers `over` and the device's own voice speaks until the 1st (≈ $30 at generative's list price at the very most; Meka's use is a few thousand characters a day).

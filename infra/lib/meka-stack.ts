@@ -243,6 +243,8 @@ export class MekaStack extends cdk.Stack {
         MEKA_FCM_SECRET: fcmKey.secretArn,
         MEKA_RELEASE_PUBLISHER_SECRET: publisherPublic.secretArn,
         MEKA_VOICE_TWILIO_SECRET: voiceTwilio.secretArn,
+        // MEKA's voice (build plan V1, Weather and a voice: Amazon Polly in MEKA's own account, approved 2026-10-08).
+        MEKA_SPEECH_ENGINE: 'polly',
       },
       secrets: {
         MEKA_DB_USER: ecs.Secret.fromSecretsManager(dbSecret, 'username'),
@@ -269,6 +271,12 @@ export class MekaStack extends cdk.Stack {
     fcmKey.grantRead(task.taskRole);
     publisherPublic.grantRead(task.taskRole); // the public half only; the private key is never granted to the service
     voiceTwilio.grantRead(task.taskRole);
+    // MEKA's voice: turn MEKA's own reply text into speech and list the voices, nothing else (no lexicons, no S3
+    // speech tasks). Polly's synthesis actions have no resource-level scoping, so the resource is '*'.
+    task.taskRole.addToPrincipalPolicy(new cdk.aws_iam.PolicyStatement({
+      actions: ['polly:SynthesizeSpeech', 'polly:DescribeVoices'],
+      resources: ['*'],
+    }));
 
     this.service = new ecs.FargateService(this, 'Service', {
       cluster,
