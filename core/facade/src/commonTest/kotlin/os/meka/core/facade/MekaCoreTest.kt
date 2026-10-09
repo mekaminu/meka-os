@@ -368,11 +368,15 @@ class MekaCoreTest {
         assertEquals(listOf("Post the letter"), a.shutdownView.value.tomorrow.rows.map { it.title })
         assertTrue(a.today.value.isClear)
 
+        assertEquals(null, a.today.value.dayRing.tomorrow)
         a.shutDown()
         assertTrue(a.shutdownView.value.doneToday)
         assertTrue(!a.shutdownView.value.offered)
+        // Living Today, item 1: once shut down the Day ring looks ahead to tomorrow (nothing timed yet), on both devices.
+        assertEquals("Nothing booked yet", a.today.value.dayRing.tomorrow?.caption)
         a.syncNow(); m.syncNow()
         assertTrue(m.shutdownView.value.doneToday)
+        assertEquals("Tomorrow", m.today.value.dayRing.tomorrow?.headline)
         assertEquals(listOf("Post the letter"), m.shutdownView.value.tomorrow.rows.map { it.title })
     }
 

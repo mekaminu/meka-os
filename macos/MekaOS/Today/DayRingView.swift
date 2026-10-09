@@ -71,6 +71,10 @@ struct DayRingView: View {
         let arcs = ring.arcs
         let work = ring.work
         let fast = ring.fast
+        // After Shut down: tomorrow's first thing (Living Today, item 1).
+        let tomorrowDegrees: Double? = ring.tomorrow?.degrees.map { Double($0.floatValue) }
+        let centreLine = ring.centreLine(free: Int32(free))
+        let centreCaption = ring.centreCaption(toDo: Int32(toDo))
         return ZStack {
             Canvas { ctx, canvasSize in
                 let stroke: CGFloat = 10
@@ -136,6 +140,14 @@ struct DayRingView: View {
                                with: .color(palette.accent.opacity(alpha)),
                                style: StrokeStyle(lineWidth: arc.highlighted && !arc.past ? stroke * 1.4 : stroke, lineCap: .butt))
                 }
+                // After Shut down: tomorrow's first thing as a hollow brass mark on the track, coming up with the mark.
+                if let deg = tomorrowDegrees, mark > 0 {
+                    let p = point(deg, radius)
+                    let r = stroke * 0.55 * mark
+                    let dot = Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2))
+                    ctx.fill(dot, with: .color(palette.background))
+                    ctx.stroke(dot, with: .color(palette.accent.opacity(mark)), lineWidth: 2)
+                }
                 // The now needle, with a brass dot at its tip.
                 if needle > 0 {
                     let deg = Double(ring.nowDegrees) * needle
@@ -148,10 +160,12 @@ struct DayRingView: View {
                 }
             }
             VStack(spacing: MekaSpace.xxs) {
-                Text(DayRingRules.shared.freeLine(freeMinutes: Int32(free), nowMinute: ring.nowMinute))
+                // "3 h 45 free" · "4 to do"; once the day is shut down, tomorrow's first thing ("Tomorrow 09:30" · "Standup").
+                Text(centreLine)
                     .font(MekaType.body).monospacedDigit().foregroundStyle(palette.textPrimary)
-                Text(DayRingRules.shared.toDoLine(toDo: Int32(toDo)))
+                Text(centreCaption)
                     .font(MekaType.caption).monospacedDigit().foregroundStyle(palette.textSecondary)
+                    .lineLimit(2)
             }
             .multilineTextAlignment(.center)
             .frame(width: size * 0.62)

@@ -359,8 +359,8 @@ enum TickDraw: Equatable { case rest, draw, done }
 /// How the Day ring plays as Today opens (the core's `DayRingPlay`): in full, quickly, or drawn at once (Off).
 enum DayRingPlayback: Equatable { case full, quick, still }
 
-/// Fades an item up after `index × 40 ms` (Expressive: 60 ms apart, rising further and growing from 0.96). When `play`
-/// is false it is simply there. Motion → Off: cross-fade only.
+/// Fades an item up after `index × 40 ms` (Expressive: 60 ms apart, rising further, growing from 0.96 and settling on
+/// the slower appear spring, about 1.4x longer). When `play` is false it is simply there. Motion → Off: cross-fade only.
 private struct StaggeredAppear: ViewModifier {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.mekaExpressiveMotion) private var expressive
@@ -377,7 +377,7 @@ private struct StaggeredAppear: ViewModifier {
             .onAppear {
                 guard play, !shown else { return }
                 let delay = MotionMath.staggerDelay(index: index, reduced: reduceMotion, expressive: expressive)
-                withAnimation(MekaMotion.appear(reduced: reduceMotion).delay(delay)) {
+                withAnimation(MekaMotion.appear(reduced: reduceMotion, expressive: expressive).delay(delay)) {
                     shown = true
                 }
             }

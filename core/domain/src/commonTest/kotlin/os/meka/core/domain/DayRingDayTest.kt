@@ -124,4 +124,53 @@ class DayRingDayTest {
         val r = build(listOf(ev("night", at(-1), at(1))), now = at(0, 30))
         assertEquals("e-night", DayRingRules.arcAt(r, 358f)?.id)
     }
+
+    private fun shut(done: Boolean, first: TomorrowRow?) = ShutdownView.EMPTY.copy(
+        doneToday = done,
+        tomorrow = ShutdownView.EMPTY.tomorrow.copy(first = first),
+    )
+
+    @Test
+    fun afterShutDownTheRingLooksAheadToTomorrowsFirstThing() {
+        val standup = TomorrowRow("e-standup", "09:30", "Standup", true, null)
+        // Not shut down yet: the ring shows today.
+        assertNull(DayRingRules.tomorrow(shut(false, standup)))
+        val t = assertNotNull(DayRingRules.tomorrow(shut(true, standup)))
+        assertEquals(570, t.minute)
+        near(142.5f, t.degrees!!)
+        assertEquals("Tomorrow 09:30", t.headline)
+        assertEquals("Standup", t.caption)
+        assertEquals("Day shut down. Tomorrow: first thing 09:30 Standup.", t.spokenLine)
+
+        // The centre and the spoken line follow it; without it the ring reads as today.
+        val ring = build(now = at(20)).copy(tomorrow = t)
+        assertEquals("Tomorrow 09:30", ring.centreLine(0))
+        assertEquals("Standup", ring.centreCaption(0))
+        assertEquals(t.spokenLine, ring.spokenLine)
+        val today = build(now = at(22, 30))
+        assertEquals("Evening", today.centreLine(0))
+        assertEquals("Nothing to do", today.centreCaption(0))
+
+        // Nothing timed tomorrow: no mark, a quiet line.
+        val none = assertNotNull(DayRingRules.tomorrow(shut(true, null)))
+        assertNull(none.degrees)
+        assertEquals("Tomorrow", none.headline)
+        assertEquals("Nothing booked yet", none.caption)
+        assertEquals("Day shut down. Tomorrow: nothing booked yet.", none.spokenLine)
+
+        // A long title is shortened like the evening glance.
+        val long = TomorrowRow("e-x", "08:00", "Quarterly planning with the whole regional leadership team", true, null)
+        assertTrue(DayRingRules.tomorrow(shut(true, long))!!.caption.endsWith("…"))
+    }
+
+    @Test
+    fun onlyAClockTimeGivesAMinute() {
+        assertEquals(570, DayRingRules.clockMinute("09:30"))
+        assertEquals(0, DayRingRules.clockMinute("00:00"))
+        assertEquals(1439, DayRingRules.clockMinute(" 23:59 "))
+        assertNull(DayRingRules.clockMinute(null))
+        assertNull(DayRingRules.clockMinute("All day"))
+        assertNull(DayRingRules.clockMinute("Until 01:00"))
+        assertNull(DayRingRules.clockMinute("24:00"))
+    }
 }

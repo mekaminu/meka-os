@@ -75,6 +75,11 @@ data class DayRing(
     val work: List<DayBand> = emptyList(),
     /** A running fast as an inner arc; set by the facade, which holds the fasting view ([DayRingRules.fastArc]). */
     val fast: DayFastArc? = null,
+    /**
+     * Once the day is shut down (Living Today, item 1), the ring looks ahead: tomorrow's first commitment in the centre
+     * and as a hollow brass mark on the track ([DayRingRules.tomorrow]); null until then. Set by the facade.
+     */
+    val tomorrow: DayRingTomorrow? = null,
 ) {
     val nowDegrees: Float get() = DayRingRules.degrees(nowMinute)
 
@@ -90,9 +95,40 @@ data class DayRing(
     /** What a screen reader says for the whole ring. */
     val spokenLine: String get() = DayRingRules.spokenLine(this)
 
+    /** The centre's large line: "3 h 45 free", or after Shut down "Tomorrow 09:00". [free] is the counting-up value. */
+    fun centreLine(free: Int): String = tomorrow?.headline ?: DayRingRules.freeLine(free, nowMinute)
+
+    /** The centre's small line: "4 to do", or after Shut down tomorrow's first thing ("Standup"). */
+    fun centreCaption(toDo: Int): String = tomorrow?.caption ?: DayRingRules.toDoLine(toDo)
+
     companion object {
         val EMPTY = DayRing(emptyList(), 0, 0, 0)
     }
+}
+
+/**
+ * Tomorrow's first commitment on the Day ring once the day is shut down (Living Today, item 1): what starts first
+ * tomorrow (not an all-day event, not one still running from tonight), or nothing booked yet.
+ */
+data class DayRingTomorrow(
+    /** Local minute of the day it starts (0–1439), where the hollow mark sits on the track; null when nothing is booked. */
+    val minute: Int?,
+    /** Its title, shortened for the centre; null when nothing is booked. */
+    val title: String?,
+) {
+    /** Where the mark sits, clockwise from midnight at the top; null when nothing is booked. */
+    val degrees: Float? get() = minute?.let { DayRingRules.degrees(it) }
+
+    /** "Tomorrow 09:00" · "Tomorrow" when nothing is booked. */
+    val headline: String get() = minute?.let { "Tomorrow ${LocalClock.formatMinute(it)}" } ?: "Tomorrow"
+
+    /** "Standup" · "Nothing booked yet". */
+    val caption: String get() = title ?: "Nothing booked yet"
+
+    /** "Day shut down. Tomorrow: first thing 09:00 Standup." */
+    val spokenLine: String
+        get() = "Day shut down. Tomorrow: " +
+            (if (minute != null && title != null) "first thing ${LocalClock.formatMinute(minute)} $title." else "nothing booked yet.")
 }
 
 /** How the Day ring plays when Today opens ([DayRingRules.play]). */
@@ -251,8 +287,28 @@ object DayRingRules {
      */
     fun line(freeMinutes: Int, toDo: Int, nowMinute: Int = 0): String = "${freeLine(freeMinutes, nowMinute)} · ${toDoLine(toDo)}"
 
-    /** "Your day: 4 things booked, 1 done. Now 14:32. 3 h 45 free · 4 to do." */
+    /**
+     * After Shut down (Living Today, item 1): the ring looks ahead to tomorrow's first commitment ([TomorrowPreview.first],
+     * the same first thing the shutdown pane shows). Null while the day isn't shut down, so the ring shows today.
+     */
+    fun tomorrow(shutdown: ShutdownView): DayRingTomorrow? {
+        if (!shutdown.doneToday) return null
+        val first = shutdown.tomorrow.first ?: return DayRingTomorrow(null, null)
+        val minute = clockMinute(first.time) ?: return DayRingTomorrow(null, null)
+        return DayRingTomorrow(minute, ShutdownRules.shorten(first.title))
+    }
+
+    /** "09:30" → 570; anything else (null, "All day", "Until 01:00") → null. */
+    fun clockMinute(time: String?): Int? {
+        val m = time?.let { Regex("^(\\d{1,2}):(\\d{2})$").find(it.trim()) } ?: return null
+        val h = m.groupValues[1].toInt()
+        val min = m.groupValues[2].toInt()
+        return if (h in 0..23 && min in 0..59) h * 60 + min else null
+    }
+
+    /** "Your day: 4 things booked, 1 done. Now 14:32. 3 h 45 free · 4 to do." (after Shut down: tomorrow's first thing). */
     fun spokenLine(ring: DayRing): String {
+        ring.tomorrow?.let { return it.spokenLine }
         val booked = ring.arcs.size
         val past = ring.arcs.count { it.past }
         val things = when (booked) {

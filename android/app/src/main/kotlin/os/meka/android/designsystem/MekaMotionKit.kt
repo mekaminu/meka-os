@@ -80,8 +80,8 @@ class Appearance internal constructor(
 )
 
 /**
- * Item [index] of a staggered group: fades up after `index × 40 ms` (Expressive: 60 ms apart, rising further and
- * growing from 0.96). When [play] is false (the intro already played, or the item arrived later) it is simply there.
+ * Item [index] of a staggered group: fades up after `index × 40 ms` (Expressive: 60 ms apart, rising further, growing
+ * from 0.96 and settling on the slower appear spring, about 1.4× longer). When [play] is false (the intro already played, or the item arrived later) it is simply there.
  * Reduced motion (Motion → Off): a short cross-fade, no rise, no stagger.
  */
 @Composable
@@ -93,7 +93,7 @@ fun rememberAppearance(index: Int, play: Boolean = true): Appearance {
     LaunchedEffect(Unit) {
         if (progress.value < 1f) {
             delay(MotionMath.staggerDelayMs(index, reduced, expressive).toLong())
-            progress.animateTo(1f, MekaMotion.appear(reduced))
+            progress.animateTo(1f, MekaMotion.appear(reduced, expressive))
         }
     }
     return remember(progress, reduced, risePx, expressive) { Appearance(progress, reduced, risePx, expressive) }

@@ -1,6 +1,8 @@
 package os.meka.android.designsystem
 
 import os.meka.core.domain.DayRingPlay
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.VectorConverter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -384,5 +386,24 @@ class MotionMathTest {
         assertEquals(0.5f, MotionMath.tabFillGrow(0f), 1e-6f)
         assertEquals(0.75f, MotionMath.tabFillGrow(0.5f), 1e-6f)
         assertEquals(1f, MotionMath.tabFillGrow(1.2f), 1e-6f)
+    }
+
+    /** Living Today, item 6: Expressive's entrances settle on a slower appear spring, about 1.4× longer than Subtle's. */
+    @Test
+    fun expressiveEntrancesRunAboutOnePointFourTimesLonger() {
+        fun settleMs(expressive: Boolean): Long =
+            MekaMotion.appear<Float>(false, expressive).vectorize(Float.VectorConverter)
+                .getDurationNanos(AnimationVector1D(0f), AnimationVector1D(1f), AnimationVector1D(0f)) / 1_000_000
+        val ratio = settleMs(true).toFloat() / settleMs(false)
+        assertTrue(ratio in 1.3f..1.5f, "Expressive's appear should run about 1.4x longer, ran ${ratio}x")
+        // Today's intro waits for the slower spring before it counts as played.
+        assertTrue(MekaMotion.appearExpressiveDurationMs >= (MekaMotion.appearDurationMs * 1.4f).toInt())
+        // Motion → Off: the same short cross-fade either way.
+        assertEquals(
+            MekaMotion.appear<Float>(true, true).vectorize(Float.VectorConverter)
+                .getDurationNanos(AnimationVector1D(0f), AnimationVector1D(1f), AnimationVector1D(0f)),
+            MekaMotion.appear<Float>(true, false).vectorize(Float.VectorConverter)
+                .getDurationNanos(AnimationVector1D(0f), AnimationVector1D(1f), AnimationVector1D(0f)),
+        )
     }
 }

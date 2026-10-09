@@ -71,12 +71,15 @@ function kotlin() {
   s += '/** Appearance → Motion (motion pass 2): Expressive uses the bouncier springs. Set by MekaTheme; read when a spec is made. */\nobject MotionStyle {\n    @Volatile var expressive: Boolean = true\n}\n\n';
   s += '/** Semantic motion. Pass reducedMotion from the Motion setting; reduced = short tween, callers drop translation. */\nobject MekaMotion {\n';
   for (const [k, v] of entries(t.motion)) {
-    if (v.expressiveDamping !== undefined) {
-      s += `    fun <T> ${k}(reducedMotion: Boolean, expressive: Boolean = MotionStyle.expressive): FiniteAnimationSpec<T> =\n        if (reducedMotion) tween(${v.reducedDuration}) else spring(dampingRatio = if (expressive) ${v.expressiveDamping}f else ${v.spring.damping}f, stiffness = ${v.spring.stiffness}f)\n`;
+    if (v.expressiveDamping !== undefined || v.expressiveStiffness !== undefined) {
+      const damping = v.expressiveDamping !== undefined ? `if (expressive) ${v.expressiveDamping}f else ${v.spring.damping}f` : `${v.spring.damping}f`;
+      const stiffness = v.expressiveStiffness !== undefined ? `if (expressive) ${v.expressiveStiffness}f else ${v.spring.stiffness}f` : `${v.spring.stiffness}f`;
+      s += `    fun <T> ${k}(reducedMotion: Boolean, expressive: Boolean = MotionStyle.expressive): FiniteAnimationSpec<T> =\n        if (reducedMotion) tween(${v.reducedDuration}) else spring(dampingRatio = ${damping}, stiffness = ${stiffness})\n`;
     } else {
       s += `    fun <T> ${k}(reducedMotion: Boolean): FiniteAnimationSpec<T> =\n        if (reducedMotion) tween(${v.reducedDuration}) else spring(dampingRatio = ${v.spring.damping}f, stiffness = ${v.spring.stiffness}f)\n`;
     }
     s += `    const val ${k}DurationMs = ${v.duration}\n`;
+    if (v.expressiveDuration !== undefined) s += `    const val ${k}ExpressiveDurationMs = ${v.expressiveDuration}\n`;
   }
   s += '}\n';
   s += '\n/** Sequencing for motion (stagger, rise, count-up, shimmer). Values in ms unless the name says otherwise. */\nobject MekaChoreography {\n';
@@ -109,8 +112,10 @@ function swift() {
   for (const [k, v] of entries(t.motion)) {
     // SwiftUI spring(response:dampingFraction:): response ≈ 2π/sqrt(stiffness) for unit mass.
     const response = (2 * Math.PI / Math.sqrt(v.spring.stiffness)).toFixed(3);
-    if (v.expressiveDamping !== undefined) {
-      s += `    static func ${k}(reduced: Bool, expressive: Bool = MotionStyle.expressive) -> Animation { reduced ? .easeOut(duration: ${(v.reducedDuration / 1000).toFixed(3)}) : .spring(response: ${response}, dampingFraction: expressive ? ${v.expressiveDamping} : ${v.spring.damping}) }\n`;
+    if (v.expressiveDamping !== undefined || v.expressiveStiffness !== undefined) {
+      const damping = v.expressiveDamping !== undefined ? `expressive ? ${v.expressiveDamping} : ${v.spring.damping}` : `${v.spring.damping}`;
+      const resp = v.expressiveStiffness !== undefined ? `expressive ? ${(2 * Math.PI / Math.sqrt(v.expressiveStiffness)).toFixed(3)} : ${response}` : response;
+      s += `    static func ${k}(reduced: Bool, expressive: Bool = MotionStyle.expressive) -> Animation { reduced ? .easeOut(duration: ${(v.reducedDuration / 1000).toFixed(3)}) : .spring(response: ${resp}, dampingFraction: ${damping}) }\n`;
     } else {
       s += `    static func ${k}(reduced: Bool) -> Animation { reduced ? .easeOut(duration: ${(v.reducedDuration / 1000).toFixed(3)}) : .spring(response: ${response}, dampingFraction: ${v.spring.damping}) }\n`;
     }

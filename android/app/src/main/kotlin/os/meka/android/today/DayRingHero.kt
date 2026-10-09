@@ -187,6 +187,13 @@ fun DayRingHero(
                         false, topLeft, arcSize, style = Stroke(if (arc.highlighted && !arc.past) stroke * 1.4f else stroke, cap = StrokeCap.Butt),
                     )
                 }
+                // After Shut down: tomorrow's first thing as a hollow brass mark on the track, coming up with the mark.
+                ring.tomorrow?.degrees?.let { deg ->
+                    val a = Math.toRadians(deg - 90.0)
+                    val at = Offset(center.x + (cos(a) * radius).toFloat(), center.y + (sin(a) * radius).toFloat())
+                    drawCircle(colors.background, radius = stroke * 0.55f * mark, center = at)
+                    drawCircle(colors.accent.copy(alpha = mark), radius = stroke * 0.55f * mark, center = at, style = Stroke(2.dp.toPx()))
+                }
                 // The now needle: from inside the arcs out past them, with a brass dot at its tip.
                 if (needle > 0f) {
                     val a = Math.toRadians(ring.nowDegrees * needle - 90.0)
@@ -207,12 +214,13 @@ fun DayRingHero(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                // "3 h 45 free" · "4 to do"; once the day is shut down, tomorrow's first thing ("Tomorrow 09:30" · "Standup").
                 Text(
-                    DayRingRules.freeLine(free, ring.nowMinute),
+                    ring.centreLine(free),
                     style = MekaType.body, color = colors.textPrimary, textAlign = TextAlign.Center,
                 )
-                Text(DayRingRules.toDoLine(toDo), style = MekaType.caption, color = colors.textSecondary, textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = MekaSpace.xxs))
+                Text(ring.centreCaption(toDo), style = MekaType.caption, color = colors.textSecondary, textAlign = TextAlign.Center,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = MekaSpace.xxs))
             }
         }
         if (tiles.isNotEmpty()) {

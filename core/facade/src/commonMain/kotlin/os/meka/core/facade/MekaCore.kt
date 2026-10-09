@@ -1421,10 +1421,16 @@ class MekaCore(
         val fastingNow = fasting.view()
         val goalsNow = goals.view(all).withSessions(_sessions.value)
         val projected = project(all, dayEvents)
+        val today = dayWindow(nowMs())
+        val shutdownNow = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), holidays)
         // The live tiles under the Day ring: next event, a running fast, habits today, renewals due.
-        // A running fast also shows as the Day ring's inner arc (Living Today, slice 3).
+        // A running fast also shows as the Day ring's inner arc (Living Today, slice 3); once the day is shut down the
+        // ring looks ahead to tomorrow's first commitment (Living Today, item 1).
         _today.value = projected.copy(
-            dayRing = projected.dayRing.copy(fast = os.meka.core.domain.DayRingRules.fastArc(fastingNow.current, nowMs(), cal)),
+            dayRing = projected.dayRing.copy(
+                fast = os.meka.core.domain.DayRingRules.fastArc(fastingNow.current, nowMs(), cal),
+                tomorrow = os.meka.core.domain.DayRingRules.tomorrow(shutdownNow),
+            ),
             dayTiles = os.meka.core.domain.DayTileRules.build(
                 projected.events, nowMs(), dayWindow(nowMs()), fastingNow.current, goalsNow.habits, listsNow.renewals.dueCount,
             ),
@@ -1434,8 +1440,7 @@ class MekaCore(
         _fasting.value = fastingNow
         _goals.value = goalsNow
         _workMode.value = workState
-        val today = dayWindow(nowMs())
-        _shutdown.value = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), holidays)
+        _shutdown.value = shutdownNow
         _wake.value = alarms.wakeView(dayEvents, os.meka.core.domain.WorkHours.of(workState, holidays, todayEpochDay()))
         _nextAlarm.value = alarms.next()
         _quickAlarms.value = alarms.quickItems()

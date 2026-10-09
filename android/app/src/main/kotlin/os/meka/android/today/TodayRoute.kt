@@ -228,7 +228,7 @@ fun TodayRoute(
     LaunchedEffect(openings) {
         if (!introPlayed) {
             // The longest (Expressive) span, so the intro never ends before its last section has started.
-            delay((MotionMath.staggerSpanMs(TODAY_SECTIONS, false, expressive = true) + MekaMotion.appearDurationMs).toLong())
+            delay((MotionMath.staggerSpanMs(TODAY_SECTIONS, false, expressive = true) + MekaMotion.appearExpressiveDurationMs).toLong())
             introPlayed = true
         }
     }

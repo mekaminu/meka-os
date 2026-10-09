@@ -128,9 +128,10 @@ object MekaMotion {
     fun <T> syncPulse(reducedMotion: Boolean): FiniteAnimationSpec<T> =
         if (reducedMotion) tween(0) else spring(dampingRatio = 1f, stiffness = 120f)
     const val syncPulseDurationMs = 900
-    fun <T> appear(reducedMotion: Boolean): FiniteAnimationSpec<T> =
-        if (reducedMotion) tween(120) else spring(dampingRatio = 0.9f, stiffness = 350f)
+    fun <T> appear(reducedMotion: Boolean, expressive: Boolean = MotionStyle.expressive): FiniteAnimationSpec<T> =
+        if (reducedMotion) tween(120) else spring(dampingRatio = 0.9f, stiffness = if (expressive) 180f else 350f)
     const val appearDurationMs = 220
+    const val appearExpressiveDurationMs = 310
     fun <T> themeBlend(reducedMotion: Boolean): FiniteAnimationSpec<T> =
         if (reducedMotion) tween(0) else spring(dampingRatio = 1f, stiffness = 200f)
     const val themeBlendDurationMs = 450
