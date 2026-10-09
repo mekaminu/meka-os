@@ -67,7 +67,7 @@ struct MoreSection: Equatable, Identifiable {
 /// Appearance, which shows its choices in the row itself (`ShellNav.unfoldsInPlace`). Today's header keeps only
 /// Search and Plan my day (Today clarity, slice 2): the brief, the shutdown, work mode and the theme moved here.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, review, vault, brief, news, shutdown, work, notifications, appearance, calendars, activity, yourData
+    case lists, goals, review, vault, brief, news, shutdown, work, notifications, appearance, voice, calendars, activity, yourData
     var id: Int { rawValue }
 
     var label: String {
@@ -82,6 +82,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .work: "Work mode"
         case .notifications: "Notifications"
         case .appearance: "Appearance"
+        case .voice: "MEKA's voice"
         case .activity: "Activity"
         case .yourData: "Your data"
         case .calendars: "Calendars"
@@ -100,6 +101,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .work: "Work hours and the Work switch"
         case .notifications: "Quiet hours, digests and what reaches you"
         case .appearance: "Dark, Light or Auto"
+        case .voice: "How MEKA sounds in Talk, the brief and calls"
         case .activity: "What MEKA did and why"
         case .yourData: "Export everything as one file"
         case .calendars: "Connected accounts and feeds"
@@ -110,7 +112,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         switch self {
         case .lists, .goals, .review, .vault: .places
         case .brief, .news, .shutdown: .daily
-        case .work, .notifications, .appearance, .calendars, .activity, .yourData: .settings
+        case .work, .notifications, .appearance, .voice, .calendars, .activity, .yourData: .settings
         }
     }
 
@@ -120,7 +122,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .goals: .goals
         case .review: .review
         case .vault: .vault
-        case .brief, .news, .shutdown, .work, .notifications, .appearance, .activity, .yourData, .calendars: nil
+        case .brief, .news, .shutdown, .work, .notifications, .appearance, .voice, .activity, .yourData, .calendars: nil
         }
     }
 }
@@ -159,7 +161,7 @@ enum ShellNav {
     }
 
     /// Stagger steps for More (after the title 0 and field 1): each section starts one step after the one before
-    /// began; a label leads its rows by one step. Places: 2, rows 3–6 · Daily: 4, rows 5–7 · Settings: 6, rows 7–12.
+    /// began; a label leads its rows by one step. Places: 2, rows 3–6 · Daily: 4, rows 5–7 · Settings: 6, rows 7–13.
     static func moreLabelStep(_ section: Int) -> Int { 2 + 2 * section }
 
     static func moreRowStep(_ section: Int, _ row: Int) -> Int { moreLabelStep(section) + 1 + row }

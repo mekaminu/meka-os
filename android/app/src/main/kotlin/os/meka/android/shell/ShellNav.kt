@@ -62,6 +62,7 @@ enum class MoreItem(val label: String, val line: String, val destination: ShellD
     WORK("Work mode", "Work hours and the Work switch", null, MoreGroup.SETTINGS),
     NOTIFICATIONS("Notifications", "Quiet hours, digests and what reaches you", null, MoreGroup.SETTINGS),
     APPEARANCE("Appearance", "Dark, Light or Auto", null, MoreGroup.SETTINGS),
+    VOICE("MEKA's voice", "How MEKA sounds in Talk, the brief and calls", null, MoreGroup.SETTINGS),
     CALENDARS("Calendars", "Connected accounts and feeds", null, MoreGroup.SETTINGS),
     ACTIVITY("Activity", "What MEKA did and why", null, MoreGroup.SETTINGS),
     YOUR_DATA("Your data", "Export everything as one file", null, MoreGroup.SETTINGS),
@@ -102,7 +103,7 @@ object ShellNav {
     /**
      * Stagger steps for More (40 ms apart, after the title 0, field 1): each section starts one step after the one
      * before began rather than after its last row, so the list settles quickly; a label leads its rows by one step.
-     * Places: label 2, rows 3–6 · Daily: label 4, rows 5–7 · Settings: label 6, rows 7–12.
+     * Places: label 2, rows 3–6 · Daily: label 4, rows 5–7 · Settings: label 6, rows 7–13.
      */
     fun moreLabelStep(section: Int): Int = 2 + 2 * section
 

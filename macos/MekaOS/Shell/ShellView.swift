@@ -58,6 +58,8 @@ struct ShellView: View {
         // Export everything (your data), from Today's header or File → Export All Data….
         .sheet(isPresented: Binding(get: { model.showYourData }, set: { model.showYourData = $0 })) { YourDataSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showActivity }, set: { model.showActivity = $0 })) { ActivitySheet(palette: palette) }
+        // MEKA's voice (Ask → More): the synced voice for Talk, the spoken brief and calls.
+        .sheet(isPresented: Binding(get: { model.showVoice }, set: { model.showVoice = $0 })) { VoiceSheet(palette: palette) }
         // Opened from Today's header or Ask's More list, so they live on the shell.
         .sheet(isPresented: Binding(get: { model.showCalendars }, set: { model.showCalendars = $0 })) { CalendarsSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showWork }, set: { model.showWork = $0 })) { WorkSheet(palette: palette) }

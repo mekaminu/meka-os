@@ -135,4 +135,41 @@ class SpeechFacadeTest {
         server.voices = SpeechCodec.Voices(SpeechCodec.Voices.OFF)
         assertNull(c.voiceUsageLine())
     }
+
+    @Test
+    fun thePickerListsTheServersVoicesAndSamplesAnyOfThem() = runTest {
+        // Not connected: only the device's own voice, and why.
+        val offline = core(transport = null).voicePicker(mac = false)
+        assertEquals(listOf("device"), offline.choices.map { it.id })
+        assertTrue(offline.statusLine!!.contains("Until this device is connected"))
+        assertNull(core(transport = null).speechSample("Amy"))
+        val c = core()
+        server.voices = SpeechCodec.Voices(
+            SpeechCodec.Voices.ON,
+            listOf(SpeechCodec.Voice("Amy", "Female", "generative"), SpeechCodec.Voice("Brian", "Male", "neural")),
+            "Amy", "2026-10", 12_400, 1_000_000,
+        )
+        val v = c.voicePicker(mac = true)
+        assertEquals(listOf("Amy", "Brian", "device"), v.choices.map { it.id })
+        assertEquals("Amy", v.choices.single { it.selected }.id)
+        assertEquals("MEKA's voice · Amy · 12,400 of 1,000,000 characters in October", v.usageLine)
+        // Choosing one lights it on the next look (and follows to every device: it's the synced setting).
+        assertTrue(c.chooseMekaVoice("Brian"))
+        assertEquals("Brian", c.voicePicker(mac = true).choices.single { it.selected }.id)
+        // ▶ Sample asks for that voice whatever is chosen, once, then plays from memory; the device's row isn't sent.
+        val sample = c.speechSample("Amy")
+        assertEquals("bXAz" + os.meka.core.domain.VoicePickerRules.SAMPLE.length, sample)
+        assertEquals(sample, c.speechSample("Amy"))
+        assertEquals(listOf<Pair<String, String?>>(os.meka.core.domain.VoicePickerRules.SAMPLE to "Amy"), server.said)
+        assertNull(c.speechSample("device"))
+        assertEquals(1, server.said.size)
+        // Refused or unreachable: no clip, the device says it.
+        server.answer = { SpeechCodec.Response(SpeechCodec.Response.OVER) }
+        assertNull(c.speechSample("Brian"))
+        server.down = true
+        assertNull(c.speechSample("Emma"))
+        val unreachable = c.voicePicker(mac = false)
+        assertEquals(listOf("Brian", "device"), unreachable.choices.map { it.id })
+        assertTrue(!unreachable.choices.first().sample && unreachable.choices.first().selected)
+    }
 }

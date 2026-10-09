@@ -1381,6 +1381,48 @@ class MekaCore(
         return os.meka.core.domain.SpeechRules.usageLine(v.state, v.month, v.usedChars, v.capChars, voice, deviceChosen = false)
     }
 
+    /**
+     * Ask → More → MEKA's voice ([os.meka.core.domain.VoicePickerRules.view]): the server's voices (best first), then
+     * the device's own, the chosen one lit, and the month's line; [mac] words the device's row for the Mac. Never
+     * throws: no answer reads as "failed", not connected says so.
+     */
+    suspend fun voicePicker(mac: Boolean): os.meka.core.domain.VoicePickerView {
+        val chosen = onCore { mekaVoice.chosen() }
+        val api = speechApi ?: return os.meka.core.domain.VoicePickerRules.view(null, emptyList(), null, chosen, null, mac, connected = false)
+        val v = try { api.speechVoices() } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            os.meka.core.wire.SpeechCodec.Voices(os.meka.core.wire.SpeechCodec.Voices.FAILED)
+        }
+        val offered = v.voices.map { os.meka.core.domain.OfferedVoice(it.id, it.gender, it.engine) }
+        val speaking = v.voices.firstOrNull { it.id.equals(chosen, ignoreCase = true) }?.id ?: v.defaultVoice
+        val usage = os.meka.core.domain.SpeechRules.usageLine(
+            v.state, v.month, v.usedChars, v.capChars, speaking, deviceChosen = chosen == os.meka.core.domain.MekaVoiceRules.DEVICE,
+        )
+        return os.meka.core.domain.VoicePickerRules.view(v.state, offered, v.defaultVoice, chosen, usage, mac)
+    }
+
+    /**
+     * ▶ Sample in the voice picker: [os.meka.core.domain.VoicePickerRules.SAMPLE] said by the server's [voice] (a Polly
+     * name), as base64 MP3, or null when it can't be (not connected, refused, slower than
+     * [os.meka.core.domain.SpeechRules.NEXT_AUDIO_MS]); the device then says it in its own voice. Kept in memory like
+     * every clip. Never throws.
+     */
+    suspend fun speechSample(voice: String): String? {
+        val api = speechApi ?: return null
+        val name = os.meka.core.domain.MekaVoiceRules.normalize(voice)?.takeIf { it != os.meka.core.domain.MekaVoiceRules.DEVICE } ?: return null
+        val words = os.meka.core.domain.VoicePickerRules.SAMPLE
+        onCore { speechCached(name, words) }?.let { return it }
+        val r = withTimeoutOrNull(os.meka.core.domain.SpeechRules.NEXT_AUDIO_MS) {
+            try { api.speak(words, name) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        } ?: return null
+        val audio = r.audio
+        if (r.state != os.meka.core.wire.SpeechCodec.Response.SPOKEN || audio.isNullOrEmpty()) return null
+        return onCore {
+            speechClips[os.meka.core.domain.SpeechRules.cacheKey(name, words)] = audio
+            while (speechClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechClips.remove(speechClips.keys.first())
+            audio
+        }
+    }
+
     private class SpeechVoice(val name: String?)
 
     /** The voice to ask the server for now, or null when the device should speak (chosen, or resting after a refusal). */

@@ -99,6 +99,8 @@ final class CoreModel {
     private(set) var activity: ActivityView?
     private(set) var activityNote: String?
     var showActivity = false
+    /// Ask → More → MEKA's voice.
+    var showVoice = false
     private(set) var exportSummary: ExportSummary?
     /// Your data's line on how MEKA's database on this Mac is protected (encrypted, or FileVault only).
     private(set) var databaseLine: String?
@@ -962,6 +964,33 @@ final class CoreModel {
     func refreshVoiceUsage() async {
         guard let core, !signedOut else { voiceUsageLine = nil; return }
         voiceUsageLine = (try? await core.voiceUsageLine()) ?? nil
+    }
+
+    /// The voice picker (MEKA's voices, then the Mac's own), nil until the server answers. Only the view crosses back.
+    private(set) var voicePicker: VoicePickerView?
+
+    func refreshVoicePicker() async {
+        guard let core else { voicePicker = nil; return }
+        voicePicker = try? await core.voicePicker(mac: true)
+    }
+
+    /// Chooses MEKA's voice on every device (a Polly name or "device"), lighting it at once; a tick haptic.
+    func chooseVoice(_ id: String) {
+        guard let core, let v = voicePicker else { return }
+        MekaHaptics.tick()
+        voicePicker = VoicePickerView(loaded: v.loaded, intro: v.intro,
+                                      choices: v.choices.map { VoiceChoice(id: $0.id, label: $0.label, detail: $0.detail, selected: $0.id == id, sample: $0.sample) },
+                                      statusLine: v.statusLine, usageLine: v.usageLine, help: v.help)
+        Task {
+            if (try? await core.chooseMekaVoice(name: id))?.boolValue == true { await refreshVoicePicker() }
+        }
+    }
+
+    /// ▶ Sample: the sample line in the server's `voice`, as MP3 data, or nil (the Mac's own voice says it).
+    func speechSample(_ voice: String) async -> Data? {
+        guard let core else { return nil }
+        guard let clip = try? await core.speechSample(voice: voice) else { return nil }
+        return Data(base64Encoded: clip)
     }
 
     /// Fetches MEKA's common lines in its voice once, so they play at once in a conversation.

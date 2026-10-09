@@ -157,6 +157,7 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.ACTIVITY) { ActivityPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.YOUR_DATA) { YourData(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.CALENDARS) { CalendarsPane(core, onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.VOICE) { VoicePane(core, onClose = { pane = null }) }
         MekaPane(visible = showSearch) {
             SearchPane(core, onClose = { showSearch = false }, openItem = { item -> showSearch = false; openItem(item) })
         }

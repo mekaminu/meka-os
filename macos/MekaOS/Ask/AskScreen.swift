@@ -61,6 +61,7 @@ struct AskScreen: View {
         case .activity: model.showActivity = true
         case .yourData: model.showYourData = true
         case .calendars: model.showCalendars = true
+        case .voice: model.showVoice = true
         case .lists, .goals, .review, .vault, .appearance: break
         }
     }

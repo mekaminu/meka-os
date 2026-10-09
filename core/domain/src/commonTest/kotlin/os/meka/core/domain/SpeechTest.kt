@@ -98,4 +98,52 @@ class SpeechTest {
         assertEquals("1,000", SpeechRules.grouped(1_000))
         assertEquals("1,234,567", SpeechRules.grouped(1_234_567))
     }
+
+    private val polly = listOf(
+        OfferedVoice("Amy", "Female", "generative"), OfferedVoice("Emma", "Female", "neural"),
+        OfferedVoice("Brian", "Male", "neural"), OfferedVoice("Arthur", "Male", "neural"),
+    )
+
+    @Test
+    fun thePickerListsMekasVoicesFirstWithTheDefaultMarkedThenTheDevicesOwn() {
+        val v = VoicePickerRules.view(SpeechRules.ON, polly, "Amy", chosen = null, usageLine = "MEKA's voice · Amy · 12 of 1,000,000 characters in October", mac = false)
+        assertEquals(listOf("Amy", "Emma", "Brian", "Arthur", "device"), v.choices.map { it.id })
+        assertEquals("British · female · most natural · MEKA's default", v.choices[0].detail)
+        assertEquals("British · male · natural", v.choices[2].detail)
+        assertEquals("This phone's own voice", v.choices.last().label)
+        assertEquals("This Mac's own voice", VoicePickerRules.view(SpeechRules.ON, polly, "Amy", null, null, mac = true).choices.last().label)
+        // Nothing chosen: MEKA's default is what speaks, so it's the one lit.
+        assertEquals(listOf("Amy"), v.choices.filter { it.selected }.map { it.id })
+        assertNull(v.statusLine)
+        assertTrue(v.choices.all { it.sample })
+        assertTrue(v.help.contains("Speech Services by Google"))
+        assertTrue(VoicePickerRules.view(SpeechRules.ON, polly, "Amy", null, null, mac = true).help.contains("Manage Voices"))
+        // A chosen voice is lit; the device's own when that's chosen.
+        assertEquals(listOf("Brian"), VoicePickerRules.view(SpeechRules.ON, polly, "Amy", "Brian", null, mac = false).choices.filter { it.selected }.map { it.id })
+        assertEquals(listOf("device"), VoicePickerRules.view(SpeechRules.ON, polly, "Amy", "device", null, mac = false).choices.filter { it.selected }.map { it.id })
+        // The sample is MEKA's own words.
+        assertTrue(VoicePickerRules.SAMPLE.startsWith("Good morning, Meka."))
+    }
+
+    @Test
+    fun withoutMekasVoicesThePickerSaysWhyAndNeverHidesTheChoice() {
+        // A chosen voice no longer offered: the default speaks and the picker says so.
+        val gone = VoicePickerRules.view(SpeechRules.ON, polly, "Amy", "Joanna", null, mac = false)
+        assertEquals(listOf("Amy"), gone.choices.filter { it.selected }.map { it.id })
+        assertEquals("“Joanna” isn't offered any more, so Amy speaks.", gone.statusLine)
+        // The server is off: only the device's voice, lit.
+        val off = VoicePickerRules.view(SpeechRules.OFF, emptyList(), null, null, null, mac = false)
+        assertEquals(listOf("device"), off.choices.map { it.id })
+        assertTrue(off.choices.single().selected)
+        assertEquals("MEKA's voices aren't switched on for this server, so the phone's own voice speaks.", off.statusLine)
+        // Unreachable with Brian chosen: Brian stays listed and lit, with nothing to sample.
+        val failed = VoicePickerRules.view(SpeechRules.FAILED, emptyList(), null, "Brian", null, mac = true)
+        assertEquals(listOf("Brian", "device"), failed.choices.map { it.id })
+        assertTrue(failed.choices[0].selected && !failed.choices[0].sample)
+        assertFalse(failed.choices[1].selected)
+        assertEquals("Couldn't reach MEKA's voices just now, so the Mac's own voice speaks. Try again in a moment.", failed.statusLine)
+        // Not connected; and still loading says nothing yet.
+        assertTrue(VoicePickerRules.view(null, emptyList(), null, null, null, mac = false, connected = false).statusLine!!.startsWith("MEKA's voices come from your MEKA server."))
+        assertNull(VoicePickerRules.view(null, emptyList(), null, null, null, mac = false, loaded = false).statusLine)
+    }
 }

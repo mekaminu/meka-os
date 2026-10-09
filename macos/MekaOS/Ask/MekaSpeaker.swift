@@ -65,6 +65,28 @@ final class MekaSpeaker {
         }
     }
 
+    /// ▶ Sample in the voice picker: `VoicePickerRules.SAMPLE` in the server's `voice` (a Polly name), or in the Mac's
+    /// own voice for "device" or when the clip can't be had or played. Stops anything already being said.
+    func sample(_ voice: String) {
+        stop()
+        line += 1
+        let id = line
+        speaking = true
+        if self.voice == nil { self.voice = Self.bestVoice() }
+        let text = VoicePickerRules.shared.SAMPLE
+        task = Task { [weak self] in
+            guard let self else { return }
+            var clip: Data?
+            if voice != MekaVoiceRules.shared.DEVICE { clip = await self.model?.speechSample(voice) }
+            guard !Task.isCancelled else { return }
+            var played = false
+            if let clip { played = await self.play(clip) }
+            guard !Task.isCancelled else { return }
+            if !played { await self.sayOnDevice(text) }
+            if id == self.line { self.speaking = false }
+        }
+    }
+
     /// Stops whatever is being said, in either voice.
     func stop() {
         line += 1

@@ -515,6 +515,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(SpeechRules.shared.usageLine(state: "off", month: nil, usedChars: 0, capChars: 0, voice: nil, deviceChosen: false))
     }
 
+    /// The voice picker (Weather and a voice, item 2): MEKA's voices first, then the Mac's own, reach Swift.
+    func testVoicePickerReachesSwift() {
+        let offered = [OfferedVoice(id: "Amy", gender: "Female", engine: "generative"), OfferedVoice(id: "Brian", gender: "Male", engine: "neural")]
+        let v = VoicePickerRules.shared.view(state: "on", offered: offered, defaultVoice: "Amy", chosen: "Brian", usageLine: nil,
+                                             mac: true, connected: true, loaded: true)
+        XCTAssertEqual(v.choices.map(\.id), ["Amy", "Brian", "device"])
+        XCTAssertEqual(v.choices.filter(\.selected).map(\.id), ["Brian"])
+        XCTAssertEqual(v.choices.last?.label, "This Mac's own voice")
+        XCTAssertEqual(v.choices.first?.detail, "British · female · most natural · MEKA's default")
+        XCTAssertTrue(v.help.contains("Manage Voices"))
+        XCTAssertTrue(VoicePickerRules.shared.SAMPLE.hasPrefix("Good morning, Meka."))
+    }
+
     /// The spoken morning brief (Weather and a voice, slice 8): the script the brief sheet's Listen reads reaches Swift.
     func testBriefSpeechReachesSwift() {
         XCTAssertEqual(BriefSpeech.shared.script(v: MorningBriefView.companion.EMPTY, name: "Meka"),

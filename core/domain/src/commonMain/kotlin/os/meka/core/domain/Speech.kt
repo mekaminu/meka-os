@@ -233,3 +233,107 @@ class MekaVoiceStore(private val replica: Replica) {
         const val ENTITY_ID = "voice"
     }
 }
+
+/** One of the server's voices as the picker sees it: Polly's [id] ("Amy"), [gender] ("Female") and best [engine] here. */
+data class OfferedVoice(val id: String, val gender: String, val engine: String)
+
+/**
+ * One row of the voice picker: [id] is what choosing it saves (a Polly name, or [MekaVoiceRules.DEVICE]); [sample] is
+ * false where there's nothing to play (a voice the server isn't reachable for).
+ */
+data class VoiceChoice(
+    val id: String,
+    val label: String,
+    val detail: String,
+    val selected: Boolean,
+    val sample: Boolean = true,
+)
+
+/**
+ * Ask → More → MEKA's voice (build plan V1, "Weather and a voice Meka likes", item 2): MEKA's voices first (Polly's
+ * British voices, the server's default marked), then the device's own voice; [statusLine] says why MEKA's voices are
+ * missing or used up; [usageLine] is Activity's month line; [help] says how to get a better free device voice.
+ */
+data class VoicePickerView(
+    val loaded: Boolean,
+    val intro: String,
+    val choices: List<VoiceChoice>,
+    val statusLine: String?,
+    val usageLine: String?,
+    val help: String,
+)
+
+/** The voice picker's words and order (non-AI, pure), the same on the Fold and the Mac. */
+object VoicePickerRules {
+    /** What ▶ Sample says: MEKA's own words, never anything of Meka's. */
+    const val SAMPLE = "Good morning, Meka. You've got three things today and it's 14 degrees."
+    const val TITLE = "MEKA's voice"
+    const val INTRO = "How MEKA sounds in Talk, the spoken brief and when it answers calls. The choice follows you to every device."
+
+    /** "Amy · British · female · most natural". */
+    fun detail(v: OfferedVoice, isDefault: Boolean): String {
+        val engine = when (v.engine.lowercase()) {
+            "generative" -> "most natural"
+            "neural" -> "natural"
+            else -> v.engine.lowercase().ifEmpty { null }
+        }
+        return listOfNotNull("British", v.gender.lowercase().ifEmpty { null }, engine, if (isDefault) "MEKA's default" else null)
+            .joinToString(" · ")
+    }
+
+    /** The device's own voice row: "This phone's own voice" / "This Mac's own voice". */
+    fun deviceLabel(mac: Boolean): String = if (mac) "This Mac's own voice" else "This phone's own voice"
+
+    const val DEVICE_DETAIL = "Speaks on the device · nothing is sent · each device uses its own"
+
+    fun help(mac: Boolean): String = if (mac) {
+        "For a better Mac voice: System Settings → Accessibility → Spoken Content → System voice → Manage Voices, " +
+            "and download a Premium or Enhanced English (United Kingdom) voice. MEKA picks the best one installed."
+    } else {
+        "For a better free phone voice: install Speech Services by Google, choose it in Settings → General management → " +
+            "Text-to-speech → Preferred engine, then download English (United Kingdom) in high quality. MEKA picks the best one installed."
+    }
+
+    /**
+     * The picker: [state] is the server's answer ("on", "off", "failed"), or null while it hasn't answered or the device
+     * isn't connected ([connected]); [offered] the server's voices (best first), [defaultVoice] its default; [chosen] the
+     * synced choice ([MekaVoiceStore.chosen]). The selected row is the chosen voice when offered, the device's when
+     * chosen, else the server's default. A chosen voice the server can't be reached for still shows (selected, no
+     * sample) so the choice is never hidden.
+     */
+    fun view(
+        state: String?,
+        offered: List<OfferedVoice>,
+        defaultVoice: String?,
+        chosen: String?,
+        usageLine: String?,
+        mac: Boolean,
+        connected: Boolean = true,
+        loaded: Boolean = true,
+    ): VoicePickerView {
+        val on = state == SpeechRules.ON && offered.isNotEmpty()
+        val device = chosen == MekaVoiceRules.DEVICE
+        val polly = if (on) offered else emptyList()
+        val default = polly.firstOrNull { it.id == defaultVoice }?.id ?: polly.firstOrNull()?.id
+        val picked = when {
+            device -> MekaVoiceRules.DEVICE
+            chosen != null && polly.any { it.id == chosen } -> chosen
+            else -> default
+        }
+        val rows = polly.map { v -> VoiceChoice(v.id, v.id, detail(v, v.id == default), selected = v.id == picked) }.toMutableList()
+        if (!on && chosen != null && !device) {
+            rows += VoiceChoice(chosen, chosen, "MEKA's voice · not reachable right now", selected = true, sample = false)
+        }
+        rows += VoiceChoice(MekaVoiceRules.DEVICE, deviceLabel(mac), DEVICE_DETAIL, selected = device || (picked == null && !rows.any { it.selected }))
+        val where = if (mac) "the Mac" else "the phone"
+        val status = when {
+            !loaded -> null
+            !connected -> "MEKA's voices come from your MEKA server. Until this device is connected, $where's own voice speaks."
+            state == SpeechRules.OFF -> "MEKA's voices aren't switched on for this server, so $where's own voice speaks."
+            !on -> "Couldn't reach MEKA's voices just now, so $where's own voice speaks. Try again in a moment."
+            chosen != null && !device && chosen !in polly.map { it.id } -> "“$chosen” isn't offered any more, so $default speaks."
+            else -> null
+        }
+        return VoicePickerView(loaded, INTRO, rows, status, usageLine, help(mac))
+    }
+}

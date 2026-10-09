@@ -53,7 +53,7 @@ class ShellNavTest {
         assertEquals(
             listOf(
                 "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Work mode", "Notifications",
-                "Appearance", "Calendars", "Activity", "Your data",
+                "Appearance", "MEKA's voice", "Calendars", "Activity", "Your data",
             ),
             ShellNav.more(connected = true).map { it.label },
         )
@@ -71,7 +71,7 @@ class ShellNavTest {
         assertEquals(listOf("Lists", "Goals and habits", "Review", "Vault"), sections[0].items.map { it.label })
         assertEquals(listOf("Morning brief", "News", "Shut down the day"), sections[1].items.map { it.label })
         assertEquals(
-            listOf("Work mode", "Notifications", "Appearance", "Calendars", "Activity", "Your data"),
+            listOf("Work mode", "Notifications", "Appearance", "MEKA's voice", "Calendars", "Activity", "Your data"),
             sections[2].items.map { it.label },
         )
         // The same rows as the flat list, in the same order; the places are exactly the Places section.
@@ -89,7 +89,7 @@ class ShellNavTest {
         assertEquals(listOf(2, 4, 6), (0..2).map { ShellNav.moreLabelStep(it) })
         assertEquals(listOf(3, 4, 5, 6), (0..3).map { ShellNav.moreRowStep(0, it) })
         assertEquals(5, ShellNav.moreRowStep(1, 0))
-        assertEquals(12, ShellNav.moreRowStep(2, 5))
+        assertEquals(13, ShellNav.moreRowStep(2, 6))
         // Each label comes before its own rows.
         for (s in 0..2) assertTrue(ShellNav.moreLabelStep(s) < ShellNav.moreRowStep(s, 0))
     }

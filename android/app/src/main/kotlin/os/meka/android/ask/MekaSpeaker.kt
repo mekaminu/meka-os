@@ -20,9 +20,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import os.meka.core.domain.MekaVoiceRules
 import os.meka.core.domain.SpeechRules
 import os.meka.core.domain.TalkVoice
 import os.meka.core.domain.VoiceCandidate
+import os.meka.core.domain.VoicePickerRules
 import os.meka.core.facade.MekaCore
 import java.util.Locale
 import kotlin.coroutines.resume
@@ -81,6 +83,24 @@ class MekaSpeaker(
             }
             next?.cancel()
             if (i < pieces.size) sayOnDevice(pieces.drop(i).joinToString(" "))
+            if (id == line) {
+                speaking = false
+                onDone()
+            }
+        }
+    }
+
+    /**
+     * ▶ Sample in the voice picker: [VoicePickerRules.SAMPLE] in the server's [voice] (a Polly name), or in the phone's
+     * own voice for [MekaVoiceRules.DEVICE] or when the clip can't be had or played. Stops anything already being said.
+     */
+    fun sample(voice: String, onDone: () -> Unit = {}) {
+        stop()
+        val id = ++line
+        speaking = true
+        job = scope.launch {
+            val clip = if (voice == MekaVoiceRules.DEVICE) null else core.speechSample(voice)
+            if (clip == null || !play(clip)) sayOnDevice(VoicePickerRules.SAMPLE)
             if (id == line) {
                 speaking = false
                 onDone()
