@@ -53,6 +53,8 @@ import os.meka.core.domain.DayTile
 import os.meka.core.domain.DayRing
 import os.meka.core.domain.DayRingPlay
 import os.meka.core.domain.DayRingRules
+import os.meka.core.domain.DayRingHeader
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -92,7 +94,16 @@ fun DayRingHero(
      */
     bedside: Boolean = false,
     quiet: Boolean = false,
+    /**
+     * False when the ring sits beside the greeting in Today's header (Fold review 2026-10-09): it takes only its own
+     * width instead of centring itself across the screen.
+     */
+    fillWidth: Boolean = true,
 ) {
+    val sizeDp = size.value.toInt()
+    // The compact header dial (closed Fold) thins its stroke and drops the centre text (DayRingHeader).
+    val strokeDp = DayRingHeader.strokeDp(sizeDp).dp
+    val showsCentre = DayRingHeader.showsCentre(sizeDp)
     val expressive = Meka.expressiveMotion
     val total = remember(play) { MotionMath.dayRingTotalMs(ring.arcs.size, play, expressive, tiles.size) }
     var elapsed by remember(play) { mutableLongStateOf(if (play == DayRingPlay.STILL) total else 0L) }
@@ -115,15 +126,16 @@ fun DayRingHero(
     val currentRing by rememberUpdatedState(ring)
     val open by rememberUpdatedState(onOpenArc)
     val dial = size
-    Column(modifier.fillMaxWidth().padding(vertical = MekaSpace.s), horizontalAlignment = Alignment.CenterHorizontally) {
+    val width = if (fillWidth) Modifier.fillMaxWidth() else Modifier
+    Column(modifier.then(width).padding(vertical = if (fillWidth) MekaSpace.s else 0.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = ring.spokenLine }
+            width.clearAndSetSemantics { testTag = DAY_RING_TAG; contentDescription = ring.spokenLine }
                 .then(
                     if (onOpenArc == null) Modifier else Modifier.pointerInput(dial) {
                         // Tap an arc to open it: the angle from the dial's centre picks the arc (free time opens nothing).
                         detectTapGestures { p ->
-                            // The track's radius, as the dial draws it (10 dp stroke, inset by half of it plus 2 dp).
-                            val radius = (dial.toPx() - 2 * (5.dp.toPx() + 2.dp.toPx())) / 2
+                            // The track's radius, as the dial draws it (inset by half the stroke plus 2 dp).
+                            val radius = DayRingHeader.trackRadiusDp(dial.value.toInt()).dp.toPx()
                             val deg = DayRingRules.tapDegrees(p.x - this.size.width / 2f, p.y - this.size.height / 2f, radius)
                                 ?: return@detectTapGestures
                             DayRingRules.arcAt(currentRing, deg)?.let { arc ->
@@ -136,7 +148,7 @@ fun DayRingHero(
             contentAlignment = Alignment.Center,
         ) {
             Canvas(Modifier.size(size)) {
-                val stroke = 10.dp.toPx()
+                val stroke = strokeDp.toPx()
                 val inset = stroke / 2 + 2.dp.toPx()
                 val arcSize = Size(this.size.width - inset * 2, this.size.height - inset * 2)
                 val topLeft = Offset(inset, inset)
@@ -221,7 +233,7 @@ fun DayRingHero(
             // Living Today: once the opening has landed the ring stays alive — the gold second hand, the breath, the
             // hour's shimmer and the now dot's pop — drawn on a layer of its own.
             DayRingLiveLayer(ring, landed = play == DayRingPlay.STILL, size = size, onFrame = onLiveFrame, bedside = bedside, quiet = quiet)
-            Column(
+            if (showsCentre) Column(
                 Modifier.size(size * 0.62f),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -286,7 +298,7 @@ private fun DayRingLiveLayer(
     Canvas(Modifier.size(size)) {
         val now = clock.longValue // read only here: a new frame redraws this layer, nothing recomposes
         if (!landed) return@Canvas // the opening draws the dial in first
-        val stroke = 10.dp.toPx()
+        val stroke = DayRingHeader.strokeDp(size.value.toInt()).dp.toPx()
         val inset = stroke / 2 + 2.dp.toPx()
         val radius = (this.size.width - inset * 2) / 2
         val sweeping = mode == DayRingLiveMode.SWEEP
@@ -351,8 +363,33 @@ private fun DayRingLiveLayer(
  * in after the mark closes ([MotionMath.dayTile]) while its number counts up with the centre ([count]); afterwards
  * they follow Today's minute refresh. Each is one screen-reader line.
  */
+/** The ring's test tag: Today's UI tests look for it on the closed and open Fold. */
+const val DAY_RING_TAG = "day-ring"
+
+/**
+ * The live tiles as a slim row under Today's header (Fold review 2026-10-09, item 1): the ring sits beside the
+ * greeting now, so its tiles leave the dial. They keep the opening's timing — the same [play] starts the same clock,
+ * so each still rises in after the mark closes while its number counts up with the ring's centre.
+ */
 @Composable
-private fun DayTilesRow(tiles: List<DayTile>, count: Float, modifier: Modifier = Modifier, appear: (Int) -> Float) {
+fun DayTilesStrip(tiles: List<DayTile>, play: DayRingPlay, arcs: Int, modifier: Modifier = Modifier) {
+    if (tiles.isEmpty()) return
+    val expressive = Meka.expressiveMotion
+    val total = remember(play) { MotionMath.dayRingTotalMs(arcs, play, expressive, tiles.size) }
+    var elapsed by remember(play) { mutableLongStateOf(if (play == DayRingPlay.STILL) total else 0L) }
+    LaunchedEffect(play) {
+        if (play != DayRingPlay.STILL) {
+            val start = withFrameMillis { it }
+            while (elapsed < total) withFrameMillis { elapsed = it - start }
+        }
+    }
+    DayTilesRow(tiles, MotionMath.dayRingCount(elapsed, play, expressive), modifier, slim = true) { i ->
+        MotionMath.dayTile(elapsed, i, play, expressive)
+    }
+}
+
+@Composable
+private fun DayTilesRow(tiles: List<DayTile>, count: Float, modifier: Modifier = Modifier, slim: Boolean = false, appear: (Int) -> Float) {
     val colors = Meka.colors
     val rise = with(LocalDensity.current) { MotionMath.riseDistanceDp(Meka.expressiveMotion).dp.toPx() / 2 }
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -363,7 +400,7 @@ private fun DayTilesRow(tiles: List<DayTile>, count: Float, modifier: Modifier =
                     .graphicsLayer { alpha = a; translationY = (1f - a) * rise }
                     .clip(RoundedCornerShape(MekaRadius.s))
                     .background(colors.surface)
-                    .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs)
+                    .padding(horizontal = MekaSpace.s, vertical = if (slim) MekaSpace.xxs else MekaSpace.xs)
                     .clearAndSetSemantics { contentDescription = tile.spokenLine },
             ) {
                 Text(
@@ -371,7 +408,7 @@ private fun DayTilesRow(tiles: List<DayTile>, count: Float, modifier: Modifier =
                     style = MekaType.body.copy(fontFeatureSettings = "tnum"), color = colors.textPrimary, maxLines = 1,
                 )
                 Text(
-                    tile.label, style = MekaType.caption, color = colors.textSecondary, maxLines = 2,
+                    tile.label, style = MekaType.caption, color = colors.textSecondary, maxLines = if (slim) 1 else 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }

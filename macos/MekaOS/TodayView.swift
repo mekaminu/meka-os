@@ -56,6 +56,10 @@ struct TodayView: View {
         VStack(spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    // The Day ring sits in the header, beside the greeting (Fold review 2026-10-09, item 1): greeting,
+                    // date and links on the left, a 150 pt ring on the right; its live tiles a slim row underneath.
+                    HStack(alignment: .top, spacing: MekaSpace.m) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
                     GreetingText(text: greeting, play: ringPlay ?? .still, palette: palette)
                         .staggeredAppear(0, play: play)
@@ -95,10 +99,12 @@ struct TodayView: View {
                         Text(line).font(MekaType.caption).foregroundStyle(palette.offline)
                             .transition(.opacity)
                     }
-                    // The opening moment (motion pass 2, slice 7): the Day ring under the header.
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // The opening moment (motion pass 2, slice 7): the Day ring, drawn in place in the header.
                     if let today = model.today, !today.timeline.dateLabel.isEmpty {
                         DayRingView(ring: today.dayRing, play: ringPlay ?? .still, played: { ringPlay = .still }, palette: palette,
-                                    tiles: today.dayTiles,
+                                    size: CGFloat(DayRingHeader.shared.WIDE_DP),
                                     // Click an arc to open it: an event's detail, a planned task's detail (Living Today, slice 3).
                                     onOpenArc: { arc in
                                         switch arc.kind {
@@ -109,7 +115,13 @@ struct TodayView: View {
                                         default:
                                             break // a session's row in the timeline carries its actions
                                         }
-                                    })
+                                    },
+                                    fillsWidth: false)
+                    }
+                    }
+                    // The ring's live tiles, a slim row under the header (they left the dial with the move).
+                    if let today = model.today, !today.timeline.dateLabel.isEmpty, !today.dayTiles.isEmpty {
+                        DayTilesStrip(tiles: today.dayTiles, play: ringPlay ?? .still, arcs: today.dayRing.arcs.count, palette: palette)
                             .padding(.top, MekaSpace.s)
                     }
                     Spacer().frame(height: MekaSpace.l)

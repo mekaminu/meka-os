@@ -408,6 +408,17 @@ final class MekaCoreBridgeTests: XCTestCase {
     }
 
     /// Living Today (slice 1): the living ring's numbers reach the Mac's layer.
+    /// Fold review 2026-10-09, item 1: the ring in Today's header — 150 pt with its centre on the Mac.
+    func testDayRingHeaderReachesSwift() {
+        let h = DayRingHeader.shared
+        XCTAssertEqual(h.sizeDp(compact: false), 150)
+        XCTAssertEqual(h.WIDE_DP, 150)
+        XCTAssertTrue(h.showsCentre(sizeDp: 150))
+        XCTAssertFalse(h.showsCentre(sizeDp: 96))
+        XCTAssertEqual(h.strokeDp(sizeDp: 150), 10)
+        XCTAssertEqual(h.strokeDp(sizeDp: 96), 6)
+    }
+
     func testDayRingLiveReachesSwift() {
         let live = DayRingLive.shared
         let nine: Int64 = 1_791_493_200_000 // Thu 8 Oct 2026 21:00 UTC

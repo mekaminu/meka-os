@@ -495,3 +495,31 @@ object DayRingLive {
         DayRingLiveMode.STILL -> null
     }
 }
+
+/**
+ * Where the Day ring sits on Today (Fold review 2026-10-09, item 1): in the header, beside the greeting — not a block
+ * between the ticker and Up next. The open Fold and the Mac show a [WIDE_DP] dial with its centre line; the closed
+ * Fold a compact [COMPACT_DP] dial (ring, hand, now dot, arcs) with no centre text — free time stays in the
+ * timeline's now line. The live tiles leave the dial and sit under the header as a slim row. The track's stroke
+ * thins on the compact dial so the arcs still read at that size.
+ */
+object DayRingHeader {
+    const val WIDE_DP = 150
+    const val COMPACT_DP = 96
+    /** Below this the centre's "3 h 45 free" · "4 to do" doesn't fit inside the arcs. */
+    const val CENTRE_MIN_DP = 120
+    const val STROKE_DP = 10f
+    const val COMPACT_STROKE_DP = 6f
+
+    /** The dial's size in the header: compact on a narrow screen (the closed Fold's cover screen). */
+    fun sizeDp(compact: Boolean): Int = if (compact) COMPACT_DP else WIDE_DP
+
+    /** Whether a dial of [sizeDp] shows its centre line and caption. */
+    fun showsCentre(sizeDp: Int): Boolean = sizeDp >= CENTRE_MIN_DP
+
+    /** The arcs' stroke on a dial of [sizeDp]. */
+    fun strokeDp(sizeDp: Int): Float = if (sizeDp < CENTRE_MIN_DP) COMPACT_STROKE_DP else STROKE_DP
+
+    /** The track's radius (what taps are measured against): half the dial, less half the stroke and a 2 dp inset. */
+    fun trackRadiusDp(sizeDp: Int): Float = sizeDp / 2f - strokeDp(sizeDp) / 2f - 2f
+}

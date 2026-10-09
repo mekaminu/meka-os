@@ -17,8 +17,16 @@ struct DayRingView: View {
     var tiles: [DayTile] = []
     /// Clicking an arc on the ring opens it (Living Today, slice 3); nil: the ring doesn't answer clicks.
     var onOpenArc: ((DayArc) -> Void)? = nil
+    /// False when the ring sits beside the greeting in Today's header (Fold review 2026-10-09): it takes only its own
+    /// width instead of centring itself across the column.
+    var fillsWidth: Bool = true
     @Environment(\.mekaExpressiveMotion) private var expressive
     @State private var began = Date()
+
+    /// The arcs' stroke: thinner on a compact dial (`DayRingHeader`), 10 pt otherwise.
+    private var stroke: CGFloat { CGFloat(DayRingHeader.shared.strokeDp(sizeDp: Int32(size))) }
+    /// Below `DayRingHeader.CENTRE_MIN_DP` the centre's "3 h 45 free" · "4 to do" doesn't fit inside the arcs.
+    private var showsCentre: Bool { DayRingHeader.shared.showsCentre(sizeDp: Int32(size)) }
 
     var body: some View {
         let total = MotionMath.dayRingTotal(arcs: ring.arcs.count, play: play, expressive: expressive, tiles: tiles.count)
@@ -31,7 +39,7 @@ struct DayRingView: View {
                     .frame(width: size, height: size)
                     .contentShape(Circle())
                     .onTapGesture(coordinateSpace: .local) { p in openArc(at: p) }
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: fillsWidth ? .infinity : nil)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(ring.spokenLine)
                 if !tiles.isEmpty {
@@ -42,7 +50,7 @@ struct DayRingView: View {
                 }
             }
         }
-        .padding(.vertical, MekaSpace.s)
+        .padding(.vertical, fillsWidth ? MekaSpace.s : 0)
         .onAppear { began = Date() }
         .task(id: play) {
             guard play != .still else { return }
@@ -55,7 +63,7 @@ struct DayRingView: View {
     /// A click on the ring opens the arc under it (the angle from the centre picks it; free time opens nothing).
     private func openArc(at p: CGPoint) {
         guard let onOpenArc else { return }
-        let radius = Float(size / 2 - 10 / 2 - 2) // the track, as the dial draws it
+        let radius = Float(size / 2 - stroke / 2 - 2) // the track, as the dial draws it
         guard let deg = DayRingRules.shared.tapDegrees(dx: Float(p.x - size / 2), dy: Float(p.y - size / 2), radius: radius),
               let arc = DayRingRules.shared.arcAt(ring: ring, degrees: deg.floatValue) else { return }
         MekaHaptics.tick()
@@ -78,7 +86,7 @@ struct DayRingView: View {
         let centreCaption = ring.centreCaption(toDo: Int32(toDo))
         return ZStack {
             Canvas { ctx, canvasSize in
-                let stroke: CGFloat = 10
+                let stroke = self.stroke
                 let radius = min(canvasSize.width, canvasSize.height) / 2 - stroke / 2 - 2
                 let c = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
                 func point(_ degrees: Double, _ r: CGFloat) -> CGPoint {
@@ -167,7 +175,7 @@ struct DayRingView: View {
                     ctx.fill(Path(ellipseIn: CGRect(x: tip.x - 3.5, y: tip.y - 3.5, width: 7, height: 7)), with: .color(palette.accent))
                 }
             }
-            VStack(spacing: MekaSpace.xxs) {
+            if showsCentre { VStack(spacing: MekaSpace.xxs) {
                 // "3 h 45 free" · "4 to do"; once the day is shut down, tomorrow's first thing ("Tomorrow 09:30" · "Standup").
                 Text(centreLine)
                     .font(MekaType.body).monospacedDigit().foregroundStyle(palette.textPrimary)
@@ -176,7 +184,7 @@ struct DayRingView: View {
                     .lineLimit(2)
             }
             .multilineTextAlignment(.center)
-            .frame(width: size * 0.62)
+            .frame(width: size * 0.62) }
         }
     }
 }
@@ -231,7 +239,7 @@ struct DayRingLiveLayer: View {
         let onNow = ring.arcs.filter { $0.current }.map { (Double($0.startDegrees), Double($0.sweepDegrees)) }
         let accent = palette.accent
         return Canvas { ctx, canvasSize in
-            let stroke: CGFloat = 10
+            let stroke = CGFloat(DayRingHeader.shared.strokeDp(sizeDp: Int32(min(canvasSize.width, canvasSize.height))))
             let radius = min(canvasSize.width, canvasSize.height) / 2 - stroke / 2 - 2
             let c = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
             func point(_ degrees: Double, _ r: CGFloat) -> CGPoint {
@@ -292,10 +300,36 @@ struct DayRingLiveLayer: View {
 /// four small tiles side by side — next event countdown, a running fast, habits done today, renewals due
 /// (`DayTileRules`). Each fades and rises in after the mark closes while its number counts up with the centre;
 /// afterwards they follow Today's minute refresh. VoiceOver reads each as one line.
+/// The live tiles as a slim row under Today's header (Fold review 2026-10-09, item 1): the ring sits beside the
+/// greeting now, so its tiles leave the dial. The same `play` starts the same clock, so each still rises in after the
+/// mark closes while its number counts up with the ring's centre.
+struct DayTilesStrip: View {
+    let tiles: [DayTile]
+    let play: DayRingPlayback
+    let arcs: Int
+    let palette: MekaPalette
+    @Environment(\.mekaExpressiveMotion) private var expressive
+    @State private var began = Date()
+
+    var body: some View {
+        let total = MotionMath.dayRingTotal(arcs: arcs, play: play, expressive: expressive, tiles: tiles.count)
+        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: play == .still)) { context in
+            let elapsed = play == .still ? total : min(total, context.date.timeIntervalSince(began))
+            DayTilesRow(tiles: tiles, count: MotionMath.dayRingCount(elapsed: elapsed, play: play, expressive: expressive),
+                        palette: palette, slim: true) { i in
+                MotionMath.dayTile(elapsed: elapsed, index: i, play: play, expressive: expressive)
+            }
+        }
+        .onAppear { began = Date() }
+        .onChange(of: play) { _, _ in began = Date() }
+    }
+}
+
 struct DayTilesRow: View {
     let tiles: [DayTile]
     let count: Double
     let palette: MekaPalette
+    var slim: Bool = false
     let appear: (Int) -> Double
     @Environment(\.mekaExpressiveMotion) private var expressive
 
@@ -308,11 +342,11 @@ struct DayTilesRow: View {
                     Text(tile.text(shown: Int32(shown)))
                         .font(MekaType.body).monospacedDigit().foregroundStyle(palette.textPrimary).lineLimit(1)
                     Text(tile.label)
-                        .font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
+                        .font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(slim ? 1 : 2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, MekaSpace.s)
-                .padding(.vertical, MekaSpace.xs)
+                .padding(.vertical, slim ? MekaSpace.xxs : MekaSpace.xs)
                 .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
                 .opacity(a)
                 .offset(y: (1 - a) * MotionMath.riseDistance(expressive: expressive) / 2)

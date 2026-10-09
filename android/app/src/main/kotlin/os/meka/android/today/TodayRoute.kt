@@ -154,6 +154,9 @@ import os.meka.core.sync.SyncStatus
 import java.time.Instant
 import os.meka.core.domain.DayArcKind
 import os.meka.core.domain.DayRingPlay
+import os.meka.core.domain.DayArc
+import os.meka.core.domain.DayRing
+import os.meka.core.domain.DayRingHeader
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -484,6 +487,26 @@ data class TodayActions(
     val setReminder: (String, Long?) -> Unit,
 )
 
+/**
+ * Today's header row (Fold review 2026-10-09, item 1): the greeting, date, weather and links on the left ([left]), the
+ * Day ring on the right — [DayRingHeader.WIDE_DP] on the open Fold, a compact [DayRingHeader.COMPACT_DP] dial with no
+ * centre text on the closed Fold ([compact]). No [ring] (no day yet): the left side takes the whole row.
+ */
+@Composable
+internal fun TodayHeaderRow(
+    ring: DayRing?, compact: Boolean, play: DayRingPlay, played: () -> Unit,
+    onOpenArc: ((DayArc) -> Unit)? = null,
+    left: @Composable () -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Column(Modifier.weight(1f)) { left() }
+        if (ring != null) {
+            DayRingHero(ring, play, played, Modifier.padding(start = MekaSpace.m),
+                size = DayRingHeader.sizeDp(compact).dp, fillWidth = false, onOpenArc = onOpenArc)
+        }
+    }
+}
+
 @Composable
 private fun TodayPane(
     today: Today, sync: SyncStatus, actions: TodayActions, modifier: Modifier, connect: ConnectHook?,
@@ -531,6 +554,22 @@ private fun TodayPane(
         ) {
             item(key = "greeting") {
                 Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play))) {
+                    // The Day ring sits in the header, beside the greeting (Fold review 2026-10-09, item 1): greeting,
+                    // date and links on the left, the ring on the right — 150 dp on the open Fold, a compact 96 dp on
+                    // the closed one (no centre text; free time stays in the timeline's now line). The first-open
+                    // moment still draws it in place.
+                    TodayHeaderRow(
+                        ring = today.dayRing.takeIf { today.timeline.dateLabel.isNotEmpty() }, compact = now != null,
+                        play = ringPlay, played = ringPlayed,
+                        // Tap an arc to open it: an event's detail, a planned task's detail (Living Today, slice 3).
+                        onOpenArc = { arc ->
+                            when (arc.kind) {
+                                DayArcKind.EVENT -> today.events.firstOrNull { "e-" + it.id == arc.id }?.let(openEvent)
+                                DayArcKind.TASK -> actions.select(arc.id.removePrefix("t-"))
+                                DayArcKind.SESSION -> Unit // the session's row in the timeline carries its actions
+                            }
+                        },
+                    ) {
                     // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
                     GreetingText(greeting(), if (now == null) ringPlay else DayRingPlay.STILL)
                     if (today.timeline.dateLabel.isNotEmpty()) {
@@ -547,7 +586,6 @@ private fun TodayPane(
                         }
                     }
                     SyncLine(sync)
-                    if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
                         modifier = Modifier.padding(top = MekaSpace.xs).horizontalScroll(rememberScrollState()),
@@ -563,26 +601,18 @@ private fun TodayPane(
                                 .clickable(role = Role.Button) { openPlan() }.padding(vertical = MekaSpace.xxs),
                         )
                     }
+                    }
+                    if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs))
                     // News ticker (news ticker, slice 2): one line of drifting cards under the header; calm by default
                     // (two loops, then it rests). Off in Appearance hides it.
                     if (core != null && TickerRules.shown(tickerMode, ticker)) {
                         NewsTickerStrip(core, ticker, tickerMode, Modifier.padding(top = MekaSpace.s), openStory = openStory, openMatch = openMatch)
                     }
+                    // The ring's live tiles, a slim row under the ticker (they left the dial with the move).
+                    if (today.timeline.dateLabel.isNotEmpty()) {
+                        DayTilesStrip(today.dayTiles, ringPlay, today.dayRing.arcs.size, Modifier.padding(top = MekaSpace.s))
+                    }
                 }
-            }
-            // The opening moment (motion pass 2, slice 7): the Day ring under the greeting; on every screen.
-            // Shown on the closed Fold too (Meka uses it most and had never seen the ring), a little smaller there.
-            if (today.timeline.dateLabel.isNotEmpty()) item(key = "dayring") {
-                DayRingHero(today.dayRing, ringPlay, ringPlayed, Modifier.padding(bottom = MekaSpace.l),
-                    size = if (now == null) 196.dp else 168.dp, tiles = today.dayTiles,
-                    // Tap an arc to open it: an event's detail, a planned task's detail (Living Today, slice 3).
-                    onOpenArc = { arc ->
-                        when (arc.kind) {
-                            DayArcKind.EVENT -> today.events.firstOrNull { "e-" + it.id == arc.id }?.let(openEvent)
-                            DayArcKind.TASK -> actions.select(arc.id.removePrefix("t-"))
-                            DayArcKind.SESSION -> Unit // the session's row in the timeline carries its actions
-                        }
-                    })
             }
             // Motion pass 2: with the phone's animations off and nothing chosen in Appearance → Motion, a one-time card.
             motionCard?.let { card ->
