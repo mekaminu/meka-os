@@ -258,7 +258,10 @@ fun TodayRoute(
     var pausedAt by remember { mutableLongStateOf(0L) }
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { pausedAt = SystemClock.elapsedRealtime() }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        val away = if (pausedAt == 0L) 0L else SystemClock.elapsedRealtime() - pausedAt
+        // "Where I am now" (Places item 3): with the switch on, one approximate fix as Today opens (the core decides,
+        // at most once per 30 minutes); away from home and work the weather line then reads "Near you · …".
+        scope.launch { HereLocation.refresh(ringContext, core, null) }
+        val away =if (pausedAt == 0L) 0L else SystemClock.elapsedRealtime() - pausedAt
         val back = DayRingOpen.onReturn(ringContext, LocalDate.now().toEpochDay(), away, ringReduced)
         if (back != null && pausedAt != 0L) {
             ringPlay = back

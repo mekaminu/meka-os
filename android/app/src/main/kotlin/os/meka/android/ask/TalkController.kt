@@ -175,6 +175,7 @@ class TalkController(
                 level = 0f
                 val gen = generation
                 scope.launch {
+                    os.meka.android.today.HereLocation.refresh(context, core, effect.question)
                     val out = core.talk(effect.question, effect.history)
                     if (gen != generation) return@launch
                     onAnswer(effect.question, out)

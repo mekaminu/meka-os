@@ -1,6 +1,14 @@
 package os.meka.android.today
 
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -23,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -30,12 +39,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -72,6 +85,77 @@ internal fun WeatherPlaceSection(core: MekaCore, modifier: Modifier = Modifier) 
             isDefault = PlacesRules::isDefaultWork, resetLabel = "Use ${PlacesRules.WORK}", spokenLabel = "Where work is",
             save = { core.setWorkPlace(it) },
             modifier = Modifier.padding(top = MekaSpace.xs),
+        )
+        HereSwitch(core, Modifier.padding(top = MekaSpace.s))
+    }
+}
+
+/**
+ * "Where I am now" (Places item 3): the switch, kept on this phone, off by default. Turn on asks Android for
+ * approximate location (once; if refused, the line is lit "Needs location · tap to allow" and a tap opens MEKA's app
+ * settings); Turn off forgets the last answer at once. The status line cross-fades and its colour blends to the
+ * accent when it needs a look; the privacy words sit under it.
+ */
+@Composable
+private fun HereSwitch(core: MekaCore, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    val scope = rememberCoroutineScope()
+    var on by remember { mutableStateOf(HereLocation.isOn(context)) }
+    var permitted by remember { mutableStateOf(HereLocation.permitted(context)) }
+    // Coming back from Android's settings: read the permission again.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        permitted = HereLocation.permitted(context)
+        if (on && !permitted) scope.launch { core.forgetHere() }
+    }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        permitted = ok
+        if (ok) scope.launch { HereLocation.refresh(context, core, null) }
+    }
+    val view = core.hereSetting(on, permitted)
+    val statusColor by animateColorAsState(
+        if (view.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "here-status",
+    )
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text("Where I am now", style = MekaType.caption, color = Meka.colors.textSecondary)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AnimatedContent(
+                targetState = view.statusLine,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "here-line",
+                modifier = Modifier.weight(1f).then(
+                    if (view.lit) Modifier.clickable(role = Role.Button) { haptics.tick(); openAppSettings(context) } else Modifier,
+                ),
+            ) { l -> Text(l, style = MekaType.caption, color = statusColor) }
+            Box(
+                Modifier.padding(start = MekaSpace.m).clip(RoundedCornerShape(MekaRadius.pill))
+                    .background(Meka.colors.surfaceRaised)
+                    .clickable(role = Role.Button) {
+                        haptics.tick()
+                        if (on) {
+                            on = false
+                            HereLocation.setOn(context, false)
+                            scope.launch { core.forgetHere() }
+                        } else {
+                            on = true
+                            HereLocation.setOn(context, true)
+                            if (permitted) scope.launch { HereLocation.refresh(context, core, null) }
+                            else ask.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        }
+                    }
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            ) { Text(view.actionLabel, style = MekaType.itemMeta, color = Meka.colors.accent) }
+        }
+        Text(view.privacy, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+private fun openAppSettings(context: Context) {
+    runCatching {
+        context.startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
     }
 }

@@ -26,6 +26,10 @@
     <!-- Talk to MEKA (V1 voice slice 2): asked for the first time Meka taps the mic. Speech is recognised on the
          device only (SpeechRecognizer's on-device recogniser); nothing is recorded, kept or sent away as audio. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- "Where I am now" (Places item 3): approximate location only, asked for when Meka turns the switch on in
+         Calendars → Weather. One fix on demand while MEKA is open (Today opening, a question about "here"); never in
+         the background, never fine location. The point is rounded to about 1 km before it leaves the phone. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!-- Talk to MEKA: see the speech recogniser and the text-to-speech engine on Android 11+ (package visibility). -->
     <queries>

@@ -190,6 +190,8 @@ fun AskMekaSection(
         asked = q
         done = emptySet()
         scope.launch {
+            // "Where I am now": a question about here takes one approximate fix first (only with the switch on).
+            os.meka.android.today.HereLocation.refresh(context, core, q)
             val out = core.askMeka(q)
             shown = AskShown.Answer(q, out, asks + 1)
             asks += 1
