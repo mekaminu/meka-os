@@ -79,6 +79,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
@@ -294,10 +295,11 @@ fun TodayRoute(
         openEvent = { eventOpen = it }, openNeedsYou = null, // Needs you is listed just above it on the cover screen
         went = { id -> scope.launch { runCatching { core.sessionWent(id, null) } } },
         didntGo = { id -> scope.launch { runCatching { core.sessionMissed(id) } } },
-        // The cover screen's mic (Talk without tapping the mic, slice 3): Ask, already listening.
-        talk = { os.meka.android.ask.talkFromCover(talkApp) },
     )
-    // The open Fold's Up next card: the same taps, no mic (Ask's is a tab away) and no Needs you line.
+    // The mic sits at the capture bar's end on every screen (Fold review 2026-10-09 07:26, item 5), not on a card:
+    // Ask, already listening.
+    val talkFromCapture: () -> Unit = { os.meka.android.ask.talkFromCover(talkApp) }
+    // The open Fold's Up next card: the same taps and no Needs you line.
     val upNextHandlers = NowHandlers(
         complete = actions.complete, tomorrow = actions.snooze, openTask = actions.select,
         openEvent = { eventOpen = it }, openNeedsYou = null,
@@ -339,7 +341,8 @@ fun TodayRoute(
                         now = if (twoPane) null else nowView, nowHandlers = nowHandlers,
                         upNext = upNextView, upNextHandlers = upNextHandlers,
                         ticker = ticker, tickerMode = tickerMode, core = core,
-                        openStory = { id -> newsOpen = id }, openMatch = { eventOpen = it }) }
+                        openStory = { id -> newsOpen = id }, openMatch = { eventOpen = it },
+                        onTalk = talkFromCapture) }
                 },
                 detail = { m ->
                     CommandSide(
@@ -562,6 +565,8 @@ private fun TodayPane(
     ringPlayed: () -> Unit = {},
     /** Tapping the watch face opens the full 24-hour Day ring. */
     openDayRing: () -> Unit = {},
+    /** The capture bar's mic (Talk): Ask, already listening. Null: no mic. */
+    onTalk: (() -> Unit)? = null,
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
@@ -828,7 +833,7 @@ private fun TodayPane(
             }
         }
         }
-        QuickCapture(actions.add)
+        QuickCapture(actions.add, onTalk)
     }
 }
 
@@ -919,30 +924,45 @@ internal fun CompleteButton(t: Task, onComplete: (String) -> Unit) {
     )
 }
 
+/**
+ * Capture bar: "Capture anything…" with the Talk mic at its right end (Fold review 2026-10-09 07:26, item 5: the mic
+ * moved here from the Up next card). The mic presses in (0.97) with a light haptic and opens Ask already listening.
+ */
 @Composable
-private fun QuickCapture(onAdd: (String) -> Unit) {
+internal fun QuickCapture(onAdd: (String) -> Unit, onTalk: (() -> Unit)? = null) {
     var text by rememberSaveable { mutableStateOf("") }
-    Box(
+    Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.s)
             .clip(RoundedCornerShape(MekaRadius.pill))
             .background(Meka.colors.surfaceRaised)
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
+            .padding(start = MekaSpace.l, end = if (onTalk != null) MekaSpace.xs else MekaSpace.l)
+            .testTag(CAPTURE_BAR_TAG),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (text.isEmpty()) Text("Capture anything…", style = MekaType.body, color = Meka.colors.textTertiary)
-        BasicTextField(
-            value = text,
-            onValueChange = { text = it },
-            singleLine = true,
-            textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
-            cursorBrush = SolidColor(Meka.colors.accent),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { onAdd(text); text = "" } }),
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Capture" },
-        )
+        Box(Modifier.weight(1f).padding(vertical = MekaSpace.m)) {
+            if (text.isEmpty()) Text("Capture anything…", style = MekaType.body, color = Meka.colors.textTertiary)
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
+                cursorBrush = SolidColor(Meka.colors.accent),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { onAdd(text); text = "" } }),
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Capture" },
+            )
+        }
+        if (onTalk != null) {
+            Spacer(Modifier.width(MekaSpace.s))
+            os.meka.android.ask.TalkMic(onTalk, size = 36.dp)
+        }
     }
 }
+
+/** The capture bar on Today (UI tests). */
+internal const val CAPTURE_BAR_TAG = "today-capture-bar"
 
 @Composable
 internal fun DetailPane(task: Task?, conflicts: List<ConflictChoice>, actions: TodayActions, modifier: Modifier, onClose: (() -> Unit)? = null) {

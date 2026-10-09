@@ -708,22 +708,34 @@ struct CompleteButton: View {
     }
 }
 
+/// The capture bar: "Capture anything…" with the Talk mic at its trailing end (Fold review 2026-10-09 07:26, item 5:
+/// the mic sits here, not on a card). The mic presses in and brings Ask forward, already listening (as ⌥Space).
 private struct CaptureField: View {
     @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     @State private var text = ""
     @FocusState private var focused: Bool
 
     var body: some View {
-        TextField("Capture anything…", text: $text)
-            .textFieldStyle(.plain)
-            .font(MekaType.body)
-            .focused($focused)
-            .padding(.horizontal, MekaSpace.l)
-            .padding(.vertical, MekaSpace.m)
-            .background(Capsule().fill(palette.surfaceRaised))
-            .onSubmit { model.captureTyped(text); text = "" }
-            .onChange(of: model.focusCapture) { focused = true }
+        HStack(spacing: MekaSpace.s) {
+            TextField("Capture anything…", text: $text)
+                .textFieldStyle(.plain)
+                .font(MekaType.body)
+                .focused($focused)
+                .padding(.vertical, MekaSpace.m)
+                .onSubmit { model.captureTyped(text); text = "" }
+                .onChange(of: model.focusCapture) { focused = true }
+            Button { model.requestTalk(reduced: reduceMotion) } label: {
+                VoiceOrbView(phase: .ended, level: 0, palette: palette, size: 30)
+            }
+            .buttonStyle(MekaPressStyle())
+            .help("Talk to MEKA (⌥Space)")
+            .accessibilityLabel("Talk to MEKA")
+        }
+        .padding(.leading, MekaSpace.l)
+        .padding(.trailing, MekaSpace.xs)
+        .background(Capsule().fill(palette.surfaceRaised))
     }
 }
 
