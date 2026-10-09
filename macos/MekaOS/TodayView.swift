@@ -102,6 +102,16 @@ struct TodayView: View {
                             .accessibilityLabel("Weather: " + (model.weather?.nowSpoken ?? line))
                             .staggeredAppear(0, play: play)
                     }
+                    // The trains on an office day's commute (Places item 4, TfL line status), lit in the accent when a
+                    // line isn't running well; cross-fades as it changes.
+                    if let route = model.weather?.route {
+                        Text(route.text).font(MekaType.caption)
+                            .foregroundStyle(route.lit ? palette.accent : palette.textSecondary).lineLimit(2)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: route.text)
+                            .accessibilityLabel(route.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     if !model.isConnected || model.signedOut {
                         Button(model.signedOut ? "Reconnect this Mac" : "This Mac isn't syncing yet · Connect") { model.showConnect = true }
                             .buttonStyle(MekaPressStyle())

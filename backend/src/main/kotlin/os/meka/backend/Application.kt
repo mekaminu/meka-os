@@ -33,6 +33,7 @@ import os.meka.backend.integrations.EspnTeamFixtures
 import os.meka.backend.integrations.GoogleCalendar
 import os.meka.backend.integrations.GovUkBankHolidays
 import os.meka.backend.integrations.HereWeather
+import os.meka.backend.integrations.TflLineStatus
 import os.meka.backend.integrations.OpenMeteoWeather
 import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.KmsTokenCipher
@@ -570,6 +571,7 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         onChanged = onChanged,
         ownKeys = OwnKeyReminders(opStore, onWritten = onChanged),
         reader = opStoreReader(opStore),
+        lines = listOf(TflLineStatus()).associateBy { it.id },
     )
 }
 

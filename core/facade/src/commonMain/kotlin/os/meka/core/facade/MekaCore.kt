@@ -139,6 +139,8 @@ class MekaCore(
     // Places item 2: the work place's forecast (server-written) and the work place setting (synced).
     private val workWeather = os.meka.core.domain.WeatherStore(replica, os.meka.core.domain.WeatherStore.WORK_ENTITY_ID)
     private val workPlace = os.meka.core.domain.WorkPlaceStore(replica)
+    // Places item 4: the route's train lines (TfL status, server-written).
+    private val lineStatus = os.meka.core.domain.LineStatusStore(replica)
     private val review = WeeklyReview(replica, nowMs, ZoneCalendar(timeZone))
     /** The week the review screen shows (null: the default for today); a screen choice, not synced. */
     private var reviewOffset: Int? = null
@@ -1713,9 +1715,12 @@ class MekaCore(
             val workLines = os.meka.core.domain.PlacesRules.workAskLines(workWeather.forecast(), nowMs(), cal)
             // Where Meka is (Places item 3): only for a question about "here", from a fix taken in the last 30 minutes.
             val hereLines = os.meka.core.domain.HereRules.askLinesFor(q, hereFix, nowMs(), cal)
+            // The route's train lines (Places item 4): one line while TfL's status is fresh.
+            val routeLines = os.meka.core.domain.RouteRules.askLines(lineStatus.snapshot(), nowMs(), cal)
             os.meka.core.domain.AskRules.context(_today.value, nowMs(), cal,
                 os.meka.core.domain.WeatherRules.askLines(weather.forecast(), nowMs(), cal)
-                    .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - hereLines.size) + hereLines + workLines)
+                    .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - hereLines.size - routeLines.size) +
+                    hereLines + workLines + routeLines)
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -2210,6 +2215,8 @@ class MekaCore(
             news.all(), news.choices(), holidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal)).copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal))
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))
         val weatherNow = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted(), workForecast, workPlace.wanted(), office)
+            // The trains on an office day's commute (Places item 4), under the weather line.
+            .copy(route = os.meka.core.domain.RouteRules.todayLine(lineStatus.snapshot(), office, nowMs(), cal))
         // Away from home and work with a fresh fix (Places item 3): Today's line says where Meka is.
         val hereLine = os.meka.core.domain.HereRules.todayLine(hereFix, nowMs(), cal)
         _weather.value = if (hereLine == null) weatherNow

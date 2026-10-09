@@ -136,6 +136,11 @@ data class WeatherView(
     val placeChoice: WeatherPlaceView = WeatherPlaceView.HOME,
     /** The work place setting (Calendars → Weather → Work, Places item 2): Canary Wharf unless Meka types another. */
     val workChoice: WeatherPlaceView = WeatherPlaceView.WORK,
+    /**
+     * The trains on an office day's commute (Places item 4, TfL line status): "Thameslink · Elizabeth line · good
+     * service", lit when a line isn't running well; null outside the commute. Shown under the weather line.
+     */
+    val route: RouteLine? = null,
 ) {
     companion object {
         val EMPTY = WeatherView(null, null, null, "")

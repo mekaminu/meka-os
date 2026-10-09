@@ -10,6 +10,11 @@ import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.HeadlineFields
+import os.meka.core.domain.LineState
+import os.meka.core.domain.LineStatusCodec
+import os.meka.core.domain.LineStatusFields
+import os.meka.core.domain.LineStatusStore
+import os.meka.core.domain.RouteRules
 import os.meka.core.domain.PlacesRules
 import os.meka.core.domain.WeatherCodec
 import os.meka.core.domain.WeatherFields
@@ -60,6 +65,10 @@ class Integrations(
     private val ownKeys: OwnKeyReminders? = null,
     /** Reads what the devices wrote (the Weather place setting); Postgres passes its indexed reader. */
     private val reader: EntityReader = EntityReader.scanning(ops),
+    /** The status of the train lines on Meka's route (Places item 4; TfL, no sign-in, no key). */
+    private val lines: Map<String, LineStatusProvider> = emptyMap(),
+    /** Where "the day" is for the line status poll (it rests overnight). */
+    private val zone: java.time.ZoneId = java.time.ZoneId.of("Europe/London"),
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -143,7 +152,7 @@ class Integrations(
     /** Every household follows the default feeds (owner's stated MVP need). Idempotent. */
     fun ensureFeeds() {
         val all = feeds.values.map { it.id to it.label } + news.values.map { it.id to it.source } + holidays.values.map { it.id to it.label } +
-            weather.values.map { it.id to it.label }
+            weather.values.map { it.id to it.label } + lines.values.map { it.id to it.label }
         for (hh in store.households()) for ((id, label) in all) {
             if (store.accounts(hh).none { it.provider == id }) {
                 store.transaction { store.upsertAccount(hh, id, label, ByteArray(0)) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
@@ -163,6 +172,7 @@ class Integrations(
         news[a.provider]?.let { source -> return syncNews(a, source) }
         holidays[a.provider]?.let { list -> return syncHolidays(a, list) }
         weather[a.provider]?.let { source -> return syncWeather(a, source) }
+        lines[a.provider]?.let { source -> return syncLines(a, source) }
         val p = providers[a.provider] ?: return
         val client = clients.get(a.provider) ?: return
         val ctx = context(a.householdId, a.provider)
@@ -281,6 +291,46 @@ class Integrations(
         } catch (e: Exception) {
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
             throw e
+        }
+    }
+
+    /**
+     * The route's line status (Places item 4): every [LINES_PERIOD_MS] from [LINES_FROM_HOUR] until [LINES_TO_HOUR]
+     * London time (overnight nobody commutes; the first poll of the morning catches up). A changed status wakes the
+     * devices, so Today's line and Ask follow within seconds; the checked time alone wakes nobody.
+     */
+    private fun syncLines(a: AccountRow, source: LineStatusProvider) {
+        val hour = java.time.Instant.ofEpochMilli(now()).atZone(zone).hour
+        if (hour < LINES_FROM_HOUR || hour >= LINES_TO_HOUR) return
+        val last = a.lastSyncAtMs
+        if (a.status == "ok" && last != null && now() - last < LINES_PERIOD_MS) return
+        try {
+            val changed = applyLines(a, source.statuses())
+            store.transaction { store.markSynced(a.id, now()) }
+            if (changed) runCatching { onChanged(a.householdId) }
+        } catch (e: Exception) {
+            store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
+            throw e
+        }
+    }
+
+    /**
+     * Writes the status into the household's one `context_mode/line_status` entity: the lines when they changed, the
+     * checked time rounded to [RouteRules.CHECKED_STEP_MS] (at most two ops an hour while nothing changes). Returns
+     * whether the lines changed.
+     */
+    internal fun applyLines(a: AccountRow, states: List<LineState>): Boolean = store.transaction {
+        ops.transaction {
+            store.lockAccount(a.id)
+            val prev = store.mirror(a.householdId, a.id)[LineStatusStore.ENTITY_ID]
+            val encoded = LineStatusCodec.encode(states)
+            val linesChanged = prev?.fieldOps?.get(LineStatusFields.LINES)?.second != valueKey(FieldValue.Text(encoded))
+            val desired = linkedMapOf(
+                LineStatusFields.LINES to FieldValue.Text(encoded),
+                LineStatusFields.CHECKED to FieldValue.Int64(RouteRules.checkedStep(now())),
+            )
+            write(a, LineStatusStore.ENTITY_ID, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
+            linesChanged
         }
     }
 
@@ -514,6 +564,10 @@ class Integrations(
         const val NEWS_PERIOD_MS = 60 * 60_000L
         const val HOLIDAYS_PERIOD_MS = 7 * 24 * 60 * 60_000L
         const val WEATHER_PERIOD_MS = 30 * 60_000L
+        /** The line status: each calendar poll (every 5 minutes) between 05:00 and 23:00 London time. */
+        const val LINES_PERIOD_MS = 4 * 60_000L
+        const val LINES_FROM_HOUR = 5
+        const val LINES_TO_HOUR = 23
 
         /** Stable per (account, topic, slot): a topic always uses the same few entities. */
         fun newsEntityId(a: AccountRow, topic: String, slot: Int): String = "hl" + Secrets.sha256Hex("${a.id}|$topic|$slot").take(30)

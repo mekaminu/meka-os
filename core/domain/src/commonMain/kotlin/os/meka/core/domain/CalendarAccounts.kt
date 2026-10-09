@@ -10,7 +10,7 @@ package os.meka.core.domain
  *   accounts apart.
  */
 object CalendarAccountRules {
-    /** "Google" · "Outlook" · "Headlines" (both news feeds) · "Fixtures" · "Bank holidays" · "Weather". */
+    /** "Google" · "Outlook" · "Headlines" (both news feeds) · "Fixtures" · "Bank holidays" · "Weather" · "Train lines". */
     fun providerLabel(provider: String): String = when (provider) {
         "google" -> "Google"
         "microsoft" -> "Outlook"
@@ -18,6 +18,7 @@ object CalendarAccountRules {
         "news", "news_more" -> "Headlines"
         "bank_holidays" -> "Bank holidays"
         "weather" -> "Weather"
+        "lines" -> "Train lines"
         else -> provider
     }
 

@@ -643,6 +643,15 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = spoken })
                         }
                     }
+                    // The trains on an office day's commute (Places item 4, TfL line status): "Thameslink · Elizabeth
+                    // line · good service", lit in the accent when a line isn't running well; cross-fades as it changes.
+                    weather.route?.let { route ->
+                        Crossfade(route, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "route-line") { r ->
+                            Text(r.text, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = r.spoken })
+                        }
+                    }
                     SyncLine(sync)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),

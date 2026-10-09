@@ -169,6 +169,29 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun theRoutesTrainLinesShowOnTheCommuteAndAskHearsThem() = runTest {
+        now = 1_791_526_200_000L // Fri 9 Oct 2026, 07:10 in London: an office day, before work
+        val c = core()
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        // What the server's TfL mirror writes (Places item 4): Thameslink in trouble, Great Northern running.
+        serverOps.append(os.meka.core.sync.Op("srvln0", "hh", os.meka.core.domain.EntityTypes.CONTEXT_MODE,
+            os.meka.core.domain.LineStatusStore.ENTITY_ID, os.meka.core.domain.LineStatusFields.LINES,
+            os.meka.core.sync.FieldValue.Text("elizabeth=10;great-northern=10;thameslink=6"), clock.now(), emptyList(), "server"))
+        serverOps.append(os.meka.core.sync.Op("srvln1", "hh", os.meka.core.domain.EntityTypes.CONTEXT_MODE,
+            os.meka.core.domain.LineStatusStore.ENTITY_ID, os.meka.core.domain.LineStatusFields.CHECKED,
+            os.meka.core.sync.FieldValue.Int64(1_791_525_600_000L), clock.now(), emptyList(), "server"))
+        c.syncNow()
+        val route = c.weatherView.value.route!!
+        assertEquals("Thameslink severe delays · Elizabeth line good service — Great Northern to King's Cross is running", route.text)
+        assertTrue(route.lit)
+
+        c.askMeka("are the trains ok?")
+        val lines = server.asked.single().second.items.filter { it.kind == os.meka.core.domain.AskItemKind.WEATHER }.map { it.line }
+        assertTrue("train lines on Meka's route (TfL status, checked 07:00): Thameslink severe delays; Great Northern good service; Elizabeth line good service" in lines,
+            lines.toString())
+    }
+
+    @Test
     fun theWeatherPlaceIsSetFromTheAppAndReachesTheServer() = runTest {
         val c = core()
         assertEquals(os.meka.core.domain.WeatherPlaceView.HOME, c.weatherView.value.placeChoice)
