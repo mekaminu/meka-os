@@ -43,6 +43,9 @@ import os.meka.core.domain.DecisionCard
 import os.meka.core.domain.DecisionEffect
 import os.meka.core.domain.DecisionMove
 import os.meka.core.domain.NeedsYouStackRules
+import os.meka.core.domain.NeedsYouMeanwhileRules
+import os.meka.core.domain.HabitItem
+import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.Task
 import os.meka.core.domain.NeedsYouStack
 import os.meka.core.domain.CommandCentreRules
@@ -109,7 +112,12 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
 
 
 /** The stack's moves, and the cards set aside with "Later" on this screen (nothing is written; back of the stack). */
-internal class DecisionMoves(val onMove: (DecisionCard, DecisionMove) -> Unit, private val aside: MutableState<List<String>>) {
+internal class DecisionMoves(
+    val onMove: (DecisionCard, DecisionMove) -> Unit,
+    private val aside: MutableState<List<String>>,
+    /** Opens Lists (a Waiting on or renewal row under "Nothing needs you"). */
+    val openLists: () -> Unit = {},
+) {
     val setAside: List<String> get() = aside.value
 }
 
@@ -141,7 +149,7 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                     undo.show(NeedsYouStackRules.message(card, move)) { aside.value = aside.value - card.id }
                 }
             }
-        }, aside)
+        }, aside, { latestOpenLists() })
     }
 }
 
@@ -155,6 +163,12 @@ internal fun NeedsYouColumn(
     compact: Boolean = false, play: Boolean = true,
 ) {
     val cards = NeedsYouStackRules.ordered(stack, moves.setAside)
+    val goals by core.goalsView.collectAsState()
+    val lists by core.listsView.collectAsState()
+    val meanwhile = remember(goals, lists) { NeedsYouMeanwhileRules.build(goals, lists) }
+    val haptics = rememberMekaHaptics()
+    val scope = rememberCoroutineScope()
+    val tickHabit: (HabitItem) -> Unit = { h -> haptics.light(); scope.launch { runCatching { core.setHabitDone(h.id, !h.doneToday) } } }
     // The foot fades into the tabs rather than cutting a card in half; the xl bottom padding clears the fade.
     LazyColumn(
         modifier.footFade(),
@@ -174,22 +188,21 @@ internal fun NeedsYouColumn(
         }
         if (cards.isEmpty()) {
             item(key = "clear") {
-                // Full screen: the breathing check ring beside a light line and what lands here (catalogue "Empty
-                // states"; Fold review 2026-10-08, item 7); the compact column stays quiet, one line.
-                if (compact) {
-                    Text(NeedsYouStackRules.EMPTY_LINE, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
-                        modifier = Modifier.animateItem().appear(rememberAppearance(1, play)))
-                } else {
-                    Row(Modifier.animateItem().appear(rememberAppearance(1, play)).semantics(mergeDescendants = true) { },
-                        verticalAlignment = Alignment.CenterVertically) {
-                        BreathingRing(Modifier.padding(end = MekaSpace.m), check = true)
-                        Column {
-                            Text(NeedsYouStackRules.EMPTY_LINE, style = MekaType.body, color = Meka.colors.textPrimary)
-                            Text(NeedsYouStackRules.EMPTY_CAPTION, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
-                        }
+                // The breathing check ring beside a light line (catalogue "Empty states"; Fold review 2026-10-08,
+                // item 7), on the full page and in the open Fold's column alike (Fold review 2026-10-09 00:10, item 6);
+                // the caption saying what lands here only on the full page.
+                Row(Modifier.animateItem().appear(rememberAppearance(1, play)).semantics(mergeDescendants = true) { },
+                    verticalAlignment = Alignment.CenterVertically) {
+                    BreathingRing(Modifier.padding(end = MekaSpace.m), size = if (compact) 22.dp else 28.dp, check = true)
+                    Column {
+                        Text(NeedsYouStackRules.EMPTY_LINE, style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
+                        if (!compact) Text(NeedsYouStackRules.EMPTY_CAPTION, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
                     }
                 }
             }
+            // Then what's coming for Meka instead of a blank page: today's habits (ticked inline), Waiting on and the
+            // next renewals (NeedsYouMeanwhile; Fold reviews 2026-10-09, 00:10 item 6 and 07:26 item 10).
+            meanwhileItems(meanwhile, play, firstIndex = 2, tick = tickHabit, open = moves.openLists)
         } else {
             item(key = "stack") {
                 DecisionStackView(cards, moves.onMove, Modifier.animateItem().appear(rememberAppearance(1, play)))

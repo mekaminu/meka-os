@@ -624,6 +624,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TalkProblem.tooNoisy.macLine, "Too noisy — click to talk")
     }
 
+    /// Under "Nothing needs you" (Fold reviews 2026-10-09): the core's habits / Waiting on / renewals reach Swift.
+    func testNeedsYouMeanwhileReachesSwift() {
+        let m = NeedsYouMeanwhileRules.shared.build(goals: nil, lists: nil)
+        XCTAssertTrue(m.isEmpty)
+        XCTAssertTrue(m.sections.isEmpty)
+        XCTAssertNil(m.habitsLine)
+        XCTAssertEqual(NeedsYouMeanwhileRules.shared.HABITS_LABEL, "Habits today")
+        XCTAssertEqual(NeedsYouMeanwhileRules.shared.WAITING_LABEL, "Waiting on")
+        XCTAssertEqual(NeedsYouMeanwhileRules.shared.more(total: 5), "+2 more")
+        XCTAssertNil(NeedsYouMeanwhileRules.shared.more(total: 3))
+    }
+
     /// The spoken morning brief (Weather and a voice, slice 8): the script the brief sheet's Listen reads reaches Swift.
     func testBriefSpeechReachesSwift() {
         XCTAssertEqual(BriefSpeech.shared.script(v: MorningBriefView.companion.EMPTY, name: "Meka"),

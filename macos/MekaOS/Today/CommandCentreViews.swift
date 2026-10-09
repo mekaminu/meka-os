@@ -57,9 +57,16 @@ struct CommandNeedsYouView: View {
                 SectionLabel(CommandCentreRules.shared.needsYouHeading(count: Int32(model.needsYouCards.count)), palette)
                     .staggeredAppear(0)
                 if model.needsYouCards.isEmpty {
-                    Text(NeedsYouStackRules.shared.EMPTY_LINE)
-                        .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-                        .staggeredAppear(1)
+                    // The breathing check ring and the line, then what's coming instead of a blank column (Fold
+                    // review 2026-10-09 00:10, item 6).
+                    HStack(spacing: MekaSpace.m) {
+                        BreathingRingView(palette: palette, size: 20, check: true)
+                        Text(NeedsYouStackRules.shared.EMPTY_LINE)
+                            .font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .staggeredAppear(1)
+                    NeedsYouMeanwhileView(palette: palette)
                 } else {
                     NeedsYouStackView(palette: palette, autofocus: false).staggeredAppear(1)
                 }

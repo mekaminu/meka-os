@@ -162,6 +162,8 @@ struct NeedsYouView: View {
                         }
                         .accessibilityElement(children: .combine)
                         .staggeredAppear(1)
+                        // Then what's coming: today's habits, Waiting on, the next renewals.
+                        NeedsYouMeanwhileView(palette: palette)
                     } else {
                         NeedsYouStackView(palette: palette).staggeredAppear(1)
                     }
