@@ -692,6 +692,8 @@ private fun TodayPane(
                     if (core != null) signIn.firstOrNull()?.let { SignInLineView(it, core, Modifier.padding(top = MekaSpace.xxs)) }
                     // Anything else MEKA depends on that needs a look (Reliability first, item 3): one quiet line.
                     if (core != null && now == null) os.meka.android.ask.HealthTodayLine(core, Modifier.padding(top = MekaSpace.xxs))
+                    // Setup checklist: a card while something is left to set up ("Not today" folds it away until tomorrow).
+                    if (core != null && now == null) os.meka.android.ask.SetupTodayCard(core, Modifier.padding(top = MekaSpace.xs))
                     // News ticker (news ticker, slice 2): one line of drifting cards under the header; calm by default
                     // (two loops, then it rests). Off in Appearance hides it.
                     if (core != null && TickerRules.shown(tickerMode, ticker)) {

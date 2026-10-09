@@ -13,7 +13,8 @@ import kotlinx.serialization.json.put
 /**
  * The Health screen's server half (Reliability first, item 3): `POST /v1/health/household`, signed by a keyed device.
  * The server says what only it knows: whether wake-ups are set up and this device has an address, whether the call
- * assistant's phone service and MEKA's voice are configured, and its own clock. Never a secret, a token or an address.
+ * assistant's phone service and MEKA's voice are configured, its own clock and how many Macs are connected (Setup).
+ * Never a secret, a token, an address or a device's name.
  * Calendars and feeds come from `/v1/integrations/list` and the AI from `/v1/ai/status`, as before.
  */
 object HealthCodec {
@@ -28,6 +29,8 @@ object HealthCodec {
         val speech: Boolean,
         /** The server's clock when it answered. */
         val atMs: Long,
+        /** How many Macs are connected to the household (Setup's "Mac" step); null from an older server. */
+        val macs: Int? = null,
     ) {
         companion object {
             const val PUSH_ON = "on"
@@ -49,6 +52,7 @@ object HealthCodec {
         put("calls", r.calls)
         put("speech", r.speech)
         put("at", r.atMs)
+        r.macs?.let { put("macs", it) }
     }.toString()
 
     /** An unknown push state reads as off (an older or newer server), never as fine. */
@@ -62,6 +66,7 @@ object HealthCodec {
             calls = o.bool("calls"),
             speech = o.bool("speech"),
             atMs = (o["at"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull ?: throw IllegalArgumentException("at"),
+            macs = (o["macs"] as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull?.takeIf { it >= 0 },
         )
     }
 

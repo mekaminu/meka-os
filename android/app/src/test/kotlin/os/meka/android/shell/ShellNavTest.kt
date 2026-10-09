@@ -53,7 +53,7 @@ class ShellNavTest {
         assertEquals(
             listOf(
                 "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Work mode", "Notifications",
-                "Appearance", "MEKA's voice", "Talk", "Calendars", "Health", "Activity", "Your data",
+                "Appearance", "MEKA's voice", "Talk", "Calendars", "Setup", "Health", "Activity", "Your data",
             ),
             ShellNav.more(connected = true).map { it.label },
         )
@@ -71,7 +71,7 @@ class ShellNavTest {
         assertEquals(listOf("Lists", "Goals and habits", "Review", "Vault"), sections[0].items.map { it.label })
         assertEquals(listOf("Morning brief", "News", "Shut down the day"), sections[1].items.map { it.label })
         assertEquals(
-            listOf("Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Health", "Activity", "Your data"),
+            listOf("Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Setup", "Health", "Activity", "Your data"),
             sections[2].items.map { it.label },
         )
         // The same rows as the flat list, in the same order; the places are exactly the Places section.
@@ -104,6 +104,16 @@ class ShellNavTest {
         assertFalse(ShellNav.moreLit(MoreItem.HEALTH, 3, healthAttention = 0))
         // Health shows before this device is connected (it says so), unlike Calendars.
         assertTrue(MoreItem.HEALTH in ShellNav.more(connected = false))
+    }
+
+    @Test
+    fun setupSaysWhatIsLeftAndIsLitUntilAllSet() {
+        // Setup checklist (Meka approved 2026-10-09).
+        assertEquals("Everything MEKA can do, and what's left to set up", ShellNav.moreLine(MoreItem.SETUP, 0))
+        assertEquals("3 steps left · 12 of 15 done", ShellNav.moreLine(MoreItem.SETUP, 0, setup = "3 steps left · 12 of 15 done"))
+        assertTrue(ShellNav.moreLit(MoreItem.SETUP, 0, setupLeft = 3))
+        assertFalse(ShellNav.moreLit(MoreItem.SETUP, 0, healthAttention = 2))
+        assertTrue(MoreItem.SETUP in ShellNav.more(connected = false))
     }
 
     @Test

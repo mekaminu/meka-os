@@ -38,6 +38,12 @@ interface DeviceRegistry {
      * (GitHub build) publishes for it; enrolment with the code never starts a second household.
      */
     fun soleHousehold(): String?
+
+    /**
+     * How many Macs are connected to [householdId] (not revoked; a Mac's id starts with "mac"), for Setup's "Mac" step.
+     * Null when unknown. Only the count leaves the server, never a name or id.
+     */
+    fun macs(householdId: String): Int? = null
 }
 
 object Secrets {
@@ -124,6 +130,13 @@ class PostgresDeviceRegistry(private val ds: DataSource) : DeviceRegistry {
         }
     }
 
+    override fun macs(householdId: String): Int? = ds.connection.use { c ->
+        c.prepareStatement("SELECT count(*) FROM device WHERE household_id = ? AND revoked_at IS NULL AND id LIKE 'mac%'").use { st ->
+            st.setString(1, householdId)
+            st.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else null }
+        }
+    }
+
     fun revoke(householdId: String, deviceId: String) = ds.connection.use { c: Connection ->
         c.prepareStatement("UPDATE device SET revoked_at = now() WHERE household_id = ? AND id = ?").use {
             it.setString(1, householdId); it.setString(2, deviceId); it.executeUpdate()
@@ -164,6 +177,8 @@ class InMemoryDeviceRegistry : DeviceRegistry {
     override fun publicKey(device: DeviceIdentity) = keys[device]
     override fun registerKey(device: DeviceIdentity, publicKeyB64: String): Boolean = keys.getOrPut(device) { publicKeyB64 } == publicKeyB64
     override fun soleHousehold(): String? = households.singleOrNull()
+    override fun macs(householdId: String): Int =
+        byHash.values.filter { it.householdId == householdId && it.deviceId.startsWith("mac") && it !in revoked }.distinct().size
 }
 
 const val REFUSED_REVOKED = "revoked"

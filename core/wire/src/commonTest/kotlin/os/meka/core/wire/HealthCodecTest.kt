@@ -22,6 +22,16 @@ class HealthCodecTest {
     }
 
     @Test
+    fun macsRoundTripAndAnOlderServerSaysNothing() {
+        // Setup's "Mac" step: how many Macs are connected; an older server leaves it out (null, "Couldn't check").
+        val r = HealthCodec.Response(HealthCodec.Response.PUSH_ON, calls = true, speech = true, atMs = 5, macs = 1)
+        assertEquals(r, HealthCodec.decodeResponse(HealthCodec.encodeResponse(r)))
+        assertEquals(null, HealthCodec.decodeResponse("""{"w":1,"push":"on","at":5}""").macs)
+        assertEquals(null, HealthCodec.decodeResponse("""{"w":1,"push":"on","at":5,"macs":-1}""").macs)
+        assertEquals(null, HealthCodec.decodeResponse("""{"w":1,"push":"on","at":5,"macs":"2"}""").macs)
+    }
+
+    @Test
     fun theRequestCarriesOnlyTheVersion() {
         assertEquals("""{"w":1}""", HealthCodec.encodeRequest())
         HealthCodec.decodeRequest(HealthCodec.encodeRequest())

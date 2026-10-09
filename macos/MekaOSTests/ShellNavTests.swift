@@ -46,7 +46,7 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(
             ShellNav.more(connected: true).map(\.label),
             ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Work mode", "Notifications",
-             "Appearance", "MEKA's voice", "Talk", "Calendars", "Health", "Activity", "Your data"]
+             "Appearance", "MEKA's voice", "Talk", "Calendars", "Setup", "Health", "Activity", "Your data"]
         )
         XCTAssertFalse(ShellNav.more(connected: false).contains(.calendars))
         let places = Set(ShellNav.more(connected: false).compactMap(\.destination))
@@ -60,7 +60,7 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(sections.map(\.group.label), ["Places", "Daily", "Settings"])
         XCTAssertEqual(sections[0].items.map(\.label), ["Lists", "Goals and habits", "Review", "Vault"])
         XCTAssertEqual(sections[1].items.map(\.label), ["Morning brief", "News", "Shut down the day"])
-        XCTAssertEqual(sections[2].items.map(\.label), ["Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Health", "Activity", "Your data"])
+        XCTAssertEqual(sections[2].items.map(\.label), ["Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Setup", "Health", "Activity", "Your data"])
         XCTAssertEqual(sections.flatMap(\.items), ShellNav.more(connected: true))
         XCTAssertTrue(sections[0].items.allSatisfy { $0.destination != nil })
         XCTAssertTrue(sections.dropFirst().flatMap(\.items).allSatisfy { $0.destination == nil })
@@ -77,6 +77,16 @@ final class ShellNavTests: XCTestCase {
         XCTAssertTrue(ShellNav.moreLit(.health, listsDue: 0, healthAttention: 1))
         XCTAssertFalse(ShellNav.moreLit(.health, listsDue: 2))
         XCTAssertTrue(ShellNav.more(connected: false).contains(.health))
+    }
+
+    @MainActor
+    func testSetupSaysWhatIsLeftAndIsLit() {
+        // Setup checklist (Meka approved 2026-10-09).
+        XCTAssertEqual(ShellNav.moreLine(.setup, listsDue: 0), "Everything MEKA can do, and what's left to set up")
+        XCTAssertEqual(ShellNav.moreLine(.setup, listsDue: 0, setup: "3 steps left · 12 of 15 done"), "3 steps left · 12 of 15 done")
+        XCTAssertTrue(ShellNav.moreLit(.setup, listsDue: 0, setupLeft: 3))
+        XCTAssertFalse(ShellNav.moreLit(.setup, listsDue: 0, healthAttention: 2))
+        XCTAssertTrue(ShellNav.more(connected: false).contains(.setup))
     }
 
     @MainActor

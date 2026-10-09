@@ -67,7 +67,7 @@ struct MoreSection: Equatable, Identifiable {
 /// Appearance, which shows its choices in the row itself (`ShellNav.unfoldsInPlace`). Today's header keeps only
 /// Search and Plan my day (Today clarity, slice 2): the brief, the shutdown, work mode and the theme moved here.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, review, vault, brief, news, shutdown, work, notifications, appearance, voice, talk, calendars, health, activity, yourData
+    case lists, goals, review, vault, brief, news, shutdown, work, notifications, appearance, voice, talk, calendars, setup, health, activity, yourData
     var id: Int { rawValue }
 
     var label: String {
@@ -87,6 +87,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .activity: "Activity"
         case .yourData: "Your data"
         case .calendars: "Calendars"
+        case .setup: "Setup"
         case .health: "Health"
         }
     }
@@ -108,6 +109,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .activity: "What MEKA did and why"
         case .yourData: "Export everything as one file"
         case .calendars: "Connected accounts and feeds"
+        case .setup: "Everything MEKA can do, and what's left to set up"
         case .health: "Is everything MEKA needs working?"
         }
     }
@@ -116,7 +118,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         switch self {
         case .lists, .goals, .review, .vault: .places
         case .brief, .news, .shutdown: .daily
-        case .work, .notifications, .appearance, .voice, .talk, .calendars, .health, .activity, .yourData: .settings
+        case .work, .notifications, .appearance, .voice, .talk, .calendars, .setup, .health, .activity, .yourData: .settings
         }
     }
 
@@ -126,7 +128,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .goals: .goals
         case .review: .review
         case .vault: .vault
-        case .brief, .news, .shutdown, .work, .notifications, .appearance, .voice, .talk, .activity, .yourData, .calendars, .health: nil
+        case .brief, .news, .shutdown, .work, .notifications, .appearance, .voice, .talk, .activity, .yourData, .calendars, .setup, .health: nil
         }
     }
 }
@@ -165,15 +167,17 @@ enum ShellNav {
     }
 
     /// Stagger steps for More (after the title 0 and field 1): each section starts one step after the one before
-    /// began; a label leads its rows by one step. Places: 2, rows 3–6 · Daily: 4, rows 5–7 · Settings: 6, rows 7–15.
+    /// began; a label leads its rows by one step. Places: 2, rows 3–6 · Daily: 4, rows 5–7 · Settings: 6, rows 7–16.
     static func moreLabelStep(_ section: Int) -> Int { 2 + 2 * section }
 
     static func moreRowStep(_ section: Int, _ row: Int) -> Int { moreLabelStep(section) + 1 + row }
 
-    /// Lists says what's due when something is ("2 need you · …"), Health its summary once checked, else the fixed words.
-    static func moreLine(_ item: MoreItem, listsDue: Int, atWork: Bool = false, health: String? = nil) -> String {
+    /// Lists says what's due when something is ("2 need you · …"), Health and Setup their summaries once checked,
+    /// else the fixed words.
+    static func moreLine(_ item: MoreItem, listsDue: Int, atWork: Bool = false, health: String? = nil, setup: String? = nil) -> String {
         if item == .work { return workLine(atWork: atWork) }
         if item == .health, let health { return health }
+        if item == .setup, let setup { return setup }
         guard item == .lists, listsDue > 0 else { return item.line }
         return "\(listsDue) need\(listsDue == 1 ? "s" : "") you · \(item.line)"
     }
@@ -184,8 +188,8 @@ enum ShellNav {
     /// Work mode's line says where you are now ("At work · Work hours and the Work switch"), as the header did.
     static func workLine(atWork: Bool) -> String { "\(atWork ? "At work" : "Off work") · \(MoreItem.work.line)" }
 
-    static func moreLit(_ item: MoreItem, listsDue: Int, healthAttention: Int = 0) -> Bool {
-        (item == .lists && listsDue > 0) || (item == .health && healthAttention > 0)
+    static func moreLit(_ item: MoreItem, listsDue: Int, healthAttention: Int = 0, setupLeft: Int = 0) -> Bool {
+        (item == .lists && listsDue > 0) || (item == .health && healthAttention > 0) || (item == .setup && setupLeft > 0)
     }
 
     /// Nothing at zero, the count up to 9, then "9+".

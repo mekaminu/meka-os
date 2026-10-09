@@ -1658,20 +1658,8 @@ class MekaCore(
             return refreshHealthLocal(device, last)
         }
         val connected = isConnected
-        val (server, accounts, ai) = kotlinx.coroutines.coroutineScope {
-            val s = async { runCatchingNotCancel { healthApi?.householdHealth() } }
-            val a = async { runCatchingNotCancel { accountsApi?.accounts() } }
-            val i = async { if (aiApi == null) null else aiStatus().takeIf { it != os.meka.core.domain.AskRules.STATUS_UNKNOWN } }
-            Triple(s.await(), a.await(), i.await())
-        }
-        accounts?.let(::rememberEditing)
-        val names = onCore { eventActions.calendarNames() }
-        val facts = onCore {
-            healthFacts(device, connected,
-                server?.let { os.meka.core.domain.ServerHealth(it.push, it.calls, it.speech, it.atMs) },
-                accounts?.map { os.meka.core.domain.HealthAccount(it.provider, it.email, os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names), it.status, it.lastSyncAtMs) },
-                ai)
-        }
+        val server = fetchHealthServer()
+        val facts = onCore { healthFacts(device, connected, server.server, server.accounts, server.ai) }
         val view = os.meka.core.domain.HealthRules.view(facts, ZoneCalendar(timeZone))
         _health.value = view
         return view
@@ -1686,19 +1674,42 @@ class MekaCore(
         return view
     }
 
-    private class HealthServerFacts(val server: os.meka.core.domain.ServerHealth?, val accounts: List<os.meka.core.domain.HealthAccount>?, val ai: os.meka.core.domain.AiStatusView?)
+    private class HealthServerFacts(
+        val server: os.meka.core.domain.ServerHealth?, val accounts: List<os.meka.core.domain.HealthAccount>?,
+        val ai: os.meka.core.domain.AiStatusView?, val atMs: Long,
+    )
     private var lastHealthServer: HealthServerFacts? = null
+
+    /** The server's three answers (household health, the calendar list, the AI's status), asked together; kept for Health and Setup. */
+    private suspend fun fetchHealthServer(): HealthServerFacts {
+        val (server, accounts, ai) = kotlinx.coroutines.coroutineScope {
+            val s = async { runCatchingNotCancel { healthApi?.householdHealth() } }
+            val a = async { runCatchingNotCancel { accountsApi?.accounts() } }
+            val i = async { if (aiApi == null) null else aiStatus().takeIf { it != os.meka.core.domain.AskRules.STATUS_UNKNOWN } }
+            Triple(s.await(), a.await(), i.await())
+        }
+        accounts?.let(::rememberEditing)
+        val names = onCore { eventActions.calendarNames() }
+        val facts = HealthServerFacts(
+            server?.let { os.meka.core.domain.ServerHealth(it.push, it.calls, it.speech, it.atMs, it.macs) },
+            accounts?.map { os.meka.core.domain.HealthAccount(it.provider, it.email, os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names), it.status, it.lastSyncAtMs) },
+            ai, nowMs(),
+        )
+        onCore { lastHealthServer = facts }
+        return facts
+    }
+
+    private fun lastVoiceMessageMs(): Long? = replica.entities(os.meka.core.domain.EntityTypes.HELD_MESSAGE)
+        .filter { it[os.meka.core.domain.HeldMessageFields.KIND].textOrNull == os.meka.core.domain.CaptureKind.VOICE_MESSAGE.name }
+        .mapNotNull { it[os.meka.core.domain.HeldMessageFields.AT].longOrNull }
+        .maxOrNull()
 
     private fun healthFacts(
         device: os.meka.core.domain.DeviceHealth, connected: Boolean, server: os.meka.core.domain.ServerHealth?,
         accounts: List<os.meka.core.domain.HealthAccount>?, ai: os.meka.core.domain.AiStatusView?,
     ): os.meka.core.domain.HealthFacts {
-        lastHealthServer = HealthServerFacts(server, accounts, ai)
         val sync = _sync.value
-        val lastVoice = replica.entities(os.meka.core.domain.EntityTypes.HELD_MESSAGE)
-            .filter { it[os.meka.core.domain.HeldMessageFields.KIND].textOrNull == os.meka.core.domain.CaptureKind.VOICE_MESSAGE.name }
-            .mapNotNull { it[os.meka.core.domain.HeldMessageFields.AT].longOrNull }
-            .maxOrNull()
+        val lastVoice = lastVoiceMessageMs()
         return os.meka.core.domain.HealthFacts(
             device = device, connected = connected, lastSyncedMs = lastSyncedMs,
             syncTrouble = when (sync) {
@@ -1710,6 +1721,38 @@ class MekaCore(
             server = server, accounts = accounts, signIns = signIns.all(), ai = ai,
             callAssistantOn = _workMode.value.callAssistant, lastVoiceMessageMs = lastVoice, nowMs = nowMs(),
         )
+    }
+
+    // ---- Setup checklist (Meka approved 2026-10-09) ----
+
+    private val _setup = MutableStateFlow<os.meka.core.domain.SetupView?>(null)
+
+    /** The Setup page as last checked ([refreshSetup]); null until checked once. Today's card reads its todayLine. */
+    val setupView: StateFlow<os.meka.core.domain.SetupView?> = _setup.asStateFlow()
+
+    /**
+     * Works out the Setup checklist ([os.meka.core.domain.SetupRules]) from this device's own facts ([device]), the
+     * replica and the server's answers (shared with Health). [force] false (Today's open) reuses the server's answers
+     * for up to [os.meka.core.domain.HealthRules.TODAY_REFRESH_MS]; the Setup page forces a fresh ask. Never throws.
+     */
+    suspend fun refreshSetup(device: os.meka.core.domain.SetupDevice, force: Boolean = true): os.meka.core.domain.SetupView {
+        val cached = onCore { lastHealthServer }
+        val server = if (!force && cached != null && nowMs() - cached.atMs < os.meka.core.domain.HealthRules.TODAY_REFRESH_MS) cached
+        else fetchHealthServer()
+        val connected = isConnected
+        val facts = onCore {
+            os.meka.core.domain.SetupFacts(
+                device = device, connected = connected, server = server.server, accounts = server.accounts,
+                signIns = signIns.all(), ai = server.ai, callAssistantOn = _workMode.value.callAssistant,
+                voiceMessageSeen = lastVoiceMessageMs() != null, voiceChosen = mekaVoice.chosen(),
+                homePlace = weatherPlace.wanted() ?: os.meka.core.domain.WeatherPlaceRules.HOME,
+                workPlace = workPlace.wanted() ?: os.meka.core.domain.PlacesRules.WORK,
+                nowMs = nowMs(),
+            )
+        }
+        val view = os.meka.core.domain.SetupRules.view(facts)
+        _setup.value = view
+        return view
     }
 
     private suspend fun <T> runCatchingNotCancel(block: suspend () -> T): T? =

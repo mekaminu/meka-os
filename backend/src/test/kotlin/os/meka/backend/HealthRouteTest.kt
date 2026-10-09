@@ -41,6 +41,10 @@ class HealthRouteTest {
         // The Mac has no address of its own.
         val mac = HealthCodec.decodeResponse(client.post(path) { with(macKey) { signed(macSecret, path, body) } }.bodyAsText())
         assertEquals(HealthCodec.Response.PUSH_MISSING, mac.push)
+        // Setup's "Mac" step: the household has one Mac connected (only the count is said).
+        assertEquals(1, fold.macs)
+        devices.revoke("mac")
+        assertEquals(0, HealthCodec.decodeResponse(client.post(path) { with(foldKey) { signed(foldSecret, path, body) } }.bodyAsText()).macs)
     }
 
     @Test

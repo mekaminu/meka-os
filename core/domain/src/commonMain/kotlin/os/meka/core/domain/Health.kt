@@ -43,7 +43,14 @@ data class HealthView(
 )
 
 /** What the server said (`/v1/health/household`); null in [HealthFacts.server] when it couldn't be reached. */
-data class ServerHealth(val push: String, val calls: Boolean, val speech: Boolean, val atMs: Long) {
+data class ServerHealth(
+    val push: String,
+    val calls: Boolean,
+    val speech: Boolean,
+    val atMs: Long,
+    /** Macs connected to the household (Setup's "Mac" step); null from a server that doesn't say. */
+    val macs: Int? = null,
+) {
     companion object {
         const val PUSH_ON = "on"
         const val PUSH_MISSING = "missing"

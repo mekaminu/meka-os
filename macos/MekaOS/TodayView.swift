@@ -120,6 +120,9 @@ struct TodayView: View {
                     // Anything else MEKA depends on that needs a look (Reliability first, item 3): one line, opens Health.
                     HealthTodayLine(palette: palette)
                         .staggeredAppear(0, play: play)
+                    // Setup checklist: a card while something is left to set up ("Not today" hides it until tomorrow).
+                    SetupTodayCard(palette: palette)
+                        .staggeredAppear(0, play: play)
                     if !model.isConnected || model.signedOut {
                         Button(model.signedOut ? "Reconnect this Mac" : "This Mac isn't syncing yet · Connect") { model.showConnect = true }
                             .buttonStyle(MekaPressStyle())

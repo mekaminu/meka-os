@@ -1073,4 +1073,20 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(battery.needsLook)
         XCTAssertEqual(HealthRules.shared.TODAY_REFRESH_MS, 15 * 60_000)
     }
+
+    func testSetupReachesSwift() {
+        // Setup checklist: the Mac's own facts and a view as the core makes them (the Mac's buttons: SetupSheetTests).
+        let device = SetupDevice(mac: true, notificationsAllowed: KotlinBoolean(bool: true), batteryExempt: nil,
+                                 notificationAccess: nil, callRoleHeld: nil, people: nil, watch: nil)
+        let facts = SetupFacts(device: device, connected: true, server: nil, accounts: nil, signIns: [], ai: nil,
+                               callAssistantOn: false, voiceMessageSeen: false, voiceChosen: nil,
+                               homePlace: "Biggleswade", workPlace: "Canary Wharf", nowMs: 0)
+        let view = SetupRules.shared.view(f: facts)
+        let role = view.steps.first { $0.key == "calls.role" }
+        XCTAssertEqual(role?.state, .elsewhere)
+        XCTAssertEqual(role?.line, SetupRules.shared.ON_THE_FOLD)
+        XCTAssertEqual(view.steps.first { $0.key == "calls.on" }?.fix, .work)
+        XCTAssertTrue(SetupRules.shared.cardShown(view: view, hiddenOnDay: nil, today: 1))
+        XCTAssertFalse(SetupRules.shared.cardShown(view: view, hiddenOnDay: KotlinLong(longLong: 1), today: 1))
+    }
 }

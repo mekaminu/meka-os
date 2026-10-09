@@ -408,7 +408,8 @@ fun Application.mekaSync(
                 withContext(Dispatchers.IO) { push.hasAddress(who) } -> HealthCodec.Response.PUSH_ON
                 else -> HealthCodec.Response.PUSH_MISSING
             }
-            val health = HealthCodec.Response(pushState, calls = voice != null, speech = speech != null, atMs = System.currentTimeMillis())
+            val macs = withContext(Dispatchers.IO) { runCatching { devices.macs(who.householdId) }.getOrNull() }
+            val health = HealthCodec.Response(pushState, calls = voice != null, speech = speech != null, atMs = System.currentTimeMillis(), macs = macs)
             call.respondText(HealthCodec.encodeResponse(health), ContentType.Application.Json)
         }
 

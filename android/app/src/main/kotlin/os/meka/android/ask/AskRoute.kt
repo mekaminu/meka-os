@@ -103,6 +103,7 @@ fun AskRoute(
     val lists by core.listsView.collectAsState()
     val work by core.workMode.collectAsState()
     val health by core.healthView.collectAsState()
+    val setup by core.setupView.collectAsState()
     // Appearance unfolds its three choices in its own row.
     var appearanceOpen by rememberSaveable { mutableStateOf(false) }
     var pane by rememberSaveable { mutableStateOf<MoreItem?>(null) }
@@ -119,6 +120,11 @@ fun AskRoute(
     val openHealth by remember(healthApp) { healthApp?.openHealth ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
     LaunchedEffect(openHealth) {
         if (openHealth) { pane = MoreItem.HEALTH; healthApp?.openHealth?.value = false }
+    }
+    // Today's setup card → Open Setup (Setup checklist).
+    val openSetup by remember(healthApp) { healthApp?.openSetup ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
+    LaunchedEffect(openSetup) {
+        if (openSetup) { pane = MoreItem.SETUP; healthApp?.openSetup?.value = false }
     }
     // Back closes whatever sprang up over Ask before it leaves the app.
     BackHandler(enabled = pane != null || showSearch) { if (showSearch) closeSearch() else pane = null }
@@ -159,7 +165,8 @@ fun AskRoute(
                     if (ShellNav.unfoldsInPlace(item)) {
                         AppearanceRow(appearanceOpen, Modifier.appear(rememberAppearance(step)), openTopics = { pane = MoreItem.NEWS }, playOpening = playOpening) { appearanceOpen = !appearanceOpen }
                     } else {
-                        MoreRow(item, ShellNav.moreLine(item, lists.dueCount, work.atWork, health?.summary), ShellNav.moreLit(item, lists.dueCount, health?.attention ?: 0),
+                        MoreRow(item, ShellNav.moreLine(item, lists.dueCount, work.atWork, health?.summary, setup?.summary),
+                            ShellNav.moreLit(item, lists.dueCount, health?.attention ?: 0, setup?.toDo ?: 0),
                             pane == item, Modifier.appear(rememberAppearance(step))) {
                             val d = item.destination
                             if (d != null) openPlace(d) else pane = item
@@ -183,6 +190,16 @@ fun AskRoute(
                 pane = when (f) {
                     os.meka.core.domain.HealthFix.CALENDARS -> MoreItem.CALENDARS
                     os.meka.core.domain.HealthFix.WORK -> MoreItem.WORK
+                    else -> pane
+                }
+            })
+        }
+        MekaPane(visible = pane == MoreItem.SETUP) {
+            SetupPane(core, onClose = { pane = null }, openPane = { f ->
+                pane = when (f) {
+                    os.meka.core.domain.SetupFix.CALENDARS -> MoreItem.CALENDARS
+                    os.meka.core.domain.SetupFix.WORK -> MoreItem.WORK
+                    os.meka.core.domain.SetupFix.VOICE -> MoreItem.VOICE
                     else -> pane
                 }
             })

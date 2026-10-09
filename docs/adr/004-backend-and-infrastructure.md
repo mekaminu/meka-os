@@ -78,3 +78,7 @@ The backend exists for sync, ingestion (calendar, email, fixtures, news), heavy 
 ## Addendum 2026-10-09: the Health screen's server half
 
 - `POST /v1/health/household` (signed, keyed devices only; the release publisher is refused; Reliability first, item 3). It answers only what the server alone knows: whether wake-ups are set up and the calling device has a push address (`on` · `missing` · `off`), whether the call assistant's phone service and MEKA's voice are configured (booleans), and the server's clock (devices warn when theirs is more than 5 minutes off). Never a secret, token, address or count of anyone else's devices. No new resource, table or provider; calendars and feeds still come from `/v1/integrations/list` and the AI from `/v1/ai/status`. An older server without the route answers 404 and the screen says "Couldn't check".
+
+## Addendum 2026-10-09: Setup's "Mac" step
+
+- `POST /v1/health/household` also answers `macs`: how many Macs are connected to the caller's own household (devices not revoked whose id starts with `mac`, as the Mac app makes them). Only the count, never a device's name or id, and only for the caller's household, so the line above still holds for anyone else's devices. The Setup checklist (Ask → More → Setup) shows "Mac · Connected" or "Install MEKA on your Mac". Optional on the wire: an older server leaves it out and the step says "Couldn't check". No new table, column or resource.
