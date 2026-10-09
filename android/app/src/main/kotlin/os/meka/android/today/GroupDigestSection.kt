@@ -1,6 +1,8 @@
 package os.meka.android.today
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,12 +25,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import os.meka.android.MekaApplication
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
@@ -35,10 +42,12 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
 import os.meka.android.work.CaptureStore
+import os.meka.android.work.DigestGist
 import os.meka.core.domain.GroupDigestCard
 import os.meka.core.domain.GroupDigestRules
 import os.meka.core.domain.GroupDigestView
 import os.meka.core.domain.GroupMode
+import os.meka.core.facade.MekaCore
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -57,18 +66,27 @@ private fun digestClock(): DigestClock {
 private val hm = DateTimeFormatter.ofPattern("HH:mm")
 private fun hhmm(ms: Long) = hm.format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))
 
-/** Needs you's group digest for this phone's kept chatter, or null when no group has news. */
+/**
+ * Needs you's group digest for this phone's kept chatter, or null when no group has news. Caught up on the Mac counts
+ * too (the synced cards' time, slice 4b). When it comes due, the gist is made once for the slot ([DigestGist]).
+ */
 @Composable
-internal fun rememberGroupDigest(store: CaptureStore): GroupDigestView? {
+internal fun rememberGroupDigest(store: CaptureStore, core: MekaCore): GroupDigestView? {
     val items by store.digest.collectAsState()
     val settings by store.triageSettings.collectAsState()
-    val seen by store.digestSeen.collectAsState()
+    val local by store.digestSeen.collectAsState()
+    val synced by core.groupDigestCaughtUp.collectAsState()
+    val seen = remember(local, synced) { (local.keys + synced.keys).associateWith { k -> maxOf(local[k] ?: 0L, synced[k] ?: 0L) } }
     val clock by produceState(digestClock()) {
         while (true) { delay(60_000L - System.currentTimeMillis() % 60_000L); value = digestClock() }
     }
-    return remember(items, settings, seen, clock) {
+    val view = remember(items, settings, seen, clock) {
         GroupDigestRules.view(items, settings, seen, clock.dayStartMs, clock.minute)
     }
+    val app = LocalContext.current.applicationContext as MekaApplication
+    val due = view?.due == true
+    LaunchedEffect(due, clock.minute >= GroupDigestRules.EVENING_MINUTE) { if (due) DigestGist.run(app) }
+    return view
 }
 
 /**
@@ -80,16 +98,27 @@ internal fun rememberGroupDigest(store: CaptureStore): GroupDigestView? {
  */
 @Composable
 internal fun GroupDigestSection(
-    view: GroupDigestView, store: CaptureStore, undo: (String, (suspend () -> Unit)?) -> Unit, modifier: Modifier = Modifier,
+    view: GroupDigestView, store: CaptureStore, core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val haptics = rememberMekaHaptics()
+    val scope = rememberCoroutineScope()
     var open by rememberSaveable(view.due) { mutableStateOf(view.due) }
+    // The AI's gist per group (slice 4b), from the synced cards: a line under the group's title.
+    val gists by core.groupGists.collectAsState()
+    val gistOf = remember(gists) { gists.mapNotNull { g -> g.gist?.let { g.groupKey to it } }.toMap() }
     val catchUp: (List<GroupDigestCard>) -> Unit = { cards ->
         haptics.light()
         val before = store.digestSeen.value
-        store.caughtUp(cards.map { it.groupKey })
+        val keys = cards.map { it.groupKey }
+        store.caughtUp(keys)
+        // The synced cards too, so the Mac's digest clears with it.
+        val synced = scope.async { runCatching { core.catchUpGroupDigest(keys) }.getOrNull() }
         val what = if (cards.size == 1) cards[0].title else view.title
-        undo("$what · ${GroupDigestRules.CAUGHT_UP.lowercase()}") { store.restoreDigestSeen(before) }
+        undo("$what · ${GroupDigestRules.CAUGHT_UP.lowercase()}") {
+            store.restoreDigestSeen(before)
+            synced.await()?.let { runCatching { core.undoCatchUpGroupDigest(it) } }
+        }
     }
     Column(modifier.fillMaxWidth().testTag("group-digest"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Row(
@@ -109,7 +138,7 @@ internal fun GroupDigestSection(
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
                 view.cards.forEach { card ->
                     androidx.compose.runtime.key(card.groupKey) {
-                        GroupDigestCardView(card, store, onCaughtUp = { catchUp(listOf(card)) }, onMode = { mode ->
+                        GroupDigestCardView(card, gistOf[card.groupKey], store, onCaughtUp = { catchUp(listOf(card)) }, onMode = { mode ->
                             haptics.tick()
                             val was = store.triageSettings.value.modeOf(card.title)
                             store.setGroupMode(card.title, mode)
@@ -123,7 +152,7 @@ internal fun GroupDigestSection(
 }
 
 @Composable
-private fun GroupDigestCardView(card: GroupDigestCard, store: CaptureStore, onCaughtUp: () -> Unit, onMode: (GroupMode) -> Unit) {
+private fun GroupDigestCardView(card: GroupDigestCard, gist: String?, store: CaptureStore, onCaughtUp: () -> Unit, onMode: (GroupMode) -> Unit) {
     val haptics = rememberMekaHaptics()
     var expanded by rememberSaveable(card.groupKey) { mutableStateOf(false) }
     val items by store.digest.collectAsState()
@@ -136,6 +165,10 @@ private fun GroupDigestCardView(card: GroupDigestCard, store: CaptureStore, onCa
     ) {
         Text("${card.title} · ${card.countLine}", style = MekaType.body, color = Meka.colors.textPrimary,
             modifier = Modifier.semantics { contentDescription = card.spoken })
+        // MEKA's gist of the chat (slice 4b) fades in under the title once it is made.
+        AnimatedVisibility(gist != null, enter = fadeIn(), exit = fadeOut()) {
+            Text(gist.orEmpty(), style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.testTag("digest-gist-${card.groupKey}"))
+        }
         Text(card.people, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (!expanded) {
             card.recent.forEach { line ->

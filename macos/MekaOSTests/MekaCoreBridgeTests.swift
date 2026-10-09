@@ -805,6 +805,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(card.lane.label, "Needs a reply")
     }
 
+    /// The group digest's synced cards (V1, messages slice 4b) reach Swift: the head line and Caught up.
+    func testGroupGistsReachSwift() {
+        let gist = GroupGist(groupKey: "barça lads", title: "Barça lads", countLine: "47 messages", count: 47, people: "Tunde, Femi and 3 others",
+                             gist: "Lineup debate for Getafe", slotMs: 1_000, slotLabel: "Lunchtime digest", latestMs: 900,
+                             caughtUpAtMs: nil, spoken: "Barça lads, 47 messages.")
+        XCTAssertEqual(GroupGistRules.shared.headLine(gists: [gist]), "Lunchtime digest · 1 group · 47 messages")
+        XCTAssertNil(GroupGistRules.shared.headLine(gists: []))
+        XCTAssertEqual(GroupDigestRules.shared.CAUGHT_UP, "Caught up")
+    }
+
     func testMotionCheckReachesSwift() {
         let off = MotionCheckRules.shared.mac(stored: nil, reduceMotion: true, lowPower: false)
         XCTAssertEqual(off.rows.map(\.label), ["MEKA Motion", "Reduce Motion", "Low Power Mode"])

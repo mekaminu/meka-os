@@ -45,6 +45,7 @@ import os.meka.core.sync.ServerOpStore
 import os.meka.core.sync.SyncService
 import os.meka.core.wire.AskCodec
 import os.meka.core.wire.MessageRequestCodec
+import os.meka.core.wire.GroupDigestCodec
 import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
 import os.meka.core.wire.WireCodec
@@ -302,6 +303,16 @@ fun Application.mekaSync(
                 val request = MessageTriageCodec.decodeRequest(body)
                 val answer = withContext(Dispatchers.IO) { triageService.triage(request) }
                 call.respondText(MessageTriageCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+            // The group digest's gist: the busy groups' latest lines at a digest time; a gist per group and asks back.
+            // Nothing is kept or logged.
+            val digestService = GroupDigestService(ai.provider)
+            post("/v1/ai/group-digest") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = GroupDigestCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { digestService.digest(request) }
+                call.respondText(GroupDigestCodec.encodeResponse(answer), ContentType.Application.Json)
             }
         }
 

@@ -146,6 +146,7 @@ class MekaCore(
     private val held = os.meka.core.domain.HeldMessages(replica, nowMs)
     private val requestCards = os.meka.core.domain.RequestCards(replica, nowMs, ZoneCalendar(timeZone))
     private val triageCards = os.meka.core.domain.TriageCards(replica, nowMs, ZoneCalendar(timeZone))
+    private val groupGists = os.meka.core.domain.GroupGists(replica, nowMs)
     // Leave-by alarms are worked out from the calendar on every read (Alarms, slice 3).
     private val alarms = os.meka.core.domain.Alarms(replica, nowMs, ZoneCalendar(timeZone)) {
         os.meka.core.domain.LeaveAlarmRules.alarms(currentEvents(), eventActions.marks(), nowMs(), ZoneCalendar(timeZone))
@@ -324,6 +325,18 @@ class MekaCore(
      * Action's proposals are in [requests].
      */
     val triage: StateFlow<List<os.meka.core.domain.TriageCard>> = _triage.asStateFlow()
+
+    private val _groupGists = MutableStateFlow<List<os.meka.core.domain.GroupGist>>(emptyList())
+    /**
+     * The group digest's synced cards (V1, messages slice 4b): one per busy group at the latest digest time — its name,
+     * how many messages, who wrote and the AI's gist; never the messages. The Mac's whole digest; the Fold shows the gist
+     * on its own cards. Caught-up ones are left out.
+     */
+    val groupGists: StateFlow<List<os.meka.core.domain.GroupGist>> = _groupGists.asStateFlow()
+
+    private val _groupDigestCaughtUp = MutableStateFlow<Map<String, Long>>(emptyMap())
+    /** When Meka caught up with each digest group on either device (group key → when), for the Fold's own digest. */
+    val groupDigestCaughtUp: StateFlow<Map<String, Long>> = _groupDigestCaughtUp.asStateFlow()
 
     private val _workMode = MutableStateFlow(work.state(localClock(), todayEpochDay()))
     /** Work mode (schedule + manual switch), synced between devices. Time moves it: apps call [tick] each minute. */
@@ -833,6 +846,125 @@ class MekaCore(
             TriageRead.Read(triageCards.save(item, checked), requests)
         }
     }
+
+    /**
+     * The group digest's gist (V1, messages slice 4b): once a digest time (12:30, 18:30) has come, the Fold calls this
+     * with the chatter it keeps ([items], sealed on the phone), Meka's group modes and when he last caught up with each
+     * group ([seen]). Every group in the due digest gets a synced card for the slot (count, who wrote; never the
+     * messages); the busy ones ([os.meka.core.domain.GroupGistRules.MIN_MESSAGES] or more) go together in **one** call
+     * to `POST /v1/ai/group-digest` — each group's name and its latest lines (sender's label, time, text), nothing else —
+     * and come back with a gist each, checked again here. Anything in the chatter that asks Meka for something becomes a
+     * Needs you card: Needs a reply (no draft: a group reply is his to write, so the card opens the chat) or request
+     * cards quoting the ask's gist. Nothing is sent, replied to or marked read. Called again in the same slot it does
+     * nothing ([GistRead.NotDue]); offline or a failed call writes nothing, so the next call tries again; with MEKA's AI
+     * off or the month's budget spent the cards are written without gists.
+     */
+    suspend fun gistGroupDigest(
+        items: List<os.meka.core.domain.CapturedItem>,
+        settings: os.meka.core.domain.TriageSettings,
+        seen: Map<String, Long>,
+    ): GistRead {
+        val rules = os.meka.core.domain.GroupGistRules
+        val cal = ZoneCalendar(timeZone)
+        val plan = onCore<GistPlan?> {
+            val now = nowMs()
+            val today = cal.epochDayOf(now)
+            val minute = cal.minuteOfDay(now)
+            val slotMs = os.meka.core.domain.GroupDigestRules.slotStartMs(cal.toEpochMs(today, 0), minute) ?: return@onCore null
+            val slotMinute = if (minute >= os.meka.core.domain.GroupDigestRules.EVENING_MINUTE) {
+                os.meka.core.domain.GroupDigestRules.EVENING_MINUTE
+            } else os.meka.core.domain.GroupDigestRules.LUNCH_MINUTE
+            val synced = groupGists.caughtUpTimes()
+            val merged = (seen.keys + synced.keys).associateWith { k -> maxOf(seen[k] ?: 0L, synced[k] ?: 0L) }
+            val gisted = groupGists.gisted(slotMs)
+            val cards = os.meka.core.domain.GroupDigestRules.cards(items, settings, merged)
+                // Only groups with news since this slot began weren't caught up after it: the digest is due for them.
+                .filter { (merged[it.groupKey] ?: 0L) < slotMs && it.groupKey !in gisted }
+            if (cards.isEmpty()) return@onCore null
+            val groups = rules.groups(cards, items, merged, gisted) { LocalClock.formatMinute(cal.minuteOfDay(it)) }
+            GistPlan(slotMs, slotMinute, today, minute, cards, groups, items)
+        } ?: return GistRead.NotDue
+        if (plan.groups.isEmpty()) return GistRead.Read(onCore { plan.saveAll(emptyMap()) }, emptyList())
+        val api = aiApi ?: return GistRead.Unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
+        val codec = os.meka.core.wire.GroupDigestCodec
+        val request = onCore {
+            val now = nowMs()
+            os.meka.core.wire.GroupDigestCodec.Request(
+                date = os.meka.core.domain.AskRules.isoDate(plan.today),
+                now = "${os.meka.core.domain.CivilDate.longLabel(plan.today)} ${os.meka.core.domain.CivilDate.fromEpochDay(plan.today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(now))}",
+                groups = plan.groups.map { g ->
+                    os.meka.core.wire.GroupDigestCodec.Group(
+                        g.name.take(codec.MAX_NAME),
+                        g.lines.map { os.meka.core.wire.GroupDigestCodec.Line(it.from.take(os.meka.core.wire.MessageRequestCodec.MAX_SENDER), it.at, it.text.take(codec.MAX_LINE)) },
+                    )
+                },
+            )
+        }
+        val reply = try { api.groupDigest(request) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            return GistRead.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
+        }
+        when (reply.state) {
+            os.meka.core.wire.AskCodec.Response.ANSWERED -> Unit
+            // AI off or the month's budget spent: the cards still go to the Mac, without gists.
+            os.meka.core.wire.AskCodec.Response.OFF, os.meka.core.wire.AskCodec.Response.OVER ->
+                return GistRead.Read(onCore { plan.saveAll(emptyMap()) }, emptyList())
+            else -> return GistRead.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
+        }
+        return onCore {
+            val raw = reply.groups.map { g ->
+                os.meka.core.domain.GroupGistRules.RawGroup(
+                    g.name, g.gist,
+                    g.asks.map { a ->
+                        os.meka.core.domain.GroupGistRules.RawAsk(a.lane, a.from, a.summary, a.proposals.map { os.meka.core.domain.RawRequestProposal(it.kind, it.title, it.date, it.time, it.words) })
+                    },
+                )
+            }
+            val checked = rules.check(plan.groups, raw, plan.today, plan.minute)
+            val saved = plan.saveAll(checked.gists.associate { it.groupKey to it.gist })
+            val made = mutableListOf<os.meka.core.domain.TriageCard>()
+            val requests = mutableListOf<os.meka.core.domain.RequestCard>()
+            checked.asks.forEachIndexed { i, ask ->
+                // An ask has no message of its own: its card is keyed by the slot, the group and its place in the answer.
+                val id = "digest:${ask.groupKey}:${plan.slotMs}:$i"
+                val app = plan.items.lastOrNull { it.conversation != null && os.meka.core.domain.GroupDigestRules.groupKey(it) == ask.groupKey }?.app
+                    ?: os.meka.core.domain.CaptureApp.WHATSAPP
+                val atMs = plan.items.lastOrNull {
+                    it.conversation != null && os.meka.core.domain.GroupDigestRules.groupKey(it) == ask.groupKey &&
+                        os.meka.core.domain.People.key(it.personName) == os.meka.core.domain.People.key(ask.from)
+                }?.atMs ?: plan.slotMs
+                val item = os.meka.core.domain.CapturedItem(id, app, os.meka.core.domain.CaptureKind.MESSAGE, ask.from, null, ask.group, atMs)
+                when (ask.lane) {
+                    os.meka.core.domain.TriageLane.NEEDS_REPLY ->
+                        triageCards.save(item, os.meka.core.domain.MessageTriage(os.meka.core.domain.TriageLane.NEEDS_REPLY, summary = ask.summary))?.let { made += it }
+                    else -> requests += requestCards.save(os.meka.core.domain.RequestMessage(id, ask.from, ask.summary, atMs), ask.proposals)
+                }
+            }
+            GistRead.Read(saved, made, requests)
+        }
+    }
+
+    private inner class GistPlan(
+        val slotMs: Long,
+        val slotMinute: Int,
+        val today: Long,
+        val minute: Int,
+        val cards: List<os.meka.core.domain.GroupDigestCard>,
+        val groups: List<os.meka.core.domain.GroupGistRules.Group>,
+        val items: List<os.meka.core.domain.CapturedItem>,
+    ) {
+        /** A card for every group in the due digest, with its gist when it has one; returns the groups written. */
+        fun saveAll(gists: Map<String, String?>): List<String> =
+            cards.filter { groupGists.save(it, slotMs, slotMinute, gists[it.groupKey]) }.map { it.groupKey }
+    }
+
+    /**
+     * Caught up with these digest groups (V1, messages slice 4b): their synced cards leave Needs you on both devices. Returns
+     * what to hand [undoCatchUpGroupDigest] for the undo bar.
+     */
+    suspend fun catchUpGroupDigest(groupKeys: List<String>): GroupDigestUndo = onCore { GroupDigestUndo(groupGists.caughtUp(groupKeys)) }
+
+    /** Takes back a Caught up: the cards come back on both devices. */
+    suspend fun undoCatchUpGroupDigest(undo: GroupDigestUndo) = onCore { groupGists.undo(undo.before) }
 
     /** Not now on a triage card: gone from Needs you on every device, its gist and draft blanked. */
     suspend fun dismissTriage(messageId: String): Boolean =
@@ -2009,6 +2141,8 @@ class MekaCore(
         _afterWork.value = held.summary()
         _requests.value = requestCards.open()
         _triage.value = triageCards.open()
+        _groupGists.value = groupGists.open()
+        _groupDigestCaughtUp.value = groupGists.caughtUpTimes()
         _notifyPreview.value = Governor.preview(currentNotices(all), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
             ConflictChoice(

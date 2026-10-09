@@ -115,7 +115,32 @@ interface AiApi {
      */
     suspend fun messageTriage(request: os.meka.core.wire.MessageTriageCodec.Request): os.meka.core.wire.MessageTriageCodec.Response =
         os.meka.core.wire.MessageTriageCodec.Response(AskCodec.Response.OFF)
+
+    /**
+     * The group digest's gist (`POST /v1/ai/group-digest`): the busy groups' names and latest lines at a digest time; a
+     * gist per group and any asks come back unchecked ([os.meka.core.domain.GroupGistRules.check] reads them). A server
+     * without the route answers "off".
+     */
+    suspend fun groupDigest(request: os.meka.core.wire.GroupDigestCodec.Request): os.meka.core.wire.GroupDigestCodec.Response =
+        os.meka.core.wire.GroupDigestCodec.Response(AskCodec.Response.OFF)
 }
+
+/** What [MekaCore.gistGroupDigest] did. */
+sealed class GistRead {
+    /** No digest is due (before 12:30), or every group in it already has its card for this slot. */
+    data object NotDue : GistRead()
+    /** The digest's cards written ([groups]: their keys) and the Needs you cards its asks made. */
+    data class Read(
+        val groups: List<String>,
+        val replies: List<os.meka.core.domain.TriageCard>,
+        val requests: List<os.meka.core.domain.RequestCard> = emptyList(),
+    ) : GistRead()
+    /** Couldn't ask: offline, or the call failed; [line] says which. Nothing written, so it is tried again. */
+    data class Unavailable(val line: String) : GistRead()
+}
+
+/** What a Caught up on the group digest changed, for its Undo. */
+class GroupDigestUndo internal constructor(internal val before: Map<String, Long?>)
 
 /** What [MekaCore.triageMessage] did with one captured message. */
 sealed class TriageRead {
@@ -358,6 +383,21 @@ class HttpSyncTransport(
             resp.status.value == 404 -> return os.meka.core.wire.MessageTriageCodec.Response(AskCodec.Response.OFF)
             resp.status.value == 403 -> return os.meka.core.wire.MessageTriageCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/message-triage")
+        }
+        return codec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun groupDigest(request: os.meka.core.wire.GroupDigestCodec.Request): os.meka.core.wire.GroupDigestCodec.Response {
+        val codec = os.meka.core.wire.GroupDigestCodec
+        val body = codec.encodeRequest(request)
+        prepare() // the AI routes require the device's signing key on the server
+        val resp = send("/v1/ai/group-digest", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/group-digest")
+            // A server without the route (older, or no AI key): the cards go without gists.
+            resp.status.value == 404 -> return os.meka.core.wire.GroupDigestCodec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.GroupDigestCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/group-digest")
         }
         return codec.decodeResponse(resp.bodyAsText())
     }

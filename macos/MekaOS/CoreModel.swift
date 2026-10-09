@@ -23,6 +23,9 @@ final class CoreModel {
     /// Messages the Fold triaged (V1, messages slice 3): Needs a reply (with MEKA's draft) and FYI, synced. The Mac
     /// never sends: Copy reply puts the draft on the pasteboard; Not now / Seen clear the card on both devices.
     private(set) var triage: [TriageCard] = []
+    /// The group digest (V1, messages slice 4b): one card per busy group at the latest digest time, made on the Fold
+    /// (its name, how many messages, who wrote, MEKA's gist; never the messages). Caught up here clears it there too.
+    private(set) var groupGists: [GroupGist] = []
     /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
     private(set) var lists: ListsView?
     /// Needs you as a stack of decisions (four tabs, slice 2); see `needsYouCards`.
@@ -185,6 +188,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await t in core.triage { self?.triage = t }
+        })
+        observers.append(Task { [weak self] in
+            for await g in core.groupGists { self?.groupGists = g }
         })
         observers.append(Task { [weak self] in
             for await l in core.listsView { self?.lists = l }
@@ -1454,6 +1460,7 @@ final class CoreModel {
         case .leaveBy(let id, let m): run { try await $0.setEventLeaveBy(eventId: id, travelMinutes: m) }
         case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }
         case .request(let done): run { _ = try await $0.undoRequest(done: done) }
+        case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
         case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
@@ -1543,6 +1550,21 @@ final class CoreModel {
                     if try await core.dismissTriage(messageId: id).boolValue { offerEventUndo(line, nil) }
                 } catch { lastError = error.localizedDescription }
             }
+        }
+    }
+
+    /// Caught up on the group digest (one group's card, or all of them): the cards leave Needs you here and on the Fold,
+    /// with Undo on the bar. Only the groups' keys (Strings) cross to the core.
+    func catchUpGroupDigest(_ gists: [GroupGist]) {
+        guard let core, !gists.isEmpty else { return }
+        MekaHaptics.light()
+        let keys = gists.map(\.groupKey)
+        let line = gists.count == 1 ? "\(gists[0].title) · caught up" : "Group digest · caught up"
+        Task {
+            do {
+                let undo = try await core.catchUpGroupDigest(groupKeys: keys)
+                offerEventUndo(line, .groupDigest(undo))
+            } catch { lastError = error.localizedDescription }
         }
     }
 
@@ -1712,6 +1734,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case talk([AskUndo], [Int])
         /// Add or Change on a request card: the task, event edit or work-from-home day is taken back.
         case request(RequestDone)
+        /// Caught up on the group digest: its cards come back on both devices.
+        case groupDigest(GroupDigestUndo)
     }
 
     let id = UUID()

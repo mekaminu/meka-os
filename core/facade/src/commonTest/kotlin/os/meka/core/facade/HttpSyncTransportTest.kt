@@ -38,6 +38,10 @@ class HttpSyncTransportTest {
     private val triageReply = os.meka.core.wire.MessageTriageCodec.encodeResponse(
         os.meka.core.wire.MessageTriageCodec.Response("answered", lane = "needs_reply", summary = "Asks about Saturday", draft = "Yes, I'll be there"),
     )
+    private var digestStatus = HttpStatusCode.OK
+    private val digestReply = os.meka.core.wire.GroupDigestCodec.encodeResponse(
+        os.meka.core.wire.GroupDigestCodec.Response("answered", listOf(os.meka.core.wire.GroupDigestCodec.GroupAnswer("Barça lads", "Lineup debate"))),
+    )
     private val requestReply = os.meka.core.wire.MessageRequestCodec.encodeResponse(
         os.meka.core.wire.MessageRequestCodec.Response("answered", listOf(os.meka.core.wire.MessageRequestCodec.Proposal("task", "Pick up dry cleaning", words = "tomorrow"))),
     )
@@ -51,6 +55,7 @@ class HttpSyncTransportTest {
             "/v1/speech/speak" -> speakRaw?.let { (bytes, h) -> respond(bytes, speakStatus, h) } ?: respond(speakReply, speakStatus, json)
             "/v1/ai/message-request" -> respond(requestReply, requestStatus, json)
             "/v1/ai/message-triage" -> respond(triageReply, triageStatus, json)
+            "/v1/ai/group-digest" -> respond(digestReply, digestStatus, json)
             else -> respond("", HttpStatusCode.NotFound)
         }
     })
@@ -169,5 +174,24 @@ class HttpSyncTransportTest {
         assertEquals("off", t.messageTriage(sent).state)
         triageStatus = HttpStatusCode.Forbidden
         assertEquals("failed", t.messageTriage(sent).state)
+    }
+
+    @Test
+    fun aDigestGoesOutSignedInOneCallAndAServerWithoutTheRouteSaysOff() = runTest {
+        val t = HttpSyncTransport(client(), "https://meka.example", RecordingKey()) { "s".repeat(64) }
+        val sent = os.meka.core.wire.GroupDigestCodec.Request(
+            "2026-10-09", "Friday 9 October 2026 · 12:30",
+            listOf(os.meka.core.wire.GroupDigestCodec.Group("Barça lads", listOf(os.meka.core.wire.GroupDigestCodec.Line("Tunde", "12:01", "lineup?")))),
+        )
+        val r = t.groupDigest(sent)
+        assertEquals("Lineup debate", r.groups.single().gist)
+        val req = requests.last()
+        assertEquals("/v1/ai/group-digest", req.url.encodedPath)
+        assertEquals(sent, os.meka.core.wire.GroupDigestCodec.decodeRequest((req.body as TextContent).text))
+        assertTrue(req.headers[RequestSigning.HEADER_SIGNATURE] != null)
+        digestStatus = HttpStatusCode.NotFound
+        assertEquals("off", t.groupDigest(sent).state)
+        digestStatus = HttpStatusCode.Forbidden
+        assertEquals("failed", t.groupDigest(sent).state)
     }
 }

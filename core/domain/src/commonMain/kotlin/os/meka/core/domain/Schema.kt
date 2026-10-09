@@ -44,12 +44,14 @@ object EntityTypes {
     const val REQUEST_CARD = "request_card"
     /** A message the messages assistant triaged (lane, gist, draft; never the text, see [TriageCards]); id from the message's id. */
     const val TRIAGE_CARD = "triage_card"
+    /** One busy group's digest card for one slot (count, who wrote, the AI's gist; never the messages, see [GroupGists]). */
+    const val GROUP_GIST = "group_gist"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
-        TRIAGE_CARD,
+        TRIAGE_CARD, GROUP_GIST,
     )
 }
 
@@ -262,6 +264,8 @@ object MekaSchema : SchemaRegistry {
         // Triage cards likewise: written once by the Fold; Sent, Not now or Seen on either device clears them for good.
         entityType == EntityTypes.TRIAGE_CARD && field == TriageCardFields.RESOLVED -> MergePolicy.TrueWins
         entityType == EntityTypes.TRIAGE_CARD -> MergePolicy.Lww
+        // Group digest cards: written once by the Fold; Caught up (and its Undo) on either device, last one wins.
+        entityType == EntityTypes.GROUP_GIST -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

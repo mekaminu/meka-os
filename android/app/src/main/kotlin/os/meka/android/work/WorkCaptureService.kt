@@ -39,7 +39,8 @@ import os.meka.core.facade.TriageRead
  * on this phone, sealed, for the digest, with no AI. Each message is triaged once.
  *
  * It never replies on its own and never marks anything read. The only notifications it dismisses are a Digest group's
- * chatter once every message in it is kept for the digest (slice 4: the group stops sitting in the shade). While a
+ * chatter once every message in it is kept for the digest (slice 4: the group stops sitting in the shade). From a
+ * digest time on, the first message to come in also makes the digest's gist ([DigestGist], slice 4b). While a
  * message's notification shows, its Reply action is held in memory ([LiveReplies]) so Send on its Needs you card (Meka's
  * tap, slice 3) answers through Android's own Reply.
  */
@@ -75,6 +76,8 @@ class WorkCaptureService : NotificationListenerService() {
             if (GroupDigestRules.clearsNotification(items, meka.captures.triageSettings.value, meka.captures.digestKept())) {
                 runCatching { cancelNotification(sbn.key) }
             }
+            // At a digest time, the busy groups' gist in one call and the digest's synced cards (slice 4b); once a slot.
+            DigestGist.run(meka)
         }
     }
 

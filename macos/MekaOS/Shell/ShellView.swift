@@ -154,6 +154,9 @@ struct NeedsYouView: View {
                         .padding(.bottom, model.triage.isEmpty ? 0 : MekaSpace.s)
                     RequestCardsView(palette: palette, firstIndex: 2 + model.triage.count)
                         .padding(.bottom, model.requests.isEmpty ? 0 : MekaSpace.s)
+                    // The group digest the Fold made at 12:30 / 18:30 (V1, messages slice 4b): gists, never the messages.
+                    GroupGistsView(palette: palette, firstIndex: 2 + model.triage.count + model.requests.count)
+                        .padding(.bottom, model.groupGists.isEmpty ? 0 : MekaSpace.s)
                     if model.needsYouCards.isEmpty && model.requests.isEmpty && model.triage.isEmpty {
                         // The breathing check ring beside a light line and what lands here (catalogue "Empty
                         // states"; Fold review 2026-10-08, item 7); Off: still.

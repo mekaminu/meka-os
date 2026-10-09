@@ -247,7 +247,7 @@ internal fun NeedsYouColumn(
     val edits = remember { mutableStateMapOf<String, String>() }
     // Busy groups' chatter, kept on this phone (V1, messages slice 4): open at the top from 12:30 and 18:30, else a line.
     val captures = (LocalContext.current.applicationContext as MekaApplication).captures
-    val digest = rememberGroupDigest(captures)
+    val digest = rememberGroupDigest(captures, core)
     val goals by core.goalsView.collectAsState()
     val lists by core.listsView.collectAsState()
     val meanwhile = remember(goals, lists) { NeedsYouMeanwhileRules.build(goals, lists) }
@@ -273,7 +273,7 @@ internal fun NeedsYouColumn(
         }
         digest?.takeIf { it.due }?.let { d ->
             item(key = "group-digest") {
-                GroupDigestSection(d, captures, moves.undoLine,
+                GroupDigestSection(d, captures, core, moves.undoLine,
                     Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(2, play)))
             }
         }
@@ -306,7 +306,7 @@ internal fun NeedsYouColumn(
         // Between digests, groups with news are one quiet line under the cards that Meka can open on demand.
         digest?.takeIf { !it.due }?.let { d ->
             item(key = "group-digest") {
-                GroupDigestSection(d, captures, moves.undoLine,
+                GroupDigestSection(d, captures, core, moves.undoLine,
                     Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(2 + triage.size + requests.size, play)))
             }
         }

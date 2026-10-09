@@ -60,6 +60,7 @@ struct CommandNeedsYouView: View {
                 // requests slice 4), above the stack.
                 TriageCardsView(palette: palette, firstIndex: 1)
                 RequestCardsView(palette: palette, firstIndex: 1 + model.triage.count)
+                GroupGistsView(palette: palette, firstIndex: 1 + model.triage.count + model.requests.count)
                 if model.needsYouCards.isEmpty && model.requests.isEmpty && model.triage.isEmpty {
                     // The breathing check ring and the line, then what's coming instead of a blank column (Fold
                     // review 2026-10-09 00:10, item 6).
