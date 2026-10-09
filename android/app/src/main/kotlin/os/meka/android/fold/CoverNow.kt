@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,7 +24,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalUriHandler
@@ -35,6 +38,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.ask.TalkMic
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.NowAction
 import os.meka.core.domain.NowKind
@@ -51,6 +55,8 @@ internal class NowHandlers(
     /** A booked session's "Went" and "Didn't go" (by habit id), as from Today's session card. */
     val went: (String) -> Unit = {},
     val didntGo: (String) -> Unit = {},
+    /** The card's mic (Talk without tapping the mic, slice 3): Ask, already listening. Null: no mic. */
+    val talk: (() -> Unit)? = null,
 )
 
 /**
@@ -68,6 +74,7 @@ internal class NowHandlers(
 internal fun NowCard(now: NowView, handlers: NowHandlers, modifier: Modifier = Modifier, titleModifier: @Composable (String) -> Modifier = { Modifier }) {
     val reduced = Meka.reducedMotion
     Column(modifier.fillMaxWidth()) {
+      Box(Modifier.fillMaxWidth()) {
         AnimatedContent(
             targetState = now,
             contentKey = { "${it.kind}:${it.task?.id ?: it.event?.id ?: it.session?.habitId ?: ""}" },
@@ -84,7 +91,8 @@ internal fun NowCard(now: NowView, handlers: NowHandlers, modifier: Modifier = M
                     .clickable(enabled = v.task != null || v.event != null, role = Role.Button) {
                         v.task?.let { handlers.openTask(it.id) } ?: v.event?.let(handlers.openEvent)
                     }
-                    .padding(MekaSpace.l),
+                    .padding(MekaSpace.l)
+                    .padding(end = if (handlers.talk != null) TALK_MIC_ROOM else 0.dp),
             ) {
                 val labelColor by animateColorAsState(
                     if (v.lit) Meka.colors.accent else Meka.colors.textTertiary, MekaMotion.themeBlend(reduced), label = "nowLabel",
@@ -111,6 +119,10 @@ internal fun NowCard(now: NowView, handlers: NowHandlers, modifier: Modifier = M
                 }
             }
         }
+        handlers.talk?.let { talk ->
+            TalkMic(talk, Modifier.align(Alignment.TopEnd).padding(MekaSpace.s), size = 40.dp)
+        }
+      }
         now.thenLine?.let { line ->
             Text(
                 line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -131,6 +143,9 @@ internal fun NowCard(now: NowView, handlers: NowHandlers, modifier: Modifier = M
         }
     }
 }
+
+/** Room kept clear at the card's end for the mic (40 dp and its inset), so a long title never runs under it. */
+private val TALK_MIC_ROOM = 36.dp
 
 @Composable
 private fun NowChip(a: NowAction, v: NowView, handlers: NowHandlers) {

@@ -35,6 +35,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -93,6 +95,7 @@ import os.meka.core.domain.FoldModeRules
 import os.meka.core.domain.NewsTicker
 import os.meka.core.domain.TickerMode
 import os.meka.core.domain.TickerRules
+import os.meka.core.domain.TalkStartRules
 import os.meka.core.facade.MekaCore
 
 /**
@@ -110,6 +113,10 @@ import os.meka.core.facade.MekaCore
  * work band, fast and living second hand, breathing slower ([DayRingLive.bedsideGlow], 8 s); in quiet hours it
  * quietens with the clock ([DayRingLive.BEDSIDE_QUIET_ALPHA]) and its hand stops ([DayRingLive.bedsideMode]), the ring
  * redrawn once a minute. After Shut down its centre shows tomorrow's first thing, as on Today.
+ *
+ * Talk without tapping the mic (slice 3): a mic beside the alarm line springs the Talk pane up over the clock already
+ * listening ([BedsideTalkPane]: Ask's field and orb, the same on-device recogniser and yes-before-anything); "‹ Clock"
+ * or Back drops it away. While it is up the screen leaves quiet hours' dimming so the answer can be read.
  *
  * Motion: the clock fades up and the lower lines stagger in; the ring draws itself in (the quick draw) as the clock
  * appears; changed digits roll up each minute; dimming blends the colours across; the strip fades in and out. Reduced
@@ -137,9 +144,11 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
         onDispose { view.keepScreenOn = false }
     }
     // Quiet hours: as dim as the screen goes; otherwise the phone's own brightness.
-    DisposableEffect(activity, v.dim) {
+    var talkOpen by remember { mutableStateOf(false) }
+    val dimScreen = v.dim && !talkOpen
+    DisposableEffect(activity, dimScreen) {
         val window = activity?.window
-        window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = if (v.dim) 0.01f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE } }
+        window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = if (dimScreen) 0.01f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE } }
         onDispose {
             window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE } }
         }
@@ -154,6 +163,8 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
     var newsShown by remember { mutableStateOf<String?>(null) }
     if (newsOpen != null) newsShown = newsOpen
     BackHandler(enabled = newsOpen != null) { newsOpen = null }
+    BackHandler(enabled = talkOpen && newsOpen == null) { talkOpen = false }
+    val talkApp = context.applicationContext as? os.meka.android.MekaApplication
     val density = LocalDensity.current
     var topInWindow by remember { mutableIntStateOf(0) }
     var heightPx by remember { mutableIntStateOf(0) }
@@ -174,7 +185,10 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
             val ringSize = FoldModeRules.bedsideRingDp(upper.value, with(density) { widthPx.toDp() }.value)?.dp
             ClockHalf(v, today.dayRing.takeIf { today.timeline.dateLabel.isNotEmpty() }, ringSize, Modifier.fillMaxWidth().height(upper).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
             Box(Modifier.height(gap))
-            DayHalf(v, Modifier.fillMaxWidth().weight(1f).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))) {
+            DayHalf(
+                v, Modifier.fillMaxWidth().weight(1f).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
+                onTalk = { os.meka.android.ask.talkAtBedside(talkApp); talkOpen = true },
+            ) {
                 open = it
             }
             BedsideNews(
@@ -185,6 +199,7 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
         }
         MekaPane(visible = open == BedsideOpens.BRIEF) { BriefPane(core, onClose = { open = null }) }
         MekaPane(visible = open == BedsideOpens.SHUTDOWN) { ShutdownPane(core, onClose = { open = null }) }
+        MekaPane(visible = talkOpen) { BedsideTalkPane(core, onClose = { talkOpen = false }) }
         MekaPane(visible = newsOpen != null) {
             newsShown?.let { start ->
                 key(start) { NewsPane(core, onClose = { newsOpen = null }, backLabel = "‹ Clock", startStoryId = start.ifEmpty { null }) }
@@ -266,7 +281,7 @@ private fun RollingTime(time: String, color: androidx.compose.ui.graphics.Color,
 }
 
 @Composable
-private fun DayHalf(v: BedsideView, modifier: Modifier, onOpen: (BedsideOpens) -> Unit) {
+private fun DayHalf(v: BedsideView, modifier: Modifier, onTalk: () -> Unit, onOpen: (BedsideOpens) -> Unit) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val text by animateColorAsState(if (v.dim) Meka.colors.textTertiary else Meka.colors.textPrimary, MekaMotion.themeBlend(reduced), label = "day")
@@ -275,7 +290,10 @@ private fun DayHalf(v: BedsideView, modifier: Modifier, onOpen: (BedsideOpens) -
         MekaMotion.themeBlend(reduced), label = "alarm",
     )
     Column(modifier.padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
-        Text(v.alarmLine, style = MekaType.itemMeta, color = alarmColor, modifier = Modifier.appear(rememberAppearance(2)))
+        Row(Modifier.fillMaxWidth().appear(rememberAppearance(2)), verticalAlignment = Alignment.CenterVertically) {
+            Text(v.alarmLine, style = MekaType.itemMeta, color = alarmColor, modifier = Modifier.weight(1f))
+            os.meka.android.ask.TalkMic(onTalk, size = 44.dp, dim = v.dim)
+        }
         val opens = v.opens
         Column(
             Modifier.fillMaxWidth().appear(rememberAppearance(3)).clip(RoundedCornerShape(MekaRadius.m))
@@ -302,6 +320,30 @@ private fun DayHalf(v: BedsideView, modifier: Modifier, onOpen: (BedsideOpens) -
                 )
             }
         }
+    }
+}
+
+/**
+ * The Talk pane over the bedside clock (Talk without tapping the mic, slice 3): "‹ Clock", the title, and Ask's field
+ * with the orb, which starts listening as it appears (the mic set [MekaApplication.talkNow]); answers and their cards
+ * show under it as on Ask, with the undo bar at the foot. Motion: MekaPane's spring; the orb as on Ask.
+ */
+@Composable
+private fun BedsideTalkPane(core: MekaCore, onClose: () -> Unit) {
+    val undo = os.meka.android.calendar.rememberEventUndo()
+    Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                .windowInsetsPadding(WindowInsets.safeDrawing).padding(MekaSpace.gutter),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        ) {
+            Text(TalkStartRules.BEDSIDE_BACK, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+            Text(TalkStartRules.BEDSIDE_TITLE, style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
+            // Search isn't reachable at the bedside: when asking can't work, the field's tap just closes the pane.
+            os.meka.android.ask.AskMekaSection(core, undo, openSearch = onClose, modifier = Modifier.appear(rememberAppearance(1)))
+        }
+        os.meka.android.calendar.EventUndoBar(undo, Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing))
     }
 }
 

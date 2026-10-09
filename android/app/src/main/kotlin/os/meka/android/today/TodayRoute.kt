@@ -279,11 +279,14 @@ fun TodayRoute(
     // Also keyed on the booked sessions: answering "Did you go?" changes the card but not Today.
     val sessions by core.sessionsView.collectAsState()
     val nowView = remember(today, sessions) { core.coverNow() }
+    val talkApp = androidx.compose.ui.platform.LocalContext.current.applicationContext as? os.meka.android.MekaApplication
     val nowHandlers = NowHandlers(
         complete = actions.complete, tomorrow = actions.snooze, openTask = actions.select,
         openEvent = { eventOpen = it }, openNeedsYou = null, // Needs you is listed just above it on the cover screen
         went = { id -> scope.launch { runCatching { core.sessionWent(id, null) } } },
         didntGo = { id -> scope.launch { runCatching { core.sessionMissed(id) } } },
+        // The cover screen's mic (Talk without tapping the mic, slice 3): Ask, already listening.
+        talk = { os.meka.android.ask.talkFromCover(talkApp) },
     )
 
     // Insets are applied once, by the app shell.

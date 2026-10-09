@@ -10,8 +10,11 @@ package os.meka.core.domain
  *
  * Slice 2, where listening is clearly wanted: [WIDGET], the home screen's Talk widget tapped; [HEADPHONES] and [CAR],
  * MEKA opened from the launcher while Bluetooth audio is connected or the phone is in car mode ([TalkStartRules.onOpen]).
+ *
+ * Slice 3: [BEDSIDE], the mic on the bedside clock (the Fold half folded on a table), which springs a Talk pane up over
+ * the clock already listening; [COVER], the mic on the closed Fold's now card, which opens Ask already listening.
  */
-enum class TalkStart { SIDE_BUTTON, HEADSET_BUTTON, WIDGET, HEADPHONES, CAR }
+enum class TalkStart { SIDE_BUTTON, HEADSET_BUTTON, WIDGET, HEADPHONES, CAR, BEDSIDE, COVER }
 
 /** One section of the Talk pane: its small label, a [status] line ([lit]: in the accent, set up), and [steps]. */
 data class TalkSetupSection(
@@ -69,6 +72,19 @@ object TalkStartRules {
 
     /** The home screen's Talk widget: its one line and the description the launcher's widget list shows. */
     const val WIDGET_LABEL = "Talk to MEKA"
+
+    /** The bedside clock's and the now card's mic, as a screen reader says it. */
+    const val MIC_LABEL = "Talk to MEKA"
+
+    /** The pane that springs up over the bedside clock: its back line and title. */
+    const val BEDSIDE_BACK = "‹ Clock"
+    const val BEDSIDE_TITLE = "Talk"
+
+    /**
+     * Where a mic on the Fold's own screens starts from: the bedside clock ([bedside]) or the closed Fold's now card.
+     * Both start listening at once, with the same yes-before-anything as Ask's mic.
+     */
+    fun fromMic(bedside: Boolean): TalkStart = if (bedside) TalkStart.BEDSIDE else TalkStart.COVER
 
     /**
      * The Talk pane. Fold: whether MEKA is the digital assistant app ([assistantHeld], from Android's role manager) and
@@ -136,6 +152,14 @@ object TalkStartRules {
                     "Add the Talk widget: one tap opens MEKA listening.",
                     lit = false,
                     steps = listOf("Hold an empty spot on the home screen → Widgets → MEKA → $WIDGET_LABEL."),
+                    action = null,
+                ),
+                TalkSetupSection(
+                    "Bedside and the cover screen",
+                    "Tap the mic on the bedside clock (the phone half folded on a table) or on the closed phone's now " +
+                        "card, and MEKA starts listening.",
+                    lit = false,
+                    steps = listOf("At the bedside MEKA answers over the clock; Back returns to the clock."),
                     action = null,
                 ),
                 TalkSetupSection("Safety", SAFETY, lit = false, steps = emptyList(), action = null),

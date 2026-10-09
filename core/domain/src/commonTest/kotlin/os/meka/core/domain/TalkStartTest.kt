@@ -29,7 +29,7 @@ class TalkStartTest {
     fun notTheAssistantYetSaysHowOnASamsungAndOffersDefaultApps() {
         val v = TalkStartRules.setup(mac = false, assistantHeld = false, samsung = true)
         assertEquals("Talk", v.title)
-        assertEquals(listOf("Side button", "Headphones and the car", "Home screen", "Safety"), v.sections.map { it.label })
+        assertEquals(listOf("Side button", "Headphones and the car", "Home screen", "Bedside and the cover screen", "Safety"), v.sections.map { it.label })
         val side = v.sections[0]
         assertFalse(side.lit)
         assertEquals("Not set up yet: holding the side key opens another assistant.", side.status)
@@ -83,5 +83,20 @@ class TalkStartTest {
         assertTrue(phones.status.contains("Bluetooth headphones"))
         assertTrue(phones.steps.any { it.contains("notification never starts listening") })
         assertEquals("Safety", v.sections.last().label)
+    }
+
+    @Test
+    fun theBedsideAndCoverMicsStartListeningAndThePaneSaysWhere() {
+        assertEquals(TalkStart.BEDSIDE, TalkStartRules.fromMic(bedside = true))
+        assertEquals(TalkStart.COVER, TalkStartRules.fromMic(bedside = false))
+        assertEquals("talk:COVER", TalkStartRules.openValue(TalkStart.COVER))
+        assertEquals(TalkStart.BEDSIDE, TalkStartRules.fromOpen("talk:BEDSIDE"))
+        val v = TalkStartRules.setup(mac = false, assistantHeld = false, samsung = true)
+        val mics = v.sections.single { it.label == "Bedside and the cover screen" }
+        assertTrue(mics.status.contains("bedside clock") && mics.status.contains("now card"))
+        assertNull(mics.action)
+        assertFalse(mics.lit)
+        // The Mac has neither screen.
+        assertTrue(TalkStartRules.setup(mac = true).sections.none { it.label.contains("Bedside") })
     }
 }
