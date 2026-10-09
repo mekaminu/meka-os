@@ -86,6 +86,12 @@ fun DayRingHero(
     onLiveFrame: ((handDegrees: Float, glow: Float) -> Unit)? = null,
     /** Tapping an arc on the ring opens it (Living Today, slice 3); null: the ring doesn't answer taps. */
     onOpenArc: ((DayArc) -> Unit)? = null,
+    /**
+     * The bedside clock's ring (Living Today, slice 5): a slower breath ([DayRingLive.bedsideGlow]), and in [quiet]
+     * hours no sweeping hand ([DayRingLive.bedsideMode]).
+     */
+    bedside: Boolean = false,
+    quiet: Boolean = false,
 ) {
     val expressive = Meka.expressiveMotion
     val total = remember(play) { MotionMath.dayRingTotalMs(ring.arcs.size, play, expressive, tiles.size) }
@@ -208,7 +214,7 @@ fun DayRingHero(
             }
             // Living Today: once the opening has landed the ring stays alive — the gold second hand, the breath, the
             // hour's shimmer and the now dot's pop — drawn on a layer of its own.
-            DayRingLiveLayer(ring, landed = play == DayRingPlay.STILL, size = size, onFrame = onLiveFrame)
+            DayRingLiveLayer(ring, landed = play == DayRingPlay.STILL, size = size, onFrame = onLiveFrame, bedside = bedside, quiet = quiet)
             Column(
                 Modifier.size(size * 0.62f),
                 verticalArrangement = Arrangement.Center,
@@ -240,11 +246,13 @@ fun DayRingHero(
  * breath, redrawn once a minute. Motion → Off: a still edge, no hand.
  */
 @Composable
-private fun DayRingLiveLayer(ring: DayRing, landed: Boolean, size: Dp, onFrame: ((Float, Float) -> Unit)?) {
+private fun DayRingLiveLayer(
+    ring: DayRing, landed: Boolean, size: Dp, onFrame: ((Float, Float) -> Unit)?, bedside: Boolean = false, quiet: Boolean = false,
+) {
     val context = LocalContext.current
     val reduced = Meka.reducedMotion
     val powerSave = remember { MotionPrefs.powerSave(context) }
-    val mode = DayRingLive.mode(reduced, powerSave)
+    val mode = if (bedside) DayRingLive.bedsideMode(reduced, powerSave, quiet) else DayRingLive.mode(reduced, powerSave)
     val resumed by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val front = resumed.isAtLeast(Lifecycle.State.RESUMED)
     val clock = remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -278,7 +286,11 @@ private fun DayRingLiveLayer(ring: DayRing, landed: Boolean, size: Dp, onFrame: 
         val sweeping = mode == DayRingLiveMode.SWEEP
         // Fades in as the opening lands (at once when the ring isn't sweeping: nothing would advance the fade).
         val fadeIn = if (sweeping) DayRingLive.handFade(now - landedAt) else 1f
-        val glow = if (sweeping) DayRingLive.glow(now) else 0.8f
+        val glow = when {
+            !sweeping -> 0.8f
+            bedside -> DayRingLive.bedsideGlow(now)
+            else -> DayRingLive.glow(now)
+        }
         val edge = radius + stroke / 2 + 1.dp.toPx()
         // The brass edge and its soft halo, breathing.
         drawCircle(colors.accent.copy(alpha = 0.10f * glow), edge + 1.5.dp.toPx(), center, style = Stroke(4.dp.toPx()), alpha = fadeIn)

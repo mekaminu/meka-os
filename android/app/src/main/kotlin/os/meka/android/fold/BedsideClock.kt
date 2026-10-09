@@ -11,6 +11,7 @@ import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -21,6 +22,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -46,6 +50,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
@@ -73,10 +80,14 @@ import os.meka.android.news.NewsPane
 import os.meka.android.news.NewsTickerStrip
 import os.meka.android.news.rememberTickerMode
 import os.meka.android.today.BriefPane
+import os.meka.android.today.DayRingHero
 import os.meka.android.today.ShutdownPane
 import os.meka.core.domain.BedsideOpens
 import os.meka.core.domain.BedsideTickerRules
 import os.meka.core.domain.BedsideView
+import os.meka.core.domain.DayRing
+import os.meka.core.domain.DayRingLive
+import os.meka.core.domain.DayRingPlay
 import os.meka.core.domain.FoldMode
 import os.meka.core.domain.FoldModeRules
 import os.meka.core.domain.NewsTicker
@@ -95,8 +106,14 @@ import os.meka.core.facade.MekaCore
  * drifting on the charger and is calm on battery, follows Appearance → News ticker, and fades away in quiet hours; a
  * story springs the News pane up on it (the match opens News itself).
  *
- * Motion: the clock fades up and the lower lines stagger in; changed digits roll up each minute; dimming blends the
- * colours across; the strip fades in and out. Reduced motion: cross-fades, the strip a still card with ‹ ›.
+ * Beside the time sits Today's Day ring, larger (Living Today, slice 5; [FoldModeRules.bedsideRingDp]): the same arcs,
+ * work band, fast and living second hand, breathing slower ([DayRingLive.bedsideGlow], 8 s); in quiet hours it
+ * quietens with the clock ([DayRingLive.BEDSIDE_QUIET_ALPHA]) and its hand stops ([DayRingLive.bedsideMode]), the ring
+ * redrawn once a minute. After Shut down its centre shows tomorrow's first thing, as on Today.
+ *
+ * Motion: the clock fades up and the lower lines stagger in; the ring draws itself in (the quick draw) as the clock
+ * appears; changed digits roll up each minute; dimming blends the colours across; the strip fades in and out. Reduced
+ * motion: cross-fades, the ring drawn at once and still, the strip a still card with ‹ ›.
  */
 @Composable
 fun BedsideClock(core: MekaCore, fold: FoldState) {
@@ -140,9 +157,12 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
     val density = LocalDensity.current
     var topInWindow by remember { mutableIntStateOf(0) }
     var heightPx by remember { mutableIntStateOf(0) }
+    var widthPx by remember { mutableIntStateOf(0) }
+    // Today's Day ring, kept current by the shell's minute tick.
+    val today by core.today.collectAsState()
     Box(
         Modifier.fillMaxSize().background(Meka.colors.background)
-            .onGloballyPositioned { topInWindow = it.positionInWindow().y.toInt(); heightPx = it.size.height },
+            .onGloballyPositioned { topInWindow = it.positionInWindow().y.toInt(); heightPx = it.size.height; widthPx = it.size.width },
     ) {
         // Split at the hinge (window coordinates), else in half.
         val hinge = fold.hinge
@@ -151,7 +171,8 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
         val upper = with(density) { splitPx.toDp() }
         val gap = with(density) { hingePx.toDp() }
         Column(Modifier.fillMaxSize()) {
-            ClockHalf(v, Modifier.fillMaxWidth().height(upper).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
+            val ringSize = FoldModeRules.bedsideRingDp(upper.value, with(density) { widthPx.toDp() }.value)?.dp
+            ClockHalf(v, today.dayRing.takeIf { today.timeline.dateLabel.isNotEmpty() }, ringSize, Modifier.fillMaxWidth().height(upper).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
             Box(Modifier.height(gap))
             DayHalf(v, Modifier.fillMaxWidth().weight(1f).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))) {
                 open = it
@@ -196,16 +217,32 @@ private fun BedsideNews(
     }
 }
 
+/**
+ * The clock half: the time and date, with the Day ring beside them when the half holds it ([ringSize] non-null). The
+ * ring draws itself in once as the clock appears (the quick draw; reduced motion: at once), then lives.
+ */
 @Composable
-private fun ClockHalf(v: BedsideView, modifier: Modifier) {
+private fun ClockHalf(v: BedsideView, ring: DayRing?, ringSize: Dp?, modifier: Modifier) {
     val reduced = Meka.reducedMotion
     val primary by animateColorAsState(if (v.dim) Meka.colors.textTertiary else Meka.colors.textPrimary, MekaMotion.themeBlend(reduced), label = "clock")
     val secondary by animateColorAsState(if (v.dim) Meka.colors.textTertiary else Meka.colors.textSecondary, MekaMotion.themeBlend(reduced), label = "date")
-    Column(modifier, verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.appear(rememberAppearance(0)).semantics { contentDescription = "${v.time}, ${v.dateLabel}" }) {
-            RollingTime(v.time, primary, reduced)
+    val ringAlpha by animateFloatAsState(if (v.dim) DayRingLive.BEDSIDE_QUIET_ALPHA else 1f, MekaMotion.themeBlend(reduced), label = "ringDim")
+    var play by remember { mutableStateOf(if (reduced) DayRingPlay.STILL else DayRingPlay.QUICK) }
+    Row(modifier, horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        if (ring != null && ringSize != null) {
+            DayRingHero(
+                ring, play, played = { play = DayRingPlay.STILL },
+                modifier = Modifier.width(ringSize).graphicsLayer { alpha = ringAlpha },
+                size = ringSize, bedside = true, quiet = v.dim,
+            )
+            Spacer(Modifier.width(MekaSpace.xl))
         }
-        Text(v.dateLabel, style = MekaType.itemMeta, color = secondary, modifier = Modifier.appear(rememberAppearance(1)))
+        Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.appear(rememberAppearance(0)).semantics { contentDescription = "${v.time}, ${v.dateLabel}" }) {
+                RollingTime(v.time, primary, reduced)
+            }
+            Text(v.dateLabel, style = MekaType.itemMeta, color = secondary, modifier = Modifier.appear(rememberAppearance(1)))
+        }
     }
 }
 

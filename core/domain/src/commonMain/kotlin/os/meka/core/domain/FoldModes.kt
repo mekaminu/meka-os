@@ -165,6 +165,22 @@ object FoldModeRules {
         )
     }
 
+    /**
+     * The Day ring beside the bedside clock (Living Today, slice 5): larger than Today's, about four fifths of the clock
+     * half's height, between [BEDSIDE_RING_MIN_DP] and [BEDSIDE_RING_MAX_DP]. Null (no ring, the clock alone) when the
+     * half is too short or too narrow to hold the ring beside the time.
+     */
+    fun bedsideRingDp(halfHeightDp: Float, widthDp: Float): Float? {
+        if (widthDp < BEDSIDE_RING_MIN_WIDTH_DP) return null
+        val size = halfHeightDp * 0.8f
+        if (size < BEDSIDE_RING_MIN_DP) return null
+        return size.coerceAtMost(BEDSIDE_RING_MAX_DP)
+    }
+
+    const val BEDSIDE_RING_MIN_DP = 150f
+    const val BEDSIDE_RING_MAX_DP = 260f
+    const val BEDSIDE_RING_MIN_WIDTH_DP = 600f
+
     const val NO_ALARM = "No alarm set"
     const val NOTHING_NEXT = "Nothing else planned today"
     private const val GLANCE_PREFIX = "Tomorrow: "

@@ -407,6 +407,12 @@ object DayRingLive {
     /** How long the hand takes to fade in once the opening has landed. */
     const val HAND_FADE_MS = 500L
 
+    /** The bedside clock's slower breath (Living Today, slice 5): a sleeping room wants a calmer light. */
+    const val BEDSIDE_GLOW_PERIOD_MS = 8_000L
+
+    /** How bright the whole bedside ring is in quiet hours, so it quietens with the clock's colours. */
+    const val BEDSIDE_QUIET_ALPHA = 0.45f
+
     private const val HOUR_MS = 3_600_000L
 
     /** The damped sine's own peak, so the dot swells by exactly [NOW_POP_SCALE]. */
@@ -419,14 +425,26 @@ object DayRingLive {
     }
 
     /**
+     * The bedside clock's ring (Living Today, slice 5): as on Today, except that in quiet hours nothing moves in a dark
+     * bedroom — no sweeping hand or breath, the ring redrawn once a minute so the now needle still keeps time.
+     */
+    fun bedsideMode(reduced: Boolean, powerSave: Boolean, quiet: Boolean): DayRingLiveMode =
+        if (quiet && !reduced) DayRingLiveMode.MINUTE else mode(reduced, powerSave)
+
+    /**
      * Where the second hand points, degrees clockwise from the top: the milliseconds into the current minute, swept
      * smoothly ([epochMs] is the wall clock; every time zone's minutes start on UTC minutes).
      */
     fun handDegrees(epochMs: Long): Float = (epochMs).mod(SWEEP_MS).toFloat() * 360f / SWEEP_MS
 
     /** How bright the brass edge is now: [GLOW_LOW] at the bottom of the breath, [GLOW_HIGH] at its top (a cosine, so it eases both ways). */
-    fun glow(epochMs: Long): Float {
-        val phase = (epochMs).mod(GLOW_PERIOD_MS).toDouble() / GLOW_PERIOD_MS
+    fun glow(epochMs: Long): Float = glowOver(epochMs, GLOW_PERIOD_MS)
+
+    /** The bedside clock's breath: the same 60 % → 100 % → 60 %, over [BEDSIDE_GLOW_PERIOD_MS]. */
+    fun bedsideGlow(epochMs: Long): Float = glowOver(epochMs, BEDSIDE_GLOW_PERIOD_MS)
+
+    private fun glowOver(epochMs: Long, periodMs: Long): Float {
+        val phase = (epochMs).mod(periodMs).toDouble() / periodMs
         val rise = (0.5 - 0.5 * cos(phase * 2 * PI)).toFloat()
         return GLOW_LOW + (GLOW_HIGH - GLOW_LOW) * rise
     }

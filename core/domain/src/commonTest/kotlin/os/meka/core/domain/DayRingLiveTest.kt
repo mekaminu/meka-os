@@ -94,4 +94,25 @@ class DayRingLiveTest {
         assertEquals(45_000L, DayRingLive.nextDrawInMs(DayRingLiveMode.MINUTE, nine + 15_000))
         assertNull(DayRingLive.nextDrawInMs(DayRingLiveMode.STILL, nine))
     }
+
+    @Test
+    fun theBedsideRingBreathesSlowerAndKeepsStillInQuietHours() {
+        // The same 60 % → 100 % → 60 %, over 8 s instead of 5.
+        near(DayRingLive.GLOW_LOW, DayRingLive.bedsideGlow(nine))
+        near(DayRingLive.GLOW_HIGH, DayRingLive.bedsideGlow(nine + 4_000))
+        near(DayRingLive.GLOW_LOW, DayRingLive.bedsideGlow(nine + 8_000))
+        assertTrue(DayRingLive.bedsideGlow(nine + 2_500) < DayRingLive.glow(nine + 2_500))
+        (0L until 8_000L step 41).forEach { t ->
+            val g = DayRingLive.bedsideGlow(nine + t)
+            assertTrue(g >= DayRingLive.GLOW_LOW - 0.001f && g <= DayRingLive.GLOW_HIGH + 0.001f)
+        }
+        // Awake: sweeps like Today's; power saving once a minute; Off still.
+        assertEquals(DayRingLiveMode.SWEEP, DayRingLive.bedsideMode(reduced = false, powerSave = false, quiet = false))
+        assertEquals(DayRingLiveMode.MINUTE, DayRingLive.bedsideMode(reduced = false, powerSave = true, quiet = false))
+        assertEquals(DayRingLiveMode.STILL, DayRingLive.bedsideMode(reduced = true, powerSave = false, quiet = false))
+        // Quiet hours: no sweeping hand in a dark bedroom, the ring still redrawn each minute; Off stays still.
+        assertEquals(DayRingLiveMode.MINUTE, DayRingLive.bedsideMode(reduced = false, powerSave = false, quiet = true))
+        assertEquals(DayRingLiveMode.STILL, DayRingLive.bedsideMode(reduced = true, powerSave = false, quiet = true))
+        assertTrue(DayRingLive.BEDSIDE_QUIET_ALPHA in 0.2f..0.6f)
+    }
 }

@@ -154,4 +154,17 @@ class FoldModesTest {
         assertEquals("1 h", FoldModeRules.inWords(60))
         assertEquals("7 h 48", FoldModeRules.inWords(468))
     }
+
+    @Test
+    fun theBedsideRingIsLargerThanTodaysAndOnlyWhereItFitsBesideTheTime() {
+        // The open Fold half folded (~840 × 350 dp a half): four fifths of the half's height.
+        assertEquals(280f * 0.8f, FoldModeRules.bedsideRingDp(280f, 840f))
+        // Never larger than 260 dp, never smaller than 150 dp.
+        assertEquals(FoldModeRules.BEDSIDE_RING_MAX_DP, FoldModeRules.bedsideRingDp(400f, 840f))
+        assertEquals(null, FoldModeRules.bedsideRingDp(150f, 840f))
+        // Too narrow to sit beside the 96 sp digits: the clock alone.
+        assertEquals(null, FoldModeRules.bedsideRingDp(350f, 400f))
+        // Larger than Today's (196 dp) wherever the half allows it.
+        assertTrue((FoldModeRules.bedsideRingDp(350f, 840f) ?: 0f) > 196f)
+    }
 }
