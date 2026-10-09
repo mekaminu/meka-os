@@ -528,6 +528,27 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(VoicePickerRules.shared.SAMPLE.hasPrefix("Good morning, Meka."))
     }
 
+    /// The Mac's own voices one by one, with speed and pitch (Weather and a voice, slice 10): the section's rows and the
+    /// one-line setting kept in UserDefaults reach Swift.
+    func testDeviceVoicesReachSwift() {
+        let voices = [
+            DeviceVoice(name: "com.apple.voice.compact.en-GB.Daniel", displayName: "Daniel", language: "en-GB", quality: 1,
+                        engine: "Apple", needsNetwork: false, installed: true),
+            DeviceVoice(name: "com.apple.voice.premium.en-GB.Serena", displayName: "Serena (Premium)", language: "en-GB", quality: 3,
+                        engine: "Apple", needsNetwork: false, installed: true),
+        ]
+        let d = DeviceVoiceRules.shared.view(voices: voices, settings: DeviceVoiceSettings.companion.DEFAULT, mac: true, expanded: false)
+        XCTAssertEqual(d.title, "This Mac's voices")
+        XCTAssertEqual(d.rows.map(\.label), ["Automatic", "Serena", "Daniel"])
+        XCTAssertEqual(d.rows[1].detail, "Apple · British · Premium")
+        XCTAssertEqual(d.rateLine, "Speed · normal")
+        let s = DeviceVoiceSettings(voice: "com.apple.voice.compact.en-GB.Daniel", rate: 1.2, pitch: 0.9)
+        XCTAssertEqual(DeviceVoiceRules.shared.decode(line: DeviceVoiceRules.shared.encode(s: s)), s)
+        XCTAssertEqual(DeviceVoiceRules.shared.pick(voices: voices, settings: s)?.name, "com.apple.voice.compact.en-GB.Daniel")
+        XCTAssertEqual(DeviceVoiceRules.shared.macRate(r: 1.2), 0.6, accuracy: 0.001)
+        XCTAssertEqual(DeviceVoiceRules.shared.pitchLine(p: 0.9), "Pitch · 10% lower")
+    }
+
     /// The spoken morning brief (Weather and a voice, slice 8): the script the brief sheet's Listen reads reaches Swift.
     func testBriefSpeechReachesSwift() {
         XCTAssertEqual(BriefSpeech.shared.script(v: MorningBriefView.companion.EMPTY, name: "Meka"),

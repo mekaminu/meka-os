@@ -12,8 +12,8 @@ import Speech
 /// (`TalkProblem.noOnDevice`) rather than using Apple's servers. The Mac's recogniser doesn't decide when a question is
 /// over, so `TalkEndpoint` does (a 1.5 s pause after words; 8 s of nothing is silence). Speaking uses MEKA's voice
 /// (Amazon Polly through MEKA's own server, `MekaCore.speechClip`: only MEKA's own words are sent), piece by piece,
-/// and falls back to `AVSpeechSynthesizer` with the best installed English voice (`TalkVoice.best`: British first,
-/// premium, then enhanced) when MEKA's voice is off, used up for the month, offline or slow. Every change still goes through `MekaCore.doTalk` exactly as clicking a card would, with one undo bar.
+/// and falls back to `AVSpeechSynthesizer` with the best installed English voice (the one chosen in the voice picker, else
+/// `TalkVoice.best`: British first, premium, then enhanced; at the Mac's speed and pitch) when MEKA's voice is off, used up for the month, offline or slow. Every change still goes through `MekaCore.doTalk` exactly as clicking a card would, with one undo bar.
 /// Clicking the orb while MEKA speaks stops it and listens (barge-in by click, as on the Fold); otherwise it ends.
 ///
 /// Main actor throughout. The microphone tap runs on the audio thread and touches only the recognition request and a
@@ -60,6 +60,8 @@ final class TalkController {
     private let speechDone = SpeechDone()
     private let clipDone = ClipDone()
     @ObservationIgnored private var voice: AVSpeechSynthesisVoice?
+    /// This Mac's own voice, speed and pitch (the voice picker's, kept on the Mac).
+    @ObservationIgnored private var voiceSettings = DeviceVoiceSettings.companion.DEFAULT
     /// Bumped by every line and every stop, so a line that was cut short doesn't move the conversation on.
     @ObservationIgnored private var utterance = 0
     @ObservationIgnored private var speaking: Task<Void, Never>?
@@ -88,7 +90,8 @@ final class TalkController {
                 return
             }
             guard gen == generation else { return }
-            if voice == nil { voice = Self.bestVoice() }
+            voiceSettings = DeviceVoiceStore.load()
+            voice = DeviceVoiceStore.voice(voiceSettings)
             Task { await model?.warmVoice() } // MEKA's common lines in its voice, fetched once
             apply(TalkFlow.shared.start())
         }
@@ -323,16 +326,6 @@ final class TalkController {
 
     // MARK: Speaking (on the device only)
 
-    private static func bestVoice() -> AVSpeechSynthesisVoice? {
-        let voices = AVSpeechSynthesisVoice.speechVoices()
-        let candidates = voices.map { v in
-            VoiceCandidate(name: v.identifier, language: v.language, quality: Int32(v.quality.rawValue),
-                           needsNetwork: false, installed: true)
-        }
-        guard let best = TalkVoice.shared.best(voices: candidates) else { return AVSpeechSynthesisVoice(language: "en-GB") }
-        return AVSpeechSynthesisVoice(identifier: best.name)
-    }
-
     /// Says `text`: piece by piece (`SpeechRules.pieces`) in MEKA's voice, fetching the next piece while one plays;
     /// the Mac's own voice says whatever is left when a piece doesn't come in time, the server refuses, or a clip won't
     /// play. Only Strings and Data cross between here and the core.
@@ -399,6 +392,7 @@ final class TalkController {
         let id = deviceLine
         let u = AVSpeechUtterance(string: text)
         u.voice = voice
+        DeviceVoiceStore.style(u, voiceSettings)
         speechDone.expect(ObjectIdentifier(u), id: id)
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             deviceWaiting[id] = c

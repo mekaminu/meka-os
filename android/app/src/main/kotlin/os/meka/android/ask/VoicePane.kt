@@ -24,6 +24,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -38,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -54,6 +57,10 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
+import os.meka.core.domain.DeviceVoice
+import os.meka.core.domain.DeviceVoiceRow
+import os.meka.core.domain.DeviceVoiceRules
+import os.meka.core.domain.DeviceVoiceSettings
 import os.meka.core.domain.VoiceChoice
 import os.meka.core.domain.VoicePickerRules
 import os.meka.core.domain.VoicePickerView
@@ -64,12 +71,15 @@ import os.meka.core.facade.MekaCore
  * own server) first, the default marked, then the phone's own voice; each with ▶ Sample ("Good morning, Meka…", MEKA's
  * own words). Choosing one sets the synced "MEKA's voice", so Talk, the spoken brief and the call assistant use it on
  * every device. Under the list: why MEKA's voices are missing (if they are), the month's characters, and how to get a
- * better free phone voice.
+ * better free phone voice. Then "This phone's voices" (slice 10): Automatic (MEKA's pick) and each installed English voice
+ * that speaks on the phone, best first (engine · accent · quality), each with ▶ Sample, and Speed and Pitch sliders;
+ * kept on this phone only ([DeviceVoiceStore]), since each device has its own voices.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; a shimmer while the server answers; rows
  * stagger in 40 ms apart; the chosen row's ring and border blend to the accent with a tick haptic; Sample presses in
  * with a light haptic and its label cross-fades to "■ Stop" while it plays (Stop: tick haptic); the status and month
- * lines cross-fade. Reduced motion: cross-fades.
+ * lines cross-fade; "+3 more" unfolds the rest of the phone's voices (they stagger in); a slider's line cross-fades as
+ * it moves, a tick haptic on each step. Reduced motion: cross-fades.
  */
 @Composable
 fun VoicePane(core: MekaCore, onClose: () -> Unit) {
@@ -79,13 +89,17 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
     val speaker = remember { MekaSpeaker(context, core, scope) }
     DisposableEffect(speaker) { onDispose { speaker.release() } }
     var view by remember { mutableStateOf<VoicePickerView?>(null) }
-    // The row whose sample is playing (null: none).
+    // The row whose sample is playing (null: none); a phone voice's row is keyed "device:<name>".
     var playing by remember { mutableStateOf<String?>(null) }
+    var deviceVoices by remember { mutableStateOf<List<DeviceVoice>?>(null) }
+    var deviceSettings by remember { mutableStateOf(DeviceVoiceStore.load(context)) }
+    var showAll by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         speaker.prepare()
         view = runCatching { core.voicePicker(mac = false) }.getOrNull()
             ?: VoicePickerRules.view(null, emptyList(), null, null, null, mac = false, connected = false)
     }
+    LaunchedEffect(Unit) { deviceVoices = speaker.deviceVoices() }
     val reduced = Meka.reducedMotion
 
     fun choose(c: VoiceChoice) {
@@ -106,6 +120,32 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
         haptics.light()
         playing = c.id
         speaker.sample(c.id) { playing = null }
+    }
+
+    fun saveDevice(next: DeviceVoiceSettings) {
+        if (next == deviceSettings) return
+        deviceSettings = next
+        DeviceVoiceStore.save(context, next)
+        speaker.useDeviceVoice(next)
+    }
+
+    fun chooseDevice(r: DeviceVoiceRow) {
+        if (r.selected) return
+        haptics.tick()
+        saveDevice(deviceSettings.copy(voice = r.id.ifEmpty { null }))
+    }
+
+    fun sampleDevice(r: DeviceVoiceRow) {
+        val key = "device:" + r.id
+        if (playing == key && speaker.speaking) {
+            haptics.tick()
+            speaker.stop()
+            playing = null
+            return
+        }
+        haptics.light()
+        playing = key
+        speaker.sampleOnDevice(r.id) { playing = null }
     }
 
     Column(
@@ -139,8 +179,33 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
+            val voices = deviceVoices
+            if (voices == null) {
+                SkeletonRows(count = 2, rowHeight = 48.dp)
+            } else {
+                val d = DeviceVoiceRules.view(voices, deviceSettings, mac = false, expanded = showAll)
+                Spacer(Modifier.height(MekaSpace.s))
+                Text(d.title, style = MekaType.sectionLabel, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(after + 1)))
+                d.rows.forEachIndexed { i, r ->
+                    DeviceRow(r, playing = playing == "device:" + r.id && speaker.speaking,
+                        modifier = Modifier.appear(rememberAppearance(after + 2 + i)),
+                        choose = { chooseDevice(r) }, sample = { sampleDevice(r) })
+                }
+                d.moreLabel?.let { more ->
+                    Text(more, style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Show the other voices") { haptics.light(); showAll = true }
+                            .padding(vertical = MekaSpace.xs))
+                }
+                d.emptyLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
+                val base = after + 2 + d.rows.size
+                VoiceSlider(d.rateLine, deviceSettings.rate, DeviceVoiceRules.RATE_MIN, DeviceVoiceRules.RATE_MAX, DeviceVoiceRules::rate,
+                    Modifier.appear(rememberAppearance(base)), onStep = { haptics.tick() }) { saveDevice(deviceSettings.copy(rate = DeviceVoiceRules.rate(it))) }
+                VoiceSlider(d.pitchLine, deviceSettings.pitch, DeviceVoiceRules.PITCH_MIN, DeviceVoiceRules.PITCH_MAX, DeviceVoiceRules::pitch,
+                    Modifier.appear(rememberAppearance(base + 1)), onStep = { haptics.tick() }) { saveDevice(deviceSettings.copy(pitch = DeviceVoiceRules.pitch(it))) }
+                Text(d.note, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(base + 2)))
+            }
             Spacer(Modifier.height(MekaSpace.s))
-            Text(v.help, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(after + 1)))
+            Text(v.help, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(after + 4)))
         }
     }
 }
@@ -179,5 +244,46 @@ private fun VoiceRow(c: VoiceChoice, playing: Boolean, modifier: Modifier, choos
                 }
             }
         }
+    }
+}
+
+/** One of the phone's own voices: the same row as MEKA's voices (dot, label, detail, ▶ Sample). */
+@Composable
+private fun DeviceRow(r: DeviceVoiceRow, playing: Boolean, modifier: Modifier, choose: () -> Unit, sample: () -> Unit) {
+    VoiceRow(VoiceChoice(r.id, r.label, r.detail, r.selected), playing, modifier, choose, sample)
+}
+
+/**
+ * Speed or pitch: the line ("Speed · 1.2× faster") cross-fades as the thumb moves on [DeviceVoiceRules.STEP] steps,
+ * a tick haptic per step; saved as it moves.
+ */
+@Composable
+private fun VoiceSlider(
+    line: String, value: Float, min: Float, max: Float, snap: (Float) -> Float, modifier: Modifier,
+    onStep: () -> Unit, onChange: (Float) -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    val steps = (((max - min) / DeviceVoiceRules.STEP) + 0.5f).toInt() - 1
+    Column(modifier.fillMaxWidth()) {
+        Crossfade(targetState = line, animationSpec = MekaMotion.appear(reduced), label = "voice-slider-line") { l ->
+            Text(l, style = MekaType.body, color = Meka.colors.textPrimary)
+        }
+        Slider(
+            value = value,
+            onValueChange = { v ->
+                val snapped = snap(v)
+                if (snapped != value) { onStep(); onChange(snapped) }
+            },
+            valueRange = min..max,
+            steps = steps,
+            colors = SliderDefaults.colors(
+                thumbColor = Meka.colors.accent,
+                activeTrackColor = Meka.colors.accent,
+                inactiveTrackColor = Meka.colors.surfaceRaised,
+                activeTickColor = Meka.colors.accent,
+                inactiveTickColor = Meka.colors.textTertiary,
+            ),
+            modifier = Modifier.semantics { contentDescription = line },
+        )
     }
 }

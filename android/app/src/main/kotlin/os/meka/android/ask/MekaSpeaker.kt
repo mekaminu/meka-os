@@ -20,10 +20,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import os.meka.core.domain.DeviceVoice
+import os.meka.core.domain.DeviceVoiceRules
+import os.meka.core.domain.DeviceVoiceSettings
 import os.meka.core.domain.MekaVoiceRules
 import os.meka.core.domain.SpeechRules
-import os.meka.core.domain.TalkVoice
-import os.meka.core.domain.VoiceCandidate
 import os.meka.core.domain.VoicePickerRules
 import os.meka.core.facade.MekaCore
 import java.util.Locale
@@ -34,8 +35,9 @@ import kotlin.coroutines.resume
  * morning brief. A line is said piece by piece ([SpeechRules.pieces]) in MEKA's voice (Amazon Polly through MEKA's own
  * server, [MekaCore.speechClip]: only MEKA's own words are sent), the next piece fetched while one plays, each clip
  * played from memory (nothing written to storage); the phone's own voice (`TextToSpeech`, the best installed British
- * voice that speaks on the device, [TalkVoice.best]; never a network voice) says whatever is left when a piece doesn't
- * come in time, the server refuses, or a clip won't play.
+ * voice that speaks on the device, [DeviceVoiceRules.pick]: the one chosen in the voice picker, else MEKA's pick; never a
+ * network voice; at this phone's speed and pitch, [DeviceVoiceStore]) says whatever is left when a piece doesn't come in
+ * time, the server refuses, or a clip won't play.
  *
  * Main thread only; the speech engine's callbacks are posted back.
  */
@@ -59,6 +61,8 @@ class MekaSpeaker(
     private var line = 0
     private var job: Job? = null
     private var player: MediaPlayer? = null
+    /** This phone's own voice, speed and pitch (kept on the phone only). */
+    private var settings: DeviceVoiceSettings = DeviceVoiceStore.load(context)
 
     /** Starts the phone's own speech engine early, so a fallback line doesn't wait for it. */
     fun prepare() { ensureTts() }
@@ -69,6 +73,8 @@ class MekaSpeaker(
      */
     fun say(text: String, onDone: () -> Unit = {}) {
         stop()
+        // The picker may have changed the phone's voice since this speaker started (prefs are read from memory).
+        DeviceVoiceStore.load(context).let { if (it != settings) useDeviceVoice(it) }
         val id = ++line
         speaking = true
         job = scope.launch {
@@ -101,6 +107,41 @@ class MekaSpeaker(
         job = scope.launch {
             val clip = if (voice == MekaVoiceRules.DEVICE) null else core.speechSample(voice)
             if (clip == null || !play(clip)) sayOnDevice(VoicePickerRules.SAMPLE)
+            if (id == line) {
+                speaking = false
+                onDone()
+            }
+        }
+    }
+
+    /** The phone's voices as the picker lists them (empty when its engine can't speak). */
+    suspend fun deviceVoices(): List<DeviceVoice> {
+        val engine = ensureTts().await() ?: return emptyList()
+        return voicesOf(engine)
+    }
+
+    /** Speaks with [s] from now on (the picker saved it). */
+    fun useDeviceVoice(s: DeviceVoiceSettings) {
+        settings = s
+        tts?.let { if (ttsReady?.isCompleted == true) applyVoice(it, s) }
+    }
+
+    /**
+     * ▶ Sample on one of the phone's voices: [VoicePickerRules.SAMPLE] in that voice ([DeviceVoiceRules.AUTOMATIC]:
+     * MEKA's pick) at this phone's speed and pitch. Stops anything already being said.
+     */
+    fun sampleOnDevice(voice: String, onDone: () -> Unit = {}) {
+        stop()
+        val id = ++line
+        speaking = true
+        job = scope.launch {
+            val engine = ensureTts().await()
+            if (engine != null) applyVoice(engine, settings.copy(voice = voice.ifEmpty { null }))
+            try {
+                sayOnDevice(VoicePickerRules.SAMPLE)
+            } finally {
+                if (engine != null) applyVoice(engine, settings)
+            }
             if (id == line) {
                 speaking = false
                 onDone()
@@ -185,7 +226,7 @@ class MekaSpeaker(
                 }
                 engine.setAudioAttributes(speechAttributes())
                 engine.setLanguage(Locale.UK)
-                chooseVoice(engine)
+                applyVoice(engine, settings)
                 engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {}
                     override fun onDone(utteranceId: String?) { lineSaid(utteranceId) }
@@ -204,16 +245,40 @@ class MekaSpeaker(
         main.post { id?.let { deviceLines.remove(it)?.complete(Unit) } }
     }
 
-    private fun chooseVoice(engine: TextToSpeech) {
+    /** The engine's voices with its label ("Speech Services by Google"). */
+    private fun voicesOf(engine: TextToSpeech): List<DeviceVoice> {
+        val label = try { engine.engines.firstOrNull { it.name == engine.defaultEngine }?.label.orEmpty() } catch (_: Exception) { "" }
         val voices = try { engine.voices.orEmpty() } catch (_: Exception) { emptySet() }
-        val best = TalkVoice.best(voices.map { v ->
-            VoiceCandidate(
-                name = v.name, language = v.locale.toLanguageTag(), quality = v.quality,
+        return voices.map { v ->
+            DeviceVoice(
+                name = v.name, displayName = "", language = v.locale.toLanguageTag(), quality = v.quality, engine = label,
                 needsNetwork = v.isNetworkConnectionRequired,
                 installed = TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in v.features.orEmpty(),
             )
-        }) ?: return
+        }
+    }
+
+    /** The chosen (else MEKA's pick of the) phone's voice, at its speed and pitch. */
+    private fun applyVoice(engine: TextToSpeech, s: DeviceVoiceSettings) {
+        engine.setSpeechRate(DeviceVoiceRules.rate(s.rate))
+        engine.setPitch(DeviceVoiceRules.pitch(s.pitch))
+        val best = DeviceVoiceRules.pick(voicesOf(engine), s) ?: return
+        val voices = try { engine.voices.orEmpty() } catch (_: Exception) { emptySet() }
         voices.firstOrNull { it.name == best.name }?.let { engine.setVoice(it) }
+    }
+}
+
+/** This phone's own voice, speed and pitch (Weather and a voice, slice 10): on the phone only, never synced. */
+object DeviceVoiceStore {
+    private const val PREFS = "meka_voice"
+    private const val KEY = "device_voice"
+
+    fun load(context: Context): DeviceVoiceSettings = DeviceVoiceRules.decode(
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null),
+    )
+
+    fun save(context: Context, s: DeviceVoiceSettings) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, DeviceVoiceRules.encode(s)).apply()
     }
 }
 
