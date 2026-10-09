@@ -11,8 +11,12 @@ import os.meka.core.sync.Replica
  * Only MEKA's own words are ever sent to be spoken, never what Meka said.
  */
 object SpeechRules {
-    /** The first piece must start playing within this, else the device's own voice says the whole line. */
-    const val FIRST_AUDIO_MS = 1_200L
+    /**
+     * The first piece must start playing within this, else the device's own voice says the whole line. 4 s (was 1.2 s):
+     * on the phone's mobile data the round trip to MEKA's voice often took longer, so after one answer the rest came in
+     * the robotic phone voice (Meka, 2026-10-09). The orb shows "Thinking…" meanwhile; one voice beats a fast switch.
+     */
+    const val FIRST_AUDIO_MS = 4_000L
     /** Later pieces are fetched while the one before plays; one this late hands the rest to the device's voice. */
     const val NEXT_AUDIO_MS = 6_000L
     /**

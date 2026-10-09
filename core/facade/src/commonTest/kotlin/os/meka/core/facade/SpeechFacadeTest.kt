@@ -78,8 +78,8 @@ class SpeechFacadeTest {
         // Too long for one piece, or blank: the device says it.
         assertNull(c.speechClip("x".repeat(601), first = true))
         assertNull(c.speechClip("  ", first = true))
-        // Slower than 1.2 s to the first audio: the device speaks this time, and the next line asks again.
-        server.slowMs = 1_500
+        // Slower than 4 s to the first audio: the device speaks this time, and the next line asks again.
+        server.slowMs = 4_500
         assertNull(c.speechClip("Slow one.", first = true))
         assertEquals("bXAz9", c.speechClip("Slow one.", first = false)) // a later piece may take up to 6 s
         server.slowMs = 0
@@ -178,8 +178,8 @@ class SpeechFacadeTest {
         assertTrue(core(transport = null).speechResting())
         val c = core()
         assertEquals(false, c.speechResting())
-        // A cold server taking 3 s: a conversation's first piece goes to the device, the brief's waits for MEKA's voice.
-        server.slowMs = 3_000
+        // A cold server taking 4.5 s: a conversation's first piece goes to the device, the brief's waits for MEKA's voice.
+        server.slowMs = 4_500
         assertNull(c.speechClip("Good morning, Meka.", first = true))
         assertEquals("bXAz19", c.speechClip("Good morning, Meka.", first = true, reading = true))
         server.slowMs = 6_000 // even the brief gives up after 5 s
