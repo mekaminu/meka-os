@@ -40,7 +40,12 @@ class TodayHeaderRingTest {
 
     private var opened = 0
 
+    private companion object { const val SETTLE_MS = 2_000L }
+
     private fun header(widthDp: Int, compact: Boolean) {
+        // The living face's second hand and breath run every frame, so Compose never goes idle on its own: drive the
+        // clock by hand (motion workflow runs 17–27 timed out waiting for idle), and step past the draw-in.
+        compose.mainClock.autoAdvance = false
         compose.setContent {
             MekaTheme {
                 Box(Modifier.width(widthDp.dp)) {
@@ -48,6 +53,7 @@ class TodayHeaderRingTest {
                 }
             }
         }
+        compose.mainClock.advanceTimeBy(SETTLE_MS)
     }
 
     @Test
@@ -71,6 +77,7 @@ class TodayHeaderRingTest {
     fun tappingTheWatchFaceOpensTheWholeDay() {
         header(412, compact = true)
         compose.onNodeWithTag(WATCH_FACE_TAG, useUnmergedTree = true).performClick()
+        compose.mainClock.advanceTimeBy(SETTLE_MS)
         assertEquals(1, opened)
     }
 }
