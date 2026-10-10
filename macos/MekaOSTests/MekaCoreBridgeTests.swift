@@ -1303,6 +1303,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "planned Pizza for dinner tomorrow")
     }
 
+    func testSkipDateNightFromAskReachesSwift() {
+        // "Skip date night next week" in Ask and Talk (date night, slice 3): the skip card's words reach the Mac.
+        let card = AskRules.shared.cardOf(p: AskProposalSkipDateNight(day: 14), today: 0)
+        XCTAssertEqual(card.line, "Skip date night · Thu 15 Jan")
+        XCTAssertEqual(card.button, "Skip")
+        XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 13, past: true), "skipped date night tomorrow")
+    }
+
     func testFamilyReachesSwift() {
         // Family sharing, slice 4: Settings → Family's rules reach the Mac (only Strings cross from the sheet).
         let rules = FamilyRules.shared

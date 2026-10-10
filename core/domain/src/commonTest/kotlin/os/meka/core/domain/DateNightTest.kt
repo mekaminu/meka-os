@@ -166,4 +166,50 @@ class DateNightTest {
         assertTrue(nFold.set(5, 19 * 60, fri16 + 14))
         assertTrue(nFold.setting()!!.booked.isEmpty())
     }
+
+    // ---- Slice 3: Ask and Talk know the nights ----
+
+    private fun skipCard(date: String?, now: Long = world.clock.nowMs) =
+        AskRules.card(AskRawAction("skip_date_night", date = date), AskContext.EMPTY, emptyMap(), now, cal, dateNight = nFold.setting())
+
+    @Test
+    fun askHearsTheComingNightsAndSkipIsACardForAKeptOne() {
+        assertNull(DateNightRules.askLine(nFold.setting(), sat, 10 * 60))
+        assertNull(skipCard(null))
+        assertTrue(nFold.set(5, 19 * 60, fri16))
+        assertTrue(nFold.book(fri16, true))
+        assertTrue(nFold.skip(fri16 + 14, true))
+        val line = DateNightRules.askLine(nFold.setting(), sat, 10 * 60)!!
+        assertEquals("Date night · every other Friday from 19:00 · coming: Fri 16 Oct (booked), Fri 30 Oct (skipped), Fri 13 Nov, Fri 27 Nov", line)
+        // On the night it says tonight, and once the evening is over it moves on.
+        assertTrue(DateNightRules.askLine(nFold.setting(), fri16, 12 * 60)!!.endsWith("coming: Fri 16 Oct (tonight, booked), Fri 30 Oct (skipped), Fri 13 Nov, Fri 27 Nov"))
+        assertTrue(DateNightRules.askLine(nFold.setting(), fri16, 23 * 60 + 30)!!.endsWith("coming: Fri 30 Oct (skipped), Fri 13 Nov, Fri 27 Nov, Fri 11 Dec"))
+
+        // It goes with a question as one date_night line, never untrusted.
+        val today = TodayProjection.project(emptyList(), world.clock.nowMs, DayWindow(at(sat, 0), at(sat + 1, 0)))
+        val ctx = AskRules.context(today, world.clock.nowMs, cal, dateNight = line)
+        assertEquals(listOf(line), ctx.items.filter { it.kind == AskItemKind.DATE_NIGHT }.map { it.line })
+        assertFalse(ctx.untrusted)
+
+        // A kept night by its date; no date means the next kept one.
+        val fri = skipCard("2026-10-16")!!
+        assertEquals(AskProposal.SkipDateNight(fri16), fri.proposal)
+        assertEquals("Skip date night · Fri 16 Oct", fri.line)
+        assertEquals("Skip", fri.button)
+        assertEquals(fri.proposal, skipCard(null)!!.proposal)
+        assertEquals(AskProposal.SkipDateNight(fri16 + 28), skipCard("2026-11-13")!!.proposal)
+        assertEquals("Skipped Fri 16 Oct · the evening is free to plan", AskRules.doneLine(fri.proposal, sat))
+        // Not a date night, already skipped, gone, or a bad date: no card.
+        assertNull(skipCard("2026-10-23"))
+        assertNull(skipCard("2026-10-30"))
+        assertNull(skipCard("2026-10-09"))
+        assertNull(skipCard("next Friday"))
+        // On the night, tonight's card until the evening is over; then the next kept one.
+        assertEquals("Skip date night · tonight", skipCard(null, at(fri16, 18))!!.line)
+        assertEquals(AskProposal.SkipDateNight(fri16 + 28), skipCard(null, at(fri16, 23, 30))!!.proposal)
+        assertTrue("skip_date_night" in AskRules.KINDS)
+        // Talk says it in words.
+        assertEquals("skip date night on Friday 16 October", TalkRules.phrase(fri.proposal, sat, past = false))
+        assertEquals("skipped date night tonight", TalkRules.phrase(fri.proposal, fri16, past = true))
+    }
 }

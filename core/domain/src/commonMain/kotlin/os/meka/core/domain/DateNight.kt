@@ -246,8 +246,51 @@ object DateNightRules {
     /** The line after a skip or keep: "Skipped Fri 23 Oct · the evening is free to plan", "Fri 23 Oct is kept clear again". */
     fun skipLine(day: Long, today: Long, skip: Boolean): String {
         val label = dayLabel(day, today)
-        return if (skip) "Skipped ${if (day == today) "tonight" else label} · the evening is free to plan"
+        return if (skip) "Skipped ${whenLabel(day, today)} · the evening is free to plan"
         else "${if (day == today) "Tonight" else label} is kept clear again"
+    }
+
+    // ---- Slice 3: Ask and Talk know the nights ----
+
+    /** How many coming nights Ask's line names. */
+    const val ASK_NIGHTS = 4
+
+    /**
+     * Date night as MEKA describes it to the model (Ask's `date_night` line), so "when's date night?" and "is date
+     * night booked?" can be answered: "Date night · every other Friday from 19:00 · coming: Fri 9 Oct (tonight),
+     * Fri 23 Oct (booked), Fri 6 Nov (skipped), Fri 20 Nov". A night whose evening is over is left out. Meka's own
+     * setting in MEKA's words, so never untrusted. Null when off.
+     */
+    fun askLine(s: DateNightSetting?, today: Long, minuteOfDay: Int): String? {
+        if (s == null || !s.on) return null
+        val over = minuteOfDay >= minOf(s.startMin + LENGTH_MIN, LocalClock.MINUTES_PER_DAY)
+        val coming = nights(s, today, ASK_NIGHTS + 1).filterNot { it == today && over }.take(ASK_NIGHTS)
+        val names = coming.joinToString(", ") { d ->
+            val marks = listOfNotNull(
+                when (d) { today -> "tonight"; today + 1 -> "tomorrow"; else -> null },
+                when { d in s.skipped -> "skipped"; d in s.booked -> "booked"; else -> null },
+            )
+            CivilDate.shortLabel(d) + if (marks.isEmpty()) "" else " (" + marks.joinToString(", ") + ")"
+        }
+        return "$TITLE · ${everyLine(s).replaceFirstChar { it.lowercase() }} · coming: $names"
+    }
+
+    /**
+     * The night a skip card skips: [day] when it is a kept date night (today included), else null; with no day, the
+     * soonest kept night whose evening isn't over yet. Null when date night is off.
+     */
+    fun skippable(s: DateNightSetting?, day: Long?, today: Long, minuteOfDay: Int): Long? {
+        if (s == null || !s.on) return null
+        if (day != null) return day.takeIf { it >= today && kept(s, it) }
+        val over = minuteOfDay >= minOf(s.startMin + LENGTH_MIN, LocalClock.MINUTES_PER_DAY)
+        return nights(s, today, ASK_NIGHTS).firstOrNull { kept(s, it) && !(it == today && over) }
+    }
+
+    /** "tonight", "tomorrow", "Fri 23 Oct" (the skip card's words). */
+    fun whenLabel(day: Long, today: Long): String = when (day) {
+        today -> "tonight"
+        today + 1 -> "tomorrow"
+        else -> CivilDate.shortLabel(day)
     }
 }
 

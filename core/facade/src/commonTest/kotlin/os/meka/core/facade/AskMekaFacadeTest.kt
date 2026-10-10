@@ -336,6 +336,41 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheComingDateNightsAndSkipDateNightSkipsOneWithUndo() = runTest {
+        val c = core()
+        c.askMeka("When's date night?")
+        assertTrue(server.asked.last().second.items.none { it.kind == os.meka.core.domain.AskItemKind.DATE_NIGHT })
+        val fri9 = os.meka.core.domain.CivilDate.toEpochDay(2026, 10, 9)
+        c.setDateNight(5, 19 * 60, fri9)
+
+        server.reply = AskReply.Answered("Done.", listOf(
+            AskRawAction("skip_date_night", date = "2026-10-23"),
+            AskRawAction("skip_date_night", date = "2026-10-16"), // not a date night: no card
+        ))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("Skip date night in a fortnight"))
+        val ctx = server.asked.last().second
+        assertEquals(
+            listOf("Date night · every other Friday from 19:00 · coming: Fri 9 Oct (tomorrow), Fri 23 Oct, Fri 6 Nov, Fri 20 Nov"),
+            ctx.items.filter { it.kind == os.meka.core.domain.AskItemKind.DATE_NIGHT }.map { it.line },
+        )
+        assertFalse(ctx.untrusted)
+        assertEquals(listOf("Skip date night · Fri 23 Oct"), out.answer.cards.map { it.line })
+        // Nothing until tapped.
+        assertTrue(c.dateNightView.value.nights.none { it.skipped })
+
+        val done = c.doAsk(out.answer.cards.single())
+        assertEquals("Skipped Fri 23 Oct · the evening is free to plan", done.line)
+        assertEquals(listOf(false, true, false, false), c.dateNightView.value.nights.map { it.skipped })
+        // Done twice: the night is already skipped.
+        assertFailsWith<os.meka.core.domain.ValidationException> { c.doAsk(out.answer.cards.single()) }
+
+        // Undo keeps it clear again, once.
+        assertTrue(c.undoAsk(assertIs<AskUndo.KeepDateNight>(done.undo)))
+        assertTrue(c.dateNightView.value.nights.none { it.skipped })
+        assertFalse(c.undoAsk(done.undo!!))
+    }
+
+    @Test
     fun everyCardCanBeTakenBack() = runTest {
         val c = core()
         c.addTask("Book dentist")

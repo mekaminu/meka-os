@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -59,6 +59,8 @@ sealed interface AskProposal {
      * or, when [mealId] is null, a new favourite with that name and no ingredients yet.
      */
     data class PlanDinner(val day: Long, val title: String, val mealId: String?) : AskProposal
+    /** Skips the date night on [day] (Date night slice 3: "skip date night next week"): that evening is free to plan. */
+    data class SkipDateNight(val day: Long) : AskProposal
 }
 
 /** A proposal as Ask shows it: "Add “Call the dentist” · Tomorrow · 09:00" with its button ("Add"). */
@@ -90,6 +92,8 @@ sealed interface AskUndo {
      * the favourite the card made ([createdMealId]) is taken off again.
      */
     data class PutBackDinner(val day: Long, val before: String?, val after: String, val createdMealId: String?) : AskUndo
+    /** The skip card: [day]'s date night is kept clear again (only while it is still skipped). */
+    data class KeepDateNight(val day: Long) : AskUndo
 }
 
 /** What a tapped card did: the undo bar's line ("Added “Milk”") and how to take it back. */
@@ -118,7 +122,7 @@ object AskRules {
     const val MAX_SHOPPING = 10
 
     /** The kinds of proposal MEKA understands; anything else is dropped. Wire names, never renamed. */
-    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner")
+    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night")
 
     /** The question as sent: one line, trimmed, at most [MAX_QUESTION] characters; null when there's nothing to ask. */
     fun question(text: String?): String? =
@@ -129,7 +133,8 @@ object AskRules {
      * the calendar (finished events included, marked). At most [MAX_ITEMS] lines of at most [MAX_LINE] characters.
      */
     fun context(today: Today, nowMs: Long, cal: LocalCalendar, weather: List<String> = emptyList(), shopping: ShoppingView? = null,
-                school: List<String> = emptyList(), meals: String? = null, mealsFromOthers: Boolean = false): AskContext {
+                school: List<String> = emptyList(), meals: String? = null, mealsFromOthers: Boolean = false,
+                dateNight: String? = null): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -176,7 +181,9 @@ object AskRules {
         // The week's dinners and the favourites (Meal plan slice 2, [MealRules.askLine]): Meka's and Jeanette's own
         // dinner names; Jeanette's favourites make the context untrusted like her shopping (below).
         val dinners = meals?.let { AskItem("", AskItemKind.MEALS, line(it)) }
-        val tail = listOfNotNull(shop, dinners) + schoolYear + forecast
+        // Date night (slice 3, [DateNightRules.askLine]): Meka's own setting in MEKA's words, never untrusted.
+        val evening = dateNight?.let { AskItem("", AskItemKind.DATE_NIGHT, line(it)) }
+        val tail = listOfNotNull(shop, dinners, evening) + schoolYear + forecast
         val kept = items.take(MAX_ITEMS - tail.size) + tail
         val keptRefs = kept.map { it.ref }.toSet()
         // Things Jeanette added are someone else's words, like a calendar invitation's title.
@@ -202,10 +209,10 @@ object AskRules {
 
     /** The answer as shown: its words and the proposals that check out, at most [MAX_CARDS], no two alike. */
     fun answer(text: String?, actions: List<AskRawAction>, context: AskContext, titles: Map<String, String>, nowMs: Long, cal: LocalCalendar,
-               meals: List<Meal> = emptyList()): AskAnswer =
+               meals: List<Meal> = emptyList(), dateNight: DateNightSetting? = null): AskAnswer =
         AskAnswer(
             answerText(text),
-            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals) }.distinctBy { it.proposal }.take(MAX_CARDS),
+            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals, dateNight) }.distinctBy { it.proposal }.take(MAX_CARDS),
         )
 
     /**
@@ -214,7 +221,7 @@ object AskRules {
      * outside [FAST_MIN_HOURS]…[FAST_MAX_HOURS] hours, a timer outside a minute to a day. [titles] maps task id → title.
      */
     fun card(a: AskRawAction, context: AskContext, titles: Map<String, String>, nowMs: Long, cal: LocalCalendar,
-             meals: List<Meal> = emptyList()): AskCard? {
+             meals: List<Meal> = emptyList(), dateNight: DateNightSetting? = null): AskCard? {
         val today = cal.epochDayOf(nowMs)
         fun task(): Pair<String, String>? {
             val id = context.taskIds[a.ref?.trim()] ?: return null
@@ -223,7 +230,7 @@ object AskRules {
         fun day(): Long? = a.date?.let { parseDay(it) }?.takeIf { it in today..today + MAX_DAYS_AHEAD }
         val minute = a.time?.let { parseTime(it) }
         // Where a kind uses a day or time, one that is there must read right (a bad one isn't guessed at).
-        if (a.kind == "add_task" || a.kind == "move_task" || a.kind == "plan_dinner") {
+        if (a.kind == "add_task" || a.kind == "move_task" || a.kind == "plan_dinner" || a.kind == "skip_date_night") {
             if (a.time != null && minute == null) return null
             if (a.date != null && day() == null) return null
         }
@@ -256,6 +263,9 @@ object AskRules {
                 val fav = meals.firstOrNull { MealRules.key(it.title) == MealRules.key(name) }
                 AskProposal.PlanDinner(d, fav?.title ?: name, fav?.id)
             }
+            "skip_date_night" -> AskProposal.SkipDateNight(
+                DateNightRules.skippable(dateNight, a.date?.let { day() }, today, cal.minuteOfDay(nowMs)) ?: return null,
+            )
             else -> return null
         }
         return cardOf(proposal, today)
@@ -331,6 +341,7 @@ object AskRules {
         is AskProposal.Alarm -> "Alarm set · ${LocalClock.formatMinute(p.minute)}"
         is AskProposal.AddShopping -> "Added ${shoppingNames(p.items)} to shopping"
         is AskProposal.PlanDinner -> "Planned " + MealRules.plannedLine(p.day, today, p.title)
+        is AskProposal.SkipDateNight -> DateNightRules.skipLine(p.day, today, skip = true)
     }
 
     /** The card's words for [p]. */
@@ -345,6 +356,7 @@ object AskRules {
         is AskProposal.PlanDinner -> AskCard(
             p, "Dinner · " + MealRules.plannedLine(p.day, today, p.title) + (if (p.mealId == null) " · new favourite" else ""), "Plan",
         )
+        is AskProposal.SkipDateNight -> AskCard(p, "Skip date night · " + DateNightRules.whenLabel(p.day, today), "Skip")
     }
 
     /** "milk", "milk and eggs", "milk, eggs and bread", as typed. */

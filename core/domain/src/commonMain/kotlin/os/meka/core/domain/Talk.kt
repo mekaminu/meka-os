@@ -215,6 +215,12 @@ object TalkRules {
             today + 1 -> "tomorrow"
             else -> "on " + CivilDate.longLabel(p.day)
         }
+        // "skip date night on Friday 23 October" / "skipped date night tonight".
+        is AskProposal.SkipDateNight -> (if (past) "skipped " else "skip ") + "date night " + when (p.day) {
+            today -> "tonight"
+            today + 1 -> "tomorrow"
+            else -> "on " + CivilDate.longLabel(p.day)
+        }
     }
 
     /** "today at 14:30", "tomorrow", "Friday 9 October at 09:00". */
