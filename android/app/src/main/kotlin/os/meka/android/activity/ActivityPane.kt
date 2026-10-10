@@ -122,7 +122,7 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
         val filter = ActivityRules.chosen(view, ActivityRules.filterNamed(filterName))
         if (chips.isNotEmpty()) {
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = MekaSpace.s)
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = MekaSpace.xs)
                     .appear(rememberAppearance(1)),
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
