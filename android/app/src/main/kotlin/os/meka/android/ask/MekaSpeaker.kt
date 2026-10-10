@@ -125,16 +125,28 @@ class MekaSpeaker(
         }
     }
 
-    /** Says [text] piece by piece in MEKA's voice, the phone's own for what's left; returns once it has been said. */
+    /**
+     * Says [text] piece by piece in MEKA's voice, the phone's own for what's left; returns once it has been said. A long
+     * [reading] is cut into short pieces ([SpeechRules.pieces], at most [SpeechRules.READ_PIECE]) and asks for
+     * [SpeechRules.ahead] of them at once from the start, so later ones are ready before they are needed; a late one is
+     * waited for ([SpeechRules.READ_PIECE_WAIT_MS]) rather than switching voice (Meka, 2026-10-10).
+     */
     private suspend fun speakNow(text: String, reading: Boolean): Unit = coroutineScope {
-        val pieces = SpeechRules.pieces(text)
+        val pieces = SpeechRules.pieces(text, reading)
+        val ahead = SpeechRules.ahead(reading)
+        val queue = ArrayDeque<Pending>()
+        var asked = 0
         var held = false
 
-        suspend fun fetch(k: Int): Pending? {
-            val p = pieces.getOrNull(k) ?: return null
+        suspend fun fetch(k: Int): Pending {
+            val p = pieces[k]
             val hold = SpeechRules.holds(reading, core.speechResting(), lastMekaVoiceMs, System.currentTimeMillis())
             val first = k == 0
             return Pending(async { core.speechClip(p, first, reading, hold) }, SystemClock.elapsedRealtime(), first, hold)
+        }
+
+        suspend fun topUp() {
+            while (asked < pieces.size && queue.size < ahead) queue.addLast(fetch(asked++))
         }
 
         // A piece that may hold: its usual wait, then "One moment…" (once a line) and the rest of its budget.
@@ -151,11 +163,11 @@ class MekaSpeaker(
         }
 
         var i = 0
-        var next = fetch(0)
+        topUp()
         while (i < pieces.size) {
-            val clip = next?.let { clipOf(it) }
+            val clip = queue.removeFirstOrNull()?.let { clipOf(it) }
             if (clip != null) lastMekaVoiceMs = System.currentTimeMillis() // heard in this conversation
-            next = fetch(i + 1)
+            topUp()
             if (clip != null && play(clip)) {
                 lastMekaVoiceMs = System.currentTimeMillis()
                 i++
@@ -165,7 +177,7 @@ class MekaSpeaker(
             sayOnDevice(pieces[i])
             i++
         }
-        next?.clip?.cancel()
+        queue.forEach { it.clip.cancel() }
         if (i < pieces.size) sayOnDevice(pieces.drop(i).joinToString(" "))
     }
 

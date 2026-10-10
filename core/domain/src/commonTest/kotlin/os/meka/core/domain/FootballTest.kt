@@ -213,6 +213,44 @@ class FootballTest {
     }
 
     @Test
+    fun u7FixturesAreRexsAndU10sLogansInTheKitTheLateDraftAndTheResultPrompt() {
+        assertEquals(7, FootballRules.ageGroup("BUFC U7s v Arlesey"))
+        assertEquals(10, FootballRules.ageGroup("SJFC Under-10s training"))
+        assertEquals(10, FootballRules.ageGroup("u10 v Potton"))
+        assertNull(FootballRules.ageGroup("BUFC v Arlesey"))
+        assertEquals("Rex", FootballRules.child(event(title = "BUFC U7s v Arlesey")))
+        assertEquals("Logan", FootballRules.child(event(title = "BUFC U10s v Potton")))
+        assertNull(FootballRules.child(event()))
+        assertNull(FootballRules.child(event(title = "U7s parents' evening", calendarName = "School")))
+        assertEquals("under-sevens", FootballRules.spokenAgeGroup(7))
+        assertEquals("under-sixes", FootballRules.spokenAgeGroup(6))
+        assertEquals("under-twelves", FootballRules.spokenAgeGroup(12))
+        assertEquals("Rex's under-sevens play Arlesey", FootballRules.spokenFixture("BUFC U7s v Arlesey"))
+        assertEquals("Biggleswade United under-nines play Arlesey", FootballRules.spokenFixture("BUFC U9s v Arlesey"))
+        assertEquals("Biggleswade United versus Arlesey", FootballRules.spokenFixture("BUFC v Arlesey"))
+        assertNull(FootballRules.spokenFixture("Standup"))
+        assertEquals("ten o'clock", FootballRules.spokenClock("10:00"))
+        assertEquals("half past ten", FootballRules.spokenClock("10:30"))
+        assertEquals("quarter past nine", FootballRules.spokenClock("09:15"))
+        assertEquals("quarter to one", FootballRules.spokenClock("12:45"))
+        assertEquals("six twenty", FootballRules.spokenClock("18:20"))
+        assertEquals("nine oh five", FootballRules.spokenClock("09:05"))
+        assertEquals("ten thirty-five", FootballRules.spokenClock("10:35"))
+        assertNull(FootballRules.spokenClock("All day"))
+
+        val rex = event(id = "r", title = "BUFC U7s v Arlesey")
+        assertEquals("Pack Rex's kit for BUFC U7s v Arlesey", FootballRules.title(rex))
+        assertEquals("Pack the kit for BUFC U9s v Arlesey", FootballRules.title(event()))
+        assertEquals(
+            "Hi, sorry, Rex and I are running about 10 min late for BUFC U7s v Arlesey. Should be there by 10:10.",
+            FootballRules.lateDrafts(rex, at(thu + 2, 8), cal)[1].text,
+        )
+        val prompt = FootballRules.notices(listOf(rex), eaFold.marks(), at(thu + 2, 11, 20), cal).single()
+        assertEquals("How did Rex's match go?", prompt.title)
+        assertTrue(prompt.text.startsWith("BUFC U7s v Arlesey · "), prompt.text)
+    }
+
+    @Test
     fun runningLateIsDraftedAroundKickOffForMekaToSendHimself() {
         val e = event(start = at(thu + 2, 10))
         // Too early: nothing, nor on an event that isn't a club fixture.

@@ -44,8 +44,30 @@ object SpeechRules {
     fun onMiss(reading: Boolean, resting: Boolean): Miss =
         if (reading && !resting) Miss.PIECE_ON_DEVICE else Miss.REST_ON_DEVICE
 
-    /** How long a device waits for a piece before it misses (or holds): the first piece's wait, else [NEXT_AUDIO_MS]. */
-    fun waitMs(first: Boolean, reading: Boolean): Long = if (first) firstWaitMs(reading) else NEXT_AUDIO_MS
+    /**
+     * How long a device waits for a piece before it misses (or holds): the first piece's wait; a long [reading]'s later
+     * pieces [READ_PIECE_WAIT_MS] (counted from when the piece was asked for, which with [READ_AHEAD] is well before it is
+     * needed); else [NEXT_AUDIO_MS].
+     */
+    fun waitMs(first: Boolean, reading: Boolean): Long = when {
+        first -> firstWaitMs(reading)
+        reading -> READ_PIECE_WAIT_MS
+        else -> NEXT_AUDIO_MS
+    }
+
+    /**
+     * Brief changes voice mid-read (Meka, 2026-10-10 07:50: "when it read the matches bit it sounded robotic"): in a long
+     * reading a later piece that the server is still working on is waited for up to this long (MEKA's own pause, no
+     * "One moment…" mid-brief) instead of [NEXT_AUDIO_MS]'s 6 s, so the voice only changes when the server refused or
+     * failed, or after this. Generative Polly is slowest on long pieces, and the brief's pieces were joined to 300.
+     */
+    const val READ_PIECE_WAIT_MS = 15_000L
+    /** A long reading asks for this many pieces at once from the start, so later ones are ready before they are needed. */
+    const val READ_AHEAD = 3
+    /** How many pieces are asked for at once: [READ_AHEAD] in a long [reading], else one (the next while one plays). */
+    fun ahead(reading: Boolean): Int = if (reading) READ_AHEAD else 1
+    /** A long reading's pieces are at most this long (each clip quick to make); sentences joined up to it. */
+    const val READ_PIECE = 200
 
     /**
      * What MEKA says, in its own (cached) voice, when a piece is late in a conversation where its voice has already
@@ -121,14 +143,19 @@ object SpeechRules {
      * joined up to [JOIN_TO] characters; a sentence longer than [MAX_PIECE] is split at a comma or a space. Whitespace
      * is collapsed; blank text has no pieces.
      */
-    fun pieces(text: String): List<String> {
+    fun pieces(text: String): List<String> = pieces(text, reading = false)
+
+    /** [pieces] for a long [reading]: every piece at most [READ_PIECE] characters (a longer sentence cut at a comma or space). */
+    fun pieces(text: String, reading: Boolean): List<String> {
         val clean = text.trim().replace(WHITESPACE, " ")
         if (clean.isEmpty()) return emptyList()
-        val sentences = sentences(clean).flatMap(::fit)
+        val max = if (reading) READ_PIECE else MAX_PIECE
+        val joinTo = if (reading) READ_PIECE else JOIN_TO
+        val sentences = sentences(clean).flatMap { fit(it, max) }
         val out = mutableListOf(sentences.first())
         sentences.drop(1).forEach { s ->
             val last = out.last()
-            if (out.size > 1 && last.length + 1 + s.length <= JOIN_TO) out[out.lastIndex] = "$last $s" else out += s
+            if (out.size > 1 && last.length + 1 + s.length <= joinTo) out[out.lastIndex] = "$last $s" else out += s
         }
         return out
     }
@@ -165,14 +192,14 @@ object SpeechRules {
     }
 
     /** A sentence too long for one request, cut at the last comma (else space) that fits. */
-    private fun fit(sentence: String): List<String> {
+    private fun fit(sentence: String, max: Int): List<String> {
         val out = mutableListOf<String>()
         var rest = sentence
-        while (rest.length > MAX_PIECE) {
-            val window = rest.substring(0, MAX_PIECE)
-            val cut = window.lastIndexOf(", ").takeIf { it > MAX_PIECE / 3 }?.plus(1)
+        while (rest.length > max) {
+            val window = rest.substring(0, max)
+            val cut = window.lastIndexOf(", ").takeIf { it > max / 3 }?.plus(1)
                 ?: window.lastIndexOf(' ').takeIf { it > 0 }
-                ?: MAX_PIECE
+                ?: max
             out += rest.substring(0, cut).trim()
             rest = rest.substring(cut).trim()
         }

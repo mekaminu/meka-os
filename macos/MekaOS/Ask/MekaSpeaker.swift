@@ -93,16 +93,26 @@ final class MekaSpeaker {
         }
     }
 
-    /// Says `text` piece by piece in MEKA's voice, the Mac's own for what's left; returns once said (or cancelled).
+    /// Says `text` piece by piece in MEKA's voice, the Mac's own for what's left; returns once said (or cancelled). A
+    /// long `reading` is cut into short pieces (`SpeechRules.pieces(text:reading:)`) and asks for `SpeechRules.ahead`
+    /// of them at once, so later ones are ready before they are needed; a late one is waited for
+    /// (`SpeechRules.READ_PIECE_WAIT_MS`) rather than switching voice (Meka, 2026-10-10).
     private func speakNow(_ text: String, reading: Bool) async {
-        let pieces = SpeechRules.shared.pieces(text: text)
+        let pieces = SpeechRules.shared.pieces(text: text, reading: reading)
+        let ahead = Int(SpeechRules.shared.ahead(reading: reading))
+        var queue: [Pending] = []
+        var asked = 0
         do {
             var held = false
             var i = 0
-            var next = await self.fetch(pieces, 0, reading: reading)
+            while asked < pieces.count && queue.count < ahead {
+                if let p = await self.fetch(pieces, asked, reading: reading) { queue.append(p) }
+                asked += 1
+            }
             while i < pieces.count {
                 var clip: Data?
-                if let p = next {
+                if !queue.isEmpty {
+                    let p = queue.removeFirst()
                     clip = await self.clipOf(p, reading: reading)
                     if clip == nil && p.hold && !p.box.done && !Task.isCancelled {
                         // Late: "One moment…" in MEKA's voice (once a line), then the rest of the piece's budget.
@@ -115,7 +125,10 @@ final class MekaSpeaker {
                 }
                 guard !Task.isCancelled else { break }
                 if clip != nil { self.lastMekaVoiceMs = Self.nowMs() } // heard in this conversation
-                next = await self.fetch(pieces, i + 1, reading: reading)
+                while asked < pieces.count && queue.count < ahead {
+                    if let p = await self.fetch(pieces, asked, reading: reading) { queue.append(p) }
+                    asked += 1
+                }
                 if let clip, await self.play(clip) {
                     self.lastMekaVoiceMs = Self.nowMs()
                     i += 1
@@ -128,7 +141,7 @@ final class MekaSpeaker {
                 guard !Task.isCancelled else { break }
                 i += 1
             }
-            next?.clip.cancel()
+            for p in queue { p.clip.cancel() }
             guard !Task.isCancelled else { return }
             if i < pieces.count { await self.sayOnDevice(pieces[i...].joined(separator: " ")) }
         }

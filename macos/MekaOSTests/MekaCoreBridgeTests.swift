@@ -595,7 +595,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(SpeechRules.shared.pieces(text: "You've got three things today. Training is at 18:00. Anything else?"),
                        ["You've got three things today.", "Training is at 18:00. Anything else?"])
         XCTAssertEqual(SpeechRules.shared.pieces(text: "  "), [])
-        XCTAssertEqual(SpeechRules.shared.FIRST_AUDIO_MS, 1200)
+        XCTAssertEqual(SpeechRules.shared.FIRST_AUDIO_MS, 4000)
+        // The spoken brief: short pieces, three asked for at once, a late one waited for in MEKA's voice.
+        let read = SpeechRules.shared.pieces(text: "Good morning, Meka. Rex's under-sevens play Arlesey at ten o'clock.", reading: true)
+        XCTAssertEqual(read, ["Good morning, Meka.", "Rex's under-sevens play Arlesey at ten o'clock."])
+        XCTAssertEqual(SpeechRules.shared.ahead(reading: true), 3)
+        XCTAssertEqual(SpeechRules.shared.waitMs(first: false, reading: true), 15000)
+        XCTAssertEqual(FootballRules.shared.spokenFixture(title: "BUFC U10s v Potton"), "Logan's under-tens play Potton")
         XCTAssertEqual(MekaVoiceRules.shared.normalize(name: " device "), MekaVoiceRules.shared.DEVICE)
         XCTAssertEqual(SpeechRules.shared.usageLine(state: "on", month: "2026-10", usedChars: 12400, capChars: 1000000,
                                                     voice: "Amy", deviceChosen: false),

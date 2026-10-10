@@ -148,10 +148,11 @@ object FootballRules {
         val kickOff = kickOffMs(e, cal)
         if (nowMs < kickOff - LATE_FROM_MIN * 60_000L || nowMs > kickOff + LATE_UNTIL_MIN * 60_000L) return emptyList()
         val what = lateTitle(e)
+        val who = child(e)?.let { "$it and I are " } ?: ""
         return LATE_MINUTES.map { m ->
             val by = if (nowMs <= kickOff) kickOff + m * 60_000L else roundUpTo5(nowMs + m * 60_000L)
             val time = LocalClock.formatMinute(cal.minuteOfDay(by))
-            LateDraft(m, "$m min", "Hi, sorry, running about $m min late for $what. Should be there by $time.")
+            LateDraft(m, "$m min", "Hi, sorry, ${who}running about $m min late for $what. Should be there by $time.")
         }
     }
 
@@ -265,10 +266,82 @@ object FootballRules {
             if (nowMs >= expires) return@mapNotNull null
             Notice(
                 key = "event:${e.id}:${e.startAtMs}:result", source = NoticeSource.EVENT_REMINDER, tier = NoticeTier.HEADS_UP,
-                title = "How did ${lateTitle(e)} go?", text = "Keep the score, the scorers and a note · open it from Today",
+                title = child(e)?.let { "How did $it's match go?" } ?: "How did ${lateTitle(e)} go?",
+                text = (if (child(e) != null) lateTitle(e) + " · " else "") + "Keep the score, the scorers and a note · open it from Today",
                 atMs = at, target = NoticeTarget.TODAY, expiresAtMs = expires,
             )
         }
+
+    // ---- Whose team it is, and saying a match the way people do (Meka, 2026-10-10) ----
+
+    /** The age group each child plays in: U7 fixtures are Rex's, U10 fixtures are Logan's (Meka, 2026-10-10). */
+    val CHILDREN: Map<Int, String> = mapOf(7 to "Rex", 10 to "Logan")
+    /** Club abbreviations said in full. */
+    val CLUB_NAMES: Map<String, String> = mapOf("BUFC" to "Biggleswade United")
+
+    private val AGE_GROUP = Regex("""\b(?:U|Under)[\s-]?(\d{1,2})(?:s)?\b""", RegexOption.IGNORE_CASE)
+    private val VERSUS = Regex("""\s+(?:v|vs|versus)\.?\s+""", RegexOption.IGNORE_CASE)
+
+    /** The age group a title names ("BUFC U7s v Arlesey" → 7, "Under-10s training" → 10), or null. */
+    fun ageGroup(title: String): Int? = AGE_GROUP.find(title)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 5..18 }
+
+    /** Whose fixture [e] is ("Rex"), from its age group; null when it isn't a club fixture or the group isn't a child's. */
+    fun child(e: CalendarEvent): String? = if (isClubFixture(e)) ageGroup(e.title)?.let { CHILDREN[it] } else null
+
+    /** 7 → "under-sevens", 6 → "under-sixes", 12 → "under-twelves". */
+    fun spokenAgeGroup(n: Int): String {
+        val word = NUMBER_WORDS.getOrNull(n) ?: return "under-$n"
+        return "under-" + if (word.endsWith("x")) word + "es" else word + "s"
+    }
+
+    /**
+     * A club fixture's title as MEKA says it aloud (the spoken brief; null when [title] names no club): "BUFC U7s v
+     * Arlesey" → "Rex's under-sevens play Arlesey", "BUFC U9s v Arlesey" → "Biggleswade United under-nines play Arlesey",
+     * "SJFC U10s training" → "Logan's under-tens training". The club is dropped when the child is named.
+     */
+    fun spokenFixture(title: String): String? {
+        val club = clubIn(title) ?: return null
+        val group = ageGroup(title)
+        val kid = group?.let { CHILDREN[it] }
+        var t = title.trim().replace(Regex("\\s+"), " ")
+        if (group != null) {
+            val team = (kid?.let { "$it's " } ?: "") + spokenAgeGroup(group)
+            t = AGE_GROUP.replaceFirst(t, Regex.escapeReplacement(team))
+        }
+        t = if (kid != null) t.replace(Regex("\\b$club\\b\\s*", RegexOption.IGNORE_CASE), "")
+        else t.replace(Regex("\\b$club\\b", RegexOption.IGNORE_CASE), Regex.escapeReplacement(CLUB_NAMES[club] ?: club))
+        t = VERSUS.replaceFirst(t, if (group != null) " play " else " versus ")
+        return t.replace(VERSUS, " versus ").trim().replaceFirstChar { it.uppercase() }
+    }
+
+    /** "10:00" → "ten o'clock", "10:30" → "half past ten", "09:15" → "quarter past nine", "09:45" → "quarter to ten", "18:20" → "six twenty"; null for anything else. */
+    fun spokenClock(time: String): String? {
+        val m = Regex("^(\\d{1,2}):(\\d{2})$").find(time.trim()) ?: return null
+        val h = m.groupValues[1].toInt()
+        val min = m.groupValues[2].toInt()
+        if (h > 23 || min > 59) return null
+        fun hour(x: Int) = NUMBER_WORDS[((x + 11) % 12) + 1]
+        return when (min) {
+            0 -> "${hour(h)} o'clock"
+            15 -> "quarter past ${hour(h)}"
+            30 -> "half past ${hour(h)}"
+            45 -> "quarter to ${hour(h + 1)}"
+            in 1..9 -> "${hour(h)} oh ${NUMBER_WORDS[min]}"
+            else -> "${hour(h)} ${minuteWords(min)}"
+        }
+    }
+
+    private fun minuteWords(n: Int): String = when {
+        n < NUMBER_WORDS.size -> NUMBER_WORDS[n]
+        n % 10 == 0 -> TENS[n / 10]
+        else -> TENS[n / 10] + "-" + NUMBER_WORDS[n % 10]
+    }
+
+    private val NUMBER_WORDS = listOf(
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+        "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+    )
+    private val TENS = listOf("", "", "twenty", "thirty", "forty", "fifty")
 
     /** The kit task's id for an event: the same on every device. */
     fun kitTaskId(eventId: String) = "k$eventId"
@@ -309,7 +382,8 @@ object FootballRules {
 
     /** "Pack the kit for BUFC U9s v Arlesey" (cut at a word to the task title's limit). */
     fun title(e: CalendarEvent): String {
-        val s = "Pack the kit for ${e.title.trim().ifEmpty { club(e) ?: "football" }}"
+        val what = e.title.trim().ifEmpty { club(e) ?: "football" }
+        val s = child(e)?.let { "Pack $it's kit for $what" } ?: "Pack the kit for $what"
         if (s.length <= PrepRules.MAX_TITLE) return s
         val head = s.take(PrepRules.MAX_TITLE - 1)
         val space = head.lastIndexOf(' ')

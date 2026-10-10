@@ -8,7 +8,9 @@ package os.meka.core.domain
  * It says what the pane shows, in the pane's order and nothing more: the greeting and the date, work, the weather,
  * the day (its first few timed things by name), what's overdue, who to chase, what needs doing on the lists, habits and
  * a fast, and every headline the pane shows (Barça first, as listed), each "From BBC Sport: …". Abbreviations are written out ("Fri 9 Oct" → "Friday 9 October", "09:30" → "9:30",
- * "9–15°" → "9 to 15 degrees") and the pane's " · " separators become pauses, so either voice reads it naturally.
+ * "9–15°" → "9 to 15 degrees", "v" → "versus") and the pane's " · " separators become pauses, so either voice reads it
+ * naturally. The kids' matches are said the way people say them (Meka, 2026-10-10: "the matches bit sounded robotic"):
+ * "BUFC U7s v Arlesey" at 10:00 is "Rex's under-sevens play Arlesey at ten o'clock" ([FootballRules.spokenFixture]).
  * The day's part is bounded by [MAX_CHARS], cut at a sentence, so a crowded morning stays a minute or so of listening;
  * the news is never cut (Meka, 2026-10-09: Listen read 3 of the 5 headlines shown), only an overlong title is shortened
  * at a word ([MAX_HEADLINE_CHARS]). Each story is its own sentence, so the voice pauses between them.
@@ -42,11 +44,11 @@ object BriefSpeech {
             val timed = v.day.filter { it.time != null && it.time != ALL_DAY }
             val allDay = v.day.filter { it.time == ALL_DAY }
             if (timed.isNotEmpty()) {
-                val named = timed.take(MAX_NAMED).map { r -> "${clean(r.title)} ${spokenWhen(r.time!!)}" }
+                val named = timed.take(MAX_NAMED).map { r -> named(r.title, r.time!!) }
                 val more = timed.size - named.size
                 out += sentence(listing(named) + if (more > 0) ", and ${count(more, "more thing")}" else "")
             }
-            if (allDay.isNotEmpty()) out += sentence("All day: " + listing(allDay.take(MAX_NAMED).map { clean(it.title) }))
+            if (allDay.isNotEmpty()) out += sentence("All day: " + listing(allDay.take(MAX_NAMED).map { FootballRules.spokenFixture(it.title) ?: clean(it.title) }))
         }
         if (v.overdueCount > 0) out += sentence("${count(v.overdueCount, "task")} ${if (v.overdueCount == 1) "is" else "are"} overdue")
 
@@ -97,6 +99,7 @@ object BriefSpeech {
         .replace(DEGREES) { m -> "${m.groupValues[1]} degrees" }
         .replace(TIME_RANGE) { m -> "${m.groupValues[1]} to ${m.groupValues[2]}" }
         .replace(" — ", ", ").replace(" – ", ", ").replace(" · ", ", ")
+        .replace(VERSUS, " versus ")
         .replace("↻", "")
         .replace(SPACES, " ")
         .trim()
@@ -109,6 +112,16 @@ object BriefSpeech {
         if (things.isEmpty()) return "Today: " + v.daySummary
         val first = v.daySummary.split(" · ").firstOrNull { it.startsWith("first at ") }
         return "You've got " + things.joinToString(" and ") + (first?.let { ", $it" } ?: "")
+    }
+
+    /**
+     * One timed thing by name: a club fixture the way people say it ("Rex's under-sevens play Arlesey at ten o'clock",
+     * [FootballRules.spokenFixture], [FootballRules.spokenClock]); anything else "Standup at 9:30".
+     */
+    private fun named(title: String, time: String): String {
+        val fixture = FootballRules.spokenFixture(title) ?: return "${clean(title)} ${spokenWhen(time)}"
+        val clock = if (time.startsWith("Until ")) null else FootballRules.spokenClock(time)
+        return "$fixture " + (clock?.let { "at $it" } ?: spokenWhen(time))
     }
 
     /** "at 9:30" for a start time, "until 10:00" for something already running ("Until 10:00"). */
@@ -150,6 +163,8 @@ object BriefSpeech {
     private val DEGREES = Regex("(-?\\d+)°")
     private val TIME_RANGE = Regex("(\\d{1,2}:\\d{2})–(\\d{1,2}:\\d{2})")
     private val SPACES = Regex("\\s+")
+    /** "Barça v Getafe": a lone "v" (or "vs") between words is said "versus". */
+    private val VERSUS = Regex(" (?:v|vs)\\.? ")
     private val DAYS = mapOf(
         "Mon" to "Monday", "Tue" to "Tuesday", "Wed" to "Wednesday", "Thu" to "Thursday",
         "Fri" to "Friday", "Sat" to "Saturday", "Sun" to "Sunday",

@@ -199,6 +199,21 @@ class SpeechFacadeTest {
     }
 
     @Test
+    fun aReadingNeverSwitchesVoiceWhileTheServerIsStillAnswering() = runTest {
+        val c = core()
+        // The matches bit took Polly 10 s: a conversation's later piece goes to the device after 6 s…
+        server.slowMs = 10_000
+        assertNull(c.speechClip("Rex's under-sevens play Arlesey at ten o'clock.", first = false, reading = false))
+        // …the brief waits for it in MEKA's voice (up to 15 s), and slow still isn't a refusal.
+        assertEquals("bXAz" + "Logan's under-tens play Potton.".length, c.speechClip("Logan's under-tens play Potton.", first = false, reading = true))
+        assertEquals(false, c.speechResting())
+        // Past 15 s only that piece goes to the device.
+        server.slowMs = 16_000
+        assertNull(c.speechClip("In the news.", first = false, reading = true))
+        assertEquals(false, c.speechResting())
+    }
+
+    @Test
     fun aHoldingPieceWaitsLongerAndTheHoldLinePlaysFromMemoryOnly() = runTest {
         val c = core()
         // Not fetched yet: no hold clip, and asking for it never reaches the server.

@@ -205,4 +205,26 @@ class SpeechTest {
         assertEquals("0.1 s", SpeechRules.seconds(10))
         assertEquals("12.0 s", SpeechRules.seconds(11_960))
     }
+
+    @Test
+    fun aReadingIsAskedForInShortPiecesAFewAtOnceAndWaitsForLatePiecesInMekasVoice() {
+        val text = "Good morning, Meka. " + (1..12).joinToString(" ") { "Rex's under-sevens play Arlesey at ten o'clock, then lunch number $it." }
+        val read = SpeechRules.pieces(text, reading = true)
+        assertTrue(read.size > SpeechRules.pieces(text).size)
+        assertTrue(read.all { it.length <= SpeechRules.READ_PIECE }, read.toString())
+        assertEquals("Good morning, Meka.", read.first())
+        assertEquals(text, read.joinToString(" "))
+        // A long sentence is cut at a comma within 200 characters.
+        val long = "From BBC Sport: " + (1..30).joinToString(", ") { "word$it" } + "."
+        assertTrue(SpeechRules.pieces(long, reading = true).all { it.length <= 200 })
+        assertEquals(3, SpeechRules.ahead(reading = true))
+        assertEquals(1, SpeechRules.ahead(reading = false))
+        // A later piece of a reading waits 15 s; a conversation's still 6 s, and the first piece of the brief 5 s.
+        assertEquals(15_000L, SpeechRules.waitMs(first = false, reading = true))
+        assertEquals(6_000L, SpeechRules.waitMs(first = false, reading = false))
+        assertEquals(5_000L, SpeechRules.waitMs(first = true, reading = true))
+        // Only a refusal (resting) hands the rest of a reading to the device; a late piece is that piece alone.
+        assertEquals(SpeechRules.Miss.PIECE_ON_DEVICE, SpeechRules.onMiss(reading = true, resting = false))
+        assertEquals(SpeechRules.Miss.REST_ON_DEVICE, SpeechRules.onMiss(reading = true, resting = true))
+    }
 }
