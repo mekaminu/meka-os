@@ -100,7 +100,9 @@ object MekaSpace {
     val l = 24.dp
     val xl = 32.dp
     val xxl = 48.dp
-    val gutter = 20.dp
+    val gutter = 16.dp
+    val gutterWide = 24.dp
+    val touch = 48.dp
 }
 
 object MekaRadius {

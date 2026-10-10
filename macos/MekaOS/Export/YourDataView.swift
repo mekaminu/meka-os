@@ -115,7 +115,7 @@ struct VaultScreen: View {
                     .padding(.top, MekaSpace.l)
             }
             .frame(maxWidth: 520, alignment: .leading)
-            .padding(.horizontal, MekaSpace.gutter)
+            .padding(.horizontal, MekaSpace.gutterWide)
             .padding(.vertical, MekaSpace.xl)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }

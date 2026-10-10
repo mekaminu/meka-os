@@ -103,7 +103,7 @@ struct CalendarScreen: View {
             }
             .scrollPosition(id: $topSection, anchor: .top)
         }
-        .padding(.horizontal, MekaSpace.gutter)
+        .padding(.horizontal, MekaSpace.gutterWide)
         .padding(.top, MekaSpace.xl)
         .onChange(of: topSection) { _, _ in
             // Scrolling the agenda keeps the strip on the week in view.

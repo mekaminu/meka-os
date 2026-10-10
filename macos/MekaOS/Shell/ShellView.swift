@@ -183,7 +183,7 @@ struct NeedsYouView: View {
                         NeedsYouStackView(palette: palette).staggeredAppear(1)
                     }
                 }
-                .padding(.horizontal, MekaSpace.gutter)
+                .padding(.horizontal, MekaSpace.gutterWide)
                 .padding(.vertical, MekaSpace.xl)
             }
             .frame(minWidth: 380, idealWidth: 520)

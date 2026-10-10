@@ -166,7 +166,7 @@ struct TodayView: View {
                     let faceShown = !(model.today?.timeline.dateLabel.isEmpty ?? true)
                     if HabitDotRules.shared.chipsShown(faceShown: faceShown, chips: habitChips) {
                         HabitChipsRow(chips: habitChips, palette: palette, play: play)
-                            .padding(.top, MekaSpace.s)
+                            .padding(.top, MekaSpace.xs)
                     }
                     // The ring's live tiles, a slim row under the header (they left the dial with the move); the
                     // habits tile is left to the chips.
@@ -174,7 +174,7 @@ struct TodayView: View {
                         let stripTiles = HabitChipRules.shared.stripTiles(tiles: today.dayTiles)
                         if !stripTiles.isEmpty {
                             DayTilesStrip(tiles: stripTiles, play: ringPlay ?? .still, arcs: today.watchFace.arcs.count, palette: palette)
-                                .padding(.top, MekaSpace.s)
+                                .padding(.top, MekaSpace.xs)
                         }
                     }
                     Spacer().frame(height: MekaSpace.l)
@@ -184,7 +184,7 @@ struct TodayView: View {
                         // all-day items (Today clarity).
                         if let line = today.clearLine {
                             // All clear: the brass ring breathes beside it (catalogue "Empty states"); Off: still.
-                            HStack(spacing: MekaSpace.s) {
+                            HStack(spacing: MekaSpace.xs) {
                                 if today.isAllClear { BreathingRingView(palette: palette) }
                                 Text(line)
                                     .font(today.isAllClear ? MekaType.upNextTitle : MekaType.body)
@@ -329,7 +329,7 @@ struct TodayView: View {
                         }
                     }
                 }
-                .padding(.horizontal, MekaSpace.gutter)
+                .padding(.horizontal, MekaSpace.gutterWide)
                 .padding(.vertical, MekaSpace.xl)
                 // Replan / complete motion: rows glide to new positions instead of redrawing.
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.allTasks.map(\.id))
@@ -375,7 +375,7 @@ struct TodayView: View {
             // News ticker (news ticker, slice 2): the drifting strip at the foot of Today; Appearance → News ticker.
             NewsTickerStrip(palette: palette)
                 .padding(.horizontal, MekaSpace.m)
-                .padding(.top, MekaSpace.s)
+                .padding(.top, MekaSpace.m)
             CaptureField(palette: palette)
                 .padding(MekaSpace.m)
         }
@@ -460,7 +460,7 @@ struct TaskRow: View {
                     .frame(width: TimelineMetrics.timeColumn - MekaSpace.m, alignment: .leading)
             }
             CompleteButton(task: task, palette: palette)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(task.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let line = subtitle {
                     Text(line).font(MekaType.itemMeta)
@@ -469,7 +469,7 @@ struct TaskRow: View {
             }
             Spacer()
         }
-        .padding(.vertical, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs)
         .padding(.horizontal, MekaSpace.xs)
         .background {
             ZStack {
@@ -526,7 +526,7 @@ struct CalendarsSheet: View {
                 }
                 ForEach(Array(accounts.enumerated()), id: \.element) { i, a in
                     HStack {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                             // Titled like its main calendar ("Personal", "Hotmail", Meka's own) or the feed's name;
                             // the address and "Headlines" (never "news_more") under it (Meka's screenshot 2026-10-09 09:01).
                             Text(a.title).font(MekaType.itemTitle)
@@ -573,7 +573,7 @@ struct CalendarsSheet: View {
             }
             // On Today (all-day polish): a planning calendar can stay in the Calendar section but off Today. Synced.
             if !model.calendarsOnToday.isEmpty {
-                SectionLabel("On Today", palette).padding(.top, MekaSpace.s)
+                SectionLabel("On Today", palette).padding(.top, MekaSpace.m)
                 Text("Turn a calendar off to keep it in the Calendar section but off Today and your day.")
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 ForEach(Array(model.calendarsOnToday.enumerated()), id: \.element.key) { i, c in
@@ -582,7 +582,7 @@ struct CalendarsSheet: View {
                 }
             }
             // Weather place setting: the town the forecast is for (home unless Meka types another). Synced.
-            WeatherPlaceSection(palette: palette).padding(.top, MekaSpace.s)
+            WeatherPlaceSection(palette: palette).padding(.top, MekaSpace.m)
             HStack {
                 Button("Connect Google Calendar") { Task { await model.connectCalendar("google") } }
                 Button("Connect Outlook Calendar") { Task { await model.connectCalendar("microsoft") } }
@@ -633,7 +633,7 @@ private struct PlanSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
             Text("Your day").font(MekaType.upNextTitle)
             if let plan = model.plan {
                 if plan.isBlank {
@@ -771,7 +771,7 @@ private struct CaptureField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             TextField("Capture anything…", text: $text)
                 .textFieldStyle(.plain)
                 .font(MekaType.body)
@@ -828,7 +828,7 @@ struct DetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .clipped()
-        .padding(MekaSpace.gutter)
+        .padding(MekaSpace.gutterWide)
         .background(palette.surface)
         .clipShape(ContainerShape(from: origin.flatMap { MotionMath.containerOrigin(row: $0, pane: bounds) },
                                   progress: grown, rowRadius: MekaRadius.m))
@@ -937,7 +937,7 @@ private struct DetailContent: View {
                 }
                 ScrollView {
                     // Entrance: the rows stagger in, 40 ms apart (fresh for each task: the detail is re-made per id).
-                    VStack(alignment: .leading, spacing: MekaSpace.s) {
+                    VStack(alignment: .leading, spacing: MekaSpace.m) {
                         WhenRow(task: task, palette: palette).staggeredAppear(0)
                         ReminderRow(task: task, palette: palette).staggeredAppear(1)
                         RepeatMenu(task: task, palette: palette).staggeredAppear(2)
@@ -1029,7 +1029,7 @@ private struct PlanCalendarToggle: View {
                 .id(setting.line).transition(.opacity)
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: setting.line)
-        .padding(.top, MekaSpace.s)
+        .padding(.top, MekaSpace.m)
     }
 }
 
@@ -1047,12 +1047,12 @@ private struct CalendarOnTodayRow: View {
     var body: some View {
         let key = choice.key, label = choice.label
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            HStack(spacing: MekaSpace.s) {
+            HStack(spacing: MekaSpace.xs) {
                 Toggle(isOn: Binding(
                     get: { choice.onToday },
                     set: { model.setCalendarOnToday(key: key, label: label, on: $0) }
                 )) {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Text(label).font(MekaType.itemMeta).id(label).transition(.opacity)
                         if let detail = choice.detail {
                             Text(detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -1072,7 +1072,7 @@ private struct CalendarOnTodayRow: View {
                 }
             }
             if renaming {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     TextField(choice.defaultLabel, text: $text)
                         .textFieldStyle(.roundedBorder).font(MekaType.body).frame(maxWidth: 260)
                         .accessibilityLabel("Name for \(choice.defaultLabel)")

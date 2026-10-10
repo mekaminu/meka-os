@@ -81,7 +81,7 @@ struct ListsScreen: View {
                 .padding(.top, MekaSpace.l)
             }
             .frame(maxWidth: 720, alignment: .leading)
-            .padding(.horizontal, MekaSpace.gutter)
+            .padding(.horizontal, MekaSpace.gutterWide)
             .padding(.vertical, MekaSpace.xl)
             .animation(MekaMotion.replan(reduced: reduceMotion), value: rowIDs)
             .animation(MekaMotion.expand(reduced: reduceMotion), value: open)

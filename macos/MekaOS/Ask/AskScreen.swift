@@ -45,7 +45,7 @@ struct AskScreen: View {
                 }
             }
             .frame(maxWidth: 560, alignment: .leading)
-            .padding(.horizontal, MekaSpace.gutter)
+            .padding(.horizontal, MekaSpace.gutterWide)
             .padding(.vertical, MekaSpace.xl)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }

@@ -1,5 +1,6 @@
 package os.meka.android.fold
 
+import os.meka.android.designsystem.minTouch
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -111,8 +112,8 @@ internal fun NowCard(now: NowView, handlers: NowHandlers, modifier: Modifier = M
                 if (v.actions.isNotEmpty()) {
                     FlowRow(
                         Modifier.padding(top = MekaSpace.m),
-                        horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
-                        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+                        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                     ) {
                         v.actions.forEach { a -> NowChip(a, v, handlers) }
                     }
@@ -179,6 +180,6 @@ private fun NowChip(a: NowAction, v: NowView, handlers: NowHandlers) {
                     NowAction.LATER -> v.task?.let { handlers.later(it.id) }
                 }
             }
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+            .minTouch().padding(horizontal = MekaSpace.l),
     )
 }

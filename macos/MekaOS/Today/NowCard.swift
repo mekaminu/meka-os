@@ -85,10 +85,10 @@ struct NowCardFace: View {
                 Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
             }
             if !v.actions.isEmpty {
-                HStack(spacing: MekaSpace.s) {
+                HStack(spacing: MekaSpace.xs) {
                     ForEach(v.actions, id: \.name) { a in chip(a) }
                 }
-                .padding(.top, MekaSpace.s)
+                .padding(.top, MekaSpace.m)
             }
         }
         .padding(MekaSpace.m)

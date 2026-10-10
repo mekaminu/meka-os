@@ -50,7 +50,7 @@ struct DayRingView: View {
                 }
             }
         }
-        .padding(.vertical, fillsWidth ? MekaSpace.s : 0)
+        .padding(.vertical, fillsWidth ? MekaSpace.m : 0)
         .onAppear { began = Date() }
         .task(id: play) {
             guard play != .still else { return }
@@ -354,14 +354,14 @@ struct DayTilesRow: View {
             ForEach(Array(tiles.enumerated()), id: \.offset) { i, tile in
                 let a = appear(i)
                 let shown = MotionMath.countUpValue(from: 0, to: Int(tile.value), fraction: count)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(tile.text(shown: Int32(shown)))
                         .font(MekaType.body).monospacedDigit().foregroundStyle(palette.textPrimary).lineLimit(1)
                     Text(tile.label)
                         .font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(slim ? 1 : 2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, MekaSpace.s)
+                .padding(.horizontal, MekaSpace.xs)
                 .padding(.vertical, slim ? MekaSpace.xxs : MekaSpace.xs)
                 .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
                 .opacity(a)

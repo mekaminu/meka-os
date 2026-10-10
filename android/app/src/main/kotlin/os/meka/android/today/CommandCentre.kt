@@ -131,7 +131,7 @@ internal fun ComingUpColumn(
         item(key = "open") {
             Text(
                 "Open Calendar ›", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.padding(top = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.m))
+                modifier = Modifier.padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
                     .clickable(role = Role.Button, onClick = openCalendar)
                     .padding(vertical = MekaSpace.xxs).animateItem().appear(rememberAppearance(1 + c.days.size)),
             )
@@ -156,7 +156,7 @@ private fun NewsGlanceView(g: NewsGlance, modifier: Modifier, openEvent: (Calend
                     .padding(vertical = MekaSpace.xxs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.padding(end = MekaSpace.s).size(6.dp).clip(CircleShape).background(Meka.colors.barca))
+                Box(Modifier.padding(end = MekaSpace.xs).size(6.dp).clip(CircleShape).background(Meka.colors.barca))
                 AnimatedContent(
                     targetState = md.line,
                     transitionSpec = { fadeIn(MekaMotion.appear(reducedLine)) togetherWith fadeOut(MekaMotion.appear(reducedLine)) },
@@ -171,7 +171,8 @@ private fun NewsGlanceView(g: NewsGlance, modifier: Modifier, openEvent: (Calend
                     .padding(vertical = MekaSpace.xxs),
                 verticalAlignment = Alignment.Top,
             ) {
-                Box(Modifier.padding(top = 7.dp, end = MekaSpace.s).size(6.dp).clip(CircleShape)
+                Box(Modifier.padding(top = 7.dp, end = MekaSpace.xs) // rhythm: ok (7 dp centres the dot on the title's first line)
+                    .size(6.dp).clip(CircleShape)
                     .background(if (n.topic == "barca") Meka.colors.barca else Meka.colors.textTertiary))
                 Column(Modifier.weight(1f)) {
                     // News is context: the regular weight.
@@ -182,7 +183,7 @@ private fun NewsGlanceView(g: NewsGlance, modifier: Modifier, openEvent: (Calend
         }
         Text(
             "Open News ›", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.padding(top = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.m))
+            modifier = Modifier.padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button) { openNews(null) }.padding(vertical = MekaSpace.xxs),
         )
     }
@@ -190,7 +191,7 @@ private fun NewsGlanceView(g: NewsGlance, modifier: Modifier, openEvent: (Calend
 
 @Composable
 private fun ComingUpDayView(day: ComingUpDay, modifier: Modifier, openEvent: (CalendarEvent) -> Unit, openCalendar: () -> Unit) {
-    Column(modifier.fillMaxWidth().padding(bottom = MekaSpace.s)) {
+    Column(modifier.fillMaxWidth().padding(bottom = MekaSpace.m)) {
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = openCalendar)
                 .padding(vertical = MekaSpace.xxs),

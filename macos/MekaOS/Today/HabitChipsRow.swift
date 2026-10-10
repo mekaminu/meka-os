@@ -36,7 +36,7 @@ struct HabitChipsRow: View {
                 }
             }
             .padding(.leading, MekaSpace.xs)
-            .padding(.trailing, MekaSpace.s)
+            .padding(.trailing, MekaSpace.m)
             .padding(.vertical, MekaSpace.xxs)
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
             .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))

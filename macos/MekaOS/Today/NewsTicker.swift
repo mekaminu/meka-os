@@ -160,7 +160,7 @@ struct StillTicker: View {
 
     var body: some View {
         let i = min(max(index, 0), max(cards.count - 1, 0))
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             if !cards.isEmpty {
                 TickerCardView(card: cards[i], palette: palette, open: open)
                     .id(cards[i].id)
@@ -193,7 +193,7 @@ private struct TickerCardView: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             switch card {
             case .match(let m):
                 Circle().fill(palette.barca).frame(width: 8, height: 8)
@@ -201,11 +201,11 @@ private struct TickerCardView: View {
                     .animation(MekaMotion.appear(reduced: false), value: m.line)
             case .story(let s):
                 NewsThumb(item: s, palette: palette).frame(width: 56, height: 42)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(s.title).font(MekaType.caption)
                         .foregroundStyle(hovering ? palette.accent : palette.textPrimary)
                         .lineLimit(2)
-                    HStack(spacing: 4) {
+                    HStack(spacing: MekaSpace.xxs) {
                         if s.topic == "barca" { Circle().fill(palette.barca).frame(width: 5, height: 5) }
                         Text(s.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
                     }
@@ -213,7 +213,7 @@ private struct TickerCardView: View {
                 .frame(width: 200, alignment: .leading)
             }
         }
-        .padding(.horizontal, MekaSpace.s)
+        .padding(.horizontal, MekaSpace.xs)
         .frame(height: 48)
         .frame(maxWidth: 300)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))

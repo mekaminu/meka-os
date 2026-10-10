@@ -128,7 +128,7 @@ fun DayRingHero(
     val open by rememberUpdatedState(onOpenArc)
     val dial = size
     val width = if (fillWidth) Modifier.fillMaxWidth() else Modifier
-    Column(modifier.then(width).padding(vertical = if (fillWidth) MekaSpace.s else 0.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier.then(width).padding(vertical = if (fillWidth) MekaSpace.m else 0.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             width.clearAndSetSemantics { testTag = DAY_RING_TAG; contentDescription = ring.spokenLine }
                 .then(
@@ -408,7 +408,7 @@ private fun DayTilesRow(tiles: List<DayTile>, count: Float, modifier: Modifier =
                     .graphicsLayer { alpha = a; translationY = (1f - a) * rise }
                     .clip(RoundedCornerShape(MekaRadius.s))
                     .background(colors.surface)
-                    .padding(horizontal = MekaSpace.s, vertical = if (slim) MekaSpace.xxs else MekaSpace.xs)
+                    .padding(horizontal = MekaSpace.xs, vertical = if (slim) MekaSpace.xxs else MekaSpace.xs)
                     .clearAndSetSemantics { contentDescription = tile.spokenLine },
             ) {
                 Text(

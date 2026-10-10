@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import os.meka.android.designsystem.minTouch
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -88,7 +89,7 @@ private fun QuickAlarmRow(item: QuickAlarmItem, onCancel: () -> Unit) {
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                 .clickable(role = Role.Button, onClick = onCancel)
                 .semantics { contentDescription = item.cancelLabel }
-                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+                .minTouch().padding(horizontal = MekaSpace.m),
         )
     }
 }

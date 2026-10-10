@@ -149,7 +149,7 @@ struct ReviewScreen: View {
             .staggeredAppear(11)
         }
         .frame(maxWidth: 720, alignment: .leading)
-        .padding(.horizontal, MekaSpace.gutter)
+        .padding(.horizontal, MekaSpace.gutterWide)
         .padding(.vertical, MekaSpace.xl)
     }
 

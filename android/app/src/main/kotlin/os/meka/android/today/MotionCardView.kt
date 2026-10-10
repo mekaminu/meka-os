@@ -37,7 +37,7 @@ internal fun MotionSystemCard(card: MotionCard, motion: MotionControl, modifier:
     ) {
         Text(card.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         Text(card.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
-        Row(Modifier.padding(top = MekaSpace.s), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Chip(card.turnOn, lit = true) { haptics.light(); motion.set(MotionRules.CARD_TURN_ON) }
             Chip(card.keepStill, lit = false) { haptics.tick(); motion.set(MotionRules.CARD_KEEP_STILL) }
         }

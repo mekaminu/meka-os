@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import os.meka.android.designsystem.minTouch
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import os.meka.android.work.AfterWorkHost
@@ -717,7 +718,7 @@ private fun TodayPane(
                     // News ticker (news ticker, slice 2): one line of drifting cards under the header; calm by default
                     // (two loops, then it rests). Off in Appearance hides it.
                     if (core != null && TickerRules.shown(tickerMode, ticker)) {
-                        NewsTickerStrip(core, ticker, tickerMode, Modifier.padding(top = MekaSpace.s), openStory = openStory, openMatch = openMatch)
+                        NewsTickerStrip(core, ticker, tickerMode, Modifier.padding(top = MekaSpace.m), openStory = openStory, openMatch = openMatch)
                     }
                     // Today's habits: compact chips to tick, only when the face can't carry them as dots.
                     if (core != null && chipsShown) {
@@ -727,12 +728,12 @@ private fun TodayPane(
                                 chipHaptics.light()
                                 chipScope.launch { runCatching { core.setHabitDone(chip.id, !chip.done) } }
                             },
-                            modifier = Modifier.padding(top = MekaSpace.s),
+                            modifier = Modifier.padding(top = MekaSpace.xs),
                         )
                     }
                     // The ring's live tiles, a slim row under the ticker (they left the dial with the move).
                     if (today.timeline.dateLabel.isNotEmpty()) {
-                        DayTilesStrip(stripTiles, ringPlay, today.watchFace.arcs.size, Modifier.padding(top = MekaSpace.s))
+                        DayTilesStrip(stripTiles, ringPlay, today.watchFace.arcs.size, Modifier.padding(top = MekaSpace.xs))
                     }
                 }
             }
@@ -804,8 +805,8 @@ private fun TodayPane(
             today.clearLine?.let { line ->
                 item(key = "clear") {
                     // All clear: the brass ring breathes beside it (catalogue "Empty states"); Off: still.
-                    Row(Modifier.padding(bottom = MekaSpace.s).animateItem().appear(rememberAppearance(TodayOrderRules.stagger(TodaySlot.CLEAR), play)), verticalAlignment = Alignment.CenterVertically) {
-                        if (today.isAllClear) BreathingRing(Modifier.padding(end = MekaSpace.s))
+                    Row(Modifier.padding(bottom = MekaSpace.m).animateItem().appear(rememberAppearance(TodayOrderRules.stagger(TodaySlot.CLEAR), play)), verticalAlignment = Alignment.CenterVertically) {
+                        if (today.isAllClear) BreathingRing(Modifier.padding(end = MekaSpace.xs))
                         Text(line, style = if (today.isAllClear) MekaType.upNextTitle else MekaType.body, color = Meka.colors.textSecondary)
                     }
                 }
@@ -997,7 +998,7 @@ internal fun TaskRow(
     )
     Row(
         modifier.containerOrigin(t.id).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(glow).clickable { actions.select(t.id) }
-            .padding(vertical = MekaSpace.s),
+            .minTouch().padding(vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (time != null) TimeColumn(time, past = false)
@@ -1072,7 +1073,7 @@ internal fun QuickCapture(onAdd: (String) -> Unit, onTalk: (() -> Unit)? = null)
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.s)
+            .padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.xs)
             .clip(RoundedCornerShape(MekaRadius.pill))
             .background(Meka.colors.surfaceRaised)
             .padding(start = MekaSpace.l, end = if (onTalk != null) MekaSpace.xs else MekaSpace.l)
@@ -1093,7 +1094,7 @@ internal fun QuickCapture(onAdd: (String) -> Unit, onTalk: (() -> Unit)? = null)
             )
         }
         if (onTalk != null) {
-            Spacer(Modifier.width(MekaSpace.s))
+            Spacer(Modifier.width(MekaSpace.xs))
             os.meka.android.ask.TalkMic(onTalk, size = 36.dp)
         }
     }
@@ -1107,7 +1108,7 @@ internal fun DetailPane(task: Task?, conflicts: List<ConflictChoice>, actions: T
     Column(modifier.padding(MekaSpace.gutter)) {
         if (onClose != null) {
             Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable { onClose() }.padding(vertical = MekaSpace.s))
+                modifier = Modifier.clickable { onClose() }.minTouch())
         }
         if (task == null) {
             Spacer(Modifier.weight(1f))

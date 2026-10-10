@@ -129,11 +129,11 @@ internal fun WorkTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
 internal fun WorkBand(title: String, detail: String?, running: Boolean, modifier: Modifier = Modifier) {
     Row(
         modifier.clip(RoundedCornerShape(MekaRadius.s)).border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.s))
-            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs),
+            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(2.dp).height(14.dp).clip(RoundedCornerShape(1.dp)).background(if (running) Meka.colors.accent else Meka.colors.textTertiary))
-        Spacer(Modifier.width(MekaSpace.s))
+        Spacer(Modifier.width(MekaSpace.xs))
         Text(title, style = MekaType.caption, color = Meka.colors.textSecondary)
         detail?.let {
             Text(" · $it", style = MekaType.caption, color = if (running) Meka.colors.accent else Meka.colors.textTertiary)
@@ -233,10 +233,10 @@ internal fun AllDayRow(
                 // Quiet: no fill, a hairline outline and secondary text, so it doesn't compete with the titles.
                 Text(
                     "Make it a task", style = MekaType.caption, color = Meka.colors.textSecondary,
-                    modifier = Modifier.padding(start = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.pill))
+                    modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
                         .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.pill))
                         .clickable(role = Role.Button) { haptics.light(); handlers.makeTask(item.event) }
-                        .padding(horizontal = MekaSpace.xs, vertical = 2.dp),
+                        .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
                 )
             }
         }

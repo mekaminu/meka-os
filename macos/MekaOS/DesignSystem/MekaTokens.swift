@@ -101,7 +101,9 @@ enum MekaSpace {
     static let l: CGFloat = 24
     static let xl: CGFloat = 32
     static let xxl: CGFloat = 48
-    static let gutter: CGFloat = 20
+    static let gutter: CGFloat = 16
+    static let gutterWide: CGFloat = 24
+    static let touch: CGFloat = 48
 }
 
 enum MekaRadius {

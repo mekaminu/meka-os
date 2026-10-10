@@ -49,7 +49,7 @@ fun ConnectCard(defaultUrl: String, connect: suspend (url: String, code: String)
         )
     } else Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised).padding(MekaSpace.l),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
     ) {
         Text("Connect this device", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         Field("Server address", url, { url = it }, KeyboardType.Uri, secret = false)
@@ -82,7 +82,7 @@ private fun Field(label: String, value: String, onChange: (String) -> Unit, type
             cursorBrush = SolidColor(Meka.colors.accent),
             keyboardOptions = KeyboardOptions(keyboardType = type),
             visualTransformation = if (secret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface).padding(MekaSpace.s),
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface).padding(MekaSpace.m),
         )
     }
 }

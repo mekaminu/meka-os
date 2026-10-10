@@ -59,7 +59,7 @@ struct EventActionsModifier: ViewModifier {
                         .buttonStyle(.borderless)
                         .font(MekaType.caption)
                         .foregroundStyle(palette.accent)
-                        .padding(.horizontal, MekaSpace.s)
+                        .padding(.horizontal, MekaSpace.xs)
                         .padding(.vertical, MekaSpace.xxs)
                         .background(palette.surfaceRaised, in: Capsule())
                         .padding(.trailing, MekaSpace.xs)
@@ -153,7 +153,7 @@ struct EventUndoBar: View {
                     }
                 }
                 .padding(.horizontal, MekaSpace.l)
-                .padding(.vertical, MekaSpace.s)
+                .padding(.vertical, MekaSpace.xs)
                 .background(palette.surfaceRaised, in: Capsule())
                 .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
                 .padding(.bottom, MekaSpace.l)
@@ -176,7 +176,7 @@ struct TimelineEventRow: View {
             Text(row.time).font(MekaType.itemMeta).monospacedDigit()
                 .foregroundStyle(past ? palette.textTertiary : palette.textSecondary)
                 .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.body).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
                 let line = [row.running ? "Now" : nil, row.detail].compactMap { $0 }.joined(separator: " · ")
                 if !line.isEmpty {
@@ -203,7 +203,7 @@ struct SessionTimelineRow: View {
             Text(row.time).font(MekaType.itemMeta).monospacedDigit()
                 .foregroundStyle(palette.textSecondary)
                 .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let line = row.detail {
                     Text(line).font(MekaType.caption).foregroundStyle(row.running ? palette.accent : palette.textTertiary)
@@ -263,7 +263,7 @@ struct WorkBand: View {
     let palette: MekaPalette
 
     var body: some View {
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             RoundedRectangle(cornerRadius: 1).fill(running ? palette.accent : palette.textTertiary).frame(width: 2, height: 12)
             HStack(spacing: 0) {
                 Text(title).font(MekaType.caption).foregroundStyle(palette.textSecondary)
@@ -272,7 +272,7 @@ struct WorkBand: View {
                 }
             }
         }
-        .padding(.horizontal, MekaSpace.s)
+        .padding(.horizontal, MekaSpace.xs)
         .padding(.vertical, MekaSpace.xxs)
         // Full width, as on the Fold (Meka's 10:48 screenshots: the Calendar's work line was a short pill).
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -340,7 +340,7 @@ struct AllDayRow: View {
         let hideLabel = "Hide \(item.calendarLabel) from Today"
         HStack(alignment: .center, spacing: 0) {
             Spacer().frame(width: TimelineMetrics.timeColumn)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(item.event.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let line = item.line {
                     Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -352,7 +352,7 @@ struct AllDayRow: View {
                 Button("Make it a task") { model.makeAllDayTask(item.event) }
                     .buttonStyle(MekaPressStyle())
                     .font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .padding(.horizontal, MekaSpace.xs).padding(.vertical, 2)
+                    .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
                     .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
                     .help("Adds it to Today as a task and takes the entry off your day (your calendar is unchanged)")
             }
@@ -416,7 +416,7 @@ struct NextEventCard: View {
     var body: some View {
         HStack(spacing: MekaSpace.m) {
             Circle().fill(palette.accent).frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(next.line).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 Text(next.detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }

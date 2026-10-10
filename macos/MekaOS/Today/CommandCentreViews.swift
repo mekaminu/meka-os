@@ -20,8 +20,8 @@ struct CommandSideView: View {
                             .font(MekaType.itemMeta)
                             .foregroundStyle(palette.accent)
                             .keyboardShortcut(.cancelAction)
-                            .padding(.horizontal, MekaSpace.gutter)
-                            .padding(.top, MekaSpace.s)
+                            .padding(.horizontal, MekaSpace.gutterWide)
+                            .padding(.top, MekaSpace.xs)
                     }
                     DetailView(task: model.selected, palette: palette, growsFromRow: true)
                 }
@@ -76,7 +76,7 @@ struct CommandNeedsYouView: View {
                     NeedsYouStackView(palette: palette, autofocus: false).staggeredAppear(1)
                 }
             }
-            .padding(.horizontal, MekaSpace.gutter)
+            .padding(.horizontal, MekaSpace.gutterWide)
             .padding(.vertical, MekaSpace.xl)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -113,7 +113,7 @@ struct ComingUpColumnView: View {
                         .buttonStyle(MekaPressStyle())
                         .font(MekaType.itemMeta)
                         .foregroundStyle(palette.accent)
-                        .padding(.top, MekaSpace.s)
+                        .padding(.top, MekaSpace.xs)
                         .staggeredAppear(1 + c.days.count)
                 }
                 if let place = model.newsPlace,
@@ -124,7 +124,7 @@ struct ComingUpColumnView: View {
                     newsView(g).padding(.top, MekaSpace.xl).staggeredAppear(2)
                 }
             }
-            .padding(.horizontal, MekaSpace.gutter)
+            .padding(.horizontal, MekaSpace.gutterWide)
             .padding(.vertical, MekaSpace.xl)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -145,17 +145,17 @@ struct ComingUpColumnView: View {
                 lineView(line)
             }
             if let more = day.moreLine {
-                Text(more).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.leading, 84)
+                Text(more).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.leading, 84) // rhythm: ok (lines up under the time column)
             }
         }
-        .padding(.bottom, MekaSpace.s)
+        .padding(.bottom, MekaSpace.m)
     }
 
     private func newsView(_ g: NewsGlance) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             SectionLabel("News", palette)
             if let md = g.matchday {
-                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                     Circle().fill(palette.barca).frame(width: 6, height: 6)
                     Text(md.line).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).lineLimit(2)
                         .id(md.line).transition(.opacity)
@@ -167,15 +167,15 @@ struct ComingUpColumnView: View {
                 .accessibilityAddTraits(.isButton)
             }
             ForEach(g.items, id: \.id) { n in
-                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                     Circle().fill(n.topic == "barca" ? palette.barca : palette.textTertiary).frame(width: 6, height: 6)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Text(n.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(2)
                         Text(n.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, MekaSpace.xxs)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     MekaHaptics.tick()
@@ -189,7 +189,7 @@ struct ComingUpColumnView: View {
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.itemMeta)
                 .foregroundStyle(palette.accent)
-                .padding(.top, MekaSpace.s)
+                .padding(.top, MekaSpace.xs)
         }
     }
 

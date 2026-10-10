@@ -29,17 +29,17 @@ private struct QuickAlarmRowView: View {
     let palette: MekaPalette
 
     var body: some View {
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             // A soft brass dot for a timer, a full one for an alarm: quiet, like the calendar's dots.
             Circle()
                 .fill(item.kind == .timer ? palette.accent.opacity(0.55) : palette.accent)
                 .frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(item.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
                 Text(item.detail).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
                     .contentTransition(.opacity)
             }
-            Spacer(minLength: MekaSpace.s)
+            Spacer(minLength: MekaSpace.xs)
             Button { model.cancelAlarm(item.id) } label: {
                 Image(systemName: "xmark").font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     .padding(MekaSpace.xs)

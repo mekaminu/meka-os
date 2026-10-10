@@ -59,7 +59,7 @@ fun HabitChipsRow(chips: List<HabitChip>, play: Boolean, tick: (HabitChip) -> Un
                         .background(colors.surface)
                         .semantics(mergeDescendants = true) { contentDescription = chip.tickLabel }
                         .clickable(role = Role.Checkbox) { tick(chip) }
-                        .padding(start = MekaSpace.xs, end = MekaSpace.s, top = MekaSpace.xxs, bottom = MekaSpace.xxs),
+                        .padding(start = MekaSpace.xs, end = MekaSpace.m, top = MekaSpace.xxs, bottom = MekaSpace.xxs),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                 ) {
