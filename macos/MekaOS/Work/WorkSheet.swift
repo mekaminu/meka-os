@@ -73,7 +73,7 @@ struct WorkSheet: View {
             Toggle(isOn: Binding(get: { callAssistant }, set: { model.setCallAssistant($0) })) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text("Screen calls at work on the Fold").font(MekaType.itemMeta)
-                    Text(CallScreeningRules.shared.statusLine(switchedOn: callAssistant, atWork: atWork, screeningAllowed: nil))
+                    Text(CallScreeningRules.shared.statusLine(switchedOn: callAssistant, atWork: atWork, screeningAllowed: nil, paused: model.work?.callAssistantPaused ?? false))
                         .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .contentTransition(.opacity)
                 }

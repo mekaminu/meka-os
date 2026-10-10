@@ -1868,6 +1868,10 @@ final class CoreModel {
             if let id = card.taskId { select(id, reduced: reduced) }
         case .openLists:
             go(to: .lists, reduced: reduced)
+        case .openLink:
+            // Top up (the call assistant's credit): the billing page in the browser; MEKA never pays anything.
+            MekaHaptics.light()
+            if let link = card.link, let url = URL(string: link) { NSWorkspace.shared.open(url) }
         case .setAside:
             MekaHaptics.light()
             withAnimation(MekaMotion.replan(reduced: reduced)) {

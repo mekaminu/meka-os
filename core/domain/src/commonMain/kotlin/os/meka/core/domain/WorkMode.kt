@@ -274,6 +274,8 @@ data class WorkModeState(
     val callAssistant: Boolean = false,
     /** How long callers' recordings are kept ([VoiceRecordingRules.keepDays]): 7, 30 or 0 (don't keep). */
     val recordingDays: Int = VoiceRecordingRules.DEFAULT_KEEP_DAYS,
+    /** The assistant is paused for want of credit ([CallCreditRules]): calls ring as usual, the Work screen says why. */
+    val callAssistantPaused: Boolean = false,
 ) {
     /** The switch overrides the schedule: offer "Back to schedule". */
     val switchedManually: Boolean get() = source == WorkSource.MANUAL

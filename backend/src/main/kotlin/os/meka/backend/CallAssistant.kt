@@ -10,6 +10,7 @@ import os.meka.core.domain.BlockedCallerRules
 import os.meka.core.domain.BankHolidayStore
 import os.meka.core.domain.CallAssistantRules
 import os.meka.core.domain.CallAssistantScript
+import os.meka.core.domain.CallCreditReading
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeldMessageFields
@@ -497,7 +498,7 @@ class TwilioVoice(
     private val delete: (url: String, headers: Map<String, String>) -> Int = { url, headers -> jdkDelete(url, headers) },
     /** GET [url] with [headers], no redirects followed: the status, the body (at most [VoiceRecordingRules.MAX_BYTES] + 1 bytes) and `Location`. */
     private val get: (url: String, headers: Map<String, String>) -> HttpFetched = { url, headers -> jdkGet(url, headers) },
-) : VoiceProvider {
+) : VoiceProvider, CreditSource {
     override val id = ID
 
     override fun verify(url: String, form: Map<String, String>, header: (String) -> String?): Boolean {
@@ -558,6 +559,30 @@ class TwilioVoice(
             delete("https://api.twilio.com/2010-04-01/Accounts/$sid/Recordings/$recording.json", mapOf("Authorization" to "Basic $auth"))
         }.getOrElse { return false }
         return status == 204 || status == 404 // 404: already gone
+    }
+
+    override fun creditConfigured(): Boolean =
+        accountSid()?.trim()?.let { accountSidPattern.matches(it) } == true && !authToken().isNullOrBlank()
+
+    /**
+     * The account's balance (`Balance.json`: `{"currency": "GBP", "balance": "4.20"}`) and status (the account's own
+     * resource: active, suspended or closed). Null when the balance couldn't be read and the account isn't known to be
+     * suspended (low-balance guard).
+     */
+    override fun readCredit(): CallCreditReading? {
+        val sid = accountSid()?.trim()?.takeIf { accountSidPattern.matches(it) } ?: return null
+        val token = authToken()?.takeIf { it.isNotBlank() } ?: return null
+        val headers = mapOf("Authorization" to "Basic " + Base64.getEncoder().encodeToString("$sid:$token".toByteArray(Charsets.UTF_8)))
+        fun json(url: String) = runCatching {
+            val r = get(url, headers)
+            if (r.status != 200) null else Json.parseToJsonElement(r.body.decodeToString()).jsonObject
+        }.getOrNull()
+        val status = json("https://api.twilio.com/2010-04-01/Accounts/$sid.json")?.get("status")?.jsonPrimitive?.content
+        val active = when (status) { "active" -> true; "suspended", "closed" -> false; else -> null }
+        val balance = json("https://api.twilio.com/2010-04-01/Accounts/$sid/Balance.json")
+        val amount = balance?.get("balance")?.jsonPrimitive?.content
+        if (amount == null && active != false) return null
+        return CallCreditReading(active, amount, balance?.get("currency")?.jsonPrimitive?.content)
     }
 
     override fun fetchRecording(recording: String): ByteArray? {

@@ -30,6 +30,8 @@ enum class CallReason(val label: String) {
     WITHHELD_QUIET("Withheld number in quiet hours"),
     /** On Suspected spam (MEKA's AI flagged their message; Meka hasn't chosen Block or Not spam yet). */
     SUSPECTED_SPAM("On Suspected spam"),
+    /** The assistant would have taken it, but its credit ran out ([CallCreditRules]): it rings instead. */
+    PAUSED("Call assistant paused · Twilio credit"),
 }
 
 /**
@@ -109,6 +111,27 @@ object CallScreeningRules {
         signals: CallSignals = CallSignals.NONE,
         /** Numbers on Suspected spam ([BlockedCallersView.suspectedKeys]): to the assistant, as likely spam. */
         suspected: Set<String> = emptySet(),
+        /**
+         * The assistant is paused for want of credit ([CallCredit.paused]): nothing is sent to it (a declined call
+         * would reach a number that can't answer), so every call that would have been declined rings; the block list
+         * still rejects silently.
+         */
+        paused: Boolean = false,
+    ): CallDecision {
+        val d = decideUnpaused(switchedOn, atWork, number, lists, recent, nowMs, blocked, signals, suspected)
+        return if (paused && d.verdict == CallVerdict.DECLINE) CallDecision(CallVerdict.RING, CallReason.PAUSED, d.callerKey, d.listedName) else d
+    }
+
+    private fun decideUnpaused(
+        switchedOn: Boolean,
+        atWork: Boolean,
+        number: String?,
+        lists: PeopleLists,
+        recent: List<ScreenedCall>,
+        nowMs: Long,
+        blocked: Set<String>,
+        signals: CallSignals,
+        suspected: Set<String>,
     ): CallDecision {
         val key = callerKey(number)
         val listed = number?.let { lists.nameForNumber(it) }
@@ -149,9 +172,10 @@ object CallScreeningRules {
      * The Work screen's line for the assistant. [screeningAllowed] is whether Android lets MEKA screen calls (the
      * Fold's call-screening role; the Mac passes null and only shows the switch).
      */
-    fun statusLine(switchedOn: Boolean, atWork: Boolean, screeningAllowed: Boolean?): String = when {
+    fun statusLine(switchedOn: Boolean, atWork: Boolean, screeningAllowed: Boolean?, paused: Boolean = false): String = when {
         !switchedOn -> "Off · calls ring as usual"
         screeningAllowed == false -> "On · allow MEKA to screen calls on the Fold"
+        paused -> "Paused · Twilio credit · calls ring as usual until it's topped up"
         atWork -> "Screening calls · family, always-notify and repeat callers ring"
         else -> "On at work · calls ring as usual now · spam goes to the assistant"
     }

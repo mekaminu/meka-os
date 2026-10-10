@@ -214,7 +214,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         Spacer(Modifier.height(MekaSpace.m))
         Label("Call assistant", 4)
         Crossfade(
-            CallScreeningRules.statusLine(work.callAssistant, work.atWork, screening),
+            CallScreeningRules.statusLine(work.callAssistant, work.atWork, screening, work.callAssistantPaused),
             animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "call-line",
         ) { line ->
             Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(4)))

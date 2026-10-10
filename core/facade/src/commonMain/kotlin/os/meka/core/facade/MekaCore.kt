@@ -145,6 +145,8 @@ class MekaCore(
     // Places item 4: the route's train lines (TfL status, server-written).
     private val lineStatus = os.meka.core.domain.LineStatusStore(replica)
     private val signIns = os.meka.core.domain.SignInStore(replica)
+    // The call assistant's credit (low-balance guard, server-written).
+    private val callCredit = os.meka.core.domain.CallCreditStore(replica)
     private val review = WeeklyReview(replica, nowMs, ZoneCalendar(timeZone))
     /** The week the review screen shows (null: the default for today); a screen choice, not synced. */
     private var reviewOffset: Int? = null
@@ -1576,6 +1578,7 @@ class MekaCore(
         val list = blockList.view()
         val decision = os.meka.core.domain.CallScreeningRules.decide(
             state.callAssistant, state.atWork, number, lists, recent, now, list.keys, signals.copy(quietHours = quiet), list.suspectedKeys,
+            paused = callCredit.current()?.paused == true,
         )
         os.meka.core.domain.CallScreeningRules.activityLine(decision, number)?.let { (summary, why) ->
             activity.recordScreened(decision.callerKey, now, summary, why)
@@ -1615,7 +1618,11 @@ class MekaCore(
         onCore { work.setSchedule(work.schedule().withDayHours(isoDay, null)) }
 
     /** Fresh work-mode state for background callers (the notification listener), not waiting for a [tick]. */
-    suspend fun currentWorkMode(): WorkModeState = onCore { work.state(localClock(), todayEpochDay()).also { _workMode.value = it } }
+    suspend fun currentWorkMode(): WorkModeState = onCore {
+        work.state(localClock(), todayEpochDay())
+            .let { it.copy(callAssistantPaused = it.callAssistant && callCredit.current()?.paused == true) }
+            .also { _workMode.value = it }
+    }
 
     /** Re-evaluates everything that depends on the clock (work mode, Today). Cheap; call it about once a minute. */
     suspend fun tick() = onCore { refresh() }
@@ -1934,6 +1941,7 @@ class MekaCore(
             syncFailing = sync is SyncStatus.Failing,
             server = server, accounts = accounts, signIns = signIns.all(), ai = ai,
             callAssistantOn = _workMode.value.callAssistant, lastVoiceMessageMs = lastVoice, nowMs = nowMs(),
+            callCredit = callCredit.current(),
         )
     }
 
@@ -2789,7 +2797,9 @@ class MekaCore(
         _eventMarks.value = marks
         val allEvents = currentEvents()
         val dayEvents = marks.visible(allEvents)
+        val credit = callCredit.current()
         val workState = work.state(localClock(), todayEpochDay())
+            .let { it.copy(callAssistantPaused = it.callAssistant && credit?.paused == true) }
         val holidays = bankHolidays.calendar()
         val cal = ZoneCalendar(timeZone)
         // Sessions first: Today's timeline shows today's booked sessions still to come.
@@ -2832,7 +2842,10 @@ class MekaCore(
             watchFace = watchFaceNow(all, dayEvents, cal),
         )
         _lists.value = listsNow
-        _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(_today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone))
+        _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(
+            _today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone),
+            credit = os.meka.core.domain.CallCreditRules.card(credit, workState.callAssistant),
+        )
         _fasting.value = fastingNow
         _goals.value = goalsNow
         _workMode.value = workState
@@ -2906,6 +2919,7 @@ class MekaCore(
             currentEvents(), _eventMarks.value, _sessions.value, all, weather.forecast(),
             requests = requestCards.open(), settings = notifyPrefs.settings(), signIns = signIns.all(),
             lines = lineStatus.snapshot(), office = officeToday(),
+            callCredit = callCredit.current(), callAssistantOn = _workMode.value.callAssistant,
         )
 
     /** Today's office window (Places item 2): a work day that isn't a work-from-home day, or null. */

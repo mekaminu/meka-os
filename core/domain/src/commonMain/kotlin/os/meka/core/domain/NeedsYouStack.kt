@@ -12,6 +12,7 @@ package os.meka.core.domain
  * | An overdue task | Done | Tomorrow (snoozed, as in the task detail) | Open |
  * | Due today, no time planned | Done | Tomorrow | Open |
  * | From your lists (chases, reviews, renewals due) | Go through (opens Lists) | Later | Open Lists |
+ * | The call assistant's credit low or paused ([CallCreditRules.card]) | Top up (opens the billing page) | Later | Open Twilio |
  *
  * "Later" on a card that can't be snoozed only sets it aside for this screen ([NeedsYouStackRules.ordered]); nothing is
  * written. Done and Tomorrow are ordinary task edits (synced, undoable from the undo bar).
@@ -19,9 +20,11 @@ package os.meka.core.domain
 enum class DecisionMove { YES, LATER, OPEN }
 
 /** What a move on a card does. The core does the task edits; the apps do the opening and the setting aside. */
-enum class DecisionEffect { COMPLETE_TASK, SNOOZE_TASK, OPEN_TASK, OPEN_LISTS, SET_ASIDE }
+enum class DecisionEffect { COMPLETE_TASK, SNOOZE_TASK, OPEN_TASK, OPEN_LISTS, SET_ASIDE,
+    /** Opens [DecisionCard.link] in the browser (the call assistant's Top up). */
+    OPEN_LINK }
 
-enum class DecisionKind { CONFLICT, OVERDUE, DUE_TODAY, LISTS }
+enum class DecisionKind { CONFLICT, OVERDUE, DUE_TODAY, LISTS, CREDIT }
 
 data class DecisionCard(
     /** The task's id, or [NeedsYouStackRules.LISTS_ID]. */
@@ -40,6 +43,8 @@ data class DecisionCard(
     val open: DecisionEffect,
     /** Overdue and conflicting cards are lit in the critical colour. */
     val urgent: Boolean,
+    /** Where [DecisionEffect.OPEN_LINK] goes; null for every other card. */
+    val link: String? = null,
 ) {
     fun effect(move: DecisionMove): DecisionEffect = when (move) {
         DecisionMove.YES -> yes
@@ -72,10 +77,14 @@ object NeedsYouStackRules {
     const val EMPTY_LINE = "Nothing needs you"
     const val EMPTY_CAPTION = "Approvals, replies and decisions land here."
 
-    /** Today's Needs you (conflicts, overdue, due today unscheduled, in that order), then the lists card. */
-    fun build(today: Today, listsDueLine: String?, nowMs: Long, calendar: LocalCalendar): NeedsYouStack {
+    /**
+     * Today's Needs you (conflicts, overdue, due today unscheduled, in that order), then the lists card. A lit [credit]
+     * card (the call assistant paused or under £2) goes first; a merely low one after the tasks.
+     */
+    fun build(today: Today, listsDueLine: String?, nowMs: Long, calendar: LocalCalendar, credit: DecisionCard? = null): NeedsYouStack {
         val todayDay = calendar.epochDayOf(nowMs)
         val cards = today.needsYou.map { card(it, todayDay, calendar) }.toMutableList()
+        if (credit != null) { if (credit.urgent) cards.add(0, credit) else cards += credit }
         if (listsDueLine != null) {
             cards += DecisionCard(
                 id = LISTS_ID, kind = DecisionKind.LISTS, title = "From your lists", why = listsDueLine, taskId = null,
@@ -146,7 +155,7 @@ object NeedsYouStackRules {
         DecisionEffect.COMPLETE_TASK -> "Done · ${card.title}"
         DecisionEffect.SNOOZE_TASK -> "Tomorrow · ${card.title}"
         DecisionEffect.SET_ASIDE -> "Set aside for later"
-        DecisionEffect.OPEN_TASK, DecisionEffect.OPEN_LISTS -> card.title
+        DecisionEffect.OPEN_TASK, DecisionEffect.OPEN_LISTS, DecisionEffect.OPEN_LINK -> card.title
     }
 
     /** The hint under the top card: "→ Done · ← Tomorrow · ↑ Open". */

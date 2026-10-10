@@ -1104,6 +1104,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CallScreeningRules.shared.ASSISTANT_NUMBER, "01767 667246")
     }
 
+    func testCallCreditReachesSwift() {
+        // The call assistant's low-balance guard: the Work sheet's paused line and the Top up card's link.
+        XCTAssertEqual(
+            CallScreeningRules.shared.statusLine(switchedOn: true, atWork: true, screeningAllowed: nil, paused: true),
+            "Paused · Twilio credit · calls ring as usual until it's topped up"
+        )
+        XCTAssertEqual(CallCreditRules.shared.money(pence: 420, currency: "GBP"), "£4.20")
+        XCTAssertEqual(CallCreditRules.shared.TOP_UP_URL, "https://www.twilio.com/console/billing")
+        XCTAssertEqual(NoticeSource.callCredit.label, "Call assistant credit")
+    }
+
     func testBlockFromAHeldMessageReachesSwift() {
         // Call assistant polish 8b b, e and 8: Block on a stranger's message, the 7726 text, the one-screener note.
         XCTAssertEqual(BlockedCallerRules.shared.reportText(number: "+441904618691"), "Call 01904618691")

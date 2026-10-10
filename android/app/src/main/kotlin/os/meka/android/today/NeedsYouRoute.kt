@@ -162,6 +162,13 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 }
                 DecisionEffect.OPEN_TASK -> latestOpenTask(card.taskId)
                 DecisionEffect.OPEN_LISTS -> latestOpenLists()
+                // Top up (the call assistant's credit): the billing page in the browser; MEKA never pays anything.
+                DecisionEffect.OPEN_LINK -> card.link?.let { link ->
+                    val view = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link))
+                        .addCategory(android.content.Intent.CATEGORY_BROWSABLE)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    runCatching { context.startActivity(view) }
+                }
                 DecisionEffect.SET_ASIDE -> {
                     aside.value = aside.value - card.id + card.id
                     undo.show(NeedsYouStackRules.message(card, move)) { aside.value = aside.value - card.id }

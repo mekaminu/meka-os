@@ -64,6 +64,8 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     FIXTURE_MOVED("Kick-off changes", NoticeTier.HEADS_UP),
     /** A calendar sign-in about to end or already expired (Reliability first, item 2; [SignInRules]). */
     SIGN_IN("Calendar sign-ins", NoticeTier.HEADS_UP),
+    /** The call assistant's credit under £2, or the assistant paused for want of it ([CallCreditRules]). */
+    CALL_CREDIT("Call assistant credit", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -416,6 +418,7 @@ object Governor {
         NoticeSource.TASK_REMINDER -> plural(n, "task reminder")
         NoticeSource.FIXTURE_MOVED -> plural(n, "kick-off") + " moved"
         NoticeSource.SIGN_IN -> plural(n, "sign-in") + " to renew"
+        NoticeSource.CALL_CREDIT -> "call assistant credit"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -455,6 +458,9 @@ object NoticeSources {
         signIns: List<SignIn> = emptyList(),
         lines: LineStatusSnapshot = LineStatusSnapshot.EMPTY,
         office: OfficeWindow? = null,
+        /** The call assistant's credit and whether its switch is on ([CallCreditRules.notices]). */
+        callCredit: CallCredit? = null,
+        callAssistantOn: Boolean = false,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -560,6 +566,7 @@ object NoticeSources {
         // Rain at today's plans you go out for (Weather), summed in the next digest.
         out += WeatherRules.notices(forecast, events, marks, sessions, nowMs, cal)
         out += SignInRules.notices(signIns, nowMs, cal)
+        out += CallCreditRules.notices(callCredit, callAssistantOn)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.

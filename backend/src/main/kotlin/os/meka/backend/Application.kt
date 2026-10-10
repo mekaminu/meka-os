@@ -43,6 +43,7 @@ import os.meka.backend.integrations.PostgresIntegrationStore
 import os.meka.backend.integrations.SecretsManagerOAuthClients
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
+import os.meka.core.domain.CallCreditRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeldMessageFields
 import os.meka.core.domain.WorkFields
@@ -733,6 +734,16 @@ fun main(args: Array<String>) {
             val ai = aiFromEnv(ds)?.also { startAiCheck(it.health) }
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech, ai)
             voice?.let { startRecordingSweep(it.assistant) }
+            // The call assistant's low-balance guard: the phone service's credit, read a few times a day.
+            voice?.providers?.values?.filterIsInstance<CreditSource>()?.firstOrNull()?.let { source ->
+                val devices = PostgresDeviceRegistry(ds)
+                startCreditWatch(
+                    CallCreditWatch(
+                        opStore, { hh -> opStore.latestFieldOps(hh, EntityTypes.CONTEXT_MODE, CallCreditRules.ENTITY_ID)[CallCreditRules.ENTITY_ID].orEmpty() },
+                        household = { devices.soleHousehold() }, source = source, onWritten = { hh -> push?.serverChanged(hh) },
+                    ),
+                )
+            }
             val verifier = RequestVerifier()
             // Jeanette's page (family sharing, slice 2): only the shopping list, written as server ops.
             val family = FamilyShare(

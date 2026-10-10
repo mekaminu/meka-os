@@ -93,6 +93,8 @@ data class HealthFacts(
     val callAssistantOn: Boolean,
     val lastVoiceMessageMs: Long? = null,
     val nowMs: Long,
+    /** The call assistant's credit as the server last wrote it ([CallCreditRules]); null when not known yet. */
+    val callCredit: CallCredit? = null,
 )
 
 object HealthRules {
@@ -250,7 +252,8 @@ object HealthRules {
             f.server == null -> HealthRow("calls", title, "On · couldn't check the phone service", HealthState.UNKNOWN)
             !f.server.calls -> HealthRow("calls", title, "On, but the phone service isn't set up on the server", HealthState.BAD)
             f.device.callRoleHeld == false -> HealthRow("calls", title, "MEKA isn't screening calls on this phone", HealthState.BAD, HealthFix.CALL_ROLE, "Allow")
-            else -> HealthRow("calls", title, "On · $last", HealthState.OK)
+            else -> CallCreditRules.healthLine(f.callCredit)?.let { (line, state) -> HealthRow("calls", title, line, state) }
+                ?: HealthRow("calls", title, "On · $last", HealthState.OK)
         }
     }
 
