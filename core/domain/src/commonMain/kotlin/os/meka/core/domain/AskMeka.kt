@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -69,6 +69,8 @@ sealed interface AskProposal {
     data class RenewalDone(val id: String, val title: String, val doneLabel: String, val dueDay: Long, val nextDay: Long?) : AskProposal
     /** Keeps [text] in this week's work wins (Work wins slice 2: "add a win: closed the Henley deal"), dated today. */
     data class AddWin(val text: String) : AskProposal
+    /** Marks one waiting link in the train queue read or listened to (train-time queue slice 3: "I've read the BBC one"). */
+    data class QueueDone(val id: String, val title: String) : AskProposal
 }
 
 /** A proposal as Ask shows it: "Add “Call the dentist” · Tomorrow · 09:00" with its button ("Add"). */
@@ -106,6 +108,8 @@ sealed interface AskUndo {
     data class PutBackRenewal(val before: RenewalDoneUndo) : AskUndo
     /** The win card: the win it kept leaves the log. */
     data class RemoveWin(val winId: String) : AskUndo
+    /** The train queue card: the link goes back to waiting (only while it is still marked done). */
+    data class PutBackQueue(val itemId: String) : AskUndo
 }
 
 /** What a tapped card did: the undo bar's line ("Added “Milk”") and how to take it back. */
@@ -134,7 +138,7 @@ object AskRules {
     const val MAX_SHOPPING = 10
 
     /** The kinds of proposal MEKA understands; anything else is dropped. Wire names, never renamed. */
-    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win")
+    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done")
 
     /** The question as sent: one line, trimmed, at most [MAX_QUESTION] characters; null when there's nothing to ask. */
     fun question(text: String?): String? =
@@ -146,7 +150,8 @@ object AskRules {
      */
     fun context(today: Today, nowMs: Long, cal: LocalCalendar, weather: List<String> = emptyList(), shopping: ShoppingView? = null,
                 school: List<String> = emptyList(), meals: String? = null, mealsFromOthers: Boolean = false,
-                dateNight: String? = null, renewals: List<String> = emptyList(), wins: List<String> = emptyList()): AskContext {
+                dateNight: String? = null, renewals: List<String> = emptyList(), wins: List<String> = emptyList(),
+                queue: List<String> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -200,12 +205,15 @@ object AskRules {
         val radar = renewals.take(RenewalAskRules.ASK_ITEMS).map { AskItem("", AskItemKind.RENEWALS, line(it)) }
         // The work wins log (Work wins slice 2, [WinAskRules.askLines]): Meka's own lines, never untrusted.
         val winLog = wins.take(WinAskRules.ASK_ITEMS + 1).map { AskItem("", AskItemKind.WINS, line(it)) }
-        val tail = listOfNotNull(shop, dinners, evening) + radar + winLog + schoolYear + forecast
+        // The train queue (Train-time queue slice 3, [QueueAskRules.askLines]): the saved links' titles came from the
+        // pages and apps they were shared from, so they make the context untrusted (below).
+        val saved = queue.take(QueueAskRules.ASK_ITEMS + QueueAskRules.ASK_DONE + 1).map { AskItem("", AskItemKind.QUEUE, line(it)) }
+        val tail = listOfNotNull(shop, dinners, evening) + radar + winLog + saved + schoolYear + forecast
         val kept = items.take(MAX_ITEMS - tail.size) + tail
         val keptRefs = kept.map { it.ref }.toSet()
         // Things Jeanette added are someone else's words, like a calendar invitation's title.
         val fromOthers = shop != null && shopping.toBuy.any { ShoppingRules.byName(it.by) != null }
-        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers))
+        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers) || saved.isNotEmpty())
     }
 
     /** "Shopping list · 3 to buy: milk, eggs, bread" / "Shopping list · nothing to buy". */
@@ -227,10 +235,10 @@ object AskRules {
     /** The answer as shown: its words and the proposals that check out, at most [MAX_CARDS], no two alike. */
     fun answer(text: String?, actions: List<AskRawAction>, context: AskContext, titles: Map<String, String>, nowMs: Long, cal: LocalCalendar,
                meals: List<Meal> = emptyList(), dateNight: DateNightSetting? = null, renewals: List<RenewalItem> = emptyList(),
-               wins: List<Win> = emptyList()): AskAnswer =
+               wins: List<Win> = emptyList(), queue: List<QueueItem> = emptyList()): AskAnswer =
         AskAnswer(
             answerText(text),
-            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals, dateNight, renewals, wins) }.distinctBy { it.proposal }.take(MAX_CARDS),
+            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals, dateNight, renewals, wins, queue) }.distinctBy { it.proposal }.take(MAX_CARDS),
         )
 
     /**
@@ -240,7 +248,7 @@ object AskRules {
      */
     fun card(a: AskRawAction, context: AskContext, titles: Map<String, String>, nowMs: Long, cal: LocalCalendar,
              meals: List<Meal> = emptyList(), dateNight: DateNightSetting? = null, renewals: List<RenewalItem> = emptyList(),
-             wins: List<Win> = emptyList()): AskCard? {
+             wins: List<Win> = emptyList(), queue: List<QueueItem> = emptyList()): AskCard? {
         val today = cal.epochDayOf(nowMs)
         fun task(): Pair<String, String>? {
             val id = context.taskIds[a.ref?.trim()] ?: return null
@@ -289,6 +297,7 @@ object AskRules {
                 AskProposal.RenewalDone(it.id, it.title, it.doneLabel, it.dueDay, it.nextDueDay)
             } ?: return null
             "add_win" -> AskProposal.AddWin(WinAskRules.text(wins, a.title, today) ?: return null)
+            "queue_done" -> QueueAskRules.find(queue, a.title)?.let { AskProposal.QueueDone(it.id, it.title) } ?: return null
             else -> return null
         }
         return cardOf(proposal, today)
@@ -367,6 +376,7 @@ object AskRules {
         is AskProposal.SkipDateNight -> DateNightRules.skipLine(p.day, today, skip = true)
         is AskProposal.RenewalDone -> RenewalAskRules.doneLine(p.doneLabel, p.title, p.nextDay, today)
         is AskProposal.AddWin -> WinAskRules.doneLine(p.text)
+        is AskProposal.QueueDone -> QueueAskRules.doneLine(p.title)
     }
 
     /** The card's words for [p]. */
@@ -384,6 +394,7 @@ object AskRules {
         is AskProposal.SkipDateNight -> AskCard(p, "Skip date night · " + DateNightRules.whenLabel(p.day, today), "Skip")
         is AskProposal.RenewalDone -> AskCard(p, RenewalAskRules.cardLine(p.doneLabel, p.title, p.nextDay, today), p.doneLabel)
         is AskProposal.AddWin -> AskCard(p, WinAskRules.cardLine(p.text), "Keep")
+        is AskProposal.QueueDone -> AskCard(p, QueueAskRules.cardLine(p.title), "Done")
     }
 
     /** "milk", "milk and eggs", "milk, eggs and bread", as typed. */

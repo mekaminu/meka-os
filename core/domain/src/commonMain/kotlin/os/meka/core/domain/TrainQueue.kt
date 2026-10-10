@@ -272,3 +272,67 @@ class TrainQueue(private val replica: Replica, private val newId: () -> String, 
         return true
     }
 }
+
+/**
+ * Ask and Talk know the train queue (train-time queue, slice 3): "what's in my train queue?" is answered from it, and
+ * "I've read the BBC one" becomes a card that marks that link done on Meka's tap. Non-AI, pure. A saved link's title
+ * comes from the page or app it was shared from (words other people wrote), so queue lines mark a question untrusted,
+ * like a calendar invitation's title (ADR-006 §2).
+ */
+object QueueAskRules {
+    /** How many waiting links go with a question (newest first), under the queue's line. */
+    const val ASK_ITEMS = 8
+    /** How many links marked done lately go with them. */
+    const val ASK_DONE = 3
+
+    const val GONE = "That link isn't waiting in your train queue any more"
+
+    private fun tidy(s: String): String = s.replace(Regex("""\s+"""), " ").trim()
+
+    /**
+     * The queue as MEKA describes it to the model (Ask's `queue` lines): first the count ("Train queue · 2 articles ·
+     * 1 podcast waiting · the newest 8 below", or "Train queue · nothing waiting"), then each waiting link ("Waiting ·
+     * Article · bbc.co.uk · Why trains run late · saved Fri 9 Oct") and the few marked done lately ("Done · … · done
+     * Thu 8 Oct"). Nothing at all while nothing has been saved (or only long-done links remain).
+     */
+    fun askLines(items: List<QueueItem>, nowMs: Long, cal: LocalCalendar): List<String> {
+        val view = QueueRules.view(items, nowMs)
+        val waiting = items.filter { !it.done }
+        val doneIds = view.done.map { it.id }.toSet()
+        val done = items.filter { it.id in doneIds }.sortedByDescending { it.doneAtMs }.take(ASK_DONE)
+        if (waiting.isEmpty() && done.isEmpty()) return emptyList()
+        val head = QueueRules.countLine(view.articles, view.podcasts)?.let { c ->
+            "Train queue · $c waiting" + if (waiting.size > ASK_ITEMS) " · the newest $ASK_ITEMS below" else ""
+        } ?: "Train queue · nothing waiting"
+        fun day(ms: Long) = CivilDate.shortLabel(cal.epochDayOf(ms))
+        return listOf(head) +
+            waiting.take(ASK_ITEMS).map { "Waiting · ${it.kind.label} · ${it.site} · ${tidy(it.title)} · saved ${day(it.addedAtMs)}" } +
+            done.map { "Done · ${it.kind.label} · ${it.site} · ${tidy(it.title)} · done ${day(it.doneAtMs)}" }
+    }
+
+    /**
+     * The one waiting link a model's `queue_done` names: the same title, else the one link whose title holds the words
+     * (or is held by them), else the one link from that site ("the BBC one" → bbc.co.uk). Null when none or several fit.
+     */
+    fun find(items: List<QueueItem>, title: String?): QueueItem? {
+        val t = title?.let(::tidy)?.lowercase()?.trim('“', '”', '"', '\'', ' ')?.takeIf { it.length >= 2 } ?: return null
+        val waiting = items.filter { !it.done }
+        waiting.filter { tidy(it.title).lowercase() == t }.singleOrNull()?.let { return it }
+        waiting.filter { val own = tidy(it.title).lowercase(); own.contains(t) || (own.length >= 4 && t.contains(own)) }
+            .singleOrNull()?.let { return it }
+        val words = t.split(Regex("""[^a-z0-9.]+""")).filter { it.length >= 3 }
+        val squashed = t.filter { it.isLetterOrDigit() }
+        return waiting.filter { i ->
+            val site = i.site.lowercase()
+            val name = site.substringBefore('.')
+            // "bbc.co.uk", "the BBC one", "the Guardian article" (theguardian.com).
+            t.contains(site) || (name.length >= 3 && name in words) || (name.length >= 6 && squashed.contains(name))
+        }.singleOrNull()
+    }
+
+    /** The card's words: "Done · “Why trains run late” · off the train queue". */
+    fun cardLine(title: String): String = "Done · “$title” · off the train queue"
+
+    /** The undo bar's line: "Marked “Why trains run late” done · off the train queue". */
+    fun doneLine(title: String): String = "Marked “$title” done · off the train queue"
+}

@@ -226,6 +226,8 @@ object TalkRules {
             (p.nextDay?.let { ", next due " + spokenWhen(it, null, today) } ?: "")
         // "keep Closed the Henley deal in this week's wins" / "kept …".
         is AskProposal.AddWin -> (if (past) "kept " else "keep ") + clean(p.text) + " in this week's wins"
+        // "mark Why trains run late done in the train queue" / "marked …".
+        is AskProposal.QueueDone -> (if (past) "marked " else "mark ") + clean(p.title) + " done in the train queue"
     }
 
     /** "today at 14:30", "tomorrow", "Friday 9 October at 09:00". */

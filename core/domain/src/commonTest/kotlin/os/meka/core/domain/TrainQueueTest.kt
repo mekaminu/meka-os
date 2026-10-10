@@ -115,4 +115,59 @@ class TrainQueueTest {
         assertNull(QueueRules.trainLine(items.filter { it.id == "d" }, office, at(7, 10), cal)) // nothing waiting
         assertTrue(QueueRules.trainLine(items, office, office!!.endMs - 10 * 60_000L, cal) != null) // the way home
     }
+
+    @Test
+    fun askHearsTheQueueAndQueueDoneIsACardForOneWaitingLinkOnly() {
+        val cal = LocalCalendar.fixedOffset(3_600_000L)
+        val fri = CivilDate.toEpochDay(2026, 10, 9)
+        fun at(day: Long, h: Int) = cal.toEpochMs(day, h * 60)
+        val now = at(fri, 8)
+        assertTrue(QueueAskRules.askLines(emptyList(), now, cal).isEmpty())
+        val items = listOf(
+            QueueItem("a", "https://bbc.co.uk/1", "Why trains run late", QueueKind.ARTICLE, "bbc.co.uk", at(fri, 7), 0),
+            QueueItem("c", "https://overcast.fm/+x", "The Rest Is Football", QueueKind.PODCAST, "overcast.fm", at(fri - 1, 20), 0),
+            QueueItem("g", "https://theguardian.com/2", "Rail  fares to rise", QueueKind.ARTICLE, "theguardian.com", at(fri - 3, 9), 0),
+            QueueItem("d", "https://ft.com/4", "Done one", QueueKind.ARTICLE, "ft.com", at(fri - 5, 9), at(fri - 1, 18)),
+            QueueItem("old", "https://ft.com/5", "Long done", QueueKind.ARTICLE, "ft.com", at(fri - 60, 9), at(fri - 40, 9)),
+        )
+        assertEquals(
+            listOf(
+                "Train queue · 2 articles · 1 podcast waiting",
+                "Waiting · Article · bbc.co.uk · Why trains run late · saved Fri 9 Oct",
+                "Waiting · Podcast · overcast.fm · The Rest Is Football · saved Thu 8 Oct",
+                "Waiting · Article · theguardian.com · Rail fares to rise · saved Tue 6 Oct",
+                "Done · Article · ft.com · Done one · done Thu 8 Oct",
+            ),
+            QueueAskRules.askLines(items, now, cal),
+        )
+        // Only long-done links: nothing to say.
+        assertTrue(QueueAskRules.askLines(items.filter { it.id == "old" }, now, cal).isEmpty())
+        assertEquals("Train queue · nothing waiting", QueueAskRules.askLines(items.filter { it.done }, now, cal).first())
+        // The titles came from other people's pages: the question is untrusted.
+        val ctx = AskRules.context(Today(emptyList(), null, emptyList(), emptyList()), now, cal, queue = QueueAskRules.askLines(items, now, cal))
+        assertTrue(ctx.untrusted)
+        assertEquals(5, ctx.items.count { it.kind == AskItemKind.QUEUE })
+
+        // By its title, by words in it, or "the BBC one" by its site; never a done one, never two at once.
+        assertEquals("a", QueueAskRules.find(items, "Why trains run late")?.id)
+        assertEquals("c", QueueAskRules.find(items, "rest is football")?.id)
+        assertEquals("a", QueueAskRules.find(items, "the BBC one")?.id)
+        assertEquals("g", QueueAskRules.find(items, "the Guardian article")?.id)
+        assertEquals("g", QueueAskRules.find(items, "theguardian.com")?.id)
+        assertNull(QueueAskRules.find(items, "Done one"))
+        assertEquals("g", QueueAskRules.find(items, "rail")?.id)
+        assertNull(QueueAskRules.find(items, "es")) // two titles hold it ("The Rest", "Rail fares")
+        assertNull(QueueAskRules.find(items, "article"))
+        assertNull(QueueAskRules.find(items, " "))
+
+        fun card(title: String?) = AskRules.card(AskRawAction("queue_done", title = title), ctx, emptyMap(), now, cal, queue = items)
+        val c = card("Why trains run late")!!
+        assertEquals(AskProposal.QueueDone("a", "Why trains run late"), c.proposal)
+        assertEquals("Done · “Why trains run late” · off the train queue", c.line)
+        assertEquals("Done", c.button)
+        assertEquals("Marked “Why trains run late” done · off the train queue", AskRules.doneLine(c.proposal, fri))
+        assertEquals("mark Why trains run late done in the train queue", TalkRules.phrase(c.proposal, fri, past = false))
+        assertNull(card("Done one"))
+        assertNull(card(null))
+    }
 }
