@@ -171,11 +171,13 @@ class PostgresDeviceRegistry(private val ds: DataSource) : DeviceRegistry {
 
     override fun linkedDevices(householdId: String): List<LinkedDevice> = ds.connection.use { c ->
         c.prepareStatement(
-            "SELECT id, name, created_at FROM device WHERE household_id = ? AND revoked_at IS NULL AND id LIKE 'watch-%' ORDER BY created_at DESC LIMIT 20",
+            "SELECT id, name, created_at FROM device WHERE household_id = ? AND revoked_at IS NULL AND id LIKE 'watch%' ORDER BY created_at DESC LIMIT 20",
         ).use { st ->
             st.setString(1, householdId)
             st.executeQuery().use { rs ->
+                // The LIKE only narrows; the watch-id rule decides (the same one the in-memory registry uses).
                 buildList { while (rs.next()) add(LinkedDevice(rs.getString(1), rs.getString(2), rs.getTimestamp(3).time)) }
+                    .filter { isLinkedDeviceId(it.id) }
             }
         }
     }
