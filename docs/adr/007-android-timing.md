@@ -39,3 +39,6 @@ The wake alarm (Alarms, slice 1) is the table's "wake-up style" row, which Meka 
 
 ## Addendum, 2026-10-08: leave-by alarms
 A leave-by with "Ring as an alarm" on (Alarms, slice 3) is one more alarm in the same queue as the wake alarm, quick alarms and timers: the earliest still to ring is registered with `setAlarmClock` (else `setWindow`, 5 minutes) and rings through the same foreground service and full-screen screen. It is derived from the calendar, so a moved event re-registers at the next refresh. The leave-by heads-up (a CLOCK notice) isn't posted for it. No new permission.
+
+## Addendum, 2026-10-10: the Galaxy Watch's tile and complication
+The watch (Galaxy Watch, slice 3) keeps its tile and complication current with the same periodic WorkManager job as the phone (`WatchSyncWorker`, 15 minutes, network-constrained, exponential backoff from 30 s), scheduled once linked and cancelled on unlink. No alarms: the tile asks to be drawn again through its own freshness interval (the next minute while a fast's clock or an "In 12 min" counts, else 15 minutes; never under 30 s), the complication through Wear OS's 5-minute update period, and both are asked again (`TileService.getUpdater`, `ComplicationDataSourceUpdateRequester`) a second after Today or the fast changes on the watch. Nothing on the watch wakes it on its own.

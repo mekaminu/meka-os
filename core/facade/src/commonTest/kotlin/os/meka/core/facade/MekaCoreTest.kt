@@ -613,6 +613,38 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theWatchTilesDoneReachesTheFoldAndAStaleTileDoesNothing() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 10, 16, 30).toInstant(london).toEpochMilliseconds() // Sat, BST
+        val fold = core("android"); val watch = core("watch0123456789abcdef")
+        fold.addTask("Post the letter")
+        fold.addTask("Put the bins out")
+        fold.syncNow(); watch.syncNow()
+
+        assertEquals("0/2", watch.watchComplication().text)
+        val tile = watch.watchTile()
+        assertEquals(watch.watchHome().title, tile.title)
+        assertEquals("Done", tile.button?.label)
+        val id = tile.buttonId
+
+        // Done on the Fold first: the watch's old tile is stale and its tap does nothing.
+        fold.complete(tile.button!!.targetId); fold.syncNow(); watch.syncNow()
+        assertFalse(watch.watchTilePress(id))
+        assertEquals("1/2", watch.watchComplication().text)
+
+        val next = watch.watchTile()
+        assertTrue(watch.watchTilePress(next.buttonId))
+        watch.syncNow(); fold.syncNow()
+        assertEquals(2, fold.today.value.doneToday.size)
+        assertEquals("2/2", watch.watchComplication().text)
+        assertEquals(os.meka.core.domain.WatchTileRules.CALM_REFRESH_MS, watch.watchRefreshAfterMs())
+
+        watch.watchFastButton()
+        assertTrue(watch.watchComplication().fasting)
+        assertEquals(60_000L - now % 60_000L, watch.watchRefreshAfterMs())
+    }
+
+    @Test
     fun homeWidgetsFollowUpNextAndAFastStartedOnTheOtherDevice() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 10, 7, 16, 30).toInstant(london).toEpochMilliseconds() // Wed, BST

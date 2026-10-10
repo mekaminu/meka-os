@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Meka</string>
+    <string name="tile_label">MEKA · Up next</string>
+    <string name="complication_label">MEKA · Fast or today</string>
 </resources>

@@ -71,4 +71,11 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.ktor.client.okhttp)
 
+    // Galaxy Watch, slice 3: the tile, the complication and a quarter-hourly background sync that keeps them current.
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.wear.tiles)
+    implementation(libs.wear.protolayout)
+    implementation(libs.wear.complications.data.source)
+    implementation(libs.androidx.concurrent.futures)
+
 }

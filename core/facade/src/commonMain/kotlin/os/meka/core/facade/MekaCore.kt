@@ -1669,6 +1669,31 @@ class MekaCore(
     }
 
     /**
+     * The watch's tile (Galaxy Watch, slice 3): Up next with its one primary button and a running fast's clock, from
+     * the same "now" card as [watchHome]. Pure and cheap; nothing is stored.
+     */
+    fun watchTile(): os.meka.core.domain.WatchTileView = os.meka.core.domain.WatchTileRules.tile(watchHome())
+
+    /**
+     * A tap on the tile's button: [clickableId] is the tile's last clickable id. Does the same as the watch's own
+     * button, but only while the watch still offers that button (a stale tile does nothing). True when it did something.
+     */
+    suspend fun watchTilePress(clickableId: String?): Boolean {
+        val b = os.meka.core.domain.WatchTileRules.pressed(clickableId, watchHome()) ?: return false
+        watchPress(b)
+        return true
+    }
+
+    /** The watch's complication (Galaxy Watch, slice 3): a running fast's ring, else how much of today's list is done. */
+    fun watchComplication(): os.meka.core.domain.WatchComplicationView {
+        val t = _today.value
+        return os.meka.core.domain.WatchTileRules.complication(watchHome(), t.doneToday.size, t.dayRing.toDo)
+    }
+
+    /** When the tile and complication should be drawn again with nothing synced in between. */
+    fun watchRefreshAfterMs(): Long = os.meka.core.domain.WatchTileRules.refreshAfterMs(watchHome(), nowMs())
+
+    /**
      * What "3 held for later" unfolds to in Needs you during work (Fold review 2026-10-09, item 5): sender · first line ·
      * time, newest first, at most five. [summary] is the one the device shows (the Fold passes its lists-applied copy;
      * the Mac passes [afterWork]'s). A preview only: nothing is marked read or cleared. Pure.
