@@ -67,6 +67,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -182,7 +183,7 @@ private fun LazyListScope.someday(
     if (view.someday.isEmpty()) empty("someday", "Ideas, trips, things to buy or read. They stay out of Today and the planner until you say \"Do it now\".")
     view.someday.forEach { g ->
         item(key = "g-${g.kind.name}") {
-            SectionLabel(g.label, Modifier.animateItem().padding(top = MekaSpace.s))
+            SectionLabel(g.label, Modifier.animateItem().padding(top = MekaSpace.m))
         }
         items(g.items, key = { "s-${it.id}" }) { t: Task ->
             ListRow(t.title, null, DueState.NONE, open == t.id, { toggle(t.id) }, Modifier.animateItem()) {
@@ -215,7 +216,7 @@ private fun LazyListScope.decisions(
                 act { core.keepDecision(d.id, days) }
             }
             AnimatedVisibility(replacing, enter = unfold(), exit = fold()) {
-                Field("What did you decide instead?", Modifier.padding(top = MekaSpace.s)) { s ->
+                Field("What did you decide instead?", Modifier.padding(top = MekaSpace.xs)) { s ->
                     replacing = false
                     leave { core.replaceDecision(d.id, s, null, null) }
                 }
@@ -225,7 +226,7 @@ private fun LazyListScope.decisions(
 }
 
 internal fun LazyListScope.empty(key: String, line: String) = item(key = "empty-$key") {
-    Text(line, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(vertical = MekaSpace.s))
+    Text(line, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(vertical = MekaSpace.xs))
 }
 
 /**
@@ -288,7 +289,7 @@ internal fun ListRow(
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(bg)) {
         Column(
             Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = if (expanded) "Hide actions" else "Show actions") { onToggle() }
-                .padding(horizontal = MekaSpace.s, vertical = MekaSpace.s),
+                .minTouch().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
         ) {
             Text(title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
             meta?.let { m ->
@@ -300,8 +301,8 @@ internal fun ListRow(
         }
         AnimatedVisibility(expanded, enter = unfold(), exit = fold()) {
             Column(
-                Modifier.fillMaxWidth().padding(start = MekaSpace.s, end = MekaSpace.s, bottom = MekaSpace.m),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+                Modifier.fillMaxWidth().padding(start = MekaSpace.xs, end = MekaSpace.xs, bottom = MekaSpace.m),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) { details() }
         }
     }
@@ -391,10 +392,10 @@ private fun AddWaiting(add: (String, String?, Int?) -> Unit) {
     var who by rememberSaveable { mutableStateOf("") }
     var chase by rememberSaveable { mutableStateOf<Int?>(ListRules.DEFAULT_CHASE_DAYS) }
     val submit = { if (title.isNotBlank()) { add(title, who.ifBlank { null }, chase); title = ""; who = ""; chase = ListRules.DEFAULT_CHASE_DAYS } }
-    Column(Modifier.padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    Column(Modifier.padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Field("Waiting for…", value = title, onValue = { title = it }) { submit() }
         AnimatedVisibility(title.isNotBlank(), enter = unfold(), exit = fold()) {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Field("From whom (optional)", value = who, onValue = { who = it }) { submit() }
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     ListRules.CHASE_CHOICES.forEach { c -> Chip(if (c.days == null) c.label else "Chase ${c.label.lowercase()}", chase == c.days) { chase = c.days } }
@@ -410,10 +411,10 @@ private fun AddSomeday(add: (String, SomedayKind) -> Unit) {
     var title by rememberSaveable { mutableStateOf("") }
     var kind by rememberSaveable { mutableStateOf(SomedayKind.IDEA) }
     val submit = { if (title.isNotBlank()) { add(title, kind); title = "" } }
-    Column(Modifier.padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    Column(Modifier.padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Field("Someday…", value = title, onValue = { title = it }) { submit() }
         AnimatedVisibility(title.isNotBlank(), enter = unfold(), exit = fold()) {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 KindChoices(kind) { kind = it }
                 Action("Add") { submit() }
             }
@@ -427,10 +428,10 @@ private fun AddDecision(add: (String, String?, Int?) -> Unit) {
     var why by rememberSaveable { mutableStateOf("") }
     var review by rememberSaveable { mutableStateOf<Int?>(null) }
     val submit = { if (statement.isNotBlank()) { add(statement, why.ifBlank { null }, review); statement = ""; why = ""; review = null } }
-    Column(Modifier.padding(top = MekaSpace.l).widthIn(max = 720.dp), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    Column(Modifier.padding(top = MekaSpace.l).widthIn(max = 720.dp), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Field("I decided…", value = statement, onValue = { statement = it }) { submit() }
         AnimatedVisibility(statement.isNotBlank(), enter = unfold(), exit = fold()) {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Field("Why (optional)", value = why, onValue = { why = it }) { submit() }
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     ListRules.REVIEW_CHOICES.forEach { c -> Chip(if (c.days == null) c.label else "Review ${c.label.lowercase()}", review == c.days) { review = c.days } }

@@ -43,7 +43,7 @@ import os.meka.core.facade.MekaCore
  */
 internal fun LazyListScope.shopping(v: ShoppingView, core: MekaCore, act: (suspend () -> Unit) -> Unit) {
     item(key = "sh-line") {
-        Text(v.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(bottom = MekaSpace.s))
+        Text(v.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(bottom = MekaSpace.xs))
     }
     if (v.toBuy.isEmpty() && v.got.isEmpty()) empty("shopping", ShoppingRules.EMPTY_LINE)
     items(v.toBuy, key = { "sh-${it.id}" }) { s -> ShoppingRow(s, core, act, Modifier.animateItem()) }
@@ -65,7 +65,7 @@ internal fun LazyListScope.shopping(v: ShoppingView, core: MekaCore, act: (suspe
 @Composable
 private fun ShoppingRow(s: ShoppingItem, core: MekaCore, act: (suspend () -> Unit) -> Unit, modifier: Modifier) {
     val haptics = rememberMekaHaptics()
-    Row(modifier.fillMaxWidth().padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
         TickRing(
             s.got,
             Modifier.size(22.dp).clip(CircleShape)
@@ -75,7 +75,7 @@ private fun ShoppingRow(s: ShoppingItem, core: MekaCore, act: (suspend () -> Uni
                 },
         )
         Spacer(Modifier.width(MekaSpace.m))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(s.title, style = MekaType.body, color = if (s.got) Meka.colors.textTertiary else Meka.colors.textPrimary)
             s.meta?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
         }

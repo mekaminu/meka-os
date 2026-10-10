@@ -154,7 +154,7 @@ struct ListsScreen: View {
             Text(g.label.uppercased())
                 .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                 .foregroundStyle(palette.textTertiary)
-                .padding(.top, MekaSpace.s)
+                .padding(.top, MekaSpace.m)
             ForEach(g.items, id: \.id) { t in
                 ListRowView(title: t.title, meta: nil, due: false, expanded: open == t.id, palette: palette, toggle: { toggle(t.id) }) {
                     if let notes = t.notes { Text(notes).font(MekaType.body).foregroundStyle(palette.textSecondary) }
@@ -210,7 +210,7 @@ struct ListRowView<Details: View>: View {
     @ViewBuilder let details: () -> Details
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Button(action: toggle) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
@@ -227,11 +227,11 @@ struct ListRowView<Details: View>: View {
             .buttonStyle(MekaPressStyle())
             .accessibilityHint(expanded ? "Hides actions" : "Shows actions")
             if expanded {
-                VStack(alignment: .leading, spacing: MekaSpace.s) { details() }
+                VStack(alignment: .leading, spacing: MekaSpace.xs) { details() }
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(MekaSpace.s)
+        .padding(MekaSpace.xs)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(expanded ? palette.surface : .clear))
         .transition(.opacity)
     }
@@ -241,7 +241,7 @@ struct EmptyLine: View {
     let text: String
     let palette: MekaPalette
     var body: some View {
-        Text(text).font(MekaType.body).foregroundStyle(palette.textSecondary).padding(.vertical, MekaSpace.s)
+        Text(text).font(MekaType.body).foregroundStyle(palette.textSecondary).padding(.vertical, MekaSpace.xs)
     }
 }
 
@@ -280,7 +280,7 @@ private struct AddWaitingRow: View {
     @State private var chase: Int? = Int(ListRules.shared.DEFAULT_CHASE_DAYS)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             TextField("Waiting for…", text: $title).textFieldStyle(.roundedBorder).onSubmit(add)
             if !title.isEmpty {
                 HStack(spacing: MekaSpace.m) {
@@ -329,7 +329,7 @@ private struct AddDecisionRow: View {
     @State private var review: Int? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             TextField("I decided…", text: $statement).textFieldStyle(.roundedBorder).onSubmit(add)
             if !statement.isEmpty {
                 HStack(spacing: MekaSpace.m) {

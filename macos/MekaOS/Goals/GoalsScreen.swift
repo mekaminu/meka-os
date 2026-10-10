@@ -34,7 +34,7 @@ struct GoalsScreen: View {
                 ForEach(model.goals?.habits ?? [], id: \.id) { h in
                     HabitRowView(habit: h, goals: model.goals?.goals ?? [], expanded: open == h.id, palette: palette) { toggle(h.id) }
                 }
-                AddHabitRow(palette: palette).padding(.top, MekaSpace.s)
+                AddHabitRow(palette: palette).padding(.top, MekaSpace.m)
                 // A hand-made gym/workout/training habit: book it in place, keeping its ticks (Fold review 13:45, item 2).
                 if let offer = model.goals?.bookOffer {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -46,7 +46,7 @@ struct GoalsScreen: View {
                         Text(SessionRules.shared.BOOK_OFFER_CAPTION)
                             .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
-                    .padding(.top, MekaSpace.s)
+                    .padding(.top, MekaSpace.m)
                     .transition(.opacity)
                 }
                 // The Gym: one click adds it with its sessions booked (offered until a booked or gym-named habit exists).
@@ -57,7 +57,7 @@ struct GoalsScreen: View {
                         Text("Three times a week, evenings, an hour: MEKA books the sessions around your calendar and work, and rebooks a missed one.")
                             .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
-                    .padding(.top, MekaSpace.s)
+                    .padding(.top, MekaSpace.m)
                     .transition(.opacity)
                 }
 
@@ -65,7 +65,7 @@ struct GoalsScreen: View {
                 let goals = model.goals?.goals ?? []
                 if goals.isEmpty {
                     Text("Say what you're working towards. Link habits and tasks to a goal and its progress counts itself.")
-                        .font(MekaType.body).foregroundStyle(palette.textSecondary).padding(.vertical, MekaSpace.s)
+                        .font(MekaType.body).foregroundStyle(palette.textSecondary).padding(.vertical, MekaSpace.xs)
                 }
                 ForEach(goals, id: \.id) { g in
                     GoalRowView(goal: g, expanded: open == g.id, palette: palette) { toggle(g.id) }
@@ -73,7 +73,7 @@ struct GoalsScreen: View {
                 if let finished = model.goals?.finishedGoals, finished > 0 {
                     Text("\(finished) finished").font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
-                AddGoalRow(palette: palette).padding(.top, MekaSpace.s)
+                AddGoalRow(palette: palette).padding(.top, MekaSpace.m)
             }
             .frame(maxWidth: 720, alignment: .leading)
             .padding(.horizontal, MekaSpace.gutterWide)
@@ -113,7 +113,7 @@ private struct HabitRowView: View {
     let toggle: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack(alignment: .top, spacing: MekaSpace.m) {
                 Button { model.setHabitDone(habit.id, !habit.doneToday) } label: {
                     TickRingView(done: habit.doneToday, palette: palette)
@@ -133,12 +133,12 @@ private struct HabitRowView: View {
                         if let line = habit.sessionLine {
                             Text(line).font(MekaType.caption).foregroundStyle(palette.accent).contentTransition(.opacity)
                         }
-                        HStack(spacing: MekaSpace.s) {
+                        HStack(spacing: MekaSpace.xs) {
                             if habit.weekly {
                                 WeekSlotsView(filled: Int(habit.slotsFilled), total: Int(habit.weekTarget),
                                               week: habit.week.map(\.boolValue), palette: palette, reduceMotion: reduceMotion)
                             } else {
-                                HStack(spacing: 3) {
+                                HStack(spacing: 3) { // rhythm: ok (the week's dots are one mark)
                                     ForEach(Array(habit.week.enumerated()), id: \.offset) { _, on in
                                         Circle().fill(on.boolValue ? palette.accent : palette.surfaceRaised).frame(width: 6, height: 6)
                                     }
@@ -216,7 +216,7 @@ private struct HabitRowView: View {
                 }
             }
         }
-        .padding(MekaSpace.s)
+        .padding(MekaSpace.xs)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(expanded ? palette.surface : .clear))
         .transition(.opacity)
     }
@@ -239,7 +239,7 @@ private struct AppLinkField: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             HStack(spacing: MekaSpace.m) {
                 TextField("Workout app link · hevy.com (optional)", text: $text)
                     .textFieldStyle(.roundedBorder).font(MekaType.body).frame(maxWidth: 320)
@@ -282,7 +282,7 @@ private struct GoalRowView: View {
     @State private var shown: Double = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Button(action: toggle) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     HStack {
@@ -311,7 +311,7 @@ private struct GoalRowView: View {
             .accessibilityLabel("\(goal.title), \(goal.progressPct) percent, \(goal.meta)")
             .accessibilityHint(expanded ? "Hides actions" : "Shows actions")
             if expanded {
-                VStack(alignment: .leading, spacing: MekaSpace.s) {
+                VStack(alignment: .leading, spacing: MekaSpace.m) {
                     HStack(spacing: MekaSpace.l) {
                         if !goal.counted {
                             Button("−10%") { model.stepGoal(goal.id, from: goal.progressPct, by: -10) }
@@ -335,7 +335,7 @@ private struct GoalRowView: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(MekaSpace.s)
+        .padding(MekaSpace.xs)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(expanded ? palette.surface : .clear))
         .transition(.opacity)
         // Progress bars fill on appear (Reduce Motion: shown at once).
@@ -356,7 +356,7 @@ private struct AddHabitRow: View {
     @State private var timing: HabitTiming = .anytime
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             TextField("New habit…", text: $title).textFieldStyle(.roundedBorder).onSubmit(add)
             if !title.isEmpty {
                 HStack(spacing: MekaSpace.m) {
@@ -389,7 +389,7 @@ private struct AddGoalRow: View {
     @State private var horizon = 1
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             TextField("New goal…", text: $title).textFieldStyle(.roundedBorder).onSubmit(add)
             if !title.isEmpty {
                 HStack(spacing: MekaSpace.m) {
@@ -457,7 +457,7 @@ struct WeekSlotsView: View {
 
     var body: some View {
         HStack(spacing: MekaSpace.xs) {
-            HStack(spacing: 3) {
+            HStack(spacing: 3) { // rhythm: ok (the slot rings are one mark)
                 ForEach(0..<max(total, 0), id: \.self) { i in
                     let on = i < filled
                     Circle().fill(on ? palette.accent : Color.clear)
@@ -465,7 +465,7 @@ struct WeekSlotsView: View {
                         .frame(width: 9, height: 9)
                 }
             }
-            HStack(spacing: 2) {
+            HStack(spacing: 2) { // rhythm: ok (the day ticks are one mark)
                 ForEach(Array(week.enumerated()), id: \.offset) { _, on in
                     Circle().fill(on ? palette.textTertiary : Color.clear).frame(width: 4, height: 4)
                 }

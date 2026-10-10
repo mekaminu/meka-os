@@ -13,7 +13,7 @@ struct RenewalsSection: View {
     var body: some View {
         let r = model.lists?.renewals
         if let line = r?.costLine {
-            Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.bottom, MekaSpace.s)
+            Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.bottom, MekaSpace.xs)
         }
         if (r?.count ?? 0) == 0 {
             EmptyLine(text: "MOT, insurance, the boiler service, subscriptions and bills. Add each with its date and MEKA shows it in good time, with a cancel-by reminder if you set one.", palette: palette)
@@ -28,7 +28,7 @@ struct RenewalsSection: View {
             Text(label.uppercased())
                 .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                 .foregroundStyle(palette.textTertiary)
-                .padding(.top, MekaSpace.s)
+                .padding(.top, MekaSpace.m)
             ForEach(items, id: \.id) { item in
                 ListRowView(title: item.title, meta: item.meta, due: item.needsAttention, expanded: open == item.id, palette: palette,
                             toggle: { open = open == item.id ? nil : item.id }) {
@@ -142,7 +142,7 @@ struct AddRenewalRow: View {
     @State private var problem: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             TextField("Renewal or bill…", text: $title).textFieldStyle(.roundedBorder).onSubmit(add)
             if !title.isEmpty {
                 HStack(spacing: MekaSpace.m) {

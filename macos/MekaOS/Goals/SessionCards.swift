@@ -12,7 +12,7 @@ struct SessionCardsView: View {
     var body: some View {
         let cards = model.sessions?.cards ?? []
         if !cards.isEmpty {
-            VStack(alignment: .leading, spacing: MekaSpace.s) {
+            VStack(alignment: .leading, spacing: MekaSpace.m) {
                 ForEach(cards, id: \.habitId) { c in SessionCardView(card: c, palette: palette) }
             }
         }
@@ -32,7 +32,7 @@ private struct SessionCardView: View {
     private var lit: Bool { card.status == .ask || card.status == .now }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
             HStack(alignment: .center, spacing: MekaSpace.m) {
                 if went {
                     // Went: the check draws itself in and pops, like a habit tick (Off: shown at once).
@@ -42,7 +42,7 @@ private struct SessionCardView: View {
                         .onDisappear { popped = false }
                         .accessibilityHidden(true)
                 }
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(card.heading).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                     Text(card.line).font(MekaType.itemMeta).foregroundStyle(lit ? palette.accent : palette.textSecondary)
                     if let n = card.note {

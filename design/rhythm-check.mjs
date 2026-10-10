@@ -67,6 +67,19 @@ export const ON_RHYTHM = [
   M + 'Calendar/CalendarScreen.swift',
   M + 'Calendar/EventDetailSheet.swift',
   M + 'Calendar/AddEventSheet.swift',
+  // Slice 4b-3: Lists (Waiting for, Someday, Decisions, Renewals, Shopping) and Goals (habits, goals, fasting, gym sessions).
+  A + 'lists/ListsRoute.kt',
+  A + 'lists/RenewalsSection.kt',
+  A + 'lists/ShoppingSection.kt',
+  A + 'goals/GoalsRoute.kt',
+  A + 'goals/FastingCard.kt',
+  A + 'goals/SessionCard.kt',
+  M + 'Lists/ListsScreen.swift',
+  M + 'Lists/RenewalsSection.swift',
+  M + 'Lists/ShoppingSection.swift',
+  M + 'Goals/GoalsScreen.swift',
+  M + 'Goals/FastingSection.swift',
+  M + 'Goals/SessionCards.swift',
 ];
 
 const NUM = String.raw`\b(?!0(?:\.0+)?\b)\d+(?:\.\d+)?`;

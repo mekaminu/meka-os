@@ -60,7 +60,7 @@ internal fun LazyListScope.renewals(
 ) {
     r.costLine?.let { line ->
         item(key = "r-cost") {
-            Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(bottom = MekaSpace.s))
+            Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(bottom = MekaSpace.xs))
         }
     }
     if (r.count == 0) {
@@ -79,7 +79,7 @@ private fun LazyListScope.section(
     act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit, tap: () -> Unit,
 ) {
     if (rows.isEmpty()) return
-    item(key = "r-label-$label") { SectionLabel(label, Modifier.animateItem().padding(top = MekaSpace.s)) }
+    item(key = "r-label-$label") { SectionLabel(label, Modifier.animateItem().padding(top = MekaSpace.m)) }
     items(rows, key = { "r-${it.id}" }) { item ->
         ListRow(item.title, item.meta, if (item.needsAttention) DueState.DUE else DueState.NONE, open == item.id, { toggle(item.id) }, Modifier.animateItem()) {
             RenewalDetails(item, today, core, act, leave, tap)
@@ -142,10 +142,10 @@ internal fun AddRenewal(today: Long, add: (NewRenewal) -> Unit) {
             repeat = RenewalRules.defaultRepeat(kind); due = today + RenewalRules.DEFAULT_DUE_IN_DAYS
         }
     }
-    Column(Modifier.padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    Column(Modifier.padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Field("Renewal or bill…", value = title, onValue = { title = it }) { submit() }
         AnimatedVisibility(title.isNotBlank(), enter = unfold(), exit = fold()) {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 KindChips(kind) { kind = it; repeat = RenewalRules.defaultRepeat(it) }
                 ChipRow(null) { Chip(RenewalRules.dueButton(due, today), true) { picking = true } }
                 ChipRow("Repeats") { RenewalRules.REPEATS.forEach { rp -> Chip(RenewalRules.repeatLabel(rp), repeat == rp) { repeat = rp } } }

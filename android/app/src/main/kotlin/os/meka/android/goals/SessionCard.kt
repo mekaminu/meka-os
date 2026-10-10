@@ -44,6 +44,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.SessionCard
@@ -60,7 +61,7 @@ import os.meka.core.facade.MekaCore
 internal fun SessionCards(core: MekaCore, modifier: Modifier = Modifier) {
     val view by core.sessionsView.collectAsState()
     if (view.cards.isEmpty()) return
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
         view.cards.forEach { c -> SessionCardTile(core, c) }
     }
 }
@@ -104,7 +105,7 @@ private fun SessionCardTile(core: MekaCore, card: SessionCard) {
             }
         }
         val context = LocalContext.current
-        Row(Modifier.padding(top = MekaSpace.s), horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) {
+        Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) {
             if (card.asks) {
                 Action("Went") { haptics.light(); act { core.sessionWent(card.habitId, null) } }
                 Action("Didn't go") { haptics.tick(); act { core.sessionMissed(card.habitId) } }
@@ -144,8 +145,8 @@ private fun WentCheck() {
 private fun NoteField(save: (String) -> Unit) {
     var text by rememberSaveable { mutableStateOf("") }
     Box(
-        Modifier.padding(top = MekaSpace.s).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+        Modifier.padding(top = MekaSpace.xs).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
+            .minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
     ) {
         if (text.isEmpty()) Text("Add a note · push day, 5 km… (optional)", style = MekaType.body, color = Meka.colors.textTertiary)
         BasicTextField(

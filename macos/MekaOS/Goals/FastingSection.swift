@@ -25,7 +25,7 @@ struct FastingSection: View {
 
     var body: some View {
         if let v = model.fasting {
-            VStack(alignment: .leading, spacing: MekaSpace.s) {
+            VStack(alignment: .leading, spacing: MekaSpace.m) {
                 HStack(alignment: .center, spacing: MekaSpace.m) {
                     FastRing(current: v.current, palette: palette, burst: burst)
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -165,12 +165,12 @@ private struct FastRing: View {
                     Circle()
                         .fill(RadialGradient(colors: [palette.accent.opacity(reduceMotion ? 0.3 : (glow ? 0.42 : 0.18)), .clear], center: .center, startRadius: 0, endRadius: 56))
                 }
-                Circle().stroke(palette.surfaceRaised, lineWidth: 8).padding(10)
+                Circle().stroke(palette.surfaceRaised, lineWidth: 8).padding(10) // rhythm: ok (the ring's inset inside its own frame, not spacing)
                 if current != nil {
                     Circle().trim(from: 0, to: p)
                         .stroke(palette.accent, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                         .rotationEffect(.degrees(-90))
-                        .padding(10)
+                        .padding(10) // rhythm: ok (the ring's inset)
                         // A linear one-second glide keeps the sweep continuous between ticks.
                         .animation(reduceMotion ? nil : .linear(duration: 1), value: p)
                 }
@@ -279,9 +279,9 @@ private struct FastingHistorySection: View {
             if let streak = history.streakLine {
                 Text(streak).font(MekaType.itemMeta).foregroundStyle(palette.accent)
             }
-            HStack(alignment: .top, spacing: 3) {
+            HStack(alignment: .top, spacing: 3) { // rhythm: ok (the heat strip's cells are one mark)
                 ForEach(Array(history.heat.enumerated()), id: \.offset) { w, week in
-                    VStack(spacing: 3) {
+                    VStack(spacing: 3) { // rhythm: ok (heat cells)
                         ForEach(week, id: \.epochDay) { d in
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(color(d))
@@ -357,7 +357,7 @@ struct FastUntilPicker: View {
         let nowMs = Self.ms(now)
         let pick = FastingRules.shared.untilPick(nowMs: nowMs, untilMs: Self.ms(date))
         let range = Self.date(FastingRules.shared.untilEarliest(nowMs: nowMs))...Self.date(FastingRules.shared.untilLatest(nowMs: nowMs))
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Fast until").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
             DatePicker("Ends", selection: $date, in: range, displayedComponents: [.date, .hourAndMinute])
                 .datePickerStyle(.field).labelsHidden()

@@ -123,7 +123,7 @@ internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
 
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(MekaSpace.m),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             FastRing(cur, now, burst.value)
@@ -157,7 +157,7 @@ internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
                 Action(if (adjusting) "Done" else "Adjust") { adjusting = !adjusting }
             }
             AnimatedVisibility(adjusting, enter = unfold(), exit = fold()) {
-                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     if (cur.extended) {
                         Chips("Goal", FastingRules.EXTENDED_CHOICES.map { it.label to (it.hours == cur.targetHours) }) { i -> act { core.setFastTarget(FastingRules.EXTENDED_CHOICES[i].hours) } }
                     } else {
@@ -298,14 +298,14 @@ private fun HistorySection(h: FastingHistory) {
         h.streakLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent) }
         Row(
             Modifier.semantics { contentDescription = h.totalsLine ?: "No fasts yet" },
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp), // rhythm: ok (the heat strip's cells are one mark)
         ) {
             h.heat.forEachIndexed { w, week ->
                 val alpha = remember { Animatable(if (reduced) 1f else 0f) }
                 LaunchedEffect(Unit) {
                     if (!reduced) { delay(MotionMath.staggerDelayMs(w, false).toLong()); alpha.animateTo(1f, MekaMotion.appear(false)) }
                 }
-                Column(Modifier.graphicsLayer { this.alpha = alpha.value }, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Column(Modifier.graphicsLayer { this.alpha = alpha.value }, verticalArrangement = Arrangement.spacedBy(3.dp)) { // rhythm: ok (heat cells)
                     week.forEach { d -> HeatCell(d) }
                 }
             }
@@ -381,7 +381,7 @@ private fun UntilPicker(v: FastingView, start: (Long) -> Unit) {
     val untilMs = v.untilAt(chosen, minute)
     val pick = FastingRules.untilPick(now, untilMs)
     val reduced = Meka.reducedMotion
-    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s), modifier = Modifier.padding(top = MekaSpace.xxs)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs), modifier = Modifier.padding(top = MekaSpace.xxs)) {
         Chips("Ends on", days.map { it.label to (it.epochDay == chosen.epochDay) }) { i -> haptics.tick(); day = days[i].epochDay }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
             Text("At", style = MekaType.caption, color = Meka.colors.textTertiary)

@@ -17,7 +17,7 @@ struct ShoppingSection: View {
             .font(MekaType.itemMeta)
             .foregroundStyle(palette.textSecondary)
             .contentTransition(.opacity)
-            .padding(.bottom, MekaSpace.s)
+            .padding(.bottom, MekaSpace.xs)
         if toBuy.isEmpty && got.isEmpty {
             EmptyLine(text: ShoppingRules.shared.EMPTY_LINE, palette: palette)
         }
@@ -45,7 +45,7 @@ private struct ShoppingRowView: View {
     let palette: MekaPalette
 
     var body: some View {
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.m) {
             Button {
                 if item.got { model.putBackShopping(item.id) } else { model.gotShopping(item.id) }
             } label: {
@@ -55,7 +55,7 @@ private struct ShoppingRowView: View {
             }
             .buttonStyle(MekaPressStyle())
             .accessibilityLabel((item.got ? "Put back " : "Got ") + item.title)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(item.title)
                     .font(MekaType.body)
                     .foregroundStyle(item.got ? palette.textTertiary : palette.textPrimary)
@@ -69,7 +69,7 @@ private struct ShoppingRowView: View {
                 .font(MekaType.caption)
                 .foregroundStyle(palette.textTertiary)
         }
-        .padding(.horizontal, MekaSpace.s)
+        .padding(.horizontal, MekaSpace.xs)
         .padding(.vertical, MekaSpace.xs)
         .transition(.opacity)
     }

@@ -154,7 +154,7 @@ fun GoalsRoute(core: MekaCore) {
         // A habit Meka made by hand named gym/workout/training: book it in place, keeping its ticks (Fold review 13:45, item 2).
         view.bookOffer?.let { h ->
             item(key = "book-${h.id}") {
-                Column(Modifier.animateItem().padding(top = MekaSpace.s)) {
+                Column(Modifier.animateItem().padding(top = MekaSpace.m)) {
                     Action(SessionRules.bookOfferLabel(h.title)) { haptics.light(); act { core.letMekaBook(h.id); open = h.id } }
                     Text(SessionRules.BOOK_OFFER_CAPTION, style = MekaType.caption, color = Meka.colors.textTertiary)
                 }
@@ -162,7 +162,7 @@ fun GoalsRoute(core: MekaCore) {
         }
         // The Gym: one tap adds it with its sessions booked around the calendar (offered until a booked or gym-named habit exists).
         if (view.offersAddGym) item(key = "add-gym") {
-            Column(Modifier.animateItem().padding(top = MekaSpace.s)) {
+            Column(Modifier.animateItem().padding(top = MekaSpace.m)) {
                 Action("Add Gym") { haptics.light(); act { open = core.addGym() } }
                 Text(
                     "Three times a week, evenings, an hour: MEKA books the sessions around your calendar and work, and rebooks a missed one.",
@@ -175,7 +175,7 @@ fun GoalsRoute(core: MekaCore) {
         if (view.goals.isEmpty()) item(key = "goals-empty") {
             Text(
                 "Say what you're working towards. Link habits and tasks to a goal and its progress counts itself.",
-                style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(vertical = MekaSpace.s),
+                style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(vertical = MekaSpace.xs),
             )
         }
         items(view.goals, key = { "g-${it.id}" }) { g ->
@@ -207,7 +207,7 @@ private fun HabitRow(
     val reduced = Meka.reducedMotion
     val bg by animateColorAsState(if (expanded) Meka.colors.surface else Color.Transparent, MekaMotion.appear(reduced), label = "habit-bg")
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(bg)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.s, vertical = MekaSpace.s), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
             TickCircle(h.doneToday, h.title, tick)
             Spacer(Modifier.width(MekaSpace.m))
             Column(
@@ -220,7 +220,7 @@ private fun HabitRow(
                 Row(Modifier.padding(top = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
                     if (h.weekly) WeekSlots(h.slotsFilled, h.weekTarget, h.week) else WeekDots(h.week)
                     if (h.streak >= 2) {
-                        Spacer(Modifier.width(MekaSpace.s))
+                        Spacer(Modifier.width(MekaSpace.xs))
                         RollingNumber(h.streak)
                         Text("-${h.streakUnit} streak", style = MekaType.caption, color = Meka.colors.textTertiary)
                     }
@@ -229,8 +229,8 @@ private fun HabitRow(
         }
         AnimatedVisibility(expanded, enter = unfold(), exit = fold()) {
             Column(
-                Modifier.fillMaxWidth().padding(start = MekaSpace.s, end = MekaSpace.s, bottom = MekaSpace.m),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+                Modifier.fillMaxWidth().padding(start = MekaSpace.xs, end = MekaSpace.xs, bottom = MekaSpace.m),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
             ) {
                 Chips("How often", GoalRules.TARGET_CHOICES.map { it.label to (it.perWeek == h.targetPerWeek) }) { i -> edit(GoalRules.TARGET_CHOICES[i].perWeek, null, null) }
                 Chips("When", GoalRules.TIMINGS.map { GoalRules.timingLabel(it) to (it == h.timing) }) { i -> edit(null, GoalRules.TIMINGS[i], null) }
@@ -309,7 +309,7 @@ private fun TickCircle(done: Boolean, title: String, onClick: () -> Unit) {
 @Composable
 private fun WeekDots(week: List<Boolean>) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp), // rhythm: ok (the week's dots are one 6 dp mark, not rows)
         modifier = Modifier.semantics { contentDescription = "${week.count { it }} days ticked this week" },
     ) {
         week.forEach { on ->
@@ -331,7 +331,7 @@ private fun WeekSlots(filled: Int, total: Int, week: List<Boolean>) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.semantics { contentDescription = "$filled of $total this week" },
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { // rhythm: ok (the slot rings are one mark)
             repeat(total) { i ->
                 val on = i < filled
                 val fill by animateColorAsState(if (on) Meka.colors.accent else Color.Transparent, MekaMotion.complete(reduced), label = "slot")
@@ -342,7 +342,7 @@ private fun WeekSlots(filled: Int, total: Int, week: List<Boolean>) {
             }
         }
         Spacer(Modifier.width(MekaSpace.xs))
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) { // rhythm: ok (the day ticks are one mark)
             week.forEach { on ->
                 Box(Modifier.size(4.dp).clip(CircleShape).background(if (on) Meka.colors.textTertiary else Color.Transparent))
             }
@@ -381,7 +381,7 @@ private fun GoalRow(
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(bg)) {
         Column(
             Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = if (expanded) "Hide actions" else "Show actions") { onToggle() }
-                .padding(horizontal = MekaSpace.s, vertical = MekaSpace.s)
+                .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs)
                 .semantics { contentDescription = "${g.title}, ${g.progressPct} percent, ${g.meta}" },
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -396,8 +396,8 @@ private fun GoalRow(
         }
         AnimatedVisibility(expanded, enter = unfold(), exit = fold()) {
             Column(
-                Modifier.fillMaxWidth().padding(start = MekaSpace.s, end = MekaSpace.s, bottom = MekaSpace.m),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+                Modifier.fillMaxWidth().padding(start = MekaSpace.xs, end = MekaSpace.xs, bottom = MekaSpace.m),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) {
                     if (!g.counted) {
@@ -478,10 +478,10 @@ private fun AddHabit(add: (String, Int, HabitTiming) -> Unit) {
     var perWeek by rememberSaveable { mutableStateOf(7) }
     var timing by rememberSaveable { mutableStateOf(HabitTiming.ANYTIME) }
     val submit = { if (title.isNotBlank()) { add(title, perWeek, timing); title = ""; perWeek = 7; timing = HabitTiming.ANYTIME } }
-    Column(Modifier.padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    Column(Modifier.padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Field("New habit…", title, { title = it }) { submit() }
         AnimatedVisibility(title.isNotBlank(), enter = unfold(), exit = fold()) {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Chips(null, GoalRules.TARGET_CHOICES.map { it.label to (it.perWeek == perWeek) }) { i -> perWeek = GoalRules.TARGET_CHOICES[i].perWeek }
                 Chips(null, GoalRules.TIMINGS.map { GoalRules.timingLabel(it) to (it == timing) }) { i -> timing = GoalRules.TIMINGS[i] }
                 Action("Add") { submit() }
@@ -497,10 +497,10 @@ private fun AddGoal(add: (String, String?, GoalHorizon) -> Unit) {
     var target by rememberSaveable { mutableStateOf("") }
     var horizon by rememberSaveable { mutableStateOf(GoalHorizon.MEDIUM) }
     val submit = { if (title.isNotBlank()) { add(title, target.ifBlank { null }, horizon); title = ""; target = ""; horizon = GoalHorizon.MEDIUM } }
-    Column(Modifier.padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    Column(Modifier.padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Field("New goal…", title, { title = it }) { submit() }
         AnimatedVisibility(title.isNotBlank(), enter = unfold(), exit = fold()) {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Field("What does done look like? (optional)", target, { target = it }) { submit() }
                 Chips(null, GoalRules.HORIZONS.map { GoalRules.horizonLabel(it) to (it == horizon) }) { i -> horizon = GoalRules.HORIZONS[i] }
                 Action("Add") { submit() }
