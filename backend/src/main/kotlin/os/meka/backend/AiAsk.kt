@@ -6,14 +6,15 @@ import os.meka.core.wire.AskCodec
  * Ask MEKA on the server (build plan V1, AI layer slice 3; ADR-006 §2–4). A keyed device sends a question with a short
  * picture of today; the server asks the small model once, with no tools, and answers with words and at most a few of
  * MEKA's own actions. The device checks every action again and shows each as a card that does nothing until Meka taps
- * it. Nothing of the question or answer is stored or logged; the meter counts the call under the feature `ask`.
+ * it. Nothing of the question or answer is stored or logged; the meter counts the call under the feature `ask`
+ * (`ask.talk` when the answer will be spoken).
  */
 class AskService(private val provider: LanguageModelProvider?) {
 
     fun ask(r: AskCodec.Request): AskCodec.Response {
         val p = provider ?: return AskCodec.Response(AskCodec.Response.OFF, reason = "MEKA's AI isn't set up")
         val outcome = p.complete(
-            ModelRequest(FEATURE, ModelTier.SMALL, if (r.voice) SYSTEM + "\n" + VOICE else SYSTEM, turns(r), MAX_TOKENS),
+            ModelRequest(if (r.voice) FEATURE_TALK else FEATURE, ModelTier.SMALL, if (r.voice) SYSTEM + "\n" + VOICE else SYSTEM, turns(r), MAX_TOKENS),
         )
         return when (outcome) {
             is ModelOutcome.Answered -> {
@@ -31,6 +32,8 @@ class AskService(private val provider: LanguageModelProvider?) {
 
     companion object {
         const val FEATURE = "ask"
+        /** A spoken answer (Talk to MEKA) is metered on its own, so Activity can count Talk's day. */
+        const val FEATURE_TALK = "ask.talk"
         const val MAX_TOKENS = 600
         val KINDS = setOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping")
 

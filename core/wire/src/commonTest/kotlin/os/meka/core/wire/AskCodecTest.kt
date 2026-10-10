@@ -96,4 +96,15 @@ class AskCodecTest {
         assertFailsWith<WireFormatException> { AskCodec.decodeStatus("""{"reason":"x"}""") }
         assertFailsWith<WireFormatException> { AskCodec.decodeStatus("not json") }
     }
+
+    @Test
+    fun theStatusReadsTodaysCallsPerFeatureAndSkipsBadEntries() {
+        val st = AskCodec.decodeStatus(
+            """{"state":"on","budget":{"spentCents":120,"budgetCents":2000,"level":"ok","day":"2026-10-10","today":[
+               {"feature":"ask.talk","calls":6,"microUsd":4200},{"feature":"ask","calls":2},
+               {"feature":"","calls":1},{"feature":"x","calls":"3"},{"calls":1},"junk"]}}""",
+        )
+        assertEquals(listOf(AskCodec.DayUse("ask.talk", 6, 4200), AskCodec.DayUse("ask", 2, 0)), st.today)
+        assertEquals(emptyList(), AskCodec.decodeStatus("""{"state":"on","budget":{"spentCents":1,"budgetCents":2,"level":"ok"}}""").today)
+    }
 }

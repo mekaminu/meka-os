@@ -116,20 +116,34 @@ data class AiUsage(val feature: String, val calls: Long, val inputTokens: Long, 
 interface AiUsageStore {
     fun add(month: String, feature: String, inputTokens: Int, outputTokens: Int, microUsd: Long)
     fun month(month: String): List<AiUsage>
+
+    /** The same count for one Europe/London [day] ("2026-10-10"), for Activity's daily line. */
+    fun addDay(day: String, feature: String, inputTokens: Int, outputTokens: Int, microUsd: Long) {}
+    fun day(day: String): List<AiUsage> = emptyList()
 }
 
 class InMemoryAiUsageStore : AiUsageStore {
     private val rows = mutableMapOf<Pair<String, String>, AiUsage>()
+    private val days = mutableMapOf<Pair<String, String>, AiUsage>()
 
-    @Synchronized
-    override fun add(month: String, feature: String, inputTokens: Int, outputTokens: Int, microUsd: Long) {
-        val k = month to feature
-        val r = rows[k] ?: AiUsage(feature, 0, 0, 0, 0)
-        rows[k] = r.copy(calls = r.calls + 1, inputTokens = r.inputTokens + inputTokens, outputTokens = r.outputTokens + outputTokens, microUsd = r.microUsd + microUsd)
+    private fun MutableMap<Pair<String, String>, AiUsage>.bump(k: Pair<String, String>, inputTokens: Int, outputTokens: Int, microUsd: Long) {
+        val r = this[k] ?: AiUsage(k.second, 0, 0, 0, 0)
+        this[k] = r.copy(calls = r.calls + 1, inputTokens = r.inputTokens + inputTokens, outputTokens = r.outputTokens + outputTokens, microUsd = r.microUsd + microUsd)
     }
 
     @Synchronized
+    override fun add(month: String, feature: String, inputTokens: Int, outputTokens: Int, microUsd: Long) =
+        rows.bump(month to feature, inputTokens, outputTokens, microUsd)
+
+    @Synchronized
     override fun month(month: String): List<AiUsage> = rows.filterKeys { it.first == month }.values.sortedBy { it.feature }
+
+    @Synchronized
+    override fun addDay(day: String, feature: String, inputTokens: Int, outputTokens: Int, microUsd: Long) =
+        days.bump(day to feature, inputTokens, outputTokens, microUsd)
+
+    @Synchronized
+    override fun day(day: String): List<AiUsage> = days.filterKeys { it.first == day }.values.sortedBy { it.feature }
 }
 
 class PostgresAiUsageStore(private val ds: DataSource) : AiUsageStore {
@@ -153,6 +167,26 @@ class PostgresAiUsageStore(private val ds: DataSource) : AiUsageStore {
             st.executeQuery().use { rs -> buildList { while (rs.next()) add(AiUsage(rs.getString(1), rs.getLong(2), rs.getLong(3), rs.getLong(4), rs.getLong(5))) } }
         }
     }
+    override fun addDay(day: String, feature: String, inputTokens: Int, outputTokens: Int, microUsd: Long) = ds.connection.use { c ->
+        c.prepareStatement(
+            """INSERT INTO ai_usage_day(day, feature, calls, input_tokens, output_tokens, micro_usd) VALUES (?,?,1,?,?,?)
+               ON CONFLICT (day, feature) DO UPDATE SET calls = ai_usage_day.calls + 1,
+                 input_tokens = ai_usage_day.input_tokens + EXCLUDED.input_tokens,
+                 output_tokens = ai_usage_day.output_tokens + EXCLUDED.output_tokens,
+                 micro_usd = ai_usage_day.micro_usd + EXCLUDED.micro_usd, updated_at = now()""",
+        ).use {
+            it.setString(1, day); it.setString(2, feature); it.setLong(3, inputTokens.toLong()); it.setLong(4, outputTokens.toLong()); it.setLong(5, microUsd)
+            it.executeUpdate()
+        }
+        Unit
+    }
+
+    override fun day(day: String): List<AiUsage> = ds.connection.use { c ->
+        c.prepareStatement("SELECT feature, calls, input_tokens, output_tokens, micro_usd FROM ai_usage_day WHERE day = ? ORDER BY feature").use { st ->
+            st.setString(1, day)
+            st.executeQuery().use { rs -> buildList { while (rs.next()) add(AiUsage(rs.getString(1), rs.getLong(2), rs.getLong(3), rs.getLong(4), rs.getLong(5))) } }
+        }
+    }
 }
 
 /**
@@ -167,7 +201,14 @@ class AiBudget(
 ) {
     enum class Level(val wire: String) { OK("ok"), ALERT("alert"), OVER("over") }
 
-    data class State(val month: String, val spentMicroUsd: Long, val budgetMicroUsd: Long, val level: Level, val byFeature: List<AiUsage>) {
+    /**
+     * [day] and [today]: the Europe/London day and its calls per feature, for Activity's daily count. Sent as
+     * micro-dollars too, since a day's few calls are often under a cent.
+     */
+    data class State(
+        val month: String, val spentMicroUsd: Long, val budgetMicroUsd: Long, val level: Level, val byFeature: List<AiUsage>,
+        val day: String = "", val today: List<AiUsage> = emptyList(),
+    ) {
         fun toJson(): JsonObject = buildJsonObject {
             put("month", month)
             put("spentCents", spentMicroUsd / 10_000)
@@ -176,12 +217,19 @@ class AiBudget(
             putJsonArray("features") {
                 byFeature.forEach { u -> addJsonObject { put("feature", u.feature); put("calls", u.calls); put("cents", u.microUsd / 10_000) } }
             }
+            if (day.isNotEmpty()) put("day", day)
+            putJsonArray("today") {
+                today.forEach { u -> addJsonObject { put("feature", u.feature); put("calls", u.calls); put("microUsd", u.microUsd) } }
+            }
         }
     }
 
     private val alerted = mutableSetOf<Pair<String, Level>>()
 
     fun month(): String = Instant.ofEpochMilli(nowMs()).atOffset(ZoneOffset.UTC).let { "%04d-%02d".format(it.year, it.monthValue) }
+
+    /** The household's day (Europe/London), so "today" in Activity turns over at Meka's midnight. */
+    fun day(): String = Instant.ofEpochMilli(nowMs()).atZone(UK).toLocalDate().toString()
 
     fun state(): State {
         val m = month()
@@ -192,13 +240,17 @@ class AiBudget(
             spent * 10 >= monthlyMicroUsd * 7 -> Level.ALERT
             else -> Level.OK
         }
-        return State(m, spent, monthlyMicroUsd, level, rows)
+        val d = day()
+        return State(m, spent, monthlyMicroUsd, level, rows, d, runCatching { store.day(d) }.getOrDefault(emptyList()))
     }
 
     /** Counts a call against its feature and raises the 70 % / 100 % alert once per month each. */
     fun record(feature: String, model: String, inputTokens: Int, outputTokens: Int) {
         val m = month()
-        store.add(m, feature, inputTokens, outputTokens, ModelPrices.costMicroUsd(model, inputTokens, outputTokens))
+        val cost = ModelPrices.costMicroUsd(model, inputTokens, outputTokens)
+        store.add(m, feature, inputTokens, outputTokens, cost)
+        // The daily count is only for Activity: a failure there never stops the budget's meter.
+        runCatching { store.addDay(day(), feature, inputTokens, outputTokens, cost) }
         val s = state()
         if (s.level != Level.OK) {
             val first = synchronized(alerted) { alerted.add(m to s.level) }
@@ -209,6 +261,7 @@ class AiBudget(
     companion object {
         /** MEKA's share of the $40/month Anthropic cap (shared with Kestrel) unless MEKA_AI_BUDGET_USD says otherwise. */
         const val DEFAULT_USD = 20
+        private val UK: java.time.ZoneId = java.time.ZoneId.of("Europe/London")
 
         fun usdFromEnv(): Long = (System.getenv("MEKA_AI_BUDGET_USD")?.trim()?.toLongOrNull()?.takeIf { it in 0..1000 } ?: DEFAULT_USD.toLong()) * 1_000_000
     }

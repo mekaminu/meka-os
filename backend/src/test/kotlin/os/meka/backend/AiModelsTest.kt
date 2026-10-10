@@ -183,6 +183,27 @@ class AiModelsTest {
     }
 
     @Test
+    fun theStatusCountsTodayByFeatureOnLondonsDay() {
+        val (_, budget, _) = setup()
+        now = 1_791_673_800_000L // 2026-10-10 23:10 UTC = 2026-10-11 00:10 in London
+        budget.record("ask.talk", "claude-haiku-9", 1000, 200)
+        budget.record("ask.talk", "claude-haiku-9", 1000, 200)
+        budget.record("ask", "claude-haiku-9", 1000, 200)
+        val s = budget.state()
+        assertEquals("2026-10-11", s.day)
+        assertEquals(listOf("ask" to 1L, "ask.talk" to 2L), s.today.map { it.feature to it.calls })
+        val today = s.toJson()["today"]!!.jsonArray.map { it.jsonObject }
+        assertEquals("ask.talk", today[1]["feature"]!!.jsonPrimitive.content)
+        assertEquals(2, today[1]["calls"]!!.jsonPrimitive.int)
+        assertEquals(2 * ModelPrices.costMicroUsd("claude-haiku-9", 1000, 200), today[1]["microUsd"]!!.jsonPrimitive.content.toLong())
+        assertEquals("2026-10-11", s.toJson()["day"]!!.jsonPrimitive.content)
+        // The next London day starts again; the month keeps counting.
+        now += 24 * 3_600_000L
+        assertTrue(budget.state().today.isEmpty())
+        assertEquals(3, budget.state().byFeature.sumOf { it.calls })
+    }
+
+    @Test
     fun theUsageTableIsMeteredInPostgres() {
         val url = System.getenv("MEKA_TEST_DB_URL") ?: return
         com.zaxxer.hikari.HikariDataSource(com.zaxxer.hikari.HikariConfig().apply {
@@ -199,6 +220,10 @@ class AiModelsTest {
                 listOf(AiUsage("ask", 2, 150, 15, 225), AiUsage("extract.email", 1, 1, 1, 6)),
                 store.month("1999-01"),
             )
+            ds.connection.use { c -> c.createStatement().execute("DELETE FROM ai_usage_day WHERE day = '1999-01-02'") }
+            store.addDay("1999-01-02", "ask.talk", 100, 10, 150)
+            store.addDay("1999-01-02", "ask.talk", 50, 5, 75)
+            assertEquals(listOf(AiUsage("ask.talk", 2, 150, 15, 225)), store.day("1999-01-02"))
         }
     }
 }

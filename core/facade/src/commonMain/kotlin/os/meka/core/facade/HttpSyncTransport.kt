@@ -86,7 +86,11 @@ sealed class AskReply {
 }
 
 /** What the server says about MEKA's AI (`POST /v1/ai/status`): never the key. Budget fields are null on an older server. */
-data class AiStatusReply(val state: String, val reason: String?, val spentCents: Long?, val budgetCents: Long?, val level: String?)
+/** [today]: the household day's AI calls per feature (Activity's daily count); empty from an older server. */
+data class AiStatusReply(
+    val state: String, val reason: String?, val spentCents: Long?, val budgetCents: Long?, val level: String?,
+    val today: List<os.meka.core.domain.AiDayUse> = emptyList(),
+)
 
 /** Ask MEKA (V1 AI layer, slice 3), available once the device is connected. */
 interface AiApi {
@@ -431,7 +435,10 @@ class HttpSyncTransport(
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/status")
         }
         val st = AskCodec.decodeStatus(resp.bodyAsText())
-        return AiStatusReply(st.state, st.reason, st.spentCents, st.budgetCents, st.level)
+        return AiStatusReply(
+            st.state, st.reason, st.spentCents, st.budgetCents, st.level,
+            st.today.map { os.meka.core.domain.AiDayUse(it.feature, it.calls, it.microUsd) },
+        )
     }
 
     override suspend fun messageRequest(request: os.meka.core.wire.MessageRequestCodec.Request): os.meka.core.wire.MessageRequestCodec.Response {

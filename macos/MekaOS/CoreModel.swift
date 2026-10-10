@@ -1174,10 +1174,15 @@ final class CoreModel {
     /// before the first clip. Kept in memory only.
     private(set) var voiceTimingLine: String?
 
+    /// MEKA's AI today ("MEKA's AI today · Talk 6 · Ask 2 · 3¢"), from the server's day count; nil when nothing was
+    /// asked today or the server can't say. Only a String crosses back.
+    private(set) var aiTodayLine: String?
+
     func refreshVoiceUsage() async {
-        guard let core, !signedOut else { voiceUsageLine = nil; voiceTimingLine = nil; return }
+        guard let core, !signedOut else { voiceUsageLine = nil; voiceTimingLine = nil; aiTodayLine = nil; return }
         voiceTimingLine = (try? await core.voiceTimingLine()) ?? nil
         voiceUsageLine = (try? await core.voiceUsageLine()) ?? nil
+        aiTodayLine = (try? await core.aiTodayLine()) ?? nil
     }
 
     /// The voice picker (MEKA's voices, then the Mac's own), nil until the server answers. Only the view crosses back.

@@ -177,18 +177,34 @@ object AskCodec {
         putJsonArray("actions") {}
     }.toString()
 
-    /** The server's AI status (`POST /v1/ai/status`): on/off/failing, why, and the month's spend when it meters. */
-    data class Status(val state: String, val reason: String?, val spentCents: Long?, val budgetCents: Long?, val level: String?)
+    /** One feature's calls on the household's day ("ask.talk" · 6 calls · 4,200 micro-dollars). */
+    data class DayUse(val feature: String, val calls: Long, val microUsd: Long)
 
     /**
-     * Reads `{"state", "reason"?, "budget": {"spentCents", "budgetCents", "level"}?}` (the status carries no wire
-     * version: it is a small read-only answer, and unknown fields are ignored).
+     * The server's AI status (`POST /v1/ai/status`): on/off/failing, why, and the month's spend when it meters;
+     * [today] is the day's calls per feature (empty from an older server or when nothing was asked).
+     */
+    data class Status(
+        val state: String, val reason: String?, val spentCents: Long?, val budgetCents: Long?, val level: String?,
+        val today: List<DayUse> = emptyList(),
+    )
+
+    /**
+     * Reads `{"state", "reason"?, "budget": {"spentCents", "budgetCents", "level", "today": [{"feature", "calls",
+     * "microUsd"}]?}?}` (the status carries no wire version: it is a small read-only answer, and unknown fields are
+     * ignored; a malformed day entry is skipped, never the whole status).
      */
     fun decodeStatus(body: String): Status = wrap("ai status") {
         val o = json.parseToJsonElement(body).jsonObject
         val b = o["budget"] as? JsonObject
         fun JsonObject.long(k: String): Long? = (this[k] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull
-        Status(o.str("state"), o.optStr("reason"), b?.long("spentCents"), b?.long("budgetCents"), b?.optStr("level"))
+        val today = (b?.get("today") as? JsonArray).orEmpty().mapNotNull { e ->
+            val d = e as? JsonObject ?: return@mapNotNull null
+            val feature = d.optStr("feature")?.takeIf { it.isNotBlank() && it.length <= 40 } ?: return@mapNotNull null
+            val calls = d.long("calls")?.takeIf { it >= 0 } ?: return@mapNotNull null
+            DayUse(feature, calls, d.long("microUsd")?.coerceAtLeast(0) ?: 0)
+        }
+        Status(o.str("state"), o.optStr("reason"), b?.long("spentCents"), b?.long("budgetCents"), b?.optStr("level"), today)
     }
 
     private fun actionsOf(o: JsonObject): List<Action> =

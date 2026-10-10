@@ -785,6 +785,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(SpeechRules.shared.seconds(ms: 1_834), "1.8 s")
     }
 
+    /// Activity's daily count of MEKA's AI (default assistant item): Talk first, then Ask, then what MEKA read, and the cost.
+    func testAiTodayLineReachesSwift() {
+        let rules = AiTodayRules.shared
+        XCTAssertNil(rules.line(today: []))
+        let today = [AiDayUse(feature: "ask", calls: 2, microUsd: 6_000), AiDayUse(feature: "ask.talk", calls: 6, microUsd: 12_000)]
+        XCTAssertEqual(rules.line(today: today), "MEKA's AI today · Talk 6 · Ask 2 · 2¢")
+        XCTAssertEqual(rules.cost(microUsd: 1_200_000), "$1.20")
+    }
+
     /// N-a-week habits (Fold review 2026-10-09 13:45, item 1): never "Behind" for a day off, the week's goes as slots.
     func testWeeklyHabitPaceReachesSwift() {
         let rules = GoalRules.shared

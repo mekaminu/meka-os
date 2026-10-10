@@ -94,9 +94,11 @@ class AiAskTest {
         assertTrue(last.endsWith("Question: and the CR to Friday"), last)
         assertEquals(1, sent.turns.count { "<today" in it.text })
         assertTrue("answer will be spoken" in sent.system)
+        assertEquals(AskService.FEATURE_TALK, sent.feature) // Talk is counted on its own for Activity's day
         // A one-off question is the single turn it always was, without the voice line.
         AskService(model).ask(request)
         assertEquals(1, model.asked.last().turns.size)
+        assertEquals(AskService.FEATURE, model.asked.last().feature)
         assertFalse("answer will be spoken" in model.asked.last().system)
     }
 

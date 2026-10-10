@@ -2695,6 +2695,17 @@ class MekaCore(
         return os.meka.core.domain.AskRules.statusView(r.state, r.reason, r.spentCents, r.budgetCents, r.level)
     }
 
+    /**
+     * Activity's daily count of MEKA's AI ([os.meka.core.domain.AiTodayRules.line]): "MEKA's AI today · Talk 6 · Ask 2
+     * · 3¢", from the server's status. Null when nothing was asked today, the device isn't connected or the server
+     * can't be reached. Never throws.
+     */
+    suspend fun aiTodayLine(): String? {
+        val api = aiApi ?: return null
+        val r = try { api.aiStatus() } catch (e: CancellationException) { throw e } catch (e: Exception) { return null } ?: return null
+        return os.meka.core.domain.AiTodayRules.line(r.today)
+    }
+
     /** An earlier exchange trimmed to what the server accepts (question, answer, at most three confirmed lines). */
     private fun sendable(t: os.meka.core.domain.TalkTurn) = os.meka.core.domain.TalkTurn(
         os.meka.core.domain.AskRules.question(t.question) ?: "…",

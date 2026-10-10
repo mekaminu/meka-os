@@ -347,6 +347,21 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun activitysDailyCountComesFromTheServersDay() = runTest {
+        val c = core()
+        // Nothing asked today (or an older server that doesn't count days): no line.
+        assertEquals(null, c.aiTodayLine())
+        server.status = AiStatusReply(
+            "on", null, 120, 2000, "ok",
+            listOf(os.meka.core.domain.AiDayUse("ask", 2, 6_000), os.meka.core.domain.AiDayUse("ask.talk", 6, 12_000)),
+        )
+        assertEquals("MEKA's AI today · Talk 6 · Ask 2 · 2¢", c.aiTodayLine())
+        server.down = true
+        assertEquals(null, c.aiTodayLine())
+        assertEquals(null, core(transport = null).aiTodayLine())
+    }
+
+    @Test
     fun talkingSendsTheConversationAndASpokenYesDoesWhatATapWould() = runTest {
         val c = core()
         val id = c.addTask("Book dentist")

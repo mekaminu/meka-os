@@ -54,7 +54,7 @@ import os.meka.android.designsystem.sharedTitleInPane
  * what is still as MEKA left it). Opened from Today's header.
  *
  * Motion: the pane springs up (MekaPane); day sections stagger in 40 ms apart; Undo gives a light haptic and the
- * row's line cross-fades to "Undone at 09:12"; MEKA's voice lines (how quickly it answered on this phone lately, the
+ * row's line cross-fades to "Undone at 09:12"; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this phone lately, the
  * month's characters) fade in once known. Reduced motion: cross-fades.
  */
 @Composable
@@ -68,9 +68,12 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit) {
     var voiceLine by remember { mutableStateOf<String?>(null) }
     // How quickly MEKA's voice answered on this phone lately ("Time to MEKA's voice · 1.8 s · 0.9 s · late"); null: none yet.
     var timingLine by remember { mutableStateOf<String?>(null) }
+    // MEKA's AI today ("MEKA's AI today · Talk 6 · Ask 2 · 3¢"); null: nothing asked today or the server can't say.
+    var aiLine by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         timingLine = runCatching { core.voiceTimingLine() }.getOrNull()
         voiceLine = runCatching { core.voiceUsageLine() }.getOrNull()
+        aiLine = runCatching { core.aiTodayLine() }.getOrNull()
     }
     val reduced = Meka.reducedMotion
 
@@ -86,6 +89,13 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit) {
             if (view.isEmpty) view.emptyLine else "What MEKA did and why. ${view.weekLine}.",
             style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)),
         )
+        AnimatedContent(
+            targetState = aiLine,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "activity-ai-today",
+        ) { line ->
+            if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
+        }
         AnimatedContent(
             targetState = voiceLine,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
