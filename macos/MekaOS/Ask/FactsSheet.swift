@@ -1,15 +1,17 @@
 @preconcurrency import MekaKit
+import AppKit
 import SwiftUI
 
 /// Ask → More → What MEKA knows on the Mac (facts page, slice 1), like the Fold's FactsPane: the facts Meka keeps so
 /// MEKA can answer from them (the car's reg, the GP, sizes, the utilities), one typed line at a time ("Car reg: AB12
 /// CDE"; the same name again changes it), in groups, each with "Keep from AI" (or "Let MEKA use it") and Remove. A line
 /// holding a password, PIN or card, bank or ID number is turned away: the line under the field says why in the accent
-/// and the words stay to fix. Only Strings and a Bool cross to the core.
+/// and the words stay to fix. Copy (slice 3, filling forms) puts the fact alone on the pasteboard and the line under
+/// the field says "Copied Car reg · AB12 CDE"; nothing is sent anywhere. Only Strings and a Bool cross to the core.
 ///
 /// Motion: the sheet scale-fades (system); the summary, the field's line and a row's "Kept from AI" cross-fade; groups
-/// stagger in; rows arrive, move and leave on the expand spring; Add gives a light haptic, a refusal, Keep from AI and
-/// Remove a tick. Reduce Motion: cross-fades.
+/// stagger in; rows arrive, move and leave on the expand spring; Add and Copy give a light haptic, a refusal, Keep from
+/// AI and Remove a tick. Reduce Motion: cross-fades.
 struct FactsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -68,6 +70,15 @@ struct FactsSheet: View {
         .background(palette.surface)
     }
 
+    /// Copy: the fact alone goes on the pasteboard (the row's own String) and the field's line says what was copied.
+    private func copy(_ row: FactRow) {
+        let board = NSPasteboard.general
+        board.clearContents()
+        board.setString(row.copyText, forType: .string)
+        MekaHaptics.light()
+        said = CoreModel.FactSaid(line: FactRules.shared.copiedLine(row: row), refused: false)
+    }
+
     @ViewBuilder
     private func part(_ group: FactGroupView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -77,6 +88,7 @@ struct FactsSheet: View {
                 .padding(.top, MekaSpace.xs)
             ForEach(group.rows, id: \.id) { row in
                 FactRowView(row: row, palette: palette, reduceMotion: reduceMotion,
+                            onCopy: { copy(row) },
                             onAi: { model.setFactAi(row.id, use: row.keptFromAi) },
                             onRemove: { model.removeFact(row.id) })
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
@@ -89,6 +101,7 @@ private struct FactRowView: View {
     let row: FactRow
     let palette: MekaPalette
     let reduceMotion: Bool
+    let onCopy: () -> Void
     let onAi: () -> Void
     let onRemove: () -> Void
 
@@ -106,6 +119,11 @@ private struct FactRowView: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel(row.spoken)
             Spacer()
+            Button(FactRules.shared.COPY_BUTTON, action: onCopy)
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.caption)
+                .foregroundStyle(palette.accent)
+                .accessibilityLabel(row.copySpoken)
             Button(row.aiButton, action: onAi)
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.caption)

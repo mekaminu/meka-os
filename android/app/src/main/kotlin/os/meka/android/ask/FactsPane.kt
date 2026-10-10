@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -43,6 +44,7 @@ import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
+import os.meka.android.work.LiveReplies
 import os.meka.core.domain.FactAdded
 import os.meka.core.domain.FactRow
 import os.meka.core.domain.FactRules
@@ -53,18 +55,20 @@ import os.meka.core.facade.MekaCore
  * car's reg, the GP, sizes, the utilities — one typed line at a time ("Car reg: AB12 CDE"; the same name again changes
  * it), shown in groups, each with "Keep from AI" (or "Let MEKA use it") and Remove. A line holding a password, PIN or
  * card, bank or ID number is turned away: the line under the field says why, lit in the accent, and the words stay to
- * fix.
+ * fix. Copy (slice 3, filling forms) puts the fact alone on the clipboard ("AB12 CDE") and the line under the field
+ * says "Copied Car reg · AB12 CDE"; nothing is sent anywhere.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary, the line under the field and
  * a row's "Kept from AI" cross-fade (the field's line blends to the accent when refused, with a tick haptic; Add gives
- * a light haptic, Keep from AI / Let MEKA use it and Remove a tick); groups and rows stagger in 40 ms apart and arrive,
- * move and leave with the list's item motion. Reduced motion: cross-fades.
+ * and Copy a light haptic, Keep from AI / Let MEKA use it and Remove a tick); groups and rows stagger in 40 ms apart
+ * and arrive, move and leave with the list's item motion. Reduced motion: cross-fades.
  */
 @Composable
 fun FactsPane(core: MekaCore, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
+    val context = LocalContext.current
     val v by core.factsView.collectAsState()
     var text by remember { mutableStateOf("") }
     var said by remember { mutableStateOf<FactAdded?>(null) }
@@ -119,6 +123,11 @@ fun FactsPane(core: MekaCore, onClose: () -> Unit) {
             itemsIndexed(group.rows, key = { _, r -> "fact-${r.id}" }) { i, r ->
                 FactRowView(
                     r, Modifier.animateItem().appear(rememberAppearance(base + 1 + i)),
+                    onCopy = {
+                        haptics.light()
+                        LiveReplies.copyText(context, r.copyText, label = "MEKA fact")
+                        said = FactAdded(FactRules.copiedLine(r), refused = false)
+                    },
                     onAi = {
                         haptics.tick()
                         scope.launch { runCatching { core.setFactAi(r.id, use = r.keptFromAi) } }
@@ -139,7 +148,7 @@ fun FactsPane(core: MekaCore, onClose: () -> Unit) {
 }
 
 @Composable
-private fun FactRowView(row: FactRow, modifier: Modifier, onAi: () -> Unit, onRemove: () -> Unit) {
+private fun FactRowView(row: FactRow, modifier: Modifier, onCopy: () -> Unit, onAi: () -> Unit, onRemove: () -> Unit) {
     val reduced = Meka.reducedMotion
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
@@ -155,6 +164,13 @@ private fun FactRowView(row: FactRow, modifier: Modifier, onAi: () -> Unit, onRe
                 l?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
             }
         }
+        Text(
+            FactRules.COPY_BUTTON, style = MekaType.caption, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                .clickable(role = Role.Button, onClick = onCopy)
+                .semantics { contentDescription = row.copySpoken }
+                .padding(MekaSpace.xs),
+        )
         Text(
             row.aiButton, style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))

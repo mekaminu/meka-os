@@ -159,4 +159,23 @@ class LifeFactsTest {
         sync()
         assertEquals(listOf("Shoe size: 10", "GP: Dr Patel"), fFold.all().map { "${it.label}: ${it.value}" })
     }
+
+    @Test
+    fun copyPutsTheFactAloneOnTheClipboardAndSaysWhatWasCopied() {
+        fFold.add("Car reg: AB12 CDE")
+        world.clock.advance(1_000)
+        fFold.add("Home address: 14 Long Lane, Biggleswade, Bedfordshire, SG18 8AA, United Kingdom")
+        val rows = fFold.view().groups.flatMap { it.rows }
+        val reg = rows.first { it.label == "Car reg" }
+        assertEquals("AB12 CDE", reg.copyText)
+        assertEquals("Copy Car reg", reg.copySpoken)
+        assertEquals("Copied Car reg · AB12 CDE", FactRules.copiedLine(reg))
+        val home = rows.first { it.label == "Home address" }
+        assertEquals("14 Long Lane, Biggleswade, Bedfordshire, SG18 8AA, United Kingdom", home.copyText)
+        assertEquals("Copied Home address · 14 Long Lane, Biggleswade, Bedfordshire,…", FactRules.copiedLine(home))
+        // A fact kept from AI copies the same way (the clipboard is Meka's own).
+        assertTrue(fFold.setAi(reg.id, use = false))
+        val kept = fFold.view().groups.flatMap { it.rows }.first { it.label == "Car reg" }
+        assertEquals("AB12 CDE", kept.copyText)
+    }
 }

@@ -98,9 +98,9 @@ object LiveReplies {
         return runCatching { context.startActivity(launch) }.isSuccess
     }
 
-    fun copyText(context: Context, text: String) {
+    fun copyText(context: Context, text: String, label: String = "MEKA reply") {
         val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
-        clipboard.setPrimaryClip(ClipData.newPlainText("MEKA reply", text))
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
     }
 
     /** The notification's free-text Reply (the phone's own actions first, then the ones it offers watches). */

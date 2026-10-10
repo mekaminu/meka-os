@@ -60,6 +60,10 @@ data class FactRow(
     /** "Keep from AI" / "Let MEKA use it". */
     val aiButton: String,
     val spoken: String,
+    /** What Copy puts on the clipboard: the fact alone ("AB12 CDE"), ready to paste into a form (slice 3). */
+    val copyText: String,
+    /** The Copy button's spoken label: "Copy Car reg". */
+    val copySpoken: String,
 )
 
 /** One group of the page with its facts, oldest first. */
@@ -99,6 +103,10 @@ object FactRules {
     const val KEPT_LINE = "Kept from AI"
     const val KEEP_BUTTON = "Keep from AI"
     const val USE_BUTTON = "Let MEKA use it"
+    /** The row's button that puts the fact on the clipboard (filling forms, slice 3). */
+    const val COPY_BUTTON = "Copy"
+    /** How much of the fact the "Copied …" line shows before "…". */
+    const val COPIED_SHOWN = 40
 
     /** "my car reg is …", "car reg: …", "car reg - …", "car reg = …". The first separator wins. */
     private val SEPARATORS = listOf(":", " - ", " – ", " — ", " = ", " is ", " are ")
@@ -181,7 +189,20 @@ object FactRules {
         if (f.aiOff) KEPT_LINE else null,
         if (f.aiOff) USE_BUTTON else KEEP_BUTTON,
         "${f.label}: ${f.value}" + if (f.aiOff) ". Kept from AI" else "",
+        f.value,
+        "$COPY_BUTTON ${f.label}",
     )
+
+    /**
+     * The line under the field once a fact is copied: "Copied Car reg · AB12 CDE". A long
+     * fact is cut at [COPIED_SHOWN] characters with "…" (the clipboard still gets all of it). Copying is the same for a
+     * fact kept from AI: the clipboard is Meka's own, nothing goes to MEKA's AI or the server.
+     */
+    fun copiedLine(row: FactRow): String {
+        val v = row.copyText.trim()
+        val shown = if (v.length > COPIED_SHOWN) v.take(COPIED_SHOWN).trimEnd() + "…" else v
+        return "Copied ${row.label} · $shown"
+    }
 
     fun view(facts: List<LifeFact>): FactsView {
         if (facts.isEmpty()) return FactsView.EMPTY

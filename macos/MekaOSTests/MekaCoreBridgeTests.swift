@@ -1467,6 +1467,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(view.groups.map(\.label), ["Car"])
         XCTAssertEqual(view.groups.first?.rows.first?.aiButton, rules.KEEP_BUTTON)
         XCTAssertEqual(FactsView.companion.EMPTY.summary, rules.EMPTY_SUMMARY)
+        // Slice 3: Copy puts the fact alone on the pasteboard and says what was copied.
+        if let row = view.groups.first?.rows.first {
+            XCTAssertEqual(row.copyText, "AB12 CDE")
+            XCTAssertEqual(row.copySpoken, "Copy Car reg")
+            XCTAssertEqual(rules.copiedLine(row: row), "Copied Car reg · AB12 CDE")
+        } else {
+            XCTFail("the Car group has its row")
+        }
+        XCTAssertEqual(rules.COPY_BUTTON, "Copy")
     }
 
     func testEmergencyCardReachesSwift() {
