@@ -1202,6 +1202,13 @@ final class CoreModel {
 
     /// Ticks or unticks a habit for today (light haptic; the circle pops).
     func setHabitDone(_ id: String, _ done: Bool) { MekaHaptics.light(); run { try await $0.setHabitDone(id: id, done: done) } }
+    /// A habit's dot on the watch face (Calm Today, slice 2): ticks or unticks it, and the undo bar says which habit.
+    func tickHabitDot(_ dot: HabitDot) {
+        let id = dot.id
+        let was = dot.done
+        setHabitDone(id, !was)
+        offerEventUndo(HabitDotRules.shared.tickedLine(dot: dot, nowDone: !was), .habit(id, was))
+    }
     func setHabitTarget(_ id: String, _ perWeek: Int32) { run { try await $0.setHabitTarget(id: id, perWeek: perWeek) } }
     func setHabitTiming(_ id: String, _ timing: HabitTiming) { run { try await $0.setHabitTiming(id: id, timing: timing) } }
     func setHabitMinutes(_ id: String, _ minutes: Int32) { run { try await $0.setHabitMinutes(id: id, minutes: minutes) } }
@@ -1686,6 +1693,7 @@ final class CoreModel {
         case .reminder(let id, let m): run { try await $0.setEventReminder(eventId: id, minutes: m) }
         case .leaveBy(let id, let m): run { try await $0.setEventLeaveBy(eventId: id, travelMinutes: m) }
         case .lastLeaveBy(let id): run { try await $0.undoLastLeaveBy(eventId: id) }
+        case .habit(let id, let done): run { try await $0.setHabitDone(id: id, done: done) }
         case .matchResult(let saved): run { try await $0.undoMatchResult(saved: saved) }
         case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }
         case .request(let done): run { _ = try await $0.undoRequest(done: done) }
@@ -1949,6 +1957,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case leaveBy(String, Int32)
         /// "Leave by 09:15 · as last time" on a club fixture: its travel time and alarm come off again.
         case lastLeaveBy(String)
+        /// A habit ticked from its dot on the watch face: back to how it was.
+        case habit(String, Bool)
         /// "How did it go?" on a club fixture: what was kept before comes back.
         case matchResult(MatchSaved)
         /// Done / Tomorrow from the Needs you stack.

@@ -15,6 +15,8 @@ data class HabitChip(
     val tickLabel: String,
     /** "1/2" for an N-a-week habit (this week's goes); null for a daily one. */
     val count: String? = null,
+    /** The whole name (the watch face's dots say it on the undo bar: Calm Today, slice 2). */
+    val name: String = title,
 )
 
 /**
@@ -35,6 +37,7 @@ object HabitChipRules {
             behind = !h.doneToday && h.pace == HabitPace.BEHIND,
             tickLabel = NeedsYouMeanwhileRules.tickLabel(h),
             count = h.countLabel,
+            name = h.title.trim(),
         )
     }
 

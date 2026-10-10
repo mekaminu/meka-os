@@ -782,6 +782,25 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.weeklyMeta(pace: .onTrack, done: 1, weekTarget: 2, today: monday + 2), "1 of 2 this week")
     }
 
+    /// Calm Today, slice 2: today's habits as dots on the watch face; a click near one ticks it, the undo bar names it.
+    func testHabitDotsReachSwift() {
+        let rules = HabitDotRules.shared
+        let chips = [
+            HabitChip(id: "s", title: "Stretch", done: false, behind: false, tickLabel: "Tick Stretch for today", count: nil, name: "Stretch"),
+            HabitChip(id: "r", title: "Read", done: true, behind: false, tickLabel: "Untick Read for today", count: nil, name: "Read"),
+        ]
+        let dots = rules.dots(chips: chips)
+        XCTAssertEqual(dots.map(\.degrees), [168, 192])
+        XCTAssertFalse(rules.chipsShown(faceShown: true, chips: chips))
+        XCTAssertTrue(rules.chipsShown(faceShown: false, chips: chips))
+        let size = Int32(DayRingHeader.shared.WIDE_DP)
+        let place = rules.place(dot: dots[0], sizeDp: size)
+        XCTAssertEqual(rules.hit(dots: dots, xDp: place.xDp, yDp: place.yDp, sizeDp: size)?.id, "s")
+        XCTAssertNil(rules.hit(dots: dots, xDp: 0, yDp: 0, sizeDp: size))
+        XCTAssertEqual(rules.tickedLine(dot: dots[0], nowDone: true), "Stretch · done today")
+        XCTAssertEqual(rules.spokenLine(dots: dots), " Habits: Stretch, not yet; Read, done.")
+    }
+
     /// A hand-made gym habit is offered booking instead of a second "Add Gym" (Fold review 2026-10-09 13:45, item 2).
     func testGymBookOfferReachesSwift() {
         let rules = SessionRules.shared

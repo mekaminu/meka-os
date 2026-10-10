@@ -153,6 +153,8 @@ import os.meka.core.domain.ReviewCard
 import os.meka.android.review.ReviewCardTile
 import os.meka.core.domain.GoalsView
 import os.meka.core.domain.HabitChipRules
+import os.meka.core.domain.HabitDot
+import os.meka.core.domain.HabitDotRules
 import kotlinx.coroutines.flow.StateFlow
 import os.meka.core.sync.SyncStatus
 import java.time.Instant
@@ -349,7 +351,7 @@ fun TodayRoute(
                         openSearch = { showSearch = true },
                         brief = brief, openBrief = { showBrief = true }, briefOpen = showBrief,
                         reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } },
-                        openEvent = { eventOpen = it }, eventHandlers = eventHandlers,
+                        openEvent = { eventOpen = it }, eventHandlers = eventHandlers, undo = eventUndo,
                         now = if (twoPane) null else nowView, nowHandlers = nowHandlers,
                         upNext = upNextView, upNextHandlers = upNextHandlers,
                         ticker = ticker, tickerMode = tickerMode, core = core,
@@ -542,13 +544,16 @@ data class TodayActions(
 internal fun TodayHeaderRow(
     face: WatchFace?, compact: Boolean, play: DayRingPlay, played: () -> Unit,
     onOpenFace: (() -> Unit)? = null,
+    /** Today's habits as dots on the face (Calm Today, slice 2); a tap on one ticks it. */
+    dots: List<HabitDot> = emptyList(),
+    onTick: ((HabitDot) -> Unit)? = null,
     left: @Composable () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) { left() }
         if (face != null) {
             WatchFaceDial(face, play, played, Modifier.padding(start = MekaSpace.m),
-                size = DayRingHeader.sizeDp(compact).dp, onOpen = onOpenFace)
+                size = DayRingHeader.sizeDp(compact).dp, onOpen = onOpenFace, dots = dots, onTick = onTick)
         }
     }
 }
@@ -581,6 +586,8 @@ private fun TodayPane(
     openDayRing: () -> Unit = {},
     /** The capture bar's mic (Talk): Ask, already listening. Null: no mic. */
     onTalk: (() -> Unit)? = null,
+    /** The screen's undo bar: a habit ticked on the watch face says which one, with Undo. */
+    undo: EventUndo? = null,
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
@@ -611,6 +618,10 @@ private fun TodayPane(
     // Today's habits as chips under the ticker (Fold review 2026-10-09 07:26, item 3); the tiles strip drops its habits tile.
     val goalsNow by actions.goals.collectAsState()
     val habitChips = remember(goalsNow) { HabitChipRules.build(goalsNow) }
+    // Calm Today, slice 2: they sit on the watch face as dots; the chips only when the face is hidden or they don't fit.
+    val faceShown = today.timeline.dateLabel.isNotEmpty()
+    val habitDots = remember(habitChips, faceShown) { if (faceShown) HabitDotRules.dots(habitChips) else emptyList() }
+    val chipsShown = HabitDotRules.chipsShown(faceShown, habitChips)
     val stripTiles = remember(today.dayTiles) { HabitChipRules.stripTiles(today.dayTiles) }
     val chipHaptics = rememberMekaHaptics()
     val chipScope = rememberCoroutineScope()
@@ -639,6 +650,13 @@ private fun TodayPane(
                         play = ringPlay, played = ringPlayed,
                         // Tap the face: the full 24-hour Day ring as a sheet, its arcs opening their events and tasks.
                         onOpenFace = openDayRing,
+                        dots = if (core != null) habitDots else emptyList(),
+                        onTick = { dot ->
+                            chipHaptics.light()
+                            val was = dot.done
+                            chipScope.launch { runCatching { core?.setHabitDone(dot.id, !was) } }
+                            undo?.show(HabitDotRules.tickedLine(dot, !was)) { core?.setHabitDone(dot.id, was) }
+                        },
                     ) {
                     // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
                     GreetingText(greeting(), if (now == null) ringPlay else DayRingPlay.STILL)
@@ -699,8 +717,8 @@ private fun TodayPane(
                     if (core != null && TickerRules.shown(tickerMode, ticker)) {
                         NewsTickerStrip(core, ticker, tickerMode, Modifier.padding(top = MekaSpace.s), openStory = openStory, openMatch = openMatch)
                     }
-                    // Today's habits: compact chips to tick, hidden when there are none.
-                    if (core != null && habitChips.isNotEmpty()) {
+                    // Today's habits: compact chips to tick, only when the face can't carry them as dots.
+                    if (core != null && chipsShown) {
                         HabitChipsRow(
                             habitChips, play,
                             tick = { chip ->

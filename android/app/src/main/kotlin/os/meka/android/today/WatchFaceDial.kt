@@ -1,7 +1,14 @@
 package os.meka.android.today
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -15,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -29,10 +37,16 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -41,6 +55,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import kotlinx.coroutines.delay
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.MotionMath
@@ -55,9 +70,12 @@ import os.meka.core.domain.DayRingLiveMode
 import os.meka.core.domain.DayRingLook
 import os.meka.core.domain.DayRingPlay
 import os.meka.core.domain.DayTile
+import os.meka.core.domain.HabitDot
+import os.meka.core.domain.HabitDotRules
 import os.meka.core.domain.WatchFace
 import os.meka.core.domain.WatchFaceRules
 import java.util.TimeZone
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -72,6 +90,11 @@ const val WATCH_FACE_TAG = "watch-face"
  * the Day ring did: the rim draws itself round from 12, the markers fade in behind it, the arcs grow clockwise one
  * after another and the hands sweep round from 12 to the time. Then it lives: the rim breathes, the hour's shimmer
  * runs, the second hand sweeps. Tapping it opens the full 24-hour Day ring ([onOpen]). Screen readers hear one line.
+ *
+ * Calm Today, slice 2: today's habits sit on the face as small dots just inside the markers, centred on 6 o'clock
+ * ([dots], [HabitDotRules]): hollow until done (behind for the week: a full-accent ring), filled once ticked. A tap on
+ * a dot ticks it ([onTick]: the fill floods in and the dot pops on the complete spring; unticking empties it at once);
+ * anywhere else on the face opens the day. Screen readers get one action per habit.
  */
 @Composable
 fun WatchFaceDial(
@@ -87,6 +110,8 @@ fun WatchFaceDial(
      */
     bedside: Boolean = false,
     quiet: Boolean = false,
+    dots: List<HabitDot> = emptyList(),
+    onTick: ((HabitDot) -> Unit)? = null,
 ) {
     val sizeDp = size.value.toInt()
     val expressive = Meka.expressiveMotion
@@ -105,13 +130,49 @@ fun WatchFaceDial(
     val needle = MotionMath.dayRingNeedle(elapsed, play, expressive)
     val haptics = rememberMekaHaptics()
     val open by rememberUpdatedState(onOpen)
+    val tickDot by rememberUpdatedState(onTick)
+    val reduced = Meka.reducedMotion
+    // Each dot's fill: floods in on the complete spring when ticked here (already done shows full), empties at once.
+    val fills = dots.map { d ->
+        key(d.id) {
+            animateFloatAsState(if (d.done) 1f else 0f, if (d.done && !reduced) MekaMotion.complete<Float>(false) else snap<Float>(), label = "habit-dot")
+        }
+    }
+    val press = remember { MutableInteractionSource() }
+    val tapping = if (dots.isEmpty() || onTick == null) {
+        // Presses in like anything tappable (the theme's press indication), with a tick haptic.
+        if (onOpen == null) Modifier else Modifier.clickable(role = Role.Button) { haptics.tick(); open?.invoke() }
+    } else {
+        // With habit dots: a tap near a dot ticks it, anywhere else opens the day; the face presses in either way.
+        Modifier.indication(press, LocalIndication.current).pointerInput(dots, sizeDp) {
+            detectTapGestures(
+                onPress = { at ->
+                    val p = PressInteraction.Press(at)
+                    press.emit(p)
+                    press.emit(if (tryAwaitRelease()) PressInteraction.Release(p) else PressInteraction.Cancel(p))
+                },
+                onTap = { at ->
+                    val x = (at.x - this.size.width / 2f).toDp().value
+                    val y = (at.y - this.size.height / 2f).toDp().value
+                    val dot = HabitDotRules.hit(dots, x, y, sizeDp)
+                    if (dot != null) tickDot?.invoke(dot) else open?.let { haptics.tick(); it() }
+                },
+            )
+        }
+    }
     Box(
         modifier.size(size)
-            // Presses in like anything tappable (the theme's press indication), with a tick haptic.
-            .then(if (onOpen == null) Modifier else Modifier.clickable(role = Role.Button) { haptics.tick(); open?.invoke() })
+            .then(tapping)
             .clearAndSetSemantics {
                 testTag = WATCH_FACE_TAG
-                contentDescription = face.spokenLine
+                contentDescription = face.spokenLine + HabitDotRules.spokenLine(dots)
+                if (dots.isNotEmpty() && onTick != null) {
+                    if (onOpen != null) {
+                        role = Role.Button
+                        onClick(label = "Open your whole day") { open?.invoke(); true }
+                    }
+                    customActions = dots.map { d -> CustomAccessibilityAction(d.tickLabel) { tickDot?.invoke(d); true } }
+                }
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -149,6 +210,23 @@ fun WatchFaceDial(
                 val alpha = WatchFaceRules.arcAlpha(arc.kind)
                 drawArc(colors.accent.copy(alpha = colors.accent.alpha * alpha), arc.startDegrees - 90f, arc.sweepDegrees * grow,
                     false, topLeft, arcSize, style = Stroke(if (arc.highlighted) rim * WatchFaceRules.HIGHLIGHT_WIDTH else rim, cap = StrokeCap.Butt))
+            }
+            // Today's habits: small dots inside the markers at the foot of the dial, coming up as the rim passes them.
+            dots.forEachIndexed { i, d ->
+                val shown = HabitDotRules.shown(mark, d.degrees)
+                if (shown <= 0f) return@forEachIndexed
+                val p = HabitDotRules.place(d, sizeDp)
+                val at = Offset(center.x + p.xDp.dp.toPx(), center.y + p.yDp.dp.toPx())
+                val r = p.radiusDp.dp.toPx()
+                val f = fills[i].value.coerceAtLeast(0f)
+                // The pop: the whole dot swells to 1.35 while the fill floods in, then settles.
+                val pop = 1f + (HabitDotRules.POP_SCALE - 1f) * sin(PI * f.coerceAtMost(1f)).toFloat()
+                scale(pop, at) {
+                    val ring = if (d.behind || f > 0f) 1f else HabitDotRules.OPEN_ALPHA
+                    drawCircle(colors.accent.copy(alpha = colors.accent.alpha * ring * shown), r, at,
+                        style = Stroke(HabitDotRules.RING_STROKE_DP.dp.toPx()))
+                    if (f > 0f) drawCircle(colors.accent.copy(alpha = colors.accent.alpha * shown), r * (f * 2f).coerceAtMost(1f), at)
+                }
             }
         }
         // The hands, the breathing rim, the shimmer and the second hand on a layer of their own.

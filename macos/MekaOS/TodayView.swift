@@ -153,12 +153,17 @@ struct TodayView: View {
                     // opening; a click opens the full 24-hour Day ring as a sheet.
                     if let today = model.today, !today.timeline.dateLabel.isEmpty {
                         WatchFaceView(face: today.watchFace, play: ringPlay ?? .still, played: { ringPlay = .still }, palette: palette,
-                                      size: CGFloat(DayRingHeader.shared.WIDE_DP), onOpen: { showDayRing = true })
+                                      size: CGFloat(DayRingHeader.shared.WIDE_DP), onOpen: { showDayRing = true },
+                                      // Today's habits as dots on the face (Calm Today, slice 2); a click on one ticks it.
+                                      dots: HabitDotRules.shared.dots(chips: HabitChipRules.shared.build(goals: model.goals)),
+                                      onTick: { model.tickHabitDot($0) })
                     }
                     }
-                    // Today's habits as chips to tick (Fold review 2026-10-09 07:26, item 3); none, no row.
+                    // Today's habits as chips to tick (Fold review 2026-10-09 07:26, item 3), only when the watch face
+                    // can't carry them as dots (Calm Today, slice 2: no day yet, or more than fit); none, no row.
                     let habitChips = HabitChipRules.shared.build(goals: model.goals)
-                    if !habitChips.isEmpty {
+                    let faceShown = !(model.today?.timeline.dateLabel.isEmpty ?? true)
+                    if HabitDotRules.shared.chipsShown(faceShown: faceShown, chips: habitChips) {
                         HabitChipsRow(chips: habitChips, palette: palette, play: play)
                             .padding(.top, MekaSpace.s)
                     }

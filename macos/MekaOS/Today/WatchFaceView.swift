@@ -8,6 +8,10 @@ import SwiftUI
 /// the Day ring did (the rim round from 12, the markers behind it, the arcs one after another, the hands sweeping from
 /// 12 to the time); then it lives (the rim breathes, the hour's shimmer runs, the second hand sweeps). A click opens
 /// the full 24-hour Day ring as a sheet. VoiceOver reads one line.
+///
+/// Calm Today, slice 2: today's habits sit on the face as small dots just inside the markers, centred on 6 o'clock
+/// (`HabitDotRules`), hollow until done; a click on a dot ticks it (`onTick`; the fill floods in and the dot pops on
+/// the complete spring, unticking empties it at once), anywhere else opens the day. VoiceOver gets one action per habit.
 struct WatchFaceView: View {
     let face: WatchFace
     let play: DayRingPlayback
@@ -15,6 +19,8 @@ struct WatchFaceView: View {
     let palette: MekaPalette
     var size: CGFloat = 150
     var onOpen: (() -> Void)? = nil
+    var dots: [HabitDot] = []
+    var onTick: ((HabitDot) -> Void)? = nil
     @Environment(\.mekaExpressiveMotion) private var expressive
     @State private var began = Date()
 
@@ -24,20 +30,34 @@ struct WatchFaceView: View {
             let elapsed = play == .still ? total : context.date.timeIntervalSince(began)
             let landed = play == .still || elapsed >= total
             dial(elapsed: elapsed)
+                .overlay(dotsLayer(mark: MotionMath.dayRingMark(elapsed: elapsed, play: play, expressive: expressive)))
                 .overlay(WatchFaceLiveLayer(face: face, landed: landed,
                                             needle: MotionMath.dayRingNeedle(elapsed: elapsed, play: play, expressive: expressive),
                                             palette: palette, size: size))
         }
         .frame(width: size, height: size)
         .contentShape(Circle())
-        .onTapGesture {
+        .onTapGesture(coordinateSpace: .local) { location in
+            // A click near a habit's dot ticks it; anywhere else opens the whole day.
+            if let onTick, let dot = HabitDotRules.shared.hit(dots: dots, xDp: Float(location.x - size / 2),
+                                                               yDp: Float(location.y - size / 2), sizeDp: Int32(size)) {
+                onTick(dot)
+                return
+            }
             guard let onOpen else { return }
             MekaHaptics.tick()
             onOpen()
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(face.spokenLine)
+        .accessibilityLabel(face.spokenLine + HabitDotRules.shared.spokenLine(dots: dots))
         .accessibilityAddTraits(onOpen == nil ? [] : .isButton)
+        .accessibilityActions {
+            if let onTick {
+                ForEach(dots, id: \.id) { dot in
+                    Button(dot.tickLabel) { onTick(dot) }
+                }
+            }
+        }
         .onAppear { began = Date() }
         .task(id: play) {
             guard play != .still else { return }
@@ -45,6 +65,22 @@ struct WatchFaceView: View {
             try? await Task.sleep(for: .seconds(total))
             played()
         }
+    }
+
+    /// Today's habits as dots inside the markers at the foot of the dial, coming up as the drawing rim passes them.
+    private func dotsLayer(mark: Double) -> some View {
+        let rules = HabitDotRules.shared
+        let sizeDp = Int32(size)
+        return ZStack {
+            ForEach(dots, id: \.id) { dot in
+                let place = rules.place(dot: dot, sizeDp: sizeDp)
+                HabitDotView(done: dot.done, behind: dot.behind, diameter: CGFloat(place.radiusDp * 2), palette: palette)
+                    .opacity(Double(rules.shown(mark: Float(mark), degrees: dot.degrees)))
+                    .position(x: size / 2 + CGFloat(place.xDp), y: size / 2 + CGFloat(place.yDp))
+            }
+        }
+        .frame(width: size, height: size)
+        .allowsHitTesting(false)
     }
 
     private func dial(elapsed: Double) -> some View {
@@ -287,5 +323,39 @@ struct DayRingSheet: View {
         .frame(minWidth: 460)
         .background(palette.background)
         .onAppear { if reduceMotion { play = .still } }
+    }
+}
+
+/// One habit's dot on the watch face (Calm Today, slice 2): a ring (the full accent when behind for the week, else
+/// quieter), filled with the accent once done. Ticking floods the fill in and pops the dot on the complete spring;
+/// unticking empties it at once; already done shows full. Reduced motion: at once.
+struct HabitDotView: View {
+    let done: Bool
+    let behind: Bool
+    let diameter: CGFloat
+    let palette: MekaPalette
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var popping = false
+
+    var body: some View {
+        let rules = HabitDotRules.shared
+        ZStack {
+            Circle()
+                .stroke(palette.accent.opacity(behind || done ? 1 : Double(rules.OPEN_ALPHA)), lineWidth: CGFloat(rules.RING_STROKE_DP))
+            Circle()
+                .fill(palette.accent)
+                .scaleEffect(done ? 1 : 0.001)
+                .animation(done && !reduceMotion ? MekaMotion.complete(reduced: false) : nil, value: done)
+        }
+        .frame(width: diameter, height: diameter)
+        .scaleEffect(popping ? CGFloat(rules.POP_SCALE) : 1)
+        .onChange(of: done) { _, now in
+            guard now, !reduceMotion else { return }
+            withAnimation(MekaMotion.complete(reduced: false)) { popping = true }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(160))
+                withAnimation(MekaMotion.complete(reduced: false)) { popping = false }
+            }
+        }
     }
 }
