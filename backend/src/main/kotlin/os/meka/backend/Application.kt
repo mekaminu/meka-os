@@ -44,6 +44,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeldMessageFields
+import os.meka.core.domain.WorkFields
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.ServerOpStore
 import os.meka.core.sync.SyncService
@@ -170,6 +171,10 @@ fun Application.mekaSync(
                         it.opId in resp.acknowledged
                 }.map { it.entityId }.distinct()
                 if (dismissed.isNotEmpty()) background { voice.assistant.forgetRecordings(who.householdId, dismissed) }
+                // "Keep callers' recordings" changed: what is now too old goes at once, not at the next hourly sweep.
+                if (req.ops.any { it.entityType == EntityTypes.CONTEXT_MODE && it.field == WorkFields.RECORDING_DAYS && it.opId in resp.acknowledged }) {
+                    background { runCatching { voice.assistant.sweepRecordings(who.householdId) } }
+                }
             }
             call.respondText(WireCodec.encodePushResponse(resp), ContentType.Application.Json)
         }
@@ -410,6 +415,8 @@ fun Application.mekaSync(
                         // Amazon Transcribe on the kept recording, Twilio's words the fallback (8d i).
                         runCatching { voice.assistant.transcribeKept(provider, event, kept) }
                             .onFailure { log.warn("transcript not settled: ${it::class.simpleName}") }
+                        // "Don't keep": the recording was held only for Transcribe.
+                        runCatching { voice.assistant.releaseUnkept(provider, event) }
                         runCatching { provider.deleteRecording(rec) }
                     }
                 }
@@ -592,6 +599,7 @@ fun main(args: Array<String>) {
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
             val speech = speechFromEnv(ds)?.also { startSpeechWarm(it) }
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech)
+            voice?.let { startRecordingSweep(it.assistant) }
             val ai = aiFromEnv(ds)?.also { startAiCheck(it.health) }
             embeddedServer(Netty, port = port) {
                 mekaSync(
@@ -674,6 +682,22 @@ fun startAiCheck(ai: AiHealth) {
         Thread.sleep(20_000)
         val s = runCatching { ai.status() }.getOrNull() ?: return@start
         System.err.println("ai: ${s.state.wire}" + (s.reason?.let { " ($it)" } ?: ""))
+    }
+}
+
+/**
+ * "Keep callers' recordings" (call assistant polish 8c): hourly, recordings older than Meka's choice are deleted from
+ * MEKA's bucket ([CallAssistant.sweepRecordings]). Logs only a count.
+ */
+fun startRecordingSweep(assistant: CallAssistant, periodMs: Long = 60 * 60_000L) {
+    Thread.ofVirtual().name("recording-sweep").start {
+        Thread.sleep(60_000)
+        while (true) {
+            runCatching { assistant.sweepRecordings() }
+                .onSuccess { n -> if (n > 0) System.err.println("recordings swept: $n") }
+                .onFailure { System.err.println("recording sweep failed: ${it::class.simpleName}") }
+            Thread.sleep(periodMs)
+        }
     }
 }
 

@@ -24,6 +24,11 @@ object WorkFields {
      * comma-separated, ascending, past days dropped on each write. Text, last writer wins. Added 2026-10-09.
      */
     const val HOME_DAYS = "workHomeDays"
+    /**
+     * How long MEKA's server keeps callers' recordings (call assistant polish 8c, "Keep callers' recordings"): days as
+     * Int64, one of [VoiceRecordingRules.KEEP_CHOICES] (0 = don't keep). Last writer wins; absent = 30. Added 2026-10-10.
+     */
+    const val RECORDING_DAYS = "callRecordingDays"
 }
 
 /** Local wall-clock position in the week: ISO day of week (1 = Monday … 7 = Sunday) and minute of day (0 … 1439). */
@@ -267,6 +272,8 @@ data class WorkModeState(
     val holiday: String? = null,
     /** The call assistant's switch ([CallScreeningRules]): screen calls during work. Off until Meka turns it on. */
     val callAssistant: Boolean = false,
+    /** How long callers' recordings are kept ([VoiceRecordingRules.keepDays]): 7, 30 or 0 (don't keep). */
+    val recordingDays: Int = VoiceRecordingRules.DEFAULT_KEEP_DAYS,
 ) {
     /** The switch overrides the schedule: offer "Back to schedule". */
     val switchedManually: Boolean get() = source == WorkSource.MANUAL
@@ -470,7 +477,7 @@ class WorkMode(
 
     /** [epochDay] is today's local date; with it, bank holidays are days off. */
     fun state(clock: LocalClock, epochDay: Long? = null): WorkModeState =
-        WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, holidays()).copy(callAssistant = callAssistant())
+        WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, holidays()).copy(callAssistant = callAssistant(), recordingDays = recordingDays())
 
     /** Work hours for Today and the Calendar tab, with today's manual "Work off" (a sick day) taken into account. */
     fun hours(clock: LocalClock, epochDay: Long): WorkHours = WorkHours.of(state(clock, epochDay), holidays(), epochDay, homeDays(epochDay))
@@ -500,6 +507,19 @@ class WorkMode(
     fun setCallAssistant(on: Boolean) {
         if (callAssistant() == on && replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_ASSISTANT) != null) return
         replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.CALL_ASSISTANT to on.fv()))
+    }
+
+    /** How long callers' recordings are kept, in days (synced; [VoiceRecordingRules.keepDays]). */
+    fun recordingDays(): Int =
+        VoiceRecordingRules.keepDays(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.RECORDING_DAYS)?.longOrNull)
+
+    /** "Keep callers' recordings": one of [VoiceRecordingRules.KEEP_CHOICES]. Returns whether anything changed. */
+    fun setRecordingDays(days: Int): Boolean {
+        require(days in VoiceRecordingRules.KEEP_CHOICES) { "keep 7 or 30 days, or 0 for don't keep" }
+        val stored = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.RECORDING_DAYS)
+        if (stored != null && recordingDays() == days) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.RECORDING_DAYS to days.toLong().fv()))
+        return true
     }
 
     fun setSchedule(s: WorkSchedule) {

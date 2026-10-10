@@ -73,6 +73,9 @@ class VoiceRecordingTest {
         assertNull(VoiceRecordingRules.key("", id))
         assertNull(VoiceRecordingRules.key("hh", "hXYZ"))
         assertFalse(VoiceRecordingRules.isHeldId("h" + "0".repeat(15)))
+        assertEquals("voice/hh/", VoiceRecordingRules.householdPrefix("hh"))
+        assertNull(VoiceRecordingRules.householdPrefix("hh/other"))
+        assertNull(VoiceRecordingRules.householdPrefix(""))
     }
 
     @Test
@@ -84,5 +87,54 @@ class VoiceRecordingTest {
         assertEquals(0.5f, VoiceRecordingRules.fraction(20_000, 40_000))
         assertEquals(1f, VoiceRecordingRules.fraction(50_000, 40_000))
         assertEquals(0f, VoiceRecordingRules.fraction(5_000, 0))
+    }
+
+    @Test
+    fun keepCallersRecordingsChoosesHowLongPlayIsOffered() {
+        val r = VoiceRecordingRules
+        assertEquals(listOf(7, 30, 0), r.KEEP_CHOICES)
+        assertEquals(listOf("7 days", "30 days", "Don't keep"), r.KEEP_CHOICES.map(r::choiceLabel))
+        // Absent or anything unexpected reads as the default, 30 days.
+        assertEquals(30, r.keepDays(null))
+        assertEquals(30, r.keepDays(30))
+        assertEquals(30, r.keepDays(12))
+        assertEquals(7, r.keepDays(7))
+        assertEquals(0, r.keepDays(0))
+        assertEquals(r.KEEP_MS, r.keepMs(30))
+        assertEquals(r.PRIVACY, r.privacy(30))
+        assertTrue(r.privacy(7).contains("for 7 days"))
+        assertTrue(r.privacy(0).contains("aren't kept"))
+        assertTrue(r.settingLine(7).startsWith("Kept 7 days"))
+        assertTrue(r.settingLine(0).startsWith("Not kept"))
+        val day = 24 * 60 * 60_000L
+        assertTrue(r.playable(CaptureKind.VOICE_MESSAGE, true, false, now - 7 * day + 1, now, keepDays = 7))
+        assertFalse(r.playable(CaptureKind.VOICE_MESSAGE, true, false, now - 7 * day, now, keepDays = 7))
+        assertFalse(r.playable(CaptureKind.VOICE_MESSAGE, true, false, now, now, keepDays = 0))
+        // The server's sweep: older than the choice, or (don't keep) anything not still being transcribed.
+        assertEquals(now - 7 * day, r.sweepBeforeMs(7, now))
+        assertEquals(now - r.KEEP_MS, r.sweepBeforeMs(30, now))
+        assertEquals(now - r.UNKEPT_GRACE_MS, r.sweepBeforeMs(0, now))
+    }
+
+    @Test
+    fun theChoiceSyncsWithWorkModeAndTheSummaryFollowsIt() {
+        val work = WorkMode(replica, nowMs = { now })
+        assertEquals(30, work.recordingDays())
+        // The summary keeps a message 7 days ([HeldMessages.RETENTION_MS]), so 7 or 30 days look alike here; the
+        // server's sweep is where 7 days differs (backend VoiceRecordingsTest).
+        serverWrites("CA1", audio = true, atMs = now - 6 * 24 * 60 * 60_000L)
+        serverWrites("CA2", audio = true)
+        fun playable() = held.items().filter { it.hasAudio }.map { it.id }.toSet()
+        assertEquals(setOf(CallAssistantRules.heldId("twilio", "CA1"), CallAssistantRules.heldId("twilio", "CA2")), playable())
+        assertTrue(work.setRecordingDays(7))
+        assertFalse(work.setRecordingDays(7)) // nothing changes the second time
+        assertEquals(7, work.recordingDays())
+        assertEquals(2, playable().size)
+        assertTrue(work.setRecordingDays(0))
+        assertTrue(playable().isEmpty())
+        assertEquals(0, work.state(LocalClock(1, 600)).recordingDays)
+        assertTrue(work.setRecordingDays(30))
+        assertEquals(2, playable().size)
+        kotlin.test.assertFailsWith<IllegalArgumentException> { work.setRecordingDays(14) }
     }
 }

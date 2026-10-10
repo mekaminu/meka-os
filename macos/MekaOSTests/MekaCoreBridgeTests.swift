@@ -1071,6 +1071,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(rules.PRIVACY.contains("30 days"))
     }
 
+    func testKeepCallersRecordingsReachesSwift() {
+        // Call assistant polish 8c: the "Keep callers' recordings" choice, its line and the summary's note.
+        let rules = VoiceRecordingRules.shared
+        XCTAssertEqual(rules.DEFAULT_KEEP_DAYS, 30)
+        XCTAssertEqual(rules.KEEP_CHOICES.map { $0.int32Value }, [7, 30, 0])
+        XCTAssertEqual(rules.choiceLabel(days: 0), "Don't keep")
+        XCTAssertEqual(rules.choiceLabel(days: 7), "7 days")
+        XCTAssertTrue(rules.settingLine(days: 0).hasPrefix("Not kept"))
+        XCTAssertEqual(rules.privacy(days: 30), rules.PRIVACY)
+        XCTAssertTrue(rules.privacy(days: 7).contains("7 days"))
+    }
+
     func testSignInLineReachesSwift() {
         // Reliability first, item 2: the line Today shows for a sign-in on its last day, with Reconnect.
         let line = SignInLine(text: "Google sign-in ends tomorrow at 14:05 · Reconnect", detail: SignInRules.shared.PRODUCTION_HINT,

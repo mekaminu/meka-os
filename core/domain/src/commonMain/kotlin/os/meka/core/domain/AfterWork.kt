@@ -428,6 +428,10 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
     /** What is waiting: not cleared, from the last [RETENTION_MS], oldest first, at most [Capture.MAX_ITEMS]. */
     fun items(): List<CapturedItem> {
         val cutoff = nowMs() - RETENTION_MS
+        // "Keep callers' recordings" (synced with Work mode): Play is offered only while the server still keeps one.
+        val keepDays = VoiceRecordingRules.keepDays(
+            replica.entity(EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID)?.get(WorkFields.RECORDING_DAYS)?.longOrNull,
+        )
         return replica.entities(EntityTypes.HELD_MESSAGE).mapNotNull { e ->
             if (e[HeldMessageFields.CLEARED].boolOrNull == true) return@mapNotNull null
             val at = e[HeldMessageFields.AT].longOrNull ?: return@mapNotNull null
@@ -447,7 +451,7 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
                     nowMs() - at < CallAssistantRules.TRANSCRIBING_MS,
                 noTranscript = noTranscript,
                 hasAudio = VoiceRecordingRules.playable(
-                    kind, e[HeldMessageFields.AUDIO].boolOrNull == true, cleared = false, atMs = at, nowMs = nowMs(),
+                    kind, e[HeldMessageFields.AUDIO].boolOrNull == true, cleared = false, atMs = at, nowMs = nowMs(), keepDays = keepDays,
                 ),
             )
         }.sortedWith(compareBy<CapturedItem>({ it.atMs }, { it.id })).takeLast(Capture.MAX_ITEMS)

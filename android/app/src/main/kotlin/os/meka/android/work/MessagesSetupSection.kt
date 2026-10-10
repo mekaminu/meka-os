@@ -150,7 +150,7 @@ private fun SetupRow(row: MessagesSetupRow, onPrivate: (Boolean) -> Unit, onMode
                     Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
                 }
             }
-            Chip(
+            SettingChip(
                 if (row.private) "Kept from AI" else "Keep from AI", row.private,
                 spoken = MessagesSetupRules.privateLine(row.name, row.private),
             ) { onPrivate(!row.private) }
@@ -158,7 +158,7 @@ private fun SetupRow(row: MessagesSetupRow, onPrivate: (Boolean) -> Unit, onMode
         if (onMode != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 GroupMode.entries.forEach { m ->
-                    Chip(m.label, row.mode == m, spoken = "${row.name}: ${m.label}") { if (row.mode != m) onMode(m) }
+                    SettingChip(m.label, row.mode == m, spoken = "${row.name}: ${m.label}") { if (row.mode != m) onMode(m) }
                 }
             }
         }
@@ -167,7 +167,7 @@ private fun SetupRow(row: MessagesSetupRow, onPrivate: (Boolean) -> Unit, onMode
 
 /** A pill whose colour blends to the accent when on, with the caller's tick haptic (motion catalogue: Messages setup). */
 @Composable
-private fun Chip(label: String, on: Boolean, spoken: String, onClick: () -> Unit) {
+internal fun SettingChip(label: String, on: Boolean, spoken: String, onClick: () -> Unit) {
     val reduced = Meka.reducedMotion
     val bg by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "setup-chip-bg")
     val fg by animateColorAsState(if (on) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "setup-chip-fg")

@@ -24,6 +24,8 @@ struct WorkSheet: View {
 
     private var atWork: Bool { model.work?.atWork ?? false }
     private var callAssistant: Bool { model.work?.callAssistant ?? false }
+    private var recordingDays: Int { Int(model.work?.recordingDays ?? Int32(VoiceRecordingRules.shared.DEFAULT_KEEP_DAYS)) }
+    private static let keepChoices = [7, 30, 0]
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
@@ -85,6 +87,7 @@ struct WorkSheet: View {
             Text("Test it: ring \(CallScreeningRules.shared.ASSISTANT_NUMBER) from another phone")
                 .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .staggeredAppear(3)
+            keepRecordings.staggeredAppear(3)
             spam.staggeredAppear(3)
 
             Text("During work your Fold holds WhatsApp, texts and missed calls and shows them after, grouped by person, urgent first. \"Urgent\" or \"emergency\" alerts you straight away. The summary shows here too, in Needs you. MEKA never replies or marks anything read.")
@@ -106,6 +109,25 @@ struct WorkSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.switchedManually)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.callAssistant)
         .onAppear(perform: load)
+    }
+
+    /// "Keep callers' recordings" (call assistant polish 8c): 7 days · 30 days · Don't keep, synced with the Fold. A
+    /// segmented control (tick haptic); the line under it cross-fades.
+    private var keepRecordings: some View {
+        let rules = VoiceRecordingRules.shared
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(rules.SETTING_TITLE).font(MekaType.itemMeta)
+            Picker(rules.SETTING_TITLE, selection: Binding(get: { recordingDays }, set: { model.setRecordingDays($0) })) {
+                ForEach(Self.keepChoices, id: \.self) { d in Text(rules.choiceLabel(days: Int32(d))).tag(d) }
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            Text(rules.settingLine(days: Int32(recordingDays)))
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.opacity)
+        }
+        .padding(.top, MekaSpace.xs)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: recordingDays)
     }
 
     /// Spam protection (call assistant polish 8b): the synced block list; the Fold does the blocking. Rows fade and

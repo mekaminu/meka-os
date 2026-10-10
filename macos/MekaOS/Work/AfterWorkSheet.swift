@@ -34,7 +34,7 @@ struct AfterWorkSheet: View {
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             if summary?.people.contains(where: { $0.items.contains(where: { $0.hasAudio }) }) == true {
-                Text(VoiceRecordingRules.shared.PRIVACY)
+                Text(VoiceRecordingRules.shared.privacy(days: model.work?.recordingDays ?? Int32(VoiceRecordingRules.shared.DEFAULT_KEEP_DAYS)))
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }

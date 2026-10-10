@@ -723,6 +723,13 @@ final class CoreModel {
     func workBackToSchedule() { run { try await $0.workBackToSchedule() } }
     /// The call assistant's one switch (synced; the Fold does the screening during work).
     func setCallAssistant(_ on: Bool) { MekaHaptics.tick(); run { try await $0.setCallAssistant(on: on) } }
+    /// "Keep callers' recordings" (call assistant polish 8c): 7 or 30 days, or 0 for don't keep. Synced; the server
+    /// deletes older recordings at once. Only an Int32 crosses to the core.
+    func setRecordingDays(_ days: Int) {
+        MekaHaptics.tick()
+        let d = Int32(days)
+        run { try await $0.setRecordingDays(days: d) }
+    }
 
     /// Saves work hours. Days are ISO (1 = Monday); minutes are local minutes of the day.
     func setWorkSchedule(days: Set<Int>, startMinute: Int, endMinute: Int, enabled: Bool) {

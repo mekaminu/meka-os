@@ -18,14 +18,22 @@ interface RecordingStore {
     fun get(key: String): ByteArray?
     /** Deletes the recording for good (every version of it). Deleting one that isn't there is fine. */
     fun delete(key: String)
+    /** What is stored under [prefix] (a household's `voice/<household>/`) and when each was stored, for the sweep. */
+    fun list(prefix: String): List<StoredRecording>
 }
 
+/** One stored object: its key and when it was stored (epoch ms). */
+data class StoredRecording(val key: String, val storedAtMs: Long)
+
 /** Tests, and a server without a bucket configured. */
-class InMemoryRecordingStore : RecordingStore {
+class InMemoryRecordingStore(private val now: () -> Long = System::currentTimeMillis) : RecordingStore {
     val objects = ConcurrentHashMap<String, ByteArray>()
-    override fun put(key: String, bytes: ByteArray) { objects[key] = bytes.copyOf() }
+    private val storedAt = ConcurrentHashMap<String, Long>()
+    override fun put(key: String, bytes: ByteArray) { objects[key] = bytes.copyOf(); storedAt[key] = now() }
     override fun get(key: String): ByteArray? = objects[key]?.copyOf()
-    override fun delete(key: String) { objects.remove(key) }
+    override fun delete(key: String) { objects.remove(key); storedAt.remove(key) }
+    override fun list(prefix: String): List<StoredRecording> =
+        objects.keys.filter { it.startsWith(prefix) }.sorted().map { StoredRecording(it, storedAt[it] ?: 0L) }
 }
 
 /**
@@ -60,5 +68,11 @@ class S3RecordingStore(private val bucket: String) : RecordingStore {
             return
         }
         for (v in ids) s3.deleteObject { it.bucket(bucket).key(key).versionId(v) }
+    }
+
+    override fun list(prefix: String): List<StoredRecording> {
+        require(prefix.startsWith(VoiceRecordingRules.PREFIX))
+        return s3.listObjectsV2Paginator { it.bucket(bucket).prefix(prefix) }.contents()
+            .map { StoredRecording(it.key(), it.lastModified().toEpochMilli()) }
     }
 }

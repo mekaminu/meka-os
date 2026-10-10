@@ -278,6 +278,10 @@ class CallAssistant(
         if (!exists(hh, id) || cleared(hh, id)) return false
         val key = VoiceRecordingRules.key(hh, id) ?: return false
         if (fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.AUDIO) == FieldValue.Bool(true)) return true
+        // "Don't keep": held only while Amazon Transcribe hears it ([releaseUnkept] deletes it after); without
+        // Transcribe there's nothing to hold it for.
+        val keep = keepDays(hh) > 0
+        if (!keep && transcriber == null) return false
         val audio = provider.fetchRecording(recording)?.takeIf { it.isNotEmpty() && it.size <= VoiceRecordingRules.MAX_BYTES } ?: return false
         store.put(key, audio)
         // Done may have been tapped while it was being fetched: then it isn't kept after all.
@@ -285,13 +289,53 @@ class CallAssistant(
             store.delete(key)
             return false
         }
-        if (write(hh, id, mapOf(HeldMessageFields.AUDIO to true.fv()))) runCatching { onWritten(hh) }
+        // Play is offered only for a recording that is kept.
+        if (keep && write(hh, id, mapOf(HeldMessageFields.AUDIO to true.fv()))) runCatching { onWritten(hh) }
         return true
     }
 
     /**
-     * A household's recording for a device to play: only a voice message that isn't cleared, was kept and is under 30
-     * days old ([VoiceRecordingRules.playable]). Null otherwise, including for another household's message.
+     * After [transcribeKept]: with "Don't keep" ([keepDays] 0), the recording held for Transcribe is deleted now (and
+     * any transcript left beside it). Nothing happens for a kept one.
+     */
+    fun releaseUnkept(provider: VoiceProvider, event: VoiceEvent.Transcribed) {
+        val store = recordings ?: return
+        val hh = household() ?: return
+        if (keepDays(hh) > 0) return
+        val id = CallAssistantRules.heldId(provider.id, event.callId)
+        if (fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.AUDIO) == FieldValue.Bool(true)) return
+        VoiceRecordingRules.key(hh, id)?.let { key ->
+            runCatching { store.delete(key) }
+            runCatching { store.delete(Transcripts.outputKey(key)) }
+        }
+    }
+
+    /**
+     * "Keep callers' recordings" (polish 8c): deletes whatever under the household's `voice/` is older than the
+     * synced choice ([VoiceRecordingRules.sweepBeforeMs]); run hourly and whenever the choice changes. The bucket's
+     * 30-day lifecycle rule stays the backstop. Returns how many objects were deleted.
+     */
+    fun sweepRecordings(householdId: String? = household()): Int {
+        val store = recordings ?: return 0
+        val hh = householdId ?: return 0
+        val prefix = VoiceRecordingRules.householdPrefix(hh) ?: return 0
+        val before = VoiceRecordingRules.sweepBeforeMs(keepDays(hh), now())
+        var n = 0
+        for (o in store.list(prefix)) if (o.storedAtMs < before) {
+            if (runCatching { store.delete(o.key) }.isSuccess) n++
+        }
+        return n
+    }
+
+    /** The synced "Keep callers' recordings" choice, in days (0 = don't keep). Unreadable reads as the default. */
+    private fun keepDays(hh: String): Int = runCatching {
+        VoiceRecordingRules.keepDays((fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.RECORDING_DAYS) as? FieldValue.Int64)?.value)
+    }.getOrDefault(VoiceRecordingRules.DEFAULT_KEEP_DAYS)
+
+    /**
+     * A household's recording for a device to play: only a voice message that isn't cleared, was kept and is younger
+     * than the "Keep callers' recordings" choice, 30 days by default ([VoiceRecordingRules.playable]). Null otherwise,
+     * including for another household's message.
      */
     fun recording(householdId: String, heldId: String): ByteArray? {
         val store = recordings ?: return null
@@ -302,6 +346,7 @@ class CallAssistant(
         val playable = VoiceRecordingRules.playable(
             kind, audio = field(HeldMessageFields.AUDIO) == FieldValue.Bool(true),
             cleared = field(HeldMessageFields.CLEARED) == FieldValue.Bool(true), atMs = at, nowMs = now(),
+            keepDays = keepDays(householdId),
         )
         return if (playable) store.get(key) else null
     }

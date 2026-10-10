@@ -1398,6 +1398,14 @@ class MekaCore(
     /** The call assistant's one switch (synced; the Fold screens calls during work while it is on). */
     suspend fun setCallAssistant(on: Boolean) = onCore { work.setCallAssistant(on); refresh() }
 
+    /**
+     * "Keep callers' recordings" (call assistant polish 8c): 7 or 30 days, or 0 for don't keep. Synced; MEKA's server
+     * deletes what is older at once and stops offering it, and the summary's ▶ Play follows. Other values are ignored.
+     */
+    suspend fun setRecordingDays(days: Int) = onCore {
+        if (days in os.meka.core.domain.VoiceRecordingRules.KEEP_CHOICES && work.setRecordingDays(days)) refresh()
+    }
+
     // ---- Spam call protection (call assistant polish 8b) ----
 
     /**

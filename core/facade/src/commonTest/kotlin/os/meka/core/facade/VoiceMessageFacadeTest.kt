@@ -87,4 +87,27 @@ class VoiceMessageFacadeTest {
         assertNull(c.voiceMessageAudio(kept))
         assertEquals(before, server.asked.size)
     }
+
+    @Test
+    fun dontKeepSyncsAndStopsOfferingPlay() = runTest {
+        val kept = serverWrites("CA1", audio = true)
+        server.audio[kept] = byteArrayOf(1, 2, 3)
+        val c = core()
+        c.syncNow()
+        assertEquals(30, c.workMode.value.recordingDays)
+        c.setRecordingDays(0)
+        assertEquals(0, c.workMode.value.recordingDays)
+        // Play goes from the summary and nothing is fetched.
+        assertTrue(c.afterWork.value.people.flatMap { it.items }.none { it.hasAudio })
+        assertNull(c.voiceMessageAudio(kept))
+        assertTrue(server.asked.isEmpty())
+        c.setRecordingDays(14) // not a choice: ignored
+        assertEquals(0, c.workMode.value.recordingDays)
+        c.syncNow()
+        // The choice reached the server, where the sweep and the playback check read it.
+        assertTrue(ops.after("hh", 0, 1000).any { it.op.field == os.meka.core.domain.WorkFields.RECORDING_DAYS && it.op.value == 0L.fv() })
+        c.setRecordingDays(7)
+        assertEquals(7, c.workMode.value.recordingDays)
+        assertTrue(c.afterWork.value.people.flatMap { it.items }.single { it.id == kept }.hasAudio)
+    }
 }

@@ -191,6 +191,47 @@ object VoiceRecordingRules {
     const val FAILED = "Couldn't play this message"
     const val PRIVACY = "Recordings are kept encrypted on MEKA's server for 30 days, and deleted when you tap Done."
 
+    /** "Keep callers' recordings" (Work → Call assistant): how long, in days, unless Meka picks otherwise. */
+    const val DEFAULT_KEEP_DAYS = 30
+    /** The choices, in the order the apps show them: 7 days · 30 days · Don't keep (0). */
+    val KEEP_CHOICES = listOf(7, 30, 0)
+    const val SETTING_TITLE = "Keep callers' recordings"
+    /**
+     * With "Don't keep", the server still holds a recording while Amazon Transcribe hears it (at most 5 minutes) and
+     * deletes it straight after; the hourly sweep removes anything left after this long.
+     */
+    const val UNKEPT_GRACE_MS = 15 * 60_000L
+    private const val DAY_MS = 24 * 60 * 60_000L
+
+    /** The synced choice ([WorkFields.RECORDING_DAYS]) as days: 0 or 7 as stored, anything else (or nothing) 30. */
+    fun keepDays(stored: Long?): Int = when (stored) {
+        0L -> 0
+        7L -> 7
+        else -> DEFAULT_KEEP_DAYS
+    }
+
+    /** How long a recording kept for [days] is offered. */
+    fun keepMs(days: Int): Long = days.coerceIn(0, DEFAULT_KEEP_DAYS) * DAY_MS
+
+    /** A choice's chip: "7 days" · "30 days" · "Don't keep". */
+    fun choiceLabel(days: Int): String = if (days == 0) "Don't keep" else "$days days"
+
+    /** The line under the chips; cross-fades as the choice changes. */
+    fun settingLine(days: Int): String =
+        if (days == 0) "Not kept · you'll have the words; each recording is deleted once it has been transcribed"
+        else "Kept $days days · encrypted on MEKA's server, deleted sooner when you tap Done"
+
+    /** The note under the after-work summary when something in it can be played. */
+    fun privacy(days: Int): String =
+        if (days == 0) "Recordings aren't kept: MEKA's server deletes each one once it has been transcribed."
+        else "Recordings are kept encrypted on MEKA's server for $days days, and deleted when you tap Done."
+
+    /**
+     * The server's sweep (hourly, and when the choice changes): recordings stored before this are deleted. "Don't
+     * keep" leaves only those still being transcribed ([UNKEPT_GRACE_MS]).
+     */
+    fun sweepBeforeMs(days: Int, nowMs: Long): Long = nowMs - if (days == 0) UNKEPT_GRACE_MS else keepMs(days)
+
     private val heldIdPattern = Regex("^h[0-9a-f]{16}$")
     private val householdPattern = Regex("^[A-Za-z0-9_-]{1,64}$")
 
@@ -203,9 +244,16 @@ object VoiceRecordingRules {
         return "$PREFIX$householdId/$heldId.mp3"
     }
 
-    /** Whether a recording is offered: a voice message, not cleared, kept ([HeldMessageFields.AUDIO]) and under [KEEP_MS] old. */
-    fun playable(kind: CaptureKind?, audio: Boolean, cleared: Boolean, atMs: Long?, nowMs: Long): Boolean =
-        kind == CaptureKind.VOICE_MESSAGE && audio && !cleared && atMs != null && nowMs - atMs in 0 until KEEP_MS
+    /** Where a household's recordings (and transcripts) live, `voice/<household>/`; null for one that couldn't be. */
+    fun householdPrefix(householdId: String): String? =
+        if (householdPattern.matches(householdId)) "$PREFIX$householdId/" else null
+
+    /**
+     * Whether a recording is offered: a voice message, not cleared, kept ([HeldMessageFields.AUDIO]) and younger than
+     * the chosen [keepDays] (30 by default; [KEEP_MS] at most; none with "Don't keep").
+     */
+    fun playable(kind: CaptureKind?, audio: Boolean, cleared: Boolean, atMs: Long?, nowMs: Long, keepDays: Int = DEFAULT_KEEP_DAYS): Boolean =
+        kind == CaptureKind.VOICE_MESSAGE && audio && !cleared && atMs != null && nowMs - atMs in 0 until keepMs(keepDays)
 
     /** "0:12 / 0:40" while playing (whole seconds; a length not known yet shows only where it is). */
     fun progressLine(positionMs: Long, durationMs: Long): String {

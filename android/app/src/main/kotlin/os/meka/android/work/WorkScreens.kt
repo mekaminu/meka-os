@@ -237,6 +237,8 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         )
         Text("Test it: ring ${CallScreeningRules.ASSISTANT_NUMBER} from another phone", style = MekaType.caption, color = Meka.colors.textSecondary)
         Spacer(Modifier.height(MekaSpace.s))
+        RecordingKeepSection(work.recordingDays, Modifier.appear(rememberAppearance(4))) { d -> scope.launch { core.setRecordingDays(d) } }
+        Spacer(Modifier.height(MekaSpace.s))
         SpamProtectionSection(core, 4)
 
         Spacer(Modifier.height(MekaSpace.m))
@@ -269,6 +271,8 @@ fun AfterWorkPane(
     onReport: (String) -> Unit = {},
     /** A kept voice message's recording (polish 8c), fetched from MEKA's server when Play is pressed. */
     audio: suspend (String) -> ByteArray? = { null },
+    /** The "Keep callers' recordings" note ([VoiceRecordingRules.privacy] for the synced choice). */
+    privacy: String = VoiceRecordingRules.PRIVACY,
 ) {
     val haptics = rememberMekaHaptics()
     var open by rememberSaveable { mutableStateOf<String?>(null) }
@@ -292,7 +296,7 @@ fun AfterWorkPane(
         if (!summary.isEmpty) PillButton("Done", filled = true) { haptics.light(); onDone() }
         Text("Done clears MEKA's copy on the Fold and the Mac. WhatsApp and Messages are untouched.", style = MekaType.caption, color = Meka.colors.textTertiary)
         if (summary.people.any { p -> p.items.any { it.hasAudio } }) {
-            Text(VoiceRecordingRules.PRIVACY, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Text(privacy, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         Spacer(Modifier.height(MekaSpace.xl))
     }
@@ -392,6 +396,7 @@ fun AfterWorkHost(onClose: () -> Unit) {
     val summary = remember(synced, lists) { synced.withLists(lists, CallerLookup.names(context)) }
     val scope = rememberCoroutineScope()
     val blocked by app.core.blockedCallers.collectAsState()
+    val work by app.core.workMode.collectAsState()
     LaunchedEffect(Unit) { app.nudger.dismiss() } // he's reading it: the nudge has done its job
     AfterWorkPane(summary, onDone = {
         scope.launch { runCatching { app.core.clearAfterWork() } }
@@ -400,7 +405,8 @@ fun AfterWorkHost(onClose: () -> Unit) {
     }, onClose = onClose, blocked = blocked,
         onBlock = { p -> scope.launch { runCatching { app.core.blockHeldCaller(p) } } },
         onReport = { number -> reportScamCall(context, number) },
-        audio = { id -> app.core.voiceMessageAudio(id) })
+        audio = { id -> app.core.voiceMessageAudio(id) },
+        privacy = VoiceRecordingRules.privacy(work.recordingDays))
 }
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
