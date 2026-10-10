@@ -80,8 +80,10 @@ class AskMekaFacadeTest {
         assertEquals("Move the dentist to tomorrow morning", q)
         assertEquals("2026-10-08", ctx.dateIso)
         assertTrue(ctx.nowLine.endsWith("· 17:15"), ctx.nowLine)
-        assertEquals("t1", ctx.items.single().ref)
-        assertFalse(id in ctx.items.single().line)
+        // The task, and protected time's one "off" line (sent with every question, so "no" is an answer too).
+        assertEquals(listOf(AskItemKind.TASK, AskItemKind.PROTECTED), ctx.items.map { it.kind })
+        assertEquals("t1", ctx.items.first().ref)
+        assertFalse(id in ctx.items.first().line)
 
         assertEquals("Moved it to tomorrow at 9.", out.answer.text)
         val card = out.answer.cards.single()
