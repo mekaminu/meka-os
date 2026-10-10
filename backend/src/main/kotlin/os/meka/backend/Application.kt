@@ -232,6 +232,17 @@ fun Application.mekaSync(
                 val guest = call.familyGuest(family, body)
                 call.familyReply(withContext(Dispatchers.IO) { family.putBack(guest, body) })
             }
+            // Meal plan slice 3: the week's dinners and the favourites; she adds favourites.
+            post("${FamilyShare.PAGE_PATH}/v1/meals") {
+                val body = call.boundedBody()
+                val guest = call.familyGuest(family, body)
+                call.familyReply(withContext(Dispatchers.IO) { family.meals(guest) })
+            }
+            post("${FamilyShare.PAGE_PATH}/v1/meals/add") {
+                val body = call.boundedBody()
+                val guest = call.familyGuest(family, body)
+                call.familyReply(withContext(Dispatchers.IO) { family.addMeal(guest, body) })
+            }
 
             // Meka's side, from a keyed device: make, list and revoke invites (the apps' Settings → Family, slice 4).
             post("/v1/family/invites/create") {
@@ -745,9 +756,10 @@ fun main(args: Array<String>) {
                 )
             }
             val verifier = RequestVerifier()
-            // Jeanette's page (family sharing, slice 2): only the shopping list, written as server ops.
+            // Jeanette's page (family sharing, slice 2; meal plan slice 3): only the shopping list and the dinners, written
+            // as server ops. FamilyShare only ever asks for its SHARED_TYPES.
             val family = FamilyShare(
-                PostgresFamilyInviteStore(ds), opStore, { hh -> opStore.latestFieldOps(hh, EntityTypes.SHOPPING_ITEM) }, verifier,
+                PostgresFamilyInviteStore(ds), opStore, { hh, type -> opStore.latestFieldOps(hh, type) }, verifier,
                 onWritten = { hh -> push?.serverChanged(hh) },
             )
             embeddedServer(Netty, port = port) {

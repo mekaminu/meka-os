@@ -62,7 +62,7 @@ class FamilyTest {
 
         val offs = (1..5).map { member("famoff$it", FamilyState.OFF, at(sat - 3, it)) }
         val v = FamilyRules.view(offs + member("famj", FamilyState.JOINED, at(sat - 3, 0), claimed = at(sat - 1, 9)), now, cal, problem = "x")
-        assertEquals("Jeanette can see and add to the shopping list", v.summary)
+        assertEquals("Jeanette can see and add to the shopping list and dinners", v.summary)
         assertEquals(listOf("famj", "famoff5", "famoff4", "famoff3"), v.rows.map { it.id })
         assertFalse(v.canInvite)
         assertEquals("x", v.problem)
@@ -73,14 +73,14 @@ class FamilyTest {
         val two = FamilyRules.view(
             listOf(member("a", FamilyState.JOINED, 1, 1), member("b", FamilyState.JOINED, 2, 2, name = "ada")), now, cal,
         )
-        assertEquals("Ada and Jeanette can see and add to the shopping list", two.summary)
+        assertEquals("Ada and Jeanette can see and add to the shopping list and dinners", two.summary)
     }
 
     @Test
     fun theLinkCarriesTheShareTextAndTheNote() {
         val l = FamilyRules.link("fam1", "jeanette", "https://meka.example/family#abc")
         assertEquals("Jeanette", l.name)
-        assertEquals("Jeanette, here's our shopping list. Open it on your phone and add to it any time: https://meka.example/family#abc", l.shareText)
+        assertEquals("Jeanette, here's our shopping list and the week's dinners. Open it on your phone and add to it any time: https://meka.example/family#abc", l.shareText)
         assertEquals(FamilyRules.NOTE, l.note)
     }
 

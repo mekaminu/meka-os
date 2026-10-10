@@ -1,4 +1,4 @@
-/* MEKA's family page (family sharing, slice 2). Dark by default, light with the phone; the tokens' colours. */
+/* MEKA's family page (family sharing, slice 2; dinners: meal plan slice 3). Dark by default, light with the phone; the tokens' colours. */
 :root {
   --bg: #000000; --surface: #0E0E10; --raised: #17171A; --hairline: #26262B;
   --text: #F4F4F5; --text2: #A1A1AA; --text3: #63636B;
@@ -15,6 +15,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; } /* .empty and the rows set display, which would beat the attribute */
 html, body { margin: 0; background: var(--bg); color: var(--text); }
 body {
   font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
@@ -74,6 +75,12 @@ h1 { margin: 4px 0 2px; font-size: 32px; font-weight: 600; letter-spacing: -.01e
 .ring.drawing svg { animation: pop 420ms var(--spring); }
 @keyframes pop { 0% { transform: scale(1); } 55% { transform: scale(1.12); } 100% { transform: scale(1); } }
 
+.add.after { margin: 16px 0 0; }
+.day .label { flex: none; width: 6.5em; font-size: 13px; letter-spacing: .02em; color: var(--text2); }
+.day.tonight .label { color: var(--accent); font-weight: 600; }
+.day.none .title { color: var(--text3); }
+#dinners { animation: rise 420ms 80ms var(--ease) both; }
+#dinners .line { margin-bottom: 8px; }
 .section { margin: 28px 0 4px; font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text2); }
 .empty { display: flex; align-items: center; gap: 12px; color: var(--text2); margin: 8px 0; }
 .breath { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--accent); box-shadow: 0 0 12px var(--accent); animation: breath 4.2s ease-in-out infinite; }
@@ -93,7 +100,7 @@ h1 { margin: 4px 0 2px; font-size: 32px; font-weight: 600; letter-spacing: -.01e
 
 /* Reduced motion: short cross-fades, no movement. */
 @media (prefers-reduced-motion: reduce) {
-  .stagger { animation: fade 160ms both; }
+  .stagger, #dinners { animation: fade 160ms both; }
   @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
   .row, .row.entering, .row.leaving { transform: none; transition: opacity .16s; }
   .ring.drawing .sweep, .ring.drawing .fill, .ring.drawing .tick { transition: none; }

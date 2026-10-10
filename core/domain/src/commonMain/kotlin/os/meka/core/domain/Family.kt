@@ -48,7 +48,7 @@ object FamilyRules {
     const val DEFAULT_NAME = "Jeanette"
     const val MAX_NAME = 30
     const val MAX_OFF_SHOWN = 3
-    const val SHARED = "Only the shopping list is shared. Nothing else of yours leaves MEKA."
+    const val SHARED = "Only the shopping list and the dinners are shared. Nothing else of yours leaves MEKA."
     const val NOTE = "The link works on the first phone that opens it, and only there. Send it to that one person."
     const val NOT_CONNECTED = "Connect this device to your server first."
     const val NO_KEY = "This device's key isn't registered with MEKA's server yet · try again in a minute"
@@ -110,7 +110,7 @@ object FamilyRules {
         val joined = on.filter { it.state == FamilyState.JOINED }.map { display(it.name) }.distinct()
         val waiting = on.filter { it.state == FamilyState.WAITING }.map { display(it.name) }.distinct()
         val summary = when {
-            joined.isNotEmpty() -> "${names(joined)} can see and add to the shopping list"
+            joined.isNotEmpty() -> "${names(joined)} can see and add to the shopping list and dinners"
             waiting.isNotEmpty() -> "Waiting for ${names(waiting)} to open the link"
             else -> "No one yet · make a link so $DEFAULT_NAME can add to the shopping list"
         }
@@ -130,7 +130,7 @@ object FamilyRules {
 
     /** What the share sheet sends with the link. */
     fun shareText(name: String, url: String): String =
-        "${display(name)}, here's our shopping list. Open it on your phone and add to it any time: $url"
+        "${display(name)}, here's our shopping list and the week's dinners. Open it on your phone and add to it any time: $url"
 
     fun link(id: String, name: String, url: String) = FamilyLink(id, display(name), url, shareText(name, url), NOTE)
 

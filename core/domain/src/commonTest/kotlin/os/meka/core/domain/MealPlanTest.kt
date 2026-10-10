@@ -178,4 +178,29 @@ class MealPlanTest {
         assertEquals("plan Fajitas for dinner on Friday 16 October", TalkRules.phrase(fri.proposal, sat, past = false))
         assertEquals("planned Pizza for dinner tomorrow", TalkRules.phrase(pizza.proposal, sat, past = true))
     }
+
+    @Test
+    fun theFamilyPageAddsFavouritesByThePureRulesAndSeesItsOwnWithoutItsName() {
+        // Meal plan slice 3: the server writes Jeanette's favourites with the same plan the devices commit.
+        val made = MealRules.addPlan("Fajitas: wraps, peppers", emptyList(), "Jeanette", 5L) { "m1" }!!
+        assertFalse(made.updated)
+        val (id, fields) = made.writes.single()
+        assertEquals("m1", id)
+        assertEquals("jeanette", fields[MealFields.BY]?.textOrNull)
+        val fajitas = MealRules.meals(mapOf(id to fields)).single()
+        assertEquals("wraps, peppers · from Jeanette", MealRules.mealLine(fajitas))
+        assertEquals("wraps, peppers", MealRules.mealLine(fajitas, viewer = "jeanette"))
+        // The same name: an update on the same entity, only its ingredients; no ingredients typed writes nothing.
+        val again = MealRules.addPlan("fajitas - wraps; peppers; salsa", listOf(fajitas), "meka", 6L) { "m2" }!!
+        assertTrue(again.updated)
+        assertEquals(listOf("m1" to setOf(MealFields.INGREDIENTS)), again.writes.map { it.first to it.second.keys })
+        assertEquals("Fajitas", again.entry.title)
+        val bare = MealRules.addPlan("Fajitas", listOf(fajitas), "meka", 7L) { "m3" }!!
+        assertTrue(bare.writes.isEmpty())
+        assertEquals(listOf("wraps", "peppers"), bare.entry.ingredients)
+        assertNull(MealRules.addPlan(" : wraps", emptyList(), "meka", 8L) { "m4" })
+        // Her view of the week names nobody on her own favourites, and Meka's never.
+        val view = MealRules.view(listOf(fajitas), emptyMap(), 0L, emptySet(), viewer = "jeanette")
+        assertEquals("wraps, peppers", view.favourites.single().line)
+    }
 }

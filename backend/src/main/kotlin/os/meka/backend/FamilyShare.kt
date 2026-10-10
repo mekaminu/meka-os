@@ -13,6 +13,7 @@ import kotlinx.serialization.json.putJsonArray
 import os.meka.backend.integrations.Integrations
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.LocalCalendar
+import os.meka.core.domain.MealRules
 import os.meka.core.domain.ShoppingItem
 import os.meka.core.domain.ShoppingRules
 import os.meka.core.sync.FieldValue
@@ -37,17 +38,19 @@ data class FamilyReply(val status: Int, val body: String) {
  * Meka's family page (build plan "Family sharing with Jeanette", slice 2; Meka approved 2026-10-09). Meka makes a
  * private invite link ([invite]); the first browser to open it makes its own non-extractable P-256 key with WebCrypto
  * and registers it ([claim], signed with that key, so possession is proved); from then on the page's requests are
- * signed like the apps' ([guest]) and the link alone is no use. Only the shopping list is shared: the page reads it
- * ([shopping]) and adds, ticks and puts back items ([add], [got], [putBack]), written as server ops with `by` = her name
- * so they sync into Meka's Lists like any other change ("From Jeanette"). Nothing else of Meka's data is reachable.
+ * signed like the apps' ([guest]) and the link alone is no use. Only the shopping list and the dinners are shared: the
+ * page reads the list ([shopping]) and adds, ticks and puts back items ([add], [got], [putBack]); it reads the week's
+ * dinners and the favourites ([meals], meal plan slice 3) and adds a favourite ([addMeal]). Writes are server ops with
+ * `by` = her name, so they sync into Meka's Lists and Dinners like any other change ("From Jeanette"). Nothing else of
+ * Meka's data is reachable: [read] is only ever asked for [SHARED_TYPES].
  *
  * Kept free of Ktor so its rules are tested directly; the routes in [mekaSync] only authenticate and forward.
  */
 class FamilyShare(
     private val invites: FamilyInviteStore,
     private val ops: ServerOpStore,
-    /** Each shopping item's latest op per field (id → field → op), for one household. */
-    private val read: (householdId: String) -> Map<String, Map<String, Op>>,
+    /** Each entity's latest op per field (id → field → op) of one type, for one household; only [SHARED_TYPES] are asked. */
+    private val read: (householdId: String, entityType: String) -> Map<String, Map<String, Op>>,
     private val verifier: RequestVerifier,
     private val now: () -> Long = System::currentTimeMillis,
     private val calendar: LocalCalendar = LondonCalendar,
@@ -119,7 +122,7 @@ class FamilyShare(
             // Lost a race with another browser, or revoked meanwhile.
             return FamilyReply.refused(403, if (invites.byId(invite.id)?.revokedAtMs != null) FamilyInvite.REVOKED else "used")
         }
-        return FamilyReply.ok(buildJsonObject { put("id", invite.id); put("name", display(invite.name)); putJsonArray("shares") { add(SHOPPING) } })
+        return FamilyReply.ok(buildJsonObject { put("id", invite.id); put("name", display(invite.name)); putJsonArray("shares") { add(SHOPPING); add(MEALS) } })
     }
 
     /** Her browser, by its invite id and a signature over this exact request; null when it isn't let in. */
@@ -144,7 +147,7 @@ class FamilyShare(
         val fields = items.mapValues { (_, f) -> f.mapValues { it.value.value } }
         if (ShoppingRules.view(fields, now(), calendar).toBuy.size >= MAX_TO_BUY) return FamilyReply.refused(403, "full")
         val plan = ShoppingRules.add(text, fields, guest.name, now()) { "srvfam" + hex(9) }
-        write(guest.householdId, items, plan.writes)
+        write(guest.householdId, EntityTypes.SHOPPING_ITEM, items, plan.writes)
         return shopping(guest)
     }
 
@@ -159,11 +162,63 @@ class FamilyShare(
         val items = current(guest)
         // Only an existing shopping item can be touched; any other id writes nothing.
         val item = items[id] ?: return shopping(guest)
-        fieldsFor(item.mapValues { it.value.value })?.let { write(guest.householdId, items, listOf(id to it)) }
+        fieldsFor(item.mapValues { it.value.value })?.let { write(guest.householdId, EntityTypes.SHOPPING_ITEM, items, listOf(id to it)) }
         return shopping(guest)
     }
 
-    private fun current(guest: FamilyInvite) = read(guest.householdId)
+    /**
+     * The week's dinners from today (London) and the favourites, as her page shows them (meal plan slice 3): her own
+     * favourites without "from Jeanette", Meka's without a name. Read only; planning a day stays on Meka's apps.
+     */
+    fun meals(guest: FamilyInvite): FamilyReply {
+        val v = mealView(guest, fieldsOf(read(guest.householdId, EntityTypes.MEAL)))
+        return FamilyReply.ok(
+            buildJsonObject {
+                put("name", display(guest.name))
+                put("summary", v.summary)
+                putJsonArray("week") {
+                    v.week.forEach { d ->
+                        addJsonObject {
+                            put("day", d.day)
+                            put("label", d.label)
+                            d.title?.let { put("title", it) }
+                            put("line", d.line)
+                        }
+                    }
+                }
+                putJsonArray("favourites") {
+                    v.favourites.forEach { f -> addJsonObject { put("id", f.id); put("title", f.title); put("line", f.line) } }
+                }
+            },
+        )
+    }
+
+    /**
+     * `{"text": "Chilli: mince, beans, rice"}`: a favourite dinner, read as Lists' Dinners reads it ([MealRules.addPlan]);
+     * the same name again updates its ingredients. Refused past [MealRules.MAX_FAVOURITES] new ones (`full`), or when
+     * nothing could be read (`text`).
+     */
+    fun addMeal(guest: FamilyInvite, body: String): FamilyReply {
+        val text = field(body, "text")?.takeIf { it.length <= MAX_MEAL_TEXT } ?: return FamilyReply.refused(400, "text")
+        val existing = read(guest.householdId, EntityTypes.MEAL)
+        val favourites = MealRules.meals(fieldsOf(existing))
+        val plan = MealRules.addPlan(text, favourites, guest.name, now()) { "srvfam" + hex(9) } ?: return FamilyReply.refused(400, "text")
+        if (!plan.updated && favourites.size >= MealRules.MAX_FAVOURITES) return FamilyReply.refused(403, "full")
+        write(guest.householdId, EntityTypes.MEAL, existing, plan.writes)
+        return meals(guest)
+    }
+
+    private fun mealView(guest: FamilyInvite, mealFields: Map<String, Map<String, FieldValue>>) = MealRules.view(
+        MealRules.meals(mealFields),
+        MealRules.plan(fieldsOf(read(guest.householdId, EntityTypes.MEAL_DAY))),
+        calendar.epochDayOf(now()),
+        ShoppingRules.view(fieldsOf(current(guest)), now(), calendar).toBuy.map { ShoppingRules.key(it.title) }.toSet(),
+        viewer = guest.name,
+    )
+
+    private fun fieldsOf(ops: Map<String, Map<String, Op>>) = ops.mapValues { (_, f) -> f.mapValues { it.value.value } }
+
+    private fun current(guest: FamilyInvite) = read(guest.householdId, EntityTypes.SHOPPING_ITEM)
 
     private fun view(guest: FamilyInvite, items: Map<String, Map<String, Op>>): JsonObject {
         val v = ShoppingRules.view(items.mapValues { (_, f) -> f.mapValues { it.value.value } }, now(), calendar)
@@ -183,7 +238,13 @@ class FamilyShare(
     }
 
     /** Appends each field as a server op over the field's current head, after it in HLC order. */
-    private fun write(householdId: String, current: Map<String, Map<String, Op>>, writes: List<Pair<String, Map<String, FieldValue>>>) {
+    private fun write(
+        householdId: String,
+        entityType: String,
+        current: Map<String, Map<String, Op>>,
+        writes: List<Pair<String, Map<String, FieldValue>>>,
+    ) {
+        require(entityType in SHARED_TYPES)
         if (writes.isEmpty()) return
         ops.transaction {
             for ((id, fields) in writes) {
@@ -195,7 +256,7 @@ class FamilyShare(
                     }
                     ops.append(
                         Op(
-                            opId = "srvfam" + hex(12), householdId = householdId, entityType = EntityTypes.SHOPPING_ITEM, entityId = id,
+                            opId = "srvfam" + hex(12), householdId = householdId, entityType = entityType, entityId = id,
                             field = field, value = value, hlc = hlc, baseOpIds = listOfNotNull(last?.opId), deviceId = Integrations.SERVER_DEVICE,
                         ),
                     )
@@ -214,6 +275,11 @@ class FamilyShare(
     companion object {
         const val PAGE_PATH = "/family"
         const val SHOPPING = "shopping"
+        const val MEALS = "meals"
+        const val MAX_MEAL_TEXT = 300
+
+        /** The only entity types the page reads or writes. */
+        val SHARED_TYPES = setOf(EntityTypes.SHOPPING_ITEM, EntityTypes.MEAL, EntityTypes.MEAL_DAY)
         const val MAX_TEXT = 1_000
         const val MAX_PER_ADD = 30
         const val MAX_TO_BUY = 200
@@ -233,10 +299,10 @@ class FamilyShare(
 
         fun isInviteId(id: String) = id.length == 23 && id.startsWith("fam") && id.drop(3).all { it in HEX }
 
-        /** Each shopping item's latest op per field by HLC, scanning the op log (tests and small stores). */
-        fun scanning(ops: ServerOpStore): (String) -> Map<String, Map<String, Op>> = { hh ->
+        /** Each entity's latest op per field by HLC, scanning the op log (tests and small stores). */
+        fun scanning(ops: ServerOpStore): (String, String) -> Map<String, Map<String, Op>> = { hh, type ->
             val out = LinkedHashMap<String, LinkedHashMap<String, Op>>()
-            ops.after(hh, 0, Int.MAX_VALUE).map { it.op }.filter { it.entityType == EntityTypes.SHOPPING_ITEM }.forEach { op ->
+            ops.after(hh, 0, Int.MAX_VALUE).map { it.op }.filter { it.entityType == type }.forEach { op ->
                 val f = out.getOrPut(op.entityId) { LinkedHashMap() }
                 val prev = f[op.field]
                 if (prev == null || op.hlc > prev.hlc) f[op.field] = op

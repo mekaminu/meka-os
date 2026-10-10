@@ -85,7 +85,7 @@ class FamilyFacadeTest {
         now += 3_600_000L
         server.invites[0] = server.invites[0].copy(state = "joined", claimedAtMs = now, lastSeenAtMs = now)
         val joined = c.refreshFamily()
-        assertEquals("Jeanette can see and add to the shopping list", joined.summary)
+        assertEquals("Jeanette can see and add to the shopping list and dinners", joined.summary)
         assertEquals("Joined today · seen today", joined.rows.single().line)
         c.refreshFamily()
         val family = c.activityView.value.days.flatMap { it.rows }.filter { it.kind == ActivityKind.FAMILY }.map { it.summary }

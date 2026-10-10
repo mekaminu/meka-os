@@ -10,7 +10,7 @@
 <meta name="referrer" content="no-referrer">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Shopping">
-<title>Shopping · MEKA</title>
+<title>Shopping and dinners · MEKA</title>
 <link rel="stylesheet" href="/family/app.css">
 <script src="/family/app.js" defer></script>
 </head>
@@ -36,7 +36,21 @@
     <p id="empty" class="empty" hidden><span class="breath" aria-hidden="true"></span>Nothing to buy. Add what you need above; separate several with commas.</p>
     <h2 id="got-title" class="section" hidden>Got</h2>
     <ul id="got" class="rows got" aria-label="Got"></ul>
-    <p class="foot">Only this list is shared. Tap a ring when you've got it; tap again to put it back.</p>
+    <p class="foot">Tap a ring when you've got it; tap again to put it back.</p>
+  </section>
+
+  <section id="dinners" hidden>
+    <h2 class="section">Dinners this week</h2>
+    <p class="line" id="dinners-line" aria-live="polite"></p>
+    <ul id="week" class="rows" aria-label="Dinners this week"></ul>
+    <h2 id="favs-title" class="section">Favourites</h2>
+    <ul id="favs" class="rows" aria-label="Favourite dinners"></ul>
+    <form id="add-meal" class="add after" autocomplete="off">
+      <input id="meal-text" name="text" type="text" maxlength="300" enterkeyhint="done"
+             placeholder="Add a dinner… (Chilli: mince, beans, rice)" aria-label="Add a favourite dinner">
+      <button id="meal-go" type="submit" class="pill">Add</button>
+    </form>
+    <p class="foot">Meka picks the week's dinners from the favourites; their ingredients go on the list above. Only the shopping list and the dinners are shared.</p>
   </section>
 
   <div id="loading" class="skeleton" aria-hidden="true"><span></span><span></span><span></span></div>

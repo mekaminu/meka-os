@@ -2,7 +2,8 @@
 // First open: the invite's token (in the link's #fragment, never sent in a URL) is exchanged for this browser's own
 // key, a non-extractable P-256 key made here with WebCrypto and kept in IndexedDB. Every later request is signed with
 // it exactly as MEKA's apps sign theirs: "MEKA1\nPOST\n<path>\n<time>\n<nonce>\n<sha256 of body>". So the link alone is
-// no use once opened, and Meka can turn it off at any time. Only the shopping list is shared.
+// no use once opened, and Meka can turn it off at any time. Only the shopping list and the dinners are shared (the
+// week's dinners and the favourites, meal plan slice 3: she reads the week and adds favourites; Meka plans the days).
 "use strict";
 (function () {
   const DB = "meka-family", STORE = "keys", ME = "me";
@@ -62,6 +63,7 @@
   function notice(text, critical) {
     $("loading").hidden = true;
     $("list").hidden = true;
+    $("dinners").hidden = true;
     $("notice").hidden = false;
     $("notice").classList.toggle("critical", !!critical);
     $("notice-text").textContent = text;
@@ -98,7 +100,7 @@
     const li = document.createElement("li");
     li.className = "row";
     li.dataset.id = item.id;
-    li.dataset.sig = item.title + "|" + (item.meta || "");
+    li.dataset.sig = sigOf(item);
     const r = ring(got);
     r.addEventListener("click", () => tap(item.id, got, li, r));
     const text = document.createElement("div");
@@ -117,18 +119,67 @@
     return li;
   }
 
+  // A day of the week: "Tonight" · "Chilli" · "3 ingredients" (no ring: Meka picks the days on his apps).
+  function dayRow(d) {
+    const li = document.createElement("li");
+    li.className = "row day" + (d.label === "Tonight" ? " tonight" : "") + (d.title ? "" : " none");
+    li.dataset.id = "d" + d.day;
+    li.dataset.sig = sigOf(d);
+    const label = document.createElement("div");
+    label.className = "label";
+    label.textContent = d.label;
+    const text = document.createElement("div");
+    text.className = "text";
+    const t = document.createElement("div");
+    t.className = "title";
+    t.textContent = d.title || d.line;
+    text.append(t);
+    if (d.title) {
+      const m = document.createElement("div");
+      m.className = "meta";
+      m.textContent = d.line;
+      text.append(m);
+    }
+    li.append(label, text);
+    return li;
+  }
+
+  // A favourite: "Chilli" · "mince, kidney beans, rice".
+  function favRow(f) {
+    const li = document.createElement("li");
+    li.className = "row";
+    li.dataset.id = f.id;
+    li.dataset.sig = sigOf(f);
+    const text = document.createElement("div");
+    text.className = "text";
+    const t = document.createElement("div");
+    t.className = "title";
+    t.textContent = f.title;
+    const m = document.createElement("div");
+    m.className = "meta";
+    m.textContent = f.line;
+    text.append(t, m);
+    li.append(text);
+    return li;
+  }
+
+  const sigOf = (item) => (item.label || "") + "|" + (item.title || "") + "|" + (item.meta || item.line || "");
+
   // Keeps rows that didn't change (no flicker on refresh); new rows rise in, gone rows leave.
-  function fill(ul, items, got) {
+  function fill(ul, items, got) { fillWith(ul, items, (item) => row(item, got), (item) => item.id); }
+
+  function fillWith(ul, items, make, idOf) {
     const old = new Map(Array.from(ul.children).map((li) => [li.dataset.id, li]));
     const keep = new Set();
     const frag = [];
     items.forEach((item, i) => {
-      const was = old.get(item.id);
-      if (was && was.dataset.sig === item.title + "|" + (item.meta || "") && !was.classList.contains("leaving")) {
-        keep.add(item.id);
+      const id = idOf(item);
+      const was = old.get(id);
+      if (was && was.dataset.sig === sigOf(item) && !was.classList.contains("leaving")) {
+        keep.add(id);
         frag.push(was);
       } else {
-        const li = row(item, got);
+        const li = make(item);
         if (!reduced()) { li.classList.add("entering"); li.style.transitionDelay = Math.min(i, 8) * 40 + "ms"; }
         frag.push(li);
       }
@@ -155,6 +206,18 @@
     $("got-title").hidden = (v.got || []).length === 0;
   }
 
+  function showMeals(v) {
+    $("dinners").hidden = false;
+    const el = $("dinners-line");
+    if (el.textContent !== (v.summary || "")) {
+      if (reduced() || !el.textContent) el.textContent = v.summary || "";
+      else { el.classList.add("fading"); setTimeout(() => { el.textContent = v.summary || ""; el.classList.remove("fading"); }, 160); }
+    }
+    fillWith($("week"), v.week || [], dayRow, (d) => "d" + d.day);
+    fillWith($("favs"), v.favourites || [], favRow, (f) => f.id);
+    $("favs-title").hidden = (v.favourites || []).length === 0;
+  }
+
   function refused(status, data) {
     const why = data && data.error;
     if (status === 401 && me) {
@@ -174,9 +237,21 @@
     return false;
   }
 
+  async function callMeals(path, payload) {
+    const r = await post(path, payload, me.keys, me.id);
+    if (r.status === 200 && r.data) { showMeals(r.data); return true; }
+    const why = r.data && r.data.error;
+    if (why === "full") { $("dinners-line").textContent = "That's a lot of favourites. Ask Meka to remove a few first."; return false; }
+    if (why === "text") { $("dinners-line").textContent = "Type the dinner's name, then a colon and its ingredients: “Chilli: mince, beans, rice”."; return false; }
+    if (!refused(r.status, r.data)) $("dinners-line").textContent = "Couldn't reach MEKA. Try again in a moment.";
+    return false;
+  }
+
   async function refresh() {
     if (!me || busy || document.hidden) return;
-    try { await call("/family/v1/shopping", {}); } catch (_) { setLine("Offline. The list will update when you're back."); }
+    try {
+      if (await call("/family/v1/shopping", {})) await callMeals("/family/v1/meals", {});
+    } catch (_) { setLine("Offline. The list will update when you're back."); }
   }
 
   async function tap(id, got, li, r) {
@@ -210,6 +285,20 @@
     } catch (_) {
       setLine("Couldn't reach MEKA. Your words are still in the box.");
     } finally { busy = false; $("add-go").disabled = false; }
+  }
+
+  async function addMeal(e) {
+    e.preventDefault();
+    const input = $("meal-text");
+    const text = input.value.trim();
+    if (!text || busy || !me) return;
+    busy = true;
+    $("meal-go").disabled = true;
+    try {
+      if (await callMeals("/family/v1/meals/add", { text })) { input.value = ""; haptic(12); }
+    } catch (_) {
+      $("dinners-line").textContent = "Couldn't reach MEKA. Your words are still in the box.";
+    } finally { busy = false; $("meal-go").disabled = false; }
   }
 
   // ---- Start ----
@@ -251,6 +340,8 @@
   document.addEventListener("DOMContentLoaded", () => {
     $("add").addEventListener("submit", add);
     $("add-go").classList.add("press");
+    $("add-meal").addEventListener("submit", addMeal);
+    $("meal-go").classList.add("press");
     document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
     setInterval(refresh, 20000);
     start();

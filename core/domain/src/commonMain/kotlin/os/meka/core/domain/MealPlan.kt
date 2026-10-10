@@ -51,6 +51,13 @@ data class MealDayRow(
 /** Tonight's dinner in Today's header: "Dinner tonight: Chilli". */
 data class MealLine(val text: String, val spoken: String)
 
+/**
+ * What adding one typed line would write ([MealRules.addPlan]): the entry as it will read, whether it updates a
+ * favourite already on the list, and the fields to write (one entity; nothing when an existing favourite gets no new
+ * ingredients). The devices commit [writes] locally; the family page's server appends them as server ops.
+ */
+data class MealAddPlan(val entry: MealEntry, val updated: Boolean, val writes: List<Pair<String, Map<String, FieldValue>>>)
+
 /** What "Add to shopping" did, for its line and its Undo ([Shopping.takeBack]). */
 data class MealsShopped(val line: String, val added: List<String>, val revived: List<String>)
 
@@ -92,7 +99,9 @@ object MealRules {
     const val SHOPPING_HINT = "Pick the week's dinners and their ingredients can go on the shopping list in one tap."
     const val NOT_PLANNED = "Not planned"
     const val NONE_CHOICE = "None"
-    const val SHARED = "Favourites and the week's dinners are on the Fold and the Mac. Ingredients go on the shopping list Jeanette shares."
+    const val SHARED = "Favourites and the week's dinners are on the Fold, the Mac and Jeanette's family page, where she can add favourites. Ingredients go on the shopping list you share."
+    /** Most favourites the family page lets the list grow to (Meka's own apps aren't limited). */
+    const val MAX_FAVOURITES = 100
 
     /** Separators between a dinner's name and its ingredients, in the order they're looked for. */
     private val SEPARATORS = listOf(":", " - ", " – ", " — ")
@@ -172,20 +181,51 @@ object MealRules {
         else -> "${list.size} ingredients"
     }
 
-    /** A favourite's line: its ingredients ("mince, kidney beans, rice", cut at a word past 80), and who added it. */
-    fun mealLine(m: Meal): String {
+    /**
+     * A favourite's line: its ingredients ("mince, kidney beans, rice", cut at a word past 80), and who added it unless
+     * that is the [viewer] (Jeanette's page leaves "from Jeanette" off her own).
+     */
+    fun mealLine(m: Meal, viewer: String = ShoppingRules.OWNER): String {
         val list = if (m.ingredients.isEmpty()) "No ingredients yet · type “${m.title}: …” to add them" else {
             val all = m.ingredients.joinToString(", ")
             if (all.length <= 80) all else all.take(80).substringBeforeLast(", ", all.take(80)) + "…"
         }
+        if (ShoppingRules.whoKey(m.by) == ShoppingRules.whoKey(viewer)) return list
         return ShoppingRules.byName(m.by)?.let { "$list · from $it" } ?: list
+    }
+
+    /**
+     * Adding a favourite from one typed line ([read]), as plain fields so the devices and the family page's server write
+     * it the same way. A dinner already a favourite (same name, [key]) keeps its entity: newly typed ingredients replace
+     * its old ones (none typed leaves them). Null when nothing could be read.
+     */
+    fun addPlan(text: String, meals: List<Meal>, by: String, nowMs: Long, newId: () -> String): MealAddPlan? {
+        val e = read(text) ?: return null
+        val same = meals.firstOrNull { key(it.title) == key(e.title) }
+        if (same != null) {
+            val writes = if (e.ingredients.isEmpty()) emptyList()
+            else listOf(same.id to mapOf(MealFields.INGREDIENTS to encodeIngredients(e.ingredients).fv()))
+            return MealAddPlan(MealEntry(same.title, e.ingredients.ifEmpty { same.ingredients }), true, writes)
+        }
+        return MealAddPlan(e, false, listOf(newId() to mapOf(
+            MealFields.TITLE to e.title.fv(),
+            MealFields.INGREDIENTS to encodeIngredients(e.ingredients).fv(),
+            MealFields.ADDED_AT to nowMs.fv(),
+            MealFields.BY to ShoppingRules.whoKey(by).fv(),
+        )))
     }
 
     /**
      * The week from [today] (seven days), the favourites by name, and what "Add to shopping" would add: the planned
      * dinners' ingredients merged by name ([ShoppingRules.key]), less what's already to buy ([toBuyKeys]).
      */
-    fun view(meals: List<Meal>, plan: Map<Long, String>, today: Long, toBuyKeys: Set<String>): MealPlanView {
+    fun view(
+        meals: List<Meal>,
+        plan: Map<Long, String>,
+        today: Long,
+        toBuyKeys: Set<String>,
+        viewer: String = ShoppingRules.OWNER,
+    ): MealPlanView {
         val byId = meals.associateBy { it.id }
         val week = (0 until WEEK_DAYS).map { i ->
             val day = today + i
@@ -195,7 +235,7 @@ object MealRules {
             else MealDayRow(day, label, meal.id, meal.title, ingredientsLine(meal.ingredients), "$label: ${meal.title}")
         }
         val favourites = meals.sortedWith(compareBy<Meal> { key(it.title) }.thenBy { it.id })
-            .map { MealRow(it.id, it.title, mealLine(it), "${it.title}. ${mealLine(it)}") }
+            .map { MealRow(it.id, it.title, mealLine(it, viewer), "${it.title}. ${mealLine(it, viewer)}") }
         val wanted = week.mapNotNull { it.mealId?.let(byId::get) }.flatMap { it.ingredients }.distinctBy(ShoppingRules::key)
         val toAdd = wanted.filter { ShoppingRules.key(it) !in toBuyKeys }
         val already = wanted.size - toAdd.size
@@ -290,21 +330,9 @@ class MealPlan(
      * update; null when nothing could be read.
      */
     fun add(text: String, by: String = ShoppingRules.OWNER): Pair<MealEntry, Boolean>? {
-        val e = MealRules.read(text) ?: return null
-        val same = meals().firstOrNull { MealRules.key(it.title) == MealRules.key(e.title) }
-        if (same != null) {
-            if (e.ingredients.isNotEmpty()) {
-                replica.commitLocal(EntityTypes.MEAL, same.id, mapOf(MealFields.INGREDIENTS to MealRules.encodeIngredients(e.ingredients).fv()))
-            }
-            return MealEntry(same.title, e.ingredients.ifEmpty { same.ingredients }) to true
-        }
-        replica.commitLocal(EntityTypes.MEAL, newId(), mapOf(
-            MealFields.TITLE to e.title.fv(),
-            MealFields.INGREDIENTS to MealRules.encodeIngredients(e.ingredients).fv(),
-            MealFields.ADDED_AT to nowMs().fv(),
-            MealFields.BY to ShoppingRules.whoKey(by).fv(),
-        ))
-        return e to false
+        val plan = MealRules.addPlan(text, meals(), by, nowMs(), newId) ?: return null
+        plan.writes.forEach { (id, fields) -> replica.commitLocal(EntityTypes.MEAL, id, fields) }
+        return plan.entry to plan.updated
     }
 
     /** Removes a favourite for good; days it was planned on show "Not planned". */

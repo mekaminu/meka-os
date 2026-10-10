@@ -81,6 +81,20 @@ class FamilyRoutesTest {
         assertEquals(HttpStatusCode.Unauthorized, client.post("/family/v1/shopping") { setBody("{}") }.status)
         assertEquals(HttpStatusCode.Unauthorized, client.post("/family/v1/shopping") { header("Authorization", "Guest $id"); setBody("{}") }.status)
 
+        // Meal plan slice 3: her favourite dinner, signed the same way; unsigned, the week stays private.
+        val addMeal = "/family/v1/meals/add"
+        val mealBody = """{"text":"Fajitas: wraps, peppers"}"""
+        val (t4, n4, s4) = phone.sign(addMeal, mealBody)
+        val meals = client.post(addMeal) {
+            header("Authorization", "Guest $id"); header("X-Meka-Time", t4); header("X-Meka-Nonce", n4); header("X-Meka-Signature", s4)
+            setBody(mealBody)
+        }
+        assertEquals(HttpStatusCode.OK, meals.status)
+        val favs = Json.parseToJsonElement(meals.bodyAsText()).jsonObject["favourites"]!!.jsonArray
+        assertEquals("Fajitas", favs.single().jsonObject["title"]!!.jsonPrimitive.content)
+        assertEquals(7, Json.parseToJsonElement(meals.bodyAsText()).jsonObject["week"]!!.jsonArray.size)
+        assertEquals(HttpStatusCode.Unauthorized, client.post("/family/v1/meals") { header("Authorization", "Guest $id"); setBody("{}") }.status)
+
         // Meka lists and revokes; her next request is refused.
         val list = "/v1/family/invites/list"
         assertTrue(client.post(list) { with(foldKey) { signed(foldSecret, list, "{}") } }.bodyAsText().contains("\"joined\""))
