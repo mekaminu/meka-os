@@ -96,13 +96,14 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     var current by rememberSaveable { mutableStateOf(ShellDestination.TODAY) }
     val today by core.today.collectAsState()
     val lists by core.listsView.collectAsState()
+    val approvals by core.approvals.collectAsState()
     val requests by core.requests.collectAsState()
     val triage by core.triage.collectAsState()
     val school by core.schoolView.collectAsState()
     val dateNight by core.dateNightView.collectAsState()
     // Due chases and decision reviews wait on you too, so they count in the badge; so do requests from people and
     // messages waiting on a reply (the messages assistant; FYIs don't nag).
-    val needsYou = today.needsYou.size + lists.dueCount + requests.size + triage.count { it.lane == TriageLane.NEEDS_REPLY } + school.covers.size +
+    val needsYou = today.needsYou.size + lists.dueCount + approvals.size + requests.size + triage.count { it.lane == TriageLane.NEEDS_REPLY } + school.covers.size +
         (if (dateNight.nudge != null) 1 else 0)
     val haptics = rememberMekaHaptics()
     // How the current place behind Ask was opened (a More row, a Today card): its title travels from there and back.

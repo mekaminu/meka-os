@@ -80,6 +80,12 @@ enum class ActivityKind {
      * in Watch). Added 2026-10-10.
      */
     DEVICE,
+    /**
+     * Meka's answer to a request in the approvals inbox (approvals inbox, slice 1): "Approved: Buy 0.05 BTC" with who
+     * asked and how he confirmed. One entry per request, whichever device answered. Nothing to undo: the one who asked
+     * acts on the answer. Added 2026-10-11.
+     */
+    APPROVAL,
 }
 
 /** One field MEKA changed: what it was, and what MEKA set. */
@@ -155,7 +161,7 @@ enum class ActivityFilter(val label: String, val kinds: Set<ActivityKind>) {
     DONE_FOR_YOU("Done for you", setOf(ActivityKind.CHANGED)),
     CALENDAR("Calendar", setOf(ActivityKind.CALENDAR)),
     CALLS("Calls", setOf(ActivityKind.SCREENED, ActivityKind.CALL)),
-    OTHER("Other", setOf(ActivityKind.PUBLISHED, ActivityKind.FAMILY, ActivityKind.DEVICE)),
+    OTHER("Other", setOf(ActivityKind.PUBLISHED, ActivityKind.FAMILY, ActivityKind.DEVICE, ActivityKind.APPROVAL)),
 }
 
 /** One filter chip: "Calls · 3" (All carries no count). */
@@ -560,6 +566,12 @@ class ActivityLog(
     fun recordDevice(id: String, atMs: Long, summary: String, why: String) {
         if (replica.entity(EntityTypes.AGENT_ACTION, id) != null) return
         write(id, ActivityKind.DEVICE, summary, null, why, "devices", atMs = atMs)
+    }
+
+    /** Meka's answer to an approval ([ApprovalRules.activityId]); written once, by the device that answered. */
+    fun recordApproval(id: String, summary: String, detail: String?, why: String) {
+        if (replica.entity(EntityTypes.AGENT_ACTION, id) != null) return
+        write(id, ActivityKind.APPROVAL, summary, detail, why, "approvals")
     }
 
     /** A digest this device just posted. */

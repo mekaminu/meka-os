@@ -70,13 +70,15 @@ object EntityTypes {
     const val LEAVE = "leave"
     /** One fact on the "What MEKA knows" page (see [LifeFacts]). */
     const val LIFE_FACT = "life_fact"
+    /** One request waiting for Meka's yes in the approvals inbox (see [Approvals]). */
+    const val APPROVAL = "approval"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
-        EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT,
+        EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL,
     )
 }
 
@@ -323,6 +325,11 @@ object MekaSchema : SchemaRegistry {
         // Facts: a fact removed on any device is gone for good; its value and AI choice, the latest edit wins.
         entityType == EntityTypes.LIFE_FACT && field == FactFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.LIFE_FACT -> MergePolicy.Lww
+        // Approvals: an answer given on any device stands (declined beats approved when both are given, see
+        // [Approval.state]); the rest is written once by whoever asked.
+        entityType == EntityTypes.APPROVAL && field == ApprovalFields.APPROVED -> MergePolicy.TrueWins
+        entityType == EntityTypes.APPROVAL && field == ApprovalFields.DECLINED -> MergePolicy.TrueWins
+        entityType == EntityTypes.APPROVAL -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

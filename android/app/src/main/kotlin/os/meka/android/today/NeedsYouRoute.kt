@@ -257,6 +257,7 @@ internal fun NeedsYouColumn(
 ) {
     val cards = NeedsYouStackRules.ordered(stack, moves.setAside)
     val requests by core.requests.collectAsState()
+    val approvals by core.approvals.collectAsState()
     val triage by core.triage.collectAsState()
     val school by core.schoolView.collectAsState()
     val covers = school.covers
@@ -285,10 +286,17 @@ internal fun NeedsYouColumn(
     ) {
         item(key = "title") {
             if (compact) {
-                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + requests.size + triage.size + asks), Modifier.animateItem().appear(rememberAppearance(0, play)))
+                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + approvals.size + requests.size + triage.size + asks), Modifier.animateItem().appear(rememberAppearance(0, play)))
             } else {
                 Text("Needs you", style = MekaType.greeting, color = Meka.colors.textPrimary,
                     modifier = Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play)))
+            }
+        }
+        // The approvals inbox (V1, slice 1) first: time-limited, and nothing happens until Meka answers.
+        approvals.forEachIndexed { i, card ->
+            item(key = "approval-${card.id}") {
+                ApprovalCardView(card, core, { line -> moves.undoLine(line, null) },
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1 + i, play)))
             }
         }
         item(key = "after-work") {
@@ -355,7 +363,7 @@ internal fun NeedsYouColumn(
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + asks + requests.size, play)))
             }
         }
-        if (cards.isEmpty() && requests.isEmpty() && triage.isEmpty() && asks == 0) {
+        if (cards.isEmpty() && approvals.isEmpty() && requests.isEmpty() && triage.isEmpty() && asks == 0) {
             item(key = "clear") {
                 // The breathing check ring beside a light line (catalogue "Empty states"; Fold review 2026-10-08,
                 // item 7), on the full page and in the open Fold's column alike (Fold review 2026-10-09 00:10, item 6);

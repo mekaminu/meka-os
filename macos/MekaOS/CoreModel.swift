@@ -22,6 +22,9 @@ final class CoreModel {
     /// Requests from people Meka watches (V1, requests slice 4): the Fold read them, the cards sync; Add · Change ·
     /// Not a task here clears them there too.
     private(set) var requests: [RequestCard] = []
+    /// The approvals inbox (V1, slice 1): requests to trade, pay or share a document, first in Needs you. Approve asks
+    /// for Touch ID every time; synced with the Fold.
+    private(set) var approvals: [ApprovalCard] = []
     /// School rhythm (V1, slice 1): Rex's and Logan's days off, dates and weekly things (Ask → More → School), and the
     /// week-ahead cover questions Needs you shows above the requests. Synced with the Fold.
     private(set) var school: SchoolView?
@@ -276,6 +279,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await r in core.requests { self?.requests = r }
+        })
+        observers.append(Task { [weak self] in
+            for await a in core.approvals { self?.approvals = a }
         })
         observers.append(Task { [weak self] in
             for await s in core.schoolView { self?.school = s }
@@ -2206,6 +2212,50 @@ final class CoreModel {
         Task {
             do {
                 if let done = try await core.coverSchool(id: id, home: home) { offerEventUndo(done.line, .schoolCover(done)) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    // MARK: Approvals inbox
+
+    /// Approve on an approval card: Touch ID first, every time (biometrics only, no password); only then does the
+    /// card's id (a String) and a Bool cross to the core. A Mac without Touch ID says to approve on the Fold.
+    func approve(_ card: ApprovalCard) {
+        guard core != nil else { return }
+        guard MacBiometric.available else {
+            MekaHaptics.tick()
+            offerEventUndo(ApprovalRules.shared.NO_BIOMETRIC_MAC, nil)
+            return
+        }
+        let id = card.id
+        let reason = ApprovalRules.shared.promptReason(card: card)
+        MekaHaptics.light()
+        MacBiometric.confirm(reason: reason) { [weak self] ok in
+            guard ok else { return }
+            self?.finishApprove(id)
+        }
+    }
+
+    private func finishApprove(_ id: String) {
+        guard let core else { return }
+        Task {
+            do {
+                let answer = try await core.approve(approvalId: id, confirmedWithBiometric: true)
+                if answer.done { MekaHaptics.medium() }
+                offerEventUndo(answer.line, nil)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Decline on an approval card: a tap is enough (saying no is always safe).
+    func declineApproval(_ card: ApprovalCard) {
+        guard let core else { return }
+        let id = card.id
+        MekaHaptics.tick()
+        Task {
+            do {
+                let answer = try await core.declineApproval(approvalId: id)
+                offerEventUndo(answer.line, nil)
             } catch { lastError = error.localizedDescription }
         }
     }

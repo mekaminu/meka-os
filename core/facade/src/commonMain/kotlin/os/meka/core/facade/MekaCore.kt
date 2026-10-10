@@ -172,6 +172,8 @@ class MekaCore(
     private val eventActions = os.meka.core.domain.EventActions(replica, tasks, nowMs, ZoneCalendar(timeZone))
     private val held = os.meka.core.domain.HeldMessages(replica, nowMs)
     private val requestCards = os.meka.core.domain.RequestCards(replica, nowMs, ZoneCalendar(timeZone))
+    // The approvals inbox (V1, slice 1): requests to do something with money or documents, answered in Needs you.
+    private val approvalStore = os.meka.core.domain.Approvals(replica, nowMs, ZoneCalendar(timeZone))
     private val triageCards = os.meka.core.domain.TriageCards(replica, nowMs, ZoneCalendar(timeZone))
     private val gistStore = os.meka.core.domain.GroupGists(replica, nowMs)
     // Spam call protection (call assistant polish 8b): the synced block list.
@@ -449,6 +451,14 @@ class MekaCore(
      * oldest first. Synced, so the Mac shows the same cards; Add or Not a task on either device clears both.
      */
     val requests: StateFlow<List<os.meka.core.domain.RequestCard>> = _requests.asStateFlow()
+
+    private val _approvals = MutableStateFlow<List<os.meka.core.domain.ApprovalCard>>(emptyList())
+    /**
+     * The approvals inbox (V1, slice 1; ADR-006 addendum 2026-10-11): requests from outside MEKA to trade, pay or share
+     * a document, waiting for Meka in Needs you, the soonest to expire first. Approving needs his fingerprint (Touch ID
+     * on the Mac) every time; declining a tap. Synced, so an answer on either device clears both.
+     */
+    val approvals: StateFlow<List<os.meka.core.domain.ApprovalCard>> = _approvals.asStateFlow()
 
     private val _triage = MutableStateFlow<List<os.meka.core.domain.TriageCard>>(emptyList())
     /**
@@ -1165,6 +1175,37 @@ class MekaCore(
     /** Seen on an FYI card, or the chat opened from a Needs a reply card: gone from Needs you on every device. */
     suspend fun seenTriage(messageId: String): Boolean =
         onCore { triageCards.resolve(messageId, os.meka.core.domain.TriageResolution.SEEN) }
+
+    /**
+     * Approve on an approval card (approvals inbox, slice 1). [confirmedWithBiometric] is true only when the app's
+     * system fingerprint prompt (BiometricPrompt, strong biometrics only; Touch ID on the Mac) has just succeeded for
+     * this card: without it the answer is refused ([os.meka.core.domain.ApprovalRefusal.NEEDS_BIOMETRIC]) and nothing is
+     * written. A yes is recorded with a fresh idempotency key for whoever asked to act on once, and in Activity.
+     */
+    suspend fun approve(approvalId: String, confirmedWithBiometric: Boolean): ApprovalAnswer = onCore {
+        answerApproval(
+            approvalId, approve = true,
+            if (confirmedWithBiometric) os.meka.core.domain.ApprovalConfirmation.BIOMETRIC else os.meka.core.domain.ApprovalConfirmation.TAP,
+        )
+    }
+
+    /** Decline on an approval card: no fingerprint needed (saying no is always safe); in Activity. */
+    suspend fun declineApproval(approvalId: String): ApprovalAnswer =
+        onCore { answerApproval(approvalId, approve = false, os.meka.core.domain.ApprovalConfirmation.TAP) }
+
+    private fun answerApproval(id: String, approve: Boolean, confirmation: os.meka.core.domain.ApprovalConfirmation): ApprovalAnswer {
+        val before = approvalStore.find(id)
+        return when (val d = approvalStore.decide(id, approve, confirmation, ids.next(), replica.deviceId)) {
+            is os.meka.core.domain.ApprovalDecision.Refused -> ApprovalAnswer(false, d.reason.line)
+            is os.meka.core.domain.ApprovalDecision.Write -> {
+                before?.let { a ->
+                    val (summary, detail, why) = os.meka.core.domain.ApprovalRules.activityLines(a, d.approved, confirmation)
+                    activity.recordApproval(os.meka.core.domain.ApprovalRules.activityId(a.id), summary, detail, why)
+                }
+                ApprovalAnswer(true, d.line)
+            }
+        }
+    }
 
     /** Not a task (Not needed, Not an event) on a request card: gone from Needs you on every device, its text blanked. */
     suspend fun declineRequest(cardId: String): Boolean =
@@ -3570,6 +3611,7 @@ class MekaCore(
         _editLines.value = os.meka.core.domain.EditLineRules.lines(editsNow, nowMs())
         _afterWork.value = held.summary()
         _requests.value = requestCards.open()
+        _approvals.value = approvalStore.cards()
         _school.value = school.view(hoursOf(workState, todayDay))
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         _triage.value = triageCards.open()

@@ -103,7 +103,7 @@ struct ShellView: View {
     }
 
     /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).
-    private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue + model.requests.count + model.triage.filter { TriageReplyRules.shared.secondary(card: $0) != nil }.count + model.needsYouAsks }
+    private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue + model.approvals.count + model.requests.count + model.triage.filter { TriageReplyRules.shared.secondary(card: $0) != nil }.count + model.needsYouAsks }
 
     /// Sidebar selection that animates the switch (the List only ever sets a value; nil is ignored).
     private var selection: Binding<ShellDestination?> {
@@ -170,6 +170,9 @@ struct NeedsYouView: View {
                         .foregroundStyle(palette.textPrimary)
                         .padding(.bottom, MekaSpace.l)
                         .staggeredAppear(0)
+                    // The approvals inbox (V1, slice 1) first: time-limited, and nothing happens until Meka answers.
+                    ApprovalCardsView(palette: palette, firstIndex: 1)
+                        .padding(.bottom, model.approvals.isEmpty ? 0 : MekaSpace.m)
                     // What the Fold held at work (synced): the card after work, a quiet count during it.
                     AfterWorkCard(palette: palette)
                         .padding(.bottom, MekaSpace.m)
@@ -186,7 +189,7 @@ struct NeedsYouView: View {
                     // The group digest the Fold made at 12:30 / 18:30 (V1, messages slice 4b): gists, never the messages.
                     GroupGistsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                         .padding(.bottom, model.groupGists.isEmpty ? 0 : MekaSpace.m)
-                    if model.needsYouCards.isEmpty && model.requests.isEmpty && model.triage.isEmpty && model.needsYouAsks == 0 {
+                    if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triage.isEmpty && model.needsYouAsks == 0 {
                         // The breathing check ring beside a light line and what lands here (catalogue "Empty
                         // states"; Fold review 2026-10-08, item 7); Off: still.
                         HStack(spacing: MekaSpace.m) {

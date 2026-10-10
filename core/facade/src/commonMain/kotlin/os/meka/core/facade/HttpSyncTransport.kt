@@ -181,6 +181,9 @@ sealed class RequestRead {
  */
 data class RequestDone(val line: String, val taskId: String?, val editId: String?, val homeDay: Long = -1)
 
+/** An answer to an approval card: [done] when it was taken, and the line to show ("Approved · …", or why not). */
+data class ApprovalAnswer(val done: Boolean, val line: String)
+
 /**
  * MEKA's voice (Weather and a voice, item 3): the server says a piece of MEKA's own words with Amazon Polly. Only
  * MEKA's words are sent, never Meka's. Available once the device is connected.

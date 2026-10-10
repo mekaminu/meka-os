@@ -1564,6 +1564,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(trusted.onItsOwn)
     }
 
+    func testApprovalsReachSwift() async throws {
+        // The approvals inbox (slice 1): the flow starts empty, an answer to a request that isn't there is refused with
+        // the core's line, and the Mac's Touch ID lines come from the core's rules.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "approvals-\(UUID().uuidString).db", deviceKey: nil
+        )
+        XCTAssertTrue(core.approvals.value.isEmpty)
+        let answer = try await core.declineApproval(approvalId: "nope")
+        XCTAssertFalse(answer.done)
+        XCTAssertEqual(answer.line, ApprovalRefusal.gone.line)
+        let refused = try await core.approve(approvalId: "nope", confirmedWithBiometric: true)
+        XCTAssertFalse(refused.done)
+        XCTAssertEqual(ApprovalRules.shared.LOCK_MAC, "Approving needs Touch ID")
+    }
+
     func testProtectedTimeReachesSwift() {
         // Protected time, slice 1: the sheet's chips and lines come from the core's rules (only two Bools and an Int
         // cross from the sheet).
