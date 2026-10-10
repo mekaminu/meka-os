@@ -334,7 +334,8 @@ enum MotionMath {
     }
 
     /// The container at `progress` of the expand spring, edge by edge from the row to the detail (clamped 0…1).
-    static func containerBounds(from: CGRect, to: CGRect, progress: Double) -> CGRect {
+    /// Nonisolated: a `Shape`'s `path(in:)` calls it off the main actor.
+    nonisolated static func containerBounds(from: CGRect, to: CGRect, progress: Double) -> CGRect {
         let p = CGFloat(min(max(progress, 0), 1))
         func lerp(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * p }
         let left = lerp(from.minX, to.minX), top = lerp(from.minY, to.minY)
@@ -343,7 +344,7 @@ enum MotionMath {
     }
 
     /// A corner of the container: the row's rounding easing into the detail's.
-    static func containerCorner(from: CGFloat, to: CGFloat, progress: Double) -> CGFloat {
+    nonisolated static func containerCorner(from: CGFloat, to: CGFloat, progress: Double) -> CGFloat {
         from + (to - from) * CGFloat(min(max(progress, 0), 1))
     }
 

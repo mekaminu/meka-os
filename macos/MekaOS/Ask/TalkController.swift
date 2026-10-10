@@ -317,7 +317,8 @@ final class TalkController {
             let n = Int(buffer.frameLength)
             var sum = 0.0
             for i in 0..<n { sum += Double(samples[i]) * Double(samples[i]) }
-            sums.withLock { $0.squares += sum; $0.count += n }
+            let squares = sum // a let copy: a captured var can't cross into withLock's @Sendable closure
+            sums.withLock { $0.squares += squares; $0.count += n }
         }
     }
 
