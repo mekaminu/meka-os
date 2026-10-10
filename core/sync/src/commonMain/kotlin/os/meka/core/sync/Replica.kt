@@ -15,6 +15,19 @@ const val DELETED_FIELD = "deleted"
 
 enum class ApplyResult { APPLIED, DUPLICATE, REJECTED_INTEGRITY, REJECTED_INVALID, REJECTED_CLOCK, REJECTED_HOUSEHOLD }
 
+/**
+ * One field a local commit changed while [Replica.recording] was watching: what it was, what it became, and whether the
+ * entity didn't exist before (Earned trust: an automatic action records exactly what it changed, for the activity log).
+ */
+data class RecordedChange(
+    val entityType: String,
+    val entityId: String,
+    val field: String,
+    val before: FieldValue,
+    val after: FieldValue,
+    val created: Boolean,
+)
+
 fun interface ReplicaListener {
     fun onChanged(refs: Set<EntityRef>)
 }
@@ -37,6 +50,23 @@ class Replica(
         clock.restore(store.clockHighWater())
     }
 
+    private var recorder: MutableList<RecordedChange>? = null
+
+    /**
+     * Runs [block] and returns what it returned with every field its local commits changed, in order (remote changes
+     * are never recorded). Not nested: one recording at a time on a replica.
+     */
+    fun <T> recording(block: () -> T): Pair<T, List<RecordedChange>> {
+        check(recorder == null) { "already recording" }
+        val out = mutableListOf<RecordedChange>()
+        recorder = out
+        try {
+            return block() to out.toList()
+        } finally {
+            recorder = null
+        }
+    }
+
     fun addListener(l: ReplicaListener) { listeners += l }
     fun removeListener(l: ReplicaListener) { listeners -= l }
 
@@ -47,8 +77,11 @@ class Replica(
      */
     fun commitLocal(entityType: String, entityId: String, changes: Map<String, FieldValue>): List<Op> {
         require(changes.isNotEmpty()) { "no changes" }
+        val rec = recorder
         val ops = store.transaction {
             val out = mutableListOf<Op>()
+            val created = rec != null && store.fieldHeads(EntityRef(entityType, entityId)).isEmpty()
+            val recorded = mutableListOf<RecordedChange>()
             for ((field, value) in changes) {
                 val key = FieldKey(entityType, entityId, field)
                 val state = store.fieldState(key)
@@ -72,11 +105,17 @@ class Replica(
                 store.appendOp(op, local = true)
                 store.setFieldState(key, state.add(op))
                 out += op
+                if (rec != null) recorded += RecordedChange(entityType, entityId, field, current?.value ?: FieldValue.Null, value, created)
             }
             if (out.isNotEmpty()) store.setClockHighWater(clock.latest)
+            rec?.addAll(recorded)
             out
         }
-        if (ops.isNotEmpty()) notify(setOf(EntityRef(entityType, entityId)))
+        if (ops.isNotEmpty()) {
+            // What listeners write in answer to this change is theirs, not part of the recorded action.
+            recorder = null
+            try { notify(setOf(EntityRef(entityType, entityId))) } finally { recorder = rec }
+        }
         return ops
     }
 

@@ -162,6 +162,10 @@ class MekaCore(
     private val notifyPrefs = NotificationPrefs(replica)
     private val interruptions = os.meka.core.domain.Interruptions(replica, ZoneCalendar(timeZone))
     private val activity = os.meka.core.domain.ActivityLog(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    /** Earned trust (V1): yeses in a row per kind of Ask card, and the kinds Meka said "just do it" to. */
+    private val trust = os.meka.core.domain.EarnedTrust(replica)
+    /** Which kind each tapped card's undo belongs to, so its Undo restarts that kind's run (this session only). */
+    private val trustOfUndo = mutableMapOf<os.meka.core.domain.AskUndo, os.meka.core.domain.TrustKind>()
     private val eventActions = os.meka.core.domain.EventActions(replica, tasks, nowMs, ZoneCalendar(timeZone))
     private val held = os.meka.core.domain.HeldMessages(replica, nowMs)
     private val requestCards = os.meka.core.domain.RequestCards(replica, nowMs, ZoneCalendar(timeZone))
@@ -1817,7 +1821,39 @@ class MekaCore(
      * Undoes what activity entry [id] changed (only fields still as MEKA left them); returns what happened, in words
      * ("Undone", "Partly undone: …"). Syncs like any edit.
      */
-    suspend fun undoActivity(id: String): String = onCore { activity.undo(id).line.also { refresh() } }
+    suspend fun undoActivity(id: String): String = onCore {
+        val kind = trustKindOfEntry(id)
+        val outcome = activity.undo(id)
+        // Earned trust: undoing something MEKA did on its own sends that kind back to asking first.
+        if (kind != null && outcome != os.meka.core.domain.UndoOutcome.NOT_UNDOABLE) trust.autoUndone(kind)
+        refresh()
+        _activity.value = activity.view()
+        if (kind != null && outcome != os.meka.core.domain.UndoOutcome.NOT_UNDOABLE) os.meka.core.domain.TrustRules.autoUndoneLine(kind, outcome)
+        else outcome.line
+    }
+
+    private fun trustKindOfEntry(id: String): os.meka.core.domain.TrustKind? {
+        val source = activity.items().firstOrNull { it.id == id }?.source ?: return null
+        if (!source.startsWith("trust:")) return null
+        return os.meka.core.domain.TrustKind.of(source.removePrefix("trust:"))
+    }
+
+    /**
+     * Earned trust: the Ask answer's Undo on something MEKA did on its own ([os.meka.core.domain.AskAutoDone]): puts
+     * it back like Activity's Undo, and that kind goes back to asking first. Returns the undo bar's line.
+     */
+    suspend fun undoAutoAsk(activityId: String): String = undoActivity(activityId)
+
+    /**
+     * Earned trust: Meka's answer to "want me to just do these?" ([os.meka.core.domain.TrustOffer]). Yes: cards of that
+     * kind run on their own from his next question (only questions that carried nothing untrusted); no: MEKA keeps
+     * asking and doesn't offer again. Returns the line to show. Synced, so it holds on every device.
+     */
+    suspend fun answerTrustOffer(kindKey: String, yes: Boolean): String = onCore {
+        val kind = os.meka.core.domain.TrustKind.of(kindKey) ?: return@onCore "That can't be changed"
+        trust.answer(kind, yes)
+        os.meka.core.domain.TrustRules.answerLine(kind, yes)
+    }
 
     // ---- Work mode ----
 
@@ -2512,7 +2548,19 @@ class MekaCore(
                 val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
                 val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),
                     os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()))
-                os.meka.core.domain.AskOutcome.Answered(answer.copy(cards = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }))
+                val allowed = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }
+                // Earned trust: a kind Meka said "just do it" to runs now, recorded in Activity with Undo, when the
+                // policy engine permits Level 4 under his rule (never for a question that carried untrusted lines).
+                val trusted = trust.trusted()
+                val did = mutableListOf<os.meka.core.domain.AskAutoDone>()
+                val cards = allowed.filter { card ->
+                    val kind = os.meka.core.domain.TrustRules.kindOf(card.proposal)
+                    if (kind == null || kind !in trusted || !askAuto(card.proposal, kind, context.untrusted)) return@filter true
+                    val auto = try { autoAsk(card, kind) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+                    if (auto != null) { did += auto; false } else true
+                }
+                if (did.isNotEmpty()) _activity.value = activity.view()
+                os.meka.core.domain.AskOutcome.Answered(answer.copy(cards = cards, did = did))
             }
         }
     }
@@ -2524,6 +2572,32 @@ class MekaCore(
      * gone, already fasting).
      */
     suspend fun doAsk(card: os.meka.core.domain.AskCard): os.meka.core.domain.AskDone = onCore {
+        val done = performAsk(card)
+        // Earned trust: one more yes in a row for this kind; the offer comes with the fifth.
+        val kind = os.meka.core.domain.TrustRules.kindOf(card.proposal)
+        if (kind == null) done
+        else {
+            done.undo?.let { trustOfUndo[it] = kind }
+            done.copy(offer = trust.approved(kind))
+        }
+    }
+
+    /**
+     * Earned trust: does [card] on its own (the same code as a tap) through the activity log, which records every
+     * field it changed so Undo puts it back. Null when it changed nothing. Caller is on the core.
+     */
+    private fun autoAsk(card: os.meka.core.domain.AskCard, kind: os.meka.core.domain.TrustKind): os.meka.core.domain.AskAutoDone? {
+        val today = ZoneCalendar(timeZone).epochDayOf(nowMs())
+        val summary = os.meka.core.domain.AskRules.doneLine(card.proposal, today)
+        val (_, id) = activity.actRecorded(
+            summary, os.meka.core.domain.TrustRules.why(kind), os.meka.core.domain.TrustRules.source(kind),
+            AutonomyLevel.AUTO_UNDER_RULE.name, detail = "Asked in MEKA",
+        ) { performAsk(card) }
+        return id?.let { os.meka.core.domain.AskAutoDone(card.proposal, os.meka.core.domain.TrustRules.autoLine(summary), it) }
+    }
+
+    /** What a card does, on a tap or on its own; caller is on the core. */
+    private fun performAsk(card: os.meka.core.domain.AskCard): os.meka.core.domain.AskDone {
         val cal = ZoneCalendar(timeZone)
         val today = cal.epochDayOf(nowMs())
         fun openTask(id: String): os.meka.core.domain.Task =
@@ -2593,7 +2667,7 @@ class MekaCore(
                 os.meka.core.domain.AskUndo.RemoveLeave(id ?: throw os.meka.core.domain.ValidationException(plan.line))
             }
         }
-        os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
+        return os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
 
     /**
@@ -2602,6 +2676,8 @@ class MekaCore(
      * there was nothing left to take back (changed since, here or on the other device).
      */
     suspend fun undoAsk(undo: os.meka.core.domain.AskUndo): Boolean = onCore {
+        // Earned trust: taking a yes back starts that kind's run again.
+        trustOfUndo.remove(undo)?.let { trust.takenBack(it) }
         when (undo) {
             is os.meka.core.domain.AskUndo.RemoveTask -> {
                 if (tasks.get(undo.taskId) == null) false else { tasks.delete(undo.taskId); followBlocks(listOf(undo.taskId)); true }
@@ -2644,13 +2720,15 @@ class MekaCore(
         val lines = mutableListOf<String>()
         val undos = mutableListOf<os.meka.core.domain.AskUndo>()
         var failed = 0
+        var offer: os.meka.core.domain.TrustOffer? = null
         cards.forEach { card ->
             try {
                 val d = doAsk(card)
                 done += card.proposal; lines += d.line; d.undo?.let { undos += it }
+                if (offer == null) offer = d.offer
             } catch (e: CancellationException) { throw e } catch (e: Exception) { failed++ }
         }
-        return os.meka.core.domain.TalkDid(done, lines, undos, failed)
+        return os.meka.core.domain.TalkDid(done, lines, undos, failed, offer)
     }
 
     /** The undo bar's Undo after a spoken yes: takes each change back, newest first. True when anything was undone. */
@@ -3117,7 +3195,40 @@ class MekaCore(
 
     /** ADR-006: a model's proposal is a suggestion the policy engine must allow; it can never run without a tap. */
     private fun askAllowed(p: os.meka.core.domain.AskProposal, untrusted: Boolean): Boolean {
-        val (type, domain) = when (p) {
+        val (type, domain) = askAction(p)
+        val decision = PolicyEngine(PolicyConfig()).decide(
+            ActionRequest(
+                type, domain,
+                provenance = if (untrusted) Provenance.MODEL_FROM_UNTRUSTED else Provenance.MODEL_FROM_TRUSTED,
+                reversible = true,
+                requestedLevel = AutonomyLevel.SUGGEST,
+            ),
+        )
+        return decision !is PolicyDecision.Deny && decision !is PolicyDecision.Permit
+    }
+
+    /**
+     * Earned trust: may [p] run on its own? Only when the policy engine permits Level 4 under the explicit rule Meka's
+     * "just do it" made for [kind] (ADR-006: reversible, an allowlisted rule, never from untrusted provenance).
+     */
+    private fun askAuto(p: os.meka.core.domain.AskProposal, kind: os.meka.core.domain.TrustKind, untrusted: Boolean): Boolean {
+        val (type, domain) = askAction(p)
+        val rule = os.meka.core.domain.TrustRules.ruleId(kind)
+        val config = PolicyConfig(levels = mapOf((domain to type) to AutonomyLevel.AUTO_UNDER_RULE), autoRules = mapOf(rule to type))
+        val decision = PolicyEngine(config).decide(
+            ActionRequest(
+                type, domain,
+                provenance = if (untrusted) Provenance.MODEL_FROM_UNTRUSTED else Provenance.MODEL_FROM_TRUSTED,
+                reversible = true,
+                requestedLevel = AutonomyLevel.AUTO_UNDER_RULE,
+                ruleId = rule,
+            ),
+        )
+        return decision is PolicyDecision.Permit
+    }
+
+    private fun askAction(p: os.meka.core.domain.AskProposal): Pair<ActionType, PolicyDomain> {
+        return when (p) {
             is os.meka.core.domain.AskProposal.AddTask -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             is os.meka.core.domain.AskProposal.CompleteTask, is os.meka.core.domain.AskProposal.MoveTask -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
             is os.meka.core.domain.AskProposal.StartFast -> ActionType.CREATE_TASK to PolicyDomain.HEALTH
@@ -3137,15 +3248,6 @@ class MekaCore(
             // Marks days off in Meka's own planner, like the Leave pane (nothing is sent to his employer or anyone).
             is os.meka.core.domain.AskProposal.BookLeave -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         }
-        val decision = PolicyEngine(PolicyConfig()).decide(
-            ActionRequest(
-                type, domain,
-                provenance = if (untrusted) Provenance.MODEL_FROM_UNTRUSTED else Provenance.MODEL_FROM_TRUSTED,
-                reversible = true,
-                requestedLevel = AutonomyLevel.SUGGEST,
-            ),
-        )
-        return decision !is PolicyDecision.Deny && decision !is PolicyDecision.Permit
     }
 
     // ---- Self-updating phone app (build plan M1) ----

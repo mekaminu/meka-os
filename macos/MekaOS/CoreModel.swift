@@ -1066,6 +1066,8 @@ final class CoreModel {
     private(set) var aiStatus: AiStatusView?
     /// The last Ask card whose Undo was pressed, so Ask shows it again.
     private(set) var askUndone: AskUndone?
+    /// Earned trust: "want me to just do these?" after the fifth yes in a row; Ask shows it under the answer.
+    var askTrustOffer: TrustOffer?
 
     // MARK: Health (Reliability first, item 3)
 
@@ -1157,7 +1159,7 @@ final class CoreModel {
         if let out = try? await core.askMeka(question: question) {
             switch onEnum(of: out) {
             case .answered(let a):
-                reply = AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil)
+                reply = AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did)
             case .unavailable(let u):
                 reply = AskReplyView(lines: [], cards: [], unavailable: u.line)
             }
@@ -1173,12 +1175,36 @@ final class CoreModel {
         MekaHaptics.light()
         do {
             let done = try await core.doAsk(card: card)
+            if let offer = done.offer { askTrustOffer = offer }
             offerEventUndo(done.line, done.undo == nil ? nil : EventUndoOffer.Action.ask(done, index))
             return true
         } catch {
             offerEventUndo(error.localizedDescription, nil)
             return false
         }
+    }
+
+    // MARK: Earned trust (V1)
+
+    /// Meka's answer to the offer: only the kind's key (a String) and a Bool cross into the core. The bar says what
+    /// MEKA will do from now on.
+    func answerTrustOffer(_ offer: TrustOffer, yes: Bool) async {
+        guard let core else { return }
+        if yes { MekaHaptics.light() } else { MekaHaptics.tick() }
+        let key = offer.kindKey
+        askTrustOffer = nil
+        let line = (try? await core.answerTrustOffer(kindKey: key, yes: yes)) ?? "That can't be changed"
+        offerEventUndo(line, nil)
+    }
+
+    /// Undo on something MEKA did on its own: only the Activity entry's id (a String) crosses; that kind goes back to
+    /// asking first, and the bar says so.
+    func undoAutoAsk(_ done: AskAutoDone) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        let id = done.activityId
+        let line = (try? await core.undoAutoAsk(activityId: id)) ?? "That can't be undone now"
+        offerEventUndo(line, nil)
     }
 
     // MARK: Talk to MEKA (V1 voice, slice 3)
@@ -1219,6 +1245,7 @@ final class CoreModel {
         nonisolated(unsafe) let sent = cards
         guard let did = try? await core.doTalk(cards: sent) else { return nil }
         if !did.done.isEmpty { MekaHaptics.light() }
+        if let offer = did.offer { askTrustOffer = offer }
         let undos = did.undos
         offerEventUndo(did.barLine, undos.isEmpty ? nil : .talk(undos, indices))
         return did
@@ -2321,6 +2348,8 @@ struct AskReplyView {
     let lines: [String]
     let cards: [AskCard]
     let unavailable: String?
+    /// Earned trust: what MEKA already did on its own for this answer, each with Undo.
+    var did: [AskAutoDone] = []
 }
 
 /// Ask cards taken back with Undo: `n` counts, `cards` are their places in the answer.

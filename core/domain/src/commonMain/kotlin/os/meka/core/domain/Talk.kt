@@ -174,6 +174,8 @@ object TalkRules {
      */
     fun spoken(answer: AskAnswer, today: Long): String {
         val words = speakable(answer.text)
+        // What MEKA already did on its own (earned trust), said plainly before anything it offers.
+        val did = answer.did.joinToString(" ") { phrase(it.proposal, today, past = true).replaceFirstChar { c -> c.uppercase() } + "." }
         val offer = when (answer.cards.size) {
             0 -> null
             1 -> "Shall I ${phrase(answer.cards[0].proposal, today, past = false)}?"
@@ -183,7 +185,7 @@ object TalkRules {
                 "I can ${choices}. Say which, or " + (if (answer.cards.size == 2) "both." else "all of them.")
             }
         }
-        return listOfNotNull(words.takeIf { it.isNotEmpty() }, offer).joinToString(" ")
+        return listOfNotNull(words.takeIf { it.isNotEmpty() }, did.takeIf { it.isNotEmpty() }, offer).joinToString(" ")
     }
 
     /** After Meka's yes: "Added Call the dentist for tomorrow at 09:00. Anything else?" (failures said plainly). */
@@ -294,7 +296,11 @@ object TalkRules {
  * What a spoken yes came to ([TalkEffect.Do] run through `MekaCore.doTalk`): the proposals [done] with the undo bar's
  * [lines] and how to take each back ([undos]), and how many [failed] (the task went meanwhile).
  */
-data class TalkDid(val done: List<AskProposal>, val lines: List<String>, val undos: List<AskUndo>, val failed: Int) {
+data class TalkDid(
+    val done: List<AskProposal>, val lines: List<String>, val undos: List<AskUndo>, val failed: Int,
+    /** Earned trust's offer when one of these yeses made [TrustRules.STREAK] in a row. */
+    val offer: TrustOffer? = null,
+) {
     /** One undo bar for the lot: "Added “Milk” · Set a timer for 20 min", or why nothing was done. */
     val barLine: String get() = lines.joinToString(" · ").ifEmpty { TalkRules.NOT_HEARD_CARD }
 }
@@ -388,7 +394,10 @@ object TalkFlow {
         if (s.phase != TalkPhase.THINKING) return TalkStep(s, emptyList())
         return when (outcome) {
             is AskOutcome.Answered -> say(
-                s.copy(conversation = s.conversation.answered(question, outcome.answer.text), pending = outcome.answer.cards),
+                s.copy(
+                    conversation = s.conversation.answered(question, outcome.answer.text).did(outcome.answer.did.map { it.line }),
+                    pending = outcome.answer.cards,
+                ),
                 TalkRules.spoken(outcome.answer, today),
             )
             is AskOutcome.Unavailable -> say(s.copy(endAfterSpeaking = true), TalkRules.speakable(outcome.line))

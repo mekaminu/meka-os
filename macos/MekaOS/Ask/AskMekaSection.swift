@@ -26,6 +26,8 @@ struct AskMekaSection: View {
     @State private var reply: AskReplyView?
     @State private var replyN = 0
     @State private var done: Set<Int> = []
+    /// Earned trust: MEKA's own actions in this answer that were taken back (their Activity ids).
+    @State private var autoUndone: Set<String> = []
     /// The question MEKA is answering (or last answered); the matches step aside for it until the field changes.
     @State private var asked: String?
     @State private var matches: AskMatches?
@@ -159,12 +161,26 @@ struct AskMekaSection: View {
                             .textSelection(.enabled)
                             .staggeredAppear(i)
                     }
+                    // Earned trust: what MEKA already did on its own, each with Undo; an undone one folds away.
+                    ForEach(Array(reply.did.enumerated()), id: \.offset) { k, auto in
+                        if !autoUndone.contains(auto.activityId) {
+                            AskAutoRow(done: auto, palette: palette) { undoAuto(auto) }
+                                .staggeredAppear(reply.lines.count + k)
+                                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
                     ForEach(Array(reply.cards.enumerated()), id: \.offset) { j, card in
                         if !done.contains(j) {
                             AskCardRow(card: card, palette: palette) { tap(j, card) }
-                                .staggeredAppear(reply.lines.count + j)
+                                .staggeredAppear(reply.lines.count + reply.did.count + j)
                                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                         }
+                    }
+                    // Earned trust: "want me to just do these?" rises under the answer after the fifth yes in a row.
+                    if let offer = model.askTrustOffer {
+                        TrustOfferRow(offer: offer, palette: palette,
+                                      onYes: { answerOffer(offer, yes: true) }, onNo: { answerOffer(offer, yes: false) })
+                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                     }
                 }
             }
@@ -194,6 +210,8 @@ struct AskMekaSection: View {
                 reply = r
                 replyN += 1
                 done = []
+                autoUndone = []
+                model.askTrustOffer = nil
                 thinking = nil
             }
             if r.unavailable == nil { text = "" }
@@ -204,7 +222,7 @@ struct AskMekaSection: View {
         talk.attach(model)
         talk.onAnswer = { q, out in
             let r: AskReplyView = switch onEnum(of: out) {
-            case .answered(let a): AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil)
+            case .answered(let a): AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did)
             case .unavailable(let u): AskReplyView(lines: [], cards: [], unavailable: u.line)
             }
             asked = q
@@ -213,6 +231,8 @@ struct AskMekaSection: View {
                 reply = r
                 replyN += 1
                 done = []
+                autoUndone = []
+                model.askTrustOffer = nil
                 thinking = nil
             }
         }
@@ -253,6 +273,16 @@ struct AskMekaSection: View {
             MekaHaptics.light()
             talk.start()
         }
+    }
+
+    private func undoAuto(_ auto: AskAutoDone) {
+        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { _ = autoUndone.insert(auto.activityId) }
+        Task { await model.undoAutoAsk(auto) }
+    }
+
+    private func answerOffer(_ offer: TrustOffer, yes: Bool) {
+        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { model.askTrustOffer = nil }
+        Task { await model.answerTrustOffer(offer, yes: yes) }
     }
 
     private func tap(_ index: Int, _ card: AskCard) {
@@ -355,6 +385,61 @@ private struct AskMatchList: View {
 }
 
 /// A proposal: its line and one button; nothing happens until it is clicked.
+/// Something MEKA did on its own (earned trust): "Added “Milk” · done for you" and Undo.
+private struct AskAutoRow: View {
+    let done: AskAutoDone
+    let palette: MekaPalette
+    let undo: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(done.line).font(MekaType.body).foregroundStyle(palette.textSecondary).lineLimit(3)
+            Spacer()
+            Button("Undo", action: undo)
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta)
+                .foregroundStyle(palette.accent)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .accessibilityLabel("Undo: \(done.line)")
+        }
+        .padding(.horizontal, MekaSpace.m)
+        .padding(.vertical, MekaSpace.xs)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+    }
+}
+
+/// Earned trust's offer: its line, then "Just do it" (accent) and "Keep asking".
+private struct TrustOfferRow: View {
+    let offer: TrustOffer
+    let palette: MekaPalette
+    let onYes: () -> Void
+    let onNo: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(offer.line).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: MekaSpace.xs) {
+                Button(offer.yes, action: onYes)
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.onAccent)
+                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                    .background(palette.accent, in: Capsule())
+                Button(offer.no, action: onNo)
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.textSecondary)
+                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                    .background(palette.surface, in: Capsule())
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+    }
+}
+
 private struct AskCardRow: View {
     let card: AskCard
     let palette: MekaPalette

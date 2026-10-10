@@ -76,7 +76,9 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AiStatusView
+import os.meka.core.domain.AskAutoDone
 import os.meka.core.domain.AskCard
+import os.meka.core.domain.TrustOffer
 import os.meka.core.domain.AskOutcome
 import os.meka.core.domain.AskRules
 import os.meka.core.domain.TalkOrb
@@ -126,6 +128,9 @@ fun AskMekaSection(
     var text by rememberSaveable { mutableStateOf("") }
     var shown by remember { mutableStateOf<AskShown>(AskShown.Idle) }
     var done by remember { mutableStateOf(setOf<Int>()) }
+    // Earned trust: the offer after the fifth yes in a row, and MEKA's own actions taken back in this answer.
+    var offer by remember { mutableStateOf<TrustOffer?>(null) }
+    var autoUndone by remember { mutableStateOf(setOf<String>()) }
     var asks by remember { mutableStateOf(0) }
     // The question MEKA is answering (or last answered); the matches step aside for it until the field changes.
     var asked by remember { mutableStateOf<String?>(null) }
@@ -139,6 +144,8 @@ fun AskMekaSection(
             onAnswer = { q, out ->
                 asked = q
                 done = emptySet()
+                autoUndone = emptySet()
+                offer = null
                 shown = AskShown.Answer(q, out, asks + 1)
                 asks += 1
             },
@@ -147,6 +154,7 @@ fun AskMekaSection(
                 val idx = cards.mapNotNull { c -> answer?.answer?.cards?.indexOf(c)?.takeIf { it >= 0 } }.toSet()
                 done = done + idx
                 if (did.done.isNotEmpty()) haptics.light()
+                did.offer?.let { offer = it }
                 val undos = did.undos
                 undo.show(did.barLine, if (undos.isEmpty()) null else suspend { core.undoTalk(undos); done = done - idx })
             },
@@ -190,6 +198,8 @@ fun AskMekaSection(
         shown = AskShown.Thinking(q)
         asked = q
         done = emptySet()
+        autoUndone = emptySet()
+        offer = null
         scope.launch {
             // "Where I am now": a question about here takes one approximate fix first (only with the switch on).
             os.meka.android.today.HereLocation.refresh(context, core, q)
@@ -207,6 +217,7 @@ fun AskMekaSection(
         scope.launch {
             try {
                 val d = core.doAsk(card)
+                d.offer?.let { offer = it }
                 val back = d.undo
                 undo.show(d.line, back?.let { u -> suspend { core.undoAsk(u); done = done - i } })
             } catch (e: Exception) {
@@ -214,6 +225,19 @@ fun AskMekaSection(
                 undo.show(e.message ?: "That can't be done now", null)
             }
         }
+    }
+
+    // Earned trust: Undo on something MEKA did on its own; that kind goes back to asking first.
+    fun undoAuto(a: AskAutoDone) {
+        haptics.tick()
+        autoUndone = autoUndone + a.activityId
+        scope.launch { undo.show(core.undoAutoAsk(a.activityId), null) }
+    }
+
+    fun answerOffer(o: TrustOffer, yes: Boolean) {
+        if (yes) haptics.light() else haptics.tick()
+        offer = null
+        scope.launch { undo.show(core.answerTrustOffer(o.kindKey, yes), null) }
     }
 
     // The field searches as you type (Fold review 2026-10-09 07:26, item 8): the best matches show under it.
@@ -333,13 +357,36 @@ fun AskMekaSection(
                             lines.forEachIndexed { i, line ->
                                 Text(line, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(i)))
                             }
+                            // Earned trust: what MEKA already did on its own, each with Undo; an undone one folds away.
+                            o.answer.did.forEachIndexed { k, a ->
+                                AnimatedVisibility(
+                                    visible = a.activityId !in autoUndone,
+                                    enter = fadeIn(MekaMotion.appear(reduced)),
+                                    exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+                                ) {
+                                    AskAutoRow(a, Modifier.appear(rememberAppearance(lines.size + k))) { undoAuto(a) }
+                                }
+                            }
                             o.answer.cards.forEachIndexed { j, card ->
                                 AnimatedVisibility(
                                     visible = j !in done,
                                     enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
                                     exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
                                 ) {
-                                    AskCardRow(card, Modifier.appear(rememberAppearance(lines.size + j))) { tap(j, card) }
+                                    AskCardRow(card, Modifier.appear(rememberAppearance(lines.size + o.answer.did.size + j))) { tap(j, card) }
+                                }
+                            }
+                            // Earned trust: "want me to just do these?" rises under the answer after the fifth yes in a row.
+                            AnimatedVisibility(
+                                visible = offer != null,
+                                enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+                                exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+                            ) {
+                                // Kept while it folds away (the state is already null by then).
+                                var last by remember { mutableStateOf<TrustOffer?>(null) }
+                                LaunchedEffect(offer) { offer?.let { last = it } }
+                                (offer ?: last)?.let { shownOffer ->
+                                    TrustOfferRow(shownOffer, onYes = { answerOffer(shownOffer, true) }, onNo = { answerOffer(shownOffer, false) })
                                 }
                             }
                         }
@@ -353,6 +400,8 @@ fun AskMekaSection(
 const val ASK_FIELD_TAG = "ask-field"
 const val ASK_MIC_TAG = "ask-mic"
 const val ASK_MATCH_TAG = "ask-match"
+const val ASK_AUTO_TAG = "ask-auto"
+const val ASK_TRUST_TAG = "ask-trust"
 
 /**
  * The best matches for what's typed: the title, then "Task · Planned today 14:00"; a task, list item, goal or habit
@@ -425,6 +474,51 @@ private fun TalkPanel(talk: TalkController, onOrb: () -> Unit) {
 @Composable
 private fun QuestionLine(q: String) {
     Text("“$q”", style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 3)
+}
+
+/** Something MEKA did on its own (earned trust): "Added “Milk” · done for you" and an Undo pill. */
+@Composable
+private fun AskAutoRow(a: AskAutoDone, modifier: Modifier, onUndo: () -> Unit) {
+    Row(
+        modifier.fillMaxWidth().padding(top = MekaSpace.xxs)
+            .clip(RoundedCornerShape(MekaRadius.m))
+            .background(Meka.colors.surface)
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
+            .testTag(ASK_AUTO_TAG),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(a.line, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f), maxLines = 3)
+        Text("Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
+                .clickable(role = Role.Button, onClick = onUndo)
+                .semantics { contentDescription = "Undo: ${a.line}" }
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+    }
+}
+
+/** Earned trust's offer: its line, then "Just do it" (accent) and "Keep asking". */
+@Composable
+private fun TrustOfferRow(o: TrustOffer, onYes: () -> Unit, onNo: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = MekaSpace.xs)
+            .clip(RoundedCornerShape(MekaRadius.m))
+            .background(Meka.colors.surfaceRaised)
+            .padding(MekaSpace.m)
+            .testTag(ASK_TRUST_TAG),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text(o.line, style = MekaType.body, color = Meka.colors.textPrimary)
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Text(o.yes, style = MekaType.itemMeta, color = Meka.colors.onAccent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+                    .clickable(role = Role.Button, onClick = onYes).minTouch()
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+            Text(o.no, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
+                    .clickable(role = Role.Button, onClick = onNo).minTouch()
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+        }
+    }
 }
 
 /** A proposal: its line and one pill; nothing happens until it is tapped. */

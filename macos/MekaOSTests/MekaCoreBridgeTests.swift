@@ -1360,6 +1360,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "booked annual leave for Monday 2 November")
     }
 
+    func testEarnedTrustReachesSwift() {
+        // Earned trust: the offer after five yeses in a row and its two answers reach the Mac (only the kind's key, a
+        // String, and a Bool cross back into the core).
+        let rules = TrustRules.shared
+        XCTAssertNil(rules.offer(k: TrustKind.addTask, s: TrustState(streak: rules.STREAK - 1, trusted: false, declined: false)))
+        let offer = rules.offer(k: TrustKind.addTask, s: TrustState(streak: rules.STREAK, trusted: false, declined: false))
+        XCTAssertEqual(offer?.kindKey, "add_task")
+        XCTAssertEqual(offer?.yes, "Just do it")
+        XCTAssertEqual(offer?.no, "Keep asking")
+        XCTAssertNil(rules.kindOf(p: AskProposalTimer(minutes: 20)))
+        XCTAssertEqual(rules.autoLine(doneLine: "Added “Milk”"), "Added “Milk” · done for you")
+    }
+
     func testFamilyReachesSwift() {
         // Family sharing, slice 4: Settings → Family's rules reach the Mac (only Strings cross from the sheet).
         let rules = FamilyRules.shared

@@ -78,8 +78,11 @@ sealed interface AskProposal {
 /** A proposal as Ask shows it: "Add “Call the dentist” · Tomorrow · 09:00" with its button ("Add"). */
 data class AskCard(val proposal: AskProposal, val line: String, val button: String)
 
-/** An answer as Ask shows it: the words, and up to [AskRules.MAX_CARDS] cards. */
-data class AskAnswer(val text: String, val cards: List<AskCard>)
+/**
+ * An answer as Ask shows it: the words, and up to [AskRules.MAX_CARDS] cards. [did]: what MEKA already did on its own
+ * under earned trust ([TrustRules]; each with Undo), so those proposals are not cards.
+ */
+data class AskAnswer(val text: String, val cards: List<AskCard>, val did: List<AskAutoDone> = emptyList())
 
 /** What asking came to: an answer, or why there is none (AI off, the month's budget spent, offline, a failure). */
 sealed interface AskOutcome {
@@ -116,8 +119,11 @@ sealed interface AskUndo {
     data class RemoveLeave(val leaveId: String) : AskUndo
 }
 
-/** What a tapped card did: the undo bar's line ("Added “Milk”") and how to take it back. */
-data class AskDone(val line: String, val undo: AskUndo?)
+/**
+ * What a tapped card did: the undo bar's line ("Added “Milk”") and how to take it back. [offer]: earned trust's
+ * "want me to just do these?" when this yes made [TrustRules.STREAK] in a row.
+ */
+data class AskDone(val line: String, val undo: AskUndo?, val offer: TrustOffer? = null)
 
 /**
  * What Ask shows about MEKA's AI under its field (`POST /v1/ai/status`): "On · $1.20 of $20 this month". [lit] when it

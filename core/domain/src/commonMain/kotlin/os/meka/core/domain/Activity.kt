@@ -535,6 +535,33 @@ class ActivityLog(
     }
 
     /**
+     * Earned trust: runs [block] (the same code a tap runs) as an automatic action and records every field it changed,
+     * with what each was, so [undo] can put it back exactly as [act] would (an entity it made is deleted on undo).
+     * Returns what [block] returned and the entry's id; null when the block changed nothing (no entry is written).
+     */
+    fun <T> actRecorded(summary: String, why: String, source: String, level: String?, detail: String? = null, block: () -> T): Pair<T, String?> {
+        val (result, recorded) = replica.recording(block)
+        if (recorded.isEmpty()) return result to null
+        val created = recorded.filter { it.created }.map { it.entityType to it.entityId }.distinct()
+        // A made entity is undone by deleting it: it carries an explicit "not deleted" so undo can tell it is as MEKA left it.
+        for (ref in created) {
+            if (current(ref.first, ref.second, DELETED_FIELD) != FieldValue.Bool(false)) {
+                replica.commitLocal(ref.first, ref.second, mapOf(DELETED_FIELD to FieldValue.Bool(false)))
+            }
+        }
+        val changes = recorded.groupBy { Triple(it.entityType, it.entityId, it.field) }.mapNotNull { (k, cs) ->
+            if ((k.first to k.second) in created) null
+            else ActivityChange(k.first, k.second, k.third, cs.first().before, cs.last().after).takeIf { it.before != it.after }
+        } + created.map { ActivityChange(it.first, it.second, DELETED_FIELD, FieldValue.Bool(true), FieldValue.Bool(false)) }
+        if (changes.isEmpty()) return result to null
+        val encoded = ActivityRules.encodeChanges(changes)
+        require(encoded.length <= Op.MAX_TEXT) { "too many changes for one entry" }
+        val id = newId()
+        write(id, ActivityKind.CHANGED, summary, detail, why, source, level, encoded)
+        return result to id
+    }
+
+    /**
      * Puts back what entry [id] changed. A field you (or anything else) changed since, or that two devices disagree on,
      * is left alone. Undoing twice, or on both devices, changes nothing more.
      */
