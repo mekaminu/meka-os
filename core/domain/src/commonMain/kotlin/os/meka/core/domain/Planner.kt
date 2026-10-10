@@ -15,7 +15,8 @@ package os.meka.core.domain
  * and shown among the habit blocks.
  *
  * Meals from the fasting tracker (see [Fasting.plannerMeals]: breaking a fast, the last meal before the eating window
- * closes) are kept free like events, so nothing is planned over them. They are shown, not applied.
+ * closes) are kept free like events, so nothing is planned over them. They are shown, not applied. Date night
+ * ([DateNightRules.block]) is kept free the same way.
  */
 object DayPlanner {
     data class Prefs(
@@ -35,10 +36,10 @@ object DayPlanner {
 
     data class Placement(val task: Task, val startMs: Long, val endMs: Long)
 
-    /** Room made for a habit today. [behind] is true when the habit is behind this week (not just due today). */
-    /** A meal kept free for fasting ("Break your fast"). Shown, not applied. */
+    /** A block kept free: a meal for fasting ("Break your fast") or date night ("Date night"). Shown, not applied. */
     data class MealBlock(val title: String, val startMs: Long, val endMs: Long)
 
+    /** Room made for a habit today. [behind] is true when the habit is behind this week (not just due today). */
     data class HabitPlacement(val habitId: String, val title: String, val startMs: Long, val endMs: Long, val behind: Boolean)
 
     data class Plan(
@@ -53,9 +54,21 @@ object DayPlanner {
         val habits: List<HabitPlacement> = emptyList(),
         /** Habits that needed room but found none today. */
         val habitsUnplaced: List<PlannerHabit> = emptyList(),
-        /** Meals kept free for fasting, in time order. */
+        /** Blocks kept free (fasting's meals, date night), in time order. */
         val meals: List<MealBlock> = emptyList(),
     ) {
+        /** The note under the plan for its kept-free blocks, or null when there are none. */
+        val keptLine: String? get() {
+            if (meals.isEmpty()) return null
+            val date = meals.any { it.title == DateNightRules.TITLE }
+            val fast = meals.any { it.title != DateNightRules.TITLE }
+            return when {
+                date && fast -> "◐ Kept free for your fast's meals and date night. Nothing is planned over them."
+                date -> "◐ Date night is kept clear. Nothing is planned over it."
+                else -> "◐ Kept free for your fast's meals. Nothing is planned over them."
+            }
+        }
+
         /** Nothing to apply (habit blocks are shown, not applied). */
         val isEmpty: Boolean get() = placements.isEmpty()
         /** Nothing to show at all. */

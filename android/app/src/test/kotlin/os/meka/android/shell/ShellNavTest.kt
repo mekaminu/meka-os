@@ -52,7 +52,7 @@ class ShellNavTest {
     fun moreListsEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
         assertEquals(
             listOf(
-                "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "School", "Dinners", "Work mode", "Notifications",
+                "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "School", "Dinners", "Date night", "Work mode", "Notifications",
                 "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "Activity", "Your data",
             ),
             ShellNav.more(connected = true).map { it.label },
@@ -71,7 +71,7 @@ class ShellNavTest {
         val sections = ShellNav.moreSections(connected = true)
         assertEquals(listOf("Places", "Daily", "Settings"), sections.map { it.group.label })
         assertEquals(listOf("Lists", "Goals and habits", "Review", "Vault"), sections[0].items.map { it.label })
-        assertEquals(listOf("Morning brief", "News", "Shut down the day", "School", "Dinners"), sections[1].items.map { it.label })
+        assertEquals(listOf("Morning brief", "News", "Shut down the day", "School", "Dinners", "Date night"), sections[1].items.map { it.label })
         assertEquals(
             listOf("Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "Activity", "Your data"),
             sections[2].items.map { it.label },

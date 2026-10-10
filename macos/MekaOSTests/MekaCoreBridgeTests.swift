@@ -1333,6 +1333,26 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(MealPlanView.companion.EMPTY.shoppingLabel)
     }
 
+    func testDateNightReachesSwift() {
+        // Date night, slice 1: the sheet's chips and lines come from the core's rules (only Ints, an Int64 and a Bool
+        // cross from the sheet).
+        let rules = DateNightRules.shared
+        let sat = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 10)
+        let fri = rules.firstNight(weekday: 5, today: sat, nextWeek: false)
+        XCTAssertEqual(fri, CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 16))
+        XCTAssertEqual(rules.WEEKDAY_CHOICES.count, 7)
+        XCTAssertEqual(rules.START_CHOICES.map { $0.int32Value }.first, 18 * 60)
+        XCTAssertEqual(LocalClock.companion.formatMinute(m: 19 * 60), "19:00")
+        let setting = DateNightSetting(weekday: 5, startMin: 19 * 60, anchorDay: fri, skipped: [])
+        let v = rules.view(s: setting, today: sat)
+        XCTAssertEqual(v.summary, "Every other Friday from 19:00 · next Fri 16 Oct")
+        XCTAssertEqual(v.nights.first?.day, fri)
+        XCTAssertEqual(v.starts.map(\.chosen), [true, false])
+        XCTAssertEqual(rules.todayLine(s: setting, today: fri, minuteOfDay: 13 * 60)?.text, "Date night tonight from 19:00")
+        XCTAssertEqual(rules.skipLine(day: fri, today: sat, skip: true), "Skipped Fri 16 Oct · the evening is free to plan")
+        XCTAssertEqual(DateNightView.companion.EMPTY.summary, rules.OFF_LINE)
+    }
+
     func testSchoolReachesSwift() {
         // School rhythm, slice 1: a typed line is read by the core's rules and the sheet's words reach the Mac (only
         // Strings cross from the sheet; the cover answer sends an id and a Bool).

@@ -61,6 +61,7 @@ enum class MoreItem(val label: String, val line: String, val destination: ShellD
     SHUTDOWN("Shut down the day", "Tick off, carry over and see tomorrow", null, MoreGroup.DAILY),
     SCHOOL("School", "Rex and Logan's days off, PE and trips", null, MoreGroup.DAILY),
     DINNERS("Dinners", "Favourites, the week's dinners and their shopping", null, MoreGroup.DAILY),
+    DATE_NIGHT("Date night", "An evening every two weeks, kept clear", null, MoreGroup.DAILY),
     WORK("Work mode", "Work hours and the Work switch", null, MoreGroup.SETTINGS),
     NOTIFICATIONS("Notifications", "Quiet hours, digests and what reaches you", null, MoreGroup.SETTINGS),
     APPEARANCE("Appearance", "Dark, Light or Auto", null, MoreGroup.SETTINGS),

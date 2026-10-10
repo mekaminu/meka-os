@@ -34,6 +34,13 @@ final class CoreModel {
     private(set) var meals: MealPlanView?
     /// Ask → More → Dinners.
     var showMeals = false
+    /// Date night (V1, slice 1): the fortnightly evening the planner and Gym bookings keep clear, and its next nights
+    /// (Ask → More → Date night). Synced with the Fold.
+    private(set) var dateNight: DateNightView?
+    /// Ask → More → Date night.
+    var showDateNight = false
+    /// The line after a skip or keep ("Skipped Fri 23 Oct · the evening is free to plan"), until the sheet closes.
+    private(set) var dateNightSaid: String?
     /// What the last "Add to shopping" did, kept here so only its line and whether it can be undone reach the sheet.
     private var lastMealsShopped: MealsShopped?
     /// The line under "Add to shopping" after a tap ("Added 9 to shopping"), until the sheet closes or Undo.
@@ -237,6 +244,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await m in core.mealsView { self?.meals = m }
+        })
+        observers.append(Task { [weak self] in
+            for await d in core.dateNightView { self?.dateNight = d }
         })
         observers.append(Task { [weak self] in
             for await t in core.triage { self?.triage = t }
@@ -1841,6 +1851,36 @@ final class CoreModel {
         mealsShoppedLine = nil
         mealsShoppedCanUndo = false
     }
+
+    // MARK: Date night (slice 1)
+
+    /// Every other `weekday` (ISO 1…7) from `startMin`, the first on `firstDay`; only Ints and an Int64 cross.
+    func setDateNight(weekday: Int32, startMin: Int32, firstDay: Int64) {
+        MekaHaptics.tick()
+        dateNightSaid = nil
+        run { _ = try await $0.setDateNight(weekday: weekday, startMin: startMin, firstDay: firstDay) }
+    }
+
+    /// Turns date night off: those evenings are free to plan again.
+    func dateNightOff() {
+        MekaHaptics.tick()
+        dateNightSaid = nil
+        run { _ = try await $0.dateNightOff() }
+    }
+
+    /// Skips one coming night (its evening is free to plan) or keeps it again; an Int64 and a Bool cross, a String comes back.
+    func skipDateNight(day: Int64, skip: Bool) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do {
+                if let line = try await core.skipDateNight(day: day, skip: skip) { dateNightSaid = line }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// The sheet closed: its line goes with it.
+    func forgetDateNightSaid() { dateNightSaid = nil }
 
     // MARK: School rhythm (slice 1)
 

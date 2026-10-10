@@ -717,6 +717,14 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
+                    today.dateNight?.let { night ->
+                        Crossfade(night, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "date-night-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
                     SyncLine(sync)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),

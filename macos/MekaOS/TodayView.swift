@@ -129,6 +129,14 @@ struct TodayView: View {
                             .accessibilityLabel(dinner.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
+                    if let night = model.today?.dateNight {
+                        Text(night.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: night.text)
+                            .accessibilityLabel(night.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     // A calendar sign-in about to end or expired (Reliability first, item 2): one line, Reconnect.
                     if let line = model.signInLines.first {
                         SignInLineView(line: line, palette: palette)
@@ -649,7 +657,7 @@ private struct PlanSheet: View {
         guard let plan = model.plan else { return nil }
         var parts: [String] = []
         if !plan.habits.isEmpty { parts.append("↻ Room for habits that are due. Tick them in Goals when they're done.") }
-        if !plan.meals.isEmpty { parts.append("◐ Kept free for your fast's meals. Nothing is planned over them.") }
+        if let kept = plan.keptLine { parts.append(kept) }
         if !plan.habitsUnplaced.isEmpty { parts.append("No room today for: " + plan.habitsUnplaced.map(\.title).joined(separator: ", ")) }
         return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }

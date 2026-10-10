@@ -134,6 +134,7 @@ class MekaCore(
     private val shopping = os.meka.core.domain.Shopping(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val school = os.meka.core.domain.School(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val mealPlan = os.meka.core.domain.MealPlan(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shutdown = EveningShutdown(replica, tasks, nowMs, ZoneCalendar(timeZone))
@@ -362,6 +363,13 @@ class MekaCore(
      */
     val mealsView: StateFlow<os.meka.core.domain.MealPlanView> = _meals.asStateFlow()
 
+    private val _dateNight = MutableStateFlow(os.meka.core.domain.DateNightView.EMPTY)
+    /**
+     * Date night (V1, slice 1): the fortnightly evening the planner and Gym bookings keep clear, its next few nights
+     * and which can be skipped (Ask → More → Date night). Synced.
+     */
+    val dateNightView: StateFlow<os.meka.core.domain.DateNightView> = _dateNight.asStateFlow()
+
     private val _requests = MutableStateFlow<List<os.meka.core.domain.RequestCard>>(emptyList())
     /**
      * Requests from people Meka watches (V1, slice 2): the open Needs you cards MEKA proposed from their messages,
@@ -506,7 +514,9 @@ class MekaCore(
         val all = tasks.all()
         val sessions = _sessions.value.todayBlocks(day.epochDay, now)
             .map { DayPlanner.HabitPlacement(it.habitId, listOfNotNull(it.title, it.label).joinToString(" · "), it.startMs, it.endMs, behind = false) }
-        DayPlanner.plan(all, visibleEvents(all), now, day, habits = goals.plannerHabits(), meals = fasting.plannerMeals(day), sessions = sessions)
+        // Date night (slice 1) is kept free like a fasting meal.
+        val kept = fasting.plannerMeals(day) + listOfNotNull(os.meka.core.domain.DateNightRules.block(dateNight.setting(), day.epochDay, ZoneCalendar(timeZone)))
+        DayPlanner.plan(all, visibleEvents(all), now, day, habits = goals.plannerHabits(), meals = kept.sortedBy { it.startMs }, sessions = sessions)
     }
 
     /**
@@ -1297,6 +1307,26 @@ class MekaCore(
     /** Undo on the bar after "Add to shopping": what it added leaves the list, what it brought back goes back under Got. */
     suspend fun undoMealsShopping(done: os.meka.core.domain.MealsShopped): Boolean = onCore {
         shopping.takeBack(done.added, done.revived)
+    }
+
+    // ---- Date night (V1, slice 1; Ask → More → Date night) ----
+
+    /**
+     * Sets date night: every other [weekday] (ISO 1..7) from [startMin], the first on [firstDay] (that weekday, from
+     * today on; the view's `starts` offer the two choices). Returns the summary line, or null when nothing changed.
+     */
+    suspend fun setDateNight(weekday: Int, startMin: Int, firstDay: Long): String? = onCore {
+        if (!dateNight.set(weekday, startMin, firstDay)) return@onCore null
+        os.meka.core.domain.DateNightRules.view(dateNight.setting(), todayEpochDay()).summary
+    }
+
+    /** Turns date night off: those evenings are free to plan again. */
+    suspend fun dateNightOff(): Boolean = onCore { dateNight.off() }
+
+    /** Skips one coming date night (its evening is free to plan), or keeps it again; returns the line to show. */
+    suspend fun skipDateNight(day: Long, skip: Boolean): String? = onCore {
+        if (!dateNight.skip(day, skip)) return@onCore null
+        os.meka.core.domain.DateNightRules.skipLine(day, todayEpochDay(), skip)
     }
 
     // ---- School rhythm (V1, slice 1; Ask → More → School, and Needs you's cover questions) ----
@@ -2959,9 +2989,12 @@ class MekaCore(
         val cal = ZoneCalendar(timeZone)
         // Sessions first: Today's timeline shows today's booked sessions still to come.
         val sessionHabits = goals.sessionHabits()
+        // Date night (slice 1): its evening is busy for Gym bookings.
+        val dateNightNow = dateNight.setting()
         _sessions.value = if (sessionHabits.isEmpty()) os.meka.core.domain.SessionsView.EMPTY
         else os.meka.core.domain.SessionRules.book(sessionHabits, todayEpochDay(), nowMs(), cal) { day ->
-            os.meka.core.domain.SessionRules.busyOn(day, dayEvents, workState.schedule, holidays, cal)
+            os.meka.core.domain.SessionRules.busyOn(day, dayEvents, workState.schedule, holidays, cal) +
+                listOfNotNull(os.meka.core.domain.DateNightRules.slot(dateNightNow, day, cal))
         }
         val listsNow = lists.view(all, renewals.view(), shopping.view())
         val fastingNow = fasting.view()
@@ -3003,7 +3036,9 @@ class MekaCore(
             watchFace = watchFaceNow(all, dayEvents, cal),
             school = schoolToday,
             dinner = mealPlan.tonight(),
+            dateNight = os.meka.core.domain.DateNightRules.todayLine(dateNightNow, todayDay, cal.minuteOfDay(nowMs())),
         )
+        _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay)
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(

@@ -38,6 +38,8 @@ data class Today(
     val school: SchoolLine? = null,
     /** Meal plan, slice 1: "Dinner tonight: Chilli" in Today's header from 15:00 to 21:00 ([MealRules.tonightLine]); set by the facade. */
     val dinner: MealLine? = null,
+    /** Date night, slice 1: "Date night tonight from 19:00" in Today's header on the day ([DateNightRules.todayLine]); set by the facade. */
+    val dateNight: DateNightLine? = null,
 ) {
     /** The Up next task is a planned task whose time has gone by ([LateTaskRules.isLate]). */
     fun upNextLate(nowMs: Long): Boolean = upNext?.let { LateTaskRules.isLate(it, nowMs) } ?: false

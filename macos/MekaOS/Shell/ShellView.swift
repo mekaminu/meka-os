@@ -82,6 +82,8 @@ struct ShellView: View {
         .sheet(isPresented: Binding(get: { model.showSchool }, set: { model.showSchool = $0 })) { SchoolSheet(palette: palette) }
         // Dinners (Ask → More): favourites, the week's dinners and their shopping (meal plan, slice 1).
         .sheet(isPresented: Binding(get: { model.showMeals }, set: { model.showMeals = $0 })) { MealsSheet(palette: palette) }
+        // Date night (Ask → More): the fortnightly evening kept clear (date night, slice 1).
+        .sheet(isPresented: Binding(get: { model.showDateNight }, set: { model.showDateNight = $0 })) { DateNightSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showNews }, set: { model.showNews = $0 })) { NewsSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showNotifications }, set: { model.showNotifications = $0 })) {
             NotificationsSheet(palette: palette)

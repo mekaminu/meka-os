@@ -130,8 +130,8 @@ fun PlanPane(
         if (p.habits.isNotEmpty()) {
             Text("↻ Room for habits that are due. Tick them in Goals when they're done.", style = MekaType.caption, color = Meka.colors.textTertiary)
         }
-        if (p.meals.isNotEmpty()) {
-            Text("◐ Kept free for your fast's meals. Nothing is planned over them.", style = MekaType.caption, color = Meka.colors.textTertiary)
+        p.keptLine?.let { kept ->
+            Text(kept, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         if (p.habitsUnplaced.isNotEmpty()) {
             Text("No room today for: " + p.habitsUnplaced.joinToString(", ") { it.title }, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
