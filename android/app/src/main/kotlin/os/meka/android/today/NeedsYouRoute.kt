@@ -42,6 +42,7 @@ import os.meka.android.calendar.EventUndoBar
 import os.meka.android.calendar.rememberEventUndo
 import os.meka.core.domain.DecisionCard
 import os.meka.core.domain.RequestCard
+import os.meka.core.domain.SchoolCover
 import os.meka.core.domain.TriageCard
 import os.meka.core.domain.TriageReplyRules
 import os.meka.android.work.LiveReplies
@@ -133,6 +134,8 @@ internal class DecisionMoves(
     val onSendAll: (List<TriageCard>) -> Unit = {},
     /** The undo bar, for the group digest's Caught up and group switches (slice 4). */
     val undoLine: (String, (suspend () -> Unit)?) -> Unit = { _, _ -> },
+    /** I'll work from home · Covered on a school day off's cover question (school rhythm, slice 1). */
+    val onSchoolCover: (SchoolCover, Boolean) -> Unit = { _, _ -> },
 ) {
     val setAside: List<String> get() = aside.value
 }
@@ -232,7 +235,14 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 if (sent > 0) undo.show(TriageReplyRules.sentAllLine(sent), null)
                 Unit
             }
-        }, undoLine = { line, back -> undo.show(line, back) })
+        }, undoLine = { line, back -> undo.show(line, back) }, onSchoolCover = { card, home ->
+            scope.launch {
+                // The question leaves both apps; Undo opens it again and takes back the work-from-home days it made.
+                runCatching { core.coverSchool(card.id, home) }.getOrNull()
+                    ?.let { done -> undo.show(done.line) { core.undoSchoolCover(done) } }
+                Unit
+            }
+        })
     }
 }
 
@@ -248,6 +258,8 @@ internal fun NeedsYouColumn(
     val cards = NeedsYouStackRules.ordered(stack, moves.setAside)
     val requests by core.requests.collectAsState()
     val triage by core.triage.collectAsState()
+    val school by core.schoolView.collectAsState()
+    val covers = school.covers
     val live by LiveReplies.live.collectAsState()
     val sendAll = remember(triage, live) { TriageReplyRules.sendAll(triage, live) }
     // Meka's edits of MEKA's drafts, by message id, so Send and "Send all" send what each card shows.
@@ -269,7 +281,7 @@ internal fun NeedsYouColumn(
     ) {
         item(key = "title") {
             if (compact) {
-                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + requests.size + triage.size), Modifier.animateItem().appear(rememberAppearance(0, play)))
+                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + requests.size + triage.size + covers.size), Modifier.animateItem().appear(rememberAppearance(0, play)))
             } else {
                 Text("Needs you", style = MekaType.greeting, color = Meka.colors.textPrimary,
                     modifier = Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play)))
@@ -302,22 +314,29 @@ internal fun NeedsYouColumn(
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + i, play)))
             }
         }
+        // School days off on office days, a week ahead (school rhythm, slice 1): soonest first, above the requests.
+        covers.forEachIndexed { i, card ->
+            item(key = "school-cover-${card.id}") {
+                SchoolCoverCardView(card, { home -> moves.onSchoolCover(card, home) },
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + i, play)))
+            }
+        }
         // Requests from people Meka watches, oldest first, above the stack (V1, requests slice 4): each staggers in
         // after the after-work card and folds away with the list's item motion once answered.
         requests.forEachIndexed { i, card ->
             item(key = "request-${card.id}") {
                 RequestCardView(card, { moves.onRequest(card, it) },
-                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + i, play)))
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + covers.size + i, play)))
             }
         }
         // Between digests, groups with news are one quiet line under the cards that Meka can open on demand.
         digest?.takeIf { !it.due }?.let { d ->
             item(key = "group-digest") {
                 GroupDigestSection(d, captures, core, moves.undoLine,
-                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + requests.size, play)))
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + covers.size + requests.size, play)))
             }
         }
-        if (cards.isEmpty() && requests.isEmpty() && triage.isEmpty()) {
+        if (cards.isEmpty() && requests.isEmpty() && triage.isEmpty() && covers.isEmpty()) {
             item(key = "clear") {
                 // The breathing check ring beside a light line (catalogue "Empty states"; Fold review 2026-10-08,
                 // item 7), on the full page and in the open Fold's column alike (Fold review 2026-10-09 00:10, item 6);

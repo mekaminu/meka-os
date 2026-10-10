@@ -132,6 +132,7 @@ class MekaCore(
     private val lists = os.meka.core.domain.Lists(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val renewals = Renewals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shopping = os.meka.core.domain.Shopping(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val school = os.meka.core.domain.School(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shutdown = EveningShutdown(replica, tasks, nowMs, ZoneCalendar(timeZone))
@@ -344,6 +345,14 @@ class MekaCore(
      * latest). Synced (Needs Meka #10), so the Mac shows the same summary; Done on either device clears it on both.
      */
     val afterWork: StateFlow<os.meka.core.domain.AfterWorkSummary> = _afterWork.asStateFlow()
+
+    private val _school = MutableStateFlow(os.meka.core.domain.SchoolView.EMPTY)
+    /**
+     * School rhythm (V1, slice 1): Rex's and Logan's days off, dates and weekly things (Ask → More → School), and the
+     * week-ahead questions ("Rex and Logan are off Mon 27 Oct · You're in the office that day. Who's covering?") that
+     * Needs you shows above the requests. Synced, so both apps show the same; an answer on either clears both.
+     */
+    val schoolView: StateFlow<os.meka.core.domain.SchoolView> = _school.asStateFlow()
 
     private val _requests = MutableStateFlow<List<os.meka.core.domain.RequestCard>>(emptyList())
     /**
@@ -1233,6 +1242,43 @@ class MekaCore(
     suspend fun removeShopping(id: String): Boolean = onCore { shopping.remove(id) }
     /** Clear under Got: every bought item leaves the list for good. Returns how many. */
     suspend fun clearGotShopping(): Int = onCore { shopping.clearGot() }
+
+    // ---- School rhythm (V1, slice 1; Ask → More → School, and Needs you's cover questions) ----
+
+    /**
+     * Adds one typed line ("INSET 27 Oct", "Half term 26–30 Oct", "Rex PE Tue"; [os.meka.core.domain.SchoolRules.read]).
+     * Returns the line to show ("Added INSET day · Tue 27 Oct · Rex and Logan"), or null when MEKA couldn't read a date
+     * or weekday in it (nothing is written; the pane says [os.meka.core.domain.SchoolRules.NOT_READ]).
+     */
+    suspend fun addSchool(text: String): String? = onCore {
+        school.add(text)?.let { (_, e) -> os.meka.core.domain.SchoolRules.addedLine(e) }
+    }
+
+    /** Removes a school line for good (typed by mistake). */
+    suspend fun removeSchool(id: String): Boolean = onCore { school.remove(id) }
+
+    /**
+     * Answers a day off's cover question in Needs you: [home] makes each office day it falls on a work-from-home day
+     * (as Add on a request card does), else it is "Covered". The question leaves both apps. Null when it isn't open.
+     */
+    suspend fun coverSchool(id: String, home: Boolean): os.meka.core.domain.SchoolCoverDone? = onCore {
+        val today = todayEpochDay()
+        val hours = os.meka.core.domain.WorkHours.of(work.state(localClock(), today), bankHolidays.calendar(), today, work.homeDays(today))
+        val items = school.items()
+        val cover = os.meka.core.domain.SchoolRules.covers(items, today, hours).firstOrNull { it.id == id } ?: return@onCore null
+        val title = items.first { it.id == id }.title
+        if (!school.answer(id, home, cover.days)) return@onCore null
+        val set = if (home) cover.days.filter { work.setHomeDay(it, true, today) } else emptyList()
+        os.meka.core.domain.SchoolCoverDone(id, os.meka.core.domain.SchoolRules.coverLine(cover, home, title), set)
+    }
+
+    /** Undo on the bar after answering: the question is open again and the work-from-home days it made are taken back. */
+    suspend fun undoSchoolCover(done: os.meka.core.domain.SchoolCoverDone): Boolean = onCore {
+        var undone = school.reopen(done.id)
+        val today = todayEpochDay()
+        done.homeDays.forEach { if (work.setHomeDay(it, false, today)) undone = true }
+        undone
+    }
 
     // ---- Goals and habits ----
 
@@ -2901,6 +2947,7 @@ class MekaCore(
         _editLines.value = os.meka.core.domain.EditLineRules.lines(editsNow, nowMs())
         _afterWork.value = held.summary()
         _requests.value = requestCards.open()
+        _school.value = school.view(os.meka.core.domain.WorkHours.of(workState, holidays, todayDay, work.homeDays(todayDay)))
         _triage.value = triageCards.open()
         _groupGists.value = gistStore.open()
         _blockedCallers.value = blockList.view()

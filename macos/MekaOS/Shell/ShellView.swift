@@ -78,6 +78,8 @@ struct ShellView: View {
         // The brief and the shutdown open from Today's cards and from Ask's More, so they live on the shell too.
         .sheet(isPresented: Binding(get: { model.showBrief }, set: { model.showBrief = $0 })) { BriefSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showShutdown }, set: { model.showShutdown = $0 })) { ShutdownSheet(palette: palette) }
+        // School (Ask → More): Rex's and Logan's days off, dates and weekly things.
+        .sheet(isPresented: Binding(get: { model.showSchool }, set: { model.showSchool = $0 })) { SchoolSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showNews }, set: { model.showNews = $0 })) { NewsSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showNotifications }, set: { model.showNotifications = $0 })) {
             NotificationsSheet(palette: palette)
@@ -85,7 +87,7 @@ struct ShellView: View {
     }
 
     /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).
-    private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue + model.requests.count + model.triage.filter { TriageReplyRules.shared.secondary(card: $0) != nil }.count }
+    private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue + model.requests.count + model.triage.filter { TriageReplyRules.shared.secondary(card: $0) != nil }.count + model.schoolCovers.count }
 
     /// Sidebar selection that animates the switch (the List only ever sets a value; nil is ignored).
     private var selection: Binding<ShellDestination?> {
@@ -160,12 +162,15 @@ struct NeedsYouView: View {
                     // (V1, requests slice 4), above the stack.
                     TriageCardsView(palette: palette)
                         .padding(.bottom, model.triage.isEmpty ? 0 : MekaSpace.m)
-                    RequestCardsView(palette: palette, firstIndex: 2 + model.triage.count)
+                    // School days off on office days, a week ahead (school rhythm, slice 1), above the requests.
+                    SchoolCoversView(palette: palette, firstIndex: 2 + model.triage.count)
+                        .padding(.bottom, model.schoolCovers.isEmpty ? 0 : MekaSpace.m)
+                    RequestCardsView(palette: palette, firstIndex: 2 + model.triage.count + model.schoolCovers.count)
                         .padding(.bottom, model.requests.isEmpty ? 0 : MekaSpace.m)
                     // The group digest the Fold made at 12:30 / 18:30 (V1, messages slice 4b): gists, never the messages.
-                    GroupGistsView(palette: palette, firstIndex: 2 + model.triage.count + model.requests.count)
+                    GroupGistsView(palette: palette, firstIndex: 2 + model.triage.count + model.schoolCovers.count + model.requests.count)
                         .padding(.bottom, model.groupGists.isEmpty ? 0 : MekaSpace.m)
-                    if model.needsYouCards.isEmpty && model.requests.isEmpty && model.triage.isEmpty {
+                    if model.needsYouCards.isEmpty && model.requests.isEmpty && model.triage.isEmpty && model.schoolCovers.isEmpty {
                         // The breathing check ring beside a light line and what lands here (catalogue "Empty
                         // states"; Fold review 2026-10-08, item 7); Off: still.
                         HStack(spacing: MekaSpace.m) {

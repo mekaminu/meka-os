@@ -1308,6 +1308,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(link.note, rules.NOTE)
     }
 
+    func testSchoolReachesSwift() {
+        // School rhythm, slice 1: a typed line is read by the core's rules and the sheet's words reach the Mac (only
+        // Strings cross from the sheet; the cover answer sends an id and a Bool).
+        let rules = SchoolRules.shared
+        let sat = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 10)
+        let inset = rules.read(text: "INSET 27 Oct", today: sat)
+        XCTAssertEqual(inset?.kind, .off)
+        XCTAssertEqual(inset?.title, "INSET day")
+        XCTAssertEqual(inset?.startDay, CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 27))
+        let pe = rules.read(text: "Rex PE Tue", today: sat)
+        XCTAssertEqual(pe?.kind, .weekly)
+        XCTAssertEqual(pe.map { rules.addedLine(e: $0) }, "Added PE · every Tuesday · Rex")
+        XCTAssertNil(rules.read(text: "Half term", today: sat))
+        XCTAssertFalse(rules.NOT_READ.isEmpty)
+        XCTAssertEqual(rules.HOME_LABEL, "I'll work from home")
+    }
+
     func testWatchLinkReachesSwift() {
         // Galaxy Watch, slice 1: Settings → Watch's rules reach the Mac (only Strings cross from the sheet).
         let rules = WatchLinkRules.shared

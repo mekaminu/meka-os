@@ -58,6 +58,7 @@ struct AskScreen: View {
         case .brief: model.showBrief = true
         case .news: model.showNews = true
         case .shutdown: model.showShutdown = true
+        case .school: model.showSchool = true
         case .work: model.showWork = true
         case .notifications: model.showNotifications = true
         case .activity: model.showActivity = true

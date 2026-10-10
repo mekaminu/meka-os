@@ -54,12 +54,14 @@ object EntityTypes {
     const val VENUE = "venue"
     /** One club fixture's drive from home with traffic, written by the server (see [TravelRules]); id from the event. */
     const val TRAVEL_TIME = "travel_time"
+    /** One line of Rex's and Logan's school year: a day off, a date or a weekly thing (see [School]). */
+    const val SCHOOL_ITEM = "school_item"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
-        TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME,
+        TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM,
     )
 }
 
@@ -283,6 +285,9 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.VENUE -> MergePolicy.Lww
         // Drive times: only the server writes them; its latest answer wins.
         entityType == EntityTypes.TRAVEL_TIME -> MergePolicy.Lww
+        // School: a line removed on any device is gone for good; the cover answer and its Undo, the latest wins.
+        entityType == EntityTypes.SCHOOL_ITEM && field == SchoolFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.SCHOOL_ITEM -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

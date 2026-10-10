@@ -22,6 +22,13 @@ final class CoreModel {
     /// Requests from people Meka watches (V1, requests slice 4): the Fold read them, the cards sync; Add · Change ·
     /// Not a task here clears them there too.
     private(set) var requests: [RequestCard] = []
+    /// School rhythm (V1, slice 1): Rex's and Logan's days off, dates and weekly things (Ask → More → School), and the
+    /// week-ahead cover questions Needs you shows above the requests. Synced with the Fold.
+    private(set) var school: SchoolView?
+    /// The open cover questions (none until the core has said).
+    var schoolCovers: [SchoolCover] { school?.covers ?? [] }
+    /// Ask → More → School.
+    var showSchool = false
     /// Messages the Fold triaged (V1, messages slice 3): Needs a reply (with MEKA's draft) and FYI, synced. The Mac
     /// never sends: Copy reply puts the draft on the pasteboard; Not now / Seen clear the card on both devices.
     private(set) var triage: [TriageCard] = []
@@ -214,6 +221,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await r in core.requests { self?.requests = r }
+        })
+        observers.append(Task { [weak self] in
+            for await s in core.schoolView { self?.school = s }
         })
         observers.append(Task { [weak self] in
             for await t in core.triage { self?.triage = t }
@@ -1744,6 +1754,7 @@ final class CoreModel {
         case .matchResult(let saved): run { try await $0.undoMatchResult(saved: saved) }
         case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }
         case .request(let done): run { _ = try await $0.undoRequest(done: done) }
+        case .schoolCover(let done): run { _ = try await $0.undoSchoolCover(done: done) }
         case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
@@ -1761,6 +1772,36 @@ final class CoreModel {
     }
 
     func dismissEventUndo() { eventUndo = nil }
+
+    // MARK: School rhythm (slice 1)
+
+    /// Adds one typed line ("INSET 27 Oct", "Rex PE Tue"); only a String crosses. Returns the line to show under the
+    /// field: what was added, or that MEKA couldn't read a date in it.
+    func addSchool(_ text: String) async -> String? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        MekaHaptics.light()
+        do {
+            return try await core.addSchool(text: t) ?? SchoolRules.shared.NOT_READ
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func removeSchool(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeSchool(id: id) } }
+
+    /// I'll work from home ([home]) or Covered on a school day off's cover question; only the id and a Bool cross.
+    /// The undo bar rises with what it did.
+    func answerSchoolCover(_ id: String, home: Bool) {
+        guard let core else { return }
+        if home { MekaHaptics.light() } else { MekaHaptics.tick() }
+        Task {
+            do {
+                if let done = try await core.coverSchool(id: id, home: home) { offerEventUndo(done.line, .schoolCover(done)) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
 
     // MARK: Requests from people Meka watches
 
@@ -2028,6 +2069,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case talk([AskUndo], [Int])
         /// Add or Change on a request card: the task, event edit or work-from-home day is taken back.
         case request(RequestDone)
+        /// I'll work from home · Covered on a school day off: the question opens again, its work-from-home days go.
+        case schoolCover(SchoolCoverDone)
         /// Caught up on the group digest: its cards come back on both devices.
         case groupDigest(GroupDigestUndo)
     }
