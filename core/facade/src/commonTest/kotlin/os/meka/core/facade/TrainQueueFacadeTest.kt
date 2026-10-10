@@ -54,4 +54,42 @@ class TrainQueueFacadeTest {
         assertTrue(fold.queueDone(v.done.single().id, false))
         assertEquals("1 article for the train", fold.queueView.value.summary)
     }
+
+    @Test
+    fun anArticlesWordsAreKeptOnThisDeviceOnlyAndGoWithTheLink() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        val article = fold.addToQueue("https://www.bbc.co.uk/news/rail-1", "Why the trains run late").id!!
+        now += 1_000
+        fold.addToQueue("https://overcast.fm/+abc123")
+        // Only the article is fetched; the podcast's own app keeps its downloads.
+        assertEquals(listOf(article), fold.queueToFetch().map { it.id })
+
+        assertFalse(fold.saveQueuePage(article, null))
+        assertTrue(fold.queueToFetch().isEmpty()) // a failure waits six hours
+        now += os.meka.core.domain.ReaderRules.RETRY_MS
+        assertEquals(listOf(article), fold.queueToFetch().map { it.id })
+
+        val para = "Engineers will work through the weekend to replace the signal cables between Bedford and St Pancras."
+        val html = "<html><head><title>BBC · Why the trains run late</title></head><body><article>" +
+            (1..4).joinToString("") { "<p>$para ($it)</p>" } + "</article></body></html>"
+        assertTrue(fold.saveQueuePage(article, html))
+        assertEquals("1 min read · saved to read offline", fold.queuePages.value[article])
+        val page = fold.queuePage(article)!!
+        assertEquals("BBC · Why the trains run late", page.title)
+        assertEquals(4, page.blocks.size)
+        assertTrue(fold.queueToFetch().isEmpty())
+
+        // Never synced: the Mac has the link but not its words.
+        fold.syncNow(); mac.syncNow()
+        assertEquals(null, mac.queuePage(article))
+        assertTrue(mac.queuePages.value.isEmpty())
+
+        // Done keeps the words (Back may bring it back); removing the link drops them.
+        assertTrue(fold.queueDone(article, true))
+        assertTrue(fold.queuePage(article) != null)
+        assertTrue(fold.removeFromQueue(article))
+        assertEquals(null, fold.queuePage(article))
+        assertTrue(fold.queuePages.value.isEmpty())
+    }
 }

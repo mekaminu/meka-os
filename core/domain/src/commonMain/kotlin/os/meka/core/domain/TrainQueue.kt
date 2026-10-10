@@ -9,8 +9,8 @@ import os.meka.core.sync.fv
  * on an office day's commute Today offers them ("For the train · 2 articles · 1 podcast"). One synced entity type
  * (ADR-008 addendum 2026-10-10): `queue_item`, one saved link, a random id.
  *
- * Slice 1 keeps the link, its title and its site; opening one needs a signal. Saving the page's words on the Fold for
- * reading offline, and the train's minutes ("15 min to Farringdon", which waits on the trains item), come later.
+ * Slice 1 keeps the link, its title and its site. Slice 2 ([ReaderRules]) keeps an article's words on the Fold for
+ * reading offline; the train's minutes ("15 min to Farringdon", which waits on the trains item) come later.
  * Plain, non-AI rules; nothing is fetched and nothing leaves Meka's own synced data.
  */
 object QueueFields {
@@ -94,7 +94,7 @@ object QueueRules {
     const val NO_LINK = "That has no link in it. Paste or share a web link (https://…)."
     const val ALREADY = "Already in your train queue"
     const val ACTION = "For the train"
-    const val NOTE = "Saved on both apps. Opening one needs a signal for now: saving pages for offline reading comes next."
+    const val NOTE = "Saved on both apps. On Wi-Fi the Fold keeps each article's words to read on the train without a signal; podcasts open in their own app, which keeps its downloads."
 
     /** Hosts whose links are podcasts (an episode page, or a show). */
     private val PODCAST_HOSTS = listOf(

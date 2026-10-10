@@ -31,6 +31,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         runCatching { app.nudger.alertVoiceMessages() }
         // A build published from the Mac is ready on the card the next time MEKA opens.
         runCatching { app.updater.check() }
+        // Train-time queue, slice 2: articles waiting for the train get their words saved once the phone is on Wi-Fi.
+        runCatching { os.meka.android.ask.QueuePages.saveWaiting(app, app.core) }
         // Push: if the server doesn't have this phone's address yet (offline before, or push was just set up), send it.
         app.ensurePush()
         return if (ok) Result.success() else Result.retry()

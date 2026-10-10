@@ -155,6 +155,11 @@ class MekaApplication : Application() {
                 .distinctUntilChanged()
                 .collect { runCatching { widgets.run() } }
         }
+        // Train-time queue, slice 2: a link saved here or synced from the Mac has its article's words fetched on Wi-Fi.
+        appScope.launch {
+            core.queueView.map { v -> v.waiting.map { it.id } }.distinctUntilChanged()
+                .collect { runCatching { os.meka.android.ask.QueuePages.saveWaiting(this@MekaApplication, core) } }
+        }
         // The News widget when its stories change (the launcher flips the cards itself), and once at process start.
         appScope.launch {
             core.newsPlace

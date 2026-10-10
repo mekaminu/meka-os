@@ -4,7 +4,15 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,6 +28,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +43,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -52,6 +62,8 @@ import os.meka.android.today.SectionLabel
 import os.meka.core.domain.QueueAdded
 import os.meka.core.domain.QueueRow
 import os.meka.core.domain.QueueRules
+import os.meka.core.domain.ReaderPage
+import os.meka.core.domain.ReaderRules
 import os.meka.core.facade.MekaCore
 
 /**
@@ -66,11 +78,35 @@ import os.meka.core.facade.MekaCore
  */
 @Composable
 fun TrainQueuePane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Close") {
+    val reduced = Meka.reducedMotion
+    // Slice 2: an article whose words this phone saved opens in the reader, pushed in from the right like a place in
+    // More (an eighth of the width, with a fade); back slides it away. Reduced motion: cross-fades.
+    var reading by remember { mutableStateOf<String?>(null) }
+    AnimatedContent(
+        targetState = reading,
+        transitionSpec = {
+            if (reduced) fadeIn(MekaMotion.appear(true)) togetherWith fadeOut(MekaMotion.appear(true))
+            else {
+                val forward = targetState != null
+                (slideInHorizontally(MekaMotion.replan(false)) { w -> if (forward) w / 8 else -w / 8 } + fadeIn(MekaMotion.appear(false))) togetherWith
+                    (slideOutHorizontally(MekaMotion.replan(false)) { w -> if (forward) -w / 8 else w / 8 } + fadeOut(MekaMotion.appear(false)))
+            }
+        },
+        label = "queue-reader",
+    ) { id ->
+        if (id == null) QueueList(core, onClose, closeLabel, onRead = { reading = it })
+        else QueueReader(core, id, onBack = { reading = null })
+    }
+}
+
+@Composable
+private fun QueueList(core: MekaCore, onClose: () -> Unit, closeLabel: String, onRead: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val context = LocalContext.current
     val v by core.queueView.collectAsState()
+    val pages by core.queuePages.collectAsState()
     var text by remember { mutableStateOf("") }
     var said by remember { mutableStateOf<QueueAdded?>(null) }
     val saidColor by animateColorAsState(
@@ -115,7 +151,8 @@ fun TrainQueuePane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Cl
         itemsIndexed(v.waiting, key = { _, r -> "q-${r.id}" }) { i, r ->
             QueueRowView(
                 r, Modifier.animateItem().appear(rememberAppearance(4 + i)),
-                onOpen = { open(context, r.url) },
+                offline = pages[r.id],
+                onOpen = { if (pages[r.id] != null) { haptics.tick(); onRead(r.id) } else open(context, r.url) },
                 primary = "Done",
                 onPrimary = { haptics.light(); scope.launch { runCatching { core.queueDone(r.id, true) } } },
                 onRemove = { haptics.tick(); scope.launch { runCatching { core.removeFromQueue(r.id) } } },
@@ -129,7 +166,8 @@ fun TrainQueuePane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Cl
         itemsIndexed(v.done, key = { _, r -> "q-${r.id}" }) { i, r ->
             QueueRowView(
                 r, Modifier.animateItem().appear(rememberAppearance(5 + v.waiting.size + i)),
-                onOpen = { open(context, r.url) },
+                offline = pages[r.id],
+                onOpen = { if (pages[r.id] != null) { haptics.tick(); onRead(r.id) } else open(context, r.url) },
                 primary = "Back",
                 onPrimary = { haptics.tick(); scope.launch { runCatching { core.queueDone(r.id, false) } } },
                 onRemove = { haptics.tick(); scope.launch { runCatching { core.removeFromQueue(r.id) } } },
@@ -155,6 +193,7 @@ private fun open(context: Context, url: String) {
 private fun QueueRowView(
     row: QueueRow,
     modifier: Modifier,
+    offline: String?,
     onOpen: () -> Unit,
     primary: String,
     onPrimary: () -> Unit,
@@ -170,11 +209,17 @@ private fun QueueRowView(
         Column(
             Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onOpen)
-                .semantics(mergeDescendants = true) { contentDescription = "Open " + row.spoken },
+                .semantics(mergeDescendants = true) {
+                    contentDescription = (if (offline != null) "Read " else "Open ") + row.spoken + (offline?.let { ", $it" } ?: "")
+                },
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
             Text(row.title, style = MekaType.body, color = ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(row.meta, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // "6 min read · saved to read offline" fades in once the phone has kept the article's words.
+            AnimatedVisibility(offline != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
+                Text(offline.orEmpty(), style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         Text(
             primary, style = MekaType.caption, color = Meka.colors.accent,
@@ -190,5 +235,81 @@ private fun QueueRowView(
                 .semantics { contentDescription = "Remove ${row.title}" }
                 .padding(MekaSpace.xs),
         )
+    }
+}
+
+/**
+ * The reader (slice 2): a saved article's words, read here without a signal. Title, "bbc.co.uk · 6 min read", its
+ * headings and paragraphs (staggering in), then Done (light haptic; off the queue and back to the list) and Open online.
+ */
+@Composable
+private fun QueueReader(core: MekaCore, id: String, onBack: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val haptics = rememberMekaHaptics()
+    val context = LocalContext.current
+    val v by core.queueView.collectAsState()
+    val row = (v.waiting + v.done).firstOrNull { it.id == id }
+    var page by remember(id) { mutableStateOf<ReaderPage?>(null) }
+    var missing by remember(id) { mutableStateOf(false) }
+    LaunchedEffect(id) {
+        page = runCatching { core.queuePage(id) }.getOrNull()
+        missing = page == null
+    }
+    BackHandler { haptics.tick(); onBack() }
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(MekaSpace.gutter),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+    ) {
+        item(key = "back") {
+            Text("‹ Train queue", style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); onBack() }.minTouch())
+        }
+        val p = page
+        item(key = "title") {
+            Text(p?.title ?: row?.title.orEmpty(), style = MekaType.greeting, color = Meka.colors.textPrimary,
+                modifier = Modifier.appear(rememberAppearance(0)))
+        }
+        item(key = "meta") {
+            val meta = listOfNotNull(row?.meta?.substringBefore(" · "), p?.minutes).joinToString(" · ")
+            Text(meta, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+        }
+        if (p == null && missing) {
+            item(key = "missing") {
+                Text("This article's words aren't on this phone any more. Open it online.", style = MekaType.body,
+                    color = Meka.colors.textSecondary)
+            }
+        }
+        if (p != null) {
+            itemsIndexed(p.blocks, key = { i, _ -> "b-$i" }) { i, b ->
+                Text(
+                    b.text,
+                    style = if (b.heading) MekaType.itemTitle else MekaType.body,
+                    color = Meka.colors.textPrimary,
+                    modifier = Modifier.padding(top = if (b.heading) MekaSpace.s else 0.dp)
+                        .appear(rememberAppearance(2 + i)),
+                )
+            }
+            if (p.cut) {
+                item(key = "cut") { Text(ReaderRules.CUT_LINE, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            }
+        }
+        item(key = "actions") {
+            Row(Modifier.padding(top = MekaSpace.l), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+                if (row != null && !row.done) {
+                    Text("Done", style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.clickable(role = Role.Button) {
+                            haptics.light()
+                            scope.launch { runCatching { core.queueDone(id, true) } }
+                            onBack()
+                        }.minTouch().semantics { contentDescription = "Done: ${row.title}" })
+                }
+                if (row != null) {
+                    Text(ReaderRules.OPEN_ONLINE, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                        modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); open(context, row.url) }.minTouch()
+                            .semantics { contentDescription = "Open ${row.title} online" })
+                }
+            }
+        }
     }
 }

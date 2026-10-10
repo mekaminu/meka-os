@@ -1372,8 +1372,86 @@ class MekaCore(
     /** Marks a saved link read or listened to ([done] true), or puts it back in the queue (false). */
     suspend fun queueDone(id: String, done: Boolean): Boolean = onCore { trainQueue.setDone(id, done) }
 
-    /** Takes a saved link off the queue for good (both apps). */
-    suspend fun removeFromQueue(id: String): Boolean = onCore { trainQueue.remove(id) }
+    /** Takes a saved link off the queue for good (both apps); its saved words go from this device too. */
+    suspend fun removeFromQueue(id: String): Boolean = onCore {
+        val removed = trainQueue.remove(id)
+        if (removed) dropQueuePages(setOf(id))
+        removed
+    }
+
+    // ---- Train queue, slice 2: an article's words kept on this device for reading offline ----
+
+    private val _queuePages = MutableStateFlow<Map<String, String>>(emptyMap())
+    private var queuePagesLoaded = false
+    /** Pages that couldn't be fetched or had too little to read, and when (in memory; tried again after 6 hours). */
+    private val queuePageFailedAt = HashMap<String, Long>()
+
+    /**
+     * The saved links whose words this device keeps, each with its row line ("6 min read · saved to read offline").
+     * Device-local (never synced): the Fold fetches the pages itself on Wi-Fi ([queueToFetch], [saveQueuePage]).
+     */
+    val queuePages: StateFlow<Map<String, String>> = _queuePages.asStateFlow()
+
+    private fun loadQueuePages() {
+        if (queuePagesLoaded) return
+        queuePagesLoaded = true
+        _queuePages.value = os.meka.core.domain.ReaderCodec.decodeIndex(
+            runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.ReaderCodec.INDEX_KEY) } }.getOrNull(),
+        )
+    }
+
+    private fun dropQueuePages(ids: Set<String>) {
+        loadQueuePages()
+        val left = _queuePages.value - ids
+        if (left.size == _queuePages.value.size) return
+        runCatching {
+            localStore.transaction {
+                ids.forEach { localStore.setLocalValue(os.meka.core.domain.ReaderCodec.key(it), null) }
+                localStore.setLocalValue(os.meka.core.domain.ReaderCodec.INDEX_KEY, os.meka.core.domain.ReaderCodec.encodeIndex(left))
+            }
+        }.onSuccess { _queuePages.value = left }
+    }
+
+    /**
+     * The waiting articles whose words this device should fetch now (newest first, at most five; podcasts never; a page
+     * that failed waits six hours). Pages of links gone from the queue are dropped here too.
+     */
+    suspend fun queueToFetch(): List<os.meka.core.domain.QueueFetch> = onCore {
+        loadQueuePages()
+        val items = trainQueue.items()
+        dropQueuePages(os.meka.core.domain.ReaderRules.stale(_queuePages.value.keys, items, nowMs()))
+        os.meka.core.domain.ReaderRules.toFetch(items, _queuePages.value.keys, queuePageFailedAt, nowMs())
+    }
+
+    /**
+     * Keeps the readable words of [html], the page the device fetched for the waiting link [id] (null: the fetch
+     * failed). False when the link no longer waits, the fetch failed or there was too little to read (tried again
+     * after six hours). The words stay on this device only and never go to MEKA's AI.
+     */
+    suspend fun saveQueuePage(id: String, html: String?): Boolean = onCore {
+        loadQueuePages()
+        val item = trainQueue.items().firstOrNull { it.id == id && !it.done }
+        val page = item?.let { html?.let { h -> os.meka.core.domain.ReaderRules.extract(h, it.title) } }?.copy(savedAtMs = nowMs())
+        if (item == null || page == null) {
+            if (item != null) queuePageFailedAt[id] = nowMs()
+            false
+        } else {
+            val index = _queuePages.value + (id to os.meka.core.domain.ReaderRules.rowLine(page))
+            runCatching {
+                localStore.transaction {
+                    localStore.setLocalValue(os.meka.core.domain.ReaderCodec.key(id), os.meka.core.domain.ReaderCodec.encode(page))
+                    localStore.setLocalValue(os.meka.core.domain.ReaderCodec.INDEX_KEY, os.meka.core.domain.ReaderCodec.encodeIndex(index))
+                }
+            }.onSuccess { _queuePages.value = index; queuePageFailedAt.remove(id) }.isSuccess
+        }
+    }
+
+    /** A saved link's words as kept on this device, or null (not saved here, or unreadable). */
+    suspend fun queuePage(id: String): os.meka.core.domain.ReaderPage? = onCore {
+        os.meka.core.domain.ReaderCodec.decode(
+            runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.ReaderCodec.key(id)) } }.getOrNull(),
+        )
+    }
 
     // ---- Work wins (V1, slice 1; the Review tab) ----
 
