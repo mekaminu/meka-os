@@ -102,7 +102,6 @@ class WatchTileService : TileService() {
             column.addContent(gap(MekaSpace.xs.value))
                 .addContent(text(it, MekaType.caption, if (v.fastReached) C.success else C.accent, 1))
         }
-        if (v.capture) column.addContent(gap(MekaSpace.xs.value)).addContent(captureChip())
         // The whole tile opens MEKA; the button sits on top with its own click.
         return LayoutElementBuilders.Box.Builder()
             .setWidth(DimensionBuilders.expand())
