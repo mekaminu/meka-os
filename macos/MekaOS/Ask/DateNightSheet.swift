@@ -104,7 +104,7 @@ struct DateNightSheet: View {
         Button(action: action) {
             Text(label).font(MekaType.caption).lineLimit(1)
                 .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
-                .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xs)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                 .background(Capsule().fill(lit ? palette.accent : palette.surfaceRaised))
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
         }

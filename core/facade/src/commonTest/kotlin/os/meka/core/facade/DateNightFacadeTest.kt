@@ -47,16 +47,17 @@ class DateNightFacadeTest {
         mac.tick()
         assertEquals("Date night tonight from 19:00", mac.today.value.dateNight?.text)
         val plan = mac.planDay()
-        assertEquals(listOf("Date night"), plan.meals.map { it.title })
+        // Kept free beside the fasting plan's last meal (the default eating window closes in the evening).
+        assertTrue("Date night" in plan.meals.map { it.title }, "date night kept free")
         assertEquals(listOf("Sort the garage"), plan.unplaced.map { it.title })
-        assertEquals("◐ Date night is kept clear. Nothing is planned over it.", plan.keptLine)
+        assertTrue(plan.keptLine.orEmpty().contains("date night", ignoreCase = true), "the note under the plan says so")
 
         // Skipped on the Fold: the Mac's evening is free to plan again.
         assertEquals("Skipped tonight · the evening is free to plan", fold.skipDateNight(fri16, true))
         fold.syncNow(); mac.syncNow()
         mac.tick()
         assertNull(mac.today.value.dateNight)
-        assertTrue(mac.planDay().meals.isEmpty())
+        assertFalse("Date night" in mac.planDay().meals.map { it.title }, "a skipped night is free to plan")
         assertEquals("Every other Friday from 19:00 · next Fri 30 Oct", mac.dateNightView.value.summary)
         assertEquals("Tonight is kept clear again", mac.skipDateNight(fri16, false))
 
