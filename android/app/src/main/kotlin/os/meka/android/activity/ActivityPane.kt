@@ -58,7 +58,7 @@ import os.meka.android.designsystem.sharedTitleInPane
  * month's characters) fade in once known. Reduced motion: cross-fades.
  */
 @Composable
-fun ActivityPane(core: MekaCore, onClose: () -> Unit) {
+fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Close") {
     val view by core.activityView.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
@@ -81,7 +81,7 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
+        Text(closeLabel, style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Text("Activity", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.ACTIVITY)).appear(rememberAppearance(0)))

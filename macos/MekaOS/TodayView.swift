@@ -345,6 +345,12 @@ struct TodayView: View {
                                 .padding(.bottom, MekaSpace.l)
                                 .transition(.opacity)
                         }
+                        // Daily receipt: in the evening, what MEKA handled today; clicking opens Activity.
+                        if s.evening, let r = s.receipt {
+                            DailyReceiptView(receipt: r, palette: palette)
+                                .padding(.bottom, MekaSpace.l)
+                                .transition(.opacity)
+                        }
                     }
 
                     if let today = model.today {

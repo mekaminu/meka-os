@@ -352,6 +352,13 @@ class MekaCore(
     /** What MEKA did and why (V1 activity log): the last 30 days by day, newest first; follows sync. */
     val activityView: StateFlow<os.meka.core.domain.ActivityView> = _activity.asStateFlow()
 
+    /** The log changed outside a full refresh: the Activity screen and Today's evening receipt follow it. */
+    private fun activityChanged() {
+        val items = activity.items()
+        _activity.value = os.meka.core.domain.ActivityRules.view(items, nowMs(), ZoneCalendar(timeZone))
+        _shutdown.value = _shutdown.value.copy(receipt = os.meka.core.domain.ReceiptRules.receipt(items, nowMs(), ZoneCalendar(timeZone)))
+    }
+
     private val _search = MutableStateFlow(SearchView.EMPTY)
     /**
      * Search everything: tasks (open, Someday, done), calendar events, Waiting for, decisions, renewals, habits and
@@ -1820,13 +1827,13 @@ class MekaCore(
         interruptions.record(posted, nowMs())
         // The activity log keeps what reached you, with why (V1); counts above stay text-free (ADR-013).
         activity.recordPosted(posted)
-        _activity.value = activity.view()
+        activityChanged()
     }
 
     /** The digest from the last [governNotifications] went out on this device: it goes in the activity log. */
     suspend fun digestPosted(digest: os.meka.core.domain.Digest) = onCore {
         activity.recordDigest(digest)
-        _activity.value = activity.view()
+        activityChanged()
     }
 
     /**
@@ -1851,7 +1858,7 @@ class MekaCore(
         // Earned trust: undoing something MEKA did on its own sends that kind back to asking first.
         if (kind != null && outcome != os.meka.core.domain.UndoOutcome.NOT_UNDOABLE) trust.autoUndone(kind)
         refresh()
-        _activity.value = activity.view()
+        activityChanged()
         if (kind != null && outcome != os.meka.core.domain.UndoOutcome.NOT_UNDOABLE) os.meka.core.domain.TrustRules.autoUndoneLine(kind, outcome)
         else outcome.line
     }
@@ -1970,7 +1977,7 @@ class MekaCore(
         )
         os.meka.core.domain.CallScreeningRules.activityLine(decision, number)?.let { (summary, why) ->
             activity.recordScreened(decision.callerKey, now, summary, why)
-            _activity.value = activity.view()
+            activityChanged()
         }
         decision
     }
@@ -2585,7 +2592,7 @@ class MekaCore(
                     val auto = try { autoAsk(card, kind) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
                     if (auto != null) { did += auto; false } else true
                 }
-                if (did.isNotEmpty()) _activity.value = activity.view()
+                if (did.isNotEmpty()) activityChanged()
                 os.meka.core.domain.AskOutcome.Answered(answer.copy(cards = cards, did = did))
             }
         }
@@ -3408,6 +3415,8 @@ class MekaCore(
         val schoolToday = os.meka.core.domain.SchoolRules.todayLine(schoolItems, todayDay, holidays)
         val shutdownRaw = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), workHolidays)
         val shutdownNow = shutdownRaw.copy(
+            // Daily receipt: what MEKA handled today, from the activity log (Today's evening line opens Activity).
+            receipt = os.meka.core.domain.ReceiptRules.receipt(activity.items(), nowMs(), cal),
             tomorrow = shutdownRaw.tomorrow.copy(
                 weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal),
                 school = os.meka.core.domain.SchoolRules.tomorrowLine(schoolItems, todayDay, holidays),

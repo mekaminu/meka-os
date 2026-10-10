@@ -88,6 +88,11 @@ data class ShutdownView(
      * rest) until the next morning ([WatchFaceRules.nightAlpha]).
      */
     val night: Boolean = false,
+    /**
+     * Daily receipt: "MEKA handled 12 things today" with its biggest parts, for Today's evening line (tapping opens
+     * Activity); null when nothing was handled today. Set by the facade from the activity log ([ReceiptRules]).
+     */
+    val receipt: DailyReceipt? = null,
 ) {
     companion object {
         val EMPTY = ShutdownView(

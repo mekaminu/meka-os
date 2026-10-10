@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import os.meka.android.activity.ActivityPane
 import os.meka.android.ask.TrainQueuePane
 import os.meka.android.designsystem.minTouch
 import android.os.SystemClock
@@ -203,6 +204,8 @@ fun TodayRoute(
     var showSearch by rememberSaveable { mutableStateOf(false) }
     /** The train queue over Today, from the "For the train" line on the commute (train-time queue, slice 1). */
     var showQueue by rememberSaveable { mutableStateOf(false) }
+    /** Activity over Today, from the evening's "MEKA handled 12 things today" (daily receipt). */
+    var showActivity by rememberSaveable { mutableStateOf(false) }
     // News over Today from the command centre (news ticker, slice 2): "" = the place, an id = that story; null = closed.
     var newsOpen by rememberSaveable { mutableStateOf<String?>(null) }
     var newsShown by remember { mutableStateOf<String?>(null) }
@@ -356,6 +359,7 @@ fun TodayRoute(
                         ringPlay = ringPlay, ringPlayed = { ringPlay = DayRingPlay.STILL },
                         openDayRing = { showDayRing = true },
                         openQueue = { showQueue = true },
+                        openActivity = { showActivity = true },
                         listsNeedsYou = CommandCentreRules.todayListsNeedsYou(layout),
                         shutdown = shutdown, openShutdown = { showShutdown = true }, shutdownOpen = showShutdown,
                         openSearch = { showSearch = true },
@@ -422,6 +426,7 @@ fun TodayRoute(
                 }
             }
             MekaPane(visible = showQueue) { TrainQueuePane(core, onClose = { showQueue = false }, closeLabel = "‹ Today") }
+            MekaPane(visible = showActivity) { ActivityPane(core, onClose = { showActivity = false }, closeLabel = "‹ Today") }
             MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
             MekaPane(visible = showSearch) {
                 SearchPane(core, onClose = { showSearch = false }, openItem = { item -> showSearch = false; openItem(item) })
@@ -608,6 +613,7 @@ private fun TodayPane(
     openDayRing: () -> Unit = {},
     /** Tapping "For the train" opens the train queue. */
     openQueue: () -> Unit = {},
+    openActivity: () -> Unit = {},
     /** The capture bar's mic (Talk): Ask, already listening. Null: no mic. */
     onTalk: (() -> Unit)? = null,
     /** The screen's undo bar: a habit ticked on the watch face says which one, with Undo. */
@@ -854,6 +860,14 @@ private fun TodayPane(
                         shutdown.doneLine, shutdown.tomorrow.glance.takeIf { shutdown.evening }, openShutdown,
                         Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
                     )
+                }
+            }
+            // Daily receipt: in the evening, what MEKA handled today; tapping opens Activity over Today.
+            val receipt = shutdown.receipt.takeIf { shutdown.evening }
+            if (receipt != null) {
+                item(key = "receipt") {
+                    DailyReceiptLine(receipt, openActivity,
+                        Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)))
                 }
             }
             }

@@ -53,6 +53,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.DailyReceipt
 import os.meka.core.domain.DoneRow
 import os.meka.core.domain.ShutdownItem
 import os.meka.core.domain.ShutdownView
@@ -321,5 +322,33 @@ internal fun TomorrowGlance(doneLine: String?, glance: String?, onOpen: () -> Un
                 label = "tomorrow-glance",
             ) { g -> Text(g, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 2) }
         }
+    }
+}
+
+/**
+ * Daily receipt in Today's evening: "MEKA handled 12 things today" over its biggest parts ("5 reminders · 3 calls
+ * stopped · 2 digests"), quiet like the glance, with the accent "Activity ›". The count cross-fades as it changes (only
+ * ever a fade, so reduced motion is the same). Tapping opens Activity over Today.
+ */
+@Composable
+internal fun DailyReceiptLine(r: DailyReceipt, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+    val reduced = Meka.reducedMotion
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onOpen() }
+            .padding(vertical = MekaSpace.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AnimatedContent(
+            targetState = r,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "daily-receipt",
+            modifier = Modifier.weight(1f),
+        ) { v ->
+            Column {
+                Text(v.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1)
+                if (v.detail.isNotEmpty()) Text(v.detail, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1)
+            }
+        }
+        Text("Activity ›", style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.padding(start = MekaSpace.xs))
     }
 }

@@ -1007,6 +1007,29 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theEveningReceiptCountsWhatMekaHandledTodayOnBothDevices() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 4, 20, 30).toInstant(london).toEpochMilliseconds() // Sunday evening
+        val a = core("android"); val m = core("mac")
+        a.tick()
+        assertTrue(a.shutdownView.value.evening)
+        assertNull(a.shutdownView.value.receipt)
+
+        val result = a.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        val reminders = result.post.count { it.tier.interrupts }
+        assertTrue(reminders > 0)
+        a.notificationsPosted(result.post)
+        // Straight away on this device, without waiting for the next tick.
+        val r = a.shutdownView.value.receipt
+        assertNotNull(r)
+        assertEquals(reminders, r.count)
+        assertEquals("MEKA handled ${if (reminders == 1) "1 thing" else "$reminders things"} today", r.line)
+        a.syncNow(); m.syncNow()
+        m.tick()
+        assertEquals(r, m.shutdownView.value.receipt)
+    }
+
+    @Test
     fun whatReachedYouShowsInTheActivityLogOnBothDevices() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 10, 4, 20, 30).toInstant(london).toEpochMilliseconds() // Sunday evening

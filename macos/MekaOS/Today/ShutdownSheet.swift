@@ -256,3 +256,33 @@ struct TomorrowGlanceView: View {
         .buttonStyle(MekaPressStyle())
     }
 }
+
+/// Daily receipt in Today's evening: "MEKA handled 12 things today" over its biggest parts ("5 reminders · 3 calls
+/// stopped · 2 digests"), quiet like the glance, with the accent "Activity ›". The count cross-fades as it changes
+/// (only ever a fade, so reduced motion is the same). Clicking opens the Activity sheet.
+struct DailyReceiptView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let receipt: DailyReceipt
+    let palette: MekaPalette
+
+    var body: some View {
+        Button { model.showActivity = true } label: {
+            HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(receipt.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
+                    if !receipt.detail.isEmpty {
+                        Text(receipt.detail).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    }
+                }
+                .id(receipt.line + receipt.detail)
+                .transition(.opacity)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text("Activity ›").font(MekaType.caption).foregroundStyle(palette.accent)
+            }
+            .contentShape(Rectangle())
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: receipt.line + receipt.detail)
+        }
+        .buttonStyle(MekaPressStyle())
+    }
+}
