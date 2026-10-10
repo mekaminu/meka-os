@@ -287,3 +287,53 @@ object TalkOnOpenRules {
         action = if (on) TURN_OFF else TURN_ON,
     )
 }
+
+// ---- ⌥Space from any app (MEKA as the default assistant, the Mac's system-wide shortcut) ----
+
+/**
+ * "From any app" on the Mac (on by default; kept on the Mac, not synced): ⌥Space is registered with macOS as a global
+ * hot key, so pressing it in any app brings MEKA forward on Ask with the orb listening, as the mic does; pressed again
+ * it ends the conversation. Off: ⌥Space works only while MEKA is in front (the Edit menu's Talk to MEKA). When another
+ * app already holds ⌥Space ([taken]) macOS refuses it, and MEKA says so rather than stealing it. Nothing listens until
+ * the shortcut is pressed: the hot key is a key press, never the microphone. (Non-AI, pure.)
+ */
+object TalkAnywhereRules {
+    const val LABEL = "From any app"
+    const val DEFAULT_ON = true
+    const val TURN_ON = "Turn on"
+    const val TURN_OFF = "Turn off"
+
+    /** The Talk sheet's section for the switch; lit while ⌥Space works from any app. */
+    fun section(on: Boolean, taken: Boolean): TalkSetupSection = TalkSetupSection(
+        LABEL,
+        when {
+            on && taken -> "Another app already uses ⌥Space, so it starts MEKA only while MEKA is in front."
+            on -> "On: press ⌥Space in any app and MEKA comes forward listening. Press it again to finish."
+            else -> "Off: ⌥Space starts MEKA only while MEKA is in front."
+        },
+        lit = on && !taken,
+        steps = listOfNotNull(
+            "While it's on, ⌥Space doesn't type a non-breaking space in other apps.",
+            if (on && taken) "Quit or change the other app's shortcut, then turn this off and on again." else null,
+        ),
+        action = if (on) TURN_OFF else TURN_ON,
+    )
+
+    /** "On the Mac"'s line, as the shortcut works now. */
+    fun onTheMacLine(on: Boolean, taken: Boolean): String =
+        if (on && !taken) "Press ⌥Space in any app, or click the mic beside Ask's field."
+        else "Press ⌥Space while MEKA is in front, or click the mic beside Ask's field."
+
+    /**
+     * The Mac's whole Talk sheet in order: On the Mac (its line following the shortcut), From any app, When I open
+     * MEKA, Safety. The words are shared with the Fold's pane through [TalkStartRules] and [TalkOnOpenRules].
+     */
+    fun macSetup(anywhere: Boolean, taken: Boolean, listenOnOpen: Boolean): TalkSetupView {
+        val base = TalkStartRules.setup(mac = true)
+        val onTheMac = base.sections.first().copy(status = onTheMacLine(anywhere, taken))
+        return base.copy(
+            sections = listOf(onTheMac, section(anywhere, taken), TalkOnOpenRules.section(listenOnOpen, mac = true)) +
+                base.sections.drop(1),
+        )
+    }
+}

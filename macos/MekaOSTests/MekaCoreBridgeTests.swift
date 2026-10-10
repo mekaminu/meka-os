@@ -660,6 +660,20 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TalkStartRules.shared.fromAction(action: "android.intent.action.ASSIST"), TalkStart.sideButton)
     }
 
+    /// ⌥Space from any app: the Talk sheet's order, the switch's words and the taken line reach Swift.
+    func testTalkAnywhereReachesSwift() {
+        XCTAssertTrue(TalkAnywhereRules.shared.DEFAULT_ON)
+        let v = TalkAnywhereRules.shared.macSetup(anywhere: true, taken: false, listenOnOpen: false)
+        XCTAssertEqual(v.sections.map(\.label), ["On the Mac", "From any app", "When I open MEKA", "Safety"])
+        XCTAssertTrue(v.sections[0].status.contains("in any app"))
+        XCTAssertEqual(v.sections[1].action, "Turn off")
+        XCTAssertTrue(v.sections[1].lit)
+        let taken = TalkAnywhereRules.shared.section(on: true, taken: true)
+        XCTAssertFalse(taken.lit)
+        XCTAssertTrue(taken.status.contains("Another app"))
+        XCTAssertEqual(TalkAnywhereRules.shared.section(on: false, taken: false).action, "Turn on")
+    }
+
     /// "Listen when I open MEKA" on the Mac: the sheet's section, the open and Dock rules and the room check reach Swift.
     func testTalkOnOpenReachesSwift() {
         let on = TalkOnOpenRules.shared.section(on: true, mac: true)

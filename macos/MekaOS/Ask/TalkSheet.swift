@@ -2,9 +2,12 @@
 import SwiftUI
 
 /// Ask → More → Talk on the Mac (Talk without tapping the mic, slice 1), like the Fold's TalkPane: how to start
-/// talking to MEKA without reaching for the mic (⌥Space while MEKA is in front, or the mic beside Ask's field) and why
+/// talking to MEKA without reaching for the mic (⌥Space from any app or while MEKA is in front, or the mic beside Ask's field) and why
 /// it stays safe. The words are the core's `TalkStartRules`, shared with the Fold (whose pane adds the side button and
 /// the headphones' button).
+///
+/// "From any app" (the system-wide ⌥Space, on by default): `TalkAnywhereRules.section`, with Turn on / Turn off
+/// (kept on this Mac; `GlobalTalkHotKey` registers or lets go of ⌥Space at once, and says when another app holds it).
 ///
 /// "When I open MEKA" (the Mac's slice): `TalkOnOpenRules.section(mac: true)` after "On the Mac", with Turn on / Turn
 /// off (kept on this Mac; turning it on asks for the microphone and speech recognition if not yet decided, since an
@@ -17,17 +20,13 @@ struct TalkSheet: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     @AppStorage(MacTalkOnOpen.key) private var listenOnOpen = false
-
-    /// The core's Mac sections with "When I open MEKA" after "On the Mac".
-    private var sections: [TalkSetupSection] {
-        var all = TalkStartRules.shared.setup(mac: true, assistantHeld: false, samsung: false).sections
-        all.insert(TalkOnOpenRules.shared.section(on: listenOnOpen, mac: true), at: min(1, all.count))
-        return all
-    }
+    /// "From any app" (`TalkAnywhereRules.DEFAULT_ON`: on until switched off).
+    @AppStorage(GlobalTalkHotKey.key) private var anywhere = true
+    private let hotKey = GlobalTalkHotKey.shared
 
     var body: some View {
-        let setup = TalkStartRules.shared.setup(mac: true, assistantHeld: false, samsung: false)
-        let view = (title: setup.title, intro: setup.intro, sections: sections)
+        // The core's Mac sheet: On the Mac, From any app, When I open MEKA, Safety.
+        let view = TalkAnywhereRules.shared.macSetup(anywhere: anywhere, taken: hotKey.taken, listenOnOpen: listenOnOpen)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(view.title).font(MekaType.upNextTitle).staggeredAppear(0)
             Text(view.intro).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
@@ -47,14 +46,9 @@ struct TalkSheet: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let action = s.action, s.label == TalkOnOpenRules.shared.LABEL {
-                        Button(action) { toggleListenOnOpen() }
-                            .buttonStyle(MekaPressStyle())
-                            .font(MekaType.itemMeta)
-                            .foregroundStyle(palette.accent)
-                            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                            .background(palette.surfaceRaised, in: Capsule())
-                            .padding(.top, MekaSpace.xxs)
-                            .accessibilityLabel("\(action): listen when I open MEKA")
+                        switchButton(action, "listen when I open MEKA") { toggleListenOnOpen() }
+                    } else if let action = s.action, s.label == TalkAnywhereRules.shared.LABEL {
+                        switchButton(action, "⌥Space from any app") { toggleAnywhere() }
                     }
                 }
                 .padding(.top, MekaSpace.m)
@@ -69,6 +63,24 @@ struct TalkSheet: View {
         .padding(MekaSpace.l)
         .frame(width: 460)
         .background(palette.surface)
+    }
+
+    /// Turn on / Turn off under a section: presses in with a tick haptic (the caller's action gives it).
+    private func switchButton(_ action: String, _ what: String, _ run: @escaping () -> Void) -> some View {
+        Button(action, action: run)
+            .buttonStyle(MekaPressStyle())
+            .font(MekaType.itemMeta)
+            .foregroundStyle(palette.accent)
+            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+            .background(palette.surfaceRaised, in: Capsule())
+            .padding(.top, MekaSpace.xxs)
+            .accessibilityLabel("\(action): \(what)")
+    }
+
+    private func toggleAnywhere() {
+        MekaHaptics.tick()
+        withAnimation(MekaMotion.themeBlend(reduced: reduceMotion)) { anywhere.toggle() }
+        hotKey.apply()
     }
 
     private func toggleListenOnOpen() {
