@@ -50,7 +50,14 @@ import os.meka.core.domain.VoiceRecordingRules
  * when it ends, on Stop, or when the card folds away. A brass bar fills as it plays, with "0:12 / 0:40".
  */
 @Composable
-internal fun VoiceMessagePlayer(id: String, fetch: suspend (String) -> ByteArray?, modifier: Modifier = Modifier) {
+internal fun VoiceMessagePlayer(
+    id: String,
+    fetch: suspend (String) -> ByteArray?,
+    modifier: Modifier = Modifier,
+    /** Start playing as soon as it appears (▶ Play on the urgent alert), once; [onAutoStarted] then clears the ask. */
+    autoStart: Boolean = false,
+    onAutoStarted: () -> Unit = {},
+) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val scope = rememberCoroutineScope()
@@ -98,6 +105,14 @@ internal fun VoiceMessagePlayer(id: String, fetch: suspend (String) -> ByteArray
                 holder.release()
                 state = PlayerState.FAILED
             }
+        }
+    }
+
+    LaunchedEffect(id, autoStart) {
+        if (autoStart && state == PlayerState.IDLE) {
+            haptics.light()
+            start()
+            onAutoStarted()
         }
     }
 

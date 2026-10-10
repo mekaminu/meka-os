@@ -69,6 +69,8 @@ class MekaApplication : Application() {
     @Volatile var isOnScreen: Boolean = false
     /** Set by the nudge's tap: the shell opens Needs you with the after-work summary. */
     val openAfterWork = MutableStateFlow(false)
+    /** ▶ Play on an urgent voice-message alert: the summary opens on that caller and plays it, then clears it. */
+    val playVoiceMessage = MutableStateFlow<String?>(null)
     /** Dismissing the wake alarm: Today opens the morning brief, then clears it. */
     val openBrief = MutableStateFlow(false)
     /** Today's health line → Ask → More → Health (Reliability first, item 3). */

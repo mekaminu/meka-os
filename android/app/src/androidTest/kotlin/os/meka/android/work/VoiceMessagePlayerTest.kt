@@ -49,6 +49,28 @@ class VoiceMessagePlayerTest {
         assertEquals(listOf("h0123456789abcdef"), asked)
     }
 
+    @Test
+    fun playOnTheUrgentAlertOpensThatCallerAndPlaysWithoutATap() {
+        val asked = mutableListOf<String>()
+        var cleared = 0
+        val kept = CapturedItem("h0123456789abcdef", CaptureApp.PHONE, CaptureKind.VOICE_MESSAGE, "School", "Call me, it's urgent", null, 1_000L, urgent = true, hasAudio = true)
+        val other = CapturedItem("h1111111111111111", CaptureApp.PHONE, CaptureKind.VOICE_MESSAGE, "Garage", "Your car is ready", null, 2_000L, hasAudio = true)
+        val summary = AfterWorkSummaries.build(listOf(kept, other), PeopleLists())
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.width(412.dp)) {
+                    AfterWorkPane(
+                        summary, onDone = {}, onClose = {}, audio = { id -> asked += id; null },
+                        autoPlay = "h0123456789abcdef", onAutoPlayed = { cleared++ },
+                    )
+                }
+            }
+        }
+        compose.waitUntil(3_000) { compose.onAllNodesWithTextCount(VoiceRecordingRules.FAILED) > 0 }
+        assertEquals(listOf("h0123456789abcdef"), asked) // only that message, and nobody tapped
+        assertEquals(1, cleared)
+    }
+
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithTextCount(text: String) =
         onAllNodes(androidx.compose.ui.test.hasText(text)).fetchSemanticsNodes().size
 }

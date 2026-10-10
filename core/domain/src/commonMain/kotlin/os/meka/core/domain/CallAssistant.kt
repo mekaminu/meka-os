@@ -167,6 +167,34 @@ object CallAssistantRules {
      */
     fun toAlert(items: List<CapturedItem>, alerted: Set<String>, nowMs: Long): List<CapturedItem> =
         items.filter { it.kind == CaptureKind.VOICE_MESSAGE && it.isUrgent && it.atMs >= nowMs - ALERT_WINDOW_MS && it.id !in alerted }
+
+    /**
+     * Urgent voice messages whose alert should gain ▶ Play now (polish 8c): already alerted ([alerted]), their
+     * recording has arrived since ([CapturedItem.hasAudio], which also honours "Keep callers' recordings"), still
+     * within [ALERT_WINDOW_MS], and not given Play before ([withPlay]). The Fold updates the alert in place, silently,
+     * and only while it is still showing, so a dismissed alert never comes back.
+     */
+    fun toAddPlay(items: List<CapturedItem>, alerted: Set<String>, withPlay: Set<String>, nowMs: Long): List<CapturedItem> =
+        items.filter {
+            it.kind == CaptureKind.VOICE_MESSAGE && it.isUrgent && it.hasAudio && it.atMs >= nowMs - ALERT_WINDOW_MS &&
+                it.id in alerted && it.id !in withPlay
+        }
+
+    /** The alert's action button. */
+    const val PLAY_ACTION = "▶ Play"
+
+    /** What the Play action opens: "play:<held id>" (the after-work summary on that person, playing it). */
+    const val OPEN_PLAY_PREFIX = "play:"
+
+    fun openPlay(heldId: String): String = OPEN_PLAY_PREFIX + heldId
+
+    /** The held message to play from an open value, or null for anything else (or an id the server couldn't make). */
+    fun playFromOpen(open: String?): String? =
+        open?.takeIf { it.startsWith(OPEN_PLAY_PREFIX) }?.removePrefix(OPEN_PLAY_PREFIX)?.takeIf { VoiceRecordingRules.isHeldId(it) }
+
+    /** The person in [summary] whose card holds [heldId] (to unfold it), or null once it has gone (Done, or swept). */
+    fun personWith(summary: AfterWorkSummary, heldId: String?): PersonSummary? =
+        heldId?.let { id -> summary.people.firstOrNull { p -> p.items.any { it.id == id && it.hasAudio } } }
 }
 
 /**

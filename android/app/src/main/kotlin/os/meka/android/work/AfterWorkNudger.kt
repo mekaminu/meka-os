@@ -56,12 +56,18 @@ class AfterWorkNudger(private val context: Context, private val app: MekaApplica
         val lists = app.captures.lists.value
         val items = app.core.afterWork.value.withLists(lists, CallerLookup.names(context)).people.flatMap { it.items }
         val alerted = prefs.getStringSet(KEY_VOICE_ALERTED, emptySet()).orEmpty()
-        val due = CallAssistantRules.toAlert(items, alerted, System.currentTimeMillis())
-        if (due.isEmpty()) return
-        due.forEach { WorkAlerts.post(context, it, BreakThrough.URGENT) }
+        val withPlay = prefs.getStringSet(KEY_VOICE_PLAY, emptySet()).orEmpty()
+        val now = System.currentTimeMillis()
+        val due = CallAssistantRules.toAlert(items, alerted, now)
+        // ▶ Play joins an alert once its recording is kept: updated in place, silently, only while it's still showing.
+        val play = CallAssistantRules.toAddPlay(items, alerted, withPlay, now)
+        if (due.isEmpty() && play.isEmpty()) return
+        due.forEach { WorkAlerts.post(context, it, BreakThrough.URGENT, play = it.hasAudio) }
+        play.forEach { if (WorkAlerts.isShowing(context, it)) WorkAlerts.post(context, it, BreakThrough.URGENT, play = true) }
         // Remember the latest few only: the rule's one-hour window keeps older ones from ringing again anyway.
         val keep = (alerted + due.map { it.id }).toList().takeLast(MAX_ALERTED).toSet()
-        prefs.edit().putStringSet(KEY_VOICE_ALERTED, keep).commit()
+        val played = (withPlay + play.map { it.id } + due.filter { it.hasAudio }.map { it.id }).toList().takeLast(MAX_ALERTED).toSet()
+        prefs.edit().putStringSet(KEY_VOICE_ALERTED, keep).putStringSet(KEY_VOICE_PLAY, played).commit()
     }
 
     /** The summary was read: the nudge has done its job. */
@@ -129,6 +135,7 @@ class AfterWorkNudger(private val context: Context, private val app: MekaApplica
         private const val PREFS = "work-nudge"
         private const val KEY_AT_WORK = "atWork"
         private const val KEY_VOICE_ALERTED = "voiceAlerted"
+        private const val KEY_VOICE_PLAY = "voicePlay"
         private const val MAX_ALERTED = 50
         /** Soft milestone: the system may batch it into the next ten minutes. */
         const val WINDOW_MS = 10 * 60_000L

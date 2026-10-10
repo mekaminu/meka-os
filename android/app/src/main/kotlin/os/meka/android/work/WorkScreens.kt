@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -78,6 +79,7 @@ import os.meka.core.domain.ContactNumbers
 import os.meka.core.domain.HeldPreview
 import os.meka.core.domain.HeldPreviewRow
 import os.meka.core.domain.HeldPreviewRules
+import os.meka.core.domain.CallAssistantRules
 import os.meka.core.domain.VoiceRecordingRules
 import os.meka.core.domain.LocalClock
 import os.meka.core.domain.PeopleLists
@@ -273,9 +275,15 @@ fun AfterWorkPane(
     audio: suspend (String) -> ByteArray? = { null },
     /** The "Keep callers' recordings" note ([VoiceRecordingRules.privacy] for the synced choice). */
     privacy: String = VoiceRecordingRules.PRIVACY,
+    /** ▶ Play on an urgent alert: this message's caller opens unfolded and it starts playing ([onAutoPlayed] once). */
+    autoPlay: String? = null,
+    onAutoPlayed: () -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
-    var open by rememberSaveable { mutableStateOf<String?>(null) }
+    var open by rememberSaveable { mutableStateOf<String?>(CallAssistantRules.personWith(summary, autoPlay)?.items?.first()?.personKey) }
+    LaunchedEffect(autoPlay) {
+        CallAssistantRules.personWith(summary, autoPlay)?.let { open = it.items.first().personKey }
+    }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
@@ -288,7 +296,7 @@ fun AfterWorkPane(
         // Email-triage style: people sort into place with a stagger.
         summary.people.forEachIndexed { i, p ->
             val key = p.items.first().personKey
-            PersonCard(p, expanded = open == key, Modifier.appear(rememberAppearance(i + 1)), blocked.has(p.blockNumber), onBlock, onReport, audio) {
+            PersonCard(p, expanded = open == key, Modifier.appear(rememberAppearance(i + 1)), blocked.has(p.blockNumber), onBlock, onReport, audio, autoPlay, onAutoPlayed) {
                 open = if (open == key) null else key
             }
         }
@@ -398,6 +406,8 @@ fun AfterWorkHost(onClose: () -> Unit) {
     val blocked by app.core.blockedCallers.collectAsState()
     val work by app.core.workMode.collectAsState()
     LaunchedEffect(Unit) { app.nudger.dismiss() } // he's reading it: the nudge has done its job
+    val autoPlay by app.playVoiceMessage.collectAsState()
+    DisposableEffect(Unit) { onDispose { app.playVoiceMessage.value = null } } // an ask for a message gone stays no longer
     AfterWorkPane(summary, onDone = {
         scope.launch { runCatching { app.core.clearAfterWork() } }
         store.clear()
@@ -406,7 +416,8 @@ fun AfterWorkHost(onClose: () -> Unit) {
         onBlock = { p -> scope.launch { runCatching { app.core.blockHeldCaller(p) } } },
         onReport = { number -> reportScamCall(context, number) },
         audio = { id -> app.core.voiceMessageAudio(id) },
-        privacy = VoiceRecordingRules.privacy(work.recordingDays))
+        privacy = VoiceRecordingRules.privacy(work.recordingDays),
+        autoPlay = autoPlay, onAutoPlayed = { app.playVoiceMessage.value = null })
 }
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
@@ -421,6 +432,8 @@ private fun PersonCard(
     onBlock: (PersonSummary) -> Unit,
     onReport: (String) -> Unit,
     audio: suspend (String) -> ByteArray?,
+    autoPlay: String?,
+    onAutoPlayed: () -> Unit,
     onTap: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -452,7 +465,9 @@ private fun PersonCard(
                         Column(Modifier.weight(1f)) {
                             item.conversation?.let { Text("in $it", style = MekaType.caption, color = Meka.colors.textTertiary) }
                             Text(body, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
-                            if (item.hasAudio) VoiceMessagePlayer(item.id, audio)
+                            if (item.hasAudio) {
+                                VoiceMessagePlayer(item.id, audio, autoStart = item.id == autoPlay, onAutoStarted = onAutoPlayed)
+                            }
                         }
                     }
                 }

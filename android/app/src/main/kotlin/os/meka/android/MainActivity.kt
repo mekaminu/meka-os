@@ -1,5 +1,6 @@
 package os.meka.android
 
+import os.meka.core.domain.CallAssistantRules
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -76,6 +77,13 @@ class MainActivity : ComponentActivity() {
         val app = application as MekaApplication
         when {
             open == OPEN_AFTER_WORK -> app.openAfterWork.value = true
+            // ▶ Play on an urgent voice-message alert: the summary, unfolded on that caller, playing it.
+            open.startsWith(CallAssistantRules.OPEN_PLAY_PREFIX) -> CallAssistantRules.playFromOpen(open)?.let {
+                app.playVoiceMessage.value = it
+                // An action button doesn't auto-cancel its notification: the alert has done its job.
+                androidx.core.app.NotificationManagerCompat.from(this).cancel(it.hashCode())
+                app.openAfterWork.value = true
+            }
             // The wake alarm was dismissed: Today with the morning brief springing up.
             open == OPEN_BRIEF -> app.openBrief.value = true
             // The News widget: Today with News on the story ("" = News itself, which leads with the match).
