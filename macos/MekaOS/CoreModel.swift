@@ -29,6 +29,16 @@ final class CoreModel {
     var schoolCovers: [SchoolCover] { school?.covers ?? [] }
     /// Ask → More → School.
     var showSchool = false
+    /// Meal plan → shopping (V1, slice 1): favourite dinners, the week's dinners and what "Add to shopping" would add
+    /// (Ask → More → Dinners). Synced with the Fold.
+    private(set) var meals: MealPlanView?
+    /// Ask → More → Dinners.
+    var showMeals = false
+    /// What the last "Add to shopping" did, kept here so only its line and whether it can be undone reach the sheet.
+    private var lastMealsShopped: MealsShopped?
+    /// The line under "Add to shopping" after a tap ("Added 9 to shopping"), until the sheet closes or Undo.
+    private(set) var mealsShoppedLine: String?
+    private(set) var mealsShoppedCanUndo = false
     /// Messages the Fold triaged (V1, messages slice 3): Needs a reply (with MEKA's draft) and FYI, synced. The Mac
     /// never sends: Copy reply puts the draft on the pasteboard; Not now / Seen clear the card on both devices.
     private(set) var triage: [TriageCard] = []
@@ -224,6 +234,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await s in core.schoolView { self?.school = s }
+        })
+        observers.append(Task { [weak self] in
+            for await m in core.mealsView { self?.meals = m }
         })
         observers.append(Task { [weak self] in
             for await t in core.triage { self?.triage = t }
@@ -1772,6 +1785,62 @@ final class CoreModel {
     }
 
     func dismissEventUndo() { eventUndo = nil }
+
+    // MARK: Meal plan → shopping (slice 1)
+
+    /// Adds a favourite from one typed line ("Chilli: mince, beans, rice"); only a String crosses. Returns the line to
+    /// show under the field: what was added, or how to type it.
+    func addMeal(_ text: String) async -> String? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        MekaHaptics.light()
+        do {
+            return try await core.addMeal(text: t) ?? MealRules.shared.NOT_READ
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func removeMeal(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeMeal(id: id) } }
+
+    /// Plans a favourite for a day (nil clears it); only an Int64 and a String cross.
+    func planMeal(day: Int64, mealId: String?) { MekaHaptics.tick(); run { _ = try await $0.planMeal(day: day, mealId: mealId) } }
+
+    /// "Add to shopping": the week's ingredients go on the shared list once each. The result stays here; the sheet
+    /// gets its line and Undo.
+    func mealsToShopping() {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                let done = try await core.mealsToShopping()
+                lastMealsShopped = done
+                mealsShoppedLine = done.line
+                mealsShoppedCanUndo = !done.added.isEmpty || !done.revived.isEmpty
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Undo under "Add to shopping": what it added leaves the list. The kept result crosses to the core once.
+    func undoMealsShopping() {
+        guard let core, let done = lastMealsShopped else { return }
+        MekaHaptics.tick()
+        lastMealsShopped = nil
+        mealsShoppedLine = nil
+        mealsShoppedCanUndo = false
+        nonisolated(unsafe) let sent = done
+        Task {
+            do { _ = try await core.undoMealsShopping(done: sent) } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// The sheet closed: its "Added …" line and Undo go with it.
+    func forgetMealsShopped() {
+        lastMealsShopped = nil
+        mealsShoppedLine = nil
+        mealsShoppedCanUndo = false
+    }
 
     // MARK: School rhythm (slice 1)
 

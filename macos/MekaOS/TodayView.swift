@@ -121,6 +121,14 @@ struct TodayView: View {
                             .accessibilityLabel(school.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Meal plan, slice 1: tonight's dinner from 15:00 to 21:00, "Dinner tonight: Chilli"; cross-fades.
+                    if let dinner = model.today?.dinner {
+                        Text(dinner.text).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: dinner.text)
+                            .accessibilityLabel(dinner.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     // A calendar sign-in about to end or expired (Reliability first, item 2): one line, Reconnect.
                     if let line = model.signInLines.first {
                         SignInLineView(line: line, palette: palette)

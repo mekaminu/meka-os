@@ -1308,6 +1308,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(link.note, rules.NOTE)
     }
 
+    func testMealPlanReachesSwift() {
+        // Meal plan → shopping, slice 1: a favourite typed once is read by the core's rules, and the week's lines reach
+        // the Mac (only Strings and an Int64 cross from the sheet).
+        let rules = MealRules.shared
+        let chilli = rules.read(text: "Chilli: mince, kidney beans, rice")
+        XCTAssertEqual(chilli?.title, "Chilli")
+        XCTAssertEqual(chilli?.ingredients, ["mince", "kidney beans", "rice"])
+        XCTAssertNil(rules.read(text: "  "))
+        let sat = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 10)
+        XCTAssertEqual(rules.dayLabel(day: sat, today: sat), "Tonight")
+        XCTAssertEqual(rules.dayLabel(day: sat + 2, today: sat), "Mon 12 Oct")
+        XCTAssertEqual(rules.shoppedLine(added: 5, already: 1), "Added 5 to shopping · 1 was already on it")
+        XCTAssertEqual(rules.plannedLine(day: sat, today: sat, title: "Chilli"), "Chilli for tonight")
+        XCTAssertEqual(MealPlanView.companion.EMPTY.summary, rules.NO_FAVOURITES)
+        XCTAssertNil(MealPlanView.companion.EMPTY.shoppingLabel)
+    }
+
     func testSchoolReachesSwift() {
         // School rhythm, slice 1: a typed line is read by the core's rules and the sheet's words reach the Mac (only
         // Strings cross from the sheet; the cover answer sends an id and a Bool).

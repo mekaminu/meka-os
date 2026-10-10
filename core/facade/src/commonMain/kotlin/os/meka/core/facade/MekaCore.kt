@@ -133,6 +133,7 @@ class MekaCore(
     private val renewals = Renewals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shopping = os.meka.core.domain.Shopping(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val school = os.meka.core.domain.School(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val mealPlan = os.meka.core.domain.MealPlan(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shutdown = EveningShutdown(replica, tasks, nowMs, ZoneCalendar(timeZone))
@@ -353,6 +354,13 @@ class MekaCore(
      * Needs you shows above the requests. Synced, so both apps show the same; an answer on either clears both.
      */
     val schoolView: StateFlow<os.meka.core.domain.SchoolView> = _school.asStateFlow()
+
+    private val _meals = MutableStateFlow(os.meka.core.domain.MealPlanView.EMPTY)
+    /**
+     * Meal plan → shopping (V1, slice 1): favourite dinners with their ingredients, the week's dinners (today and the
+     * six days after) and what "Add to shopping" would put on the shared list (Ask → More → Dinners). Synced.
+     */
+    val mealsView: StateFlow<os.meka.core.domain.MealPlanView> = _meals.asStateFlow()
 
     private val _requests = MutableStateFlow<List<os.meka.core.domain.RequestCard>>(emptyList())
     /**
@@ -1242,6 +1250,54 @@ class MekaCore(
     suspend fun removeShopping(id: String): Boolean = onCore { shopping.remove(id) }
     /** Clear under Got: every bought item leaves the list for good. Returns how many. */
     suspend fun clearGotShopping(): Int = onCore { shopping.clearGot() }
+
+    // ---- Meal plan → shopping (V1, slice 1; Ask → More → Dinners) ----
+
+    /**
+     * Adds a favourite dinner from one typed line ("Chilli: mince, kidney beans, rice"; [os.meka.core.domain.MealRules.read]);
+     * a dinner already a favourite gets the newly typed ingredients. Returns the line to show ("Added Chilli · 3
+     * ingredients"), or null when nothing could be read (the pane says [os.meka.core.domain.MealRules.NOT_READ]).
+     */
+    suspend fun addMeal(text: String): String? = onCore {
+        mealPlan.add(text)?.let { (e, updated) -> os.meka.core.domain.MealRules.addedLine(e, updated) }
+    }
+
+    /** Removes a favourite for good; days it was planned on read "Not planned". */
+    suspend fun removeMeal(id: String): Boolean = onCore { mealPlan.remove(id) }
+
+    /**
+     * Plans the favourite [mealId] for [day] (an epoch day, today up to two weeks on), or clears the day with null.
+     * Returns the line to show ("Chilli for tonight"), or null when nothing changed.
+     */
+    suspend fun planMeal(day: Long, mealId: String?): String? = onCore {
+        if (!mealPlan.set(day, mealId)) return@onCore null
+        val title = mealId?.let { id -> mealPlan.meals().firstOrNull { it.id == id }?.title }
+        os.meka.core.domain.MealRules.plannedLine(day, todayEpochDay(), title)
+    }
+
+    /**
+     * "Add to shopping": the week's planned dinners' ingredients go on the shared shopping list, each once, leaving out
+     * what is already to buy (a got one comes back). Undo with [undoMealsShopping].
+     */
+    suspend fun mealsToShopping(): os.meka.core.domain.MealsShopped = onCore {
+        val toBuy = shopping.view().toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet()
+        val v = mealPlan.view(toBuy)
+        val wanted = v.week.mapNotNull { r -> r.mealId?.let { id -> mealPlan.meals().firstOrNull { it.id == id } } }
+            .flatMap { it.ingredients }.distinctBy(os.meka.core.domain.ShoppingRules::key)
+        if (v.toAdd.isEmpty()) return@onCore os.meka.core.domain.MealsShopped(
+            os.meka.core.domain.MealRules.shoppedLine(0, wanted.size), emptyList(), emptyList(),
+        )
+        val a = shopping.addTracked(v.toAdd.joinToString(", "))
+        val added = a.created.size + a.revived.size
+        os.meka.core.domain.MealsShopped(
+            os.meka.core.domain.MealRules.shoppedLine(added, wanted.size - added), a.created, a.revived,
+        )
+    }
+
+    /** Undo on the bar after "Add to shopping": what it added leaves the list, what it brought back goes back under Got. */
+    suspend fun undoMealsShopping(done: os.meka.core.domain.MealsShopped): Boolean = onCore {
+        shopping.takeBack(done.added, done.revived)
+    }
 
     // ---- School rhythm (V1, slice 1; Ask → More → School, and Needs you's cover questions) ----
 
@@ -2915,8 +2971,10 @@ class MekaCore(
             // The watch face (Fold review 2026-10-09 07:26, item 2): the next 12 hours, across midnight.
             watchFace = watchFaceNow(all, dayEvents, cal),
             school = schoolToday,
+            dinner = mealPlan.tonight(),
         )
         _lists.value = listsNow
+        _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(
             _today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone),
             credit = os.meka.core.domain.CallCreditRules.card(credit, workState.callAssistant),

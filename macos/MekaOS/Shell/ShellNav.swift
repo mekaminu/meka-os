@@ -67,7 +67,7 @@ struct MoreSection: Equatable, Identifiable {
 /// Appearance, which shows its choices in the row itself (`ShellNav.unfoldsInPlace`). Today's header keeps only
 /// Search and Plan my day (Today clarity, slice 2): the brief, the shutdown, work mode and the theme moved here.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, review, vault, brief, news, shutdown, school, work, notifications, appearance, voice, talk, calendars, family, watch, setup, health, activity, yourData
+    case lists, goals, review, vault, brief, news, shutdown, school, dinners, work, notifications, appearance, voice, talk, calendars, family, watch, setup, health, activity, yourData
     var id: Int { rawValue }
 
     var label: String {
@@ -80,6 +80,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .news: "News"
         case .shutdown: "Shut down the day"
         case .school: "School"
+        case .dinners: "Dinners"
         case .work: "Work mode"
         case .notifications: "Notifications"
         case .appearance: "Appearance"
@@ -105,6 +106,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .news: "Barça, AI and the headlines · topics and sources"
         case .shutdown: "Tick off, carry over and see tomorrow"
         case .school: "Rex and Logan's days off, PE and trips"
+        case .dinners: "Favourites, the week's dinners and their shopping"
         case .work: "Work hours and the Work switch"
         case .notifications: "Quiet hours, digests and what reaches you"
         case .appearance: "Dark, Light or Auto"
@@ -123,7 +125,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
     var group: MoreGroup {
         switch self {
         case .lists, .goals, .review, .vault: .places
-        case .brief, .news, .shutdown, .school: .daily
+        case .brief, .news, .shutdown, .school, .dinners: .daily
         case .work, .notifications, .appearance, .voice, .talk, .calendars, .family, .watch, .setup, .health, .activity, .yourData: .settings
         }
     }
@@ -134,7 +136,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .goals: .goals
         case .review: .review
         case .vault: .vault
-        case .brief, .news, .shutdown, .school, .work, .notifications, .appearance, .voice, .talk, .activity, .yourData, .calendars, .family, .watch, .setup, .health: nil
+        case .brief, .news, .shutdown, .school, .dinners, .work, .notifications, .appearance, .voice, .talk, .activity, .yourData, .calendars, .family, .watch, .setup, .health: nil
         }
     }
 }

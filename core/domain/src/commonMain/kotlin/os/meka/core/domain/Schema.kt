@@ -56,12 +56,16 @@ object EntityTypes {
     const val TRAVEL_TIME = "travel_time"
     /** One line of Rex's and Logan's school year: a day off, a date or a weekly thing (see [School]). */
     const val SCHOOL_ITEM = "school_item"
+    /** One favourite dinner and its ingredients (see [MealPlan]). */
+    const val MEAL = "meal"
+    /** What's for dinner on one day, id `d<epoch day>` (see [MealPlan]). */
+    const val MEAL_DAY = "meal_day"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
-        TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM,
+        TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
     )
 }
 
@@ -288,6 +292,10 @@ object MekaSchema : SchemaRegistry {
         // School: a line removed on any device is gone for good; the cover answer and its Undo, the latest wins.
         entityType == EntityTypes.SCHOOL_ITEM && field == SchoolFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.SCHOOL_ITEM -> MergePolicy.Lww
+        // Meals: a favourite removed on any device is gone for good; ingredients and each day's dinner, the latest wins.
+        entityType == EntityTypes.MEAL && field == MealFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.MEAL -> MergePolicy.Lww
+        entityType == EntityTypes.MEAL_DAY -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

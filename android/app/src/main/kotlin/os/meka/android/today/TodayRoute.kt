@@ -709,6 +709,14 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Meal plan, slice 1: tonight's dinner from 15:00 to 21:00, "Dinner tonight: Chilli"; cross-fades.
+                    today.dinner?.let { dinner ->
+                        Crossfade(dinner, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "dinner-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
                     SyncLine(sync)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
