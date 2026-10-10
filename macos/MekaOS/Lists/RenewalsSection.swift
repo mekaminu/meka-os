@@ -59,7 +59,7 @@ private struct UpkeepRowView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: MekaSpace.m) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 Text(row.line).font(MekaType.itemMeta)
                     .foregroundStyle(row.tracked ? palette.textSecondary : palette.textTertiary)
