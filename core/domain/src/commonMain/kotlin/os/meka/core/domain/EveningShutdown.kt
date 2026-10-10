@@ -29,6 +29,9 @@ data class ShutdownItem(
     val canSomeday: Boolean,
 )
 
+/** One thing done today (Done for the day): the task and when it was ticked ("14:02"). */
+data class DoneRow(val id: String, val title: String, val time: String)
+
 /** One line of tomorrow: an event or a task. [time] is "All day", "09:30", or null for a task with no time. */
 data class TomorrowRow(val id: String, val time: String?, val title: String, val isEvent: Boolean, val detail: String?)
 
@@ -72,6 +75,17 @@ data class ShutdownView(
      * ([TomorrowPreview.glance]) when the shutdown card isn't there to show it: after shutting down, or while still at work.
      */
     val evening: Boolean = false,
+    /** Done for the day: what got done today, newest first, at most [ShutdownRules.DONE_SHOWN]. */
+    val done: List<DoneRow> = emptyList(),
+    /** "+ 3 more" when more were done than [done] shows, else null. */
+    val doneMore: String? = null,
+    /** Tomorrow's first commitment: "Tomorrow starts at 09:00 · Standup"; null when nothing timed is booked. */
+    val firstLine: String? = null,
+    /**
+     * Done for the day: the day has been shut down, so Today's watch face dims to night (its second hand and breath
+     * rest) until the next morning ([WatchFaceRules.nightAlpha]).
+     */
+    val night: Boolean = false,
 ) {
     companion object {
         val EMPTY = ShutdownView(
@@ -84,12 +98,14 @@ data class ShutdownView(
 
 /** Pure rules, unit-tested without a replica. */
 object ShutdownRules {
-    /** When the card appears on a day without work hours. */
-    const val DEFAULT_START_MIN = 18 * 60
+    /** When the card appears on a day without work hours (Done for the day, Meka 2026-10-09: "from work end or 20:00"). */
+    const val DEFAULT_START_MIN = 20 * 60
+    /** Done for the day: how many of today's finished tasks the pane lists before "+ N more". */
+    const val DONE_SHOWN = 6
     /** Work that ends inside this range starts the evening; outside it (early finish, late or night shift) 18:00 does. */
     val WORK_END_RANGE = 15 * 60..22 * 60
 
-    /** The minute the shutdown is offered on local day [epochDay]: the end of work on a work day, else 18:00. */
+    /** The minute the shutdown is offered on local day [epochDay]: the end of work on a work day, else 20:00. */
     fun startMinute(schedule: WorkSchedule, epochDay: Long, holidays: HolidayCalendar = HolidayCalendar.NONE): Int {
         val iso = CivilDate.isoDayOfWeek(epochDay)
         val h = schedule.hoursOn(iso)
@@ -121,6 +137,17 @@ object ShutdownRules {
                 (t.scheduledAtMs != null && t.scheduledAtMs in tomorrow) ||
                 (t.scheduledAtMs == null && t.dueAtMs != null && t.dueAtMs in tomorrow && !t.waitsForItsDay(tomorrow.epochDay))
         }
+
+    /** Today's finished tasks, newest first (ties by title), as the pane lists them. */
+    fun doneToday(tasks: List<Task>, today: DayWindow): List<Task> = tasks
+        .filter { it.lifecycle == Lifecycle.DONE && it.completedAtMs != null && it.completedAtMs in today }
+        .sortedWith(compareByDescending<Task> { it.completedAtMs }.thenBy { it.title })
+
+    /** "+ 3 more" past the first [DONE_SHOWN]; null when everything shows. */
+    fun doneMore(total: Int): String? = (total - DONE_SHOWN).takeIf { it > 0 }?.let { "+ $it more" }
+
+    /** Tomorrow's first commitment: "Tomorrow starts at 09:00 · Standup" (title cut like the glance's), or null. */
+    fun firstLine(first: TomorrowRow?): String? = first?.let { "Tomorrow starts at ${it.time} · ${shorten(it.title)}" }
 
     fun count(n: Int, one: String, many: String = one + "s") = if (n == 1) "1 $one" else "$n $many"
 
@@ -198,7 +225,8 @@ class EveningShutdown(
         val minute = calendar.minuteOfDay(now)
         val start = ShutdownRules.startMinute(schedule, today.epochDay, holidays)
         val doneToday = doneDay() == today.epochDay
-        val doneCount = all.count { it.lifecycle == Lifecycle.DONE && it.completedAtMs != null && it.completedAtMs in today }
+        val doneTasks = ShutdownRules.doneToday(all, today)
+        val doneCount = doneTasks.size
 
         val left = ShutdownRules.left(all, today).map { t ->
             val overdue = t.dueAtMs != null && t.dueAtMs < now
@@ -230,6 +258,10 @@ class EveningShutdown(
             tomorrow = preview,
             cardLine = cardLine,
             evening = minute >= start,
+            done = doneTasks.take(ShutdownRules.DONE_SHOWN).map { DoneRow(it.id, it.title, hhmm(it.completedAtMs!!)) },
+            doneMore = ShutdownRules.doneMore(doneCount),
+            firstLine = ShutdownRules.firstLine(preview.first),
+            night = doneToday,
         )
     }
 

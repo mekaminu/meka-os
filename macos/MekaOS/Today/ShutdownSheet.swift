@@ -19,6 +19,18 @@ struct ShutdownSheet: View {
                 doneCount(v).staggeredAppear(0)
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        // Done for the day: what got done today, newest first, each with a check and its time.
+                        if !v.done.isEmpty {
+                            SectionLabel("Done today", palette).staggeredAppear(1)
+                            ForEach(v.done, id: \.id) { r in
+                                DoneLine(row: r, palette: palette).staggeredAppear(1)
+                            }
+                            if let more = v.doneMore {
+                                Text(more).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                    .padding(.bottom, MekaSpace.m)
+                                    .staggeredAppear(1)
+                            }
+                        }
                         SectionLabel("Left from today", palette).staggeredAppear(1)
                         if v.left.isEmpty {
                             Text("Nothing left from today.")
@@ -38,6 +50,10 @@ struct ShutdownSheet: View {
                         }
 
                         SectionLabel(v.tomorrow.label, palette).padding(.top, MekaSpace.l).staggeredAppear(2)
+                        // Done for the day: tomorrow's first commitment.
+                        if let first = v.firstLine {
+                            Text(first).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).staggeredAppear(2)
+                        }
                         if let work = v.tomorrow.workLine {
                             Text(work).font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(2)
                         }
@@ -137,6 +153,23 @@ private struct LeftRow: View {
                 .padding(.top, MekaSpace.xxs)
             }
             Spacer()
+        }
+        .padding(.vertical, MekaSpace.xs)
+        .padding(.horizontal, MekaSpace.xs)
+    }
+}
+
+/// One thing done today: a small check, the title (calm, like an event) and when it was ticked.
+private struct DoneLine: View {
+    let row: DoneRow
+    let palette: MekaPalette
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+            Text("✓").font(MekaType.captionStrong).foregroundStyle(palette.accent)
+            Text(row.title).font(MekaType.body).foregroundStyle(palette.textSecondary).lineLimit(1)
+            Spacer()
+            Text(row.time).font(MekaType.caption).monospacedDigit().foregroundStyle(palette.textTertiary)
         }
         .padding(.vertical, MekaSpace.xs)
         .padding(.horizontal, MekaSpace.xs)

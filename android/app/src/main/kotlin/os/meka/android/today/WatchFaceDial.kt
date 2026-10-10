@@ -113,6 +113,8 @@ fun WatchFaceDial(
     quiet: Boolean = false,
     dots: List<HabitDot> = emptyList(),
     onTick: ((HabitDot) -> Unit)? = null,
+    /** Done for the day: the day is shut down, so the face rests like the bedside's in quiet hours (no second hand or breath). */
+    night: Boolean = false,
 ) {
     val sizeDp = size.value.toInt()
     val expressive = Meka.expressiveMotion
@@ -232,7 +234,7 @@ fun WatchFaceDial(
         }
         // The hands, the breathing rim, the shimmer and the second hand on a layer of their own.
         WatchFaceLiveLayer(face, landed = play == DayRingPlay.STILL || elapsed >= total, needle = needle, size = size,
-            bedside = bedside, quiet = quiet)
+            bedside = bedside, quiet = quiet, night = night)
     }
 }
 
@@ -244,11 +246,11 @@ fun WatchFaceDial(
  * redraw once a minute, with no second hand or breath.
  */
 @Composable
-private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, size: Dp, bedside: Boolean, quiet: Boolean) {
+private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, size: Dp, bedside: Boolean, quiet: Boolean, night: Boolean) {
     val context = LocalContext.current
     val reduced = Meka.reducedMotion
     val powerSave = remember { MotionPrefs.powerSave(context) }
-    val mode = WatchFaceRules.liveMode(reduced, powerSave, bedside, quiet)
+    val mode = WatchFaceRules.liveMode(reduced, powerSave, bedside, quiet, night)
     val resumed by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val front = resumed.isAtLeast(Lifecycle.State.RESUMED)
     val clock = remember { mutableLongStateOf(System.currentTimeMillis()) }

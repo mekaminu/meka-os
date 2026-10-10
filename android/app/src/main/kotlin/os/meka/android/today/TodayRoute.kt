@@ -25,6 +25,7 @@ import os.meka.core.domain.CalendarEvent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.rememberUpdatedState
 import os.meka.android.designsystem.CheckRing
 import androidx.compose.animation.AnimatedContent
@@ -135,6 +136,8 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.MekaMotion
+import os.meka.android.designsystem.MekaChoreography
+import os.meka.core.domain.WatchFaceRules
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
@@ -550,13 +553,24 @@ internal fun TodayHeaderRow(
     /** Today's habits as dots on the face (Calm Today, slice 2); a tap on one ticks it. */
     dots: List<HabitDot> = emptyList(),
     onTick: ((HabitDot) -> Unit)? = null,
+    /**
+     * Done for the day: once the day is shut down the face dims to night ([WatchFaceRules.nightAlpha]) over the
+     * `nightFall` token as the pane drops away, its second hand and breath at rest. Reduced motion: the short cross-fade.
+     */
+    night: Boolean = false,
     left: @Composable () -> Unit,
 ) {
+    val reduced = Meka.reducedMotion
+    val faceAlpha by animateFloatAsState(
+        WatchFaceRules.nightAlpha(night),
+        if (reduced) MekaMotion.appear<Float>(true) else tween<Float>(MekaChoreography.nightFallMs),
+        label = "watch-face-night",
+    )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) { left() }
         if (face != null) {
-            WatchFaceDial(face, play, played, Modifier.padding(start = MekaSpace.m),
-                size = DayRingHeader.sizeDp(compact).dp, onOpen = onOpenFace, dots = dots, onTick = onTick)
+            WatchFaceDial(face, play, played, Modifier.padding(start = MekaSpace.m).graphicsLayer { alpha = faceAlpha },
+                size = DayRingHeader.sizeDp(compact).dp, onOpen = onOpenFace, dots = dots, onTick = onTick, night = night)
         }
     }
 }
@@ -653,6 +667,7 @@ private fun TodayPane(
                         play = ringPlay, played = ringPlayed,
                         // Tap the face: the full 24-hour Day ring as a sheet, its arcs opening their events and tasks.
                         onOpenFace = openDayRing,
+                        night = shutdown.night,
                         dots = if (core != null) habitDots else emptyList(),
                         onTick = { dot ->
                             chipHaptics.light()

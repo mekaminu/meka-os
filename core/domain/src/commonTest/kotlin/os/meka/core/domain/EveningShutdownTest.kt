@@ -43,15 +43,15 @@ class EveningShutdownTest {
         CalendarEvent(id, title, start, end, allDay, null, provider, null, null)
 
     @Test
-    fun theEveningStartsWhenWorkEndsOnAWorkDayAndAtSixOtherwise() {
+    fun theEveningStartsWhenWorkEndsOnAWorkDayAndAtEightOtherwise() {
         val tue = today()
         assertEquals(17 * 60 + 30, ShutdownRules.startMinute(schedule, tue))
         val sat = tue + 4
-        assertEquals(18 * 60, ShutdownRules.startMinute(schedule, sat))
+        assertEquals(20 * 60, ShutdownRules.startMinute(schedule, sat))
         // A night shift or a very early finish doesn't define the evening.
-        assertEquals(18 * 60, ShutdownRules.startMinute(WorkSchedule(setOf(2), 22 * 60, 6 * 60), tue))
-        assertEquals(18 * 60, ShutdownRules.startMinute(WorkSchedule(setOf(2), 7 * 60, 13 * 60), tue))
-        assertEquals(18 * 60, ShutdownRules.startMinute(schedule.copy(enabled = false), tue))
+        assertEquals(20 * 60, ShutdownRules.startMinute(WorkSchedule(setOf(2), 22 * 60, 6 * 60), tue))
+        assertEquals(20 * 60, ShutdownRules.startMinute(WorkSchedule(setOf(2), 7 * 60, 13 * 60), tue))
+        assertEquals(20 * 60, ShutdownRules.startMinute(schedule.copy(enabled = false), tue))
     }
 
     @Test
@@ -206,10 +206,10 @@ class EveningShutdownTest {
         assertTrue(view().evening)
         assertFalse(view().offered)
         assertEquals("Tomorrow: nothing planned yet", view().tomorrow.glance)
-        // Saturday: the evening starts at 18:00.
-        world.clock.nowMs = at(today() + 4, 17, 45)
+        // Saturday: the evening starts at 20:00.
+        world.clock.nowMs = at(today() + 4, 19, 45)
         assertFalse(view().evening)
-        world.clock.nowMs = at(today(), 18, 0)
+        world.clock.nowMs = at(today(), 20, 0)
         assertTrue(view().evening)
     }
 
@@ -241,5 +241,52 @@ class EveningShutdownTest {
         a.replica.commitLocal(EntityTypes.CONTEXT_MODE, EveningShutdown.ENTITY_ID, mapOf(ShutdownFields.DONE_DAY to (today() - 1).fv()))
         assertTrue(view().offered)
         assertFalse(view().doneToday)
+    }
+
+    @Test
+    fun doneForTheDayListsWhatGotDoneNewestFirstWithTheRestCounted() {
+        val day = today()
+        val titles = (1..8).map { "Job $it" }
+        titles.forEachIndexed { k, t ->
+            world.clock.nowMs = at(day, 9 + k)
+            ta.complete(ta.create(NewTask(t)))
+        }
+        // Finished yesterday: not today's.
+        world.clock.nowMs = at(day - 1, 20)
+        ta.complete(ta.create(NewTask("Yesterday's")))
+        world.clock.nowMs = at(day, 18, 30)
+
+        val v = view()
+        assertEquals(8, v.doneCount)
+        assertEquals(ShutdownRules.DONE_SHOWN, v.done.size)
+        assertEquals(listOf("Job 8", "Job 7", "Job 6", "Job 5", "Job 4", "Job 3"), v.done.map { it.title })
+        assertEquals("16:00", v.done.first().time)
+        assertEquals("+ 2 more", v.doneMore)
+        assertNull(ShutdownRules.doneMore(ShutdownRules.DONE_SHOWN))
+    }
+
+    @Test
+    fun doneForTheDaySaysWhatTomorrowStartsWith() {
+        val day = today()
+        assertNull(view().firstLine)
+        val events = listOf(
+            event("hol", "Bank holiday", at(day + 1, 0), at(day + 2, 0), allDay = true),
+            event("su", "Standup with the whole platform team and guests", at(day + 1, 9, 30), at(day + 1, 9, 45)),
+        )
+        assertEquals("Tomorrow starts at 09:30 · Standup with the whole…", view(events = events).firstLine)
+    }
+
+    @Test
+    fun shuttingDownTurnsTheWatchFaceToNightUntilTomorrow() {
+        assertFalse(view().night)
+        sa.shutDown()
+        assertTrue(view().night)
+        world.clock.advance(CivilDate.DAY_MS)
+        assertFalse(view().night)
+        assertEquals(WatchFaceRules.NIGHT_ALPHA, WatchFaceRules.nightAlpha(true))
+        assertEquals(1f, WatchFaceRules.nightAlpha(false))
+        assertEquals(DayRingLiveMode.MINUTE, WatchFaceRules.liveMode(reduced = false, powerSave = false, bedside = false, quiet = false, night = true))
+        assertEquals(DayRingLiveMode.SWEEP, WatchFaceRules.liveMode(reduced = false, powerSave = false, bedside = false, quiet = false, night = false))
+        assertEquals(DayRingLiveMode.STILL, WatchFaceRules.liveMode(reduced = true, powerSave = false, bedside = false, quiet = false, night = true))
     }
 }

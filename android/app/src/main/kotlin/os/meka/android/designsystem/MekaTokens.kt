@@ -175,5 +175,6 @@ object MekaChoreography {
     const val emptyBreathPeriodMs = 4200
     const val swipeArmDistanceDp = 96
     const val swipeIconPopScale = 1.25f
+    const val nightFallMs = 1200
     const val tabIconPopScale = 1.15f
 }

@@ -149,8 +149,16 @@ object WatchFaceRules {
      * as the bedside ring did — in quiet hours nothing moves in a dark bedroom (no second hand, breath or shimmer), the
      * face redrawn once a minute so the hour and minute hands still keep time.
      */
-    fun liveMode(reduced: Boolean, powerSave: Boolean, bedside: Boolean, quiet: Boolean): DayRingLiveMode =
-        if (bedside) DayRingLive.bedsideMode(reduced, powerSave, quiet) else DayRingLive.mode(reduced, powerSave)
+    fun liveMode(reduced: Boolean, powerSave: Boolean, bedside: Boolean, quiet: Boolean, night: Boolean = false): DayRingLiveMode =
+        if (bedside || night) DayRingLive.bedsideMode(reduced, powerSave, quiet || night) else DayRingLive.mode(reduced, powerSave)
+
+    /**
+     * Done for the day: once the day is shut down Today's face dims to night — the whole face at [NIGHT_ALPHA], no
+     * second hand or breath, redrawn each minute so the hands keep time ([liveMode] with `night`). The dim blends in
+     * over the `nightFall` choreography token as the shutdown pane drops away; reduced motion: the short cross-fade.
+     */
+    fun nightAlpha(night: Boolean): Float = if (night) NIGHT_ALPHA else 1f
+    const val NIGHT_ALPHA = 0.55f
 
     /** The rim's breath now: Today's 5 s, the bedside clock's calmer 8 s ([DayRingLive.bedsideGlow]). */
     fun breath(epochMs: Long, bedside: Boolean): Float =

@@ -157,7 +157,13 @@ struct TodayView: View {
                                       size: CGFloat(DayRingHeader.shared.WIDE_DP), onOpen: { showDayRing = true },
                                       // Today's habits as dots on the face (Calm Today, slice 2); a click on one ticks it.
                                       dots: HabitDotRules.shared.dots(chips: HabitChipRules.shared.build(goals: model.goals)),
-                                      onTick: { model.tickHabitDot($0) })
+                                      onTick: { model.tickHabitDot($0) },
+                                      night: model.shutdown?.night ?? false)
+                            // Done for the day: once shut down the face dims to night over `nightFall` as the sheet
+                            // goes (Reduce Motion: the short cross-fade).
+                            .opacity(Double(WatchFaceRules.shared.nightAlpha(night: model.shutdown?.night ?? false)))
+                            .animation(reduceMotion ? MekaMotion.appear(reduced: true) : .easeInOut(duration: MekaChoreography.nightFall),
+                                       value: model.shutdown?.night ?? false)
                     }
                     }
                     // Today's habits as chips to tick (Fold review 2026-10-09 07:26, item 3), only when the watch face

@@ -51,6 +51,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.DoneRow
 import os.meka.core.domain.ShutdownItem
 import os.meka.core.domain.ShutdownView
 import os.meka.core.domain.SomedayKind
@@ -98,6 +99,18 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
                     CountUpText(v.doneCount, MekaType.itemMeta, Meka.colors.textSecondary, Modifier.padding(top = MekaSpace.xxs)) { "$it done today" }
                 } else {
                     Text(v.doneCountLine, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
+                }
+            }
+        }
+
+        // Done for the day: what got done today, newest first, each with a small check and when it was ticked.
+        if (v.done.isNotEmpty()) {
+            item(key = "h-done") { SectionLabel("Done today", Modifier.animateItem().appear(rememberAppearance(1))) }
+            items(v.done, key = { "d-" + it.id }) { r -> DoneLine(r, Modifier.animateItem().appear(rememberAppearance(1))) }
+            v.doneMore?.let { more ->
+                item(key = "done-more") {
+                    Text(more, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.padding(bottom = MekaSpace.m).animateItem().appear(rememberAppearance(1)))
                 }
             }
         }
@@ -192,6 +205,8 @@ private fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
     val reduced = Meka.reducedMotion
     Column(modifier) {
         SectionLabel(p.label)
+        // Done for the day: tomorrow's first commitment, "Tomorrow starts at 09:30 · Standup".
+        v.firstLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textPrimary) }
         p.workLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         // Tomorrow's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
         p.weatherLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
@@ -212,6 +227,18 @@ internal fun TomorrowLine(r: TomorrowRow, modifier: Modifier) {
             Text(r.title, style = MekaType.itemTitle, color = if (r.isEvent) Meka.colors.textPrimary else Meka.colors.textSecondary)
             r.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         }
+    }
+}
+
+/** One thing done today: a small filled check, the title (calm, like an event) and when it was ticked. */
+@Composable
+private fun DoneLine(r: DoneRow, modifier: Modifier) {
+    Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+        Text("✓", style = MekaType.captionStrong, color = Meka.colors.accent)
+        Spacer(Modifier.width(MekaSpace.xs))
+        Text(r.title, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 1, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(MekaSpace.xs))
+        Text(r.time, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

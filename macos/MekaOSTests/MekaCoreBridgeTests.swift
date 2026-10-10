@@ -205,6 +205,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         var v = core.shutdownView.value
         XCTAssertEqual(v.left.map { $0.task.title }, ["Post the letter"])
         XCTAssertEqual(v.doneCount, 1)
+        // Done for the day: what got done reaches the Mac with its time.
+        XCTAssertEqual(v.done.map(\.title), ["Call the garage"])
+        XCTAssertNil(v.doneMore)
         XCTAssertTrue(v.left.first?.canSomeday == true)
         try await core.carryAllToTomorrow()
         v = core.shutdownView.value
@@ -214,6 +217,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         try await core.shutDown()
         XCTAssertTrue(core.shutdownView.value.doneToday)
         XCTAssertFalse(core.shutdownView.value.offered)
+        // The watch face dims to night once the day is shut down.
+        XCTAssertTrue(core.shutdownView.value.night)
+        XCTAssertEqual(WatchFaceRules.shared.nightAlpha(night: true), WatchFaceRules.shared.NIGHT_ALPHA)
+        XCTAssertEqual(WatchFaceRules.shared.liveMode(reduced: false, powerSave: false, bedside: false, quiet: false, night: true), .minute)
     }
 
     func testSearchThroughTheBridge() async throws {

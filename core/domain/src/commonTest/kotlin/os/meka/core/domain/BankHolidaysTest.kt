@@ -85,7 +85,7 @@ class BankHolidaysTest {
         assertEquals("Work 09:00–17:30", BriefRules.workLine(weekdays, holidays, day(2026, 12, 24)))
         assertNull(BriefRules.workLine(weekdays, holidays, day(2026, 12, 26)))
         assertEquals(17 * 60 + 30, ShutdownRules.startMinute(weekdays, day(2026, 12, 24), holidays))
-        assertEquals(18 * 60, ShutdownRules.startMinute(weekdays, christmas, holidays))
+        assertEquals(20 * 60, ShutdownRules.startMinute(weekdays, christmas, holidays))
         assertTrue(WorkModeRules.isWorkDay(weekdays, holidays, day(2026, 12, 24)))
         assertFalse(WorkModeRules.isWorkDay(weekdays, holidays, christmas))
     }

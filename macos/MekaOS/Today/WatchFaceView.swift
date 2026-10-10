@@ -21,6 +21,8 @@ struct WatchFaceView: View {
     var onOpen: (() -> Void)? = nil
     var dots: [HabitDot] = []
     var onTick: ((HabitDot) -> Void)? = nil
+    /// Done for the day: the day is shut down, so the face rests (no second hand or breath; redrawn each minute).
+    var night: Bool = false
     @Environment(\.mekaExpressiveMotion) private var expressive
     @State private var began = Date()
 
@@ -33,7 +35,7 @@ struct WatchFaceView: View {
                 .overlay(dotsLayer(mark: MotionMath.dayRingMark(elapsed: elapsed, play: play, expressive: expressive)))
                 .overlay(WatchFaceLiveLayer(face: face, landed: landed,
                                             needle: MotionMath.dayRingNeedle(elapsed: elapsed, play: play, expressive: expressive),
-                                            palette: palette, size: size))
+                                            palette: palette, size: size, night: night))
         }
         .frame(width: size, height: size)
         .contentShape(Circle())
@@ -149,11 +151,13 @@ struct WatchFaceLiveLayer: View {
     let needle: Double
     let palette: MekaPalette
     let size: CGFloat
+    var night: Bool = false
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var landedAt: Date? = nil
 
     private var sweeping: Bool {
-        landed && DayRingLive.shared.mode(reduced: reduceMotion, powerSave: ProcessInfo.processInfo.isLowPowerModeEnabled) == .sweep
+        landed && WatchFaceRules.shared.liveMode(reduced: reduceMotion, powerSave: ProcessInfo.processInfo.isLowPowerModeEnabled,
+                                                 bedside: false, quiet: false, night: night) == .sweep
     }
 
     var body: some View {
