@@ -32,6 +32,11 @@ object ActivityFields {
     const val CHANGES = "changes"
     const val UNDONE_AT = "undoneAtMs"
     const val UNDO_NOTE = "undoNote"
+    /**
+     * What a reminder was about, for "Prevented misses" (ADR-013): `task:<id>` or `renewal:<id>:<cancel-by day>`
+     * ([PreventedMissRules.aboutOf]); absent on other entries and on reminders logged before 2026-10-10.
+     */
+    const val ABOUT = "about"
 }
 
 enum class ActivityKind {
@@ -101,6 +106,8 @@ data class ActivityItem(
     val changes: List<ActivityChange>,
     val undoneAtMs: Long?,
     val undoNote: String?,
+    /** [ActivityFields.ABOUT]: what a reminder was about; null otherwise. */
+    val about: String? = null,
 ) {
     val canUndo: Boolean get() = changes.isNotEmpty() && undoneAtMs == null
 }
@@ -462,6 +469,7 @@ class ActivityLog(
             changes = if (kind == ActivityKind.CHANGED) ActivityRules.decodeChanges(s[ActivityFields.CHANGES].textOrNull) else emptyList(),
             undoneAtMs = s[ActivityFields.UNDONE_AT].longOrNull,
             undoNote = s[ActivityFields.UNDO_NOTE].textOrNull,
+            about = s[ActivityFields.ABOUT].textOrNull,
         )
     }
 
@@ -474,7 +482,7 @@ class ActivityLog(
             val id = ActivityRules.noticeId(n.key)
             if (replica.entity(EntityTypes.AGENT_ACTION, id) != null) continue
             val (summary, detail, why) = ActivityRules.noticeSummary(n)
-            write(id, ActivityKind.REMINDED, summary, detail, why, "notice:${n.source.name}")
+            write(id, ActivityKind.REMINDED, summary, detail, why, "notice:${n.source.name}", about = PreventedMissRules.aboutOf(n.key))
         }
     }
 
@@ -603,7 +611,7 @@ class ActivityLog(
 
     private fun write(
         id: String, kind: ActivityKind, summary: String, detail: String?, why: String, source: String,
-        level: String? = null, changes: String? = null, atMs: Long = nowMs(),
+        level: String? = null, changes: String? = null, atMs: Long = nowMs(), about: String? = null,
     ) {
         replica.commitLocal(
             EntityTypes.AGENT_ACTION, id,
@@ -616,6 +624,7 @@ class ActivityLog(
                 put(ActivityFields.SOURCE, source.fv())
                 level?.let { put(ActivityFields.LEVEL, it.fv()) }
                 changes?.let { put(ActivityFields.CHANGES, it.fv()) }
+                about?.let { put(ActivityFields.ABOUT, it.fv()) }
             },
         )
     }

@@ -195,12 +195,12 @@ object ReviewRules {
 
     /**
      * The north-star metrics (ADR-013) before anything is counted. Interruptions are counted from what the devices
-     * post ([Interruptions]); the rest measure what MEKA does for you (acting, reminding, asking), which starts with
+     * post ([Interruptions]), prevented misses from the activity log's reminders ([PreventedMisses]); the rest measure what MEKA does for you (acting, reminding, asking), which starts with
      * the activity log, approvals and the assistant layer (V1).
      */
     val NORTH_STAR_PENDING: List<NorthStarMetric> = listOf(
         NorthStarMetric("handled", "Handled without you", null, "Counted once MEKA acts for you"),
-        NorthStarMetric("prevented", "Prevented misses", null, "Counted once MEKA's reminders are logged"),
+        NorthStarMetric(PreventedMissRules.KEY, PreventedMissRules.LABEL, null, PreventedMissRules.PENDING_LINE),
         NorthStarMetric("interruptions", "Interruptions", null, "Counted once MEKA can notify you on a device"),
         NorthStarMetric("approval", "Approval rate", null, "Counted once MEKA asks you to approve things"),
         NorthStarMetric("false-positive", "Not relevant", null, "Suggestions you dismissed; counted with the assistant"),
@@ -214,6 +214,7 @@ class WeeklyReview(
     private val calendar: LocalCalendar = LocalCalendar.UTC,
 ) {
     private val interruptions = Interruptions(replica, calendar)
+    private val prevented = PreventedMisses(replica, calendar)
 
     fun reviewedWeek(): Long? = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(ReviewFields.REVIEWED_WEEK)?.longOrNull
 
@@ -377,7 +378,13 @@ class WeeklyReview(
             stillOpenMore = open.size - stillOpen.size,
             aheadTitle = aheadTitle,
             aheadLines = aheadLines,
-            northStar = ReviewRules.NORTH_STAR_PENDING.map { if (it.key == InterruptionRules.KEY) interruptions.metric(ws) else it },
+            northStar = ReviewRules.NORTH_STAR_PENDING.map {
+                when (it.key) {
+                    InterruptionRules.KEY -> interruptions.metric(ws)
+                    PreventedMissRules.KEY -> prevented.metric(ws, all)
+                    else -> it
+                }
+            },
             reviewed = reviewed,
             reviewedLine = reviewedLine,
         )
