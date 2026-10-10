@@ -75,6 +75,16 @@ data class EventDetailView(
      * kick-off until half an hour after; empty otherwise. Meka sends one himself from the share sheet.
      */
     val lateDrafts: List<LateDraft> = emptyList(),
+    /**
+     * Weekend football, slice 4: "How did it go?" on a club fixture once it is over (for a week; always once something
+     * is kept). [resultScore] is false for training (a note only). [result] is what is kept; [resultLine] "Won 3–1 ·
+     * Leo 2, Sam" and [resultNote] the note, null when not kept.
+     */
+    val canResult: Boolean = false,
+    val resultScore: Boolean = false,
+    val result: FixtureResult? = null,
+    val resultLine: String? = null,
+    val resultNote: String? = null,
 )
 
 /**
@@ -217,6 +227,11 @@ object EventDetails {
             leaveOfferLabel = offer?.label,
             leaveOfferMin = offer?.travelMin ?: 0,
             lateDrafts = FootballRules.lateDrafts(e, nowMs, calendar),
+            canResult = FootballRules.canRecord(e, marks.results[e.id], nowMs, calendar),
+            resultScore = !FootballRules.isTraining(e),
+            result = marks.results[e.id],
+            resultLine = FootballRules.resultLine(marks.results[e.id]),
+            resultNote = marks.results[e.id]?.note,
         )
     }
 

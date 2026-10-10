@@ -718,6 +718,55 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theResultAfterAFixtureIsKeptOnTheFoldSeenOnTheMacAndUndone() = runTest {
+        val london = TimeZone.of("Europe/London")
+        fun at(day: Int, h: Int, min: Int = 0) = kotlinx.datetime.LocalDateTime(2026, 10, day, h, min).toInstant(london).toEpochMilliseconds()
+        now = at(10, 9) // Sat 10 Oct, before kick-off
+        val a = core("android"); val m = core("mac")
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        var k = 0
+        mapOf(
+            os.meka.core.domain.EventFields.TITLE to os.meka.core.sync.FieldValue.Text("BUFC U9s v Arlesey"),
+            os.meka.core.domain.EventFields.START_AT to os.meka.core.sync.FieldValue.Int64(at(10, 10)),
+            os.meka.core.domain.EventFields.END_AT to os.meka.core.sync.FieldValue.Int64(at(10, 11)),
+            os.meka.core.domain.EventFields.ALL_DAY to os.meka.core.sync.FieldValue.Bool(false),
+            os.meka.core.domain.EventFields.LOCATION to os.meka.core.sync.FieldValue.Text("Arlesey Town FC"),
+            os.meka.core.domain.EventFields.PROVIDER to os.meka.core.sync.FieldValue.Text("google"),
+            os.meka.core.domain.EventFields.ACCOUNT to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
+            os.meka.core.domain.EventFields.CALENDAR to os.meka.core.sync.FieldValue.Text("Personal"),
+            os.meka.core.domain.EventFields.REMOVED to os.meka.core.sync.FieldValue.Bool(false),
+        ).forEach { (f, v) ->
+            serverOps.append(os.meka.core.sync.Op("srvres${k++}", "hh", os.meka.core.domain.EntityTypes.EVENT, "fx1", f, v, clock.now(), emptyList(), "server"))
+        }
+        assertTrue(a.syncNow()); assertTrue(m.syncNow())
+        val match = os.meka.core.domain.CalendarEvent("fx1", "BUFC U9s v Arlesey", at(10, 10), at(10, 11), false, "Arlesey Town FC", "google", "meka@gmail.com", "Personal")
+        // Not yet over: nothing to keep.
+        assertFalse(a.eventDetail(match).canResult)
+        assertNull(a.saveMatchResult(match, 3, 1, "Leo 2, Sam", ""))
+
+        now = at(10, 11, 20)
+        assertTrue(a.eventDetail(match).canResult)
+        val saved = assertNotNull(a.saveMatchResult(match, 3, 1, "Leo 2, Sam", "Played in goal second half"))
+        assertEquals("Saved · Won 3–1 · Leo 2, Sam", saved.line)
+        assertNull(saved.previous)
+        assertEquals("Won 3–1 · Leo 2, Sam", a.eventDetail(match).resultLine)
+        assertTrue(a.syncNow()); assertTrue(m.syncNow())
+        assertEquals("Played in goal second half", m.eventDetail(match).resultNote)
+
+        // Changed on the Mac, undone there: the Fold's result is back.
+        val changed = assertNotNull(m.saveMatchResult(match, 3, 2, "Leo 2, Sam", "Played in goal second half"))
+        assertEquals("Won 3–2 · Leo 2, Sam", m.eventDetail(match).resultLine)
+        m.undoMatchResult(changed)
+        assertEquals("Won 3–1 · Leo 2, Sam", m.eventDetail(match).resultLine)
+        // Emptied: cleared, and its undo brings it back.
+        val cleared = assertNotNull(m.saveMatchResult(match, -1, -1, "", ""))
+        assertEquals("Result cleared", cleared.line)
+        assertNull(m.eventDetail(match).resultLine)
+        m.undoMatchResult(cleared)
+        assertEquals("Won 3–1 · Leo 2, Sam", m.eventDetail(match).resultLine)
+    }
+
+    @Test
     fun theWeeklyReviewCountsTheWeekStepsBackAndDoneReviewingSyncs() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 10, 1, 18, 30).toInstant(london).toEpochMilliseconds() // a Thursday

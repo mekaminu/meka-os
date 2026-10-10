@@ -1132,6 +1132,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(FootballRules.shared.LATE_CAPTION, "Drafts a message; you pick the chat and send it")
     }
 
+    func testMatchResultReachesSwift() {
+        // Weekend football, slice 4: "How did it go?" — the words, the line and the Swift-friendly score reach the Mac.
+        XCTAssertEqual(FootballRules.shared.RESULT_TITLE, "How did it go?")
+        let r = FixtureResult(scoreFor: KotlinInt(int: 3), scoreAgainst: KotlinInt(int: 1), scorers: "Leo 2, Sam", note: nil, atMs: 0)
+        XCTAssertEqual(FootballRules.shared.resultLine(r: r), "Won 3–1 · Leo 2, Sam")
+        XCTAssertEqual(r.forOrNone, 3)
+        let noScore = FixtureResult(scoreFor: nil, scoreAgainst: nil, scorers: nil, note: "Rained off", atMs: 0)
+        XCTAssertEqual(noScore.againstOrNone, -1)
+        XCTAssertEqual(FootballRules.shared.savedLine(r: noScore), "Saved the note")
+        XCTAssertNil(EventMarks.companion.NONE.resultOf(eventId: "x"))
+    }
+
     func testShoppingFromAskReachesSwift() async throws {
         // "Add milk to shopping" in Ask and Talk: the card, its undo and Search's Shopping kind reach the Mac.
         let card = AskRules.shared.cardOf(p: AskProposalAddShopping(items: ["milk", "eggs"]), today: 0)

@@ -15,6 +15,15 @@ object EventMarkFields {
     const val TRAVEL_MIN = "travelMin"
     /** Leave by rings as an alarm instead of a heads-up (Bool; Alarms, slice 3, [LeaveAlarmRules]). */
     const val LEAVE_ALARM = "leaveAlarm"
+    /**
+     * Weekend football, slice 4 ([FixtureResult]): a club fixture's score (Ints, Meka's kid's team first; both or
+     * neither), the scorers and a note (Text), and when they were kept. Null clears each.
+     */
+    const val SCORE_FOR = "scoreFor"
+    const val SCORE_AGAINST = "scoreAgainst"
+    const val SCORERS = "scorers"
+    const val MATCH_NOTE = "matchNote"
+    const val RESULT_AT = "resultAtMs"
 }
 
 /** What MEKA knows about events beyond the provider's mirror: which are hidden and which have a prep task. */
@@ -36,7 +45,12 @@ data class EventMarks(
     val kitTasks: Map<String, Task> = emptyMap(),
     /** Ground key ([FootballRules.venueKey]) → the travel time Meka last set there (weekend football, slice 2). */
     val venues: Map<String, VenueTravel> = emptyMap(),
+    /** Event id → what Meka kept after the match (weekend football, slice 4). */
+    val results: Map<String, FixtureResult> = emptyMap(),
 ) {
+    /** For Swift: the result kept for [eventId], or null. */
+    fun resultOf(eventId: String): FixtureResult? = results[eventId]
+
     fun isHidden(eventId: String) = eventId in hidden
 
     /** Whether [e]'s calendar is hidden from Today. */
@@ -125,7 +139,44 @@ class EventActions(
             val travel = v[VenueFields.TRAVEL_MIN].longOrNull?.toInt()?.takeIf { it in 1..ReminderRules.MAX_MIN } ?: return@mapNotNull null
             key to VenueTravel(v[VenueFields.PLACE].textOrNull ?: key, travel, v[VenueFields.LEAVE_ALARM].boolOrNull == true, v[VenueFields.SET_AT].longOrNull ?: 0L)
         }.toMap()
-        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars, leaveAlarms, shown, kit, venues)
+        val results = entities.mapNotNull { e -> resultIn(e)?.let { e.ref.entityId to it } }.toMap()
+        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars, leaveAlarms, shown, kit, venues, results)
+    }
+
+    private fun resultIn(e: os.meka.core.sync.EntitySnapshot): FixtureResult? {
+        fun score(field: String) = e[field].longOrNull?.toInt()?.takeIf { it in 0..FootballRules.MAX_SCORE }
+        val f = score(EventMarkFields.SCORE_FOR)
+        val a = score(EventMarkFields.SCORE_AGAINST)
+        val both = f != null && a != null
+        val r = FixtureResult(
+            if (both) f else null, if (both) a else null,
+            e[EventMarkFields.SCORERS].textOrNull?.trim()?.ifEmpty { null },
+            e[EventMarkFields.MATCH_NOTE].textOrNull?.trim()?.ifEmpty { null },
+            e[EventMarkFields.RESULT_AT].longOrNull ?: 0L,
+        )
+        return r.takeIf { !it.isEmpty }
+    }
+
+    /**
+     * Weekend football, slice 4: keeps [r] on the fixture's mark (null clears it); returns what was there before.
+     * Nothing is written for an event still on its way to Google, or when nothing changed.
+     */
+    fun setResult(eventId: String, r: FixtureResult?): FixtureResult? {
+        val mark = replica.entity(EntityTypes.EVENT_MARK, eventId)
+        val before = mark?.let { resultIn(it) }
+        if (PendingEditRules.isProvisional(eventId)) return before
+        if (before?.copy(atMs = 0) == r?.copy(atMs = 0)) return before
+        replica.commitLocal(
+            EntityTypes.EVENT_MARK, eventId,
+            mapOf(
+                EventMarkFields.SCORE_FOR to r?.scoreFor?.toLong().fv(),
+                EventMarkFields.SCORE_AGAINST to r?.scoreAgainst?.toLong().fv(),
+                EventMarkFields.SCORERS to r?.scorers.fv(),
+                EventMarkFields.MATCH_NOTE to r?.note.fv(),
+                EventMarkFields.RESULT_AT to (r?.atMs ?: nowMs()).fv(),
+            ),
+        )
+        return before
     }
 
     /**

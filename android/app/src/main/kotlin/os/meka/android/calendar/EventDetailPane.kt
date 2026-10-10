@@ -4,6 +4,9 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.platform.LocalContext
 import os.meka.android.MekaApplication
 import os.meka.core.domain.ReminderRules
@@ -205,6 +208,17 @@ private fun DetailContent(
             exit = fadeOut(MekaMotion.appear(Meka.reducedMotion)),
         ) {
             LateDrafts(lateShown.value, onPick = { haptics.light() })
+        }
+        // Weekend football, slice 4: "How did it go?" once a club fixture is over (the score, the scorers and a note,
+        // kept on the fixture and synced); Save raises the undo bar.
+        if (d.canResult && !d.provisional) {
+            MatchResultBlock(d) { ours, theirs, scorers, note ->
+                haptics.light()
+                scope.launch {
+                    val saved = runCatching { core.saveMatchResult(event, ours, theirs, scorers, note) }.getOrNull() ?: return@launch
+                    undo?.show(saved.line) { core.undoMatchResult(saved) }
+                }
+            }
         }
         val reducedNote = Meka.reducedMotion
         d.edit?.let { note ->
@@ -477,6 +491,118 @@ private fun ActionChip(label: String, onTap: () -> Unit) {
             .clickable(role = Role.Button) { onTap() }
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
+}
+
+/**
+ * "HOW DID IT GO?" (weekend football, slice 4): with nothing kept, the form is open — Us and Them steppers ("–" until
+ * one is tapped; training has none), Scorers and a note, Save. Once kept, the line ("Won 3–1 · Leo 2, Sam") and the note
+ * with Edit result, which unfolds the form again filled in. The form and the line swap on the expand spring (reduced
+ * motion: a cross-fade); the digits cross-fade as they step, with a tick haptic.
+ */
+@Composable
+private fun MatchResultBlock(d: os.meka.core.domain.EventDetailView, onSave: (Int, Int, String, String) -> Unit) {
+    val f = os.meka.core.domain.FootballRules
+    val haptics = rememberMekaHaptics()
+    val r = d.result
+    var editing by remember(d.id) { mutableStateOf(r == null) }
+    var ours by remember(d.id) { mutableIntStateOf(r?.forOrNone ?: -1) }
+    var theirs by remember(d.id) { mutableIntStateOf(r?.againstOrNone ?: -1) }
+    var scorers by remember(d.id) { mutableStateOf(r?.scorers ?: "") }
+    var note by remember(d.id) { mutableStateOf(r?.note ?: "") }
+    val reduced = Meka.reducedMotion
+    Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.l).appear(rememberAppearance(2))) {
+        Text(
+            f.RESULT_TITLE.uppercase(), style = MekaType.sectionLabel,
+            color = Meka.colors.textTertiary, modifier = Modifier.padding(bottom = MekaSpace.xs),
+        )
+        AnimatedContent(
+            targetState = editing,
+            transitionSpec = {
+                (fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)))
+                    .using(if (reduced) null else androidx.compose.animation.SizeTransform(clip = true) { _, _ -> MekaMotion.expand(false) })
+            },
+            label = "match-result",
+        ) { isEditing ->
+            if (isEditing) {
+                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+                    if (d.resultScore) {
+                        fun step(side: Int, by: Int) {
+                            haptics.tick()
+                            if (ours < 0 || theirs < 0) { ours = maxOf(ours, 0); theirs = maxOf(theirs, 0) }
+                            if (side == 0) ours = (ours + by).coerceIn(0, f.MAX_SCORE) else theirs = (theirs + by).coerceIn(0, f.MAX_SCORE)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) {
+                            ScoreStepper("Us", ours, reduced, { step(0, -1) }, { step(0, 1) })
+                            ScoreStepper("Them", theirs, reduced, { step(1, -1) }, { step(1, 1) })
+                        }
+                        ResultField(scorers, f.SCORERS_HINT, singleLine = true, max = f.MAX_SCORERS) { scorers = it }
+                    }
+                    ResultField(note, f.NOTE_HINT, singleLine = false, max = f.MAX_NOTE) { note = it }
+                    Row {
+                        ActionChip(f.RESULT_SAVE) {
+                            // Nothing filled in and nothing kept: nothing to save.
+                            if (r != null || ours >= 0 || scorers.isNotBlank() || note.isNotBlank()) {
+                                onSave(ours, theirs, scorers, note)
+                                editing = false
+                            } else haptics.tick()
+                        }
+                    }
+                }
+            } else {
+                Column {
+                    d.resultLine?.let { Text(it, style = MekaType.body, color = Meka.colors.textPrimary) }
+                    d.resultNote?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
+                    Row(Modifier.padding(top = MekaSpace.s)) {
+                        ActionChip(f.RESULT_EDIT) {
+                            haptics.tick()
+                            ours = d.result?.forOrNone ?: -1
+                            theirs = d.result?.againstOrNone ?: -1
+                            scorers = d.result?.scorers ?: ""
+                            note = d.result?.note ?: ""
+                            editing = true
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Cleared elsewhere (or undone back to nothing): the form opens again.
+    LaunchedEffect(r == null) { if (r == null) editing = true }
+}
+
+/** "Us  − 3 +": the digit ("–" before a score is given) cross-fades as it steps. */
+@Composable
+private fun ScoreStepper(label: String, value: Int, reduced: Boolean, minus: () -> Unit, plus: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+        Text(label, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        ActionChip("−") { minus() }
+        AnimatedContent(
+            targetState = value,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "score-$label",
+        ) { v -> Text(if (v < 0) "–" else "$v", style = MekaType.itemTitle, color = Meka.colors.textPrimary) }
+        ActionChip("+") { plus() }
+    }
+}
+
+/** A pill field like the session note's: [hint] while empty, cut at [max]. */
+@Composable
+private fun ResultField(value: String, hint: String, singleLine: Boolean, max: Int, onChange: (String) -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(if (singleLine) MekaRadius.pill else MekaRadius.m)).background(Meka.colors.surface)
+            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+    ) {
+        if (value.isEmpty()) Text(hint, style = MekaType.body, color = Meka.colors.textTertiary)
+        androidx.compose.foundation.text.BasicTextField(
+            value = value,
+            onValueChange = { onChange(it.take(max)) },
+            singleLine = singleLine,
+            minLines = if (singleLine) 1 else 2,
+            textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(Meka.colors.accent),
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = hint },
+        )
+    }
 }
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)

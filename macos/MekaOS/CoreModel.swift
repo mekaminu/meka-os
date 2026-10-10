@@ -1534,6 +1534,22 @@ final class CoreModel {
         }
     }
 
+    /// Weekend football, slice 4: "How did it go?" keeps the score (-1 for none), the scorers and a note on a club
+    /// fixture once it's over ("Saved · Won 3–1 · Leo 2, Sam"); Undo puts back what was there. Only the event (once),
+    /// Ints and Strings cross to the core; the saved result comes back once for its undo.
+    func saveMatchResult(_ event: CalendarEvent, ours: Int, theirs: Int, scorers: String, note: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                guard let saved = try await core.saveMatchResult(
+                    event: event, scoreFor: Int32(ours), scoreAgainst: Int32(theirs), scorers: scorers, note: note
+                ) else { return }
+                offerEventUndo(saved.line, .matchResult(saved))
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Weekend football, slice 2: "Leave by 09:15 · as last time" on a club fixture sets the travel time (and the alarm)
     /// Meka set at that ground before ("Leave by 09:15 · 40 min away · alarm"); Undo takes them off. The event is
     /// handed to the core once.
@@ -1663,6 +1679,7 @@ final class CoreModel {
         case .reminder(let id, let m): run { try await $0.setEventReminder(eventId: id, minutes: m) }
         case .leaveBy(let id, let m): run { try await $0.setEventLeaveBy(eventId: id, travelMinutes: m) }
         case .lastLeaveBy(let id): run { try await $0.undoLastLeaveBy(eventId: id) }
+        case .matchResult(let saved): run { try await $0.undoMatchResult(saved: saved) }
         case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }
         case .request(let done): run { _ = try await $0.undoRequest(done: done) }
         case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
@@ -1925,6 +1942,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case leaveBy(String, Int32)
         /// "Leave by 09:15 · as last time" on a club fixture: its travel time and alarm come off again.
         case lastLeaveBy(String)
+        /// "How did it go?" on a club fixture: what was kept before comes back.
+        case matchResult(MatchSaved)
         /// Done / Tomorrow from the Needs you stack.
         case decision(DecisionUndo)
         /// A card set aside with Later comes back to the front.

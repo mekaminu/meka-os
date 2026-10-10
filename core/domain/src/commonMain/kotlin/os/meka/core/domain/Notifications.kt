@@ -551,6 +551,8 @@ object NoticeSources {
         // Remind me and Leave by, set on calendar events.
         out += ReminderRules.notices(events, marks, nowMs, cal)
         out += FixtureMoves.notices(events, marks, nowMs, cal)
+        // Weekend football: "How did it go?" after a club match with nothing kept yet.
+        out += FootballRules.notices(events, marks, nowMs, cal)
         // Booked sessions (Gym): time to go, then "Did you go?" once the slot is over.
         out += SessionRules.notices(sessions, cal)
         // Remind me, set on tasks.

@@ -717,6 +717,26 @@ class MekaCore(
         val plan = os.meka.core.domain.FootballRules.plan(event, nowMs(), cal)
         eventActions.addKit(event)?.let { os.meka.core.domain.KitAdded(it, os.meka.core.domain.FootballRules.addedLine(plan, nowMs(), cal)) }
     }
+    /**
+     * Weekend football, slice 4: "How did it go?" on a club fixture keeps the score ([scoreFor] Meka's kid's team,
+     * [scoreAgainst]; -1 for no score), the [scorers] and a [note] on the fixture, synced. Empty fields clear it.
+     * Returns the undo bar's line and what was there before ([undoMatchResult]), or null when the fixture doesn't offer it.
+     */
+    suspend fun saveMatchResult(
+        event: os.meka.core.domain.CalendarEvent, scoreFor: Int, scoreAgainst: Int, scorers: String, note: String,
+    ): os.meka.core.domain.MatchSaved? = onCore {
+        val f = os.meka.core.domain.FootballRules
+        if (!f.canRecord(event, eventActions.marks().results[event.id], nowMs(), ZoneCalendar(timeZone))) return@onCore null
+        val r = f.result(event, scoreFor, scoreAgainst, scorers, note, nowMs())
+        val before = eventActions.setResult(event.id, r)
+        os.meka.core.domain.MatchSaved(event.id, f.savedLine(r), before)
+    }
+
+    /** Undo for [saveMatchResult]: what was kept before comes back (nothing, if nothing was). */
+    suspend fun undoMatchResult(saved: os.meka.core.domain.MatchSaved) = onCore {
+        eventActions.setResult(saved.eventId, saved.previous)
+        Unit
+    }
     /** Hides an event from my day (timeline, planner, brief, shutdown, review); the Calendar tab still lists it. */
     suspend fun hideEvent(eventId: String) = onCore { eventActions.hide(eventId) }
     /**

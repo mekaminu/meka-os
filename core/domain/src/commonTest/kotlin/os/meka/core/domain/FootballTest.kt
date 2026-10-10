@@ -235,4 +235,93 @@ class FootballTest {
         val long = FootballRules.lateDrafts(event(title = "BUFC U9s v Arlesey Town Youth in the county cup quarter final replay"), at(thu + 2, 9), cal)
         assertTrue(long[0].text.contains("for BUFC U9s v Arlesey Town Youth in the county cup quarter…. Should"), long[0].text)
     }
+
+    @Test
+    fun theResultIsOfferedAfterTheMatchKeptOnTheFixtureAndSyncedToTheMac() {
+        val e = event(start = at(thu, 10)) // 10:00–11:00 today
+        // Before the end: nothing to record.
+        assertFalse(FootballRules.canRecord(e, null, at(thu, 10, 59), cal))
+        assertFalse(EventDetails.build(e, at(thu, 10, 30), cal, eaFold.marks()).canResult)
+        // Once over, for a week.
+        assertTrue(FootballRules.canRecord(e, null, at(thu, 11), cal))
+        assertTrue(FootballRules.canRecord(e, null, at(thu + 6, 23), cal))
+        assertFalse(FootballRules.canRecord(e, null, at(thu + 7, 11), cal))
+        // Never on an event that isn't a club fixture.
+        assertFalse(FootballRules.canRecord(event(title = "Dentist", start = at(thu, 10)), null, at(thu, 12), cal))
+
+        val r = assertNotNull(FootballRules.result(e, 3, 1, "  Leo 2,   Sam ", "Great save in the\n\n\n\nsecond half ", at(thu, 12)))
+        assertEquals("Leo 2, Sam", r.scorers)
+        assertEquals("Great save in the\n\nsecond half", r.note)
+        assertNull(eaFold.setResult("ev1", r))
+        val d = EventDetails.build(e, at(thu, 12), cal, eaFold.marks())
+        assertTrue(d.canResult)
+        assertTrue(d.resultScore)
+        assertEquals("Won 3–1 · Leo 2, Sam", d.resultLine)
+        assertEquals("Great save in the\n\nsecond half", d.resultNote)
+        assertEquals(3, d.result?.forOrNone)
+        assertEquals("Saved · Won 3–1 · Leo 2, Sam", FootballRules.savedLine(r))
+        // Kept for good: still shown (and changeable) after the week.
+        assertTrue(EventDetails.build(e, at(thu + 30, 12), cal, eaFold.marks()).canResult)
+
+        // On the Mac after a sync; a change there wins (the latest), and the old one comes back with its undo.
+        sync()
+        assertEquals("Won 3–1 · Leo 2, Sam", FootballRules.resultLine(eaMac.marks().results["ev1"]))
+        val draw = assertNotNull(FootballRules.result(e, 2, 2, "", "", at(thu, 13)))
+        val before = eaMac.setResult("ev1", draw)
+        assertEquals(r.copy(atMs = before!!.atMs), before)
+        sync()
+        assertEquals("Drew 2–2", FootballRules.resultLine(eaFold.marks().results["ev1"]))
+        assertNull(eaFold.marks().results["ev1"]?.note)
+        eaFold.setResult("ev1", before)
+        assertEquals("Won 3–1 · Leo 2, Sam", FootballRules.resultLine(eaFold.marks().results["ev1"]))
+        // Saving nothing clears it.
+        assertNull(FootballRules.result(e, -1, -1, " ", "\n", at(thu, 14)))
+        eaFold.setResult("ev1", null)
+        assertNull(eaFold.marks().results["ev1"])
+        assertEquals("Result cleared", FootballRules.savedLine(null))
+    }
+
+    @Test
+    fun aScoreIsBothSidesTrainingKeepsANoteOnlyAndTheWordsReadNaturally() {
+        val e = event(start = at(thu, 10))
+        // One side missing: no score, the note stays.
+        val noScore = assertNotNull(FootballRules.result(e, 2, -1, "", "Rained off at half time", at(thu, 12)))
+        assertFalse(noScore.hasScore)
+        assertNull(FootballRules.resultLine(noScore))
+        assertEquals("Saved the note", FootballRules.savedLine(noScore))
+        assertEquals("Lost 0–1", FootballRules.scoreLabel(FootballRules.result(e, 0, 1, "", "", 0)!!))
+        assertEquals("Scorers · Leo", FootballRules.resultLine(FootballRules.result(e, -1, -1, "Leo", "", 0)))
+        assertNull(FootballRules.result(e, 100, 1, "", "", 0))
+        // Training: a note, never a score or scorers.
+        val training = event(title = "SJFC training", start = at(thu, 10))
+        assertTrue(FootballRules.isTraining(training))
+        assertFalse(EventDetails.build(training, at(thu, 12), cal, eaFold.marks()).resultScore)
+        val t = assertNotNull(FootballRules.result(training, 3, 1, "Leo", "Worked on passing", 0))
+        assertFalse(t.hasScore)
+        assertNull(t.scorers)
+        assertEquals("Worked on passing", t.note)
+        assertFalse(FootballRules.isTraining(e))
+        // An all-day tournament is over at 17:00 on its first day.
+        val cup = event(title = "SJFC cup day", allDay = true, start = CivilDate.toEpochDay(2026, 10, 10) * CivilDate.DAY_MS)
+        assertEquals(at(thu + 2, 17), FootballRules.matchEndMs(cup, cal))
+    }
+
+    @Test
+    fun aPromptAsksHowItWentAfterAMatchUntilSomethingIsKept() {
+        val e = event(start = at(thu, 10))
+        val n = FootballRules.notices(listOf(e), eaFold.marks(), at(thu, 9), cal).single()
+        assertEquals("How did BUFC U9s v Arlesey go?", n.title)
+        assertEquals(at(thu, 11, 15), n.atMs)
+        assertEquals(at(thu, 23), n.expiresAtMs)
+        assertEquals(NoticeSource.EVENT_REMINDER, n.source)
+        // It goes once stale, once something is kept, for training, a hidden fixture or anything else.
+        assertTrue(FootballRules.notices(listOf(e), eaFold.marks(), at(thu, 23), cal).isEmpty())
+        assertTrue(FootballRules.notices(listOf(event(title = "SJFC training", start = at(thu, 10))), eaFold.marks(), at(thu, 12), cal).isEmpty())
+        assertTrue(FootballRules.notices(listOf(event(title = "Dentist", start = at(thu, 10))), eaFold.marks(), at(thu, 12), cal).isEmpty())
+        eaFold.hide("ev1")
+        assertTrue(FootballRules.notices(listOf(e), eaFold.marks(), at(thu, 12), cal).isEmpty())
+        eaFold.show("ev1")
+        eaFold.setResult("ev1", FootballRules.result(e, 1, 0, "", "", at(thu, 12)))
+        assertTrue(FootballRules.notices(listOf(e), eaFold.marks(), at(thu, 12), cal).isEmpty())
+    }
 }

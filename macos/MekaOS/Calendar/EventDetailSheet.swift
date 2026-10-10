@@ -117,6 +117,22 @@ struct EventDetailSheet: View {
             .staggeredAppear(1)
         }
 
+        // Weekend football, slice 4: "How did it go?" once a club fixture is over. Only Strings, Ints and Bools cross
+        // from the core into the view.
+        if !d.provisional && d.canResult {
+            MatchResultView(
+                eventID: d.id, scoreAllowed: d.resultScore, kept: d.result != nil,
+                line: d.resultLine, note: d.resultNote,
+                keptFor: Int(d.result?.forOrNone ?? -1), keptAgainst: Int(d.result?.againstOrNone ?? -1),
+                keptScorers: d.result?.scorers ?? "", keptNote: d.result?.note ?? "",
+                palette: palette
+            ) { ours, theirs, scorers, note in
+                model.saveMatchResult(event, ours: ours, theirs: theirs, scorers: scorers, note: note)
+            }
+            .id(d.id)
+            .staggeredAppear(2)
+        }
+
         if let note = d.edit {
             HStack(spacing: MekaSpace.s) {
                 Text(note.text).font(MekaType.caption)
@@ -335,4 +351,105 @@ private struct LateDraftRow: Identifiable {
     let label: String
     let text: String
     var id: String { label }
+}
+
+/// "HOW DID IT GO?" (weekend football, slice 4), matching the Fold's MatchResultBlock: with nothing kept the form is
+/// open — Us and Them steppers ("–" until one is clicked; none for training), Scorers and a note, Save. Once kept, the
+/// line ("Won 3–1 · Leo 2, Sam"), the note and Edit result. The form and the line swap on the expand spring; the
+/// digits roll (numeric text) as they step. Reduce Motion: cross-fades.
+private struct MatchResultView: View {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let eventID: String
+    let scoreAllowed: Bool
+    let kept: Bool
+    let line: String?
+    let note: String?
+    let keptFor: Int
+    let keptAgainst: Int
+    let keptScorers: String
+    let keptNote: String
+    let palette: MekaPalette
+    let onSave: (Int, Int, String, String) -> Void
+
+    @State private var editing: Bool?
+    @State private var ours = -1
+    @State private var theirs = -1
+    @State private var scorers = ""
+    @State private var noteText = ""
+
+    private var isEditing: Bool { editing ?? !kept }
+
+    var body: some View {
+        let rules = FootballRules.shared
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(rules.RESULT_TITLE.uppercased()).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
+            if isEditing {
+                VStack(alignment: .leading, spacing: MekaSpace.s) {
+                    if scoreAllowed {
+                        HStack(spacing: MekaSpace.l) {
+                            stepper("Us", value: ours, side: 0)
+                            stepper("Them", value: theirs, side: 1)
+                        }
+                        TextField(rules.SCORERS_HINT, text: $scorers)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: scorers) { _, v in if v.count > Int(rules.MAX_SCORERS) { scorers = String(v.prefix(Int(rules.MAX_SCORERS))) } }
+                    }
+                    TextField(rules.NOTE_HINT, text: $noteText, axis: .vertical)
+                        .lineLimit(2...5)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: noteText) { _, v in if v.count > Int(rules.MAX_NOTE) { noteText = String(v.prefix(Int(rules.MAX_NOTE))) } }
+                    Button(rules.RESULT_SAVE) {
+                        if kept || ours >= 0 || !scorers.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            onSave(ours, theirs, scorers, noteText)
+                            withAnimation(MekaMotion.expand(reduced: reduceMotion)) { editing = false }
+                        } else {
+                            MekaHaptics.tick()
+                        }
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .foregroundStyle(palette.accent)
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            } else {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    if let line { Text(line).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity) }
+                    if let note {
+                        Text(note).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Button(rules.RESULT_EDIT) {
+                        MekaHaptics.tick()
+                        ours = keptFor; theirs = keptAgainst; scorers = keptScorers; noteText = keptNote
+                        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { editing = true }
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .foregroundStyle(palette.accent)
+                    .padding(.top, MekaSpace.xxs)
+                }
+                .transition(.opacity)
+            }
+        }
+        .controlSize(.small)
+        .onAppear { ours = keptFor; theirs = keptAgainst; scorers = keptScorers; noteText = keptNote }
+        .onChange(of: kept) { _, isKept in if !isKept { editing = nil } }
+    }
+
+    private func stepper(_ label: String, value: Int, side: Int) -> some View {
+        HStack(spacing: MekaSpace.s) {
+            Text(label).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+            Button("−") { step(side, by: -1) }.buttonStyle(MekaPressStyle())
+            Text(value < 0 ? "–" : "\(value)").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                .monospacedDigit()
+                .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(max(value, 0))))
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: value)
+            Button("+") { step(side, by: 1) }.buttonStyle(MekaPressStyle())
+        }
+    }
+
+    private func step(_ side: Int, by: Int) {
+        MekaHaptics.tick()
+        let top = Int(FootballRules.shared.MAX_SCORE)
+        if ours < 0 || theirs < 0 { ours = max(ours, 0); theirs = max(theirs, 0) }
+        if side == 0 { ours = min(max(ours + by, 0), top) } else { theirs = min(max(theirs + by, 0), top) }
+    }
 }

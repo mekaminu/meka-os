@@ -29,6 +29,27 @@ data class LeaveOffer(val travelMin: Int, val rings: Boolean, val label: String,
  */
 data class LateDraft(val minutes: Int, val label: String, val text: String)
 
+/**
+ * Weekend football, slice 4: what Meka kept about a match once it was over, on the fixture's `event_mark`
+ * ([EventMarkFields.SCORE_FOR] and the rest). [scoreFor] is his kid's team's goals; a score is both sides or neither.
+ */
+data class FixtureResult(
+    val scoreFor: Int?,
+    val scoreAgainst: Int?,
+    val scorers: String?,
+    val note: String?,
+    val atMs: Long,
+) {
+    val hasScore: Boolean get() = scoreFor != null && scoreAgainst != null
+    val isEmpty: Boolean get() = !hasScore && scorers == null && note == null
+    /** For Swift: the goals for, or -1 without a score. */
+    val forOrNone: Int get() = if (hasScore) scoreFor!! else -1
+    val againstOrNone: Int get() = if (hasScore) scoreAgainst!! else -1
+}
+
+/** A result just saved: the undo bar's [line] ("Saved · Won 3–1") and what was there before ([previous]; null: nothing). */
+data class MatchSaved(val eventId: String, val line: String, val previous: FixtureResult?)
+
 /** A kit task just made: its id (Undo deletes it) and the undo bar's line ("Kit reminder tomorrow 19:00"). */
 data class KitAdded(val taskId: String, val line: String)
 
@@ -147,6 +168,107 @@ object FootballRules {
         val step = 5 * 60_000L
         return (ms + step - 1).floorDiv(step) * step
     }
+
+    // ---- Slice 4: the result and a note after the match ----
+
+    const val RESULT_TITLE = "How did it go?"
+    const val RESULT_SAVE = "Save"
+    const val RESULT_EDIT = "Edit result"
+    const val SCORERS_HINT = "Scorers · Leo 2, Sam (optional)"
+    const val NOTE_HINT = "A note · man of the match, how he played… (optional)"
+    /** Offered from the end of the match for this many days (a result already kept can always be changed). */
+    const val RESULT_DAYS = 7
+    /** The prompt posts this long after the end… */
+    const val RESULT_PROMPT_AFTER_MIN = 15
+    /** …and is stale this long after it. */
+    const val RESULT_PROMPT_HOURS = 12
+    const val MAX_SCORE = 99
+    const val MAX_SCORERS = 120
+    const val MAX_NOTE = 500
+    /** An all-day tournament counts as over at 17:00 on its first day. */
+    const val ALL_DAY_END_MIN = 17 * 60
+    /** Words that make a club event a training session: a note is kept, never a score, and no prompt is posted. */
+    val TRAINING_WORDS = setOf("TRAINING", "PRACTICE", "SESSION", "COACHING")
+
+    /** Whether [e] is a training session rather than a match (its title names one of [TRAINING_WORDS]). */
+    fun isTraining(e: CalendarEvent): Boolean =
+        e.title.split(Regex("[^A-Za-z0-9]+")).any { it.uppercase() in TRAINING_WORDS }
+
+    /** When the match is over: a timed one's end (at least its start), an all-day one at 17:00 on its first day. */
+    fun matchEndMs(e: CalendarEvent, cal: LocalCalendar): Long =
+        if (e.allDay) cal.toEpochMs(matchDay(e, cal), ALL_DAY_END_MIN) else maxOf(e.endAtMs, e.startAtMs)
+
+    /**
+     * Whether the detail offers "How did it go?": a club fixture that is over, for [RESULT_DAYS] days after; one with a
+     * result kept already always shows it (to change it). Never an event still on its way to Google.
+     */
+    fun canRecord(e: CalendarEvent, result: FixtureResult?, nowMs: Long, cal: LocalCalendar): Boolean {
+        if (e.isProvisional || !isClubFixture(e)) return false
+        if (result != null) return true
+        val end = matchEndMs(e, cal)
+        return nowMs >= end && nowMs < end + RESULT_DAYS * CivilDate.DAY_MS
+    }
+
+    /**
+     * What gets kept from the fields Meka filled in: a score only when both sides are 0–[MAX_SCORE] and it isn't
+     * training; scorers and the note trimmed (runs of spaces as one, the note keeps its lines) and cut to their
+     * limits. Null when nothing is left (saving that clears the result).
+     */
+    fun result(e: CalendarEvent, scoreFor: Int, scoreAgainst: Int, scorers: String, note: String, nowMs: Long): FixtureResult? {
+        val score = !isTraining(e) && scoreFor in 0..MAX_SCORE && scoreAgainst in 0..MAX_SCORE
+        val who = scorers.replace(Regex("\\s+"), " ").trim().take(MAX_SCORERS).trim().ifEmpty { null }?.takeIf { !isTraining(e) }
+        val text = note.lines().joinToString("\n") { it.replace(Regex("[ \\t]+"), " ").trim() }.trim()
+            .replace(Regex("\n{3,}"), "\n\n").take(MAX_NOTE).trim().ifEmpty { null }
+        val r = FixtureResult(if (score) scoreFor else null, if (score) scoreAgainst else null, who, text, nowMs)
+        return r.takeIf { !it.isEmpty }
+    }
+
+    /** "Won 3–1" · "Drew 2–2" · "Lost 0–1"; null without a score. */
+    fun scoreLabel(r: FixtureResult): String? {
+        if (!r.hasScore) return null
+        val f = r.scoreFor!!
+        val a = r.scoreAgainst!!
+        val word = when { f > a -> "Won"; f < a -> "Lost"; else -> "Drew" }
+        return "$word $f–$a"
+    }
+
+    /** The detail's line: "Won 3–1 · Leo 2, Sam" · "Scorers · Leo 2, Sam" · null (only a note, or nothing). */
+    fun resultLine(r: FixtureResult?): String? {
+        if (r == null) return null
+        val score = scoreLabel(r)
+        return when {
+            score != null && r.scorers != null -> "$score · ${r.scorers}"
+            score != null -> score
+            r.scorers != null -> "Scorers · ${r.scorers}"
+            else -> null
+        }
+    }
+
+    /** The undo bar's line once saved: "Saved · Won 3–1" · "Saved the note" · "Result cleared". */
+    fun savedLine(r: FixtureResult?): String = when {
+        r == null -> "Result cleared"
+        resultLine(r) != null -> "Saved · ${resultLine(r)}"
+        else -> "Saved the note"
+    }
+
+    /**
+     * The prompt after the match: a heads-up [RESULT_PROMPT_AFTER_MIN] minutes after the end of each club match
+     * (not training, not hidden) with nothing kept yet, "How did BUFC U9s v Arlesey go?", standing for
+     * [RESULT_PROMPT_HOURS] hours. Through Event reminders, so quiet hours and Notifications' choice apply.
+     */
+    fun notices(events: List<CalendarEvent>, marks: EventMarks, nowMs: Long, cal: LocalCalendar): List<Notice> =
+        events.mapNotNull { e ->
+            if (e.isProvisional || !isClubFixture(e) || isTraining(e) || marks.isHidden(e.id) || marks.results[e.id] != null) return@mapNotNull null
+            val end = matchEndMs(e, cal)
+            val at = end + RESULT_PROMPT_AFTER_MIN * 60_000L
+            val expires = end + RESULT_PROMPT_HOURS * 3_600_000L
+            if (nowMs >= expires) return@mapNotNull null
+            Notice(
+                key = "event:${e.id}:${e.startAtMs}:result", source = NoticeSource.EVENT_REMINDER, tier = NoticeTier.HEADS_UP,
+                title = "How did ${lateTitle(e)} go?", text = "Keep the score, the scorers and a note · open it from Today",
+                atMs = at, target = NoticeTarget.TODAY, expiresAtMs = expires,
+            )
+        }
 
     /** The kit task's id for an event: the same on every device. */
     fun kitTaskId(eventId: String) = "k$eventId"
