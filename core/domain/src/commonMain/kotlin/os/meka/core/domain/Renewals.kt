@@ -20,7 +20,7 @@ import os.meka.core.sync.fv
  */
 
 /** How a renewal is repeated (the presets offered); stored as a [Recurrence] anchored on the due day. */
-enum class RenewalRepeat { NONE, MONTHLY, QUARTERLY, YEARLY }
+enum class RenewalRepeat { NONE, MONTHLY, QUARTERLY, HALF_YEARLY, YEARLY }
 
 /** Where a renewal stands today. */
 enum class RenewalState {
@@ -136,6 +136,7 @@ object RenewalRules {
         ObligationKind.BILL -> "Bill"
         ObligationKind.LICENCE -> "Licence or passport"
         ObligationKind.WARRANTY -> "Warranty"
+        ObligationKind.HOME -> "Home upkeep"
         ObligationKind.OTHER -> "Other"
     }
 
@@ -146,6 +147,7 @@ object RenewalRules {
         ObligationKind.CAR_TAX, ObligationKind.WARRANTY -> 14
         ObligationKind.SUBSCRIPTION, ObligationKind.BILL -> 3
         ObligationKind.LICENCE -> 61
+        ObligationKind.HOME -> 3
         ObligationKind.OTHER -> 7
     }
 
@@ -153,6 +155,7 @@ object RenewalRules {
     fun defaultRepeat(k: ObligationKind): RenewalRepeat = when (k) {
         ObligationKind.MOT, ObligationKind.CAR_TAX, ObligationKind.INSURANCE, ObligationKind.BOILER -> RenewalRepeat.YEARLY
         ObligationKind.SUBSCRIPTION, ObligationKind.BILL -> RenewalRepeat.MONTHLY
+        ObligationKind.HOME -> RenewalRepeat.YEARLY
         ObligationKind.LICENCE, ObligationKind.WARRANTY, ObligationKind.OTHER -> RenewalRepeat.NONE
     }
 
@@ -172,7 +175,7 @@ object RenewalRules {
         ObligationKind.CAR_TAX, ObligationKind.BILL -> "Paid"
         ObligationKind.BOILER -> "Serviced"
         ObligationKind.INSURANCE, ObligationKind.SUBSCRIPTION, ObligationKind.LICENCE -> "Renewed"
-        ObligationKind.WARRANTY, ObligationKind.OTHER -> "Done"
+        ObligationKind.WARRANTY, ObligationKind.HOME, ObligationKind.OTHER -> "Done"
     }
 
     fun stopLabel(k: ObligationKind): String =
@@ -182,6 +185,7 @@ object RenewalRules {
         RenewalRepeat.NONE -> "Doesn't repeat"
         RenewalRepeat.MONTHLY -> "Every month"
         RenewalRepeat.QUARTERLY -> "Every 3 months"
+        RenewalRepeat.HALF_YEARLY -> "Every 6 months"
         RenewalRepeat.YEARLY -> "Every year"
     }
 
@@ -192,6 +196,7 @@ object RenewalRules {
             RenewalRepeat.NONE -> null
             RenewalRepeat.MONTHLY -> Recurrence.MonthlyOnDay(1, d.day)
             RenewalRepeat.QUARTERLY -> Recurrence.MonthlyOnDay(3, d.day)
+            RenewalRepeat.HALF_YEARLY -> Recurrence.MonthlyOnDay(6, d.day)
             RenewalRepeat.YEARLY -> Recurrence.Yearly(1, d.month, d.day)
         }
     }
@@ -201,6 +206,7 @@ object RenewalRules {
         rule == null -> RenewalRepeat.NONE
         rule is Recurrence.MonthlyOnDay && rule.interval == 1 -> RenewalRepeat.MONTHLY
         rule is Recurrence.MonthlyOnDay && rule.interval == 3 -> RenewalRepeat.QUARTERLY
+        rule is Recurrence.MonthlyOnDay && rule.interval == 6 -> RenewalRepeat.HALF_YEARLY
         rule is Recurrence.Yearly && rule.interval == 1 -> RenewalRepeat.YEARLY
         else -> null
     }
@@ -312,17 +318,20 @@ class Renewals(
         cost: String? = null,
         cancelByDaysBefore: Int? = null,
         subject: String? = null,
+        /** Days ahead to show it; null takes the kind's default ([RenewalRules.defaultLeadDays]). */
+        leadDays: Int? = null,
     ): String {
         val t = cleanTitle(title)
         checkDay(dueDay)
         checkCancel(cancelByDaysBefore)
+        if (leadDays != null && leadDays !in 0..MAX_LEAD_DAYS) throw ValidationException("Pick up to a year ahead")
         val pence = RenewalRules.parseCost(cost)
         val id = ids()
         val fields = linkedMapOf<String, FieldValue>(
             ActionableFields.TITLE to t.fv(),
             ObligationFields.KIND to kind.name.fv(),
             ActionableFields.DUE_AT to dayMs(dueDay).fv(),
-            ObligationFields.LEAD_DAYS to RenewalRules.defaultLeadDays(kind).fv(),
+            ObligationFields.LEAD_DAYS to (leadDays ?: RenewalRules.defaultLeadDays(kind)).fv(),
             ActionableFields.LIFECYCLE to Lifecycle.ACTIVE.name.fv(),
             ActionableFields.CREATED_AT to nowMs().fv(),
             ActionableFields.VISIBILITY to Visibility.PRIVATE.name.fv(),

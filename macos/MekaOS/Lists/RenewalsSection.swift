@@ -18,10 +18,20 @@ struct RenewalsSection: View {
         if (r?.count ?? 0) == 0 {
             EmptyLine(text: "MOT, insurance, the boiler service, subscriptions and bills. Add each with its date and MEKA shows it in good time, with a cancel-by reminder if you set one.", palette: palette)
         }
+        if let home = model.homeUpkeep {
+            ListRowView(title: HomeUpkeepRules.shared.LABEL, meta: home.summary, due: false, expanded: open == Self.homeKey, palette: palette,
+                        toggle: { open = open == Self.homeKey ? nil : Self.homeKey }) {
+                ForEach(home.rows, id: \.presetId) { row in
+                    UpkeepRowView(row: row, palette: palette, open: $open)
+                }
+            }
+        }
         section("Needs doing", r?.attention ?? [])
         section("Coming up", r?.upcoming ?? [])
         section("Later", r?.later ?? [])
     }
+
+    static let homeKey = "home-upkeep"
 
     @ViewBuilder private func section(_ label: String, _ items: [RenewalItem]) -> some View {
         if !items.isEmpty {
@@ -33,6 +43,35 @@ struct RenewalsSection: View {
                 ListRowView(title: item.title, meta: item.meta, due: item.needsAttention, expanded: open == item.id, palette: palette,
                             toggle: { open = open == item.id ? nil : item.id }) {
                     RenewalDetails(item: item, palette: palette, open: $open)
+                }
+            }
+        }
+    }
+}
+
+/// One suggested home job: its title, the line (cross-fades to "On the radar · due Sun 1 Nov" once added) and what it
+/// covers; Add (press style, light haptic) puts it on the radar, and a job whose date only Meka knows unfolds its row.
+private struct UpkeepRowView: View {
+    @Environment(CoreModel.self) private var model
+    let row: UpkeepRow
+    let palette: MekaPalette
+    @Binding var open: String?
+
+    var body: some View {
+        HStack(alignment: .center, spacing: MekaSpace.m) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(row.line).font(MekaType.itemMeta)
+                    .foregroundStyle(row.tracked ? palette.textSecondary : palette.textTertiary)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: true), value: row.line)
+                Text(row.note).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+            Spacer(minLength: 0)
+            if !row.tracked {
+                let dateKnown = row.dateKnown
+                Button("Add") {
+                    model.addHomeUpkeep(row.presetId) { id in if !dateKnown { open = id } }
                 }
             }
         }

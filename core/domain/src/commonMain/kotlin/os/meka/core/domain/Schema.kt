@@ -77,7 +77,8 @@ enum class Lifecycle { INBOX, ACTIVE, SOMEDAY, WAITING, DONE, CANCELLED;
 
 enum class SomedayKind { IDEA, PURCHASE, PROJECT, TRIP, BOOK, RESEARCH, APPLICATION, HOME_IMPROVEMENT, OTHER }
 enum class CommitmentDirection { OWED_BY_ME, OWED_TO_ME }
-enum class ObligationKind { MOT, CAR_TAX, INSURANCE, BOILER, SUBSCRIPTION, BILL, LICENCE, WARRANTY, OTHER }
+/** [HOME]: a home upkeep job (smoke alarm test, gutters, filters; Home upkeep, V1), nothing to pay or renew. */
+enum class ObligationKind { MOT, CAR_TAX, INSURANCE, BOILER, SUBSCRIPTION, BILL, LICENCE, WARRANTY, HOME, OTHER }
 enum class GoalHorizon { SHORT, MEDIUM, LONG }
 enum class DecisionStatus { ACTIVE, REVISITING, SUPERSEDED }
 enum class Visibility { HOUSEHOLD, PRIVATE }

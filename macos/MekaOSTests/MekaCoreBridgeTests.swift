@@ -1311,6 +1311,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 13, past: true), "skipped date night tomorrow")
     }
 
+    func testHomeUpkeepReachesSwift() {
+        // Home upkeep, slice 1: the suggested jobs and their lines reach the Mac (only Strings and an Int64 cross).
+        let sat = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 10)
+        let view = HomeUpkeepRules.shared.view(items: [], today: sat)
+        XCTAssertEqual(view.rows.count, 6)
+        XCTAssertEqual(view.summary, "6 jobs a home needs · add the ones that apply")
+        let alarms = view.rows[0]
+        XCTAssertEqual(alarms.presetId, "alarms")
+        XCTAssertEqual(alarms.line, "Every month · a nudge on the day")
+        XCTAssertFalse(alarms.tracked)
+        XCTAssertTrue(alarms.dateKnown)
+        XCTAssertFalse(view.rows[4].dateKnown) // home insurance: Meka sets the date
+        XCTAssertEqual(HomeUpkeepRules.shared.LABEL, "Home upkeep")
+        XCTAssertEqual(RenewalRules.shared.repeatLabel(r: .halfYearly), "Every 6 months")
+    }
+
     func testFamilyReachesSwift() {
         // Family sharing, slice 4: Settings → Family's rules reach the Mac (only Strings cross from the sheet).
         let rules = FamilyRules.shared

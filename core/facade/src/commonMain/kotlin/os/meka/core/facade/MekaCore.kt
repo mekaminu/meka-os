@@ -45,6 +45,7 @@ import os.meka.core.domain.SearchView
 import os.meka.core.domain.ObligationKind
 import os.meka.core.domain.RenewalRepeat
 import os.meka.core.domain.Renewals
+import os.meka.core.domain.addHomeUpkeep
 import os.meka.core.domain.DayWindow
 import os.meka.core.domain.EveningShutdown
 import os.meka.core.domain.BriefRules
@@ -1244,6 +1245,19 @@ class MekaCore(
     /** "Cancelled it" / "Stop tracking": off the radar, kept as cancelled. */
     suspend fun stopRenewal(id: String) = onCore { renewals.stop(id) }
     suspend fun deleteRenewal(id: String) = onCore { renewals.delete(id) }
+
+    /**
+     * Home upkeep: adds one of [os.meka.core.domain.HomeUpkeepRules.PRESETS] to the radar with its interval, lead time
+     * and first date. Returns the new item's id, or null when that job is already on the radar or isn't one (never
+     * throws, so the Mac can call it). The view is [os.meka.core.domain.HomeUpkeepRules.view] over the radar's items.
+     */
+    suspend fun addHomeUpkeep(presetId: String): String? = onCore {
+        try { renewals.addHomeUpkeep(presetId, todayEpochDay()) } catch (_: os.meka.core.domain.ValidationException) { null }
+    }
+
+    /** The suggested home jobs against the radar today (Lists → Renewals → Home upkeep). */
+    fun homeUpkeep(): os.meka.core.domain.HomeUpkeepView =
+        os.meka.core.domain.HomeUpkeepRules.view(_lists.value.renewals.all, todayEpochDay())
 
     // ---- Shopping (family sharing, slice 1; Lists → Shopping) ----
 

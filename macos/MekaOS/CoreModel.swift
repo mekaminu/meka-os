@@ -904,6 +904,24 @@ final class CoreModel {
     func stopRenewal(_ id: String) { MekaHaptics.light(); run { try await $0.stopRenewal(id: id) } }
     func deleteRenewal(_ id: String) { run { try await $0.deleteRenewal(id: id) } }
 
+    /// Home upkeep: the suggested home jobs against the radar today (pure, from the synced lists).
+    var homeUpkeep: HomeUpkeepView? {
+        guard let r = lists?.renewals else { return nil }
+        return HomeUpkeepRules.shared.view(items: r.all, today: todayEpochDay)
+    }
+
+    /// Adds a suggested home job to the radar (light haptic); [opened] gets the new row's id when its date is one only
+    /// Meka knows, so the sheet can unfold it. Only a String crosses each way.
+    func addHomeUpkeep(_ presetId: String, opened: @escaping @MainActor (String) -> Void) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                if let id = try await core.addHomeUpkeep(presetId: presetId) { opened(id) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Today as a local epoch day (the core's day numbering, for due dates).
     var todayEpochDay: Int64 { core?.todayEpochDay() ?? Self.epochDay(of: Date()) }
 

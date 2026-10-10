@@ -1,6 +1,16 @@
 package os.meka.android.lists
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Alignment
+import os.meka.android.designsystem.MekaMotion
+import os.meka.core.domain.HomeUpkeepRules
+import os.meka.core.domain.HomeUpkeepView
+import os.meka.core.domain.UpkeepRow
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -69,9 +79,43 @@ internal fun LazyListScope.renewals(
             "MOT, insurance, the boiler service, subscriptions and bills. Add each with its date and MEKA shows it in good time, with a cancel-by reminder if you set one.",
         )
     }
+    homeUpkeep(HomeUpkeepRules.view(r.all, today), open, toggle, core, act, tap)
     section("Needs doing", r.attention, today, open, toggle, core, act, leave, tap)
     section("Coming up", r.upcoming, today, open, toggle, core, act, leave, tap)
     section("Later", r.later, today, open, toggle, core, act, leave, tap)
+}
+
+/**
+ * Home upkeep (V1): the jobs a house needs on a rhythm, one row that unfolds in place (the list's row motion) into
+ * the suggestions. Add (light haptic) puts a job on the radar with its interval and first date, and its line
+ * cross-fades to "On the radar · due Sun 1 Nov"; a job whose date only Meka knows (insurance, TV licence) opens its
+ * new row so the date can be set straight away.
+ */
+private fun LazyListScope.homeUpkeep(
+    v: HomeUpkeepView, open: String?, toggle: (String) -> Unit, core: MekaCore,
+    act: (suspend () -> Unit) -> Unit, tap: () -> Unit,
+) {
+    item(key = "r-home") {
+        ListRow(HomeUpkeepRules.LABEL, v.summary, DueState.NONE, open == HOME_UPKEEP, { toggle(HOME_UPKEEP) }, Modifier.animateItem()) {
+            v.rows.forEach { row -> UpkeepRowView(row) { tap(); act { core.addHomeUpkeep(row.presetId)?.let { id -> if (!row.dateKnown) toggle(id) } } } }
+        }
+    }
+}
+
+private const val HOME_UPKEEP = "home-upkeep"
+
+@Composable
+private fun UpkeepRowView(row: UpkeepRow, add: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            AnimatedContent(row.line, transitionSpec = { fadeIn(MekaMotion.appear(true)) togetherWith fadeOut(MekaMotion.appear(true)) }, label = "upkeep-line") { line ->
+                Text(line, style = MekaType.itemMeta, color = if (row.tracked) Meka.colors.textSecondary else Meka.colors.textTertiary)
+            }
+            Text(row.note, style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
+        if (!row.tracked) Action("Add") { add() }
+    }
 }
 
 private fun LazyListScope.section(
