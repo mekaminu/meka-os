@@ -1117,6 +1117,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(EventMarks.companion.NONE.kitTasks.count, 0)
     }
 
+    func testLeaveOfferReachesSwift() {
+        // Weekend football, slice 2: a ground's key and the remembered grounds reach the Mac.
+        XCTAssertEqual(FootballRules.shared.venueKey(place: "Arlesey Town FC, Hitchin Rd"), "arlesey town fc hitchin rd")
+        XCTAssertNil(FootballRules.shared.venueKey(place: "https://meet.google.com/abc"))
+        XCTAssertEqual(FootballRules.shared.AS_LAST_TIME, "as last time")
+        XCTAssertEqual(EventMarks.companion.NONE.venues.count, 0)
+    }
+
     func testShoppingFromAskReachesSwift() async throws {
         // "Add milk to shopping" in Ask and Talk: the card, its undo and Search's Shopping kind reach the Mac.
         let card = AskRules.shared.cardOf(p: AskProposalAddShopping(items: ["milk", "eggs"]), today: 0)

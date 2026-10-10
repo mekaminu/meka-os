@@ -34,6 +34,8 @@ data class EventMarks(
     val shownCalendars: Set<String> = emptySet(),
     /** Event id → its kit task (weekend football, [FootballRules]; open or done; deleted ones are gone). */
     val kitTasks: Map<String, Task> = emptyMap(),
+    /** Ground key ([FootballRules.venueKey]) → the travel time Meka last set there (weekend football, slice 2). */
+    val venues: Map<String, VenueTravel> = emptyMap(),
 ) {
     fun isHidden(eventId: String) = eventId in hidden
 
@@ -118,7 +120,34 @@ class EventActions(
             }.toMap()
         val leaveAlarms = entities.filter { it[EventMarkFields.LEAVE_ALARM].boolOrNull == true }.map { it.ref.entityId }.toSet()
         val kit = all.filter { FootballRules.isKitTask(it) && it.lifecycle != Lifecycle.CANCELLED }.associateBy { it.eventId!! }
-        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars, leaveAlarms, shown, kit)
+        val venues = replica.entities(EntityTypes.VENUE).mapNotNull { v ->
+            val key = v[VenueFields.KEY].textOrNull ?: return@mapNotNull null
+            val travel = v[VenueFields.TRAVEL_MIN].longOrNull?.toInt()?.takeIf { it in 1..ReminderRules.MAX_MIN } ?: return@mapNotNull null
+            key to VenueTravel(v[VenueFields.PLACE].textOrNull ?: key, travel, v[VenueFields.LEAVE_ALARM].boolOrNull == true, v[VenueFields.SET_AT].longOrNull ?: 0L)
+        }.toMap()
+        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars, leaveAlarms, shown, kit, venues)
+    }
+
+    /**
+     * Weekend football, slice 2: once Meka sets Leave by (or its alarm switch) on a club fixture with a place, the
+     * ground keeps that travel time and whether it rang, for the next fixture there ([FootballRules.leaveOffer]).
+     * Nothing is written when nothing changed; returns whether something was.
+     */
+    fun rememberVenue(e: CalendarEvent): Boolean {
+        val (key, v) = FootballRules.venueToRemember(e, marks()) ?: return false
+        val id = FootballRules.venueId(key)
+        val current = replica.entity(EntityTypes.VENUE, id)
+        if (current != null && current[VenueFields.TRAVEL_MIN].longOrNull?.toInt() == v.travelMin &&
+            (current[VenueFields.LEAVE_ALARM].boolOrNull == true) == v.rings && current[VenueFields.PLACE].textOrNull == v.place
+        ) return false
+        replica.commitLocal(
+            EntityTypes.VENUE, id,
+            mapOf(
+                VenueFields.KEY to key.fv(), VenueFields.PLACE to v.place.fv(), VenueFields.TRAVEL_MIN to v.travelMin.toLong().fv(),
+                VenueFields.LEAVE_ALARM to v.rings.fv(), VenueFields.SET_AT to nowMs().fv(),
+            ),
+        )
+        return true
     }
 
     /**

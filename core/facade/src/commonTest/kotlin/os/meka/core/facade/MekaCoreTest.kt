@@ -670,6 +670,54 @@ class MekaCoreTest {
     }
 
     @Test
+    fun leaveByOnAFixtureIsRememberedForTheGroundAndOfferedOnTheNextFixtureThereOnBothDevices() = runTest {
+        val london = TimeZone.of("Europe/London")
+        fun at(day: Int, h: Int, min: Int = 0) = kotlinx.datetime.LocalDateTime(2026, 10, day, h, min).toInstant(london).toEpochMilliseconds()
+        now = at(8, 12) // Thu 8 Oct
+        val a = core("android"); val m = core("mac")
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        var k = 0
+        fun fixture(id: String, title: String, start: Long) = mapOf(
+            os.meka.core.domain.EventFields.TITLE to os.meka.core.sync.FieldValue.Text(title),
+            os.meka.core.domain.EventFields.START_AT to os.meka.core.sync.FieldValue.Int64(start),
+            os.meka.core.domain.EventFields.END_AT to os.meka.core.sync.FieldValue.Int64(start + 3_600_000L),
+            os.meka.core.domain.EventFields.ALL_DAY to os.meka.core.sync.FieldValue.Bool(false),
+            os.meka.core.domain.EventFields.LOCATION to os.meka.core.sync.FieldValue.Text("Arlesey Town FC, Hitchin Rd"),
+            os.meka.core.domain.EventFields.PROVIDER to os.meka.core.sync.FieldValue.Text("google"),
+            os.meka.core.domain.EventFields.ACCOUNT to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
+            os.meka.core.domain.EventFields.CALENDAR to os.meka.core.sync.FieldValue.Text("Personal"),
+            os.meka.core.domain.EventFields.REMOVED to os.meka.core.sync.FieldValue.Bool(false),
+        ).forEach { (f, v) ->
+            serverOps.append(os.meka.core.sync.Op("srvfc${k++}", "hh", os.meka.core.domain.EntityTypes.EVENT, id, f, v, clock.now(), emptyList(), "server"))
+        }
+        fixture("fc1", "BUFC U9s v Arlesey", at(10, 10))
+        fixture("fc2", "BUFC U9s v Arlesey (cup)", at(17, 10))
+        assertTrue(a.syncNow()); assertTrue(m.syncNow())
+        val first = os.meka.core.domain.CalendarEvent("fc1", "BUFC U9s v Arlesey", at(10, 10), at(10, 11), false, "Arlesey Town FC, Hitchin Rd", "google", "meka@gmail.com", "Personal")
+        val second = first.copy(id = "fc2", title = "BUFC U9s v Arlesey (cup)", startAtMs = at(17, 10), endAtMs = at(17, 11))
+        assertNull(a.eventDetail(second).leaveOfferLabel)
+
+        a.setEventLeaveBy("fc1", 40)
+        a.setEventLeaveAlarm("fc1", true)
+        assertEquals("Leave by 09:20 · as last time", a.eventDetail(second).leaveOfferLabel)
+        assertNull(a.eventDetail(first).leaveOfferLabel)
+        assertTrue(a.syncNow()); assertTrue(m.syncNow())
+        assertEquals("Leave by 09:20 · as last time", m.eventDetail(second).leaveOfferLabel)
+
+        // One tap on the Mac sets the same travel time and the alarm; Undo takes both off and the offer comes back.
+        val used = assertNotNull(m.useLastLeaveBy(second))
+        assertEquals("Leave by 09:20 · 40 min away · alarm", used.line)
+        assertEquals(40, m.eventMarks.value.travel["fc2"])
+        assertTrue("fc2" in m.eventMarks.value.leaveAlarms)
+        assertNull(m.eventDetail(second).leaveOfferLabel)
+        assertNull(m.useLastLeaveBy(second))
+        m.undoLastLeaveBy("fc2")
+        assertNull(m.eventMarks.value.travel["fc2"])
+        assertFalse("fc2" in m.eventMarks.value.leaveAlarms)
+        assertEquals(40, m.eventDetail(second).leaveOfferMin)
+    }
+
+    @Test
     fun theWeeklyReviewCountsTheWeekStepsBackAndDoneReviewingSyncs() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 10, 1, 18, 30).toInstant(london).toEpochMilliseconds() // a Thursday

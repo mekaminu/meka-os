@@ -1534,6 +1534,21 @@ final class CoreModel {
         }
     }
 
+    /// Weekend football, slice 2: "Leave by 09:15 · as last time" on a club fixture sets the travel time (and the alarm)
+    /// Meka set at that ground before ("Leave by 09:15 · 40 min away · alarm"); Undo takes them off. The event is
+    /// handed to the core once.
+    func useLastLeaveBy(_ event: CalendarEvent) {
+        guard let core else { return }
+        let eventID = event.id
+        MekaHaptics.light()
+        Task {
+            do {
+                guard let used = try await core.useLastLeaveBy(event: event) else { return }
+                offerEventUndo(used.line, .lastLeaveBy(eventID))
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Hides an event from my day (timeline, planner, brief, shutdown, review); Undo shows it again.
     func hideEvent(_ eventID: String, offerUndo: Bool = true) {
         MekaHaptics.light()
@@ -1647,6 +1662,7 @@ final class CoreModel {
         case .showCalendar(let key): run { try await $0.showCalendarOnToday(calendarKey: key) }
         case .reminder(let id, let m): run { try await $0.setEventReminder(eventId: id, minutes: m) }
         case .leaveBy(let id, let m): run { try await $0.setEventLeaveBy(eventId: id, travelMinutes: m) }
+        case .lastLeaveBy(let id): run { try await $0.undoLastLeaveBy(eventId: id) }
         case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }
         case .request(let done): run { _ = try await $0.undoRequest(done: done) }
         case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
@@ -1907,6 +1923,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case showCalendar(String)
         case reminder(String, Int32)
         case leaveBy(String, Int32)
+        /// "Leave by 09:15 · as last time" on a club fixture: its travel time and alarm come off again.
+        case lastLeaveBy(String)
         /// Done / Tomorrow from the Needs you stack.
         case decision(DecisionUndo)
         /// A card set aside with Later comes back to the front.

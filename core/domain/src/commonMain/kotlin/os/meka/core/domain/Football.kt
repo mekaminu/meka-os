@@ -1,5 +1,27 @@
 package os.meka.core.domain
 
+/** Fields of a `venue` (weekend football, slice 2): a ground and the travel time Meka last set for a fixture there. */
+object VenueFields {
+    /** The ground's key ([FootballRules.venueKey]): the place in lower case, words only. */
+    const val KEY = "key"
+    /** The place as the fixture had it ("Arlesey Town FC, Hitchin Rd"). */
+    const val PLACE = "place"
+    /** Minutes it took to get there (Int, 1–240). */
+    const val TRAVEL_MIN = "travelMin"
+    /** Whether that fixture's Leave by rang as an alarm (Bool). */
+    const val LEAVE_ALARM = "leaveAlarm"
+    const val SET_AT = "setAtMs"
+}
+
+/** What Meka last set for a ground: how long it took and whether Leave by rang as an alarm. */
+data class VenueTravel(val place: String, val travelMin: Int, val rings: Boolean, val setAtMs: Long)
+
+/**
+ * The detail's offer on a fixture at a ground Meka has set a travel time for before: "Leave by 09:15 · as last time"
+ * ([label]); one tap sets the same travel time (and Ring as an alarm when it rang last time). [line] is the undo bar's.
+ */
+data class LeaveOffer(val travelMin: Int, val rings: Boolean, val label: String, val line: String)
+
 /** A kit task just made: its id (Undo deletes it) and the undo bar's line ("Kit reminder tomorrow 19:00"). */
 data class KitAdded(val taskId: String, val line: String)
 
@@ -30,6 +52,50 @@ object FootballRules {
     const val EVENING_MIN = 19 * 60
     const val KIT_MINUTES = 10
     const val CHIP = "Kit reminder"
+
+    // ---- Slice 2: the travel time Meka set for each ground ----
+
+    /**
+     * A ground's key: the place in lower case with only its words ("Arlesey Town FC, Hitchin Rd" →
+     * "arlesey town fc hitchin rd"), so a stray comma or capital still finds it. Null for no place or just a call link.
+     */
+    fun venueKey(place: String?): String? {
+        val p = place?.trim()?.takeIf { it.isNotEmpty() && !ReminderRules.isLink(it) } ?: return null
+        return p.lowercase().map { if (it.isLetterOrDigit()) it else ' ' }.joinToString("").split(' ').filter { it.isNotEmpty() }.joinToString(" ").take(200).ifEmpty { null }
+    }
+
+    /** The `venue` entity's id for a key: the same on every device. */
+    fun venueId(key: String): String = "vn" + ActivityRules.fnv64("venue:$key")
+
+    /**
+     * The ground to remember once Meka sets Leave by (or its alarm switch) on [e]: a club fixture with a place and a
+     * travel time; null otherwise. Clearing the travel time forgets nothing (the ground keeps what was set last).
+     */
+    fun venueToRemember(e: CalendarEvent, marks: EventMarks): Pair<String, VenueTravel>? {
+        if (!isClubFixture(e)) return null
+        val place = LeaveAlarmRules.place(e) ?: return null
+        val key = venueKey(place) ?: return null
+        val travel = marks.travel[e.id] ?: return null
+        return key to VenueTravel(place.take(200), travel, e.id in marks.leaveAlarms, 0L)
+    }
+
+    /**
+     * "Leave by 09:15 · as last time" on a club fixture still to come at a ground Meka set a travel time for before,
+     * while this one has none and leaving would still be ahead of now. Null otherwise (all day, no place, hidden,
+     * an event still on its way to Google).
+     */
+    fun leaveOffer(e: CalendarEvent, marks: EventMarks, nowMs: Long, cal: LocalCalendar): LeaveOffer? {
+        if (e.allDay || e.isProvisional || !isClubFixture(e) || marks.travel[e.id] != null || marks.isHidden(e.id)) return null
+        val key = venueKey(LeaveAlarmRules.place(e)) ?: return null
+        val v = marks.venues[key] ?: return null
+        val at = e.startAtMs - v.travelMin * 60_000L
+        if (at <= nowMs) return null
+        val time = LocalClock.formatMinute(cal.minuteOfDay(at))
+        val line = "Leave by $time · ${ReminderRules.travelLabel(v.travelMin)}" + if (v.rings) " · ${ReminderRules.ALARM_WORD}" else ""
+        return LeaveOffer(v.travelMin, v.rings, "Leave by $time · $AS_LAST_TIME", line)
+    }
+
+    const val AS_LAST_TIME = "as last time"
 
     /** The kit task's id for an event: the same on every device. */
     fun kitTaskId(eventId: String) = "k$eventId"

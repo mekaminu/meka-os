@@ -64,6 +64,12 @@ data class EventDetailView(
     val kitTaskId: String? = null,
     /** "Kit reminder Fri 19:00 · 2 of 5 packed" · "Kit list · 2 of 5 packed" · "Kit packed"; null without a kit task. */
     val kitLine: String? = null,
+    /**
+     * Weekend football, slice 2: "Leave by 09:15 · as last time" on a club fixture at a ground Meka set a travel time
+     * for before (this one has none yet); null otherwise. [leaveOfferMin] is that travel time (0 without an offer).
+     */
+    val leaveOfferLabel: String? = null,
+    val leaveOfferMin: Int = 0,
 )
 
 /**
@@ -171,6 +177,7 @@ object EventDetails {
         val join = e.joinUrl?.trim()?.takeIf { isHttps(it) }?.let { JoinLink(it, labelFor(it) ?: "Join call") }
             ?: findCallLink(location) ?: findCallLink(notes)
         val prep = marks.prepTasks[e.id]
+        val offer = FootballRules.leaveOffer(e, marks, nowMs, calendar)
         val locationIsLink = location != null && (location.startsWith("https://") || location.startsWith("http://")) && !location.contains(' ')
 
         return EventDetailView(
@@ -202,6 +209,8 @@ object EventDetails {
             canKit = FootballRules.canKit(e, marks.kitTasks[e.id], nowMs, calendar),
             kitTaskId = marks.kitTasks[e.id]?.id,
             kitLine = FootballRules.line(marks.kitTasks[e.id], nowMs, calendar),
+            leaveOfferLabel = offer?.label,
+            leaveOfferMin = offer?.travelMin ?: 0,
         )
     }
 

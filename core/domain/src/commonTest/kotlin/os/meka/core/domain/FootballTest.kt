@@ -151,4 +151,64 @@ class FootballTest {
         assertTrue(back.checklist.none { it.checked })
         assertEquals(at(thu + 1, 19), back.remindAtMs)
     }
+
+    // ---- Slice 2: the travel time Meka set for each ground ----
+
+    @Test
+    fun aGroundsKeyIgnoresCaseAndPunctuationAndALinkIsNoGround() {
+        assertEquals("arlesey town fc hitchin rd", FootballRules.venueKey("  Arlesey Town FC,  Hitchin Rd. "))
+        assertEquals(FootballRules.venueKey("arlesey town fc hitchin rd"), FootballRules.venueKey("Arlesey Town FC, Hitchin Rd"))
+        assertEquals("camp nou", FootballRules.venueKey("Camp Nou!"))
+        assertNull(FootballRules.venueKey("https://meet.google.com/abc"))
+        assertNull(FootballRules.venueKey("  "))
+        assertNull(FootballRules.venueKey(null))
+        assertEquals(FootballRules.venueId("bury field"), FootballRules.venueId("bury field"))
+    }
+
+    @Test
+    fun settingLeaveByOnAFixtureRemembersTheGroundAndTheNextFixtureThereOffersIt() {
+        val first = event()
+        eaFold.setLeaveBy(first.id, 25)
+        assertTrue(eaFold.rememberVenue(first))
+        assertFalse(eaFold.rememberVenue(first)) // nothing changed: nothing written
+        val next = event(id = "ev2", title = "BUFC U9s v Potton", start = at(thu + 9, 10))
+        val offer = assertNotNull(FootballRules.leaveOffer(next, eaFold.marks(), world.clock.nowMs, cal))
+        assertEquals(25, offer.travelMin)
+        assertFalse(offer.rings)
+        assertEquals("Leave by 09:35 · as last time", offer.label)
+        assertEquals("Leave by 09:35 · 25 min away", offer.line)
+        // The detail carries it, and the first fixture (which has its own) offers nothing.
+        val d = EventDetails.build(next, world.clock.nowMs, cal, eaFold.marks())
+        assertEquals("Leave by 09:35 · as last time", d.leaveOfferLabel)
+        assertEquals(25, d.leaveOfferMin)
+        assertNull(FootballRules.leaveOffer(first, eaFold.marks(), world.clock.nowMs, cal))
+
+        // The alarm switch is remembered too, and the Mac sees the ground after a sync.
+        eaFold.setLeaveAlarm(first.id, true)
+        assertTrue(eaFold.rememberVenue(first))
+        sync()
+        val onMac = assertNotNull(FootballRules.leaveOffer(next, eaMac.marks(), world.clock.nowMs, cal))
+        assertTrue(onMac.rings)
+        assertEquals("Leave by 09:35 · 25 min away · alarm", onMac.line)
+    }
+
+    @Test
+    fun noOfferForAnotherGroundAPlainEventAnAllDayOneOrWhenLeavingHasGone() {
+        val first = event()
+        eaFold.setLeaveBy(first.id, 30)
+        eaFold.rememberVenue(first)
+        val marks = eaFold.marks()
+        val now = world.clock.nowMs
+        // Another ground.
+        assertNull(FootballRules.leaveOffer(event(id = "a", start = at(thu + 9, 10)).copy(location = "Potton Rec"), marks, now, cal))
+        // Not a club fixture: the dentist at Bury Field isn't remembered or offered.
+        assertNull(FootballRules.leaveOffer(event(id = "b", title = "Dentist", start = at(thu + 9, 10)), marks, now, cal))
+        assertFalse(eaFold.rememberVenue(event(id = "b", title = "Dentist")))
+        // All day.
+        assertNull(FootballRules.leaveOffer(event(id = "c", allDay = true, start = cal.toEpochMs(thu + 9, 0)), marks, now, cal))
+        // Leaving would already be gone (kick-off in 20 min, 30 min away).
+        assertNull(FootballRules.leaveOffer(event(id = "d", start = now + 20 * 60_000L), marks, now, cal))
+        // A fixture with no travel time remembers nothing.
+        assertFalse(eaFold.rememberVenue(event(id = "e")))
+    }
 }

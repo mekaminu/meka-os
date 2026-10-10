@@ -78,6 +78,10 @@ struct EventDetailSheet: View {
                 if d.canKit {
                     Button(FootballRules.shared.CHIP) { model.addKitReminder(event) }
                 }
+                // Weekend football, slice 2: a ground Meka set a travel time for before.
+                if let offer = d.leaveOfferLabel {
+                    Button(offer) { model.useLastLeaveBy(event) }
+                }
                 Button(d.hidden ? "Show in my day" : "Hide from my day") {
                     if d.hidden { model.showEvent(d.id) } else { model.hideEvent(d.id, offerUndo: false) }
                 }

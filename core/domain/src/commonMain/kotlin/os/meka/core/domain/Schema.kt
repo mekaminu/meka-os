@@ -50,12 +50,14 @@ object EntityTypes {
     const val BLOCKED_CALLER = "blocked_caller"
     /** One thing on the shared shopping list (see [Shopping]); Got is a field, never a delete. */
     const val SHOPPING_ITEM = "shopping_item"
+    /** A ground Meka drives to for football, with the travel time he last set there (see [FootballRules]). */
+    const val VENUE = "venue"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
-        TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM,
+        TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE,
     )
 }
 
@@ -275,6 +277,8 @@ object MekaSchema : SchemaRegistry {
         // Shopping: Got and Put back on any device (or Jeanette's page), the latest wins; a removal is for good.
         entityType == EntityTypes.SHOPPING_ITEM && field == ShoppingFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.SHOPPING_ITEM -> MergePolicy.Lww
+        // Venues: the travel time last set for a ground on any device wins.
+        entityType == EntityTypes.VENUE -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

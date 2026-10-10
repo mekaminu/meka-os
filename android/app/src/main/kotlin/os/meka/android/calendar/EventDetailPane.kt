@@ -177,6 +177,16 @@ private fun DetailContent(
                     }
                 }
             }
+            // Weekend football, slice 2: a ground Meka has set a travel time for before ("Leave by 09:15 · as last time").
+            d.leaveOfferLabel?.let { label ->
+                ActionChip(label) {
+                    haptics.light()
+                    scope.launch {
+                        val used = runCatching { core.useLastLeaveBy(event) }.getOrNull() ?: return@launch
+                        undo?.show(used.line) { core.undoLastLeaveBy(event.id) }
+                    }
+                }
+            }
             ActionChip(if (d.hidden) "Show in my day" else "Hide from my day") {
                 haptics.light()
                 scope.launch { runCatching { if (d.hidden) core.showEvent(event.id) else core.hideEvent(event.id) } }

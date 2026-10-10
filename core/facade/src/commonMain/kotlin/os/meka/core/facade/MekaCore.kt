@@ -1096,12 +1096,42 @@ class MekaCore(
     }
     suspend fun setEventReminder(eventId: String, minutes: Int) = onCore { eventActions.setReminder(eventId, minutes) }
     /** Leave by: a heads-up [travelMinutes] before the event starts (how long it takes to get there); 0 turns it off. */
-    suspend fun setEventLeaveBy(eventId: String, travelMinutes: Int) = onCore { eventActions.setLeaveBy(eventId, travelMinutes) }
+    suspend fun setEventLeaveBy(eventId: String, travelMinutes: Int) = onCore {
+        eventActions.setLeaveBy(eventId, travelMinutes)
+        rememberVenueOf(eventId)
+    }
     /**
      * Ring as an alarm (Alarms, slice 3): the event's leave-by rings like the wake alarm (full screen on the Fold, a
      * notification with Snooze / Dismiss on the Mac) instead of a heads-up. Synced; last tap wins.
      */
-    suspend fun setEventLeaveAlarm(eventId: String, on: Boolean) = onCore { eventActions.setLeaveAlarm(eventId, on) }
+    suspend fun setEventLeaveAlarm(eventId: String, on: Boolean) = onCore {
+        eventActions.setLeaveAlarm(eventId, on)
+        rememberVenueOf(eventId)
+    }
+
+    /** Weekend football, slice 2: a club fixture's ground keeps the travel time just set (and whether it rings). */
+    private fun rememberVenueOf(eventId: String) {
+        currentEvents().firstOrNull { it.id == eventId }?.let { eventActions.rememberVenue(it) }
+    }
+
+    /**
+     * Weekend football, slice 2: "Leave by 09:15 · as last time" on a club fixture's detail sets the travel time Meka
+     * set at that ground before, and Ring as an alarm when it rang then. Returns the offer taken (its line is the undo
+     * bar's: "Leave by 09:15 · 25 min away · alarm"), or null when there was none.
+     */
+    suspend fun useLastLeaveBy(event: os.meka.core.domain.CalendarEvent): os.meka.core.domain.LeaveOffer? = onCore {
+        val offer = os.meka.core.domain.FootballRules.leaveOffer(event, eventActions.marks(), nowMs(), ZoneCalendar(timeZone))
+            ?: return@onCore null
+        eventActions.setLeaveBy(event.id, offer.travelMin)
+        if (offer.rings) eventActions.setLeaveAlarm(event.id, true)
+        offer
+    }
+
+    /** Undo for [useLastLeaveBy]: no travel time and no alarm on that fixture; the ground still remembers its own. */
+    suspend fun undoLastLeaveBy(eventId: String) = onCore {
+        eventActions.setLeaveBy(eventId, null)
+        eventActions.setLeaveAlarm(eventId, false)
+    }
 
     // ---- Lists: Waiting for · Someday · Decisions ----
 
