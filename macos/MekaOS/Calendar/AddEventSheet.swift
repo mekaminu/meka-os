@@ -78,7 +78,7 @@ struct AddEventSheet: View {
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
             if let line = v.typedLine {
-                HStack(spacing: MekaSpace.s) {
+                HStack(spacing: MekaSpace.xs) {
                     Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
                         .contentTransition(.opacity)
                     if let keep = v.keepWordsLabel {
@@ -110,7 +110,7 @@ struct AddEventSheet: View {
         .staggeredAppear(2)
 
         if let start = v.startLabel {
-            VStack(alignment: .leading, spacing: MekaSpace.s) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 HStack(spacing: MekaSpace.xs) {
                     step("‹", "15 minutes earlier") { MekaHaptics.tick(); set(f.stepTime(steps: -1)) }
                     Text(start).font(MekaType.itemTitle).monospacedDigit().foregroundStyle(palette.textPrimary)
@@ -121,7 +121,7 @@ struct AddEventSheet: View {
                         Text("until \(end)").font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                             .contentTransition(.opacity)
                             .animation(MekaMotion.appear(reduced: reduceMotion), value: end)
-                            .padding(.leading, MekaSpace.s)
+                            .padding(.leading, MekaSpace.xs)
                     }
                 }
                 HStack(spacing: MekaSpace.xs) {
@@ -130,7 +130,7 @@ struct AddEventSheet: View {
                     }
                 }
             }
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.xs)
             .transition(.opacity)
             .staggeredAppear(3)
         }
@@ -175,13 +175,13 @@ struct AddEventSheet: View {
         .staggeredAppear(6)
         }
 
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if let problem = refusal ?? v.problem {
                 Text(problem).font(MekaType.itemMeta).foregroundStyle(palette.critical)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: problem)
             }
-            HStack(spacing: MekaSpace.s) {
+            HStack(spacing: MekaSpace.xs) {
                 Button("Cancel") { if let onCancel { onCancel() } else { dismiss() } }
                     .keyboardShortcut(.cancelAction)
                     .buttonStyle(MekaPressStyle())
@@ -190,7 +190,7 @@ struct AddEventSheet: View {
                 Button { add() } label: {
                     Text(v.addLabel).font(MekaType.caption)
                         .foregroundStyle(palette.onAccent)
-                        .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.s)
+                        .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.xs)
                         .background(Capsule().fill(palette.accent))
                         .opacity(v.canAdd && !sending ? 1 : 0.45)
                 }
@@ -204,7 +204,7 @@ struct AddEventSheet: View {
                     .buttonStyle(MekaPressStyle())
                     .foregroundStyle(palette.critical)
                     .disabled(sending)
-                    .padding(.top, MekaSpace.s)
+                    .padding(.top, MekaSpace.m)
             }
         }
         .padding(.top, MekaSpace.l)

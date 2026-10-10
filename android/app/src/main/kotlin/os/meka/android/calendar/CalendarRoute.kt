@@ -236,7 +236,7 @@ private fun Agenda(
                 v.weeks[page].days.forEach { d -> Pill(d, d.epochDay == lit, Modifier.weight(1f)) { jump(d) } }
             }
         }
-        Box(Modifier.fillMaxWidth().padding(top = MekaSpace.s).height(1.dp).background(Meka.colors.hairline))
+        Box(Modifier.fillMaxWidth().padding(top = MekaSpace.xs).height(1.dp).background(Meka.colors.hairline))
         AgendaList(v, entries, list, handlers, showAgain, onEvent) { id -> allDayOpen = allDayOpen + id }
     }
 }
@@ -260,7 +260,7 @@ private suspend fun LazyListState.springScrollTo(index: Int) {
 private fun CalendarKey(legend: List<CalendarTone>, modifier: Modifier) {
     FlowRow(
         modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "Calendars: " + legend.joinToString(", ") { it.label } },
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         legend.forEach { c ->
@@ -297,7 +297,7 @@ private fun WeekTitle(v: CalendarView, page: Int, modifier: Modifier) {
         Row(Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalAlignment = Alignment.Bottom) {
             Text(w.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
             if (w.title != w.range) {
-                Spacer(Modifier.width(MekaSpace.s))
+                Spacer(Modifier.width(MekaSpace.xs))
                 Text(w.range, style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
@@ -326,7 +326,7 @@ private fun Pill(d: DayPill, lit: Boolean, modifier: Modifier, onTap: () -> Unit
     ) {
         Text(d.letter, style = MekaType.caption, color = Meka.colors.textTertiary)
         Text(d.number, style = MekaType.itemTitle, color = numberColor, textAlign = TextAlign.Center)
-        Row(Modifier.height(6.dp).padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.height(6.dp).padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) { // rhythm: ok (the dot pips under a day number)
             repeat(d.dots) { Box(Modifier.size(4.dp).clip(CircleShape).background(if (d.isToday) Meka.colors.accent else Meka.colors.textSecondary)) }
         }
     }
@@ -339,7 +339,7 @@ private fun AgendaList(
 ) {
     LazyColumn(
         state = list,
-        contentPadding = PaddingValues(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.s, bottom = MekaSpace.xl),
+        contentPadding = PaddingValues(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.xs, bottom = MekaSpace.xl),
         // The foot fades into the tabs rather than cutting a row in half; the xl bottom padding clears the fade.
         modifier = Modifier.fillMaxSize().footFade(),
     ) {
@@ -391,7 +391,7 @@ private fun AgendaList(
 private fun SectionHeader(s: AgendaSection, modifier: Modifier) {
     val free = s.kind == AgendaKind.FREE
     Row(
-        modifier.fillMaxWidth().padding(top = if (free) MekaSpace.s else MekaSpace.l, bottom = if (free) MekaSpace.s else MekaSpace.xs),
+        modifier.fillMaxWidth().padding(top = if (free) MekaSpace.xs else MekaSpace.l, bottom = MekaSpace.xs),
         verticalAlignment = Alignment.Bottom,
     ) {
         Text(
@@ -399,7 +399,7 @@ private fun SectionHeader(s: AgendaSection, modifier: Modifier) {
             color = if (free) Meka.colors.textTertiary else Meka.colors.textPrimary,
         )
         s.subtitle?.let {
-            Spacer(Modifier.width(MekaSpace.s))
+            Spacer(Modifier.width(MekaSpace.xs))
             Text(it, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
     }

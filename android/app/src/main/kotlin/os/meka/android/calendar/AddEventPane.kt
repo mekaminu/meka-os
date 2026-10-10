@@ -54,6 +54,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
@@ -124,11 +125,11 @@ fun AddEventPane(
     ) {
         Text(
             "Cancel", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s),
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch(),
         )
         Text(
             if (editing != null) "Edit event" else "Add event", style = MekaType.greeting, color = Meka.colors.textPrimary,
-            modifier = Modifier.padding(top = MekaSpace.s).appear(rememberAppearance(0)).semantics { heading() },
+            modifier = Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(0)).semantics { heading() },
         )
         Column(Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(1))) {
             FormField(
@@ -152,7 +153,7 @@ fun AddEventPane(
                     shown.second?.let { keep ->
                         Text(
                             keep, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
-                            modifier = Modifier.padding(start = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.m))
+                            modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
                                 .clickable(role = Role.Button) { haptics.tick(); set(f.keepTypedWords()) }
                                 .padding(vertical = MekaSpace.xxs),
                         )
@@ -175,7 +176,7 @@ fun AddEventPane(
         val start = v.startLabel
         if (start != null) {
             Row(
-                Modifier.padding(top = MekaSpace.s).appear(rememberAppearance(3)),
+                Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(3)),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
@@ -183,11 +184,11 @@ fun AddEventPane(
                 FadeLine(start) { Text(it, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.padding(horizontal = MekaSpace.xs)) }
                 Step("›", "15 minutes later") { haptics.tick(); set(f.stepTime(1)) }
                 v.endLabel?.let { end ->
-                    FadeLine("until $end") { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(start = MekaSpace.s)) }
+                    FadeLine("until $end") { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(start = MekaSpace.xs)) }
                 }
             }
             Row(
-                Modifier.padding(top = MekaSpace.s).horizontalScroll(rememberScrollState()).appear(rememberAppearance(3)),
+                Modifier.padding(top = MekaSpace.xs).horizontalScroll(rememberScrollState()).appear(rememberAppearance(3)),
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 v.lengths.forEach { l -> FormChip(l.label, l.selected) { if (!l.selected) { haptics.tick(); set(f.withLength(l.minutes)) } } }
@@ -220,7 +221,7 @@ fun AddEventPane(
 
         val problem = refusal ?: v.problem
         Column(Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(7))) {
-            problem?.let { FadeLine(it) { p -> Text(p, style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.padding(bottom = MekaSpace.s)) } }
+            problem?.let { FadeLine(it) { p -> Text(p, style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.padding(bottom = MekaSpace.xs)) } }
             val enabled = v.canAdd && !sending
             Text(
                 v.addLabel, style = MekaType.caption, maxLines = 1, color = Meka.colors.onAccent,
@@ -240,14 +241,14 @@ fun AddEventPane(
                             sending = false
                         }
                     }
-                    .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+                    .minTouch().padding(horizontal = MekaSpace.l),
             )
             // Editing: Delete is a quiet red line with the undo bar (no dialog); guests get Delete anyway later.
             val del = v.deleteLabel
             if (editing != null && del != null) {
                 Text(
                     del, style = MekaType.itemMeta, color = Meka.colors.critical,
-                    modifier = Modifier.padding(top = MekaSpace.l)
+                    modifier = Modifier.padding(top = MekaSpace.m)
                         .clickable(enabled = !sending, role = Role.Button) {
                             haptics.light()
                             sending = true
@@ -260,7 +261,7 @@ fun AddEventPane(
                                 sending = false
                             }
                         }
-                        .padding(vertical = MekaSpace.s),
+                        .minTouch(),
                 )
             }
         }

@@ -25,7 +25,7 @@ struct EventDetailSheet: View {
     var body: some View {
         // "In 25 min" moves on while the sheet is open.
         TimelineView(.periodic(from: .now, by: 30)) { _ in
-            VStack(alignment: .leading, spacing: MekaSpace.s) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 // Reading the marks here re-renders the sheet when a prep task or hide lands (or syncs in).
                 let _ = model.eventMarks
                 let _ = model.editAccounts
@@ -70,7 +70,7 @@ struct EventDetailSheet: View {
         // Calendar actions: MEKA-only, the real event is untouched. An event just added in MEKA has none until Google
         // has it (its line below says "Adding “Dentist” to Google").
         if !d.provisional {
-            HStack(spacing: MekaSpace.s) {
+            HStack(spacing: MekaSpace.xs) {
                 if d.canPrep {
                     Button("Prep task") { model.addPrepTask(event) }
                 }
@@ -106,7 +106,7 @@ struct EventDetailSheet: View {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(FootballRules.shared.LATE_TITLE.uppercased()).font(MekaType.sectionLabel)
                     .foregroundStyle(palette.textTertiary)
-                HStack(spacing: MekaSpace.s) {
+                HStack(spacing: MekaSpace.xs) {
                     ForEach(drafts) { draft in
                         ShareLink(item: draft.text) { Text(draft.label) }
                     }
@@ -134,7 +134,7 @@ struct EventDetailSheet: View {
         }
 
         if let note = d.edit {
-            HStack(spacing: MekaSpace.s) {
+            HStack(spacing: MekaSpace.xs) {
                 Text(note.text).font(MekaType.caption)
                     .foregroundStyle(note.needsMeka ? palette.accent : palette.textSecondary)
                     .contentTransition(.opacity)
@@ -286,7 +286,7 @@ struct EventDetailSheet: View {
                     .staggeredAppear(5)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.m)
         }
         .frame(maxHeight: 420)
     }
@@ -315,7 +315,7 @@ struct ClashChooserView: View {
     let palette: MekaPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(clash.explain).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             Grid(alignment: .leading, horizontalSpacing: MekaSpace.m, verticalSpacing: MekaSpace.xs) {
                 GridRow {
@@ -333,7 +333,7 @@ struct ClashChooserView: View {
                     }
                 }
             }
-            HStack(spacing: MekaSpace.s) {
+            HStack(spacing: MekaSpace.xs) {
                 if canKeepMine {
                     Button(clash.keepMineLabel, action: keepMine).buttonStyle(MekaPressStyle())
                         .foregroundStyle(palette.accent)
@@ -384,7 +384,7 @@ private struct MatchResultView: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(rules.RESULT_TITLE.uppercased()).font(MekaType.sectionLabel).foregroundStyle(palette.textTertiary)
             if isEditing {
-                VStack(alignment: .leading, spacing: MekaSpace.s) {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     if scoreAllowed {
                         HStack(spacing: MekaSpace.l) {
                             stepper("Us", value: ours, side: 0)
@@ -435,7 +435,7 @@ private struct MatchResultView: View {
     }
 
     private func stepper(_ label: String, value: Int, side: Int) -> some View {
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             Text(label).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
             Button("−") { step(side, by: -1) }.buttonStyle(MekaPressStyle())
             Text(value < 0 ? "–" : "\(value)").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)

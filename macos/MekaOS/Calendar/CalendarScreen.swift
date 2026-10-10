@@ -87,7 +87,7 @@ struct CalendarScreen: View {
 
             strip(v, lit: lit).staggeredAppear(2)
 
-            Rectangle().fill(palette.hairline).frame(height: 1).padding(.top, MekaSpace.s)
+            Rectangle().fill(palette.hairline).frame(height: 1).padding(.top, MekaSpace.xs)
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -97,7 +97,7 @@ struct CalendarScreen: View {
                     }
                 }
                 .scrollTargetLayout()
-                .padding(.top, MekaSpace.s)
+                .padding(.top, MekaSpace.xs)
                 .padding(.bottom, MekaSpace.xl)
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: v.sections.map(\.id))
             }
@@ -127,7 +127,7 @@ struct CalendarScreen: View {
                     .disabled(week == 0)
                     .keyboardShortcut("[", modifiers: .command)
                     .help("Previous week")
-                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                     Text(w.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                     if w.title != w.range {
                         Text(w.range).font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -176,11 +176,11 @@ private struct DayPillView: View {
 
     var body: some View {
         Button(action: tap) {
-            VStack(spacing: 2) {
+            VStack(spacing: MekaSpace.xxs) {
                 Text(day.letter).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 Text(day.number).font(MekaType.itemTitle).monospacedDigit()
                     .foregroundStyle(day.isToday ? palette.accent : (day.inRange ? palette.textPrimary : palette.textTertiary))
-                HStack(spacing: 2) {
+                HStack(spacing: 2) { // rhythm: ok (the dot pips under a day number)
                     ForEach(0..<Int(day.dots), id: \.self) { _ in
                         Circle().fill(day.isToday ? palette.accent : palette.textSecondary).frame(width: 4, height: 4)
                     }
@@ -233,7 +233,7 @@ private struct CalendarKey: View {
     let palette: MekaPalette
 
     var body: some View {
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             ForEach(legend, id: \.key) { c in
                 HStack(spacing: MekaSpace.xxs) {
                     CalendarDot(tone: c.tone, palette: palette)
@@ -262,7 +262,7 @@ private struct AgendaSectionView: View {
     var body: some View {
         let free = section.kind == .free
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+            HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                 Text(section.title)
                     .font(free ? MekaType.body : MekaType.itemTitle)
                     .foregroundStyle(free ? palette.textTertiary : palette.textPrimary)
@@ -270,8 +270,8 @@ private struct AgendaSectionView: View {
                     Text(sub).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
             }
-            .padding(.top, free ? MekaSpace.s : MekaSpace.l)
-            .padding(.bottom, free ? MekaSpace.s : MekaSpace.xs)
+            .padding(.top, free ? MekaSpace.xs : MekaSpace.l)
+            .padding(.bottom, MekaSpace.xs)
 
             if !section.allDayItems.isEmpty {
                 // The "All day" group as Today shows it: the label once, one row each, "+2 more" unfolds the rest.
@@ -348,7 +348,7 @@ private struct AgendaAllDayRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             Spacer().frame(width: TimelineMetrics.timeColumn)
             CalendarDot(tone: tone, palette: palette).frame(width: dotColumn, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(item.event.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let line = item.line {
                     Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -381,7 +381,7 @@ private struct AgendaEventRow: View {
                 if let tone { CalendarDot(tone: tone, palette: palette, past: past) } else { Color.clear.frame(width: 7, height: 7) }
             }
             .frame(width: dotColumn, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.body).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
                 let line = [row.running ? "Now" : nil, row.detail].compactMap { $0 }.joined(separator: " · ")
                 if !line.isEmpty {
@@ -407,7 +407,7 @@ private struct AgendaTaskRow: View {
             Text(row.time).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textSecondary)
                 .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
             Spacer().frame(width: dotColumn)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let d = row.detail { Text(d).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
             }

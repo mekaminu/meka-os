@@ -58,6 +58,7 @@ import os.meka.android.designsystem.SwipeGlyph
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.CalendarRules
@@ -353,7 +354,7 @@ fun EventUndoBar(undo: EventUndo, modifier: Modifier = Modifier) {
         val shown = last ?: return@AnimatedVisibility
         Row(
             Modifier.fillMaxWidth().padding(MekaSpace.m).clip(RoundedCornerShape(MekaRadius.l))
-                .background(Meka.colors.surfaceRaised).padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+                .background(Meka.colors.surfaceRaised).minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {

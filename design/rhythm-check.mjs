@@ -59,6 +59,14 @@ export const ON_RHYTHM = [
   M + 'Today/ShutdownSheet.swift',
   M + 'Today/WakeSection.swift',
   M + 'RepeatViews.swift',
+  // Slice 4b-2: Calendar (the tab, the event detail, Add/Edit event, the event undo bar).
+  A + 'calendar/CalendarRoute.kt',
+  A + 'calendar/EventDetailPane.kt',
+  A + 'calendar/AddEventPane.kt',
+  A + 'calendar/EventActionsUi.kt',
+  M + 'Calendar/CalendarScreen.swift',
+  M + 'Calendar/EventDetailSheet.swift',
+  M + 'Calendar/AddEventSheet.swift',
 ];
 
 const NUM = String.raw`\b(?!0(?:\.0+)?\b)\d+(?:\.\d+)?`;

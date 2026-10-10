@@ -54,6 +54,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
@@ -139,10 +140,10 @@ private fun DetailContent(
     ) {
         Text(
             "Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s),
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch(),
         )
 
-        Column(Modifier.padding(top = MekaSpace.s, bottom = MekaSpace.l).appear(rememberAppearance(0))) {
+        Column(Modifier.padding(top = MekaSpace.xs, bottom = MekaSpace.l).appear(rememberAppearance(0))) {
             Text(d.title, style = MekaType.greeting, color = Meka.colors.textPrimary)
             Text(
                 listOfNotNull(d.whenLine, d.duration).joinToString(" · "), style = MekaType.itemMeta,
@@ -161,7 +162,7 @@ private fun DetailContent(
         // has it (its line below says "Adding “Dentist” to Google").
         if (!d.provisional) Row(
             Modifier.fillMaxWidth().padding(bottom = MekaSpace.l).appear(rememberAppearance(1)),
-            horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (d.canPrep) {
@@ -393,7 +394,7 @@ private fun ReminderChips(label: String, choices: List<Int>, current: Int, text:
     val reduced = Meka.reducedMotion
     Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.m).appear(rememberAppearance(index))) {
         Text(label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(bottom = MekaSpace.xs))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             (if (current != 0 && current !in choices) listOf(current) + choices else choices).forEach { m ->
                 val on = m == current
                 val bg by androidx.compose.animation.animateColorAsState(
@@ -458,24 +459,24 @@ private fun ClashChooser(
     c: os.meka.core.domain.EventClashView, canKeepMine: Boolean, onKeepMine: () -> Unit, onKeepTheirs: () -> Unit,
 ) {
     Column(
-        Modifier.fillMaxWidth().padding(top = MekaSpace.s)
+        Modifier.fillMaxWidth().padding(top = MekaSpace.m)
             .clip(RoundedCornerShape(MekaRadius.m))
             .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.m))
             .padding(MekaSpace.m),
     ) {
         Text(c.explain, style = MekaType.caption, color = Meka.colors.textSecondary)
-        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.s), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
             Text(c.mineLabel.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.accent, modifier = Modifier.weight(1f))
             Text(c.theirsLabel.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
         }
         c.rows.forEach { r ->
-            Text(r.label, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.s))
+            Text(r.label, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
                 Text(r.mine, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
                 Text(r.theirs, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
             }
         }
-        Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+        Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             if (canKeepMine) ActionChip(c.keepMineLabel, onKeepMine)
             ActionChip(c.keepTheirsLabel, onKeepTheirs)
         }
@@ -524,7 +525,7 @@ private fun MatchResultBlock(d: os.meka.core.domain.EventDetailView, onSave: (In
             label = "match-result",
         ) { isEditing ->
             if (isEditing) {
-                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     if (d.resultScore) {
                         fun step(side: Int, by: Int) {
                             haptics.tick()
@@ -552,7 +553,7 @@ private fun MatchResultBlock(d: os.meka.core.domain.EventDetailView, onSave: (In
                 Column {
                     d.resultLine?.let { Text(it, style = MekaType.body, color = Meka.colors.textPrimary) }
                     d.resultNote?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
-                    Row(Modifier.padding(top = MekaSpace.s)) {
+                    Row(Modifier.padding(top = MekaSpace.m)) {
                         ActionChip(f.RESULT_EDIT) {
                             haptics.tick()
                             ours = d.result?.forOrNone ?: -1
@@ -573,7 +574,7 @@ private fun MatchResultBlock(d: os.meka.core.domain.EventDetailView, onSave: (In
 /** "Us  − 3 +": the digit ("–" before a score is given) cross-fades as it steps. */
 @Composable
 private fun ScoreStepper(label: String, value: Int, reduced: Boolean, minus: () -> Unit, plus: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Text(label, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         ActionChip("−") { minus() }
         AnimatedContent(
@@ -590,7 +591,7 @@ private fun ScoreStepper(label: String, value: Int, reduced: Boolean, minus: () 
 private fun ResultField(value: String, hint: String, singleLine: Boolean, max: Int, onChange: (String) -> Unit) {
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(if (singleLine) MekaRadius.pill else MekaRadius.m)).background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+            .minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
     ) {
         if (value.isEmpty()) Text(hint, style = MekaType.body, color = Meka.colors.textTertiary)
         androidx.compose.foundation.text.BasicTextField(
@@ -614,7 +615,7 @@ private fun LateDrafts(drafts: List<os.meka.core.domain.LateDraft>, onPick: () -
             os.meka.core.domain.FootballRules.LATE_TITLE.uppercase(), style = MekaType.sectionLabel,
             color = Meka.colors.textTertiary, modifier = Modifier.padding(bottom = MekaSpace.xxs),
         )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             drafts.forEach { draft -> ActionChip(draft.label) { onPick(); shareLateDraft(context, draft) } }
         }
         Text(
