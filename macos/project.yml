@@ -77,6 +77,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: os.meka.mac
+        # MEKA's watch-face icon (Assets.xcassets/AppIcon, made by tools/make-app-icon.py with the Fold's).
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # No -lsqlite3: MekaKit's sqlite3_* calls bind to SQLCipher (spike S6). MekaCoreBridgeTests checks it.
   # The Mac's desktop News widget (build plan M1, news ticker slice 3b). Sandboxed, as WidgetKit requires; it never
   # links the core: it reads only the snapshot MEKA writes to ~/Library/Application Support/MekaOS/NewsWidget/ (a
