@@ -259,7 +259,7 @@ private fun QueueReader(core: MekaCore, id: String, onBack: () -> Unit) {
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         item(key = "back") {
             Text("‹ Train queue", style = MekaType.itemMeta, color = Meka.colors.accent,
@@ -286,7 +286,7 @@ private fun QueueReader(core: MekaCore, id: String, onBack: () -> Unit) {
                     b.text,
                     style = if (b.heading) MekaType.itemTitle else MekaType.body,
                     color = Meka.colors.textPrimary,
-                    modifier = Modifier.padding(top = if (b.heading) MekaSpace.s else 0.dp)
+                    modifier = Modifier.padding(top = if (b.heading) MekaSpace.xs else 0.dp)
                         .appear(rememberAppearance(2 + i)),
                 )
             }
