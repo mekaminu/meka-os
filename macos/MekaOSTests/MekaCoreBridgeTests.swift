@@ -250,6 +250,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(v.waitingLine, "Waiting on 1 thing · 1 to chase today")
         XCTAssertEqual(v.waiting.first?.state, .due)
         XCTAssertFalse(v.seenToday)
+        // Calm Today: a glance never counts as read; open long enough, it does whenever the card is offered.
+        XCTAssertEqual(BriefRules.shared.READ_AFTER_MS, 5000)
+        let glanced = try await core.briefLookedAt(on: "Mac", openForMs: 1200)
+        XCTAssertFalse(glanced.boolValue)
+        let offered = core.briefView.value.offered
+        let read = try await core.briefLookedAt(on: "Mac", openForMs: 9000)
+        XCTAssertEqual(read.boolValue, offered)
+        if offered { XCTAssertFalse(core.briefView.value.offered) }
         try await core.briefSeen(on: "Mac")
         XCTAssertTrue(core.briefView.value.seenToday)
         XCTAssertFalse(core.briefView.value.offered)

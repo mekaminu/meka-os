@@ -133,6 +133,21 @@ object BriefRules {
     const val END_MIN = 12 * 60
     /** Waiting-for items shown in the brief; the rest are in Lists. */
     const val MAX_WAITING = 5
+    /**
+     * Calm Today: the brief counts as read once it has been open this long (Got it still says so at once), so the card
+     * folds away without a tap. A pane opened by mistake and closed straight away leaves the card where it was.
+     */
+    const val READ_AFTER_MS = 5_000L
+
+    /** True when a brief that was open for [openForMs] has been read (see [READ_AFTER_MS]). */
+    fun readByLooking(openForMs: Long): Boolean = openForMs >= READ_AFTER_MS
+
+    /**
+     * Whether closing the pane after [openForMs] should put the card away: only while the card is offered (this
+     * morning, not read yet), so opening the brief in the evening or after noon never marks tomorrow's as read.
+     */
+    fun putAwayOnClose(view: MorningBriefView, openForMs: Long): Boolean =
+        view.offered && !view.seenToday && readByLooking(openForMs)
 
     fun startMinute(quiet: QuietHours): Int =
         if (quiet.enabled && quiet.startMinute != quiet.endMinute && quiet.endMinute in QUIET_END_RANGE) quiet.endMinute else DEFAULT_START_MIN

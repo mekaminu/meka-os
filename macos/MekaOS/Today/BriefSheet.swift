@@ -3,7 +3,8 @@ import SwiftUI
 
 /// Morning brief on the Mac (build plan M1): today at a glance (work hours, events and what's planned or due, in time
 /// order), what you're waiting on, what needs you on your lists, habits and a running fast. "Got it" puts the card
-/// away here and on the Fold until tomorrow morning. Read-only.
+/// away here and on the Fold until tomorrow morning; so does closing the sheet once it was open long enough to read
+/// (Calm Today). Read-only.
 /// Motion: sections stagger in; chases due today are lit in the accent colour; Got it pops a check and the sheet goes.
 /// Reduce Motion: cross-fades.
 struct BriefSheet: View {
@@ -13,6 +14,8 @@ struct BriefSheet: View {
     @Environment(\.openURL) private var openURL
     let palette: MekaPalette
     @State private var closing = false
+    /// When the sheet appeared: closing it after `BriefRules.READ_AFTER_MS` counts as read (Calm Today).
+    @State private var openedAt = Date()
     /// Listen (Weather and a voice, slice 8): MEKA reads the brief aloud in its voice, else the Mac's own.
     @State private var speaker = MekaSpeaker()
 
@@ -143,8 +146,12 @@ struct BriefSheet: View {
         }
         .padding(MekaSpace.l)
         .frame(width: 480)
-        .onAppear { speaker.attach(model) }
-        .onDisappear { speaker.stop() }
+        .onAppear { speaker.attach(model); openedAt = Date() }
+        .onDisappear {
+            speaker.stop()
+            // Calm Today: open long enough to read counts as read, so Today's card folds away (a glance leaves it).
+            model.briefClosed(openFor: Date().timeIntervalSince(openedAt))
+        }
     }
 
     /// Listen reads the brief aloud (light haptic); Stop ends it (tick haptic).

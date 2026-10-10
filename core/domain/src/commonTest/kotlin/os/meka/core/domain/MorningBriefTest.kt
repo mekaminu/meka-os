@@ -67,6 +67,24 @@ class MorningBriefTest {
     }
 
     @Test
+    fun calmTodayABriefOpenLongEnoughToReadPutsTheCardAwayButNotAGlanceOrAnEveningLook() {
+        // Calm Today: five seconds open is a read; a pane closed at once leaves the card where it was.
+        assertFalse(BriefRules.readByLooking(4_999))
+        assertTrue(BriefRules.readByLooking(BriefRules.READ_AFTER_MS))
+        assertTrue(BriefRules.putAwayOnClose(view(), 12_000))
+        assertFalse(BriefRules.putAwayOnClose(view(), 1_500))
+        // Already read this morning: nothing more to put away.
+        ba.markSeen()
+        assertFalse(BriefRules.putAwayOnClose(view(), 12_000))
+        // Opened after noon (or last night) the card isn't offered, so reading it never puts tomorrow's away.
+        world.clock.advance(dayMs)
+        world.clock.nowMs = at(today(), 13, 0)
+        assertFalse(BriefRules.putAwayOnClose(view(), 60_000))
+        world.clock.nowMs = at(today(), 6, 30)
+        assertFalse(BriefRules.putAwayOnClose(view(), 60_000))
+    }
+
+    @Test
     fun gotItPutsTheCardAwayOnBothDevicesUntilTomorrow() {
         ba.markSeen()
         assertFalse(view().offered)

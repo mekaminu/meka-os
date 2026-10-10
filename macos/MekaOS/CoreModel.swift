@@ -923,6 +923,13 @@ final class CoreModel {
         do { try await core.briefSeen(on: "Mac") } catch { lastError = error.localizedDescription }
     }
 
+    /// Calm Today: the brief sheet closed after `seconds`; open long enough to read, it counts as read on both devices
+    /// and Today's card folds away. Only a number crosses to the core.
+    func briefClosed(openFor seconds: TimeInterval) {
+        guard let core else { return }
+        core.briefClosed(on: "Mac", openForMs: Int64(max(seconds, 0) * 1000))
+    }
+
     /// A story's picture (images slice): the small JPEG the server made from the feed's picture, fetched from the
     /// server by key (never from the publisher) and kept in memory by the core. Nil when there is none or offline.
     func newsImage(_ key: String?) async -> NSImage? {

@@ -177,10 +177,13 @@ struct TodayView: View {
                     MotionSystemCardView(palette: palette)
                         .staggeredAppear(1, play: play)
 
-                    // Morning brief: the card rises in when the morning starts and goes at noon or once read.
+                    // Morning brief: the card rises in when the morning starts and goes at noon or once read (Got it, or
+                    // the sheet open long enough to read: Calm Today); it folds away, shrinking to its top as it fades.
                     if let b = model.brief, b.offered {
                         BriefCard(brief: b, palette: palette)
-                            .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
+                            .transition(reduceMotion ? AnyTransition.opacity : .asymmetric(
+                                insertion: AnyTransition.opacity.combined(with: .move(edge: .bottom)),
+                                removal: AnyTransition.opacity.combined(with: .scale(scale: 0.96, anchor: .top))))
                             .padding(.bottom, MekaSpace.l)
                             .staggeredAppear(1, play: play)
                     } else if let line = model.brief?.readElsewhereLine {
@@ -320,7 +323,7 @@ struct TodayView: View {
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.allTasks.map(\.id))
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.upNext?.id)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.shutdown?.offered)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: model.brief?.offered)
+                .animation(MekaMotion.expand(reduced: reduceMotion), value: model.brief?.offered)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.review?.card.offered)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: model.sessions?.cards.map(\.habitId) ?? [])
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.timeline.rows.map(\.id))

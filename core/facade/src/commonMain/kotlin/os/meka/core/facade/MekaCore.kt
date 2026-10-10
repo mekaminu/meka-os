@@ -47,6 +47,7 @@ import os.meka.core.domain.RenewalRepeat
 import os.meka.core.domain.Renewals
 import os.meka.core.domain.DayWindow
 import os.meka.core.domain.EveningShutdown
+import os.meka.core.domain.BriefRules
 import os.meka.core.domain.MorningBrief
 import os.meka.core.domain.MorningBriefView
 import os.meka.core.domain.WeeklyReview
@@ -1366,6 +1367,16 @@ class MekaCore(
      * app calls it ("Mac", "Fold"), so the other one can say "Brief read on your Mac".
      */
     suspend fun briefSeen(on: String) = onCore { brief.markSeen(on) }
+    /**
+     * Calm Today: the brief pane closed after [openForMs] (measured by the app). Once it was open long enough to read
+     * ([BriefRules.READ_AFTER_MS]) while this morning's card was offered, it counts as read on every device, as "Got
+     * it" does, so the card folds away. Returns true when it did.
+     */
+    suspend fun briefLookedAt(on: String, openForMs: Long): Boolean = onCore {
+        if (!BriefRules.putAwayOnClose(_brief.value, openForMs)) false else { brief.markSeen(on); true }
+    }
+    /** [briefLookedAt] without waiting, for a pane that is going away (its own scope is ending). */
+    fun briefClosed(on: String, openForMs: Long) { scope.launch { runCatching { briefLookedAt(on, openForMs) } } }
     /** Shows or hides a news topic in the brief and the News place ([os.meka.core.domain.NewsTopics]); synced. */
     suspend fun setNewsTopic(topicId: String, on: Boolean) = onCore { news.setTopic(topicId, on) }
 

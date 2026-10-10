@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Spring
@@ -80,7 +81,8 @@ private const val GOT_IT_HOLD_MS = 600L
  * Morning brief (build plan M1): today at a glance (work hours, events and what's planned or due, in time order),
  * what you're waiting on, what needs you on your lists, habits and a running fast, and headlines from the news topics
  * chosen under "Topics" (synced; tapping one opens the article in the browser). "Got it" puts the card away here
- * and on the Mac until tomorrow morning. Nothing in the brief changes anything but the topic choice.
+ * and on the Mac until tomorrow morning; so does closing the pane once it has been open long enough to read
+ * ([os.meka.core.domain.BriefRules.READ_AFTER_MS], Calm Today). Nothing in the brief changes anything but the topic choice.
  *
  * Motion: sections stagger in 40 ms apart; chases due today are lit in the accent colour; the topic chips unfold in
  * place and a chosen chip's colour blends across; Got it pops a check (spring) with a light haptic and the pane drops
@@ -95,6 +97,12 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
     // Listen (Weather and a voice, slice 8): MEKA reads the brief aloud in its voice, else the phone's own.
     val speaker = remember { MekaSpeaker(context, core, scope) }
     DisposableEffect(speaker) { onDispose { speaker.release() } }
+    // Calm Today: open long enough to read counts as read, so Today's card folds away once the pane has dropped away
+    // (on the core's own scope: this pane's is ending). A glance leaves the card.
+    DisposableEffect(Unit) {
+        val openedAt = SystemClock.elapsedRealtime()
+        onDispose { core.briefClosed("Fold", SystemClock.elapsedRealtime() - openedAt) }
+    }
     fun listen() = speaker.say(BriefSpeech.script(core.briefView.value), reading = true)
     // After the wake alarm the brief reads itself once it has something to say.
     var autoRead by rememberSaveable { mutableStateOf(readAloud) }

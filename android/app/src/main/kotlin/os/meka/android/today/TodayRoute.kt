@@ -728,7 +728,8 @@ private fun TodayPane(
                     UpdateCard(update, updater, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
                 }
             }
-            // Morning brief: the card rises in when the morning starts and goes at noon or once read.
+            // Morning brief: the card rises in when the morning starts and goes at noon or once read (Got it, or the
+            // pane open long enough to read: Calm Today); it folds away with the list's item motion as the rows glide up.
             if (brief.offered) {
                 item(key = "brief") {
                     // Its title travels into the brief pane's (Four tabs, slice 3).

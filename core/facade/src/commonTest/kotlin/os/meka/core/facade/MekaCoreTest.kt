@@ -499,6 +499,27 @@ class MekaCoreTest {
     }
 
     @Test
+    fun calmTodayReadingTheBriefOnTheFoldFoldsTheCardAwayOnBothWithoutGotIt() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 13, 7, 40).toInstant(london).toEpochMilliseconds() // a Tuesday
+        val a = core("android"); val m = core("mac")
+        a.addTask("Post the letter")
+        a.tick()
+        assertTrue(a.briefView.value.offered)
+        // A glance (opened and closed at once) leaves the card.
+        assertTrue(!a.briefLookedAt("Fold", 1_200))
+        assertTrue(a.briefView.value.offered)
+        // Open long enough to read: the card goes here and on the Mac, which says where it was read.
+        assertTrue(a.briefLookedAt("Fold", 9_000))
+        assertTrue(a.briefView.value.seenToday && !a.briefView.value.offered)
+        a.syncNow(); m.syncNow(); m.tick()
+        assertTrue(!m.briefView.value.offered)
+        assertEquals("Brief read on your Fold", m.briefView.value.readElsewhereLine)
+        // Reading it again changes nothing.
+        assertTrue(!a.briefLookedAt("Fold", 9_000))
+    }
+
+    @Test
     fun readAfterMidnightTheBriefStillComesInTheMorningAndAReadOnTheMacIsALineOnTheFold() = runTest {
         // Fold review 2026-10-08: no card at 07:14–07:58 BST. A read after midnight was last night's brief.
         val london = TimeZone.of("Europe/London")
