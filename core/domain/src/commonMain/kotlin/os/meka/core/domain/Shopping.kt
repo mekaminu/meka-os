@@ -25,6 +25,9 @@ object ShoppingFields {
 /** One row of the shopping list. [meta] is null for Meka's own items still to buy. */
 data class ShoppingItem(val id: String, val title: String, val got: Boolean, val meta: String?, val by: String, val atMs: Long)
 
+/** What one typed line adds ([ShoppingRules.add]): the ids now to buy in order, and each entity's fields to write. */
+data class ShoppingAdd(val ids: List<String>, val writes: List<Pair<String, Map<String, FieldValue>>>)
+
 data class ShoppingView(
     /** Still to buy, in the order they were added (oldest first, so the list reads like a note). */
     val toBuy: List<ShoppingItem>,
@@ -81,6 +84,87 @@ object ShoppingRules {
         else -> "$toBuy to buy · $got got"
     }
 
+    /** "Jeanette " → "jeanette": who added a thing, as stored in [ShoppingFields.BY]; blank is [OWNER]. */
+    fun whoKey(by: String): String = by.trim().lowercase().ifEmpty { OWNER }.take(40)
+
+    private fun Map<String, FieldValue>.f(field: String): FieldValue = this[field] ?: FieldValue.Null
+
+    private fun live(items: Map<String, Map<String, FieldValue>>) =
+        items.filterValues { it.f(ShoppingFields.DELETED).boolOrNull != true }
+
+    /**
+     * What the list shows, from each item's current fields (id → fields). Pure, so the devices ([Shopping]) and MEKA's
+     * server (the family page, slice 2) read the list the same way.
+     */
+    fun view(items: Map<String, Map<String, FieldValue>>, nowMs: Long, cal: LocalCalendar): ShoppingView {
+        val today = cal.epochDayOf(nowMs)
+        val live = live(items)
+        val toBuy = live.filter { it.value.f(ShoppingFields.GOT).boolOrNull != true }
+            .map { (id, s) ->
+                val at = s.f(ShoppingFields.ADDED_AT).longOrNull ?: 0L
+                val by = s.f(ShoppingFields.BY).textOrNull ?: OWNER
+                ShoppingItem(id, s.f(ShoppingFields.TITLE).textOrNull.orEmpty(), false, toBuyMeta(by, at, nowMs, cal), by, at)
+            }
+            .filter { it.title.isNotEmpty() }
+            .sortedWith(compareBy<ShoppingItem> { it.atMs }.thenBy { it.id })
+        val got = live.filter { it.value.f(ShoppingFields.GOT).boolOrNull == true }
+            .map { (id, s) ->
+                val at = s.f(ShoppingFields.GOT_AT).longOrNull ?: 0L
+                val by = s.f(ShoppingFields.BY).textOrNull ?: OWNER
+                ShoppingItem(id, s.f(ShoppingFields.TITLE).textOrNull.orEmpty(), true, gotMeta(at, nowMs, cal), by, at)
+            }
+            .filter { it.title.isNotEmpty() && today - cal.epochDayOf(it.atMs) < GOT_DAYS }
+            .sortedWith(compareByDescending<ShoppingItem> { it.atMs }.thenBy { it.id })
+            .take(MAX_GOT)
+        return ShoppingView(toBuy, got)
+    }
+
+    /**
+     * What adding [text] for [by] writes ([split]): a name already to buy is left as it is; one under Got (or bought
+     * longer ago) comes back to buy on its own entity; anything else is a new entity from [newId] (asked in typed
+     * order). Several things in one line keep their typed order: each is stamped a millisecond after the one before.
+     */
+    fun add(text: String, items: Map<String, Map<String, FieldValue>>, by: String, nowMs: Long, newId: () -> String): ShoppingAdd {
+        val names = split(text)
+        if (names.isEmpty()) return ShoppingAdd(emptyList(), emptyList())
+        val byKey = live(items).entries.groupBy { key(it.value.f(ShoppingFields.TITLE).textOrNull.orEmpty()) }
+        val who = whoKey(by)
+        val writes = mutableListOf<Pair<String, Map<String, FieldValue>>>()
+        val ids = names.mapIndexed { i, name ->
+            val at = nowMs + i
+            val same = byKey[key(name)].orEmpty()
+            same.firstOrNull { it.value.f(ShoppingFields.GOT).boolOrNull != true }?.let { return@mapIndexed it.key }
+            val back = same.maxByOrNull { it.value.f(ShoppingFields.GOT_AT).longOrNull ?: 0L }
+            if (back != null) {
+                writes += back.key to mapOf(ShoppingFields.GOT to false.fv(), ShoppingFields.ADDED_AT to at.fv(), ShoppingFields.BY to who.fv())
+                return@mapIndexed back.key
+            }
+            val id = newId()
+            writes += id to mapOf(
+                ShoppingFields.TITLE to name.fv(),
+                ShoppingFields.GOT to false.fv(),
+                ShoppingFields.ADDED_AT to at.fv(),
+                ShoppingFields.BY to who.fv(),
+            )
+            id
+        }
+        return ShoppingAdd(ids, writes)
+    }
+
+    /** What ticking an item as bought writes; null when it isn't on the list ([fields] null or deleted) or is already got. */
+    fun gotFields(fields: Map<String, FieldValue>?, nowMs: Long): Map<String, FieldValue>? {
+        if (fields == null || fields.f(ShoppingFields.DELETED).boolOrNull == true) return null
+        if (fields.f(ShoppingFields.GOT).boolOrNull == true) return null
+        return mapOf(ShoppingFields.GOT to true.fv(), ShoppingFields.GOT_AT to nowMs.fv())
+    }
+
+    /** What putting a got item back writes; null when it isn't on the list or isn't got. */
+    fun putBackFields(fields: Map<String, FieldValue>?): Map<String, FieldValue>? {
+        if (fields == null || fields.f(ShoppingFields.DELETED).boolOrNull == true) return null
+        if (fields.f(ShoppingFields.GOT).boolOrNull != true) return null
+        return mapOf(ShoppingFields.GOT to false.fv(), ShoppingFields.GOT_AT to FieldValue.Null)
+    }
+
     private fun day(atMs: Long, nowMs: Long, cal: LocalCalendar): String {
         val label = SearchRules.dayLabel(cal.epochDayOf(atMs), cal.epochDayOf(nowMs))
         return if (label == "Today" || label == "Yesterday") label.lowercase() else label
@@ -94,84 +178,26 @@ class Shopping(
     private val nowMs: () -> Long,
     private val calendar: LocalCalendar = LocalCalendar.UTC,
 ) {
-    fun view(): ShoppingView {
-        val now = nowMs()
-        val today = calendar.epochDayOf(now)
-        val live = replica.entities(EntityTypes.SHOPPING_ITEM).filter { it[ShoppingFields.DELETED].boolOrNull != true }
-        val toBuy = live.filter { it[ShoppingFields.GOT].boolOrNull != true }
-            .map { s ->
-                val at = s[ShoppingFields.ADDED_AT].longOrNull ?: 0L
-                val by = s[ShoppingFields.BY].textOrNull ?: ShoppingRules.OWNER
-                ShoppingItem(s.ref.entityId, s[ShoppingFields.TITLE].textOrNull.orEmpty(), false, ShoppingRules.toBuyMeta(by, at, now, calendar), by, at)
-            }
-            .filter { it.title.isNotEmpty() }
-            .sortedWith(compareBy<ShoppingItem> { it.atMs }.thenBy { it.id })
-        val got = live.filter { it[ShoppingFields.GOT].boolOrNull == true }
-            .map { s ->
-                val at = s[ShoppingFields.GOT_AT].longOrNull ?: 0L
-                val by = s[ShoppingFields.BY].textOrNull ?: ShoppingRules.OWNER
-                ShoppingItem(s.ref.entityId, s[ShoppingFields.TITLE].textOrNull.orEmpty(), true, ShoppingRules.gotMeta(at, now, calendar), by, at)
-            }
-            .filter { it.title.isNotEmpty() && today - calendar.epochDayOf(it.atMs) < ShoppingRules.GOT_DAYS }
-            .sortedWith(compareByDescending<ShoppingItem> { it.atMs }.thenBy { it.id })
-            .take(ShoppingRules.MAX_GOT)
-        return ShoppingView(toBuy, got)
-    }
+    private fun items(): Map<String, Map<String, FieldValue>> =
+        replica.entities(EntityTypes.SHOPPING_ITEM).associate { it.ref.entityId to it.fields }
+
+    fun view(): ShoppingView = ShoppingRules.view(items(), nowMs(), calendar)
 
     /**
-     * Adds each thing in [text] ([ShoppingRules.split]) for [by]. A name already to buy is left as it is; one under
-     * Got (or bought longer ago) comes back to buy, keeping its row. Returns the ids now to buy, in order; empty when
-     * nothing was typed.
+     * Adds each thing in [text] ([ShoppingRules.add]) for [by]. Returns the ids now to buy, in order; empty when nothing
+     * was typed.
      */
     fun add(text: String, by: String = ShoppingRules.OWNER): List<String> {
-        val names = ShoppingRules.split(text)
-        if (names.isEmpty()) return emptyList()
-        val live = replica.entities(EntityTypes.SHOPPING_ITEM).filter { it[ShoppingFields.DELETED].boolOrNull != true }
-        val byKey = live.groupBy { ShoppingRules.key(it[ShoppingFields.TITLE].textOrNull.orEmpty()) }
-        val who = by.trim().lowercase().ifEmpty { ShoppingRules.OWNER }.take(40)
-        val now = nowMs()
-        // Several things in one line keep their typed order: each is stamped a millisecond after the one before.
-        return names.mapIndexed { i, name ->
-            val at = now + i
-            val same = byKey[ShoppingRules.key(name)].orEmpty()
-            same.firstOrNull { it[ShoppingFields.GOT].boolOrNull != true }?.let { return@mapIndexed it.ref.entityId }
-            val back = same.maxByOrNull { it[ShoppingFields.GOT_AT].longOrNull ?: 0L }
-            if (back != null) {
-                replica.commitLocal(
-                    EntityTypes.SHOPPING_ITEM, back.ref.entityId,
-                    mapOf(ShoppingFields.GOT to false.fv(), ShoppingFields.ADDED_AT to at.fv(), ShoppingFields.BY to who.fv()),
-                )
-                return@mapIndexed back.ref.entityId
-            }
-            val id = newId()
-            replica.commitLocal(
-                EntityTypes.SHOPPING_ITEM, id,
-                mapOf(
-                    ShoppingFields.TITLE to name.fv(),
-                    ShoppingFields.GOT to false.fv(),
-                    ShoppingFields.ADDED_AT to at.fv(),
-                    ShoppingFields.BY to who.fv(),
-                ),
-            )
-            id
-        }
+        val a = ShoppingRules.add(text, items(), by, nowMs(), newId)
+        a.writes.forEach { (id, fields) -> replica.commitLocal(EntityTypes.SHOPPING_ITEM, id, fields) }
+        return a.ids
     }
 
     /** Ticks [id] as bought; false when it isn't on the list or is already got. */
-    fun got(id: String): Boolean {
-        val s = live(id) ?: return false
-        if (s[ShoppingFields.GOT].boolOrNull == true) return false
-        replica.commitLocal(EntityTypes.SHOPPING_ITEM, id, mapOf(ShoppingFields.GOT to true.fv(), ShoppingFields.GOT_AT to nowMs().fv()))
-        return true
-    }
+    fun got(id: String): Boolean = write(id, ShoppingRules.gotFields(replica.entity(EntityTypes.SHOPPING_ITEM, id)?.fields, nowMs()))
 
     /** Puts a got item back to buy (unticking it, or Undo); its place in the list is where it was first added. */
-    fun putBack(id: String): Boolean {
-        val s = live(id) ?: return false
-        if (s[ShoppingFields.GOT].boolOrNull != true) return false
-        replica.commitLocal(EntityTypes.SHOPPING_ITEM, id, mapOf(ShoppingFields.GOT to false.fv(), ShoppingFields.GOT_AT to FieldValue.Null))
-        return true
-    }
+    fun putBack(id: String): Boolean = write(id, ShoppingRules.putBackFields(replica.entity(EntityTypes.SHOPPING_ITEM, id)?.fields))
 
     /** Removes [id] from the list for good (added by mistake). */
     fun remove(id: String): Boolean {
@@ -185,6 +211,12 @@ class Shopping(
         val ids = view().got.map { it.id }
         ids.forEach { replica.commitLocal(EntityTypes.SHOPPING_ITEM, it, mapOf(ShoppingFields.DELETED to true.fv())) }
         return ids.size
+    }
+
+    private fun write(id: String, fields: Map<String, FieldValue>?): Boolean {
+        fields ?: return false
+        replica.commitLocal(EntityTypes.SHOPPING_ITEM, id, fields)
+        return true
     }
 
     private fun live(id: String) =

@@ -1,0 +1,103 @@
+/* MEKA's family page (family sharing, slice 2). Dark by default, light with the phone; the tokens' colours. */
+:root {
+  --bg: #000000; --surface: #0E0E10; --raised: #17171A; --hairline: #26262B;
+  --text: #F4F4F5; --text2: #A1A1AA; --text3: #63636B;
+  --accent: #C9B37E; --on-accent: #14120C; --critical: #F2766B;
+  --spring: cubic-bezier(.2, 1.3, .4, 1); --ease: cubic-bezier(.2, .8, .2, 1);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #FAFAF7; --surface: #FFFFFF; --raised: #F2F1EC; --hairline: #E4E2DA;
+    --text: #111113; --text2: #5B5B63; --text3: #7E7E86;
+    --accent: #8A6F2F; --on-accent: #FFFFFF; --critical: #B4372C;
+    color-scheme: light;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body {
+  font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+}
+main { max-width: 34rem; margin: 0 auto; padding: max(28px, env(safe-area-inset-top)) 16px max(32px, env(safe-area-inset-bottom)); }
+.eyebrow { margin: 0; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 4px 0 2px; font-size: 32px; font-weight: 600; letter-spacing: -.01em; }
+.line { margin: 0 0 20px; color: var(--text2); min-height: 1.45em; transition: opacity .2s; }
+.line.fading { opacity: 0; }
+.notice { background: var(--surface); border: 1px solid var(--hairline); border-radius: 16px; padding: 16px; color: var(--text2); }
+.notice.critical { color: var(--critical); }
+.notice p { margin: 0; }
+
+.add { display: flex; gap: 8px; margin-bottom: 16px; }
+.add input {
+  flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--surface);
+  border: 1px solid var(--hairline); border-radius: 999px; padding: 12px 16px; outline: none;
+}
+.add input:focus { border-color: var(--accent); }
+.add input::placeholder { color: var(--text3); }
+.pill {
+  font: inherit; font-weight: 600; border: 0; border-radius: 999px; padding: 0 18px;
+  background: var(--accent); color: var(--on-accent); cursor: pointer;
+}
+.pill:disabled { opacity: .5; }
+
+.rows { list-style: none; margin: 0; padding: 0; }
+.row {
+  display: flex; align-items: center; gap: 14px; padding: 12px 4px; border-bottom: 1px solid var(--hairline);
+  transition: opacity .32s var(--ease), transform .32s var(--ease);
+}
+.row.entering { opacity: 0; transform: translateY(14px) scale(.98); }
+.row.leaving { opacity: 0; transform: translateY(18px); }
+.row .text { flex: 1; min-width: 0; }
+.row .title { overflow-wrap: anywhere; }
+.row .meta { font-size: 13px; color: var(--text2); }
+.got .title { color: var(--text2); text-decoration: line-through; text-decoration-color: var(--text3); }
+
+/* Press (everywhere): 0.97 on the complete spring while held, a faint veil. */
+.press { transition: transform .35s var(--spring), opacity .2s; }
+.press:active { transform: scale(.97); opacity: .85; }
+
+/* The ring: sweeps round from the top, floods with the accent and the check strokes in (checkDraw, 420 ms). */
+.ring { flex: none; width: 30px; height: 30px; padding: 0; border: 0; background: none; cursor: pointer; color: var(--accent); }
+.ring svg { display: block; width: 30px; height: 30px; overflow: visible; }
+.ring .track { fill: none; stroke: var(--text3); stroke-width: 2; }
+.ring .sweep { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 76; stroke-dashoffset: 76; transform: rotate(-90deg); transform-origin: 15px 15px; }
+.ring .fill { fill: var(--accent); opacity: 0; transform: scale(.4); transform-origin: 15px 15px; }
+.ring .tick { fill: none; stroke: var(--on-accent); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 16; stroke-dashoffset: 16; }
+.ring.done .sweep { stroke-dashoffset: 0; }
+.ring.done .fill { opacity: 1; transform: scale(1); }
+.ring.done .tick { stroke-dashoffset: 0; }
+.ring.drawing .sweep { transition: stroke-dashoffset 220ms var(--ease); }
+.ring.drawing .fill { transition: opacity 140ms 200ms, transform 200ms 200ms var(--spring); }
+.ring.drawing .tick { transition: stroke-dashoffset 120ms 300ms var(--ease); }
+.ring.drawing svg { animation: pop 420ms var(--spring); }
+@keyframes pop { 0% { transform: scale(1); } 55% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
+.section { margin: 28px 0 4px; font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text2); }
+.empty { display: flex; align-items: center; gap: 12px; color: var(--text2); margin: 8px 0; }
+.breath { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--accent); box-shadow: 0 0 12px var(--accent); animation: breath 4.2s ease-in-out infinite; }
+@keyframes breath { 0%, 100% { transform: scale(.92); opacity: .7; } 50% { transform: scale(1); opacity: 1; } }
+.foot { margin-top: 28px; font-size: 13px; color: var(--text3); }
+
+/* App open: sections fade up, 40 ms apart. */
+.stagger { animation: rise 420ms var(--ease) both; }
+.stagger:nth-child(2) { animation-delay: 40ms; }
+.stagger:nth-child(3) { animation-delay: 80ms; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* Loading: a skeleton shimmer, never a spinner. */
+.skeleton span { display: block; height: 44px; margin: 8px 0; border-radius: 12px; background: linear-gradient(90deg, var(--surface), var(--raised), var(--surface)); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
+.skeleton[hidden] { display: none; }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* Reduced motion: short cross-fades, no movement. */
+@media (prefers-reduced-motion: reduce) {
+  .stagger { animation: fade 160ms both; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  .row, .row.entering, .row.leaving { transform: none; transition: opacity .16s; }
+  .ring.drawing .sweep, .ring.drawing .fill, .ring.drawing .tick { transition: none; }
+  .ring.drawing svg { animation: none; }
+  .breath, .skeleton span { animation: none; }
+  .press:active { transform: none; }
+}

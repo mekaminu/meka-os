@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#FAFAF7" media="(prefers-color-scheme: light)">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Shopping">
+<title>Shopping · MEKA</title>
+<link rel="stylesheet" href="/family/app.css">
+<script src="/family/app.js" defer></script>
+</head>
+<body>
+<main id="app">
+  <header class="head stagger">
+    <p class="eyebrow" id="who">MEKA · family</p>
+    <h1>Shopping</h1>
+    <p class="line" id="line" aria-live="polite"></p>
+  </header>
+
+  <section id="notice" class="notice stagger" hidden>
+    <p id="notice-text"></p>
+  </section>
+
+  <section id="list" hidden>
+    <form id="add" class="add stagger" autocomplete="off">
+      <input id="add-text" name="text" type="text" maxlength="1000" enterkeyhint="done"
+             placeholder="Add to shopping… (milk, eggs)" aria-label="Add to shopping">
+      <button id="add-go" type="submit" class="pill">Add</button>
+    </form>
+    <ul id="to-buy" class="rows" aria-label="To buy"></ul>
+    <p id="empty" class="empty" hidden><span class="breath" aria-hidden="true"></span>Nothing to buy. Add what you need above; separate several with commas.</p>
+    <h2 id="got-title" class="section" hidden>Got</h2>
+    <ul id="got" class="rows got" aria-label="Got"></ul>
+    <p class="foot">Only this list is shared. Tap a ring when you've got it; tap again to put it back.</p>
+  </section>
+
+  <div id="loading" class="skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+</main>
+</body>
+</html>

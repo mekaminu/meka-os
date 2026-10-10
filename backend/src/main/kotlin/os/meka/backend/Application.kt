@@ -96,6 +96,8 @@ fun Application.mekaSync(
     speech: SpeechService? = null,
     /** "Where I am now" (Places item 3): the forecast at a rounded point; null leaves the route out. */
     here: HereWeather? = integrations?.hereWeather(),
+    /** The family page (family sharing with Jeanette, slice 2); null leaves its routes out. */
+    family: FamilyShare? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -153,6 +155,62 @@ fun Application.mekaSync(
             if (!stored) throw Forbidden()
             call.application.environment.log.info("device key registered")
             call.respondText(WireCodec.encodeDeviceKey(pub), ContentType.Application.Json)
+        }
+
+        if (family != null) {
+            // Jeanette's page (family sharing, slice 2): static, self-contained, no personal data in it.
+            get(FamilyShare.PAGE_PATH) { call.familyAsset("index.html", ContentType.Text.Html) }
+            get("${FamilyShare.PAGE_PATH}/app.js") { call.familyAsset("app.js", ContentType.Application.JavaScript) }
+            get("${FamilyShare.PAGE_PATH}/app.css") { call.familyAsset("app.css", ContentType.Text.CSS) }
+
+            // First open: her browser registers its own key with the invite's token (signed with that key).
+            post("${FamilyShare.PAGE_PATH}/v1/claim") {
+                if (call.isPublisher()) throw Forbidden()
+                val body = call.boundedBody()
+                val h = call.request.headers
+                val r = withContext(Dispatchers.IO) {
+                    family.claim(call.request.path(), body, h["X-Meka-Time"], h["X-Meka-Nonce"], h["X-Meka-Signature"])
+                }
+                if (r.status == 200) call.application.environment.log.info("family page joined") // no identifiers in logs
+                call.familyReply(r)
+            }
+            post("${FamilyShare.PAGE_PATH}/v1/shopping") {
+                val body = call.boundedBody()
+                val guest = call.familyGuest(family, body)
+                call.familyReply(withContext(Dispatchers.IO) { family.shopping(guest) })
+            }
+            post("${FamilyShare.PAGE_PATH}/v1/shopping/add") {
+                val body = call.boundedBody()
+                val guest = call.familyGuest(family, body)
+                call.familyReply(withContext(Dispatchers.IO) { family.add(guest, body) })
+            }
+            post("${FamilyShare.PAGE_PATH}/v1/shopping/got") {
+                val body = call.boundedBody()
+                val guest = call.familyGuest(family, body)
+                call.familyReply(withContext(Dispatchers.IO) { family.got(guest, body) })
+            }
+            post("${FamilyShare.PAGE_PATH}/v1/shopping/putback") {
+                val body = call.boundedBody()
+                val guest = call.familyGuest(family, body)
+                call.familyReply(withContext(Dispatchers.IO) { family.putBack(guest, body) })
+            }
+
+            // Meka's side, from a keyed device: make, list and revoke invites (the apps' Settings → Family, slice 4).
+            post("/v1/family/invites/create") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                call.familyReply(withContext(Dispatchers.IO) { family.invite(who.householdId, body) })
+            }
+            post("/v1/family/invites/list") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                call.familyReply(withContext(Dispatchers.IO) { family.list(who.householdId) })
+            }
+            post("/v1/family/invites/revoke") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                call.familyReply(withContext(Dispatchers.IO) { family.revoke(who.householdId, body) })
+            }
         }
 
         post("/v1/sync/push") {
@@ -507,6 +565,38 @@ private fun resultPage(title: String, message: String) = """<!doctype html><html
 main{max-width:30rem}h1{font-size:1.5rem;margin:0 0 .5rem}p{margin:0;opacity:.8}</style></head>
 <body><main><h1>${html(title)}</h1><p>${html(message)}</p></main></body></html>"""
 
+/** The family page's files, read once from the classpath, sent with a strict policy: only this server's own script. */
+private val familyAssets = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
+
+private suspend fun ApplicationCall.familyAsset(name: String, type: ContentType) {
+    val bytes = familyAssets.getOrPut(name) { FamilyShare::class.java.getResource("/family/$name")!!.readBytes() }
+    response.header(
+        "Content-Security-Policy",
+        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; manifest-src 'self'; " +
+            "base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    )
+    response.header("Referrer-Policy", "no-referrer")
+    response.header("X-Content-Type-Options", "nosniff")
+    response.header("X-Frame-Options", "DENY")
+    response.header("Cache-Control", "no-cache")
+    respondBytes(bytes, type)
+}
+
+private suspend fun ApplicationCall.familyReply(r: FamilyReply) {
+    response.header("Cache-Control", "no-store")
+    respondText(r.body, ContentType.Application.Json, HttpStatusCode.fromValue(r.status))
+}
+
+/** Her browser: `Authorization: Guest <invite id>` and a signature by the key it registered, over this exact request. */
+private suspend fun ApplicationCall.familyGuest(family: FamilyShare, body: String): FamilyInvite {
+    if (isPublisher()) throw Forbidden()
+    val id = request.header("Authorization")?.takeIf { it.startsWith("Guest ") }?.removePrefix("Guest ")?.trim()
+    val h = request.headers
+    return withContext(Dispatchers.IO) {
+        family.guest(id, request.httpMethod.value, request.path(), body, h["X-Meka-Time"], h["X-Meka-Nonce"], h["X-Meka-Signature"])
+    } ?: throw Unauthorised()
+}
+
 private fun ApplicationCall.isPublisher(): Boolean = request.header("Authorization")?.startsWith("${ReleasePublisher.AUTH_SCHEME} ") == true
 
 private fun ApplicationCall.bearer(devices: DeviceRegistry): DeviceIdentity {
@@ -601,12 +691,19 @@ fun main(args: Array<String>) {
             val ai = aiFromEnv(ds)?.also { startAiCheck(it.health) }
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech, ai)
             voice?.let { startRecordingSweep(it.assistant) }
+            val verifier = RequestVerifier()
+            // Jeanette's page (family sharing, slice 2): only the shopping list, written as server ops.
+            val family = FamilyShare(
+                PostgresFamilyInviteStore(ds), opStore, { hh -> opStore.latestFieldOps(hh, EntityTypes.SHOPPING_ITEM) }, verifier,
+                onWritten = { hh -> push?.serverChanged(hh) },
+            )
             embeddedServer(Netty, port = port) {
                 mekaSync(
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
                     releases = Releases(PostgresReleaseStore(ds), onPublished = { who, r -> releaseActivity.record(who, r) }), push = push,
                     publisher = System.getenv("MEKA_RELEASE_PUBLISHER_SECRET")?.takeIf { it.isNotBlank() }?.let { SecretsManagerPublisherKey(it) },
                     voice = voice, newsImages = newsImages, calendarWriter = calendarWriter, ai = ai, speech = speech,
+                    verifier = verifier, family = family,
                 )
             }.start(wait = true)
         }
@@ -719,7 +816,7 @@ object Migrations {
         1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql", 4 to "/db/V4__event_mirror_end.sql",
         5 to "/db/V5__app_release.sql", 6 to "/db/V6__push_token.sql", 7 to "/db/V7__news_image.sql",
         8 to "/db/V8__calendar_editing.sql", 9 to "/db/V9__event_edits.sql", 10 to "/db/V10__ai_usage.sql",
-        11 to "/db/V11__speech_usage.sql", 12 to "/db/V12__sign_ins.sql",
+        11 to "/db/V11__speech_usage.sql", 12 to "/db/V12__sign_ins.sql", 13 to "/db/V13__family_invite.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

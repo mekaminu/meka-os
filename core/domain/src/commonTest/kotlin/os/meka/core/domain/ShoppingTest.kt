@@ -1,5 +1,6 @@
 package os.meka.core.domain
 
+import os.meka.core.sync.fv
 import os.meka.core.testing.Device
 import os.meka.core.testing.SyncWorld
 import kotlin.test.Test
@@ -112,6 +113,33 @@ class ShoppingTest {
         sync()
         assertEquals(ShoppingView.EMPTY, sFold.view())
         assertEquals(ShoppingView.EMPTY, sMac.view())
+    }
+
+    @Test
+    fun thePureRulesReadPlainFieldsAsTheServerHoldsThem() {
+        // MEKA's server (Jeanette's page) has each item's latest fields, not a replica: the same rules read them.
+        val now = at(sat, 10)
+        val items = mapOf(
+            "a" to mapOf(ShoppingFields.TITLE to "Milk".fv(), ShoppingFields.GOT to false.fv(), ShoppingFields.ADDED_AT to now.fv()),
+            "b" to mapOf(ShoppingFields.TITLE to "Eggs".fv(), ShoppingFields.GOT to true.fv(), ShoppingFields.GOT_AT to now.fv()),
+            "c" to mapOf(ShoppingFields.TITLE to "Tea".fv(), ShoppingFields.DELETED to true.fv()),
+        )
+        val v = ShoppingRules.view(items, now, cal)
+        assertEquals(listOf("Milk"), v.toBuy.map { it.title })
+        assertEquals(listOf("Eggs"), v.got.map { it.title })
+        var k = 0
+        val add = ShoppingRules.add("milk, eggs, tea, bread", items, " Jeanette", now, { "new${k++}" })
+        // Milk is already to buy, eggs come back on their own row, tea was removed so it is new, as is bread.
+        assertEquals(listOf("a", "b", "new0", "new1"), add.ids)
+        assertEquals(listOf("b", "new0", "new1"), add.writes.map { it.first })
+        assertEquals("jeanette".fv(), add.writes[0].second[ShoppingFields.BY])
+        assertEquals((now + 3).fv(), add.writes[2].second[ShoppingFields.ADDED_AT])
+        assertNull(ShoppingRules.gotFields(items["b"], now)) // already got
+        assertNull(ShoppingRules.gotFields(items["c"], now)) // removed
+        assertNull(ShoppingRules.gotFields(null, now))
+        assertEquals(true.fv(), ShoppingRules.gotFields(items["a"], now)!![ShoppingFields.GOT])
+        assertNull(ShoppingRules.putBackFields(items["a"]))
+        assertEquals(false.fv(), ShoppingRules.putBackFields(items["b"])!![ShoppingFields.GOT])
     }
 
     @Test

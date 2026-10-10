@@ -14,14 +14,21 @@ import java.util.concurrent.ConcurrentHashMap
 class RequestVerifier(private val now: () -> Long = System::currentTimeMillis) {
     private val seen = ConcurrentHashMap<String, Long>()
 
-    fun verify(publicKeyB64: String, method: String, path: String, body: String, time: String?, nonce: String?, signatureB64: String?): Boolean {
+    /**
+     * [p1363]: the signature is the raw r‖s pair WebCrypto makes (a browser on the family page), not the DER the apps'
+     * hardware keys make; the signed message is the same.
+     */
+    fun verify(
+        publicKeyB64: String, method: String, path: String, body: String, time: String?, nonce: String?, signatureB64: String?,
+        p1363: Boolean = false,
+    ): Boolean {
         val t = time?.toLongOrNull() ?: return false
         if (nonce == null || nonce.length !in 16..64 || signatureB64 == null) return false
         if (kotlin.math.abs(now() - t) > WINDOW_MS) return false
         val canonical = listOf("MEKA1", method.uppercase(), path, t.toString(), nonce, Secrets.sha256Hex(body)).joinToString("\n")
         val ok = runCatching {
             val key = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(Base64.getDecoder().decode(publicKeyB64)))
-            Signature.getInstance("SHA256withECDSA").run {
+            Signature.getInstance(if (p1363) "SHA256withECDSAinP1363Format" else "SHA256withECDSA").run {
                 initVerify(key); update(canonical.toByteArray()); verify(Base64.getDecoder().decode(signatureB64))
             }
         }.getOrDefault(false)
