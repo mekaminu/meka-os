@@ -1349,6 +1349,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(link.note, rules.NOTE)
     }
 
+    func testEmergencyCardReachesSwift() {
+        // Emergency card, slice 1: a typed line is read by the core's rules, secrets and numbers are turned away, and the
+        // card's parts reach the Mac (only Strings cross from the sheet).
+        let rules = EmergencyRules.shared
+        let gp = rules.read(text: "GP: Dr Patel, 01767 123456")
+        XCTAssertEqual(gp?.title, "GP")
+        XCTAssertEqual(gp?.detail, "Dr Patel, 01767 123456")
+        XCTAssertNil(rules.refusal(section: .call, text: "GP: Dr Patel, 01767 123456"))
+        XCTAssertEqual(rules.refusal(section: .accounts, text: "Bank PIN: 4821"), rules.REFUSED_SECRET)
+        XCTAssertEqual(rules.refusal(section: .documents, text: "Passport: 123456789"), rules.REFUSED_NUMBER)
+        XCTAssertEqual(rules.phone(detail: "Dr Patel, 01767 123456"), "01767123456")
+        let empty = EmergencyView.companion.EMPTY
+        XCTAssertEqual(empty.groups.map(\.label), ["Who to call", "Where things are", "Key accounts"])
+        XCTAssertEqual(empty.groups.map(\.section), ["call", "documents", "accounts"])
+        XCTAssertEqual(empty.summary, rules.EMPTY_SUMMARY)
+    }
+
     func testMealPlanReachesSwift() {
         // Meal plan → shopping, slice 1: a favourite typed once is read by the core's rules, and the week's lines reach
         // the Mac (only Strings and an Int64 cross from the sheet).

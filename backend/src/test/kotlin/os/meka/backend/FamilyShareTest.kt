@@ -5,6 +5,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import os.meka.core.domain.EmergencyFields
+import os.meka.core.domain.EmergencyRules
+import os.meka.core.domain.EmergencySection
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MealDayFields
 import os.meka.core.domain.MealPlan
@@ -222,6 +225,46 @@ class FamilyShareTest {
         (3..MealRules.MAX_FAVOURITES).forEach { assertEquals(200, family.addMeal(jeanette, """{"text":"Dinner $it"}""").status) }
         assertEquals("""{"error":"full"}""", family.addMeal(jeanette, """{"text":"One more"}""").body)
         assertEquals(200, family.addMeal(jeanette, """{"text":"Fajitas: wraps, peppers, salsa"}""").status) // an update still goes in
+    }
+
+    @Test
+    fun sheSeesTheEmergencyCardReadOnlyAndNeverASecret() {
+        // Emergency card slice 1.
+        val (id, token) = invite()
+        assertTrue("emergency" in claim(token, TestBrowserKey { nowMs }).body)
+        val jeanette = invites.byId(id)!!
+        val empty = obj(family.emergency(jeanette).body)
+        assertEquals("Meka hasn't filled the emergency card in yet.", empty.str("summary"))
+        assertEquals(0, empty["groups"]!!.jsonArray.size)
+
+        // Meka fills it in on his Mac.
+        var n = 0
+        val mac = Replica("hh", "mac", HlcClock("mac", { nowMs }), InMemoryReplicaStore(), MekaSchema) { "mac${n++}" }
+        fun add(section: EmergencySection, text: String) {
+            nowMs += 1_000
+            EmergencyRules.addPlan(section, text, emptyList(), nowMs) { "em${n++}" }.second
+                .flatMap { (e, f) -> mac.commitLocal(EntityTypes.EMERGENCY_ENTRY, e, f) }.forEach { ops.append(it) }
+        }
+        add(EmergencySection.CALL, "GP: Dr Patel, 01767 123456")
+        add(EmergencySection.ACCOUNTS, "Home insurance: Aviva")
+        // A secret written past the apps' check (an older device, a hand-made op) is never answered.
+        mac.commitLocal(EntityTypes.EMERGENCY_ENTRY, "bad", mapOf(
+            EmergencyFields.SECTION to "accounts".fv(), EmergencyFields.TITLE to "Bank PIN".fv(), EmergencyFields.DETAIL to "4821".fv(),
+        )).forEach { ops.append(it) }
+
+        val card = obj(family.emergency(jeanette).body)
+        assertEquals("Kept up to date by Meka", card.str("summary"))
+        val groups = card["groups"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf("Who to call", "Key accounts"), groups.map { it.str("label") })
+        val gp = groups[0]["rows"]!!.jsonArray.single().jsonObject
+        assertEquals("GP", gp.str("title"))
+        assertEquals("Dr Patel, 01767 123456", gp.str("detail"))
+        assertEquals("01767123456", gp.str("phone"))
+        assertEquals(listOf("Home insurance"), groups[1]["rows"]!!.jsonArray.map { it.jsonObject.str("title") })
+        assertTrue("4821" !in family.emergency(jeanette).body)
+        // The page can't write it: no route, and the server's writer refuses the type.
+        assertTrue(EntityTypes.EMERGENCY_ENTRY !in FamilyShare.WRITABLE_TYPES)
+        assertTrue(ops.after("hh", 0, 10_000).map { it.op }.none { it.deviceId == "server" && it.entityType == EntityTypes.EMERGENCY_ENTRY })
     }
 
     @Test

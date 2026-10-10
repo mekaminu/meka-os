@@ -135,6 +135,7 @@ class MekaCore(
     private val shopping = os.meka.core.domain.Shopping(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val school = os.meka.core.domain.School(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val mealPlan = os.meka.core.domain.MealPlan(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val emergency = os.meka.core.domain.EmergencyCard(replica, ids::next, nowMs)
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -363,6 +364,14 @@ class MekaCore(
      * six days after) and what "Add to shopping" would put on the shared list (Ask → More → Dinners). Synced.
      */
     val mealsView: StateFlow<os.meka.core.domain.MealPlanView> = _meals.asStateFlow()
+
+    private val _emergency = MutableStateFlow(os.meka.core.domain.EmergencyView.EMPTY)
+    /**
+     * The emergency card (V1, slice 1): who to call, where important documents are and key accounts by name only
+     * (Ask → More → Emergency card). Synced; Jeanette sees it read-only on her family page. Never a password, PIN or
+     * card or account number ([os.meka.core.domain.EmergencyRules.refusal]).
+     */
+    val emergencyView: StateFlow<os.meka.core.domain.EmergencyView> = _emergency.asStateFlow()
 
     private val _dateNight = MutableStateFlow(os.meka.core.domain.DateNightView.EMPTY)
     /**
@@ -1322,6 +1331,18 @@ class MekaCore(
     suspend fun undoMealsShopping(done: os.meka.core.domain.MealsShopped): Boolean = onCore {
         shopping.takeBack(done.added, done.revived)
     }
+
+    // ---- Emergency card (V1, slice 1; Ask → More → Emergency card) ----
+
+    /**
+     * Adds one typed line to the card under [section] (`call` · `documents` · `accounts`): "GP: Dr Patel, 01767 123456".
+     * The same name again in that part updates its details. A line holding a password, PIN or card, account or policy
+     * number is refused and nothing is written; the answer says why (`refused`, lit in the accent).
+     */
+    suspend fun addEmergency(section: String, text: String): os.meka.core.domain.EmergencyAdded = onCore { emergency.add(section, text) }
+
+    /** Takes a line off the card for good (on both apps and her page). */
+    suspend fun removeEmergency(id: String): Boolean = onCore { emergency.remove(id) }
 
     // ---- Date night (V1, slice 1; Ask → More → Date night) ----
 
@@ -3083,6 +3104,7 @@ class MekaCore(
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
+        _emergency.value = emergency.view()
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(
             _today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone),
             credit = os.meka.core.domain.CallCreditRules.card(credit, workState.callAssistant),

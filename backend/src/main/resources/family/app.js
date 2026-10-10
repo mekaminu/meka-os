@@ -163,7 +163,37 @@
     return li;
   }
 
-  const sigOf = (item) => (item.label || "") + "|" + (item.title || "") + "|" + (item.meta || item.line || "");
+  // An emergency card line: "GP" · "Dr Patel, 01767 123456" · "Call 01767 123456" (a tel: link under Who to call).
+  function cardRow(r) {
+    const li = document.createElement("li");
+    li.className = "row";
+    li.dataset.id = r.id;
+    li.dataset.sig = sigOf(r);
+    const text = document.createElement("div");
+    text.className = "text";
+    const t = document.createElement("div");
+    t.className = "title";
+    t.textContent = r.title;
+    text.append(t);
+    if (r.detail) {
+      const m = document.createElement("div");
+      m.className = "meta";
+      m.textContent = r.detail;
+      text.append(m);
+    }
+    if (r.phone && /^\+?[0-9]{6,15}$/.test(r.phone)) {
+      const a = document.createElement("a");
+      a.className = "call";
+      a.href = "tel:" + r.phone;
+      a.textContent = "Call " + r.title;
+      a.addEventListener("click", () => haptic(12));
+      text.append(a);
+    }
+    li.append(text);
+    return li;
+  }
+
+  const sigOf = (item) => (item.label || "") + "|" + (item.title || "") + "|" + (item.meta || item.line || item.detail || "") + "|" + (item.phone || "");
 
   // Keeps rows that didn't change (no flicker on refresh); new rows rise in, gone rows leave.
   function fill(ul, items, got) { fillWith(ul, items, (item) => row(item, got), (item) => item.id); }
@@ -218,6 +248,43 @@
     $("favs-title").hidden = (v.favourites || []).length === 0;
   }
 
+  function showEmergency(v) {
+    $("emergency").hidden = false;
+    const el = $("emergency-line");
+    if (el.textContent !== (v.summary || "")) {
+      if (reduced() || !el.textContent) el.textContent = v.summary || "";
+      else { el.classList.add("fading"); setTimeout(() => { el.textContent = v.summary || ""; el.classList.remove("fading"); }, 160); }
+    }
+    const box = $("emergency-groups");
+    const groups = v.groups || [];
+    // One list per part, made once and kept so unchanged rows don't flicker on refresh.
+    const want = new Set(groups.map((g) => g.section));
+    Array.from(box.children).forEach((c) => { if (!want.has(c.dataset.section)) c.remove(); });
+    groups.forEach((g) => {
+      let part = box.querySelector('[data-section="' + g.section + '"]');
+      if (!part) {
+        part = document.createElement("div");
+        part.dataset.section = g.section;
+        const h = document.createElement("h2");
+        h.className = "section";
+        h.textContent = g.label;
+        const ul = document.createElement("ul");
+        ul.className = "rows";
+        ul.setAttribute("aria-label", g.label);
+        part.append(h, ul);
+      }
+      box.append(part); // keeps the parts in the card's order
+      fillWith(part.querySelector("ul"), g.rows || [], cardRow, (r) => r.id);
+    });
+  }
+
+  async function callEmergency() {
+    const r = await post("/family/v1/emergency", {}, me.keys, me.id);
+    if (r.status === 200 && r.data) { showEmergency(r.data); return true; }
+    refused(r.status, r.data);
+    return false;
+  }
+
   function refused(status, data) {
     const why = data && data.error;
     if (status === 401 && me) {
@@ -250,7 +317,10 @@
   async function refresh() {
     if (!me || busy || document.hidden) return;
     try {
-      if (await call("/family/v1/shopping", {})) await callMeals("/family/v1/meals", {});
+      if (await call("/family/v1/shopping", {})) {
+        await callMeals("/family/v1/meals", {});
+        await callEmergency();
+      }
     } catch (_) { setLine("Offline. The list will update when you're back."); }
   }
 

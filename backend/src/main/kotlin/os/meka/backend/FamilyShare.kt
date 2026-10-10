@@ -11,6 +11,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import os.meka.backend.integrations.Integrations
+import os.meka.core.domain.EmergencyRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.MealRules
@@ -40,9 +41,10 @@ data class FamilyReply(val status: Int, val body: String) {
  * and registers it ([claim], signed with that key, so possession is proved); from then on the page's requests are
  * signed like the apps' ([guest]) and the link alone is no use. Only the shopping list and the dinners are shared: the
  * page reads the list ([shopping]) and adds, ticks and puts back items ([add], [got], [putBack]); it reads the week's
- * dinners and the favourites ([meals], meal plan slice 3) and adds a favourite ([addMeal]). Writes are server ops with
- * `by` = her name, so they sync into Meka's Lists and Dinners like any other change ("From Jeanette"). Nothing else of
- * Meka's data is reachable: [read] is only ever asked for [SHARED_TYPES].
+ * dinners and the favourites ([meals], meal plan slice 3) and adds a favourite ([addMeal]); and it reads the emergency
+ * card ([emergency], read-only: the server never writes it). Writes are server ops with `by` = her name, so they sync
+ * into Meka's Lists and Dinners like any other change ("From Jeanette"). Nothing else of Meka's data is reachable:
+ * [read] is only ever asked for [SHARED_TYPES], and only [WRITABLE_TYPES] are ever written.
  *
  * Kept free of Ktor so its rules are tested directly; the routes in [mekaSync] only authenticate and forward.
  */
@@ -122,7 +124,7 @@ class FamilyShare(
             // Lost a race with another browser, or revoked meanwhile.
             return FamilyReply.refused(403, if (invites.byId(invite.id)?.revokedAtMs != null) FamilyInvite.REVOKED else "used")
         }
-        return FamilyReply.ok(buildJsonObject { put("id", invite.id); put("name", display(invite.name)); putJsonArray("shares") { add(SHOPPING); add(MEALS) } })
+        return FamilyReply.ok(buildJsonObject { put("id", invite.id); put("name", display(invite.name)); putJsonArray("shares") { add(SHOPPING); add(MEALS); add(EMERGENCY) } })
     }
 
     /** Her browser, by its invite id and a signature over this exact request; null when it isn't let in. */
@@ -208,6 +210,39 @@ class FamilyShare(
         return meals(guest)
     }
 
+    /**
+     * The emergency card as her page shows it (emergency card slice 1): the three parts in order, each line's name, its
+     * details and, under "Who to call", the number to ring. Read only. A line that holds a password, PIN or card or
+     * account number is never answered, even if one were written past the apps' check ([EmergencyRules.entries]).
+     */
+    fun emergency(guest: FamilyInvite): FamilyReply {
+        val v = EmergencyRules.view(EmergencyRules.entries(fieldsOf(read(guest.householdId, EntityTypes.EMERGENCY_ENTRY))), viewer = guest.name)
+        return FamilyReply.ok(
+            buildJsonObject {
+                put("summary", v.summary)
+                put("count", v.count)
+                putJsonArray("groups") {
+                    v.groups.filter { it.rows.isNotEmpty() }.forEach { g ->
+                        addJsonObject {
+                            put("section", g.section)
+                            put("label", g.label)
+                            putJsonArray("rows") {
+                                g.rows.forEach { r ->
+                                    addJsonObject {
+                                        put("id", r.id)
+                                        put("title", r.title)
+                                        r.detail?.let { put("detail", it) }
+                                        r.phone?.let { put("phone", it) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        )
+    }
+
     private fun mealView(guest: FamilyInvite, mealFields: Map<String, Map<String, FieldValue>>) = MealRules.view(
         MealRules.meals(mealFields),
         MealRules.plan(fieldsOf(read(guest.householdId, EntityTypes.MEAL_DAY))),
@@ -244,7 +279,7 @@ class FamilyShare(
         current: Map<String, Map<String, Op>>,
         writes: List<Pair<String, Map<String, FieldValue>>>,
     ) {
-        require(entityType in SHARED_TYPES)
+        require(entityType in WRITABLE_TYPES)
         if (writes.isEmpty()) return
         ops.transaction {
             for ((id, fields) in writes) {
@@ -276,10 +311,14 @@ class FamilyShare(
         const val PAGE_PATH = "/family"
         const val SHOPPING = "shopping"
         const val MEALS = "meals"
+        const val EMERGENCY = "emergency"
         const val MAX_MEAL_TEXT = 300
 
         /** The only entity types the page reads or writes. */
-        val SHARED_TYPES = setOf(EntityTypes.SHOPPING_ITEM, EntityTypes.MEAL, EntityTypes.MEAL_DAY)
+        val SHARED_TYPES = setOf(EntityTypes.SHOPPING_ITEM, EntityTypes.MEAL, EntityTypes.MEAL_DAY, EntityTypes.EMERGENCY_ENTRY)
+
+        /** The only entity types the page may write: the emergency card is read-only for her. */
+        val WRITABLE_TYPES = setOf(EntityTypes.SHOPPING_ITEM, EntityTypes.MEAL)
         const val MAX_TEXT = 1_000
         const val MAX_PER_ADD = 30
         const val MAX_TO_BUY = 200

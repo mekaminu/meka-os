@@ -48,7 +48,7 @@ object FamilyRules {
     const val DEFAULT_NAME = "Jeanette"
     const val MAX_NAME = 30
     const val MAX_OFF_SHOWN = 3
-    const val SHARED = "Only the shopping list and the dinners are shared. Nothing else of yours leaves MEKA."
+    const val SHARED = "Only the shopping list, the dinners and the emergency card (read only) are shared. Nothing else of yours leaves MEKA."
     const val NOTE = "The link works on the first phone that opens it, and only there. Send it to that one person."
     const val NOT_CONNECTED = "Connect this device to your server first."
     const val NO_KEY = "This device's key isn't registered with MEKA's server yet · try again in a minute"

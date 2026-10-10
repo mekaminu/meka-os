@@ -50,7 +50,14 @@
              placeholder="Add a dinner… (Chilli: mince, beans, rice)" aria-label="Add a favourite dinner">
       <button id="meal-go" type="submit" class="pill">Add</button>
     </form>
-    <p class="foot">Meka picks the week's dinners from the favourites; their ingredients go on the list above. Only the shopping list and the dinners are shared.</p>
+    <p class="foot">Meka picks the week's dinners from the favourites; their ingredients go on the list above. Only the shopping list, the dinners and the emergency card are shared.</p>
+  </section>
+
+  <section id="emergency" hidden>
+    <h2 class="section">Emergency card</h2>
+    <p class="line" id="emergency-line" aria-live="polite"></p>
+    <div id="emergency-groups"></div>
+    <p class="foot">Who to call and where things are, kept by Meka. Read only; passwords and account numbers are never on it.</p>
   </section>
 
   <div id="loading" class="skeleton" aria-hidden="true"><span></span><span></span><span></span></div>

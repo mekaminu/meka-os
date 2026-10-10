@@ -238,6 +238,12 @@ fun Application.mekaSync(
                 val guest = call.familyGuest(family, body)
                 call.familyReply(withContext(Dispatchers.IO) { family.meals(guest) })
             }
+            // Emergency card slice 1: read-only.
+            post("${FamilyShare.PAGE_PATH}/v1/emergency") {
+                val body = call.boundedBody()
+                val guest = call.familyGuest(family, body)
+                call.familyReply(withContext(Dispatchers.IO) { family.emergency(guest) })
+            }
             post("${FamilyShare.PAGE_PATH}/v1/meals/add") {
                 val body = call.boundedBody()
                 val guest = call.familyGuest(family, body)
@@ -756,8 +762,9 @@ fun main(args: Array<String>) {
                 )
             }
             val verifier = RequestVerifier()
-            // Jeanette's page (family sharing, slice 2; meal plan slice 3): only the shopping list and the dinners, written
-            // as server ops. FamilyShare only ever asks for its SHARED_TYPES.
+            // Jeanette's page (family sharing, slice 2; meal plan slice 3; emergency card slice 1): only the shopping list
+            // and the dinners, written as server ops, and the emergency card, read only. FamilyShare only ever asks for its
+            // SHARED_TYPES and writes its WRITABLE_TYPES.
             val family = FamilyShare(
                 PostgresFamilyInviteStore(ds), opStore, { hh, type -> opStore.latestFieldOps(hh, type) }, verifier,
                 onWritten = { hh -> push?.serverChanged(hh) },

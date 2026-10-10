@@ -108,3 +108,9 @@ h1 { margin: 4px 0 2px; font-size: 32px; font-weight: 600; letter-spacing: -.01e
   .breath, .skeleton span { animation: none; }
   .press:active { transform: none; }
 }
+
+/* Emergency card (read only): rises after the dinners; a number to ring is a brass link that presses in. */
+#emergency { animation: rise 420ms 120ms var(--ease) both; }
+#emergency .line { margin-bottom: 8px; }
+.call { display: inline-block; margin-top: 2px; color: var(--accent); text-decoration: none; font-weight: 600; transition: transform .35s var(--spring), opacity .2s; }
+.call:active { transform: scale(.97); opacity: .85; }

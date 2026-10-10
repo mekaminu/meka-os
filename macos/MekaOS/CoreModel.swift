@@ -43,6 +43,11 @@ final class CoreModel {
     private(set) var dateNight: DateNightView?
     /// Ask → More → Date night.
     var showDateNight = false
+    /// The emergency card (V1, slice 1): who to call, where things are and key accounts by name (Ask → More →
+    /// Emergency card). Synced with the Fold; Jeanette reads it on her family page.
+    private(set) var emergency: EmergencyView?
+    /// Ask → More → Emergency card.
+    var showEmergency = false
     /// The line after a skip or keep ("Skipped Fri 23 Oct · the evening is free to plan"), until the sheet closes.
     private(set) var dateNightSaid: String?
     /// What the last "Add to shopping" did, kept here so only its line and whether it can be undone reach the sheet.
@@ -251,6 +256,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await d in core.dateNightView { self?.dateNight = d }
+        })
+        observers.append(Task { [weak self] in
+            for await e in core.emergencyView { self?.emergency = e }
         })
         observers.append(Task { [weak self] in
             for await t in core.triage { self?.triage = t }
@@ -1819,6 +1827,31 @@ final class CoreModel {
     }
 
     func dismissEventUndo() { eventUndo = nil }
+
+    // MARK: Emergency card (slice 1)
+
+    /// What adding a line said: the line to show and whether it was turned away (a secret or a number).
+    struct EmergencySaid: Equatable {
+        let line: String
+        let refused: Bool
+    }
+
+    /// Adds one typed line under a part (`call` · `documents` · `accounts`); only Strings cross. A refused line writes
+    /// nothing and says why.
+    func addEmergency(section: String, text: String) async -> EmergencySaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            let r = try await core.addEmergency(section: section, text: t)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return EmergencySaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func removeEmergency(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeEmergency(id: id) } }
 
     // MARK: Meal plan → shopping (slice 1)
 
