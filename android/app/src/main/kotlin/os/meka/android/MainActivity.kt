@@ -86,6 +86,11 @@ class MainActivity : ComponentActivity() {
             }
             // The wake alarm was dismissed: Today with the morning brief springing up.
             open == OPEN_BRIEF -> app.openBrief.value = true
+            // A school holiday with nothing booked (annual leave, slice 2): Ask with the Annual leave pane up.
+            open == OPEN_LEAVE -> {
+                app.openLeave.value = true
+                app.openDestination.value = ShellDestination.ASK
+            }
             // The News widget: Today with News on the story ("" = News itself, which leads with the match).
             open.startsWith(OPEN_NEWS_PREFIX) -> app.openNewsStory.value = open.removePrefix(OPEN_NEWS_PREFIX)
             // The side button or the headphones' button (TalkStartActivity), or the Talk widget: Ask, already listening.
@@ -119,6 +124,8 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_OPEN = "os.meka.open"
         const val OPEN_AFTER_WORK = "after_work"
         const val OPEN_BRIEF = "brief"
+        /** Ask → More → Annual leave, its pane up (the leave heads-up). */
+        const val OPEN_LEAVE = "leave"
         /** "dest:LISTS" opens Lists. */
         const val OPEN_DESTINATION_PREFIX = "dest:"
         /** "news:<story id>" opens News over Today on that story; "news:" opens News. */

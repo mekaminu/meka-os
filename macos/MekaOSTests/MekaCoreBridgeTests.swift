@@ -1397,6 +1397,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(empty.summary, rules.EMPTY_LINE)
         XCTAssertTrue(empty.holidays.isEmpty)
         XCTAssertEqual(empty.allowance, Int32(rules.DEFAULT_ALLOWANCE))
+        // Slice 2: the nudge is a heads-up of its own, listed in Notifications; it targets the Leave pane.
+        XCTAssertEqual(NoticeSource.leave.defaultTier, NoticeTier.headsUp)
+        XCTAssertEqual(NotifyRules.shared.targetName(t: .leave), "LEAVE")
     }
 
     func testTrainQueueReachesSwift() {

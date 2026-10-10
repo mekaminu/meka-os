@@ -77,6 +77,8 @@ class MekaApplication : Application() {
     val openHealth = MutableStateFlow(false)
     /** Today's setup card → Ask → More → Setup (Setup checklist). */
     val openSetup = MutableStateFlow(false)
+    /** The leave heads-up's tap → Ask → More → Annual leave (annual leave, slice 2). */
+    val openLeave = MutableStateFlow(false)
     /** Appearance → "Play the opening": Today replays its opening (Day ring, tiles, greeting, stagger), then clears it. */
     val playOpening = MutableStateFlow(false)
     /** The wake alarm (Alarms, slice 1), registered with Android whenever the core's next alarm changes. */

@@ -302,6 +302,66 @@ object LeaveRules {
         return LeaveAdded("Booked ${e.title} · $span · ${daysWord(new)}", refused = false)
     }
 
+    // ---- Slice 2: the nudge as a heads-up, and the lines either side of leave ----
+
+    /** The nudge's heads-up goes out at 09:00. */
+    const val NOTICE_MIN = 9 * 60
+    /** How far ahead the day Meka is back at work is looked for (the longest stretch, and a fortnight more). */
+    private const val BACK_SEARCH_DAYS = SchoolRules.MAX_SPAN_DAYS + 14
+    /** The next work day after the last one before leave is looked for this far ahead (a long weekend, Christmas). */
+    private const val NEXT_WORK_DAY_SEARCH = 15
+
+    /**
+     * The nudge as a heads-up (slice 2): one for each school holiday still to start whose work days have nothing
+     * booked, no cover answer and the first of them within [NUDGE_DAYS] — at 09:00 on the day the pane's nudge lights
+     * (or straight away when it is typed in later), opening the Leave pane. Once per holiday (its key holds the school
+     * item and its first day); gone once anything in it is booked, it is answered with cover, or its first work day comes.
+     * [work] gives the schedule and bank holidays (its own leave is ignored); null, or work mode off, tells nothing.
+     */
+    fun notices(school: List<SchoolItem>, items: List<LeaveItem>, work: WorkHours?, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        if (work == null || !work.schedule.enabled) return emptyList()
+        val today = cal.epochDayOf(nowMs)
+        val leave = days(items)
+        return school.filter { it.kind == SchoolKind.OFF && it.cover == null && it.startDay > today && it.startDay - today <= HORIZON_DAYS }
+            .sortedWith(compareBy<SchoolItem> { it.startDay }.thenBy { it.id })
+            .mapNotNull { h ->
+                val days = workDays(work, h.startDay, h.endDay)
+                val first = days.firstOrNull() ?: return@mapNotNull null
+                if (first - today > NUDGE_DAYS || days.any { it in leave }) return@mapNotNull null
+                val name = if (h.who.isEmpty()) h.title else "${h.title} · ${h.who}"
+                Notice(
+                    key = "leave:${h.id}:${h.startDay}", source = NoticeSource.LEAVE, tier = NoticeTier.HEADS_UP,
+                    title = "$name · nothing booked",
+                    text = "${SchoolRules.spanLabel(h.startDay, h.endDay)} · ${days.size} work ${if (days.size == 1) "day" else "days"} · book before the good weeks go",
+                    atMs = cal.toEpochMs(maxOf(first - NUDGE_DAYS, today), NOTICE_MIN), target = NoticeTarget.LEAVE,
+                    expiresAtMs = cal.toEpochMs(first, 0),
+                )
+            }
+    }
+
+    /** The first day from [from] on that Meka works (no leave booked, not a day off); null when none is near. */
+    fun backDay(leave: Set<Long>, work: WorkHours, from: Long): Long? =
+        (from until from + BACK_SEARCH_DAYS).firstOrNull { it !in leave && baseWorkDay(work, it) }
+
+    /**
+     * The brief's and the shutdown's work line for [day] ([base] is [BriefRules.workLine]'s, null on a day off) with
+     * leave either side of it: on the last work day before leave "Work 09:00–17:30 · last day before leave · back Mon 2 Nov";
+     * on a day of leave "Annual leave · no work · back Mon 2 Nov"; otherwise [base] as it was.
+     */
+    fun workLine(base: String?, leave: Set<Long>, work: WorkHours, day: Long): String? {
+        base ?: return null
+        if (leave.isEmpty()) return base
+        if (day in leave) {
+            if (!baseWorkDay(work, day)) return base
+            return backDay(leave, work, day)?.let { "$base · back ${CivilDate.shortLabel(it)}" } ?: base
+        }
+        if (!baseWorkDay(work, day)) return base
+        val next = (day + 1 until day + NEXT_WORK_DAY_SEARCH).firstOrNull { baseWorkDay(work, it) } ?: return base
+        if (next !in leave) return base
+        val back = backDay(leave, work, next)
+        return if (back == null) "$base · last day before leave" else "$base · last day before leave · back ${CivilDate.shortLabel(back)}"
+    }
+
     /** Booking a school holiday: its work days not yet booked, from the first to the last, under the holiday's name. */
     fun holidayEntry(h: SchoolItem, leave: Set<Long>, work: WorkHours, today: Long): LeaveEntry? {
         val open = workDays(work, maxOf(h.startDay, today), h.endDay).filter { it !in leave }

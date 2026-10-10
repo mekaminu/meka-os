@@ -198,7 +198,7 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
     private fun openIntent(target: NoticeTarget, requestCode: Int): PendingIntent = PendingIntent.getActivity(
         context, requestCode,
         Intent(context, MainActivity::class.java)
-            .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_DESTINATION_PREFIX + NotifyRouting.destination(target).name)
+            .putExtra(MainActivity.EXTRA_OPEN, NotifyRouting.openExtra(target))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
@@ -244,6 +244,13 @@ object NotifyRouting {
         NoticeTarget.LISTS -> ShellDestination.LISTS
         NoticeTarget.GOALS -> ShellDestination.GOALS
         NoticeTarget.REVIEW -> ShellDestination.REVIEW
+        NoticeTarget.LEAVE -> ShellDestination.ASK
+    }
+
+    /** What a tap hands MainActivity: a place ("dest:LISTS"), or Ask with the Annual leave pane up ("leave"). */
+    fun openExtra(target: NoticeTarget): String = when (target) {
+        NoticeTarget.LEAVE -> MainActivity.OPEN_LEAVE
+        else -> MainActivity.OPEN_DESTINATION_PREFIX + destination(target).name
     }
 
     /** Stable per key, never the digest's id. */

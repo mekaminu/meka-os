@@ -59,4 +59,33 @@ class LeaveFacadeTest {
         mac.syncNow(); fold.syncNow()
         assertTrue(fold.currentWorkMode().atWork)
     }
+
+    /** Slice 2: the heads-up through the governor (once), and the brief's and shutdown's lines either side of leave. */
+    @Test
+    fun theNudgeIsAHeadsUpAndTheBriefSaysTheLastDayBeforeLeave() = runTest {
+        val fold = core("android")
+        fold.addSchool("Half term 26–30 Oct")
+        fun leave(r: os.meka.core.domain.GovernorResult) = r.post.filter { it.source == os.meka.core.domain.NoticeSource.LEAVE }
+        val gov = fold.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        assertEquals(listOf("Half term · nothing booked" to "Mon 26 – Fri 30 Oct · 5 work days · book before the good weeks go"),
+            leave(gov).map { it.title to it.text })
+        assertEquals(os.meka.core.domain.NoticeTarget.LEAVE, leave(gov).single().target)
+        assertTrue(leave(fold.governNotifications(gov.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty()) // once
+
+        // Booking it ends the nudge.
+        fold.bookLeaveForHoliday(fold.leaveView.value.holidays.single().id)
+        assertTrue(leave(fold.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty())
+        fold.addLeave("2 Nov")
+        // Fri 23 Oct, 08:00 BST: the brief says it's the last day before leave, and when Meka is back.
+        now = 1_792_738_800_000L
+        fold.tick()
+        assertEquals("Work 09:00–17:30 · last day before leave · back Tue 3 Nov", fold.briefView.value.workLine)
+        // Sun 25 Oct, 20:00 GMT: the shutdown's tomorrow; Mon 26 Oct, 08:00: the brief on leave.
+        now = 1_792_958_400_000L
+        fold.tick()
+        assertEquals("Annual leave · no work · back Tue 3 Nov", fold.shutdownView.value.tomorrow.workLine)
+        now = 1_793_001_600_000L
+        fold.tick()
+        assertEquals("Annual leave · no work · back Tue 3 Nov", fold.briefView.value.workLine)
+    }
 }

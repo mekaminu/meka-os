@@ -143,4 +143,68 @@ class LeaveTest {
         assertEquals("Christmas Day", LeaveRules.withLeave(holidays, setOf(d(12, 25), d(12, 24))).title(d(12, 25)))
         assertEquals("Annual leave", LeaveRules.withLeave(holidays, setOf(d(12, 24))).title(d(12, 24)))
     }
+
+    /** Slice 2: the nudge as a 09:00 heads-up eight weeks before, once, opening the Leave pane; gone once anything is booked. */
+    @Test
+    fun aSchoolHolidayWithNothingBookedIsAHeadsUpOnceUntilBooked() {
+        val sc = school(fold)
+        sc.add("Half term 26–30 Oct")
+        sc.add("Christmas holidays 18 Dec – 4 Jan")
+        sc.add("INSET Sat 24 Oct") // no work days: never a heads-up
+        val lv = leave(fold)
+        // Today (Sat 10 Oct) half term is two weeks off, past the eight weeks: due at 09:00 today, until its first work day.
+        val n = LeaveRules.notices(sc.items(), lv.items(), work, at(sat, 10), cal).single()
+        assertEquals(NoticeSource.LEAVE, n.source)
+        assertEquals(NoticeTier.HEADS_UP, n.tier)
+        assertEquals(NoticeTarget.LEAVE, n.target)
+        assertEquals("Half term · nothing booked", n.title)
+        assertEquals("Mon 26 – Fri 30 Oct · 5 work days · book before the good weeks go", n.text)
+        assertEquals(at(sat, 9), n.atMs)
+        assertEquals(at(d(10, 26), 0), n.expiresAtMs)
+        // Christmas: from 09:00 on Fri 23 Oct, eight weeks before Fri 18 Dec; its key holds the holiday, so it's the same notice next day.
+        val xmas = LeaveRules.notices(sc.items(), lv.items(), work, at(d(10, 23), 8), cal).single { it.title.startsWith("Christmas") }
+        assertEquals(at(d(10, 23), 9), xmas.atMs)
+        assertEquals(xmas.key, LeaveRules.notices(sc.items(), lv.items(), work, at(d(10, 24), 8), cal).single { it.title.startsWith("Christmas") }.key)
+
+        // Through the governor: posted once.
+        val settings = NotificationSettings.DEFAULT
+        val first = Governor.evaluate(LeaveRules.notices(sc.items(), lv.items(), work, at(sat, 10), cal), settings, DeviceAlerts.ALL, GovernorState(), at(sat, 10), cal)
+        assertEquals(listOf("Half term · nothing booked"), first.post.map { it.title })
+        assertTrue(Governor.evaluate(LeaveRules.notices(sc.items(), lv.items(), work, at(sat, 11), cal), settings, DeviceAlerts.ALL, first.state, at(sat, 11), cal).post.isEmpty())
+        // Through the notice sources, as the facade collects them.
+        val all = NoticeSources.collect(
+            ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, Today(emptyList(), null, emptyList(), emptyList()), at(sat, 10), cal,
+            school = sc.items(), leave = lv.items(), leaveWork = work,
+        )
+        assertEquals(listOf("Half term · nothing booked"), all.filter { it.source == NoticeSource.LEAVE }.map { it.title })
+
+        // One day booked, an answer to cover, or work mode off: no heads-up.
+        lv.add("27 Oct", work)
+        assertTrue(LeaveRules.notices(sc.items(), lv.items(), work, at(sat, 10), cal).isEmpty())
+        assertTrue(LeaveRules.notices(sc.items(), emptyList(), work.copy(schedule = work.schedule.copy(enabled = false)), at(sat, 10), cal).isEmpty())
+        assertTrue(LeaveRules.notices(sc.items(), emptyList(), null, at(sat, 10), cal).isEmpty())
+        // Once it has started there's nothing left to nudge about.
+        assertTrue(LeaveRules.notices(sc.items(), emptyList(), work, at(d(10, 26), 10), cal).none { it.title.startsWith("Half term") })
+    }
+
+    /** Slice 2: the brief's and the shutdown's work line say the last day before leave and, on leave, when Meka is back. */
+    @Test
+    fun theWorkLineSaysTheLastDayBeforeLeaveAndWhenMekaIsBack() {
+        val lv = leave(fold)
+        lv.add("27–30 Oct", work)
+        lv.add("Spain 18 Dec – 4 Jan", work)
+        val leave = lv.days()
+        fun line(day: Long) = LeaveRules.workLine(BriefRules.workLine(work.schedule, LeaveRules.withLeave(holidays, leave), day), leave, work, day)
+        assertEquals("Work 09:00–17:30", line(d(10, 23))) // Fri: Monday is a work day
+        assertEquals("Work 09:00–17:30 · last day before leave · back Mon 2 Nov", line(d(10, 26)))
+        assertEquals("Annual leave · no work · back Mon 2 Nov", line(d(10, 27)))
+        assertNull(line(d(10, 31))) // a Saturday says nothing
+        assertEquals("Work 09:00–17:30", line(d(11, 2)))
+        // Thursday's short day before Spain; back on Tue 5 Jan; a bank holiday inside keeps its own name.
+        assertEquals("Work 09:00–15:30 · last day before leave · back Tue 5 Jan", line(d(12, 17)))
+        assertEquals("Christmas Day · no work", line(d(12, 25)))
+        assertEquals("Annual leave · no work · back Tue 5 Jan", line(d(1, 4, 2027)))
+        // Nothing booked: the line as it was.
+        assertEquals("Work 09:00–17:30", LeaveRules.workLine("Work 09:00–17:30", emptySet(), work, d(10, 26)))
+    }
 }

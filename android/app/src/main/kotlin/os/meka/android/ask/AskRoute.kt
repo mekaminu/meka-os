@@ -127,6 +127,11 @@ fun AskRoute(
     LaunchedEffect(openSetup) {
         if (openSetup) { pane = MoreItem.SETUP; healthApp?.openSetup?.value = false }
     }
+    // The leave heads-up (annual leave, slice 2) → the Annual leave pane.
+    val openLeave by remember(healthApp) { healthApp?.openLeave ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
+    LaunchedEffect(openLeave) {
+        if (openLeave) { pane = MoreItem.LEAVE; healthApp?.openLeave?.value = false }
+    }
     // Back closes whatever sprang up over Ask before it leaves the app.
     BackHandler(enabled = pane != null || showSearch) { if (showSearch) closeSearch() else pane = null }
 

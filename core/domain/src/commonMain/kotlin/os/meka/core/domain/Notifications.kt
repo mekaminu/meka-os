@@ -31,8 +31,8 @@ enum class NoticeTier(val label: String) {
 /** ADR-007: CLOCK reminders may use an exact alarm when allowed; everything else is windowed. */
 enum class NoticePrecision { CLOCK, SOFT }
 
-/** Where tapping a notification takes you. */
-enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW }
+/** Where tapping a notification takes you. [LEAVE] is Ask → More → Annual leave with its pane up (annual leave, slice 2). */
+enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW, LEAVE }
 
 /**
  * A button on a posted notification, answered without opening the app (Gym slice 2b: "Did you go?" offers Went and
@@ -75,6 +75,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     DATE_NIGHT("Date night", NoticeTier.HEADS_UP),
     /** Work wins log ([WinRules.notices]): Friday at 16:00, "What went well this week?", until a win is kept. */
     WINS("What went well this week (Friday)", NoticeTier.HEADS_UP),
+    /**
+     * Annual leave, slice 2 ([LeaveRules.notices]): a school holiday coming up with nothing booked, at 09:00 eight
+     * weeks before its first work day — "Half term · nothing booked" · "book before the good weeks go".
+     */
+    LEAVE("Book leave for school holidays", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -431,6 +436,7 @@ object Governor {
         NoticeSource.SCHOOL -> plural(n, "school reminder")
         NoticeSource.DATE_NIGHT -> "date night to book"
         NoticeSource.WINS -> "this week's wins"
+        NoticeSource.LEAVE -> if (n == 1) "leave to book" else "leave to book for $n holidays"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -480,6 +486,9 @@ object NoticeSources {
         dateNight: DateNightSetting? = null,
         /** The work wins log, for Friday's question ([WinRules.notices]). */
         wins: List<Win> = emptyList(),
+        /** Annual leave: the booked stretches and the schedule with the bank holidays ([LeaveRules.notices]). */
+        leave: List<LeaveItem> = emptyList(),
+        leaveWork: WorkHours? = null,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -589,6 +598,7 @@ object NoticeSources {
         out += SchoolRules.notices(school, schoolCovers, nowMs, cal)
         out += DateNightRules.notices(dateNight, nowMs, cal)
         out += WinRules.notices(wins, nowMs, cal)
+        out += LeaveRules.notices(school, leave, leaveWork, nowMs, cal)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.

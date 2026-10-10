@@ -3225,7 +3225,10 @@ class MekaCore(
         val holidays = bankHolidays.calendar()
         // Booked leave is a day off for work like a bank holiday (Gym bookings, the shutdown, the brief's work line);
         // the school's days follow the bank holidays alone.
-        val workHolidays = os.meka.core.domain.LeaveRules.withLeave(holidays, leave.days())
+        val leaveDays = leave.days()
+        val workHolidays = os.meka.core.domain.LeaveRules.withLeave(holidays, leaveDays)
+        // The schedule and the bank holidays alone, for the lines either side of leave (annual leave, slice 2).
+        val leaveHours = os.meka.core.domain.WorkHours(workState.schedule, holidays)
         val cal = ZoneCalendar(timeZone)
         // Sessions first: Today's timeline shows today's booked sessions still to come.
         val sessionHabits = goals.sessionHabits()
@@ -3258,6 +3261,8 @@ class MekaCore(
             tomorrow = shutdownRaw.tomorrow.copy(
                 weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal),
                 school = os.meka.core.domain.SchoolRules.tomorrowLine(schoolItems, todayDay, holidays),
+                // Annual leave, slice 2: "Annual leave · no work · back Mon 2 Nov" on the evening before leave.
+                workLine = os.meka.core.domain.LeaveRules.workLine(shutdownRaw.tomorrow.workLine, leaveDays, leaveHours, dayWindow(today.endMs).epochDay),
             ),
         )
         // The live tiles under the Day ring: next event, a running fast, habits today, renewals due.
@@ -3299,7 +3304,13 @@ class MekaCore(
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
-            news.all(), news.choices(), workHolidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolToday).copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal))
+            news.all(), news.choices(), workHolidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolToday).let {
+                // Annual leave, slice 2: "… · last day before leave · back Mon 2 Nov" and "Annual leave · no work · back …".
+                it.copy(
+                    weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal),
+                    workLine = os.meka.core.domain.LeaveRules.workLine(it.workLine, leaveDays, leaveHours, today.epochDay),
+                )
+            }
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))
         val weatherNow = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted(), workForecast, workPlace.wanted(), office)
             // The trains on an office day's commute (Places item 4), under the weather line.
@@ -3369,6 +3380,7 @@ class MekaCore(
             school = school.items(), schoolCovers = _school.value.covers,
             dateNight = dateNight.setting(),
             wins = wins.all(),
+            leave = leave.items(), leaveWork = hoursOf(_workMode.value, todayEpochDay()),
         )
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */
