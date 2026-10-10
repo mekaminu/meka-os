@@ -1352,6 +1352,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "marked Why trains run late done in the train queue")
     }
 
+    func testBookLeaveFromAskReachesSwift() {
+        // "Book the 2nd of November off" in Ask and Talk (annual leave, slice 2b): the card's words reach the Mac.
+        let card = AskRules.shared.cardOf(p: AskProposalBookLeave(title: "Annual leave", startDay: 20759, endDay: 20759, days: 1), today: 0)
+        XCTAssertEqual(card.line, "Book annual leave · Mon 2 Nov · 1 day")
+        XCTAssertEqual(card.button, "Book")
+        XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "booked annual leave for Monday 2 November")
+    }
+
     func testFamilyReachesSwift() {
         // Family sharing, slice 4: Settings → Family's rules reach the Mac (only Strings cross from the sheet).
         let rules = FamilyRules.shared

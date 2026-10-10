@@ -2499,7 +2499,9 @@ class MekaCore(
                 // Work wins, slice 2: the log, so "show my wins this quarter" has an answer.
                 os.meka.core.domain.WinAskRules.askLines(wins.all(), cal.epochDayOf(nowMs())),
                 // Train-time queue, slice 3: the saved links, so "what's in my train queue?" has an answer.
-                os.meka.core.domain.QueueAskRules.askLines(trainQueue.items(), nowMs(), cal))
+                os.meka.core.domain.QueueAskRules.askLines(trainQueue.items(), nowMs(), cal),
+                // Annual leave, slice 2b: the planner as the pane shows it, so "how many days have I got left?" has an answer.
+                os.meka.core.domain.LeaveAskRules.askLines(_leave.value, work.schedule().enabled, q))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -2508,7 +2510,8 @@ class MekaCore(
             is AskReply.Unavailable -> os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
             is AskReply.Answered -> onCore {
                 val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
-                val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items())
+                val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),
+                    os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()))
                 os.meka.core.domain.AskOutcome.Answered(answer.copy(cards = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }))
             }
         }
@@ -2584,6 +2587,11 @@ class MekaCore(
                 if (!trainQueue.setDone(p.id, true)) throw os.meka.core.domain.ValidationException(os.meka.core.domain.QueueAskRules.GONE)
                 os.meka.core.domain.AskUndo.PutBackQueue(p.id)
             }
+            // Checked again now: refused when its work days were booked meanwhile (here or on the other device).
+            is os.meka.core.domain.AskProposal.BookLeave -> {
+                val (plan, id) = leave.bookEntry(os.meka.core.domain.LeaveEntry(p.title, p.startDay, p.endDay), leaveWork())
+                os.meka.core.domain.AskUndo.RemoveLeave(id ?: throw os.meka.core.domain.ValidationException(plan.line))
+            }
         }
         os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
@@ -2621,6 +2629,8 @@ class MekaCore(
             is os.meka.core.domain.AskUndo.RemoveWin -> wins.remove(undo.winId)
             // Back to waiting only while it is still marked done (false when put back or removed meanwhile).
             is os.meka.core.domain.AskUndo.PutBackQueue -> trainQueue.setDone(undo.itemId, false)
+            // The stretch the card booked comes off (false when it was already removed, here or on the other device).
+            is os.meka.core.domain.AskUndo.RemoveLeave -> leave.remove(undo.leaveId)
         }
     }
 
@@ -3124,6 +3134,8 @@ class MekaCore(
             is os.meka.core.domain.AskProposal.AddWin -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             // Marks one of Meka's own saved links read, like its Done button (nothing is opened, fetched or sent).
             is os.meka.core.domain.AskProposal.QueueDone -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
+            // Marks days off in Meka's own planner, like the Leave pane (nothing is sent to his employer or anyone).
+            is os.meka.core.domain.AskProposal.BookLeave -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         }
         val decision = PolicyEngine(PolicyConfig()).decide(
             ActionRequest(

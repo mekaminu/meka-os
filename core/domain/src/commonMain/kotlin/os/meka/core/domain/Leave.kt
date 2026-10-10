@@ -122,8 +122,16 @@ object LeaveRules {
 
     private val genericTitle = setOf("", "leave", "annual leave", "a/l", "al", "off", "day off", "days off", "holiday", "holidays", "booked", "book", "leave booked")
 
-    /** "leave" / "off" / "" → [TITLE]; else the words as typed. */
-    fun title(words: String): String = if (words.lowercase() in genericTitle) TITLE else words
+    /** Words that say only "a day off" ("book the … off", "take … as leave"): a title made of these alone is [TITLE]. */
+    private val fillerWords = setOf("the", "a", "an", "of", "on", "for", "as", "book", "booked", "take", "taking", "off", "leave",
+        "annual", "day", "days", "holiday", "holidays", "please", "me", "my", "i'm", "im", "i", "am", "want", "to", "be")
+
+    /** "leave" / "off" / "" / "The off" (from "book the 2nd of November off") → [TITLE]; else the words as typed. */
+    fun title(words: String): String {
+        if (words.lowercase() in genericTitle) return TITLE
+        val w = words.lowercase().split(Regex("""[^a-z']+""")).filter { it.isNotEmpty() }
+        return if (w.all { it in fillerWords }) TITLE else words
+    }
 
     /**
      * What one typed line says, or null when it names no date MEKA can read. With no year, the next time it comes round;
@@ -402,10 +410,18 @@ class Leave(
         return book(e, work)
     }
 
-    private fun book(e: LeaveEntry, work: WorkHours): LeaveAdded {
+    private fun book(e: LeaveEntry, work: WorkHours): LeaveAdded = bookEntry(e, work).first
+
+    /**
+     * Books [e] as it stands (an Ask card's stretch, checked again now): what [LeaveRules.addPlan] says, and the new
+     * stretch's id (null when refused: no work days in it, or they are all booked already).
+     */
+    fun bookEntry(e: LeaveEntry, work: WorkHours): Pair<LeaveAdded, String?> {
         val plan = LeaveRules.addPlan(e, items(), work)
-        if (!plan.refused) replica.commitLocal(EntityTypes.LEAVE, newId(), LeaveRules.fields(e, nowMs()))
-        return plan
+        if (plan.refused) return plan to null
+        val id = newId()
+        replica.commitLocal(EntityTypes.LEAVE, id, LeaveRules.fields(e, nowMs()))
+        return plan to id
     }
 
     /** Takes a stretch off for good (cancelled, or typed by mistake); false when it isn't there. */
@@ -430,4 +446,77 @@ class Leave(
     companion object {
         const val SETTINGS_ID = "leave"
     }
+}
+
+/** What Ask needs to check a `book_leave` card: the stretches booked, work hours without leave, and the settings. */
+data class LeaveAskData(val items: List<LeaveItem>, val work: WorkHours, val settings: LeaveSettings)
+
+/**
+ * Ask and Talk know the leave (annual leave, slice 2b): "how many days have I got left?" is answered from the planner,
+ * and "book the 2nd of November off" becomes a card that books it on Meka's tap, with Undo. Non-AI, pure. Every line is
+ * Meka's own (his allowance, his stretches, the school holidays he typed), so leave lines never mark a question untrusted.
+ */
+object LeaveAskRules {
+    /** How many stretches to come go with a question (soonest first). */
+    const val ASK_BOOKED = 6
+    /** How many taken this leave year (latest first). */
+    const val ASK_TAKEN = 3
+    /** How many school holidays coming up. */
+    const val ASK_HOLIDAYS = 4
+    /** The most lines leave adds to a question (the head and the rows above). */
+    const val MAX_LINES = 1 + ASK_BOOKED + ASK_TAKEN + ASK_HOLIDAYS
+
+    /**
+     * The leave as MEKA describes it to the model (Ask's `leave` lines): first the count ("Annual leave · 17 of 25 days
+     * booked · 8 days left · Leave year Jan – Dec 2026 · 5 taken · 12 to come"), then each stretch to come ("Booked ·
+     * Spain · Fri 18 Dec – Mon 4 Jan · 7 days · Next leave year"), the few taken this leave year ("Taken · …") and the
+     * school holidays coming up with how much is booked ("School holiday · Half term · Mon 26 – Fri 30 Oct · 5 work days
+     * · Not booked"). While nothing is booked and no school holiday is coming, only for a question about leave
+     * ([mentionsLeave]) with work mode on, so other questions don't carry an empty planner.
+     */
+    fun askLines(view: LeaveView, workOn: Boolean, question: String): List<String> {
+        if (view.isEmpty && view.holidays.isEmpty() && !(workOn && mentionsLeave(question))) return emptyList()
+        val left = if (view.daysLeft >= 0) "${LeaveRules.daysWord(view.daysLeft)} left" else "${-view.daysLeft} over the allowance"
+        val head = listOf("Annual leave", "${view.daysBooked} of ${view.allowance} days booked", left, view.yearLine)
+            .filter { it.isNotEmpty() }.joinToString(" · ")
+        fun row(kind: String, r: LeaveRow) = listOfNotNull(kind, r.title, r.line, r.note).joinToString(" · ")
+        return listOf(head) +
+            view.booked.take(ASK_BOOKED).map { row("Booked", it) } +
+            view.taken.take(ASK_TAKEN).map { row("Taken", it) } +
+            view.holidays.take(ASK_HOLIDAYS).map { "School holiday · ${it.title} · ${it.line} · ${it.note}" }
+    }
+
+    private val leaveWords = Regex("""\b(leave|holidays?|day off|days off|time off|off work|allowance|annual)\b""", RegexOption.IGNORE_CASE)
+
+    /** "How many days have I got left?" counts too: a question about leave, holidays or days off. */
+    fun mentionsLeave(question: String): Boolean =
+        leaveWords.containsMatchIn(question) || Regex("""\bdays\b.*\bleft\b""", RegexOption.IGNORE_CASE).containsMatchIn(question)
+
+    /**
+     * The stretch a model's `book_leave` names: [title] read as Meka would type it in the Leave pane ("Mon 2 Nov",
+     * "27–30 Oct", "Spain 18 Dec – 4 Jan"), else the one day [day] (the card's ISO date) as plain annual leave. Null when
+     * neither reads, or when it holds no work days or they are all booked already (no card).
+     */
+    fun proposal(title: String?, day: Long?, data: LeaveAskData, today: Long): AskProposal.BookLeave? {
+        val earliest = LeaveRules.yearStart(today, data.settings.yearStartMonth)
+        val entry = title?.let { LeaveRules.read(it, today, earliest) }
+            ?: day?.let { LeaveEntry(LeaveRules.TITLE, it, it) }
+            ?: return null
+        val plan = LeaveRules.addPlan(entry, data.items, data.work)
+        if (plan.refused) return null
+        val booked = LeaveRules.days(data.items)
+        val days = LeaveRules.workDays(data.work, entry.startDay, entry.endDay).count { it !in booked }
+        return AskProposal.BookLeave(entry.title, entry.startDay, entry.endDay, days)
+    }
+
+    /** "annual leave" for the plain title, else the name as typed ("Spain"). */
+    private fun name(title: String) = if (title == LeaveRules.TITLE) "annual leave" else title
+
+    /** The card's words: "Book annual leave · Mon 2 Nov · 1 day", "Book Spain · Fri 18 Dec – Mon 4 Jan · 7 days". */
+    fun cardLine(p: AskProposal.BookLeave): String =
+        "Book ${name(p.title)} · ${SchoolRules.spanLabel(p.startDay, p.endDay)} · ${LeaveRules.daysWord(p.days)}"
+
+    /** The undo bar's line: "Booked annual leave · Mon 2 Nov · 1 day". */
+    fun doneLine(p: AskProposal.BookLeave): String =
+        "Booked ${name(p.title)} · ${SchoolRules.spanLabel(p.startDay, p.endDay)} · ${LeaveRules.daysWord(p.days)}"
 }

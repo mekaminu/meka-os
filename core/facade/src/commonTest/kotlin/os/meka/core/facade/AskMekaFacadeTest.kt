@@ -474,6 +474,35 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheLeaveAndBookLeaveBooksDaysOffWithUndo() = runTest {
+        val c = core()
+        assertEquals("Booked Annual leave · Tue 27 – Fri 30 Oct · 4 days", c.addLeave("27–30 Oct")?.line)
+        server.reply = AskReply.Answered("You've 21 days left.", listOf(
+            AskRawAction("book_leave", title = "Mon 2 Nov", date = "2026-11-02"),
+            AskRawAction("book_leave", title = "28 Oct"), // already booked: no card
+        ))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("How many days have I got left? Book the 2nd of November off"))
+        val ctx = server.asked.last().second
+        assertEquals(
+            listOf("Annual leave · 4 of 25 days booked · 21 days left · Leave year Jan – Dec 2026 · 4 to come",
+                "Booked · Annual leave · Tue 27 – Fri 30 Oct · 4 days"),
+            ctx.items.filter { it.kind == AskItemKind.LEAVE }.map { it.line },
+        )
+        assertEquals(listOf("Book annual leave · Mon 2 Nov · 1 day"), out.answer.cards.map { it.line })
+        assertEquals(1, c.leaveView.value.booked.size) // nothing until tapped
+
+        val done = c.doAsk(out.answer.cards.single())
+        assertEquals("Booked annual leave · Mon 2 Nov · 1 day", done.line)
+        assertEquals("5 of 25 days booked · 20 days left", c.leaveView.value.summary)
+        // Twice: the day is booked already.
+        assertFailsWith<ValidationException> { c.doAsk(out.answer.cards.single()) }
+        // Undo takes the stretch off, once.
+        assertTrue(c.undoAsk(assertIs<AskUndo.RemoveLeave>(done.undo)))
+        assertEquals("4 of 25 days booked · 21 days left", c.leaveView.value.summary)
+        assertFalse(c.undoAsk(done.undo!!))
+    }
+
+    @Test
     fun everyCardCanBeTakenBack() = runTest {
         val c = core()
         c.addTask("Book dentist")

@@ -36,6 +36,9 @@ class AskCodecTest {
         // The train queue (train-time queue, slice 3): a kind of its own.
         val queue = req.copy(items = listOf(AskCodec.Item("", "queue", "Waiting · Article · bbc.co.uk · Why trains run late · saved Fri 9 Oct")))
         assertEquals(queue, AskCodec.decodeRequest(AskCodec.encodeRequest(queue)))
+        // Annual leave (annual leave, slice 2b): a kind of its own.
+        val leave = req.copy(items = listOf(AskCodec.Item("", "leave", "Annual leave · 4 of 25 days booked · 21 days left · Leave year Jan – Dec 2026")))
+        assertEquals(leave, AskCodec.decodeRequest(AskCodec.encodeRequest(leave)))
         fun bad(r: AskCodec.Request) = assertFailsWith<WireFormatException> { AskCodec.decodeRequest(AskCodec.encodeRequest(r)) }
         bad(req.copy(question = "  "))
         bad(req.copy(question = "q".repeat(501)))
