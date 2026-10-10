@@ -768,6 +768,17 @@ final class CoreModel {
     func received(_ id: String) { MekaHaptics.light(); run { try await $0.received(id: id) } }
     func deleteWaiting(_ id: String) { run { try await $0.deleteWaiting(id: id) } }
 
+    // Shopping (family sharing, slice 1): only Strings cross to the core.
+    func addShopping(_ text: String) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        run { _ = try await $0.addShopping(text: t) }
+    }
+    func gotShopping(_ id: String) { MekaHaptics.light(); run { _ = try await $0.gotShopping(id: id) } }
+    func putBackShopping(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.putBackShopping(id: id) } }
+    func removeShopping(_ id: String) { run { _ = try await $0.removeShopping(id: id) } }
+    func clearGotShopping() { run { _ = try await $0.clearGotShopping() } }
+
     func addSomeday(_ title: String, kind: SomedayKind) {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }

@@ -85,12 +85,14 @@ import os.meka.core.facade.MekaCore
 import os.meka.android.designsystem.LocalPlaceTitleKey
 import os.meka.android.designsystem.sharedPlace
 
-/** The three lists, in the order of the tabs. */
-enum class ListTab(val label: String) { WAITING("Waiting for"), SOMEDAY("Someday"), DECISIONS("Decisions"), RENEWALS("Renewals") }
+/** The lists, in the order of the tabs; [short] is the label when five don't fit (the closed Fold). */
+enum class ListTab(val label: String, val short: String = label) {
+    WAITING("Waiting for", "Waiting"), SOMEDAY("Someday"), DECISIONS("Decisions"), RENEWALS("Renewals"), SHOPPING("Shopping"),
+}
 
 /**
  * LISTS (build plan M1): Waiting for (chase dates), Someday (kinds), Decisions (review dates) and Renewals (the
- * renewals and bills radar, see RenewalsSection.kt). One screen with four tabs; the lit tab pill springs across. Tapping a row unfolds its actions in place; "Got it" and "Do it now" make the
+ * renewals and bills radar, see RenewalsSection.kt) and Shopping (the shared shopping list, ShoppingSection.kt). One screen with five tabs; the lit tab pill springs across. Tapping a row unfolds its actions in place; "Got it" and "Do it now" make the
  * row leave like a completion (light haptic). Due chases and reviews are lit in the accent colour. Nothing is chased,
  * decided or promoted for you. Reduced motion: cross-fades only.
  */
@@ -141,6 +143,7 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
             ListTab.SOMEDAY -> someday(view, open, toggle, core, act, leave)
             ListTab.DECISIONS -> decisions(view, open, toggle, core, act, leave)
             ListTab.RENEWALS -> renewals(view.renewals, core.todayEpochDay(), open, toggle, core, act, leave) { haptics.light() }
+            ListTab.SHOPPING -> shopping(view.shopping, core, act)
         }
         item(key = "add-${tab.name}") {
             when (tab) {
@@ -148,6 +151,7 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
                 ListTab.SOMEDAY -> AddSomeday { title, kind -> act { core.addSomeday(title, kind) } }
                 ListTab.DECISIONS -> AddDecision { s, why, days -> act { core.recordDecision(s, why, days) } }
                 ListTab.RENEWALS -> AddRenewal(core.todayEpochDay()) { n -> act { core.addRenewal(n.title, n.kind, n.dueDay, n.repeat, n.cost, n.cancelByDaysBefore) } }
+                ListTab.SHOPPING -> AddShopping { text -> act { core.addShopping(text) } }
             }
         }
     }
@@ -224,13 +228,17 @@ internal fun LazyListScope.empty(key: String, line: String) = item(key = "empty-
     Text(line, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(vertical = MekaSpace.s))
 }
 
-/** Four tabs on a quiet track; the lit pill springs to the chosen one. Counts sit beside the labels when there's room. */
+/**
+ * Five tabs on a quiet track; the lit pill springs to the chosen one. Counts sit beside the labels when there's room,
+ * and the short labels ("Waiting") are used when a slot is narrower than 84 dp (the closed Fold).
+ */
 @Composable
 private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: (ListTab) -> Unit) {
     val tabs = ListTab.entries
     BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface).padding(MekaSpace.xxs)) {
         val slot = maxWidth / tabs.size
         val roomForCounts = slot >= 104.dp
+        val shortLabels = slot < 84.dp
         val x by animateDpAsState(slot * tabs.indexOf(current), MekaMotion.replan(Meka.reducedMotion), label = "lists-pill")
         Box(Modifier.offset(x = x).width(slot).height(40.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
         Row(Modifier.fillMaxWidth()) {
@@ -240,6 +248,7 @@ private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: 
                     ListTab.SOMEDAY -> view.somedayCount
                     ListTab.DECISIONS -> view.decisions.size
                     ListTab.RENEWALS -> view.renewals.count
+                    ListTab.SHOPPING -> view.shopping.count
                 }
                 val due = when (t) {
                     ListTab.WAITING -> view.chaseDue; ListTab.DECISIONS -> view.reviewsDue; ListTab.RENEWALS -> view.renewalsDue; else -> 0
@@ -257,7 +266,7 @@ private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: 
                     contentAlignment = Alignment.Center,
                 ) {
                     BasicText(
-                        if (count > 0 && roomForCounts) "${t.label} $count" else t.label, maxLines = 1, softWrap = false,
+                        (if (shortLabels) t.short else t.label).let { if (count > 0 && roomForCounts) "$it $count" else it }, maxLines = 1, softWrap = false,
                         style = MekaType.caption.copy(color = if (due > 0) Meka.colors.accent else color),
                     )
                 }

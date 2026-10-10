@@ -65,6 +65,8 @@ data class ListsView(
     val decisions: List<DecisionItem>,
     /** Renewals and bills (the radar): what needs doing, what's coming up, and what repeating costs add up to. */
     val renewals: RenewalsView = RenewalsView.EMPTY,
+    /** The shared shopping list (family sharing, slice 1): to buy in the order added, then what was got this week. */
+    val shopping: ShoppingView = ShoppingView.EMPTY,
 ) {
     val chaseDue: Int get() = waiting.count { it.state == DueState.DUE }
     val reviewsDue: Int get() = decisions.count { it.state == DueState.DUE }
@@ -414,8 +416,8 @@ class Lists(
     }
 
     /** The whole Lists screen. [tasks] is the already-loaded task list (Someday lives there). */
-    fun view(tasks: List<Task>, renewals: RenewalsView = RenewalsView.EMPTY): ListsView =
-        ListsView(waitingItems(), somedayGroups(tasks), decisionItems(), renewals)
+    fun view(tasks: List<Task>, renewals: RenewalsView = RenewalsView.EMPTY, shopping: ShoppingView = ShoppingView.EMPTY): ListsView =
+        ListsView(waitingItems(), somedayGroups(tasks), decisionItems(), renewals, shopping)
 
     // ---- Helpers ----
 

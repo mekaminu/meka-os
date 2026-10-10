@@ -1096,6 +1096,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual((playlist.steps.first as? PlayStepSay)?.text, "No voice messages waiting. Anything else?")
     }
 
+    func testShoppingReachesSwift() {
+        // Family sharing, slice 1: the shopping list's rules and Lists' new tab reach the Mac.
+        XCTAssertEqual(ShoppingRules.shared.split(text: "milk, fish and chips;eggs"), ["milk", "fish and chips", "eggs"])
+        XCTAssertEqual(ShoppingRules.shared.line(toBuy: 2, got: 1), "2 to buy · 1 got")
+        XCTAssertEqual(ShoppingRules.shared.byName(by: "jeanette"), "Jeanette")
+        XCTAssertNil(ShoppingRules.shared.byName(by: "meka"))
+        XCTAssertEqual(ShoppingView.companion.EMPTY.line, "Nothing to buy")
+        XCTAssertEqual(ListsView.companion.EMPTY.shopping.count, 0)
+    }
+
     func testKeepCallersRecordingsReachesSwift() {
         // Call assistant polish 8c: the "Keep callers' recordings" choice, its line and the summary's note.
         let rules = VoiceRecordingRules.shared

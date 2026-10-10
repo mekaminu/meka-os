@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The Lists tabs, in order (same as the Fold).
 enum ListTab: Int, CaseIterable, Identifiable {
-    case waiting, someday, decisions, renewals
+    case waiting, someday, decisions, renewals, shopping
     var id: Int { rawValue }
     var label: String {
         switch self {
@@ -11,12 +11,13 @@ enum ListTab: Int, CaseIterable, Identifiable {
         case .someday: "Someday"
         case .decisions: "Decisions"
         case .renewals: "Renewals"
+        case .shopping: "Shopping"
         }
     }
 }
 
-/// LISTS on the Mac (build plan M1): Waiting for (chase dates), Someday (kinds), Decisions (review dates) and Renewals
-/// (the renewals and bills radar, `RenewalsSection.swift`), synced
+/// LISTS on the Mac (build plan M1): Waiting for (chase dates), Someday (kinds), Decisions (review dates), Renewals
+/// (the renewals and bills radar, `RenewalsSection.swift`) and Shopping (the shared list, `ShoppingSection.swift`), synced
 /// with the Fold. A segmented control switches lists; clicking a row unfolds its actions (date presets are menus, as
 /// rule 7 allows). "Got it" and "Do it now" make the row leave like a completion. Due chases and reviews are lit in the
 /// accent colour. Nothing is chased, decided or promoted for you. Reduce Motion: cross-fades only.
@@ -52,7 +53,7 @@ struct ListsScreen: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(maxWidth: 560)
+                .frame(maxWidth: 640)
                 .padding(.bottom, MekaSpace.m)
                 .staggeredAppear(2)
 
@@ -62,6 +63,7 @@ struct ListsScreen: View {
                     case .someday: someday
                     case .decisions: decisions
                     case .renewals: RenewalsSection(palette: palette, open: $open)
+                    case .shopping: ShoppingSection(palette: palette)
                     }
                 }
                 .id(tab)
@@ -73,6 +75,7 @@ struct ListsScreen: View {
                     case .someday: AddSomedayRow(palette: palette)
                     case .decisions: AddDecisionRow(palette: palette)
                     case .renewals: AddRenewalRow(palette: palette)
+                    case .shopping: AddShoppingRow(palette: palette)
                     }
                 }
                 .padding(.top, MekaSpace.l)
@@ -99,8 +102,10 @@ struct ListsScreen: View {
 
     private var rowIDs: [String] {
         guard let l = model.lists else { return [] }
-        return l.waiting.map(\.id) + l.someday.flatMap { $0.items.map(\.id) } + l.decisions.map(\.id)
-            + l.renewals.all.map { "\($0.id)|\($0.dueDay)" }
+        let renewalIDs: [String] = l.renewals.all.map { "\($0.id)|\($0.dueDay)" }
+        let shopping: [ShoppingItem] = l.shopping.toBuy + l.shopping.got
+        let shoppingIDs: [String] = shopping.map { "\($0.id)|\($0.got)" }
+        return l.waiting.map(\.id) + l.someday.flatMap { $0.items.map(\.id) } + l.decisions.map(\.id) + renewalIDs + shoppingIDs
     }
 
     private func tabLabel(_ t: ListTab) -> String {
@@ -110,6 +115,7 @@ struct ListsScreen: View {
         case .someday: l.somedayCount
         case .decisions: Int32(l.decisions.count)
         case .renewals: l.renewals.count
+        case .shopping: l.shopping.count
         }
         return n > 0 ? "\(t.label) \(n)" : t.label
     }

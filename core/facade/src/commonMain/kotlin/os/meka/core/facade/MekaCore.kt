@@ -130,6 +130,7 @@ class MekaCore(
     private val work = WorkMode(replica, { bankHolidays.calendar() }, nowMs)
     private val lists = os.meka.core.domain.Lists(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val renewals = Renewals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val shopping = os.meka.core.domain.Shopping(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shutdown = EveningShutdown(replica, tasks, nowMs, ZoneCalendar(timeZone))
@@ -1141,6 +1142,22 @@ class MekaCore(
     /** "Cancelled it" / "Stop tracking": off the radar, kept as cancelled. */
     suspend fun stopRenewal(id: String) = onCore { renewals.stop(id) }
     suspend fun deleteRenewal(id: String) = onCore { renewals.delete(id) }
+
+    // ---- Shopping (family sharing, slice 1; Lists → Shopping) ----
+
+    /**
+     * Adds what was typed ("milk, eggs": commas, semicolons and new lines separate) to the shopping list; a name
+     * already to buy stays one row, a got one comes back. Returns the ids now to buy; empty when nothing was typed.
+     */
+    suspend fun addShopping(text: String): List<String> = onCore { shopping.add(text) }
+    /** Ticks a shopping item as bought; it moves under Got for a week, where it can be put back. */
+    suspend fun gotShopping(id: String): Boolean = onCore { shopping.got(id) }
+    /** Unticks a got item: back to buy, in the place it was first added. */
+    suspend fun putBackShopping(id: String): Boolean = onCore { shopping.putBack(id) }
+    /** Takes an item off the list for good (added by mistake). */
+    suspend fun removeShopping(id: String): Boolean = onCore { shopping.remove(id) }
+    /** Clear under Got: every bought item leaves the list for good. Returns how many. */
+    suspend fun clearGotShopping(): Int = onCore { shopping.clearGot() }
 
     // ---- Goals and habits ----
 
@@ -2424,7 +2441,7 @@ class MekaCore(
         else os.meka.core.domain.SessionRules.book(sessionHabits, todayEpochDay(), nowMs(), cal) { day ->
             os.meka.core.domain.SessionRules.busyOn(day, dayEvents, workState.schedule, holidays, cal)
         }
-        val listsNow = lists.view(all, renewals.view())
+        val listsNow = lists.view(all, renewals.view(), shopping.view())
         val fastingNow = fasting.view()
         val goalsNow = goals.view(all).withSessions(_sessions.value)
         val projected = project(all, dayEvents)
