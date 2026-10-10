@@ -407,6 +407,38 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheWinsLogAndAddWinKeepsALineWithUndo() = runTest {
+        val c = core()
+        c.askMeka("Show my wins this quarter")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.WINS })
+        c.addWin("Closed the Henley deal")
+
+        server.reply = AskReply.Answered("Nice.", listOf(
+            AskRawAction("add_win", title = "Ran the planning session"),
+            AskRawAction("add_win", title = "closed the henley deal"), // already this week: no card
+        ))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("Add a win: ran the planning session"))
+        val ctx = server.asked.last().second
+        assertEquals(
+            listOf("Wins · this quarter, Oct – Dec · 1 kept · 1 this week", "Win · Thu 8 Oct · Closed the Henley deal"),
+            ctx.items.filter { it.kind == AskItemKind.WINS }.map { it.line },
+        )
+        assertFalse(ctx.untrusted)
+        assertEquals(listOf("Keep in this week's wins · “Ran the planning session”"), out.answer.cards.map { it.line })
+        assertEquals(1, c.winsView.value.week.size) // nothing until tapped
+
+        val done = c.doAsk(out.answer.cards.single())
+        assertEquals("Kept “Ran the planning session” in this week's wins", done.line)
+        assertEquals(setOf("Closed the Henley deal", "Ran the planning session"), c.winsView.value.week.map { it.text }.toSet())
+        // Twice: already there.
+        assertFailsWith<ValidationException> { c.doAsk(out.answer.cards.single()) }
+        // Undo takes it off, once.
+        assertTrue(c.undoAsk(assertIs<AskUndo.RemoveWin>(done.undo)))
+        assertEquals(listOf("Closed the Henley deal"), c.winsView.value.week.map { it.text })
+        assertFalse(c.undoAsk(done.undo!!))
+    }
+
+    @Test
     fun everyCardCanBeTakenBack() = runTest {
         val c = core()
         c.addTask("Book dentist")

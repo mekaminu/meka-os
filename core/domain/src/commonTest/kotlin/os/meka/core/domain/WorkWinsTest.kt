@@ -106,4 +106,31 @@ class WorkWinsTest {
         // Next week asks again.
         assertEquals(at(fri16 + 7, 16), WinRules.notices(wFold.all(), at(fri16 + 3, 9), cal).single().atMs)
     }
+
+    @Test
+    fun askHearsTheLogAndAddWinIsACardForANewLineOnly() {
+        assertTrue(WinAskRules.askLines(emptyList(), fri16).isEmpty())
+        wFold.add("Closed the Henley deal", mon12)
+        world.clock.nowMs = at(d(9, 30), 12)
+        wFold.add("Shipped Q3", GoalRules.weekStart(d(9, 30)))
+        world.clock.nowMs = at(fri16, 17)
+        assertEquals(
+            listOf("Wins · this quarter, Oct – Dec · 1 kept · 1 this week", "Win · Fri 16 Oct · Closed the Henley deal", "Win · Wed 30 Sep · Shipped Q3"),
+            WinAskRules.askLines(wFold.all(), fri16),
+        )
+        assertEquals("Wins · none kept this quarter (Jan – Mar) · earlier ones below", WinAskRules.askLines(wFold.all(), d(1, 5, 2027)).first())
+
+        val ctx = AskContext.EMPTY
+        fun card(title: String?) = AskRules.card(AskRawAction("add_win", title = title), ctx, emptyMap(), world.clock.nowMs, cal, wins = wFold.all())
+        val c = card("  ran the planning session ")!!
+        assertEquals(AskProposal.AddWin("Ran the planning session"), c.proposal)
+        assertEquals("Keep in this week's wins · “Ran the planning session”", c.line)
+        assertEquals("Keep", c.button)
+        assertEquals("Kept “Ran the planning session” in this week's wins", AskRules.doneLine(c.proposal, fri16))
+        assertEquals("keep Ran the planning session in this week's wins", TalkRules.phrase(c.proposal, fri16, past = false))
+        // Already kept this week, or nothing to keep: no card.
+        assertNull(card("closed the Henley deal."))
+        assertNull(card("  "))
+        assertNull(card(null))
+    }
 }

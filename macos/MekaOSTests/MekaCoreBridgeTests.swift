@@ -1336,6 +1336,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "marked Test the smoke and CO alarms done, next due Sunday 1 February")
     }
 
+    func testAddWinFromAskReachesSwift() {
+        // "Add a win: …" in Ask and Talk (work wins, slice 2): the card's words reach the Mac.
+        let card = AskRules.shared.cardOf(p: AskProposalAddWin(text: "Closed the Henley deal"), today: 0)
+        XCTAssertEqual(card.line, "Keep in this week's wins · “Closed the Henley deal”")
+        XCTAssertEqual(card.button, "Keep")
+        XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "kept Closed the Henley deal in this week's wins")
+    }
+
     func testFamilyReachesSwift() {
         // Family sharing, slice 4: Settings → Family's rules reach the Mac (only Strings cross from the sheet).
         let rules = FamilyRules.shared

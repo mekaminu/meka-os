@@ -70,6 +70,8 @@ class AiAskTest {
         assertTrue("skip_date_night" in AskService.KINDS && "skip_date_night" in AskService.SYSTEM)
         assertTrue("radar lines" in AskService.SYSTEM)
         assertTrue("done_renewal" in AskService.KINDS && "done_renewal" in AskService.SYSTEM)
+        assertTrue("wins lines" in AskService.SYSTEM)
+        assertTrue("add_win" in AskService.KINDS && "add_win" in AskService.SYSTEM)
         // A chatty answer that isn't the JSON is words only, with nothing to act on.
         model.outcome = answered("Sure — I've moved it for you!")
         val plain = AskService(model).ask(request)

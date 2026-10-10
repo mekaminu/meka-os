@@ -196,3 +196,50 @@ class WorkWins(private val replica: Replica, private val newId: () -> String, pr
         return true
     }
 }
+
+/**
+ * Ask and Talk know the wins log (Work wins, slice 2): "show my wins this quarter" is answered from the log, and "add a
+ * win: closed the Henley deal" (typed, or said to Talk as the spoken 30-second note) becomes a card that keeps the line
+ * on Meka's tap. Non-AI, pure. Wins are Meka's own words, so they never mark a question untrusted.
+ */
+object WinAskRules {
+    /** How many wins go with a question (newest first), under the quarter's line. */
+    const val ASK_ITEMS = 10
+
+    /**
+     * The log as MEKA describes it to the model (Ask's `wins` lines): first the quarter ("Wins · this quarter, Oct – Dec ·
+     * 7 kept · 1 this week · the newest 10 below"), then the newest wins, each "Win · Fri 9 Oct · Closed the Henley deal".
+     * Nothing at all while the log is empty (the model is told no wins lines means none kept yet).
+     */
+    fun askLines(wins: List<Win>, today: Long): List<String> {
+        if (wins.isEmpty()) return emptyList()
+        val (qStart, qEnd, qLabel) = WinRules.quarter(today)
+        val inQuarter = wins.count { it.day in qStart..qEnd }
+        val ws = GoalRules.weekStart(today)
+        val thisWeek = wins.count { it.day in ws until ws + 7 }
+        val newest = wins.sortedWith(compareByDescending<Win> { it.day }.thenByDescending { it.addedAtMs }).take(ASK_ITEMS)
+        val head = if (inQuarter == 0) "Wins · none kept this quarter ($qLabel) · earlier ones below"
+        else listOfNotNull(
+            "Wins · this quarter, $qLabel · $inQuarter kept",
+            "$thisWeek this week".takeIf { thisWeek > 0 },
+            "the newest $ASK_ITEMS below".takeIf { wins.size > ASK_ITEMS },
+        ).joinToString(" · ")
+        return listOf(head) + newest.map { "Win · ${CivilDate.shortLabel(it.day)} · ${it.text.replace(Regex("""\s+"""), " ").trim()}" }
+    }
+
+    /**
+     * The line a model's `add_win` would keep: tidied like a typed one ([WinRules.read]); null when there's nothing to
+     * keep or the same line is already in [today]'s week (no card for what's already there).
+     */
+    fun text(wins: List<Win>, title: String?, today: Long): String? {
+        val t = WinRules.read(title ?: return null) ?: return null
+        val ws = GoalRules.weekStart(today)
+        return t.takeIf { wins.none { w -> w.day in ws until ws + 7 && WinRules.key(w.text) == WinRules.key(t) } }
+    }
+
+    /** The card's words: "Keep in this week's wins · “Closed the Henley deal”". */
+    fun cardLine(text: String): String = "Keep in this week's wins · “$text”"
+
+    /** The undo bar's line: "Kept “Closed the Henley deal” in this week's wins". */
+    fun doneLine(text: String): String = "Kept “$text” in this week's wins"
+}
