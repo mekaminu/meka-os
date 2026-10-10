@@ -1372,6 +1372,20 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NoticeSource.wins.defaultTier, NoticeTier.headsUp)
     }
 
+    func testTrainQueueReachesSwift() {
+        // Train-time queue, slice 1: a pasted link is found and tidied by the core's rules, podcasts are told from
+        // articles, and the queue's view reaches the Mac (only Strings cross from the sheet).
+        let rules = QueueRules.shared
+        XCTAssertEqual(rules.link(text: "Read this: https://www.bbc.co.uk/news/uk-123."), "https://www.bbc.co.uk/news/uk-123")
+        XCTAssertNil(rules.link(text: "no link here"))
+        XCTAssertEqual(rules.host(url: "https://www.bbc.co.uk/news/uk-123"), "bbc.co.uk")
+        XCTAssertEqual(rules.kind(url: "https://overcast.fm/+abc", title: "x"), .podcast)
+        XCTAssertEqual(rules.countLine(articles: 2, podcasts: 1), "2 articles · 1 podcast")
+        let empty = QueueView.companion.EMPTY
+        XCTAssertEqual(empty.summary, rules.EMPTY_SUMMARY)
+        XCTAssertTrue(empty.waiting.isEmpty)
+    }
+
     func testEmergencyCardReachesSwift() {
         // Emergency card, slice 1: a typed line is read by the core's rules, secrets and numbers are turned away, and the
         // card's parts reach the Mac (only Strings cross from the sheet).

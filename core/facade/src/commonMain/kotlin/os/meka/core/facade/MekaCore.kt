@@ -136,6 +136,7 @@ class MekaCore(
     private val school = os.meka.core.domain.School(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val mealPlan = os.meka.core.domain.MealPlan(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val emergency = os.meka.core.domain.EmergencyCard(replica, ids::next, nowMs)
+    private val trainQueue = os.meka.core.domain.TrainQueue(replica, ids::next, nowMs)
     private val wins = os.meka.core.domain.WorkWins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -380,6 +381,13 @@ class MekaCore(
      * card or account number ([os.meka.core.domain.EmergencyRules.refusal]).
      */
     val emergencyView: StateFlow<os.meka.core.domain.EmergencyView> = _emergency.asStateFlow()
+
+    private val _queue = MutableStateFlow(os.meka.core.domain.QueueView.EMPTY)
+    /**
+     * The train queue (V1, train-time queue slice 1): links and podcasts shared to MEKA for the commute, waiting
+     * newest first, and the ones marked done lately (Ask → More → Train queue). Synced; nothing is fetched.
+     */
+    val queueView: StateFlow<os.meka.core.domain.QueueView> = _queue.asStateFlow()
 
     private val _dateNight = MutableStateFlow(os.meka.core.domain.DateNightView.EMPTY)
     /**
@@ -1351,6 +1359,21 @@ class MekaCore(
 
     /** Takes a line off the card for good (on both apps and her page). */
     suspend fun removeEmergency(id: String): Boolean = onCore { emergency.remove(id) }
+
+    // ---- Train queue (V1, train-time queue slice 1; the share sheet's For the train, Ask → More → Train queue) ----
+
+    /**
+     * Saves the first web link in shared or pasted [text] for the train; a share's [subject] gives the title when it
+     * has one. No link: refused, nothing written. The same link again is kept once (back in the queue if it was done).
+     */
+    suspend fun addToQueue(text: String, subject: String? = null): os.meka.core.domain.QueueAdded =
+        onCore { trainQueue.add(text, subject) }
+
+    /** Marks a saved link read or listened to ([done] true), or puts it back in the queue (false). */
+    suspend fun queueDone(id: String, done: Boolean): Boolean = onCore { trainQueue.setDone(id, done) }
+
+    /** Takes a saved link off the queue for good (both apps). */
+    suspend fun removeFromQueue(id: String): Boolean = onCore { trainQueue.remove(id) }
 
     // ---- Work wins (V1, slice 1; the Review tab) ----
 
@@ -3130,11 +3153,14 @@ class MekaCore(
             school = schoolToday,
             dinner = mealPlan.tonight(),
             dateNight = os.meka.core.domain.DateNightRules.todayLine(dateNightNow, todayDay, cal.minuteOfDay(nowMs())),
+            // Train-time queue, slice 1: on an office day's commute, what's saved for the train.
+            trainQueue = os.meka.core.domain.QueueRules.trainLine(trainQueue.items(), office, nowMs(), cal),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _emergency.value = emergency.view()
+        _queue.value = trainQueue.view()
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(
             _today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone),
             credit = os.meka.core.domain.CallCreditRules.card(credit, workState.callAssistant),

@@ -129,6 +129,18 @@ struct TodayView: View {
                             .accessibilityLabel(dinner.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Train-time queue, slice 1: on an office day's commute, "For the train · 2 articles · 1 podcast" in the
+                    // accent; clicking it opens the queue. Cross-fades as it changes.
+                    if let queue = model.today?.trainQueue {
+                        Button { model.showTrainQueue = true } label: {
+                            Text(queue.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: queue.text)
+                        .accessibilityLabel(queue.spoken)
+                        .staggeredAppear(0, play: play)
+                    }
                     // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
                     if let night = model.today?.dateNight {
                         Text(night.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)

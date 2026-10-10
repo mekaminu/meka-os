@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -72,6 +73,7 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.QueueRules
 import os.meka.core.domain.QuickCapture
 
 /**
@@ -100,6 +102,8 @@ class CaptureActivity : ComponentActivity() {
                     // First launch only: rotation or unfolding must not re-open the recogniser.
                     listenOnOpen = request.startVoice && savedInstanceState == null,
                     save = { text -> core.capture(text, null) != null },
+                    // Train-time queue, slice 1: a shared link can be saved for the train instead of becoming a task.
+                    saveForTrain = { text, subject -> !core.addToQueue(text, subject).refused },
                     done = { saved -> setResult(if (saved) Activity.RESULT_OK else Activity.RESULT_CANCELED); finish() },
                 )
             }
@@ -114,8 +118,17 @@ class CaptureActivity : ComponentActivity() {
 }
 
 @Composable
-private fun CaptureSheet(request: CaptureRequest, listenOnOpen: Boolean, save: suspend (String) -> Boolean, done: (Boolean) -> Unit) {
+private fun CaptureSheet(
+    request: CaptureRequest,
+    listenOnOpen: Boolean,
+    save: suspend (String) -> Boolean,
+    saveForTrain: suspend (String, String?) -> Boolean,
+    done: (Boolean) -> Unit,
+) {
     val initial = remember(request) { QuickCapture.draft(request.text, request.subject) }
+    // A shared web link offers "For the train" (train-time queue, slice 1).
+    val hasLink = remember(request) { (QueueRules.link(request.text) ?: QueueRules.link(request.subject)) != null }
+    var doneLabel by rememberSaveable { mutableStateOf("Captured") }
     var title by rememberSaveable { mutableStateOf(initial?.title.orEmpty()) }
     val notes = initial?.notes
     var captured by rememberSaveable { mutableStateOf(false) }
@@ -153,6 +166,20 @@ private fun CaptureSheet(request: CaptureRequest, listenOnOpen: Boolean, save: s
         scope.launch {
             if (save(CaptureRequests.compose(title, notes))) {
                 keyboard?.hide()
+                captured = true
+                haptics.light()
+                delay(if (reduced) 250 else 520)
+                leave(true)
+            }
+        }
+    }
+
+    fun forTheTrain() {
+        if (captured) return
+        scope.launch {
+            if (saveForTrain(request.text, request.subject)) {
+                keyboard?.hide()
+                doneLabel = "Saved for the train"
                 captured = true
                 haptics.light()
                 delay(if (reduced) 250 else 520)
@@ -205,7 +232,7 @@ private fun CaptureSheet(request: CaptureRequest, listenOnOpen: Boolean, save: s
                             Text("✓", color = Meka.colors.background, style = MekaType.itemMeta)
                         }
                         Spacer(Modifier.width(MekaSpace.xs))
-                        Text("Captured", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+                        Text(doneLabel, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
                     }
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -234,6 +261,15 @@ private fun CaptureSheet(request: CaptureRequest, listenOnOpen: Boolean, save: s
                             RoundButton("🎙", "Speak", Meka.colors.surfaceRaised, Meka.colors.textPrimary) { startListening() }
                             Spacer(Modifier.width(MekaSpace.xs))
                             RoundButton("↑", "Add", if (title.isBlank()) Meka.colors.hairline else Meka.colors.accent, Meka.colors.onAccent) { add() }
+                        }
+                        if (hasLink) {
+                            Text(
+                                "🚆 " + QueueRules.ACTION, style = MekaType.itemMeta, color = Meka.colors.accent,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                                    .clickable(role = Role.Button) { forTheTrain() }
+                                    .semantics { contentDescription = "Save for the train instead" }
+                                    .padding(vertical = MekaSpace.xs),
+                            )
                         }
                         if (notes != null) {
                             Text("Kept in notes: $notes", style = MekaType.caption, color = Meka.colors.textSecondary,

@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import os.meka.android.ask.TrainQueuePane
 import os.meka.android.designsystem.minTouch
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
@@ -200,6 +201,8 @@ fun TodayRoute(
     /** The brief was opened by dismissing the wake alarm, so it reads itself aloud (Weather and a voice, slice 8). */
     var briefReadAloud by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
+    /** The train queue over Today, from the "For the train" line on the commute (train-time queue, slice 1). */
+    var showQueue by rememberSaveable { mutableStateOf(false) }
     // News over Today from the command centre (news ticker, slice 2): "" = the place, an id = that story; null = closed.
     var newsOpen by rememberSaveable { mutableStateOf<String?>(null) }
     var newsShown by remember { mutableStateOf<String?>(null) }
@@ -352,6 +355,7 @@ fun TodayRoute(
                     key(openings) { TodayPane(today, sync, actions, m, connect, openPlan, !introPlayed, rowMotion,
                         ringPlay = ringPlay, ringPlayed = { ringPlay = DayRingPlay.STILL },
                         openDayRing = { showDayRing = true },
+                        openQueue = { showQueue = true },
                         listsNeedsYou = CommandCentreRules.todayListsNeedsYou(layout),
                         shutdown = shutdown, openShutdown = { showShutdown = true }, shutdownOpen = showShutdown,
                         openSearch = { showSearch = true },
@@ -417,6 +421,7 @@ fun TodayRoute(
                     key(start) { NewsPane(core, onClose = { newsOpen = null }, backLabel = "‹ Today", startStoryId = start.ifEmpty { null }) }
                 }
             }
+            MekaPane(visible = showQueue) { TrainQueuePane(core, onClose = { showQueue = false }, closeLabel = "‹ Today") }
             MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
             MekaPane(visible = showSearch) {
                 SearchPane(core, onClose = { showSearch = false }, openItem = { item -> showSearch = false; openItem(item) })
@@ -601,6 +606,8 @@ private fun TodayPane(
     ringPlayed: () -> Unit = {},
     /** Tapping the watch face opens the full 24-hour Day ring. */
     openDayRing: () -> Unit = {},
+    /** Tapping "For the train" opens the train queue. */
+    openQueue: () -> Unit = {},
     /** The capture bar's mic (Talk): Ask, already listening. Null: no mic. */
     onTalk: (() -> Unit)? = null,
     /** The screen's undo bar: a habit ticked on the watch face says which one, with Undo. */
@@ -715,6 +722,17 @@ private fun TodayPane(
                             Text(l.text, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
+                    // Train-time queue, slice 1: on an office day's commute, "For the train · 2 articles · 1 podcast" in the
+                    // accent; tapping it springs the queue up over Today. Cross-fades as it changes.
+                    today.trainQueue?.let { queue ->
+                        Crossfade(queue, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "train-queue-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.m))
+                                    .clickable(role = Role.Button) { openQueue() }
+                                    .semantics { contentDescription = l.spoken })
                         }
                     }
                     // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.

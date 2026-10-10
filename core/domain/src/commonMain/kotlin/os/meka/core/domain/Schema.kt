@@ -62,6 +62,8 @@ object EntityTypes {
     const val MEAL_DAY = "meal_day"
     /** One line of the emergency card Jeanette sees read-only (see [EmergencyCard]). */
     const val EMERGENCY_ENTRY = "emergency_entry"
+    /** One link saved for the train (see [TrainQueue]). */
+    const val QUEUE_ITEM = "queue_item"
     /** One line of the work wins log (see [WorkWins]). */
     const val WIN = "win"
 
@@ -70,7 +72,7 @@ object EntityTypes {
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
-        EMERGENCY_ENTRY, WIN,
+        EMERGENCY_ENTRY, WIN, QUEUE_ITEM,
     )
 }
 
@@ -305,6 +307,9 @@ object MekaSchema : SchemaRegistry {
         // The emergency card: a line removed on any device is gone for good; its details, the latest edit wins.
         entityType == EntityTypes.EMERGENCY_ENTRY && field == EmergencyFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.EMERGENCY_ENTRY -> MergePolicy.Lww
+        // The train queue: a link removed on any device is gone for good; done/back and the rest, the latest edit wins.
+        entityType == EntityTypes.QUEUE_ITEM && field == QueueFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.QUEUE_ITEM -> MergePolicy.Lww
         // Work wins: a win removed on any device is gone for good; its text, the latest edit wins.
         entityType == EntityTypes.WIN && field == WinFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.WIN -> MergePolicy.Lww

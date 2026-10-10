@@ -48,6 +48,11 @@ final class CoreModel {
     private(set) var emergency: EmergencyView?
     /// Ask → More → Emergency card.
     var showEmergency = false
+    /// The train queue (V1, train-time queue slice 1): links and podcasts saved for the commute, waiting and done
+    /// lately (Ask → More → Train queue). Synced with the Fold, where the share sheet saves them.
+    private(set) var queue: QueueView?
+    /// Ask → More → Train queue (also Today's "For the train" line).
+    var showTrainQueue = false
     /// Work wins (V1, slice 1): the reviewed week's wins and this quarter's, shown in Review. Synced with the Fold.
     private(set) var wins: WinsView?
     /// The line after a skip or keep ("Skipped Fri 23 Oct · the evening is free to plan"), until the sheet closes.
@@ -261,6 +266,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await e in core.emergencyView { self?.emergency = e }
+        })
+        observers.append(Task { [weak self] in
+            for await q in core.queueView { self?.queue = q }
         })
         observers.append(Task { [weak self] in
             for await w in core.winsView { self?.wins = w }
@@ -1857,6 +1865,36 @@ final class CoreModel {
     }
 
     func removeEmergency(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeEmergency(id: id) } }
+
+    // MARK: Train queue (train-time queue, slice 1)
+
+    /// What saving a pasted link said: the line to show and whether it was turned away (no link in it).
+    struct QueueSaid: Equatable {
+        let line: String
+        let refused: Bool
+    }
+
+    /// Saves the first web link in pasted words for the train; only Strings cross. No link: nothing is written.
+    func addToQueue(_ text: String) async -> QueueSaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            let r = try await core.addToQueue(text: t, subject: nil)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return QueueSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Done when read or listened to (`done` true), or Back into the queue.
+    func queueDone(_ id: String, done: Bool) {
+        if done { MekaHaptics.light() } else { MekaHaptics.tick() }
+        run { _ = try await $0.queueDone(id: id, done: done) }
+    }
+
+    func removeFromQueue(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeFromQueue(id: id) } }
 
     // MARK: Work wins (slice 1)
 
