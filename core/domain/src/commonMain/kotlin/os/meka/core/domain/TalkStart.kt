@@ -326,14 +326,19 @@ object TalkAnywhereRules {
 
     /**
      * The Mac's whole Talk sheet in order: On the Mac (its line following the shortcut), From any app, When I open
-     * MEKA, Safety. The words are shared with the Fold's pane through [TalkStartRules] and [TalkOnOpenRules].
+     * MEKA, Talk over MEKA ([talkOver], [BargeInRules.section]), Safety. The words are shared with the Fold's pane
+     * through [TalkStartRules], [TalkOnOpenRules] and [BargeInRules].
      */
-    fun macSetup(anywhere: Boolean, taken: Boolean, listenOnOpen: Boolean): TalkSetupView {
+    fun macSetup(anywhere: Boolean, taken: Boolean, listenOnOpen: Boolean, talkOver: Boolean): TalkSetupView {
         val base = TalkStartRules.setup(mac = true)
         val onTheMac = base.sections.first().copy(status = onTheMacLine(anywhere, taken))
         return base.copy(
-            sections = listOf(onTheMac, section(anywhere, taken), TalkOnOpenRules.section(listenOnOpen, mac = true)) +
-                base.sections.drop(1),
+            sections = listOf(
+                onTheMac,
+                section(anywhere, taken),
+                TalkOnOpenRules.section(listenOnOpen, mac = true),
+                BargeInRules.section(talkOver, mac = true),
+            ) + base.sections.drop(1),
         )
     }
 }

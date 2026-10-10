@@ -403,10 +403,10 @@ private fun TalkPanel(talk: TalkController, onOrb: () -> Unit) {
             talk.phase, talk.level,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                 .clickable(enabled = talk.active, role = Role.Button, onClick = onOrb)
-                .semantics { contentDescription = "MEKA, ${TalkOrb.label(talk.phase)}" },
+                .semantics { contentDescription = "MEKA, ${TalkOrb.label(talk.phase, mac = false, talkOver = talk.talkOver)}" },
         )
         AnimatedContent(
-            targetState = talk.problem?.line ?: TalkOrb.label(talk.phase),
+            targetState = talk.problem?.line ?: TalkOrb.label(talk.phase, mac = false, talkOver = talk.talkOver),
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "talk-line",
         ) { line ->

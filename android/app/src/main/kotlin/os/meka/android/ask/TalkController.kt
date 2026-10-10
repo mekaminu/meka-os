@@ -16,6 +16,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.core.domain.AskCard
 import os.meka.core.domain.AskOutcome
+import os.meka.core.domain.BargeInOutput
+import os.meka.core.domain.BargeInRules
+import os.meka.core.domain.BargeInState
 import os.meka.core.domain.TalkDid
 import os.meka.core.domain.TalkEffect
 import os.meka.core.domain.TalkFlow
@@ -36,8 +39,10 @@ import os.meka.core.facade.MekaCore
  * MEKA's own words are sent, never what Meka said), piece by piece, and falls back to `TextToSpeech` with the best
  * installed British voice that speaks on the device ([TalkVoice.best]; never a network voice) when MEKA's voice is off,
  * used up for the month, offline or slow. Every change still goes through `MekaCore.doTalk` exactly as tapping a card
- * would, and its undo bar rises. Tapping the orb while MEKA speaks stops it and listens (barge-in by touch: the phone's
- * recogniser can't listen over its own speaker without hearing MEKA); tapping it otherwise ends the conversation.
+ * would, and its undo bar rises. Tapping the orb while MEKA speaks stops it and listens; tapping it otherwise ends the
+ * conversation. With "Talk over MEKA" on (the default, [BargeInRules]) talking over MEKA does the same: while a line is
+ * being said [TalkBargeIn] reads only the microphone's level (no recogniser, nothing kept) and the core decides when
+ * Meka's voice has clearly risen over MEKA's own; it is closed before the recogniser listens.
  *
  * Everything here runs on the main thread (the recogniser requires it); the speech engine's callbacks are posted back.
  */
@@ -61,6 +66,9 @@ class TalkController(
     /** What MEKA last said aloud. */
     var said by mutableStateOf("")
         private set
+    /** "Talk over MEKA" is on for this conversation (read from the phone's setting at each start; the orb's line). */
+    var talkOver by mutableStateOf(BargeInRules.DEFAULT_ON)
+        private set
     /** Why MEKA couldn't listen, shown under the orb until the next start. */
     var problem by mutableStateOf<TalkProblem?>(null)
         private set
@@ -74,6 +82,10 @@ class TalkController(
     private val speaker = MekaSpeaker(context, core, scope)
     /** Bumped by every line and every stop, so a line that was cut short doesn't move the conversation on. */
     private var utterance = 0
+    /** "Talk over MEKA": the microphone's level while MEKA speaks, and the core's detector over it. */
+    private val bargeIn = TalkBargeIn(context, ::overheard)
+    private var bargeState: BargeInState = BargeInRules.start()
+    private var bargeOutput = BargeInOutput.SPEAKER
 
     val active: Boolean get() = phase != TalkPhase.ENDED
 
@@ -85,6 +97,7 @@ class TalkController(
         speechBegan = false
         heard = ""
         said = ""
+        talkOver = TalkAutoListen.talkOver(context)
         speaker.prepare()
         scope.launch { core.warmVoice() } // MEKA's common lines in its voice, fetched once
         apply(TalkFlow.start())
@@ -153,6 +166,7 @@ class TalkController(
         stop()
         recognizer?.destroy()
         recognizer = null
+        bargeIn.stop()
         speaker.release()
     }
 
@@ -286,6 +300,7 @@ class TalkController(
     private fun say(text: String) {
         val id = ++utterance
         speaker.say(text) { finishedSaying(id) }
+        listenOver()
     }
 
     /**
@@ -300,6 +315,7 @@ class TalkController(
         said = playlist.steps.filterIsInstance<os.meka.core.domain.PlayStep.Say>().firstOrNull()?.text.orEmpty()
         val id = ++utterance
         speaker.playlist(playlist.steps, { core.voiceMessageAudio(it) }) { finishedSaying(id) }
+        listenOver()
     }
 
     /**
@@ -312,17 +328,38 @@ class TalkController(
         said = os.meka.core.domain.ReadOutRules.showing(read)
         val id = ++utterance
         speaker.say(text, reading = true) { finishedSaying(id) }
+        listenOver()
     }
 
     /** Stops whatever is being said, in either voice. */
     private fun stopSaying() {
         utterance++
+        bargeIn.stop()
         speaker.stop()
     }
 
     /** The line [id] finished (or couldn't be said): listen again, unless it was cut short since. */
     private fun finishedSaying(id: Int) {
         if (id != utterance || phase != TalkPhase.SPEAKING) return
+        bargeIn.stop() // let go of the microphone before the recogniser takes it
         apply(TalkFlow.spoke(session))
+    }
+
+    // ---- Talking over MEKA (voice barge-in) ----
+
+    /** A line has started: with "Talk over MEKA" on, watch the microphone's level while it is said. */
+    private fun listenOver() {
+        if (!talkOver) return
+        bargeState = BargeInRules.start()
+        bargeOutput = TalkBargeIn.output(context)
+        bargeIn.start()
+    }
+
+    /** One frame's level while MEKA speaks: the core decides whether Meka is talking over it. */
+    private fun overheard(db: Float) {
+        if (phase != TalkPhase.SPEAKING) return
+        val step = BargeInRules.step(bargeState, db, speaker.audible, bargeOutput, android.os.SystemClock.elapsedRealtime())
+        bargeState = step.state
+        if (step.interrupt) apply(TalkFlow.bargeIn(session)) // stops MEKA, lets go of the microphone, listens
     }
 }

@@ -13,6 +13,9 @@ import SwiftUI
 /// off (kept on this Mac; turning it on asks for the microphone and speech recognition if not yet decided, since an
 /// open never asks).
 ///
+/// "Talk over MEKA" (voice barge-in, on by default): `BargeInRules.section(mac: true)` after it, with Turn on / Turn off
+/// (kept on this Mac; `MacTalkOver`, read when a conversation starts).
+///
 /// Motion: the sheet scale-fades (system); sections stagger in; Turn on / Turn off presses in with a tick haptic and
 /// the status line blends to the accent while on (`themeBlend`, the words cross-fade). Reduce Motion: cross-fades.
 struct TalkSheet: View {
@@ -22,11 +25,14 @@ struct TalkSheet: View {
     @AppStorage(MacTalkOnOpen.key) private var listenOnOpen = false
     /// "From any app" (`TalkAnywhereRules.DEFAULT_ON`: on until switched off).
     @AppStorage(GlobalTalkHotKey.key) private var anywhere = true
+    /// "Talk over MEKA" (`BargeInRules.DEFAULT_ON`: on until switched off).
+    @AppStorage(MacTalkOver.key) private var talkOver = true
     private let hotKey = GlobalTalkHotKey.shared
 
     var body: some View {
-        // The core's Mac sheet: On the Mac, From any app, When I open MEKA, Safety.
-        let view = TalkAnywhereRules.shared.macSetup(anywhere: anywhere, taken: hotKey.taken, listenOnOpen: listenOnOpen)
+        // The core's Mac sheet: On the Mac, From any app, When I open MEKA, Talk over MEKA, Safety.
+        let view = TalkAnywhereRules.shared.macSetup(anywhere: anywhere, taken: hotKey.taken, listenOnOpen: listenOnOpen,
+                                                       talkOver: talkOver)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(view.title).font(MekaType.upNextTitle).staggeredAppear(0)
             Text(view.intro).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
@@ -49,6 +55,8 @@ struct TalkSheet: View {
                         switchButton(action, "listen when I open MEKA") { toggleListenOnOpen() }
                     } else if let action = s.action, s.label == TalkAnywhereRules.shared.LABEL {
                         switchButton(action, "⌥Space from any app") { toggleAnywhere() }
+                    } else if let action = s.action, s.label == BargeInRules.shared.LABEL {
+                        switchButton(action, "talk over MEKA to interrupt") { toggleTalkOver() }
                     }
                 }
                 .padding(.top, MekaSpace.m)
@@ -81,6 +89,11 @@ struct TalkSheet: View {
         MekaHaptics.tick()
         withAnimation(MekaMotion.themeBlend(reduced: reduceMotion)) { anywhere.toggle() }
         hotKey.apply()
+    }
+
+    private func toggleTalkOver() {
+        MekaHaptics.tick()
+        withAnimation(MekaMotion.themeBlend(reduced: reduceMotion)) { talkOver.toggle() }
     }
 
     private func toggleListenOnOpen() {

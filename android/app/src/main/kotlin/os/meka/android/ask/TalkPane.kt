@@ -50,6 +50,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
+import os.meka.core.domain.BargeInRules
 import os.meka.core.domain.TalkOnOpenRules
 import os.meka.core.domain.TalkSetupSection
 import os.meka.core.domain.TalkStartRules
@@ -60,7 +61,8 @@ import os.meka.core.domain.TalkStartRules
  * to the front, so returning from Settings updates it) and the steps to make it so, with "Open default apps"; the
  * headphones and the car (slice 2: opening MEKA with Bluetooth audio or in car mode listens); the Talk widget (slice 2);
  * and the safety line. The words are the core's [TalkStartRules]. Slice 4: "When I open MEKA" ([TalkOnOpenRules.section],
- * kept on this phone, off by default) with Turn on / Turn off; turning it on asks for the microphone if needed.
+ * kept on this phone, off by default) with Turn on / Turn off; turning it on asks for the microphone if needed. "Talk
+ * over MEKA" ([BargeInRules.section], kept on this phone, on by default) after it, with Turn on / Turn off.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; sections stagger in 40 ms apart; the side
  * button's status line blends to the accent once MEKA is the assistant; Open default apps presses in with a tick haptic.
@@ -83,9 +85,14 @@ fun TalkPane(onClose: () -> Unit) {
         TalkAutoListen.setListenOnOpen(context, on)
         listenOnOpen = on
     }
+    var talkOver by remember { mutableStateOf(TalkAutoListen.talkOver(context)) }
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok -> if (ok) setListen(true) }
     // "When I open MEKA" sits after the side button (the other way to start without the mic).
-    val sections = view.sections.toMutableList().apply { add(minOf(1, size), TalkOnOpenRules.section(listenOnOpen)) }
+    // "Talk over MEKA" follows it (what happens once MEKA is talking).
+    val sections = view.sections.toMutableList().apply {
+        add(minOf(1, size), TalkOnOpenRules.section(listenOnOpen))
+        add(minOf(2, size), BargeInRules.section(talkOver))
+    }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
@@ -100,6 +107,10 @@ fun TalkPane(onClose: () -> Unit) {
             TalkSection(s, Modifier.appear(rememberAppearance(i + 1))) {
                 haptics.tick()
                 when {
+                    s.label == BargeInRules.LABEL -> {
+                        talkOver = !talkOver
+                        TalkAutoListen.setTalkOver(context, talkOver)
+                    }
                     s.label != TalkOnOpenRules.LABEL -> openDefaultApps(context)
                     listenOnOpen -> setListen(false)
                     TalkAutoListen.micAllowed(context) -> setListen(true)

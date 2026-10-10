@@ -500,13 +500,16 @@ object TalkOrb {
     fun label(phase: TalkPhase): String = label(phase, mac = false)
 
     /** The same, worded for the Mac when [mac] ("Click to interrupt"). */
-    fun label(phase: TalkPhase, mac: Boolean): String {
+    fun label(phase: TalkPhase, mac: Boolean): String = label(phase, mac, talkOver = false)
+
+    /** The same, with "Talk over MEKA" on ([talkOver]): "Talk or tap to interrupt" while MEKA speaks ([BargeInRules]). */
+    fun label(phase: TalkPhase, mac: Boolean, talkOver: Boolean): String {
         val press = if (mac) "Click" else "Tap"
         return when (phase) {
             TalkPhase.LISTENING -> "Listening…"
             TalkPhase.THINKING -> "Thinking…"
             TalkPhase.DOING -> "Doing it…"
-            TalkPhase.SPEAKING -> "$press to interrupt"
+            TalkPhase.SPEAKING -> if (talkOver) "Talk or ${press.lowercase()} to interrupt" else "$press to interrupt"
             TalkPhase.ENDED -> "$press the mic to talk"
         }
     }

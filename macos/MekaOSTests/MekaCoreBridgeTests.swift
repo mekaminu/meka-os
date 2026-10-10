@@ -663,8 +663,8 @@ final class MekaCoreBridgeTests: XCTestCase {
     /// ⌥Space from any app: the Talk sheet's order, the switch's words and the taken line reach Swift.
     func testTalkAnywhereReachesSwift() {
         XCTAssertTrue(TalkAnywhereRules.shared.DEFAULT_ON)
-        let v = TalkAnywhereRules.shared.macSetup(anywhere: true, taken: false, listenOnOpen: false)
-        XCTAssertEqual(v.sections.map(\.label), ["On the Mac", "From any app", "When I open MEKA", "Safety"])
+        let v = TalkAnywhereRules.shared.macSetup(anywhere: true, taken: false, listenOnOpen: false, talkOver: true)
+        XCTAssertEqual(v.sections.map(\.label), ["On the Mac", "From any app", "When I open MEKA", "Talk over MEKA", "Safety"])
         XCTAssertTrue(v.sections[0].status.contains("in any app"))
         XCTAssertEqual(v.sections[1].action, "Turn off")
         XCTAssertTrue(v.sections[1].lit)
@@ -672,6 +672,26 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(taken.lit)
         XCTAssertTrue(taken.status.contains("Another app"))
         XCTAssertEqual(TalkAnywhereRules.shared.section(on: false, taken: false).action, "Turn on")
+    }
+
+    /// Talking over MEKA: the detector, the orb's line and the sheet's switch reach Swift.
+    func testTalkOverMekaReachesSwift() {
+        XCTAssertTrue(BargeInRules.shared.DEFAULT_ON)
+        XCTAssertEqual(TalkOrb.shared.label(phase: .speaking, mac: true, talkOver: true), "Talk or click to interrupt")
+        XCTAssertEqual(TalkOrb.shared.label(phase: .speaking, mac: true, talkOver: false), "Click to interrupt")
+        // MEKA's echo at -25 dBFS for a second, then Meka at -8 dBFS: MEKA stops once it has kept up.
+        var s = BargeInRules.shared.start()
+        var stoppedAt: Int64?
+        for i in 0..<100 {
+            let now = Int64(i * 20)
+            let step = BargeInRules.shared.step(s: s, levelDbfs: i < 50 ? -25 : -8, playing: true, output: .speaker, nowMs: now)
+            s = step.state
+            if step.interrupt { stoppedAt = now; break }
+        }
+        XCTAssertEqual(stoppedAt, 1_000 + BargeInRules.shared.SPEAKER.sustainMs)
+        let section = BargeInRules.shared.section(on: false, mac: true)
+        XCTAssertEqual(section.label, "Talk over MEKA")
+        XCTAssertEqual(section.action, "Turn on")
     }
 
     /// "Listen when I open MEKA" on the Mac: the sheet's section, the open and Dock rules and the room check reach Swift.

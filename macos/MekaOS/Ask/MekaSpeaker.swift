@@ -213,6 +213,10 @@ final class MekaSpeaker {
         }
     }
 
+    /// MEKA's audio is coming out right now (a clip playing or the Mac's voice speaking), not merely waiting for a
+    /// clip: "Talk over MEKA" only learns and listens while it is (`BargeInRules`).
+    var audible: Bool { (player?.isPlaying ?? false) || synthesizer.isSpeaking }
+
     /// Stops whatever is being said, in either voice.
     func stop() {
         line += 1

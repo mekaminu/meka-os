@@ -68,6 +68,17 @@ object TalkAutoListen {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_LISTEN_ON_OPEN, on).apply()
     }
 
+    // ---- "Talk over MEKA" (voice barge-in): kept on this phone, on by default (BargeInRules.DEFAULT_ON) ----
+
+    private const val KEY_TALK_OVER = "talk_over"
+
+    fun talkOver(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_TALK_OVER, os.meka.core.domain.BargeInRules.DEFAULT_ON)
+
+    fun setTalkOver(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_TALK_OVER, on).apply()
+    }
+
     fun micAllowed(context: Context): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 

@@ -233,14 +233,16 @@ class TalkOnOpenTest {
         assertTrue(off.status.startsWith("Off"))
         assertEquals(1, off.steps.size)
 
-        val sheet = TalkAnywhereRules.macSetup(anywhere = true, taken = false, listenOnOpen = false)
-        assertEquals(listOf("On the Mac", "From any app", "When I open MEKA", "Safety"), sheet.sections.map { it.label })
+        val sheet = TalkAnywhereRules.macSetup(anywhere = true, taken = false, listenOnOpen = false, talkOver = true)
+        assertEquals(listOf("On the Mac", "From any app", "When I open MEKA", "Talk over MEKA", "Safety"), sheet.sections.map { it.label })
         assertTrue("in any app" in sheet.sections[0].status)
         assertEquals(TalkStartRules.setup(mac = true).title, sheet.title)
-        assertTrue(sheet.sections[3].status.contains("Undo"))
+        assertTrue(sheet.sections[3].lit)
+        assertTrue(sheet.sections[4].status.contains("Undo"))
         // Off or refused by macOS: "On the Mac" says it works while MEKA is in front, as before.
-        assertTrue("in front" in TalkAnywhereRules.macSetup(anywhere = false, taken = false, listenOnOpen = true).sections[0].status)
-        assertTrue("in front" in TalkAnywhereRules.macSetup(anywhere = true, taken = true, listenOnOpen = false).sections[0].status)
-        assertTrue(TalkAnywhereRules.macSetup(anywhere = false, taken = false, listenOnOpen = true).sections[2].lit)
+        assertTrue("in front" in TalkAnywhereRules.macSetup(anywhere = false, taken = false, listenOnOpen = true, talkOver = false).sections[0].status)
+        assertTrue("in front" in TalkAnywhereRules.macSetup(anywhere = true, taken = true, listenOnOpen = false, talkOver = false).sections[0].status)
+        assertTrue(TalkAnywhereRules.macSetup(anywhere = false, taken = false, listenOnOpen = true, talkOver = false).sections[2].lit)
+        assertFalse(TalkAnywhereRules.macSetup(anywhere = false, taken = false, listenOnOpen = true, talkOver = false).sections[3].lit)
     }
 }

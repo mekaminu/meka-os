@@ -15,7 +15,10 @@ import Speech
 /// (Amazon Polly through MEKA's own server, `MekaCore.speechClip`: only MEKA's own words are sent), piece by piece,
 /// and falls back to `AVSpeechSynthesizer` with the best installed English voice (the one chosen in the voice picker, else
 /// `TalkVoice.best`: British first, premium, then enhanced; at the Mac's speed and pitch) when MEKA's voice is off, used up for the month, offline or slow. Every change still goes through `MekaCore.doTalk` exactly as clicking a card would, with one undo bar.
-/// Clicking the orb while MEKA speaks stops it and listens (barge-in by click, as on the Fold); otherwise it ends.
+/// Clicking the orb while MEKA speaks stops it and listens (as on the Fold); otherwise it ends. With "Talk over MEKA" on
+/// (the default, `BargeInRules`; `MacTalkOver`) talking over MEKA does the same: while a line is said a second engine
+/// reads only the microphone's level (the loudest buffer since the last look, every 40 ms; no recogniser, nothing kept)
+/// and the core decides when Meka's voice has clearly risen over MEKA's own. It is stopped before the recogniser listens.
 ///
 /// Main actor throughout. The microphone tap runs on the audio thread and touches only the recognition request and a
 /// lock holding the level; recogniser and speech callbacks hop back with plain values (Strings, Bools, Ints). Kotlin
@@ -32,6 +35,8 @@ final class TalkController {
     private(set) var said = ""
     /// Why MEKA couldn't listen, shown under the orb until the next start.
     private(set) var problem: TalkProblem?
+    /// "Talk over MEKA" is on for this conversation (read from the Mac's setting at each start; the orb's line).
+    private(set) var talkOver = true
 
     var active: Bool { phase != .ended }
 
@@ -70,6 +75,12 @@ final class TalkController {
     private let speaker = MekaSpeaker()
     /// Bumped by every line and every stop, so a line that was cut short doesn't move the conversation on.
     @ObservationIgnored private var utterance = 0
+    /// "Talk over MEKA": the microphone's level while MEKA speaks (its own engine) and the core's detector over it.
+    @ObservationIgnored private var overEngine: AVAudioEngine?
+    @ObservationIgnored private var overClock: Task<Void, Never>?
+    @ObservationIgnored private var bargeState = BargeInRules.shared.start()
+    private let overMeter = OSAllocatedUnfairLock<Float>(initialState: -160)
+    private static let overTickMs = 40
 
     func attach(_ model: CoreModel) {
         self.model = model
@@ -83,6 +94,7 @@ final class TalkController {
         problem = nil
         heard = ""
         said = ""
+        talkOver = MacTalkOver.enabled
         let gen = generation
         Task {
             guard await Self.allowed() else {
@@ -419,6 +431,7 @@ final class TalkController {
         utterance += 1
         let id = utterance
         speaker.say(text) { [weak self] in self?.finishedSaying(id) }
+        listenOver()
     }
 
     /// "Play my messages" (call assistant polish 8c): each voice message introduced in MEKA's voice, then the caller's
@@ -429,6 +442,7 @@ final class TalkController {
         utterance += 1
         let id = utterance
         speaker.playlist(steps) { [weak self] in self?.finishedSaying(id) }
+        listenOver()
     }
 
     /// "Read my brief", "the headlines", "Barça news": the words from the brief and the News place this Mac shows, said
@@ -440,19 +454,93 @@ final class TalkController {
         utterance += 1
         let id = utterance
         speaker.say(text, reading: true) { [weak self] in self?.finishedSaying(id) }
+        listenOver()
     }
 
     /// Stops whatever is being said, in either voice.
     private func stopSaying() {
         utterance += 1
+        stopListeningOver()
         speaker.stop()
     }
 
     /// The line `id` finished: listen again, unless it was cut short since.
     private func finishedSaying(_ id: Int) {
         guard id == utterance, phase == .speaking else { return }
+        stopListeningOver() // let go of the microphone before the recogniser takes it
         apply(TalkFlow.shared.spoke(s: session))
     }
+
+    // MARK: Talking over MEKA (voice barge-in)
+
+    /// A line has started: with "Talk over MEKA" on, watch the microphone's level while it is said.
+    private func listenOver() {
+        guard talkOver else { return }
+        stopListeningOver()
+        let engine = AVAudioEngine()
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else { return }
+        overMeter.withLock { $0 = -160 }
+        Self.tapLevel(input, format: format, meter: overMeter)
+        engine.prepare()
+        do { try engine.start() } catch {
+            input.removeTap(onBus: 0)
+            return // only a click interrupts this line
+        }
+        overEngine = engine
+        bargeState = BargeInRules.shared.start()
+        let gen = generation
+        let line = utterance
+        overClock = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(Self.overTickMs))
+                guard let self, gen == self.generation, line == self.utterance, self.phase == .speaking else { return }
+                self.overheard()
+            }
+        }
+    }
+
+    /// Every 40 ms while MEKA speaks: the loudest buffer since the last look goes to the core's detector.
+    private func overheard() {
+        let db = overMeter.withLock { (v: inout Float) -> Float in
+            let loudest = v
+            v = -160
+            return loudest
+        }
+        let step = BargeInRules.shared.step(s: bargeState, levelDbfs: db, playing: speaker.audible, output: .speaker,
+                                            nowMs: Int64(ProcessInfo.processInfo.systemUptime * 1000))
+        bargeState = step.state
+        if step.interrupt { apply(TalkFlow.shared.bargeIn(s: session)) } // stops MEKA, lets go of the mic, listens
+    }
+
+    private func stopListeningOver() {
+        overClock?.cancel()
+        overClock = nil
+        if let overEngine {
+            overEngine.stop()
+            overEngine.inputNode.removeTap(onBus: 0)
+        }
+        overEngine = nil
+    }
+
+    /// The level tap: only each buffer's loudness is kept (the loudest since the last look). Nonisolated: the audio
+    /// thread runs it.
+    nonisolated private static func tapLevel(_ input: AVAudioInputNode, format: AVAudioFormat,
+                                              meter: OSAllocatedUnfairLock<Float>) {
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+            let db = Self.dbfs(buffer)
+            meter.withLock { $0 = max($0, db) }
+        }
+    }
+}
+
+/// "Talk over MEKA" on the Mac (voice barge-in): on by default (`BargeInRules.DEFAULT_ON`) and kept on this Mac
+/// (UserDefaults, never synced), switched in Ask → More → Talk.
+enum MacTalkOver {
+    static let key = "meka.talk.talkOver"
+
+    static var enabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 }
 
 /// The room check's running sums (Sendable, so the audio thread's tap can add to them under a lock).

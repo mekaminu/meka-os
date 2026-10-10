@@ -237,6 +237,14 @@ class MekaSpeaker(
         }
     }
 
+    /**
+     * MEKA's audio is coming out right now (a clip playing or the phone's voice speaking), not merely waiting for a
+     * clip: "Talk over MEKA" only learns and listens while it is ([os.meka.core.domain.BargeInRules]).
+     */
+    val audible: Boolean
+        get() = runCatching { player?.isPlaying == true }.getOrDefault(false) ||
+            runCatching { tts?.isSpeaking == true }.getOrDefault(false)
+
     /** Stops whatever is being said, in either voice. */
     fun stop() {
         line++
