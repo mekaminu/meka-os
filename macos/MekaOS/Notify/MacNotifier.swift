@@ -25,6 +25,9 @@ enum MacNotifier {
     @discardableResult
     static func post(_ result: GovernorResult) async -> [String] {
         let center = UNUserNotificationCenter.current()
+        // What no longer applies comes down first (an approval answered on either device, or run out). Plain Strings.
+        let withdraw: [String] = result.withdraw
+        if !withdraw.isEmpty { center.removeDeliveredNotifications(withIdentifiers: withdraw) }
         guard await allowed() else { return [] }
         var posted: [String] = []
         for notice in result.post {
@@ -41,7 +44,8 @@ enum MacNotifier {
                 await ensureCategory(category, buttons: buttons)
                 content.categoryIdentifier = category
             }
-            if (try? await center.add(UNNotificationRequest(identifier: notice.key, content: content, trigger: nil))) != nil {
+            // Posted at its postId: an approval's "expires soon" replaces its first notice. Counted by its key.
+            if (try? await center.add(UNNotificationRequest(identifier: notice.postId, content: content, trigger: nil))) != nil {
                 posted.append(notice.key)
             }
         }

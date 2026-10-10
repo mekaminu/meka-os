@@ -3657,6 +3657,7 @@ class MekaCore(
             dateNight = dateNight.setting(),
             wins = wins.all(),
             leave = leave.items(), leaveWork = hoursOf(_workMode.value, todayEpochDay()),
+            approvals = os.meka.core.domain.ApprovalRules.pending(approvalStore.all(), nowMs()),
         )
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */

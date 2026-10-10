@@ -57,6 +57,8 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
 
     suspend fun run() = mutex.withLock {
         val r = app.core.governNotifications(prefs.getString(KEY_STATE, null), _device.value)
+        // What no longer applies comes down (an approval answered on either device, or run out).
+        r.withdraw.forEach { NotificationManagerCompat.from(context).cancel(NotifyRouting.notificationId(it)) }
         if (WorkAlerts.canPost(context)) {
             val posted = r.post.filter { post(it) }
             val digest = r.digest?.takeIf { postDigest(it) }
@@ -109,7 +111,7 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
             .setPublicVersion(public) // titles stay off the lock screen
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(if (n.tier == NoticeTier.HEADS_UP) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(openIntent(n.target, NotifyRouting.notificationId(n.key)))
+            .setContentIntent(openIntent(n.target, NotifyRouting.notificationId(n.postId)))
             .setAutoCancel(true)
         if (n.text.isNotBlank()) b.setContentText(n.text)
         // Buttons answered from the shade ("Did you go?": Went · Didn't go); the core checks each still applies.
@@ -124,7 +126,8 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
         }
         val live = context.getSystemService(NotificationManager::class.java)
             ?.getNotificationChannel(channel)?.importance != NotificationManager.IMPORTANCE_NONE
-        return notify(NotifyRouting.notificationId(n.key), b.build()) && live
+        // Posted at its postId, so an approval's "expires soon" replaces its first notice rather than adding a second.
+        return notify(NotifyRouting.notificationId(n.postId), b.build()) && live
     }
 
     /**

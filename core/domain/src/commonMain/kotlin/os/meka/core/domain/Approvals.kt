@@ -225,6 +225,51 @@ object ApprovalRules {
         return ApprovalDecision.Write(fields, approve, (if (approve) "Approved · " else "Declined · ") + a.title)
     }
 
+    // ---- Notices (slice 2): a heads-up when a request arrives, Critical in its last 15 minutes ----
+
+    /** Every approval notice's key starts with this; both of a request's notices post at [noticeSlot]. */
+    const val NOTICE_PREFIX = "approval:"
+
+    /** Where [key]'s notification is posted: "approval:<id>" for both "approval:<id>" and "approval:<id>:ending". */
+    fun noticeSlot(key: String): String = NOTICE_PREFIX + key.removePrefix(NOTICE_PREFIX).substringBefore(':')
+
+    /**
+     * The notices for the requests waiting ([pending]): a Needs a decision notice when one arrives ("Trade · Kestrel" ·
+     * "Buy 0.05 BTC at market · answer by 22:30", the day named when it isn't the day asked), standing until its last [URGENT_MS], then a Critical one in the same
+     * place ("Trade · Kestrel · expires 22:30"), which posts even in quiet hours. A request asked within its last 15
+     * minutes has only the Critical one. Tapping opens Needs you; no button approves from the notification (the
+     * fingerprint is asked in the app). An answered or expired request has none, so the platform takes it down.
+     */
+    fun notices(pending: List<Approval>, cal: LocalCalendar): List<Notice> = pending.flatMap { a ->
+        val slot = NOTICE_PREFIX + a.id
+        val heading = "${a.kind.label} · ${a.source}"
+        val urgentFrom = a.expiresAtMs - URGENT_MS
+        val ending = Notice(
+            key = "$slot:ending", source = NoticeSource.APPROVAL, tier = NoticeTier.CRITICAL,
+            title = "$heading · expires ${clock(a.expiresAtMs, maxOf(urgentFrom, a.askedAtMs), cal)}", text = a.title,
+            atMs = maxOf(urgentFrom, a.askedAtMs), target = NoticeTarget.NEEDS_YOU, expiresAtMs = a.expiresAtMs,
+            postAs = slot,
+        )
+        if (urgentFrom <= a.askedAtMs) listOf(ending) else listOf(
+            Notice(
+                key = slot, source = NoticeSource.APPROVAL, tier = NoticeTier.ACTION,
+                title = heading, text = "${a.title} · answer by ${clock(a.expiresAtMs, a.askedAtMs, cal)}",
+                atMs = a.askedAtMs, target = NoticeTarget.NEEDS_YOU, expiresAtMs = urgentFrom, postAs = slot,
+            ),
+            ending,
+        )
+    }
+
+    /**
+     * "22:30" on the day of [fromMs], else "Mon 12 Oct 09:30". Never "tomorrow" or "in 14 min": a notice held through
+     * quiet hours posts later than it was made, so its words mustn't depend on when it is read.
+     */
+    private fun clock(ms: Long, fromMs: Long, cal: LocalCalendar): String {
+        val day = cal.epochDayOf(ms)
+        val time = LocalClock.formatMinute(cal.minuteOfDay(ms))
+        return if (day == cal.epochDayOf(fromMs)) time else "${CivilDate.shortLabel(day)} $time"
+    }
+
     // ---- Activity (ActivityKind.APPROVAL): one entry per request, whichever device answered ----
 
     fun activityId(approvalId: String): String = "p" + ActivityRules.fnv64("approval:$approvalId")

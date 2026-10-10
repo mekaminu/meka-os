@@ -1581,6 +1581,24 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(ApprovalRules.shared.LOCK_MAC, "Approving needs Touch ID")
     }
 
+    func testApprovalNoticesReachSwift() async throws {
+        // Approvals inbox, slice 2: both of a request's notices post in one place (so the Critical one replaces the
+        // first), the governor's result says what to take down, and the Notifications sheet doesn't list approvals.
+        XCTAssertEqual(ApprovalRules.shared.noticeSlot(key: "approval:ab12:ending"), "approval:ab12")
+        let labels = (0..<Int(NotifyRules.shared.sourceCount)).map {
+            NotifyRules.shared.sourceLabel(s: NotifyRules.shared.sourceAt(index: Int32($0)))
+        }
+        XCTAssertFalse(labels.contains("Approvals (trades, payments, documents)"))
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "approval-notices-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let result = try await core.governNotifications(state: nil, device: .all)
+        let withdraw: [String] = result.withdraw
+        XCTAssertTrue(withdraw.isEmpty)
+    }
+
     func testProtectedTimeReachesSwift() {
         // Protected time, slice 1: the sheet's chips and lines come from the core's rules (only two Bools and an Int
         // cross from the sheet).

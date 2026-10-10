@@ -139,6 +139,8 @@ class MekaApplication : Application() {
                 core.eventMarks.map { }, core.calendarView.map { },
                 // A request card read from a watched person's message (digest item, or a heads-up straight away).
                 core.requests.map { it.map { c -> c.id } }.distinctUntilChanged().map { },
+                // An approval asked or answered (on either device): its notice posts, or comes down.
+                core.approvals.map { it.map { c -> c.id } }.distinctUntilChanged().map { },
             ).debounce(GOVERNOR_SETTLE_MS).collect { runCatching { governor.run() } }
         }
         // Ongoing notifications follow Today and the fast, but only re-post when what they show changes (Today moves

@@ -161,7 +161,7 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
 
         Spacer(Modifier.height(MekaSpace.m))
         Label("What goes where", 4)
-        NoticeSource.entries.forEach { source ->
+        NoticeSource.ADJUSTABLE.forEach { source -> // approvals always reach you (ADR-006), so they aren't listed
             val choices = NoticeSource.CHOICES.filter { it.ordinal >= source.defaultTier.ordinal }
             val current = settings.tierFor(source)
             Column(Modifier.appear(rememberAppearance(4)).padding(vertical = MekaSpace.xxs)) {

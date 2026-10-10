@@ -4,6 +4,10 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.ActivityKind
 import os.meka.core.domain.ApprovalKind
+import os.meka.core.domain.DeviceAlerts
+import os.meka.core.domain.NoticeSource
+import os.meka.core.domain.NoticeTarget
+import os.meka.core.domain.NoticeTier
 import os.meka.core.domain.ApprovalRefusal
 import os.meka.core.domain.ApprovalRules
 import os.meka.core.domain.EntityTypes
@@ -91,6 +95,30 @@ class ApprovalsFacadeTest {
         assertEquals("Declined · Sell 0.05 BTC", fold.declineApproval(a).line)
         now += 6 * 60_000L
         assertEquals(ApprovalRefusal.EXPIRED.line, fold.approve(b, confirmedWithBiometric = true).line)
+    }
+
+    /** Slice 2: a server-written request is a Needs a decision notice on each device; answered on one, both take it down. */
+    @Test
+    fun aRequestNotifiesBothDevicesAndAnAnswerTakesTheNotificationDown() = runTest {
+        now = 1_791_745_200_000L // Sun 11 Oct 2026, 20:00 in London (before quiet hours)
+        val fold = core("android")
+        val mac = core("mac")
+        val id = serverAsks("sig-4", "Buy 0.05 BTC at market", now + 60 * 60_000L)
+        fold.syncNow(); mac.syncNow()
+        val foldPost = fold.governNotifications(null, DeviceAlerts.ALL)
+        val macPost = mac.governNotifications(null, DeviceAlerts.ALL)
+        for (r in listOf(foldPost, macPost)) {
+            val n = r.post.single { it.source == NoticeSource.APPROVAL }
+            assertEquals(NoticeTier.ACTION, n.tier)
+            assertEquals("Trade · Kestrel", n.title)
+            assertEquals("Buy 0.05 BTC at market · answer by 21:00", n.text)
+            assertEquals(NoticeTarget.NEEDS_YOU, n.target)
+            assertEquals("approval:$id", n.postId)
+        }
+        assertTrue(fold.approve(id, confirmedWithBiometric = true).done)
+        fold.syncNow(); mac.syncNow()
+        assertEquals(listOf("approval:$id"), fold.governNotifications(foldPost.stateEncoded, DeviceAlerts.ALL).withdraw)
+        assertEquals(listOf("approval:$id"), mac.governNotifications(macPost.stateEncoded, DeviceAlerts.ALL).withdraw)
     }
 
     /** The inbox's fingerprint rule is the policy engine's: every kind's action needs biometric approval at any setting. */

@@ -95,11 +95,23 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * A request card from someone Meka watches (V1, requests): summed in the next digest, or a heads-up straight away
      * for the people he marked "Notify straight away" ([NotificationSettings.requestNow]).
      */
-    REQUEST("Requests from people you watch", NoticeTier.DIGEST);
+    REQUEST("Requests from people you watch", NoticeTier.DIGEST),
+    /**
+     * The approvals inbox, slice 2 ([ApprovalRules.notices]): a request to trade, pay or share a document is a Needs a
+     * decision notice when it arrives (held in quiet hours) and Critical in its last 15 minutes, posted in the same
+     * place so it replaces the first. Never an Approve button on the notification: tapping opens Needs you, where the
+     * fingerprint is asked. Not adjustable ([adjustable]): ADR-006 keeps these in front of Meka.
+     */
+    APPROVAL("Approvals (trades, payments, documents)", NoticeTier.ACTION);
+
+    /** Whether the settings screens offer a lower tier for it (approvals: never). */
+    val adjustable: Boolean get() = this != APPROVAL
 
     companion object {
         /** The tiers a source can be set to in the settings screen. */
         val CHOICES = listOf(NoticeTier.HEADS_UP, NoticeTier.DIGEST, NoticeTier.SILENT)
+        /** The sources the settings screens list, in order. */
+        val ADJUSTABLE: List<NoticeSource> get() = entries.filter { it.adjustable }
     }
 }
 
@@ -118,7 +130,15 @@ data class Notice(
     val precision: NoticePrecision = NoticePrecision.SOFT,
     /** Buttons on the posted notification, in order; none for most. */
     val actions: List<NoticeAction> = emptyList(),
-)
+    /**
+     * Where it is posted, when that isn't its own [key]: notices sharing one replace each other on screen (an
+     * approval's "expires soon" replaces its first notice). See [postId].
+     */
+    val postAs: String? = null,
+) {
+    /** The platform notification's identity: [postAs], else [key]. */
+    val postId: String get() = postAs ?: key
+}
 
 /** Quiet hours as local minutes of the day; an end at or before the start crosses midnight. */
 data class QuietHours(val enabled: Boolean, val startMinute: Int, val endMinute: Int) {
@@ -220,8 +240,8 @@ data class NotificationSettings(
                 val (k, v) = pair.split('=').takeIf { it.size == 2 } ?: return@mapNotNull null
                 val source = NoticeSource.entries.firstOrNull { it.name == k } ?: return@mapNotNull null
                 val tier = NoticeTier.entries.firstOrNull { it.name == v } ?: return@mapNotNull null
-                // Only lowering is allowed; a raised tier from anywhere is ignored.
-                if (tier.ordinal < source.defaultTier.ordinal) null else source to tier
+                // Only lowering is allowed; a raised tier from anywhere is ignored, and so is any tier for approvals.
+                if (tier.ordinal < source.defaultTier.ordinal || !source.adjustable) null else source to tier
             }.toMap()
         }
     }
@@ -272,6 +292,11 @@ data class GovernorResult(
     /** When to look again (an inexact alarm); null when nothing is coming. */
     val nextWakeMs: Long?,
     val nextWakePrecision: NoticePrecision,
+    /**
+     * Take these notifications down (their [Notice.postId]s): what was posted here and no longer applies, such as an
+     * approval answered on either device or run out ([Governor.withdrawable]). Cancelling one that isn't showing is fine.
+     */
+    val withdraw: List<String> = emptyList(),
 ) {
     /** For Swift: the state to store. */
     val stateEncoded: String get() = state.encode()
@@ -346,7 +371,13 @@ object Governor {
         }
 
         val postedKeys = post.map { it.key } + ridesInDigest.map { it.key } + (if (digest != null) headsNow.map { it.key } else emptyList())
-        val delivered = (state.delivered + postedKeys.associateWith { nowMs }).filterValues { nowMs - it < KEEP_MS }
+        // Posted notices that must come down once they no longer apply (an answered or expired approval): withdrawn
+        // once, then forgotten (their keys never come back).
+        val current = notices.map { it.key }.toSet()
+        val gone = state.delivered.keys.filter { withdrawable(it) && it !in current }
+        val stillShown = notices.map { it.postId }.toSet()
+        val withdraw = gone.map(::withdrawSlot).distinct().filter { it !in stillShown }
+        val delivered = (state.delivered - gone.toSet() + postedKeys.associateWith { nowMs }).filterValues { nowMs - it < KEEP_MS }
         val newState = GovernorState(delivered, if (slot != null) maxOf(slot, state.lastDigestSlotMs) else state.lastDigestSlotMs)
 
         // Next look: the next digest, the end of quiet hours, or the next notice that would post on its own.
@@ -358,8 +389,14 @@ object Governor {
                 .forEach { wakes += it.atMs to it.precision }
         }
         val next = wakes.minByOrNull { it.first }
-        return GovernorResult(post, digest, newState, next?.first, next?.second ?: NoticePrecision.SOFT)
+        return GovernorResult(post, digest, newState, next?.first, next?.second ?: NoticePrecision.SOFT, withdraw)
     }
+
+    /** Keys whose notification comes down once the notice stops being produced: approvals (they can't come back). */
+    fun withdrawable(key: String): Boolean = key.startsWith(ApprovalRules.NOTICE_PREFIX)
+
+    /** Where a withdrawable key was posted: an approval's notices share "approval:<id>". */
+    internal fun withdrawSlot(key: String): String = ApprovalRules.noticeSlot(key)
 
     /** What the settings screens show. */
     fun preview(notices: List<Notice>, settings: NotificationSettings, nowMs: Long, cal: LocalCalendar): NotificationPreview {
@@ -383,6 +420,7 @@ object Governor {
     }
 
     fun effectiveTier(n: Notice, settings: NotificationSettings): NoticeTier {
+        if (!n.source.adjustable) return n.tier
         val chosen = settings.tiers[n.source] ?: return n.tier
         // A notice can be lowered by the owner's choice, never raised by it.
         return if (chosen.ordinal > n.tier.ordinal) chosen else n.tier
@@ -444,6 +482,7 @@ object Governor {
         NoticeSource.WEATHER -> "rain on " + plural(n, "plan")
         NoticeSource.TRAINS -> if (n == 1) "a line on your route" else "$n lines on your route"
         NoticeSource.REQUEST -> plural(n, "request")
+        NoticeSource.APPROVAL -> plural(n, "approval")
     }
 }
 
@@ -489,6 +528,8 @@ object NoticeSources {
         /** Annual leave: the booked stretches and the schedule with the bank holidays ([LeaveRules.notices]). */
         leave: List<LeaveItem> = emptyList(),
         leaveWork: WorkHours? = null,
+        /** The approvals waiting for Meka ([ApprovalRules.pending]), for their notices. */
+        approvals: List<Approval> = emptyList(),
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -603,6 +644,8 @@ object NoticeSources {
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.
         out += requestNotices(requests, settings)
+        // The approvals inbox: Needs a decision when a request arrives, Critical in its last 15 minutes.
+        out += ApprovalRules.notices(approvals, cal)
         return out
     }
 
@@ -677,6 +720,7 @@ class NotificationPrefs(private val replica: Replica) {
     /** Moves a source to [tier]; its default tier clears the override. Only lowering is possible. */
     fun setTier(source: NoticeSource, tier: NoticeTier) {
         require(tier.ordinal >= source.defaultTier.ordinal) { "a source can only be lowered" }
+        if (!source.adjustable) return
         val tiers = settings().tiers.toMutableMap()
         if (tier == source.defaultTier) tiers.remove(source) else tiers[source] = tier
         val encoded = NotificationSettings.encodeTiers(tiers)
@@ -693,8 +737,9 @@ class NotificationPrefs(private val replica: Replica) {
 object NotifyRules {
     const val MIDDAY = NotificationSettings.MIDDAY
     const val EVENING = NotificationSettings.EVENING
-    val sourceCount: Int get() = NoticeSource.entries.size
-    fun sourceAt(index: Int): NoticeSource = NoticeSource.entries[index]
+    /** The sources the settings sheet lists (approvals aren't adjustable, so they aren't listed). */
+    val sourceCount: Int get() = NoticeSource.ADJUSTABLE.size
+    fun sourceAt(index: Int): NoticeSource = NoticeSource.ADJUSTABLE[index]
     fun sourceLabel(s: NoticeSource): String = s.label
     /** The tiers [s] can be set to: its default and anything lower. */
     fun tierChoices(s: NoticeSource): List<NoticeTier> = NoticeSource.CHOICES.filter { it.ordinal >= s.defaultTier.ordinal }
