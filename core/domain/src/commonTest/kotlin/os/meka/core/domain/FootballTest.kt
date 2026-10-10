@@ -211,4 +211,28 @@ class FootballTest {
         // A fixture with no travel time remembers nothing.
         assertFalse(eaFold.rememberVenue(event(id = "e")))
     }
+
+    @Test
+    fun runningLateIsDraftedAroundKickOffForMekaToSendHimself() {
+        val e = event(start = at(thu + 2, 10))
+        // Too early: nothing, nor on an event that isn't a club fixture.
+        assertTrue(FootballRules.lateDrafts(e, at(thu + 2, 7, 59), cal).isEmpty())
+        assertTrue(FootballRules.lateDrafts(event(title = "Dentist"), at(thu + 2, 9, 30), cal).isEmpty())
+        // From two hours before kick-off: by kick-off plus the minutes.
+        val before = FootballRules.lateDrafts(e, at(thu + 2, 8), cal)
+        assertEquals(listOf(5, 10, 15, 20), before.map { it.minutes })
+        assertEquals("10 min", before[1].label)
+        assertEquals("Hi, sorry, running about 10 min late for BUFC U9s v Arlesey. Should be there by 10:10.", before[1].text)
+        // After kick-off: now plus the minutes, rounded up to five.
+        val after = FootballRules.lateDrafts(e, at(thu + 2, 10, 7), cal)
+        assertEquals("Hi, sorry, running about 5 min late for BUFC U9s v Arlesey. Should be there by 10:15.", after[0].text)
+        // Half an hour after kick-off it's gone.
+        assertTrue(FootballRules.lateDrafts(e, at(thu + 2, 10, 31), cal).isEmpty())
+        // The detail carries them.
+        assertEquals(4, EventDetails.build(e, at(thu + 2, 9), cal, eaFold.marks()).lateDrafts.size)
+        assertTrue(EventDetails.build(e, at(thu, 12), cal, eaFold.marks()).lateDrafts.isEmpty())
+        // A long title is cut at a word.
+        val long = FootballRules.lateDrafts(event(title = "BUFC U9s v Arlesey Town Youth in the county cup quarter final replay"), at(thu + 2, 9), cal)
+        assertTrue(long[0].text.contains("for BUFC U9s v Arlesey Town Youth in the county cup quarter…. Should"), long[0].text)
+    }
 }

@@ -99,6 +99,24 @@ struct EventDetailSheet: View {
             .staggeredAppear(1)
         }
 
+        // Weekend football, slice 3: "Running late?" around kick-off. Each choice opens the share menu with the drafted
+        // message; Meka picks where it goes and sends it himself (MEKA never sends it). Only Strings cross from the core.
+        if !d.provisional && !d.lateDrafts.isEmpty {
+            let drafts = d.lateDrafts.map { LateDraftRow(label: $0.label, text: $0.text) }
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text(FootballRules.shared.LATE_TITLE.uppercased()).font(MekaType.sectionLabel)
+                    .foregroundStyle(palette.textTertiary)
+                HStack(spacing: MekaSpace.s) {
+                    ForEach(drafts) { draft in
+                        ShareLink(item: draft.text) { Text(draft.label) }
+                    }
+                }
+                .controlSize(.small)
+                Text(FootballRules.shared.LATE_CAPTION).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
+            .staggeredAppear(1)
+        }
+
         if let note = d.edit {
             HStack(spacing: MekaSpace.s) {
                 Text(note.text).font(MekaType.caption)
@@ -310,4 +328,11 @@ struct ClashChooserView: View {
         .padding(MekaSpace.m)
         .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).stroke(palette.hairline, lineWidth: 1))
     }
+}
+
+/// One "running late" choice as plain Strings ("10 min" and the message), so no Kotlin object is kept by the view.
+private struct LateDraftRow: Identifiable {
+    let label: String
+    let text: String
+    var id: String { label }
 }

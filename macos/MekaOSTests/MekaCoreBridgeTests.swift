@@ -1125,6 +1125,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(EventMarks.companion.NONE.venues.count, 0)
     }
 
+    func testLateDraftsReachSwift() {
+        // Weekend football, slice 3: the "running late" wording and choices reach the Mac.
+        XCTAssertEqual(FootballRules.shared.LATE_TITLE, "Running late?")
+        XCTAssertEqual(FootballRules.shared.LATE_MINUTES.count, 4)
+        XCTAssertEqual(FootballRules.shared.LATE_CAPTION, "Drafts a message; you pick the chat and send it")
+    }
+
     func testShoppingFromAskReachesSwift() async throws {
         // "Add milk to shopping" in Ask and Talk: the card, its undo and Search's Shopping kind reach the Mac.
         let card = AskRules.shared.cardOf(p: AskProposalAddShopping(items: ["milk", "eggs"]), today: 0)

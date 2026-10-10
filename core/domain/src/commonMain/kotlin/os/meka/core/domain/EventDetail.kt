@@ -70,6 +70,11 @@ data class EventDetailView(
      */
     val leaveOfferLabel: String? = null,
     val leaveOfferMin: Int = 0,
+    /**
+     * Weekend football, slice 3: "running late" drafts (5 · 10 · 15 · 20 min) on a club fixture from two hours before
+     * kick-off until half an hour after; empty otherwise. Meka sends one himself from the share sheet.
+     */
+    val lateDrafts: List<LateDraft> = emptyList(),
 )
 
 /**
@@ -211,6 +216,7 @@ object EventDetails {
             kitLine = FootballRules.line(marks.kitTasks[e.id], nowMs, calendar),
             leaveOfferLabel = offer?.label,
             leaveOfferMin = offer?.travelMin ?: 0,
+            lateDrafts = FootballRules.lateDrafts(e, nowMs, calendar),
         )
     }
 

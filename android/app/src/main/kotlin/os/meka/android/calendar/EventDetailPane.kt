@@ -194,6 +194,18 @@ private fun DetailContent(
             // Calendar editing: changes the real event (after five seconds' Undo); not while an edit is on its way.
             if (d.editable && undo != null && d.edit?.waiting != true) ActionChip("Edit") { onEdit() }
         }
+        // Weekend football, slice 3: "Running late?" around kick-off; a tap drafts the message and opens the share sheet,
+        // where Meka picks the chat and sends it himself (MEKA never sends it).
+        val lateNow = if (d.provisional) emptyList() else d.lateDrafts
+        val lateShown = remember { mutableStateOf(lateNow) }
+        if (lateNow.isNotEmpty()) lateShown.value = lateNow
+        androidx.compose.animation.AnimatedVisibility(
+            visible = lateNow.isNotEmpty(),
+            enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)),
+            exit = fadeOut(MekaMotion.appear(Meka.reducedMotion)),
+        ) {
+            LateDrafts(lateShown.value, onPick = { haptics.light() })
+        }
         val reducedNote = Meka.reducedMotion
         d.edit?.let { note ->
             Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.l).appear(rememberAppearance(1))) {
@@ -465,6 +477,41 @@ private fun ActionChip(label: String, onTap: () -> Unit) {
             .clickable(role = Role.Button) { onTap() }
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun LateDrafts(drafts: List<os.meka.core.domain.LateDraft>, onPick: () -> Unit) {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.l).appear(rememberAppearance(1))) {
+        Text(
+            os.meka.core.domain.FootballRules.LATE_TITLE.uppercase(), style = MekaType.sectionLabel,
+            color = Meka.colors.textTertiary, modifier = Modifier.padding(bottom = MekaSpace.xxs),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            drafts.forEach { draft -> ActionChip(draft.label) { onPick(); shareLateDraft(context, draft) } }
+        }
+        Text(
+            os.meka.core.domain.FootballRules.LATE_CAPTION, style = MekaType.caption,
+            color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs),
+        )
+    }
+}
+
+/**
+ * The share sheet with the "running late" message (weekend football, slice 3): Meka picks the coach's chat and sends it
+ * there himself. MEKA itself is left out of the targets (it would file the message as a task).
+ */
+fun shareLateDraft(context: android.content.Context, draft: os.meka.core.domain.LateDraft) {
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, draft.text)
+    }
+    val chooser = Intent.createChooser(send, "Running ${draft.label} late").apply {
+        putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(android.content.ComponentName(context, os.meka.android.capture.CaptureActivity::class.java)))
+        if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { context.startActivity(chooser) }
 }
 
 @Composable

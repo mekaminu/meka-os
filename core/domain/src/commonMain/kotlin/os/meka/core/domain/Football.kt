@@ -22,6 +22,13 @@ data class VenueTravel(val place: String, val travelMin: Int, val rings: Boolean
  */
 data class LeaveOffer(val travelMin: Int, val rings: Boolean, val label: String, val line: String)
 
+/**
+ * Weekend football, slice 3: a "running late" message Meka can send the coach ([text]), [minutes] late ([label]:
+ * "10 min"). MEKA only drafts it: it goes to the phone's share sheet (the Mac's share menu), where Meka picks the chat
+ * and sends it himself (Level 3, never sent by MEKA).
+ */
+data class LateDraft(val minutes: Int, val label: String, val text: String)
+
 /** A kit task just made: its id (Undo deletes it) and the undo bar's line ("Kit reminder tomorrow 19:00"). */
 data class KitAdded(val taskId: String, val line: String)
 
@@ -96,6 +103,50 @@ object FootballRules {
     }
 
     const val AS_LAST_TIME = "as last time"
+
+    // ---- Slice 3: "running late" drafts ----
+
+    /** How late Meka can say he'll be. */
+    val LATE_MINUTES = listOf(5, 10, 15, 20)
+    /** Offered from 2 hours before kick-off… */
+    const val LATE_FROM_MIN = 120
+    /** …until 30 minutes after it. */
+    const val LATE_UNTIL_MIN = 30
+    const val LATE_TITLE = "Running late?"
+    const val LATE_CAPTION = "Drafts a message; you pick the chat and send it"
+    private const val MAX_LATE_TITLE = 60
+
+    /**
+     * The "running late" drafts on a club fixture's detail, one per [LATE_MINUTES], from [LATE_FROM_MIN] before
+     * kick-off until [LATE_UNTIL_MIN] after it (an all-day tournament: from 09:00 on its first day); empty otherwise.
+     * "Hi, sorry, running about 10 min late for BUFC U9s v Arlesey. Should be there by 09:40." — by kick-off plus the
+     * minutes, or once kick-off has gone, now plus the minutes rounded up to five. Nothing is sent: Meka sends it.
+     */
+    fun lateDrafts(e: CalendarEvent, nowMs: Long, cal: LocalCalendar): List<LateDraft> {
+        if (!isClubFixture(e)) return emptyList()
+        val kickOff = kickOffMs(e, cal)
+        if (nowMs < kickOff - LATE_FROM_MIN * 60_000L || nowMs > kickOff + LATE_UNTIL_MIN * 60_000L) return emptyList()
+        val what = lateTitle(e)
+        return LATE_MINUTES.map { m ->
+            val by = if (nowMs <= kickOff) kickOff + m * 60_000L else roundUpTo5(nowMs + m * 60_000L)
+            val time = LocalClock.formatMinute(cal.minuteOfDay(by))
+            LateDraft(m, "$m min", "Hi, sorry, running about $m min late for $what. Should be there by $time.")
+        }
+    }
+
+    /** The fixture as the message names it: its title cut at a word to [MAX_LATE_TITLE], or the club. */
+    private fun lateTitle(e: CalendarEvent): String {
+        val t = e.title.trim().replace(Regex("\\s+"), " ").ifEmpty { return club(e) ?: "football" }
+        if (t.length <= MAX_LATE_TITLE) return t
+        val head = t.take(MAX_LATE_TITLE - 1)
+        val space = head.lastIndexOf(' ')
+        return (if (space > MAX_LATE_TITLE / 2) head.take(space) else head).trimEnd() + "…"
+    }
+
+    private fun roundUpTo5(ms: Long): Long {
+        val step = 5 * 60_000L
+        return (ms + step - 1).floorDiv(step) * step
+    }
 
     /** The kit task's id for an event: the same on every device. */
     fun kitTaskId(eventId: String) = "k$eventId"
