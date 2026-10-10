@@ -1380,6 +1380,25 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NoticeSource.wins.defaultTier, NoticeTier.headsUp)
     }
 
+    func testAnnualLeaveReachesSwift() {
+        // Annual leave planner, slice 1: a typed stretch is read by the core's rules (leave already taken needs its
+        // year), the words and the empty view reach the Mac (only Strings and Ints cross from the sheet).
+        let rules = LeaveRules.shared
+        let sat = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 10)
+        let jan1 = CivilDate.shared.toEpochDay(year: 2026, month: 1, day: 1)
+        let e = rules.read(text: "Spain 18 Dec – 4 Jan", today: sat, earliest: jan1)
+        XCTAssertEqual(e?.title, "Spain")
+        XCTAssertEqual(e?.startDay, CivilDate.shared.toEpochDay(year: 2026, month: 12, day: 18))
+        XCTAssertEqual(rules.read(text: "27–30 Oct", today: sat, earliest: jan1)?.title, rules.TITLE)
+        XCTAssertNil(rules.read(text: "whenever", today: sat, earliest: jan1))
+        XCTAssertEqual(rules.daysWord(n: 1), "1 day")
+        XCTAssertEqual(rules.allowanceLine(s: LeaveSettings(allowance: 27, yearStartMonth: 4)), "27 days a year · the leave year starts 1 Apr")
+        let empty = LeaveView.companion.EMPTY
+        XCTAssertEqual(empty.summary, rules.EMPTY_LINE)
+        XCTAssertTrue(empty.holidays.isEmpty)
+        XCTAssertEqual(empty.allowance, Int32(rules.DEFAULT_ALLOWANCE))
+    }
+
     func testTrainQueueReachesSwift() {
         // Train-time queue, slice 1: a pasted link is found and tidied by the core's rules, podcasts are told from
         // articles, and the queue's view reaches the Mac (only Strings cross from the sheet).

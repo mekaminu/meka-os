@@ -414,8 +414,14 @@ data class WorkHours(
     val offDay: Long? = null,
     /** Days Meka works from home (Add on a request card): the work band reads "Work from home". */
     val homeDays: Set<Long> = emptySet(),
+    /**
+     * Booked annual leave ([Leave], V1): days off like a bank holiday — no work band, not an office day — while
+     * [holidays] stays the bank holidays alone (the school's days still follow those).
+     */
+    val leaveDays: Set<Long> = emptySet(),
 ) {
-    fun isWorkDay(epochDay: Long): Boolean = epochDay != offDay && WorkModeRules.isWorkDay(schedule, holidays, epochDay)
+    fun isWorkDay(epochDay: Long): Boolean =
+        epochDay != offDay && epochDay !in leaveDays && WorkModeRules.isWorkDay(schedule, holidays, epochDay)
 
     /** "Work from home" on a home day, else "Work". */
     fun title(epochDay: Long): String = if (epochDay in homeDays) HOME_TITLE else TITLE
@@ -450,8 +456,13 @@ data class WorkHours(
          * From the work-mode state: an active manual "Work off" during today's shift takes today's block away;
          * [homeDays] read "Work from home".
          */
-        fun of(state: WorkModeState, holidays: HolidayCalendar, todayEpochDay: Long, homeDays: Set<Long> = emptySet()): WorkHours =
-            WorkHours(state.schedule, holidays, offDay = todayEpochDay.takeIf { state.switchedManually && !state.atWork }, homeDays = homeDays)
+        fun of(
+            state: WorkModeState, holidays: HolidayCalendar, todayEpochDay: Long, homeDays: Set<Long> = emptySet(),
+            leaveDays: Set<Long> = emptySet(),
+        ): WorkHours = WorkHours(
+            state.schedule, holidays, offDay = todayEpochDay.takeIf { state.switchedManually && !state.atWork },
+            homeDays = homeDays, leaveDays = leaveDays,
+        )
 
         /** [WorkFields.HOME_DAYS] read: unreadable entries skipped. */
         fun decodeHomeDays(s: String?): Set<Long> =
@@ -466,8 +477,16 @@ class WorkMode(
     private val replica: Replica,
     /** The mirrored bank holidays ([BankHolidayStore]); none until the server has sent them. */
     private val holidays: () -> HolidayCalendar = { HolidayCalendar.NONE },
+    /** Booked annual leave ([Leave.days]): days off for work mode, like a bank holiday ("Off work · Annual leave"). */
+    private val leave: () -> Set<Long> = { emptySet() },
     private val nowMs: () -> Long,
 ) {
+    /** The bank holidays with booked leave laid over, for deciding whether Meka is at work. */
+    private fun workHolidays(): HolidayCalendar = LeaveRules.withLeave(holidays(), leaveDays())
+
+    /** Booked annual leave days. */
+    fun leaveDays(): Set<Long> = leave()
+
     /** The stored schedule; the default when never set (or stored as the old default, before per-day hours). */
     fun schedule(): WorkSchedule {
         val stored = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SCHEDULE)?.textOrNull
@@ -479,10 +498,11 @@ class WorkMode(
 
     /** [epochDay] is today's local date; with it, bank holidays are days off. */
     fun state(clock: LocalClock, epochDay: Long? = null): WorkModeState =
-        WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, holidays()).copy(callAssistant = callAssistant(), recordingDays = recordingDays())
+        WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, workHolidays()).copy(callAssistant = callAssistant(), recordingDays = recordingDays())
 
     /** Work hours for Today and the Calendar tab, with today's manual "Work off" (a sick day) taken into account. */
-    fun hours(clock: LocalClock, epochDay: Long): WorkHours = WorkHours.of(state(clock, epochDay), holidays(), epochDay, homeDays(epochDay))
+    fun hours(clock: LocalClock, epochDay: Long): WorkHours =
+        WorkHours.of(state(clock, epochDay), holidays(), epochDay, homeDays(epochDay), leaveDays())
 
     private fun storedHomeDays(): Set<Long> =
         WorkHours.decodeHomeDays(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.HOME_DAYS)?.textOrNull)
@@ -533,7 +553,7 @@ class WorkMode(
     /** The Work switch. Choosing what the schedule already says just returns to the schedule. */
     fun setSwitch(on: Boolean, clock: LocalClock, epochDay: Long? = null) {
         val scheduled = if (epochDay == null) schedule().isScheduled(clock)
-        else WorkModeRules.scheduledOn(schedule(), holidays(), epochDay, clock.minuteOfDay)
+        else WorkModeRules.scheduledOn(schedule(), workHolidays(), epochDay, clock.minuteOfDay)
         if (on == scheduled) { backToSchedule(); return }
         replica.commitLocal(
             EntityTypes.CONTEXT_MODE, ENTITY_ID,

@@ -45,6 +45,13 @@ enum class SchoolKind(val wire: String) {
     companion object { fun of(wire: String?): SchoolKind? = entries.firstOrNull { it.wire == wire } }
 }
 
+/** A date or range in typed words ([SchoolRules.findSpan]): none, one that can't be right, or the days and the words left. */
+sealed interface SpanFound {
+    object None : SpanFound
+    object Bad : SpanFound
+    data class Days(val startDay: Long, val endDay: Long, val rest: String) : SpanFound
+}
+
 /** What one typed line says ([SchoolRules.read]). */
 data class SchoolEntry(
     val kind: SchoolKind,
@@ -195,31 +202,11 @@ object SchoolRules {
 
         var start: Long? = null
         var end: Long? = null
-        // A range that can't be a day off (gone, back to front, too long) refuses the line rather than reading half of it.
-        val short = shortRange.find(s)
-        if (short != null) {
-            val g = short.groupValues
-            val month = monthOf(g[5]) ?: return null
-            val year = g[6].toIntOrNull()
-            val span = rangeDays(g[2].toInt(), month, year, g[4].toInt(), month, year, today) ?: return null
-            start = span.first; end = span.second
-            s = s.removeRange(short.range)
-        } else fullRange.find(s)?.let { m ->
-            val a = dateParts(m.groupValues.subList(1, 11)) ?: return null
-            val b = dateParts(m.groupValues.subList(11, 21)) ?: return null
-            val span = rangeDays(a.day, a.month, a.year, b.day, b.month, b.year, today) ?: return null
-            start = span.first; end = span.second
-            s = s.removeRange(m.range)
-        }
         var weekday = 0
-        if (start == null) {
-            val m = dateRe.find(s)
-            if (m != null) {
-                val p = dateParts(m.groupValues.subList(1, 11)) ?: return null
-                val d = dayOf(p.day, p.month, p.year, today) ?: return null
-                start = d; end = d
-                s = s.removeRange(m.range)
-            } else {
+        when (val found = findSpan(s, today)) {
+            SpanFound.Bad -> return null
+            is SpanFound.Days -> { start = found.startDay; end = found.endDay; s = found.rest }
+            SpanFound.None -> {
                 val w = weekdayRe.find(s) ?: return null
                 weekday = weekdayOf(w.groupValues[1])
                 if (weekday > 5) return null
@@ -249,7 +236,36 @@ object SchoolRules {
         }
     }
 
-    private fun cleanTitle(rest: String): String {
+    /**
+     * The first date or range in [s] ("27 Oct", "26–30 Oct", "18 Dec – 4 Jan", "27/10/26"), with the words left over.
+     * With no year, the next time it comes round from [today] (a range by its end); a typed year may go back as far as
+     * [earliest] (annual leave already taken this leave year). A range that is back to front, over [MAX_SPAN_DAYS] or
+     * gone is [SpanFound.Bad], so a line is refused rather than half read. Shared with annual leave ([LeaveRules.read]).
+     */
+    fun findSpan(s: String, today: Long, earliest: Long = today): SpanFound {
+        val short = shortRange.find(s)
+        if (short != null) {
+            val g = short.groupValues
+            val month = monthOf(g[5]) ?: return SpanFound.Bad
+            val year = g[6].toIntOrNull()
+            val span = rangeDays(g[2].toInt(), month, year, g[4].toInt(), month, year, today, earliest) ?: return SpanFound.Bad
+            return SpanFound.Days(span.first, span.second, s.removeRange(short.range))
+        }
+        val full = fullRange.find(s)
+        if (full != null) {
+            val a = dateParts(full.groupValues.subList(1, 11)) ?: return SpanFound.Bad
+            val b = dateParts(full.groupValues.subList(11, 21)) ?: return SpanFound.Bad
+            val span = rangeDays(a.day, a.month, a.year, b.day, b.month, b.year, today, earliest) ?: return SpanFound.Bad
+            return SpanFound.Days(span.first, span.second, s.removeRange(full.range))
+        }
+        val m = dateRe.find(s) ?: return SpanFound.None
+        val p = dateParts(m.groupValues.subList(1, 11)) ?: return SpanFound.Bad
+        val d = dayOf(p.day, p.month, p.year, today, earliest) ?: return SpanFound.Bad
+        return SpanFound.Days(d, d, s.removeRange(m.range))
+    }
+
+    /** Words left after the date: connectors trimmed, at most [MAX_TITLE], first letter up. */
+    fun cleanTitle(rest: String): String {
         var t = tidy(rest)
         repeat(3) { t = t.replace(connectorsLead, "").replace(connectorsTail, "").trim() }
         t = tidy(t).take(MAX_TITLE).trim()
@@ -269,10 +285,10 @@ object SchoolRules {
     private fun valid(day: Int, month: Int, year: Int) =
         month in 1..12 && day in 1..CivilDate.lengthOfMonth(year, month)
 
-    /** A single date: with no year, the next time it comes round (today counts). */
-    private fun dayOf(day: Int, month: Int, year: Int?, today: Long): Long? {
+    /** A single date: with no year, the next time it comes round (today counts); a typed year back to [earliest]. */
+    private fun dayOf(day: Int, month: Int, year: Int?, today: Long, earliest: Long = today): Long? {
         val thisYear = CivilDate.fromEpochDay(today).year
-        if (year != null) return if (valid(day, month, year)) CivilDate.toEpochDay(year, month, day).takeIf { it >= today } else null
+        if (year != null) return if (valid(day, month, year)) CivilDate.toEpochDay(year, month, day).takeIf { it >= earliest } else null
         for (y in thisYear..thisYear + 1) {
             if (!valid(day, month, y)) continue
             val d = CivilDate.toEpochDay(y, month, day)
@@ -285,8 +301,8 @@ object SchoolRules {
      * A range: with no years, the next time its end comes round, its start in the same year unless it falls later in
      * the year than the end ("18 Dec – 4 Jan"). At most [MAX_SPAN_DAYS] long and not over yet.
      */
-    private fun rangeDays(d1: Int, m1: Int, y1: Int?, d2: Int, m2: Int, y2: Int?, today: Long): Pair<Long, Long>? {
-        val endDay = dayOf(d2, m2, y2 ?: y1, today) ?: return null
+    private fun rangeDays(d1: Int, m1: Int, y1: Int?, d2: Int, m2: Int, y2: Int?, today: Long, earliest: Long = today): Pair<Long, Long>? {
+        val endDay = dayOf(d2, m2, y2 ?: y1, today, earliest) ?: return null
         val endYear = CivilDate.fromEpochDay(endDay).year
         val startYear = y1 ?: if (m1 > m2 || (m1 == m2 && d1 > d2)) endYear - 1 else endYear
         if (!valid(d1, m1, startYear)) return null

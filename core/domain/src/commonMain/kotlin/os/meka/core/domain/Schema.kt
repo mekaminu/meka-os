@@ -66,13 +66,15 @@ object EntityTypes {
     const val QUEUE_ITEM = "queue_item"
     /** One line of the work wins log (see [WorkWins]). */
     const val WIN = "win"
+    /** One stretch of booked annual leave (see [Leave]). */
+    const val LEAVE = "leave"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
-        EMERGENCY_ENTRY, WIN, QUEUE_ITEM,
+        EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE,
     )
 }
 
@@ -313,6 +315,9 @@ object MekaSchema : SchemaRegistry {
         // Work wins: a win removed on any device is gone for good; its text, the latest edit wins.
         entityType == EntityTypes.WIN && field == WinFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.WIN -> MergePolicy.Lww
+        // Annual leave: a stretch removed on any device is gone for good; its days and name, the latest edit wins.
+        entityType == EntityTypes.LEAVE && field == LeaveFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.LEAVE -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

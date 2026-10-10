@@ -129,7 +129,9 @@ class MekaCore(
     private val tasks = Tasks(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val events = CalendarEvents(replica)
     private val bankHolidays = os.meka.core.domain.BankHolidayStore(replica)
-    private val work = WorkMode(replica, { bankHolidays.calendar() }, nowMs)
+    // Annual leave (V1, slice 1): booked days are days off for work mode, like a bank holiday.
+    private val leave = os.meka.core.domain.Leave(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val work = WorkMode(replica, { bankHolidays.calendar() }, leave = { leave.days() }, nowMs = nowMs)
     private val lists = os.meka.core.domain.Lists(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val renewals = Renewals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shopping = os.meka.core.domain.Shopping(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -366,6 +368,14 @@ class MekaCore(
      * Needs you shows above the requests. Synced, so both apps show the same; an answer on either clears both.
      */
     val schoolView: StateFlow<os.meka.core.domain.SchoolView> = _school.asStateFlow()
+
+    private val _leave = MutableStateFlow(os.meka.core.domain.LeaveView.EMPTY)
+    /**
+     * Annual leave (V1, slice 1; Ask → More → Annual leave): the days booked against the allowance this leave year,
+     * the stretches to come and taken, and the school holidays coming up with how much of each is booked. Synced;
+     * booked days are days off for work mode on both apps.
+     */
+    val leaveView: StateFlow<os.meka.core.domain.LeaveView> = _leave.asStateFlow()
 
     private val _meals = MutableStateFlow(os.meka.core.domain.MealPlanView.EMPTY)
     /**
@@ -1167,7 +1177,7 @@ class MekaCore(
             }
             is os.meka.core.domain.RequestPlan.HomeDay -> {
                 work.setHomeDay(plan.day, true, today)
-                val workDay = os.meka.core.domain.WorkModeRules.isWorkDay(work.schedule(), bankHolidays.calendar(), plan.day)
+                val workDay = os.meka.core.domain.WorkModeRules.isWorkDay(work.schedule(), bankHolidays.calendar(), plan.day) && plan.day !in leave.days()
                 RequestDone(rules.doneLine(plan, card.proposal.kind, today, isWorkDay = workDay), null, null, plan.day)
             }
         }
@@ -1513,7 +1523,7 @@ class MekaCore(
      */
     suspend fun coverSchool(id: String, home: Boolean): os.meka.core.domain.SchoolCoverDone? = onCore {
         val today = todayEpochDay()
-        val hours = os.meka.core.domain.WorkHours.of(work.state(localClock(), today), bankHolidays.calendar(), today, work.homeDays(today))
+        val hours = work.hours(localClock(), today)
         val items = school.items()
         val cover = os.meka.core.domain.SchoolRules.covers(items, today, hours).firstOrNull { it.id == id } ?: return@onCore null
         val title = items.first { it.id == id }.title
@@ -1529,6 +1539,28 @@ class MekaCore(
         done.homeDays.forEach { if (work.setHomeDay(it, false, today)) undone = true }
         undone
     }
+
+    // ---- Annual leave (V1, slice 1; Ask → More → Annual leave) ----
+
+    /** Work hours today without the leave itself, so a stretch's cost is its work days ([os.meka.core.domain.LeaveRules]). */
+    private fun leaveWork(): os.meka.core.domain.WorkHours = work.hours(localClock(), todayEpochDay())
+
+    /**
+     * Books one typed stretch ("27–30 Oct", "Spain 18 Dec – 4 Jan"; leave already taken with its year). Returns the
+     * line to show ("Booked Spain · Fri 18 Dec – Mon 4 Jan · 7 days", or why nothing was written: no work days in it,
+     * already booked), or null when MEKA couldn't read a date (the pane says [os.meka.core.domain.LeaveRules.NOT_READ]).
+     */
+    suspend fun addLeave(text: String): os.meka.core.domain.LeaveAdded? = onCore { leave.add(text, leaveWork()) }
+
+    /** Books a school holiday's work days not booked yet, under its name; null when they all are (or it's gone). */
+    suspend fun bookLeaveForHoliday(schoolId: String): os.meka.core.domain.LeaveAdded? =
+        onCore { leave.bookHoliday(schoolId, school.items(), leaveWork()) }
+
+    /** Takes a stretch off for good (cancelled, or typed by mistake); its days are work days again on both apps. */
+    suspend fun removeLeave(id: String): Boolean = onCore { leave.remove(id) }
+
+    /** The allowance (days a leave year, 1–60) and the month the leave year starts (1–12). */
+    suspend fun setLeaveAllowance(days: Int, yearStartMonth: Int): Boolean = onCore { leave.setSettings(days, yearStartMonth) }
 
     // ---- Goals and habits ----
 
@@ -3191,6 +3223,9 @@ class MekaCore(
         val workState = work.state(localClock(), todayEpochDay())
             .let { it.copy(callAssistantPaused = it.callAssistant && credit?.paused == true) }
         val holidays = bankHolidays.calendar()
+        // Booked leave is a day off for work like a bank holiday (Gym bookings, the shutdown, the brief's work line);
+        // the school's days follow the bank holidays alone.
+        val workHolidays = os.meka.core.domain.LeaveRules.withLeave(holidays, leave.days())
         val cal = ZoneCalendar(timeZone)
         // Sessions first: Today's timeline shows today's booked sessions still to come.
         val sessionHabits = goals.sessionHabits()
@@ -3198,7 +3233,7 @@ class MekaCore(
         val dateNightNow = dateNight.setting()
         _sessions.value = if (sessionHabits.isEmpty()) os.meka.core.domain.SessionsView.EMPTY
         else os.meka.core.domain.SessionRules.book(sessionHabits, todayEpochDay(), nowMs(), cal) { day ->
-            os.meka.core.domain.SessionRules.busyOn(day, dayEvents, workState.schedule, holidays, cal) +
+            os.meka.core.domain.SessionRules.busyOn(day, dayEvents, workState.schedule, workHolidays, cal) +
                 listOfNotNull(os.meka.core.domain.DateNightRules.slot(dateNightNow, day, cal))
         }
         val listsNow = lists.view(all, renewals.view(), shopping.view())
@@ -3212,13 +3247,13 @@ class MekaCore(
         // Places item 2: on an office day, both places on Today's line and the brief, and the ring's rain follows Meka.
         val workForecast = workWeather.forecast()
         val office = os.meka.core.domain.PlacesRules.officeWindow(
-            os.meka.core.domain.WorkHours.of(workState, holidays, todayDay, work.homeDays(todayDay)), todayDay, cal,
+            hoursOf(workState, todayDay), todayDay, cal,
         )
         val placesLine = office?.let { os.meka.core.domain.PlacesRules.placesLine(forecast, workForecast, nowMs(), it, cal) }
         // School rhythm, slice 2: what the school says about today (Today's header, the brief) and tomorrow (the shutdown).
         val schoolItems = school.items()
         val schoolToday = os.meka.core.domain.SchoolRules.todayLine(schoolItems, todayDay, holidays)
-        val shutdownRaw = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), holidays)
+        val shutdownRaw = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), workHolidays)
         val shutdownNow = shutdownRaw.copy(
             tomorrow = shutdownRaw.tomorrow.copy(
                 weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal),
@@ -3258,13 +3293,13 @@ class MekaCore(
         _goals.value = goalsNow
         _workMode.value = workState
         _shutdown.value = shutdownNow
-        _wake.value = alarms.wakeView(dayEvents, os.meka.core.domain.WorkHours.of(workState, holidays, todayEpochDay(), work.homeDays(todayEpochDay())))
+        _wake.value = alarms.wakeView(dayEvents, hoursOf(workState, todayEpochDay()))
         _nextAlarm.value = alarms.next()
         _quickAlarms.value = alarms.quickItems()
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
-            news.all(), news.choices(), holidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolToday).copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal))
+            news.all(), news.choices(), workHolidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolToday).copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal))
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))
         val weatherNow = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted(), workForecast, workPlace.wanted(), office)
             // The trains on an office day's commute (Places item 4), under the weather line.
@@ -3282,7 +3317,7 @@ class MekaCore(
         _activity.value = activity.view()
         _calendar.value = CalendarAgenda.build(
             all, marks.forCalendarTab(allEvents), nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden,
-            work = os.meka.core.domain.WorkHours.of(workState, holidays, todayEpochDay(), work.homeDays(todayEpochDay())),
+            work = hoursOf(workState, todayEpochDay()),
         )
         _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars, marks.shownCalendars)
         val editsNow = calendarEdits.all()
@@ -3290,7 +3325,8 @@ class MekaCore(
         _editLines.value = os.meka.core.domain.EditLineRules.lines(editsNow, nowMs())
         _afterWork.value = held.summary()
         _requests.value = requestCards.open()
-        _school.value = school.view(os.meka.core.domain.WorkHours.of(workState, holidays, todayDay, work.homeDays(todayDay)))
+        _school.value = school.view(hoursOf(workState, todayDay))
+        _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         _triage.value = triageCards.open()
         _groupGists.value = gistStore.open()
         _blockedCallers.value = blockList.view()
@@ -3335,10 +3371,14 @@ class MekaCore(
             wins = wins.all(),
         )
 
+    /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */
+    private fun hoursOf(state: WorkModeState, day: Long): os.meka.core.domain.WorkHours =
+        os.meka.core.domain.WorkHours.of(state, bankHolidays.calendar(), day, work.homeDays(day), leave.days())
+
     /** Today's office window (Places item 2): a work day that isn't a work-from-home day, or null. */
     private fun officeToday(): os.meka.core.domain.OfficeWindow? {
         val day = todayEpochDay()
-        val hours = os.meka.core.domain.WorkHours.of(work.state(localClock(), day), bankHolidays.calendar(), day, work.homeDays(day))
+        val hours = work.hours(localClock(), day)
         return os.meka.core.domain.PlacesRules.officeWindow(hours, day, ZoneCalendar(timeZone))
     }
 

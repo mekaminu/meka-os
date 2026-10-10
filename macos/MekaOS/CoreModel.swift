@@ -53,6 +53,11 @@ final class CoreModel {
     private(set) var queue: QueueView?
     /// Ask → More → Train queue (also Today's "For the train" line).
     var showTrainQueue = false
+    /// Annual leave (V1, slice 1): the allowance, the days booked and the school holidays (Ask → More → Annual leave).
+    /// Synced with the Fold; booked days are days off for work mode on both apps.
+    private(set) var leave: LeaveView?
+    /// Ask → More → Annual leave.
+    var showLeave = false
     /// Work wins (V1, slice 1): the reviewed week's wins and this quarter's, shown in Review. Synced with the Fold.
     private(set) var wins: WinsView?
     /// The line after a skip or keep ("Skipped Fri 23 Oct · the evening is free to plan"), until the sheet closes.
@@ -269,6 +274,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await q in core.queueView { self?.queue = q }
+        })
+        observers.append(Task { [weak self] in
+            for await l in core.leaveView { self?.leave = l }
         })
         observers.append(Task { [weak self] in
             for await w in core.winsView { self?.wins = w }
@@ -1895,6 +1903,53 @@ final class CoreModel {
     }
 
     func removeFromQueue(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeFromQueue(id: id) } }
+
+    // MARK: Annual leave (annual leave planner, slice 1)
+
+    /// What booking said: the line under the field, and whether nothing was written (no date, no work days, booked).
+    struct LeaveSaid: Equatable {
+        let line: String
+        let refused: Bool
+    }
+
+    /// Books one typed stretch ("27–30 Oct", "Spain 18 Dec – 4 Jan"); only Strings cross.
+    func addLeave(_ text: String) async -> LeaveSaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        MekaHaptics.light()
+        do {
+            guard let r = try await core.addLeave(text: t) else {
+                MekaHaptics.tick()
+                return LeaveSaid(line: LeaveRules.shared.NOT_READ, refused: true)
+            }
+            if r.refused { MekaHaptics.tick() }
+            return LeaveSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Book on a school holiday: its work days not booked yet; only the school item's id crosses.
+    func bookLeave(forHoliday id: String) async -> LeaveSaid? {
+        guard let core else { return nil }
+        MekaHaptics.light()
+        do {
+            guard let r = try await core.bookLeaveForHoliday(schoolId: id) else { return nil }
+            return LeaveSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func removeLeave(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeLeave(id: id) } }
+
+    /// The allowance (days a leave year) and the month the leave year starts; only Ints cross.
+    func setLeaveAllowance(days: Int32, yearStartMonth: Int32) {
+        MekaHaptics.tick()
+        run { _ = try await $0.setLeaveAllowance(days: days, yearStartMonth: yearStartMonth) }
+    }
 
     // MARK: Work wins (slice 1)
 
