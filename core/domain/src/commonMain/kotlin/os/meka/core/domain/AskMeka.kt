@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -61,6 +61,12 @@ sealed interface AskProposal {
     data class PlanDinner(val day: Long, val title: String, val mealId: String?) : AskProposal
     /** Skips the date night on [day] (Date night slice 3: "skip date night next week"): that evening is free to plan. */
     data class SkipDateNight(val day: Long) : AskProposal
+    /**
+     * Marks the radar item [id] done (Home upkeep slice 2: "I've tested the smoke alarms", "the boiler's been
+     * serviced"), as its own button would: a repeating one moves on from [dueDay] to [nextDay], a one-off ([nextDay]
+     * null) leaves the radar. [doneLabel] is its button ("Done", "Serviced", "Paid"). Nothing is paid or booked.
+     */
+    data class RenewalDone(val id: String, val title: String, val doneLabel: String, val dueDay: Long, val nextDay: Long?) : AskProposal
 }
 
 /** A proposal as Ask shows it: "Add “Call the dentist” · Tomorrow · 09:00" with its button ("Add"). */
@@ -94,6 +100,8 @@ sealed interface AskUndo {
     data class PutBackDinner(val day: Long, val before: String?, val after: String, val createdMealId: String?) : AskUndo
     /** The skip card: [day]'s date night is kept clear again (only while it is still skipped). */
     data class KeepDateNight(val day: Long) : AskUndo
+    /** The radar card: the item goes back to how it was (only while it is still as Done left it). */
+    data class PutBackRenewal(val before: RenewalDoneUndo) : AskUndo
 }
 
 /** What a tapped card did: the undo bar's line ("Added “Milk”") and how to take it back. */
@@ -122,7 +130,7 @@ object AskRules {
     const val MAX_SHOPPING = 10
 
     /** The kinds of proposal MEKA understands; anything else is dropped. Wire names, never renamed. */
-    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night")
+    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal")
 
     /** The question as sent: one line, trimmed, at most [MAX_QUESTION] characters; null when there's nothing to ask. */
     fun question(text: String?): String? =
@@ -134,7 +142,7 @@ object AskRules {
      */
     fun context(today: Today, nowMs: Long, cal: LocalCalendar, weather: List<String> = emptyList(), shopping: ShoppingView? = null,
                 school: List<String> = emptyList(), meals: String? = null, mealsFromOthers: Boolean = false,
-                dateNight: String? = null): AskContext {
+                dateNight: String? = null, renewals: List<String> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -183,7 +191,10 @@ object AskRules {
         val dinners = meals?.let { AskItem("", AskItemKind.MEALS, line(it)) }
         // Date night (slice 3, [DateNightRules.askLine]): Meka's own setting in MEKA's words, never untrusted.
         val evening = dateNight?.let { AskItem("", AskItemKind.DATE_NIGHT, line(it)) }
-        val tail = listOfNotNull(shop, dinners, evening) + schoolYear + forecast
+        // The renewals radar (Home upkeep slice 2, [RenewalAskRules.askLines]): Meka's own entries, titles and dates
+        // only, never untrusted.
+        val radar = renewals.take(RenewalAskRules.ASK_ITEMS).map { AskItem("", AskItemKind.RENEWALS, line(it)) }
+        val tail = listOfNotNull(shop, dinners, evening) + radar + schoolYear + forecast
         val kept = items.take(MAX_ITEMS - tail.size) + tail
         val keptRefs = kept.map { it.ref }.toSet()
         // Things Jeanette added are someone else's words, like a calendar invitation's title.
@@ -209,10 +220,10 @@ object AskRules {
 
     /** The answer as shown: its words and the proposals that check out, at most [MAX_CARDS], no two alike. */
     fun answer(text: String?, actions: List<AskRawAction>, context: AskContext, titles: Map<String, String>, nowMs: Long, cal: LocalCalendar,
-               meals: List<Meal> = emptyList(), dateNight: DateNightSetting? = null): AskAnswer =
+               meals: List<Meal> = emptyList(), dateNight: DateNightSetting? = null, renewals: List<RenewalItem> = emptyList()): AskAnswer =
         AskAnswer(
             answerText(text),
-            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals, dateNight) }.distinctBy { it.proposal }.take(MAX_CARDS),
+            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals, dateNight, renewals) }.distinctBy { it.proposal }.take(MAX_CARDS),
         )
 
     /**
@@ -221,7 +232,7 @@ object AskRules {
      * outside [FAST_MIN_HOURS]…[FAST_MAX_HOURS] hours, a timer outside a minute to a day. [titles] maps task id → title.
      */
     fun card(a: AskRawAction, context: AskContext, titles: Map<String, String>, nowMs: Long, cal: LocalCalendar,
-             meals: List<Meal> = emptyList(), dateNight: DateNightSetting? = null): AskCard? {
+             meals: List<Meal> = emptyList(), dateNight: DateNightSetting? = null, renewals: List<RenewalItem> = emptyList()): AskCard? {
         val today = cal.epochDayOf(nowMs)
         fun task(): Pair<String, String>? {
             val id = context.taskIds[a.ref?.trim()] ?: return null
@@ -266,6 +277,9 @@ object AskRules {
             "skip_date_night" -> AskProposal.SkipDateNight(
                 DateNightRules.skippable(dateNight, a.date?.let { day() }, today, cal.minuteOfDay(nowMs)) ?: return null,
             )
+            "done_renewal" -> RenewalAskRules.find(renewals, a.title)?.let {
+                AskProposal.RenewalDone(it.id, it.title, it.doneLabel, it.dueDay, it.nextDueDay)
+            } ?: return null
             else -> return null
         }
         return cardOf(proposal, today)
@@ -342,6 +356,7 @@ object AskRules {
         is AskProposal.AddShopping -> "Added ${shoppingNames(p.items)} to shopping"
         is AskProposal.PlanDinner -> "Planned " + MealRules.plannedLine(p.day, today, p.title)
         is AskProposal.SkipDateNight -> DateNightRules.skipLine(p.day, today, skip = true)
+        is AskProposal.RenewalDone -> RenewalAskRules.doneLine(p.doneLabel, p.title, p.nextDay, today)
     }
 
     /** The card's words for [p]. */
@@ -357,6 +372,7 @@ object AskRules {
             p, "Dinner · " + MealRules.plannedLine(p.day, today, p.title) + (if (p.mealId == null) " · new favourite" else ""), "Plan",
         )
         is AskProposal.SkipDateNight -> AskCard(p, "Skip date night · " + DateNightRules.whenLabel(p.day, today), "Skip")
+        is AskProposal.RenewalDone -> AskCard(p, RenewalAskRules.cardLine(p.doneLabel, p.title, p.nextDay, today), p.doneLabel)
     }
 
     /** "milk", "milk and eggs", "milk, eggs and bread", as typed. */

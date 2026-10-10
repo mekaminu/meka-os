@@ -2320,7 +2320,9 @@ class MekaCore(
                 os.meka.core.domain.MealRules.askLine(mealPlan.view(emptySet())),
                 mealPlan.meals().any { os.meka.core.domain.ShoppingRules.byName(it.by) != null },
                 // Date night, slice 3: the coming nights, so "when's date night?" has an answer.
-                os.meka.core.domain.DateNightRules.askLine(dateNight.setting(), cal.epochDayOf(nowMs()), cal.minuteOfDay(nowMs())))
+                os.meka.core.domain.DateNightRules.askLine(dateNight.setting(), cal.epochDayOf(nowMs()), cal.minuteOfDay(nowMs())),
+                // Home upkeep, slice 2: the renewals radar, so "when's the boiler service?" has an answer.
+                os.meka.core.domain.RenewalAskRules.askLines(renewals.view(), cal.epochDayOf(nowMs())))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -2329,7 +2331,7 @@ class MekaCore(
             is AskReply.Unavailable -> os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
             is AskReply.Answered -> onCore {
                 val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
-                val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting())
+                val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items())
                 os.meka.core.domain.AskOutcome.Answered(answer.copy(cards = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }))
             }
         }
@@ -2393,6 +2395,8 @@ class MekaCore(
                 if (!dateNight.skip(p.day, true)) throw os.meka.core.domain.ValidationException("That date night can't be skipped any more")
                 os.meka.core.domain.AskUndo.KeepDateNight(p.day)
             }
+            // Checked again now: only while it is still due on the card's day (Done here or on the other device moved it on).
+            is os.meka.core.domain.AskProposal.RenewalDone -> os.meka.core.domain.AskUndo.PutBackRenewal(renewals.doneFromAsk(p.id, p.dueDay))
         }
         os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
@@ -2424,6 +2428,8 @@ class MekaCore(
             }
             // Kept clear again only while it is still skipped (a change since, here or on the other device, wins).
             is os.meka.core.domain.AskUndo.KeepDateNight -> dateNight.skip(undo.day, false)
+            // Put back only while it is still as Done left it (a change since, here or on the other device, wins).
+            is os.meka.core.domain.AskUndo.PutBackRenewal -> renewals.undoDone(undo.before)
         }
     }
 
@@ -2921,6 +2927,8 @@ class MekaCore(
             is os.meka.core.domain.AskProposal.PlanDinner -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             // Meka's own evening setting (nothing is booked, cancelled or sent).
             is os.meka.core.domain.AskProposal.SkipDateNight -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+            // Marks Meka's own radar item done, like its button (nothing is paid, booked or sent).
+            is os.meka.core.domain.AskProposal.RenewalDone -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
         }
         val decision = PolicyEngine(PolicyConfig()).decide(
             ActionRequest(

@@ -27,6 +27,9 @@ class AskCodecTest {
         // Date night's coming nights (date night, slice 3): a kind of its own.
         val night = req.copy(items = listOf(AskCodec.Item("", "date_night", "Date night · every other Friday from 19:00 · coming: Fri 23 Oct")))
         assertEquals(night, AskCodec.decodeRequest(AskCodec.encodeRequest(night)))
+        // The renewals radar (home upkeep, slice 2): a kind of its own.
+        val radar = req.copy(items = listOf(AskCodec.Item("", "renewals", "Radar · Boiler service · due Mon 9 Nov · every year")))
+        assertEquals(radar, AskCodec.decodeRequest(AskCodec.encodeRequest(radar)))
         fun bad(r: AskCodec.Request) = assertFailsWith<WireFormatException> { AskCodec.decodeRequest(AskCodec.encodeRequest(r)) }
         bad(req.copy(question = "  "))
         bad(req.copy(question = "q".repeat(501)))

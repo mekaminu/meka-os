@@ -1327,6 +1327,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(RenewalRules.shared.repeatLabel(r: .halfYearly), "Every 6 months")
     }
 
+    func testRenewalDoneFromAskReachesSwift() {
+        // "I've tested the smoke alarms" in Ask and Talk (home upkeep, slice 2): the radar card's words reach the Mac.
+        let p = AskProposalRenewalDone(id: "r1", title: "Test the smoke and CO alarms", doneLabel: "Done", dueDay: 0, nextDay: KotlinLong(value: 31))
+        let card = AskRules.shared.cardOf(p: p, today: 0)
+        XCTAssertEqual(card.line, "Done · Test the smoke and CO alarms · next Sun 1 Feb")
+        XCTAssertEqual(card.button, "Done")
+        XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "marked Test the smoke and CO alarms done, next due Sunday 1 February")
+    }
+
     func testFamilyReachesSwift() {
         // Family sharing, slice 4: Settings → Family's rules reach the Mac (only Strings cross from the sheet).
         let rules = FamilyRules.shared

@@ -59,6 +59,8 @@ data class RenewalItem(
     /** "Cancelled it" (subscriptions, insurance) or "Stop tracking". */
     val stopLabel: String,
     val hasConflict: Boolean,
+    /** The day "Done" moves it on to (its repeat's next time); null for a one-off, which Done closes. */
+    val nextDueDay: Long? = null,
 ) {
     /** Shown in Needs you and counted in its badge. */
     val needsAttention: Boolean get() = state != RenewalState.LATER
@@ -294,6 +296,66 @@ object RenewalRules {
     }
 }
 
+/** What Ask's "Done" on a radar item changed (Home upkeep slice 2), so its Undo can put it back exactly. */
+data class RenewalDoneUndo(
+    val id: String,
+    /** Its due day before. */
+    val beforeDueDay: Long,
+    /** The day Done moved it on to; null when Done closed a one-off. */
+    val afterDueDay: Long?,
+    /** Its cancel-by day before (Done moves it with the due day). */
+    val beforeCancelByDay: Long?,
+    /** When it was last done before, in ms (null: never). */
+    val beforeLastDoneMs: Long?,
+)
+
+/** Ask and Talk know the radar (Home upkeep slice 2). Non-AI, pure. */
+object RenewalAskRules {
+    /** How many radar items go with a question. */
+    const val ASK_ITEMS = 8
+
+    /**
+     * The radar as MEKA describes it to the model (Ask's `renewals` lines), so "when's the boiler service?" and "is
+     * anything up for renewal?" can be answered: "Radar · Boiler service · due Sun 1 Nov · every year", "Radar · Aviva
+     * Home Insurance · insurance · renews Thu 12 Nov · every year · cancel by Sat 7 Nov · in Needs you". What needs
+     * doing first, then by date. Titles and dates only: never a cost, a note or who it's with (ADR-006 addendum). Meka's
+     * own entries, so never untrusted.
+     */
+    fun askLines(v: RenewalsView, today: Long): List<String> = v.all.take(ASK_ITEMS).map { i ->
+        val kind = RenewalRules.kindLabel(i.kind).takeIf { !i.title.contains(it, ignoreCase = true) && i.kind != ObligationKind.OTHER }
+        val due = if (i.dueDay < today) "was due ${RenewalRules.dayWord(i.dueDay, today)}"
+        else "${RenewalRules.verb(i.kind)} ${RenewalRules.dayWord(i.dueDay, today)}"
+        listOfNotNull(
+            "Radar", i.title.replace(Regex("""\s+"""), " ").trim(), kind?.lowercase(), due,
+            i.repeats?.takeIf { it != RenewalRepeat.NONE }?.let { RenewalRules.repeatLabel(it).lowercase() },
+            i.cancelByDay?.takeIf { it >= today && i.dueDay >= today }?.let { "cancel by ${RenewalRules.dayWord(it, today)}" },
+            "in Needs you".takeIf { i.needsAttention },
+        ).joinToString(" · ")
+    }
+
+    /**
+     * The radar item a model's `done_renewal` names by [title]: the same title (any case), else the one home job whose
+     * words it uses ("I've tested the smoke alarms" → the alarms job), else the one item whose title holds it or is held
+     * by it. Null when nothing, or more than one, fits.
+     */
+    fun find(items: List<RenewalItem>, title: String?): RenewalItem? {
+        val t = title?.replace(Regex("""\s+"""), " ")?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+        items.filter { it.title.trim().lowercase() == t }.singleOrNull()?.let { return it }
+        HomeUpkeepRules.PRESETS.filter { p -> t == p.title.lowercase() || p.aliases.any { t.contains(it) } || t.contains(p.id) }
+            .mapNotNull { p -> items.filter { HomeUpkeepRules.matches(p, it) }.minByOrNull { it.dueDay } }
+            .distinctBy { it.id }.singleOrNull()?.let { return it }
+        return items.filter { val own = it.title.trim().lowercase(); own.isNotEmpty() && (own.contains(t) || t.contains(own)) }.singleOrNull()
+    }
+
+    /** The card's words: "Done · Test the smoke and CO alarms · next Tue 1 Dec", "Paid · Car tax · off the radar". */
+    fun cardLine(doneLabel: String, title: String, nextDay: Long?, today: Long): String =
+        "$doneLabel · $title · " + (nextDay?.let { "next ${RenewalRules.dayWord(it, today)}" } ?: "off the radar")
+
+    /** The undo bar's line: "“Boiler service” serviced · next 1 Nov 2027", "“Car tax” paid · off the radar". */
+    fun doneLine(doneLabel: String, title: String, nextDay: Long?, today: Long): String =
+        "“$title” ${doneLabel.lowercase()} · " + (nextDay?.let { "next ${RenewalRules.dayWord(it, today)}" } ?: "off the radar")
+}
+
 /**
  * Renewals commands and the [view] projection over a [Replica]. Every write is an op, so it is offline-first and synced.
  */
@@ -375,6 +437,47 @@ class Renewals(
         )
         cancelByDayOf(s)?.let { changes[ObligationFields.CANCEL_BY_AT] = dayMs(it + (next - due)).fv() }
         replica.commitLocal(EntityTypes.OBLIGATION, id, changes)
+    }
+
+    /**
+     * [done] for Ask's card (Home upkeep slice 2), only while it is still due on [dueDay] (the day the card showed);
+     * returns what Undo needs. Throws [ValidationException] when it moved on or left the radar since.
+     */
+    fun doneFromAsk(id: String, dueDay: Long): RenewalDoneUndo {
+        val s = live(id)
+        if (s[ActionableFields.LIFECYCLE].textOrNull?.let { enumOrNull<Lifecycle>(it) }?.isTerminal == true || dueDayOf(s) != dueDay) {
+            throw ValidationException("That has changed since · look in Lists → Renewals")
+        }
+        val cancel = cancelByDayOf(s)
+        val lastDone = s[ObligationFields.LAST_DONE_AT].longOrNull
+        done(id)
+        val after = replica.entity(EntityTypes.OBLIGATION, id)
+        val next = after?.takeIf { a -> a[ActionableFields.LIFECYCLE].textOrNull?.let { enumOrNull<Lifecycle>(it) }?.isTerminal != true }?.let(::dueDayOf)
+        return RenewalDoneUndo(id, dueDay, next, cancel, lastDone)
+    }
+
+    /**
+     * Ask's Undo: puts the item back as it was before [doneFromAsk], only while it is still as Done left it (moved on to
+     * [RenewalDoneUndo.afterDueDay], or closed). False when there was nothing to take back (changed since, here or on
+     * the other device).
+     */
+    fun undoDone(u: RenewalDoneUndo): Boolean {
+        val s = replica.entity(EntityTypes.OBLIGATION, u.id) ?: return false
+        if (s.deleted) return false
+        val life = s[ActionableFields.LIFECYCLE].textOrNull?.let { enumOrNull<Lifecycle>(it) }
+        val changes = linkedMapOf<String, FieldValue>()
+        if (u.afterDueDay == null) {
+            if (life != Lifecycle.DONE) return false
+            changes[ActionableFields.LIFECYCLE] = Lifecycle.ACTIVE.name.fv()
+            changes[ActionableFields.COMPLETED_AT] = FieldValue.Null
+        } else {
+            if (life?.isTerminal == true || dueDayOf(s) != u.afterDueDay) return false
+            changes[ActionableFields.DUE_AT] = dayMs(u.beforeDueDay).fv()
+            changes[ObligationFields.CANCEL_BY_AT] = u.beforeCancelByDay?.let { dayMs(it).fv() } ?: FieldValue.Null
+        }
+        changes[ObligationFields.LAST_DONE_AT] = u.beforeLastDoneMs?.fv() ?: FieldValue.Null
+        replica.commitLocal(EntityTypes.OBLIGATION, u.id, changes)
+        return true
     }
 
     /** Moves the due day. A repeat follows it (monthly on the 12th becomes the 20th); so does the cancel-by day. */
@@ -488,6 +591,7 @@ class Renewals(
                     doneLabel = RenewalRules.doneLabel(kind),
                     stopLabel = RenewalRules.stopLabel(kind),
                     hasConflict = replica.conflictsFor(EntityTypes.OBLIGATION, s.ref.entityId).isNotEmpty(),
+                    nextDueDay = rule?.next(due),
                 )
             }
     }

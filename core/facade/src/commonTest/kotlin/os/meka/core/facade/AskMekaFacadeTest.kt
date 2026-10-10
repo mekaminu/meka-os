@@ -371,6 +371,42 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheRadarAndDoneRenewalMovesAJobOnWithUndo() = runTest {
+        val c = core()
+        c.askMeka("When's the boiler service?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.RENEWALS })
+        val alarms = c.addHomeUpkeep("alarms")!!
+        val nov1 = os.meka.core.domain.CivilDate.toEpochDay(2026, 11, 1)
+        val dec1 = os.meka.core.domain.CivilDate.toEpochDay(2026, 12, 1)
+
+        server.reply = AskReply.Answered("Nice one.", listOf(
+            AskRawAction("done_renewal", title = "Test the smoke and CO alarms"),
+            AskRawAction("done_renewal", title = "Boiler service"), // not on the radar: no card
+        ))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("I've tested the smoke alarms"))
+        val ctx = server.asked.last().second
+        assertEquals(
+            listOf("Radar · Test the smoke and CO alarms · home upkeep · due Sun 1 Nov · every month"),
+            ctx.items.filter { it.kind == AskItemKind.RENEWALS }.map { it.line },
+        )
+        assertFalse(ctx.untrusted)
+        assertEquals(listOf("Done · Test the smoke and CO alarms · next Tue 1 Dec"), out.answer.cards.map { it.line })
+        // Nothing until tapped.
+        assertEquals(nov1, c.listsView.value.renewals.all.single { it.id == alarms }.dueDay)
+
+        val done = c.doAsk(out.answer.cards.single())
+        assertEquals("“Test the smoke and CO alarms” done · next Tue 1 Dec", done.line)
+        assertEquals(dec1, c.listsView.value.renewals.all.single { it.id == alarms }.dueDay)
+        // Done twice: it has moved on.
+        assertFailsWith<ValidationException> { c.doAsk(out.answer.cards.single()) }
+
+        // Undo puts it back, once.
+        assertTrue(c.undoAsk(assertIs<AskUndo.PutBackRenewal>(done.undo)))
+        assertEquals(nov1, c.listsView.value.renewals.all.single { it.id == alarms }.dueDay)
+        assertFalse(c.undoAsk(done.undo!!))
+    }
+
+    @Test
     fun everyCardCanBeTakenBack() = runTest {
         val c = core()
         c.addTask("Book dentist")
