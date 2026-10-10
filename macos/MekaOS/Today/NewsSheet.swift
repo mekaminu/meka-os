@@ -226,7 +226,7 @@ struct NewsThumb: View {
     let item: NewsItem
     let palette: MekaPalette
     var corner: CGFloat = MekaRadius.s
-    var initialFont: Font = MekaType.body.weight(.semibold)
+    var initialFont: Font = MekaType.itemTitle
     @State private var picture: NSImage?
 
     var body: some View {

@@ -233,7 +233,7 @@ struct FloatingTickerView: View {
         HStack(spacing: MekaSpace.xs) {
             Image(systemName: "line.3.horizontal")
                 .rotationEffect(.degrees(90))
-                .font(.caption)
+                .font(MekaType.caption)
                 .foregroundStyle(gripHover ? palette.accent : palette.textTertiary)
                 .frame(width: 18, height: 44)
                 .contentShape(Rectangle())

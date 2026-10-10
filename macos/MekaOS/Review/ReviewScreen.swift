@@ -132,7 +132,7 @@ struct ReviewScreen: View {
             VStack(spacing: MekaSpace.xs) {
                 if v.reviewed {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 34))
+                        .font(MekaType.greeting)
                         .foregroundStyle(palette.accent)
                         .transition(reduceMotion ? .opacity : .scale(scale: 0.6).combined(with: .opacity))
                     if let l = v.reviewedLine { Text(l).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary) }

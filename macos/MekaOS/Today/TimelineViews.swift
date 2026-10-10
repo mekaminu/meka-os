@@ -396,7 +396,7 @@ struct EarlierToggle: View {
         Button { open.toggle() } label: {
             HStack(spacing: MekaSpace.xxs) {
                 Text(label)
-                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
+                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)) // type: ok (an icon size: the disclosure chevron sits small beside its caption)
                     .rotationEffect(.degrees(open ? 90 : 0))
             }
             .font(MekaType.caption).foregroundStyle(palette.textTertiary)

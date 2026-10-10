@@ -178,7 +178,7 @@ private struct DecisionCardFace: View {
                 let ink = yes ? palette.onAccent : palette.textPrimary
                 HStack(spacing: MekaSpace.xs) {
                     Image(systemName: symbol(armed))
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(MekaType.captionStrong)
                         .scaleEffect(MotionMath.swipeIconScale(progress, armed: progress >= 1, reduced: reduceMotion))
                         .animation(MekaMotion.approve(reduced: reduceMotion), value: progress >= 1)
                         .accessibilityHidden(true)

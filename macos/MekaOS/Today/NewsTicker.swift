@@ -123,7 +123,7 @@ struct DriftingTicker: View {
                     MekaHaptics.tick()
                     drift = TickerDrift(offsetDp: drift.offsetDp, loops: 0)
                 } label: {
-                    Image(systemName: "play.fill").font(.caption).foregroundStyle(palette.accent)
+                    Image(systemName: "play.fill").font(MekaType.caption).foregroundStyle(palette.accent)
                         .frame(width: 28, height: 28)
                         .background(palette.surfaceRaised, in: Circle())
                 }

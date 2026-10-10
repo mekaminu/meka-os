@@ -41,7 +41,7 @@ struct VoiceOrbView: View {
                         if lit { Circle().fill(palette.accent.opacity(0.9)).padding(2) } // rhythm: ok (the lit fill's inset inside the ring)
                         Circle().strokeBorder(palette.accent.opacity(0.6 + 0.4 * glow), lineWidth: 2)
                         Image(systemName: "mic.fill")
-                            .font(.system(size: base * 0.34, weight: .medium))
+                            .font(.system(size: base * 0.34, weight: .medium)) // type: ok (an icon size: the mic scales with the orb)
                             .foregroundStyle(lit ? palette.onAccent : palette.accent)
                     }
                     .frame(width: base, height: base)

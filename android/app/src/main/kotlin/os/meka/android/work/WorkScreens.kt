@@ -54,7 +54,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
@@ -333,7 +332,7 @@ fun AfterWorkCard(core: MekaCore, modifier: Modifier = Modifier, onOpen: () -> U
         Text(summary.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         Text(summary.headline, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         if (summary.urgentPeople > 0) {
-            Text("${summary.urgentPeople} urgent", style = MekaType.caption.copy(fontWeight = FontWeight.SemiBold), color = Meka.colors.critical)
+            Text("${summary.urgentPeople} urgent", style = MekaType.captionStrong, color = Meka.colors.critical)
         }
     }
 }
@@ -384,7 +383,7 @@ internal fun HeldPreviewLine(preview: HeldPreview, modifier: Modifier = Modifier
 private fun HeldPreviewRowView(r: HeldPreviewRow, modifier: Modifier) {
     Column(modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            Text(r.who, style = MekaType.itemMeta.copy(fontWeight = FontWeight.SemiBold), color = Meka.colors.textPrimary, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+            Text(r.who, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
             Text("${r.app.label} · ${r.time}", style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1)
         }
         Text(r.line, style = MekaType.body, color = if (r.urgent) Meka.colors.critical else Meka.colors.textSecondary, maxLines = 2)
@@ -446,7 +445,7 @@ private fun PersonCard(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Text(p.personName, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f, fill = false))
-            if (p.urgent) Text("Urgent", style = MekaType.caption.copy(fontWeight = FontWeight.SemiBold), color = Meka.colors.critical)
+            if (p.urgent) Text("Urgent", style = MekaType.captionStrong, color = Meka.colors.critical)
             if (p.isFamily) Text("Family", style = MekaType.caption, color = Meka.colors.accent)
             Spacer(Modifier.weight(1f))
             Text(time(p.latestAtMs), style = MekaType.caption, color = Meka.colors.textTertiary)
@@ -526,7 +525,7 @@ private fun DayChip(isoDay: Int, on: Boolean, onToggle: () -> Unit) {
             .clickable(role = Role.Checkbox) { onToggle() }
             .semantics { contentDescription = name; selected = on },
         contentAlignment = Alignment.Center,
-    ) { Text(name.take(1), style = MekaType.caption.copy(fontWeight = FontWeight.SemiBold), color = fg) }
+    ) { Text(name.take(1), style = MekaType.captionStrong, color = fg) }
 }
 
 @Composable

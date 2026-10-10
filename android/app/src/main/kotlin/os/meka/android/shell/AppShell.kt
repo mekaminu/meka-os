@@ -49,7 +49,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import os.meka.android.designsystem.Meka
@@ -316,13 +315,13 @@ private fun NavItem(d: ShellDestination, lit: Boolean, needsYou: Int, modifier: 
             BasicText(
                 d.label, style = MekaType.caption.copy(color = color), maxLines = 1, softWrap = false,
                 // The tabs share the closed Fold's width: step down to 10 sp rather than clip "Needs you".
-                autoSize = if (fit) TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.caption.fontSize, stepSize = 0.5.sp) else null,
+                autoSize = if (fit) TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.caption.fontSize, stepSize = 0.5.sp) else null, // type: ok (shrinks to fit, never below 10)
                 modifier = if (fit) Modifier.weight(1f, fill = false) else Modifier,
             )
             AnimatedVisibility(badge != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
                 BasicText(
                     badge.orEmpty(), maxLines = 1, softWrap = false,
-                    style = MekaType.caption.copy(color = Meka.colors.critical, fontWeight = FontWeight.SemiBold),
+                    style = MekaType.captionStrong.copy(color = Meka.colors.critical),
                     modifier = Modifier.padding(start = 3.dp), // rhythm: ok (the badge sits against its label)
                 )
             }

@@ -93,7 +93,7 @@ private struct MoreRow: View {
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(palette.textTertiary)
+                Image(systemName: "chevron.right").font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
             .padding(.horizontal, MekaSpace.m)
             .padding(.vertical, MekaSpace.xs)

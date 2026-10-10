@@ -62,7 +62,7 @@ struct AfterWorkSheet: View {
             HStack(spacing: MekaSpace.xs) {
                 Text(p.personName).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
                 if p.urgent {
-                    Text("Urgent").font(MekaType.caption.weight(.semibold)).foregroundStyle(palette.critical)
+                    Text("Urgent").font(MekaType.captionStrong).foregroundStyle(palette.critical)
                 }
                 if p.isFamily {
                     Text("Family").font(MekaType.caption).foregroundStyle(palette.accent)
@@ -172,7 +172,7 @@ struct AfterWorkCard: View {
                         Text(summary.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                         Text(summary.headline).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                         if summary.urgentPeople > 0 {
-                            Text("\(summary.urgentPeople) urgent").font(MekaType.caption.weight(.semibold)).foregroundStyle(palette.critical)
+                            Text("\(summary.urgentPeople) urgent").font(MekaType.captionStrong).foregroundStyle(palette.critical)
                         }
                     }
                     .padding(MekaSpace.m)
@@ -205,7 +205,7 @@ struct HeldPreviewView: View {
             } label: {
                 HStack(spacing: MekaSpace.xs) {
                     Text(preview.label).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(palette.accent)
+                    Image(systemName: "chevron.right").font(MekaType.caption).foregroundStyle(palette.accent)
                         .rotationEffect(.degrees(open ? 90 : 0))
                 }
                 .contentShape(Rectangle())
@@ -219,7 +219,7 @@ struct HeldPreviewView: View {
                     ForEach(Array(preview.rows.enumerated()), id: \.element.id) { i, r in
                         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                             HStack(spacing: MekaSpace.xs) {
-                                Text(r.who).font(MekaType.itemMeta.weight(.semibold)).foregroundStyle(palette.textPrimary).lineLimit(1)
+                                Text(r.who).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary).lineLimit(1)
                                 Text("\(r.app.label) · \(r.time)").font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
                             }
                             Text(r.line).font(MekaType.body).foregroundStyle(r.urgent ? palette.critical : palette.textSecondary).lineLimit(2)

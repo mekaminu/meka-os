@@ -91,6 +91,12 @@ enum MekaType {
     static let bodyTracking: CGFloat = 0.00
     static let caption = Font.system(size: 13, weight: .regular)
     static let captionTracking: CGFloat = 0.13
+    static let captionStrong = Font.system(size: 13, weight: .semibold)
+    static let captionStrongTracking: CGFloat = 0.13
+    static let metaStrong = Font.system(size: 15, weight: .semibold)
+    static let metaStrongTracking: CGFloat = 0.00
+    static let clock = Font.system(size: 96, weight: .light)
+    static let clockTracking: CGFloat = -2.88
 }
 
 enum MekaSpace {

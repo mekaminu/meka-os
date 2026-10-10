@@ -63,10 +63,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.em
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import os.meka.android.designsystem.Meka
@@ -275,7 +272,7 @@ private fun ClockHalf(v: BedsideView, face: WatchFace?, ringSize: Dp?, onOpenDay
 /** The time with each changed character rolling up on its own, so 06:59 → 07:00 rolls three digits and 07:00 → 07:01 one. */
 @Composable
 private fun RollingTime(time: String, color: androidx.compose.ui.graphics.Color, reduced: Boolean) {
-    val style = MekaType.greeting.copy(fontSize = 96.sp, fontWeight = FontWeight(300), letterSpacing = (-0.03).em, fontFeatureSettings = "tnum", lineHeight = 104.sp)
+    val style = MekaType.clock.copy(fontFeatureSettings = "tnum")
     androidx.compose.foundation.layout.Row {
         time.forEachIndexed { i, ch ->
             AnimatedContent(

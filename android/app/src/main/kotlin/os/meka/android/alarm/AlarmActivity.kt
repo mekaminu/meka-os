@@ -50,11 +50,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -170,7 +167,7 @@ private fun AlarmScreen(ring: AlarmRing, onSnooze: () -> Unit, onDismiss: () -> 
         Text(ring.title.uppercase(), style = MekaType.caption, color = Meka.colors.accent)
         Text(
             ring.timeLabel,
-            style = MekaType.greeting.copy(fontSize = 96.sp, fontWeight = FontWeight(300), letterSpacing = (-0.03).em, fontFeatureSettings = "tnum", lineHeight = 104.sp),
+            style = MekaType.clock.copy(fontFeatureSettings = "tnum"),
             color = Meka.colors.textPrimary,
         )
         Text(ring.line, style = MekaType.body, color = Meka.colors.textSecondary)

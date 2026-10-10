@@ -90,6 +90,9 @@ object MekaType {
     val nowTitle = TextStyle(fontSize = 22.sp, fontWeight = FontWeight(600), lineHeight = 27.5.sp, letterSpacing = -0.01.em)
     val body = TextStyle(fontSize = 17.sp, fontWeight = FontWeight(400), lineHeight = 24.6.sp, letterSpacing = 0.em)
     val caption = TextStyle(fontSize = 13.sp, fontWeight = FontWeight(400), lineHeight = 16.9.sp, letterSpacing = 0.01.em)
+    val captionStrong = TextStyle(fontSize = 13.sp, fontWeight = FontWeight(600), lineHeight = 16.9.sp, letterSpacing = 0.01.em)
+    val metaStrong = TextStyle(fontSize = 15.sp, fontWeight = FontWeight(600), lineHeight = 20.3.sp, letterSpacing = 0.em)
+    val clock = TextStyle(fontSize = 96.sp, fontWeight = FontWeight(300), lineHeight = 104.0.sp, letterSpacing = -0.03.em)
 }
 
 object MekaSpace {

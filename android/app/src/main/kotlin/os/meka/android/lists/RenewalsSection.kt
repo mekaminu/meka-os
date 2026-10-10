@@ -200,9 +200,9 @@ internal fun DayPickerDialog(initialDay: Long, onPick: (Long) -> Unit, onDismiss
                 TextButton(onClick = {
                     state.selectedDateMillis?.let { onPick(Math.floorDiv(it, CivilDate.DAY_MS)) }
                     onDismiss()
-                }) { Text("Set") }
+                }) { Text("Set", style = MekaType.body) }
             },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", style = MekaType.body) } },
         ) { DatePicker(state) }
     }
 }

@@ -267,7 +267,7 @@ struct WorkSheet: View {
                         .foregroundStyle(row.own ? palette.accent : palette.textSecondary)
                         .contentTransition(.opacity)
                     Spacer()
-                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(palette.accent)
+                    Image(systemName: "chevron.right").font(MekaType.caption).foregroundStyle(palette.accent)
                         .rotationEffect(.degrees(open ? 90 : 0))
                 }
                 .contentShape(Rectangle())

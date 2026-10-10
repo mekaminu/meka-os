@@ -69,7 +69,7 @@ struct ShutdownSheet: View {
 
                 if closing || v.doneToday {
                     HStack(spacing: MekaSpace.xs) {
-                        Image(systemName: "checkmark.circle.fill").font(.system(size: 22)).foregroundStyle(palette.accent)
+                        Image(systemName: "checkmark.circle.fill").font(MekaType.nowTitle).foregroundStyle(palette.accent)
                         Text(v.doneLine ?? "Day shut down").font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     }
                     .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.scale(scale: 0.6).combined(with: .opacity))
