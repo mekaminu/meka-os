@@ -2204,7 +2204,9 @@ class MekaCore(
                 os.meka.core.domain.WeatherRules.askLines(weather.forecast(), nowMs(), cal)
                     .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - hereLines.size - routeLines.size) +
                     hereLines + workLines + routeLines,
-                shopping.view())
+                shopping.view(),
+                // School rhythm, slice 2b: the school year, so "when's half term?" has an answer.
+                os.meka.core.domain.SchoolRules.askLines(school.items(), cal.epochDayOf(nowMs()), bankHolidays.calendar()))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)

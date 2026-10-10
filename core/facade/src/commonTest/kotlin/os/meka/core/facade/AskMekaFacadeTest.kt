@@ -3,6 +3,7 @@ package os.meka.core.facade
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.AskContext
+import os.meka.core.domain.AskItemKind
 import os.meka.core.domain.AskOutcome
 import os.meka.core.domain.AskProposal
 import os.meka.core.domain.AskRawAction
@@ -89,6 +90,22 @@ class AskMekaFacadeTest {
         assertEquals(id, c.today.value.upNext?.id)
         assertEquals("Moved “Book dentist” to Tomorrow · 09:00", c.doAsk(card).line)
         assertTrue((listOfNotNull(c.today.value.upNext) + c.today.value.yourDay).none { it.id == id })
+    }
+
+    @Test
+    fun aQuestionCarriesTheSchoolYearAsSchoolLines() = runTest {
+        val c = core()
+        c.askMeka("When's half term?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.SCHOOL })
+        c.addSchool("Half term 26–30 Oct")
+        c.addSchool("Rex PE Tue")
+        c.askMeka("When's half term?")
+        val ctx = server.asked.last().second
+        assertEquals(
+            listOf("Day off · Half term · Mon 26 – Fri 30 Oct · Rex and Logan", "Every Tuesday · PE · Rex · next Tue 13 Oct"),
+            ctx.items.filter { it.kind == AskItemKind.SCHOOL }.map { it.line },
+        )
+        assertFalse(ctx.untrusted)
     }
 
     @Test

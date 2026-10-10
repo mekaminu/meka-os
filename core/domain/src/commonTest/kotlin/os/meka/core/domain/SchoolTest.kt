@@ -185,4 +185,33 @@ class SchoolTest {
         assertEquals("Christmas holidays today", SchoolRules.todayLine(items, boxing + 1, holidays)?.text)
         assertEquals("Logan: Football tournament today", SchoolRules.todayLine(items, d(10, 17), holidays)?.text)
     }
+
+    @Test
+    fun askKnowsTheSchoolYearWithTheCoverAnswerAndTheNextWeeklyOne() {
+        assertTrue(SchoolRules.askLines(sFold.items(), sat, HolidayCalendar.NONE).isEmpty())
+        listOf("INSET 12 Oct", "Half term 26–30 Oct", "Rex PE Mon", "Non-uniform day Fri 16 Oct", "Logan swimming Thursdays")
+            .forEach { assertTrue(sFold.add(it) != null, it) }
+        val inset = sFold.items().single { it.title == "INSET day" }
+        assertTrue(sFold.answer(inset.id, home = true, listOf(d(10, 12))))
+        val lines = SchoolRules.askLines(sFold.items(), sat, HolidayCalendar.NONE)
+        assertEquals(
+            listOf(
+                "Day off · INSET day · Mon 12 Oct · Rex and Logan · Meka working from home",
+                "Day off · Half term · Mon 26 – Fri 30 Oct · Rex and Logan",
+                "School date · Non-uniform day · Fri 16 Oct · Rex and Logan",
+                // Rex's Monday PE skips the INSET day.
+                "Every Monday · PE · Rex · next Mon 19 Oct",
+                "Every Thursday · Swimming · Logan · next Thu 15 Oct",
+            ),
+            lines,
+        )
+        // They reach Ask's picture of the day as school lines, after everything else and never untrusted.
+        val ctx = AskRules.context(
+            TodayProjection.project(emptyList(), world.clock.nowMs, DayWindow(at(sat, 0), at(sat + 1, 0))), world.clock.nowMs, cal, school = lines,
+        )
+        assertEquals(lines, ctx.items.filter { it.kind == AskItemKind.SCHOOL }.map { it.line })
+        assertFalse(ctx.untrusted)
+        // Gone days drop out; a day off under way still counts.
+        assertEquals("Day off · Half term · Mon 26 – Fri 30 Oct · Rex and Logan", SchoolRules.askLines(sFold.items(), d(10, 28), HolidayCalendar.NONE).first())
+    }
 }

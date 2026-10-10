@@ -500,6 +500,42 @@ object SchoolRules {
         return SchoolLine("Tomorrow · " + things.joinToString(" · ") { thingText(it, kit = true) }, "School tomorrow: " + listWords(spoken) + ".")
     }
 
+    // ---- Slice 2b: Ask and Talk know the school year ----
+
+    /** Lines sent with a question at most: [ASK_OFF] days off, [ASK_DATES] dates and [ASK_WEEKLY] weekly things. */
+    const val ASK_OFF = 4
+    const val ASK_DATES = 2
+    const val ASK_WEEKLY = 2
+
+    /**
+     * The school year as MEKA describes it to the model (Ask's `school` lines), so "when's half term?", "are the boys
+     * off on Monday?" and "when's Rex's PE?" can be answered: days off still to come or under way (soonest first, with
+     * Meka's cover answer), one-off dates from today on, and weekly things with their next school day. Meka's own typed
+     * lines, so never untrusted. Empty when nothing is entered.
+     */
+    fun askLines(items: List<SchoolItem>, today: Long, holidays: HolidayCalendar): List<String> {
+        val off = items.filter { it.kind == SchoolKind.OFF && it.endDay >= today }
+            .sortedWith(compareBy<SchoolItem> { it.startDay }.thenBy { it.addedAtMs }.thenBy { it.id }).take(ASK_OFF)
+            .map { o ->
+                val cover = when (o.cover) {
+                    COVER_HOME -> "Meka working from home"
+                    COVER_COVERED -> "covered"
+                    else -> null
+                }
+                listOfNotNull("Day off", o.title, spanLabel(o.startDay, o.endDay), whoLabel(o.who), cover).joinToString(" · ")
+            }
+        val dates = items.filter { it.kind == SchoolKind.DAY && it.startDay >= today }
+            .sortedWith(compareBy<SchoolItem> { it.startDay }.thenBy { it.addedAtMs }.thenBy { it.id }).take(ASK_DATES)
+            .map { d -> "School date · ${d.title} · ${CivilDate.shortLabel(d.startDay)} · ${whoLabel(d.who)}" }
+        val weekly = items.filter { it.kind == SchoolKind.WEEKLY }
+            .sortedWith(compareBy<SchoolItem> { it.weekday }.thenBy { it.addedAtMs }.thenBy { it.id }).take(ASK_WEEKLY)
+            .map { w ->
+                val next = nextWeekly(w, items, today, holidays)?.let { "next ${CivilDate.shortLabel(it)}" }
+                listOfNotNull("Every ${CivilDate.DAY_LONG[w.weekday - 1]}", w.title, whoLabel(w.who), next).joinToString(" · ")
+            }
+        return off + dates + weekly
+    }
+
     /** The line after adding: "Added INSET day · Mon 27 Oct", "Added PE · every Tuesday · Rex". */
     fun addedLine(e: SchoolEntry): String = when (e.kind) {
         SchoolKind.WEEKLY -> "Added ${e.title} · every ${CivilDate.DAY_LONG[e.weekday - 1]} · ${whoLabel(e.who)}"
