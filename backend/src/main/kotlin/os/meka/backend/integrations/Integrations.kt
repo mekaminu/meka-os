@@ -28,6 +28,12 @@ import os.meka.core.domain.WeatherPlaceStore
 import os.meka.core.domain.WeatherStore
 import os.meka.core.domain.WorkPlaceFields
 import os.meka.core.domain.WorkPlaceStore
+import os.meka.core.domain.CalendarEvent
+import os.meka.core.domain.EventMarkFields
+import os.meka.core.domain.TravelRules
+import os.meka.core.sync.EntityRef
+import os.meka.core.sync.EntitySnapshot
+import os.meka.core.sync.Hlc
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.Op
@@ -72,6 +78,10 @@ class Integrations(
     private val lines: Map<String, LineStatusProvider> = emptyMap(),
     /** Where "the day" is for the line status poll (it rests overnight). */
     private val zone: java.time.ZoneId = java.time.ZoneId.of("Europe/London"),
+    /** Drive times to the kids' football (weekend football, slice 2b; Google Routes, off until its key is pasted). */
+    private val travel: Map<String, TravelProvider> = emptyMap(),
+    /** The local calendar the football's evening before and kick-off are judged in. */
+    private val calendar: os.meka.core.domain.LocalCalendar = os.meka.backend.LondonCalendar,
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -196,7 +206,7 @@ class Integrations(
     /** Every household follows the default feeds (owner's stated MVP need). Idempotent. */
     fun ensureFeeds() {
         val all = feeds.values.map { it.id to it.label } + news.values.map { it.id to it.source } + holidays.values.map { it.id to it.label } +
-            weather.values.map { it.id to it.label } + lines.values.map { it.id to it.label }
+            weather.values.map { it.id to it.label } + lines.values.map { it.id to it.label } + travel.values.map { it.id to it.label }
         for (hh in store.households()) for ((id, label) in all) {
             if (store.accounts(hh).none { it.provider == id }) {
                 store.transaction { store.upsertAccount(hh, id, label, ByteArray(0)) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
@@ -217,6 +227,7 @@ class Integrations(
         holidays[a.provider]?.let { list -> return syncHolidays(a, list) }
         weather[a.provider]?.let { source -> return syncWeather(a, source) }
         lines[a.provider]?.let { source -> return syncLines(a, source) }
+        travel[a.provider]?.let { source -> return syncTravel(a, source) }
         val p = providers[a.provider] ?: return
         val client = clients.get(a.provider) ?: return
         val ctx = context(a.householdId, a.provider)
@@ -375,6 +386,79 @@ class Integrations(
             )
             write(a, LineStatusStore.ENTITY_ID, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
             linesChanged
+        }
+    }
+
+    /** Lookups made today (London day → count), so a bug can never run through Google's daily cap. */
+    private var travelDay: Pair<Long, Int> = 0L to 0
+
+    /**
+     * Drive times to the kids' football (weekend football, slice 2b): every [TRAVEL_PERIOD_MS], the club fixtures
+     * [TravelRules.due] for a lookup (first sight, the evening before, an hour before leaving) are asked about, at most
+     * [TRAVEL_PER_PASS] a pass and [TravelRules.MAX_PER_DAY] a day, from home's coordinates as the weather knows them
+     * to the fixture's place. Each answer goes into the fixture's `travel_time` entity and wakes the devices. Without
+     * the key the feed is [TravelRules.STATUS_OFF] and nothing is read or sent. One failed lookup never stops the others.
+     */
+    private fun syncTravel(a: AccountRow, source: TravelProvider) {
+        if (!source.configured()) {
+            if (a.status != TravelRules.STATUS_OFF) store.transaction { store.markError(a.id, TravelRules.STATUS_OFF, "no key") }
+            return
+        }
+        val last = a.lastSyncAtMs
+        if (a.status == "ok" && last != null && now() - last < TRAVEL_PERIOD_MS) return
+        try {
+            val wrote = travelPass(a, source)
+            store.transaction { store.markSynced(a.id, now()) }
+            if (wrote) runCatching { onChanged(a.householdId) }
+        } catch (e: Exception) {
+            store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
+            throw e
+        }
+    }
+
+    /** One pass for [a]'s household; returns whether a drive was written. Throws only when every lookup failed. */
+    internal fun travelPass(a: AccountRow, source: TravelProvider): Boolean {
+        val hh = a.householdId
+        val events = reader.entities(hh, EntityTypes.EVENT).mapNotNull { (id, f) ->
+            CalendarEvent.from(EntitySnapshot(EntityRef(EntityTypes.EVENT, id), hh, f, Hlc.ZERO))
+        }
+        val hidden = reader.entities(hh, EntityTypes.EVENT_MARK).filter { (_, f) -> (f[EventMarkFields.HIDDEN] as? FieldValue.Bool)?.value == true }.keys
+        val known = reader.entities(hh, EntityTypes.TRAVEL_TIME).mapNotNull { (id, f) -> TravelRules.read(id, f) }.associateBy { it.eventId }
+        val due = TravelRules.due(events, hidden, known, now(), calendar)
+        if (due.isEmpty()) return false
+        val home = weather.values.firstOrNull()?.let { knownPlaces(hh, it).firstOrNull() } ?: error("no home")
+        var wrote = false
+        var failed = 0
+        var tried = 0
+        for (l in due.take(TRAVEL_PER_PASS)) {
+            if (!takeTravelLookup()) break
+            tried++
+            val drive = runCatching { source.driveMinutes(home.latitude, home.longitude, l.place, maxOf(l.departAtMs, now() + 60_000L)) }
+                .getOrElse { failed++; null } ?: continue
+            if (applyTravel(a, l, drive)) wrote = true
+        }
+        if (tried > 0 && failed == tried) error("no drive time could be read")
+        return wrote
+    }
+
+    private fun takeTravelLookup(): Boolean {
+        synchronized(this) {
+            val day = calendar.epochDayOf(now())
+            val (d, n) = travelDay
+            val count = if (d == day) n else 0
+            if (count >= TravelRules.MAX_PER_DAY) return false
+            travelDay = day to count + 1
+            return true
+        }
+    }
+
+    /** Writes one fixture's drive into its `travel_time` entity (the checked time always moves, so it isn't asked again). */
+    internal fun applyTravel(a: AccountRow, l: TravelRules.Lookup, driveMin: Int): Boolean = store.transaction {
+        ops.transaction {
+            store.lockAccount(a.id)
+            val id = TravelRules.entityId(l.eventId)
+            val prev = store.mirror(a.householdId, a.id)[id]
+            write(a, id, 0, 0, false, prev, TravelRules.fields(l, driveMin, now()), EntityTypes.TRAVEL_TIME)
         }
     }
 
@@ -612,6 +696,9 @@ class Integrations(
         const val LINES_PERIOD_MS = 4 * 60_000L
         const val LINES_FROM_HOUR = 5
         const val LINES_TO_HOUR = 23
+        /** Drive times: a look every 10 minutes (only due fixtures are asked about), at most 3 lookups a pass. */
+        const val TRAVEL_PERIOD_MS = 10 * 60_000L
+        const val TRAVEL_PER_PASS = 3
 
         /** Stable per (account, topic, slot): a topic always uses the same few entities. */
         fun newsEntityId(a: AccountRow, topic: String, slot: Int): String = "hl" + Secrets.sha256Hex("${a.id}|$topic|$slot").take(30)

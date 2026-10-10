@@ -34,6 +34,7 @@ import os.meka.backend.integrations.GoogleCalendar
 import os.meka.backend.integrations.GovUkBankHolidays
 import os.meka.backend.integrations.HereWeather
 import os.meka.backend.integrations.TflLineStatus
+import os.meka.backend.integrations.GoogleRoutes
 import os.meka.backend.integrations.OpenMeteoWeather
 import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.KmsTokenCipher
@@ -731,6 +732,9 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         ownKeys = OwnKeyReminders(opStore, onWritten = onChanged),
         reader = opStoreReader(opStore),
         lines = listOf(TflLineStatus()).associateBy { it.id },
+        // Weekend football, slice 2b: off (and nothing sent) until Meka pastes the Google key into the secret.
+        travel = System.getenv("MEKA_MAPS_GOOGLE_SECRET")?.takeIf { it.isNotBlank() }
+            ?.let { listOf(GoogleRoutes.fromSecret(it)).associateBy { p -> p.id } }.orEmpty(),
     )
 }
 

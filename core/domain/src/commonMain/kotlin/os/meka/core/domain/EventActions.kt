@@ -47,6 +47,8 @@ data class EventMarks(
     val venues: Map<String, VenueTravel> = emptyMap(),
     /** Event id → what Meka kept after the match (weekend football, slice 4). */
     val results: Map<String, FixtureResult> = emptyMap(),
+    /** Event id → its drive from home as the server last worked it out (weekend football, slice 2b, [TravelRules]). */
+    val routes: Map<String, TravelTime> = emptyMap(),
 ) {
     /** For Swift: the result kept for [eventId], or null. */
     fun resultOf(eventId: String): FixtureResult? = results[eventId]
@@ -140,7 +142,8 @@ class EventActions(
             key to VenueTravel(v[VenueFields.PLACE].textOrNull ?: key, travel, v[VenueFields.LEAVE_ALARM].boolOrNull == true, v[VenueFields.SET_AT].longOrNull ?: 0L)
         }.toMap()
         val results = entities.mapNotNull { e -> resultIn(e)?.let { e.ref.entityId to it } }.toMap()
-        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars, leaveAlarms, shown, kit, venues, results)
+        val routes = replica.entities(EntityTypes.TRAVEL_TIME).mapNotNull { TravelRules.read(it) }.associateBy { it.eventId }
+        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars, leaveAlarms, shown, kit, venues, results, routes)
     }
 
     private fun resultIn(e: os.meka.core.sync.EntitySnapshot): FixtureResult? {

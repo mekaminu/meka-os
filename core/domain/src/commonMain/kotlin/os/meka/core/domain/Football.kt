@@ -115,7 +115,21 @@ object FootballRules {
     fun leaveOffer(e: CalendarEvent, marks: EventMarks, nowMs: Long, cal: LocalCalendar): LeaveOffer? {
         if (e.allDay || e.isProvisional || !isClubFixture(e) || marks.travel[e.id] != null || marks.isHidden(e.id)) return null
         val key = venueKey(LeaveAlarmRules.place(e)) ?: return null
-        val v = marks.venues[key] ?: return null
+        val v = marks.venues[key]
+        // Slice 2b: the server's drive with traffic comes first ("Leave by 08:55 · 25 min drive"); it rings as an
+        // alarm unless Meka turned the alarm off at this ground last time.
+        TravelRules.current(e, marks.routes)?.let { r ->
+            val travel = TravelRules.travelMin(r.driveMin)
+            val at = e.startAtMs - travel * 60_000L
+            if (at > nowMs) {
+                val rings = v?.rings ?: true
+                val time = LocalClock.formatMinute(cal.minuteOfDay(at))
+                val drive = TravelRules.driveLabel(r.driveMin)
+                val line = "Leave by $time · $drive" + if (rings) " · ${ReminderRules.ALARM_WORD}" else ""
+                return LeaveOffer(travel, rings, "Leave by $time · $drive", line)
+            }
+        }
+        if (v == null) return null
         val at = e.startAtMs - v.travelMin * 60_000L
         if (at <= nowMs) return null
         val time = LocalClock.formatMinute(cal.minuteOfDay(at))

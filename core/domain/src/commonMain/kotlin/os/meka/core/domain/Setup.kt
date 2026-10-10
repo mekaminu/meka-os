@@ -79,6 +79,9 @@ data class SetupFacts(
 
 object SetupRules {
     const val ON_THE_FOLD = "On the Fold"
+    const val TRAVEL_KEY = "travel"
+    const val TRAVEL_TITLE = "Travel times"
+    const val TRAVEL_ADD_KEY = "Add the Google key · save it on MEKA's server as meka-os-dev/maps/google (steps on the build board)"
     private const val COULDNT = "Couldn't check"
 
     fun view(f: SetupFacts): SetupView {
@@ -87,7 +90,7 @@ object SetupRules {
             SetupSection("Call assistant", calls(f)),
             SetupSection("Messages", messages(f)),
             SetupSection("MEKA's voice", voice(f)),
-            SetupSection("Weather and trains", places(f)),
+            SetupSection("Weather and travel", places(f)),
             SetupSection("Mail", listOf(SetupStep("mail", "Mail", "Comes with email triage: you'll reconnect Google and Outlook with mail access then", SetupState.LATER))),
             SetupSection(if (f.device.mac) "This Mac" else "This phone", device(f)),
             SetupSection("Your devices", listOf(mac(f))),
@@ -228,7 +231,15 @@ object SetupRules {
             else -> SetupStep("trains.status", "Train lines", "Not fetched yet · it starts with MEKA's server", SetupState.LATER)
         }
         val live = SetupStep("trains.live", "Live departures", "Need a free National Rail data key (on the build board for you)", SetupState.LATER)
-        return listOf(weather, lines, live)
+        // Weekend football, slice 2b: drive times with traffic once the server has its Google key.
+        val travel = accounts?.firstOrNull { it.provider == TravelRules.PROVIDER }
+        val drive = when {
+            accounts == null -> SetupStep(TRAVEL_KEY, TRAVEL_TITLE, COULDNT, SetupState.UNKNOWN)
+            travel == null -> SetupStep(TRAVEL_KEY, TRAVEL_TITLE, "Not on MEKA's server yet · football keeps the time you set last", SetupState.LATER)
+            travel.status == TravelRules.STATUS_OFF -> SetupStep(TRAVEL_KEY, TRAVEL_TITLE, TRAVEL_ADD_KEY, SetupState.TODO)
+            else -> SetupStep(TRAVEL_KEY, TRAVEL_TITLE, "Drive times to football with traffic, from Google", SetupState.DONE)
+        }
+        return listOf(weather, lines, live, drive)
     }
 
     private fun device(f: SetupFacts): List<SetupStep> = buildList {

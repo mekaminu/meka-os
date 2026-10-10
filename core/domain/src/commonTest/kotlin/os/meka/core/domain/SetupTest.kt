@@ -17,6 +17,7 @@ class SetupTest {
         HealthAccount("microsoft", "meka@outlook.com", "Work", "ok", now),
         HealthAccount("weather", "home", "Weather", "ok", now),
         HealthAccount("lines", "tfl", "Train lines", "ok", now),
+        HealthAccount("travel", "Google Routes · drive times to football", "Travel times", "ok", now),
     )
     private val editing = listOf(SignIn("google", "meka@gmail.com", SignInState.OK, null, canEdit = true))
     private val family = PeopleLists(family = setOf("Jeanette"), numbers = mapOf("Jeanette" to setOf("+447700900123")))
@@ -57,7 +58,7 @@ class SetupTest {
         assertEquals("Home Biggleswade · work Canary Wharf · change in Calendars", v.step("weather").line)
         assertEquals("Connected", v.step("mac").line)
         assertEquals(
-            listOf("Calendars", "Call assistant", "Messages", "MEKA's voice", "Weather and trains", "Mail", "This phone", "Your devices"),
+            listOf("Calendars", "Call assistant", "Messages", "MEKA's voice", "Weather and travel", "Mail", "This phone", "Your devices"),
             v.sections.map { it.title },
         )
     }

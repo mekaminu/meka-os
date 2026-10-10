@@ -19,6 +19,7 @@ object CalendarAccountRules {
         "bank_holidays" -> "Bank holidays"
         "weather" -> "Weather"
         "lines" -> "Train lines"
+        TravelRules.PROVIDER -> "Travel times"
         else -> provider
     }
 
@@ -94,6 +95,7 @@ object CalendarAccountRules {
         return when {
             status == "needs_reconnect" -> "$who · access expired · Reconnect"
             status == "error" -> "$who · couldn't sync last time · retrying"
+            status == TravelRules.STATUS_OFF -> "$who · off · add the Google key (see Setup)"
             syncedAt != null -> "$who · synced $syncedAt"
             else -> "$who · first sync in progress"
         }

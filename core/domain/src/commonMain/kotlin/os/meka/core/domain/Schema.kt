@@ -52,12 +52,14 @@ object EntityTypes {
     const val SHOPPING_ITEM = "shopping_item"
     /** A ground Meka drives to for football, with the travel time he last set there (see [FootballRules]). */
     const val VENUE = "venue"
+    /** One club fixture's drive from home with traffic, written by the server (see [TravelRules]); id from the event. */
+    const val TRAVEL_TIME = "travel_time"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
-        TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE,
+        TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME,
     )
 }
 
@@ -279,6 +281,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.SHOPPING_ITEM -> MergePolicy.Lww
         // Venues: the travel time last set for a ground on any device wins.
         entityType == EntityTypes.VENUE -> MergePolicy.Lww
+        // Drive times: only the server writes them; its latest answer wins.
+        entityType == EntityTypes.TRAVEL_TIME -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

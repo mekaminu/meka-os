@@ -227,6 +227,15 @@ export class MekaStack extends cdk.Stack {
       secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
     });
 
+    // Drive times to the kids' football (weekend football, slice 2b; Meka chose Google 2026-10-10): '{}' until he pastes
+    // a Routes API key restricted to that API and capped at 100 requests a day. Read at use time; empty = feature off.
+    const mapsGoogle = new secretsmanager.Secret(this, 'MapsGoogle', {
+      secretName: `${prefix}/maps/google`,
+      encryptionKey: this.key,
+      description: 'MEKA OS travel times: {"api_key": "AIza..."} from Google Cloud (Routes API only, 100 requests/day)',
+      secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
+    });
+
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc, clusterName: prefix, containerInsightsV2: ecs.ContainerInsights.DISABLED });
     const task = new ecs.FargateTaskDefinition(this, 'Task', {
       cpu: 256,
@@ -251,6 +260,7 @@ export class MekaStack extends cdk.Stack {
         MEKA_FCM_SECRET: fcmKey.secretArn,
         MEKA_RELEASE_PUBLISHER_SECRET: publisherPublic.secretArn,
         MEKA_VOICE_TWILIO_SECRET: voiceTwilio.secretArn,
+        MEKA_MAPS_GOOGLE_SECRET: mapsGoogle.secretArn,
         // MEKA's voice (build plan V1, Weather and a voice: Amazon Polly in MEKA's own account, approved 2026-10-08).
         MEKA_SPEECH_ENGINE: 'polly',
         // Callers' messages transcribed by Amazon Transcribe in MEKA's own account (call assistant polish 8d i).
@@ -281,6 +291,7 @@ export class MekaStack extends cdk.Stack {
     fcmKey.grantRead(task.taskRole);
     publisherPublic.grantRead(task.taskRole); // the public half only; the private key is never granted to the service
     voiceTwilio.grantRead(task.taskRole);
+    mapsGoogle.grantRead(task.taskRole);
     // MEKA's voice: turn MEKA's own reply text into speech and list the voices, nothing else (no lexicons, no S3
     // speech tasks). Polly's synthesis actions have no resource-level scoping, so the resource is '*'.
     task.taskRole.addToPrincipalPolicy(new cdk.aws_iam.PolicyStatement({

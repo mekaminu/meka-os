@@ -212,7 +212,8 @@ object HealthRules {
     }
 
     private fun feeds(f: HealthFacts, cal: LocalCalendar): HealthRow? {
-        val feeds = f.accounts?.filter { !isCalendar(it.provider) } ?: return null
+        // A feed switched off on the server (travel times without the Google key) is Setup's to mention, not trouble.
+        val feeds = f.accounts?.filter { !isCalendar(it.provider) && it.status != TravelRules.STATUS_OFF } ?: return null
         if (feeds.isEmpty()) return null
         // One row for every feed; "news" and "news_more" are both Headlines.
         val byLabel = feeds.groupBy { CalendarAccountRules.providerLabel(it.provider) }
