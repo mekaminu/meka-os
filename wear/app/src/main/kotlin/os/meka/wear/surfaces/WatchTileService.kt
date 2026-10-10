@@ -163,12 +163,8 @@ class WatchTileService : TileService() {
                 LayoutElementBuilders.FontStyle.Builder()
                     .setSize(DimensionBuilders.sp(style.fontSize.value))
                     .setWeight(
-                        // The token's weight as the tile's three: medium from 500, bold from 600.
-                        when (weightOf(style)) {
-                            2 -> LayoutElementBuilders.FONT_WEIGHT_BOLD
-                            1 -> LayoutElementBuilders.FONT_WEIGHT_MEDIUM
-                            else -> LayoutElementBuilders.FONT_WEIGHT_NORMAL
-                        },
+                        // The token's weight as the tile's two stable weights: medium from 500 (bold is experimental).
+                        if (strong(style)) LayoutElementBuilders.FONT_WEIGHT_MEDIUM else LayoutElementBuilders.FONT_WEIGHT_NORMAL,
                     )
                     .setColor(argb(color))
                     .build(),
@@ -187,14 +183,7 @@ class WatchTileService : TileService() {
 
         fun argb(c: Color): ColorBuilders.ColorProp = ColorBuilders.argb(c.toArgb())
 
-        /** 2 for a token at 600 or more, 1 from 500, else 0. */
-        fun weightOf(style: TextStyle): Int {
-            val w = style.fontWeight?.weight ?: 400
-            return when {
-                w >= 600 -> 2
-                w >= 500 -> 1
-                else -> 0
-            }
-        }
+        /** The token is set at 500 or heavier. */
+        fun strong(style: TextStyle): Boolean = (style.fontWeight?.weight ?: 400) >= 500
     }
 }
