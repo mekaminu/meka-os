@@ -311,7 +311,7 @@ private fun NavItem(d: ShellDestination, lit: Boolean, needsYou: Int, modifier: 
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         ShellNav.glyph(d)?.let { TabIcon(it, lit, iconColor, knockout = Meka.colors.surfaceRaised) }
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(2.dp)) // rhythm: ok (the tab icon's gap to its label, one mark)
         Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             BasicText(
                 d.label, style = MekaType.caption.copy(color = color), maxLines = 1, softWrap = false,
@@ -323,7 +323,7 @@ private fun NavItem(d: ShellDestination, lit: Boolean, needsYou: Int, modifier: 
                 BasicText(
                     badge.orEmpty(), maxLines = 1, softWrap = false,
                     style = MekaType.caption.copy(color = Meka.colors.critical, fontWeight = FontWeight.SemiBold),
-                    modifier = Modifier.padding(start = 3.dp),
+                    modifier = Modifier.padding(start = 3.dp), // rhythm: ok (the badge sits against its label)
                 )
             }
         }

@@ -86,7 +86,7 @@ internal fun WeatherPlaceSection(core: MekaCore, modifier: Modifier = Modifier) 
             save = { core.setWorkPlace(it) },
             modifier = Modifier.padding(top = MekaSpace.xs),
         )
-        HereSwitch(core, Modifier.padding(top = MekaSpace.s))
+        HereSwitch(core, Modifier.padding(top = MekaSpace.xs))
     }
 }
 

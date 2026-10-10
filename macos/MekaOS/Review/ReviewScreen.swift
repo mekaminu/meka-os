@@ -49,7 +49,7 @@ struct ReviewScreen: View {
                     .disabled(!v.canGoBack)
                     .keyboardShortcut("[", modifiers: .command)
                     .help("Previous week")
-                VStack(spacing: 2) {
+                VStack(spacing: MekaSpace.xxs) {
                     Text(v.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                     Text(v.rangeLabel).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 }
@@ -63,7 +63,7 @@ struct ReviewScreen: View {
             .padding(.bottom, MekaSpace.m)
             .staggeredAppear(0)
 
-            HStack(spacing: MekaSpace.s) {
+            HStack(spacing: MekaSpace.m) {
                 ForEach(Array(v.tiles.enumerated()), id: \.offset) { i, t in
                     TileView(tile: t, palette: palette).staggeredAppear(1 + i)
                 }
@@ -93,7 +93,7 @@ struct ReviewScreen: View {
             if !more.isEmpty {
                 section("Fasting and lists", 7)
                 ForEach(more, id: \.self) { l in
-                    Text(l).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.vertical, 2).staggeredAppear(7)
+                    Text(l).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.vertical, MekaSpace.xxs).staggeredAppear(7)
                 }
             }
 
@@ -106,13 +106,13 @@ struct ReviewScreen: View {
             if let ahead = v.aheadTitle {
                 section(ahead, 9)
                 ForEach(v.aheadLines, id: \.self) { l in
-                    Text(l).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.vertical, 2).staggeredAppear(9)
+                    Text(l).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.vertical, MekaSpace.xxs).staggeredAppear(9)
                 }
             }
 
             section("North star", 10)
             ForEach(v.northStar, id: \.key) { m in
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     HStack {
                         Text(m.label).font(MekaType.body).foregroundStyle(palette.textPrimary)
                         Spacer()
@@ -124,12 +124,12 @@ struct ReviewScreen: View {
                     }
                     Text(m.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, MekaSpace.xxs)
                 .accessibilityElement(children: .combine)
                 .staggeredAppear(10)
             }
 
-            VStack(spacing: MekaSpace.s) {
+            VStack(spacing: MekaSpace.xs) {
                 if v.reviewed {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 34))
@@ -154,7 +154,7 @@ struct ReviewScreen: View {
     }
 
     private func section(_ label: String, _ index: Int, _ sub: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             SectionLabel(label, palette)
             if let sub { Text(sub).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.bottom, MekaSpace.xs) }
         }
@@ -163,7 +163,7 @@ struct ReviewScreen: View {
     }
 
     private func note(_ text: String, _ index: Int) -> some View {
-        Text(text).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).padding(.vertical, 2).staggeredAppear(index)
+        Text(text).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).padding(.vertical, MekaSpace.xxs).staggeredAppear(index)
     }
 
     private func line(_ title: String, _ detail: String, _ index: Int, lit: Bool = false) -> some View {
@@ -172,7 +172,7 @@ struct ReviewScreen: View {
             Spacer()
             Text(detail).font(MekaType.caption).foregroundStyle(lit ? palette.accent : palette.textTertiary)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, MekaSpace.xxs)
         .accessibilityElement(children: .combine)
         .staggeredAppear(index)
     }
@@ -184,7 +184,7 @@ private struct TileView: View {
     let palette: MekaPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             Text(tile.label).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             CountUpText(Int(tile.value))
                 .font(MekaType.greeting)
@@ -210,7 +210,7 @@ private struct HabitWeekRow: View {
                 Spacer()
                 Text(habit.line).font(MekaType.itemMeta).foregroundStyle(habit.met ? palette.accent : palette.textSecondary)
             }
-            HStack(spacing: 4) {
+            HStack(spacing: 4) { // rhythm: ok (the week's day ticks, one mark)
                 ForEach(Array(habit.days.enumerated()), id: \.offset) { _, on in
                     Circle().fill(on.boolValue ? palette.accent : palette.surfaceRaised).frame(width: 8, height: 8)
                 }
@@ -263,7 +263,7 @@ struct ReviewCardView: View {
 
     var body: some View {
         Button { model.openReviewCard(reduced: reduceMotion) } label: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(card.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                 Text(card.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
             }

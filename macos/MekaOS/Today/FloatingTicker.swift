@@ -230,7 +230,7 @@ struct FloatingTickerView: View {
     var body: some View {
         let scheme = (MekaAppearance(rawValue: appearance) ?? .dark).scheme ?? systemScheme
         let palette: MekaPalette = scheme == .dark ? .dark : .light
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             Image(systemName: "line.3.horizontal")
                 .rotationEffect(.degrees(90))
                 .font(.caption)
@@ -258,7 +258,7 @@ struct FloatingTickerView: View {
             }
         }
         .padding(.leading, MekaSpace.xs)
-        .padding(.trailing, MekaSpace.s)
+        .padding(.trailing, MekaSpace.xs)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.l))
         .overlay(RoundedRectangle(cornerRadius: MekaRadius.l).strokeBorder(palette.hairline, lineWidth: 1))

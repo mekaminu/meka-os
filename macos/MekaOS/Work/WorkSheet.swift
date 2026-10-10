@@ -46,7 +46,7 @@ struct WorkSheet: View {
             .staggeredAppear(1)
 
             Text("HOURS").font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                .foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.s)
+                .foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.m)
                 .staggeredAppear(2)
             HStack(spacing: MekaSpace.xxs) {
                 ForEach(1...7, id: \.self) { d in
@@ -68,7 +68,7 @@ struct WorkSheet: View {
                 .staggeredAppear(2)
 
             Text("CALL ASSISTANT").font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                .foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.s)
+                .foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.m)
                 .staggeredAppear(3)
             Toggle(isOn: Binding(get: { callAssistant }, set: { model.setCallAssistant($0) })) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -93,7 +93,7 @@ struct WorkSheet: View {
             Text("During work your Fold holds WhatsApp, texts and missed calls and shows them after, grouped by person, urgent first. \"Urgent\" or \"emergency\" alerts you straight away. The summary shows here too, in Needs you. MEKA never replies or marks anything read.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, MekaSpace.s)
+                .padding(.top, MekaSpace.xs)
                 .staggeredAppear(4)
 
             messages.staggeredAppear(5)
@@ -152,7 +152,7 @@ struct WorkSheet: View {
             }
             ForEach(view?.suspects ?? [], id: \.key) { row in
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Text(row.number).font(MekaType.itemMeta)
                         Text(row.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
@@ -171,7 +171,7 @@ struct WorkSheet: View {
             }
             ForEach(view?.rows ?? [], id: \.key) { row in
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Text(row.number).font(MekaType.itemMeta)
                         Text(row.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
@@ -234,7 +234,7 @@ struct WorkSheet: View {
                 Text("Privacy, cost and limits").font(MekaType.itemMeta).foregroundStyle(palette.accent)
             }
         }
-        .padding(.top, MekaSpace.s)
+        .padding(.top, MekaSpace.m)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: showMessageDetails)
     }
 

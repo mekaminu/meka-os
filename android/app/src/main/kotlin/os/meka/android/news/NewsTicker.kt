@@ -224,12 +224,12 @@ private fun StillTicker(core: MekaCore, list: List<TickerCard>, modifier: Modifi
             Text("‹", style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clip(CircleShape).clickable(role = Role.Button, onClickLabel = "Previous headline") {
                     haptics.tick(); index = TickerRules.page(index, -1, list.size)
-                }.padding(MekaSpace.s))
+                }.padding(MekaSpace.m))
             Text(TickerRules.pageLabel(index, list.size), style = MekaType.caption, color = Meka.colors.textTertiary)
             Text("›", style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clip(CircleShape).clickable(role = Role.Button, onClickLabel = "Next headline") {
                     haptics.tick(); index = TickerRules.page(index, 1, list.size)
-                }.padding(MekaSpace.s))
+                }.padding(MekaSpace.m))
         }
     }
 }
@@ -247,12 +247,12 @@ private fun Card(core: MekaCore, c: TickerCard, modifier: Modifier, open: (Ticke
             .clip(RoundedCornerShape(MekaRadius.m))
             .background(Meka.colors.surface)
             .clickable(role = Role.Button, onClickLabel = if (c is TickerCard.Match) "Open the match" else "Open story") { open(c) }
-            .padding(horizontal = MekaSpace.s),
+            .padding(horizontal = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         when (c) {
             is TickerCard.Match -> {
-                Box(Modifier.padding(end = MekaSpace.s).size(8.dp).clip(CircleShape).background(Meka.colors.barca))
+                Box(Modifier.padding(end = MekaSpace.xs).size(8.dp).clip(CircleShape).background(Meka.colors.barca))
                 AnimatedContent(
                     targetState = c.m.line,
                     transitionSpec = { fadeIn(MekaMotion.appear(false)) togetherWith fadeOut(MekaMotion.appear(false)) },
@@ -261,11 +261,11 @@ private fun Card(core: MekaCore, c: TickerCard, modifier: Modifier, open: (Ticke
             }
             is TickerCard.Story -> {
                 NewsThumb(core, c.item, Modifier.size(width = 56.dp, height = 42.dp))
-                Column(Modifier.padding(start = MekaSpace.s).width(200.dp)) {
+                Column(Modifier.padding(start = MekaSpace.xs).width(200.dp)) {
                     Text(c.item.title, style = MekaType.caption, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (c.item.topic == "barca") {
-                            Box(Modifier.padding(end = 4.dp).size(5.dp).clip(CircleShape).background(Meka.colors.barca))
+                            Box(Modifier.padding(end = MekaSpace.xxs).size(5.dp).clip(CircleShape).background(Meka.colors.barca))
                         }
                         Text(c.item.meta, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }

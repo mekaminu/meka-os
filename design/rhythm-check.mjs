@@ -3,9 +3,9 @@
 // MekaSpace tokens on the 8 / 16 / 24 rhythm (xxs 4 for a text's own second line, xs 8, m 16, l 24, xl 32,
 // gutter 16, gutterWide 24, touch 48). The off-rhythm `s` (12) and literal numbers in padding, spacedBy, Spacer
 // and SwiftUI spacing are refused. Dependency-free; CI runs it with the token check.
-// Usage: node design/rhythm-check.mjs            (lists offences in the files on the rhythm; exit 1 if any)
+// Usage: node design/rhythm-check.mjs            (lists offences in every app source file; exit 1 if any)
 //        node design/rhythm-check.mjs --self-test (the rules against known lines)
-//        node design/rhythm-check.mjs --all      (the same over every app source file, for planning; never fails)
+//        node design/rhythm-check.mjs --all      (a per-file count of offences, for planning; never fails)
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,92 +14,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const A = 'android/app/src/main/kotlin/os/meka/android/';
 const M = 'macos/MekaOS/';
 
-/** Files already on the rhythm. Each Calm Today spacing slice adds the screens it moved. */
-export const ON_RHYTHM = [
-  // Slice 4a: Today (Fold and Mac) and what sits on it.
-  A + 'today/TodayRoute.kt',
-  A + 'today/TimelineViews.kt',
-  A + 'today/QuickAlarmRows.kt',
-  A + 'today/HabitChipsRow.kt',
-  A + 'today/ConnectCard.kt',
-  A + 'today/MotionCardView.kt',
-  A + 'today/SignInLine.kt',
-  A + 'today/BatteryCare.kt',
-  A + 'today/DayRingHero.kt',
-  A + 'today/CommandCentre.kt',
-  A + 'fold/CoverNow.kt',
-  M + 'TodayView.swift',
-  M + 'Today/TimelineViews.swift',
-  M + 'Today/QuickAlarmRows.swift',
-  M + 'Today/HabitChipsRow.swift',
-  M + 'Today/NowCard.swift',
-  M + 'Today/NewsTicker.swift',
-  M + 'Today/DayRingView.swift',
-  M + 'Today/CommandCentreViews.swift',
-  M + 'Today/SignInLineView.swift',
-  // Slice 4b: Needs you and the panes that open from Today (task detail, brief, shutdown, wake alarm, repeat, plan).
-  A + 'today/NeedsYouRoute.kt',
-  A + 'today/DecisionStack.kt',
-  A + 'today/TriageCardView.kt',
-  A + 'today/RequestCardView.kt',
-  A + 'today/GroupDigestSection.kt',
-  A + 'today/TaskDetailRows.kt',
-  A + 'today/BriefPane.kt',
-  A + 'today/ShutdownPane.kt',
-  A + 'today/WakeSection.kt',
-  A + 'today/RepeatSection.kt',
-  A + 'today/PlanPane.kt',
-  M + 'Shell/NeedsYouStackView.swift',
-  M + 'Shell/RequestCardsView.swift',
-  M + 'Shell/TriageCardsView.swift',
-  M + 'Shell/GroupGistsView.swift',
-  M + 'Shell/NeedsYouMeanwhileView.swift',
-  M + 'TaskDetailRows.swift',
-  M + 'Today/BriefSheet.swift',
-  M + 'Today/ShutdownSheet.swift',
-  M + 'Today/WakeSection.swift',
-  M + 'RepeatViews.swift',
-  // Slice 4b-2: Calendar (the tab, the event detail, Add/Edit event, the event undo bar).
-  A + 'calendar/CalendarRoute.kt',
-  A + 'calendar/EventDetailPane.kt',
-  A + 'calendar/AddEventPane.kt',
-  A + 'calendar/EventActionsUi.kt',
-  M + 'Calendar/CalendarScreen.swift',
-  M + 'Calendar/EventDetailSheet.swift',
-  M + 'Calendar/AddEventSheet.swift',
-  // Slice 4b-3: Lists (Waiting for, Someday, Decisions, Renewals, Shopping) and Goals (habits, goals, fasting, gym sessions).
-  A + 'lists/ListsRoute.kt',
-  A + 'lists/RenewalsSection.kt',
-  A + 'lists/ShoppingSection.kt',
-  A + 'goals/GoalsRoute.kt',
-  A + 'goals/FastingCard.kt',
-  A + 'goals/SessionCard.kt',
-  M + 'Lists/ListsScreen.swift',
-  M + 'Lists/RenewalsSection.swift',
-  M + 'Lists/ShoppingSection.swift',
-  M + 'Goals/GoalsScreen.swift',
-  M + 'Goals/FastingSection.swift',
-  M + 'Goals/SessionCards.swift',
-  // Slice 4b-4: Ask and More's panes (Ask, MEKA's AI, Talk, MEKA's voice, Family, Setup, Health, Activity).
-  A + 'ask/AskRoute.kt',
-  A + 'ask/AskMekaSection.kt',
-  A + 'ask/TalkPane.kt',
-  A + 'ask/VoicePane.kt',
-  A + 'ask/VoiceOrb.kt',
-  A + 'ask/FamilyPane.kt',
-  A + 'ask/SetupPane.kt',
-  A + 'ask/HealthPane.kt',
-  A + 'activity/ActivityPane.kt',
-  M + 'Ask/AskScreen.swift',
-  M + 'Ask/AskMekaSection.swift',
-  M + 'Ask/TalkSheet.swift',
-  M + 'Ask/VoiceSheet.swift',
-  M + 'Ask/VoiceOrbView.swift',
-  M + 'Ask/FamilySheet.swift',
-  M + 'Ask/SetupSheet.swift',
-  M + 'Ask/HealthSheet.swift',
-  M + 'Activity/ActivitySheet.swift',
-];
+/** Every screen is on the rhythm since slice 4b-5 (2026-10-10): the check covers every app source file, so a new
+ * screen is held to it from its first commit (slices 4a–4b-4 moved them a group at a time). */
 
 const NUM = String.raw`\b(?!0(?:\.0+)?\b)\d+(?:\.\d+)?`;
 const KOTLIN = [
@@ -163,7 +79,7 @@ if (process.argv.includes('--self-test')) {
 }
 
 const all = process.argv.includes('--all');
-const files = all ? [...walk(join(root, A)), ...walk(join(root, M))] : ON_RHYTHM;
+const files = [...walk(join(root, A)), ...walk(join(root, M))];
 const found = files.flatMap((f) => offences(f, readFileSync(join(root, f), 'utf8')));
 if (all) {
   const per = {};
@@ -174,5 +90,5 @@ if (all) {
   console.error(`Spacing off the 8/16/24 rhythm (${found.length}):\n` + found.join('\n'));
   process.exit(1);
 } else {
-  console.log(`Spacing rhythm: ${files.length} files on 8/16/24.`);
+  console.log(`Spacing rhythm: all ${files.length} app source files on 8/16/24.`);
 }

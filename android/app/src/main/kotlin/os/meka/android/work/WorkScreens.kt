@@ -66,6 +66,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -147,10 +148,10 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Text("Work mode", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.WORK)).appear(rememberAppearance(0)))
         Text(work.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
@@ -238,14 +239,14 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
             style = MekaType.caption, color = Meka.colors.textTertiary,
         )
         Text("Test it: ring ${CallScreeningRules.ASSISTANT_NUMBER} from another phone", style = MekaType.caption, color = Meka.colors.textSecondary)
-        Spacer(Modifier.height(MekaSpace.s))
+        Spacer(Modifier.height(MekaSpace.m))
         RecordingKeepSection(work.recordingDays, Modifier.appear(rememberAppearance(4))) { d -> scope.launch { core.setRecordingDays(d) } }
-        Spacer(Modifier.height(MekaSpace.s))
+        Spacer(Modifier.height(MekaSpace.m))
         SpamProtectionSection(core, 4)
 
         Spacer(Modifier.height(MekaSpace.m))
         PeopleSection(ListKind.FAMILY, lists, store::setLists, 5) { pick(ListKind.FAMILY) }
-        Spacer(Modifier.height(MekaSpace.s))
+        Spacer(Modifier.height(MekaSpace.m))
         PeopleSection(ListKind.ALWAYS, lists, store::setLists, 6) { pick(ListKind.ALWAYS) }
         Spacer(Modifier.height(MekaSpace.m))
         RequestWatchSection(
@@ -286,10 +287,10 @@ fun AfterWorkPane(
     }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Text(summary.title, style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
         Text(summary.headline, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
         Spacer(Modifier.height(MekaSpace.xs))
@@ -367,7 +368,7 @@ internal fun HeldPreviewLine(preview: HeldPreview, modifier: Modifier = Modifier
         ) {
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 preview.rows.forEachIndexed { i, r -> HeldPreviewRowView(r, Modifier.appear(rememberAppearance(i))) }
                 preview.moreLine?.let {
@@ -459,7 +460,7 @@ private fun PersonCard(
         ) {
             Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 p.items.forEach { item ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Text(time(item.atMs), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.width(44.dp))
                         val body = item.displayLine
                         Column(Modifier.weight(1f)) {

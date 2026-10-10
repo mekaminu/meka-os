@@ -63,7 +63,7 @@ jobs:
         with: { node-version: "22" }
       - name: Design tokens up to date + contrast gate (ADR-012)
         run: node design/generate.mjs --check
-      - name: Spacing rhythm 8/16/24 on the screens moved so far (ADR-012, Calm Today)
+      - name: Spacing rhythm 8/16/24 on every screen (ADR-012, Calm Today)
         run: node design/rhythm-check.mjs --self-test && node design/rhythm-check.mjs
       - name: Infra typecheck, invariant tests, synth (no credentials)
         working-directory: infra

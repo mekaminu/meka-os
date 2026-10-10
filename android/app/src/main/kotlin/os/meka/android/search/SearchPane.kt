@@ -52,6 +52,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -126,7 +127,7 @@ fun SearchPane(
         ) {
             item(key = "close") {
                 Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-                    modifier = Modifier.clickable(role = Role.Button) { close() }.padding(vertical = MekaSpace.s))
+                    modifier = Modifier.clickable(role = Role.Button) { close() }.minTouch())
             }
             item(key = "title") {
                 Text("Search", style = MekaType.greeting, color = Meka.colors.textPrimary,
@@ -139,7 +140,7 @@ fun SearchPane(
                 Text(
                     if (v.active || query.isBlank()) v.summary.ifEmpty { HINT } else "",
                     style = MekaType.itemMeta, color = Meka.colors.textSecondary,
-                    modifier = Modifier.padding(top = MekaSpace.s, bottom = MekaSpace.s).animateItem().appear(rememberAppearance(1)),
+                    modifier = Modifier.padding(top = MekaSpace.xs, bottom = MekaSpace.xs).animateItem().appear(rememberAppearance(1)),
                 )
             }
             v.groups.forEachIndexed { i, g ->
@@ -205,7 +206,7 @@ private fun ResultRow(hit: SearchHit, unfolded: Boolean, modifier: Modifier, onT
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .then(if (tappable) Modifier.clickable(onClickLabel = hint, role = Role.Button) { onTap() } else Modifier)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s)
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
             .animateContentSize(MekaMotion.expand(Meka.reducedMotion)),
     ) {
         Text(hit.title, style = MekaType.itemTitle,
@@ -218,7 +219,7 @@ private fun ResultRow(hit: SearchHit, unfolded: Boolean, modifier: Modifier, onT
             exit = if (Meka.reducedMotion) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
             Text("Reopen", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.padding(top = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.m))
+                modifier = Modifier.padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
                     .clickable(role = Role.Button) { onReopen() }.padding(vertical = MekaSpace.xxs))
         }
     }

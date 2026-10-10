@@ -55,6 +55,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -115,7 +116,7 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
         ) {
             item(key = "close") {
                 Text(backLabel, style = MekaType.itemMeta, color = Meka.colors.accent,
-                    modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+                    modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
             }
             item(key = "title") {
                 Row(Modifier.fillMaxWidth().padding(bottom = MekaSpace.m).appear(rememberAppearance(0)), verticalAlignment = Alignment.CenterVertically) {
@@ -203,10 +204,10 @@ private fun MatchdayRow(md: NewsMatchday, modifier: Modifier, open: () -> Unit) 
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button, onClickLabel = "Open the match") { open() }
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.m),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.padding(end = MekaSpace.s).size(8.dp).clip(CircleShape).background(Meka.colors.barca))
+        Box(Modifier.padding(end = MekaSpace.xs).size(8.dp).clip(CircleShape).background(Meka.colors.barca))
         Column(Modifier.weight(1f)) {
             Text(if (md.live) "ON NOW" else "MATCHDAY", style = MekaType.sectionLabel, color = Meka.colors.barca)
             AnimatedContent(
@@ -240,13 +241,13 @@ private fun StoryRow(core: MekaCore, n: NewsItem, modifier: Modifier, open: () -
             .padding(vertical = MekaSpace.xs),
         verticalAlignment = Alignment.Top,
     ) {
-        Box(Modifier.padding(top = 7.dp, end = MekaSpace.s).size(6.dp).clip(CircleShape)
+        Box(Modifier.padding(top = 7.dp, end = MekaSpace.xs).size(6.dp).clip(CircleShape) // rhythm: ok (centres the dot on the title's first line)
             .background(if (n.topic == "barca") Meka.colors.barca else Meka.colors.textTertiary))
         Column(Modifier.weight(1f)) {
             Text(n.title, style = MekaType.body, color = Meka.colors.textPrimary)
             Text(n.meta, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
-        NewsThumb(core, n, Modifier.padding(start = MekaSpace.s, top = 2.dp).size(width = 72.dp, height = 54.dp))
+        NewsThumb(core, n, Modifier.padding(start = MekaSpace.xs, top = 2.dp).size(width = 72.dp, height = 54.dp)) // rhythm: ok (lines the picture up with the title)
     }
 }
 
@@ -279,7 +280,7 @@ private fun NewsDetailSheet(core: MekaCore, d: NewsDetail, onClose: () -> Unit, 
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+                modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
             Spacer(Modifier.weight(1f))
             Text(d.position, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
@@ -341,6 +342,6 @@ private fun NavButton(label: String, id: String?, go: (String) -> Unit) {
         label, style = MekaType.itemMeta, color = if (id != null) Meka.colors.accent else Meka.colors.textTertiary,
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
             .then(if (id != null) Modifier.clickable(role = Role.Button) { go(id) } else Modifier)
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+            .minTouch().padding(horizontal = MekaSpace.l),
     )
 }

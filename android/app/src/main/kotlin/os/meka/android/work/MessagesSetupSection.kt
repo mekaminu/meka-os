@@ -111,7 +111,7 @@ internal fun MessagesSetupSection(core: MekaCore, store: CaptureStore, listening
             }
         }
 
-        Text("Kept from MEKA's AI", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.s))
+        Text("Kept from MEKA's AI", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
         Text(
             "A person or group kept from MEKA's AI still shows in Needs you, as FYI with nothing drafted; a kept group still has its digest, with no gist.",
             style = MekaType.caption, color = Meka.colors.textTertiary,
@@ -132,9 +132,9 @@ internal fun MessagesSetupSection(core: MekaCore, store: CaptureStore, listening
                 runCatching { pick.launch(Intent(Intent.ACTION_PICK, Phone.CONTENT_URI)) }
             }.padding(vertical = MekaSpace.xs))
 
-        Text("Privacy and cost", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.s))
+        Text("Privacy and cost", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
         (MessagesSetupRules.PRIVACY + MessagesSetupRules.COST).forEach { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
-        Text("What MEKA can't see", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.s))
+        Text("What MEKA can't see", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
         MessagesSetupRules.LIMITS.forEach { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
     }
 }
@@ -176,7 +176,7 @@ internal fun SettingChip(label: String, on: Boolean, spoken: String, onClick: ()
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
             .clickable(role = Role.Switch) { onClick() }
             .semantics { contentDescription = spoken; stateDescription = if (on) "On" else "Off" }
-            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs),
+            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
     )
 }
 

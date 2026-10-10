@@ -53,6 +53,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -98,10 +99,10 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Text("Notifications", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.NOTIFICATIONS)).appear(rememberAppearance(0)))
         Column(Modifier.appear(rememberAppearance(0))) {

@@ -103,7 +103,7 @@ struct NotificationsSheet: View {
 
     private func section(_ title: String, _ index: Int) -> some View {
         Text(title).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-            .foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.s)
+            .foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.m)
             .staggeredAppear(index)
     }
 

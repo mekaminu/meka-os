@@ -127,9 +127,9 @@ private fun Week(v: WeeklyReviewView, step: (Int) -> Unit, reviewDone: () -> Uni
         }
 
         item(key = "tiles") {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
                 v.tiles.chunked(2).forEachIndexed { row, pair ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
                         pair.forEachIndexed { i, t -> Tile(t, Modifier.weight(1f).appear(rememberAppearance(1 + row * 2 + i))) }
                         if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
@@ -198,7 +198,7 @@ private fun Week(v: WeeklyReviewView, step: (Int) -> Unit, reviewDone: () -> Uni
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 ReviewedCheck(v.reviewed)
-                Spacer(Modifier.height(MekaSpace.s))
+                Spacer(Modifier.height(MekaSpace.xs))
                 val line = v.reviewedLine
                 if (v.reviewed && line != null) {
                     Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
@@ -258,7 +258,7 @@ private fun Line(title: String, detail: String, index: Int, lit: Boolean = false
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-        Text(detail, style = MekaType.caption, color = if (lit) Meka.colors.accent else Meka.colors.textTertiary, modifier = Modifier.padding(start = MekaSpace.s))
+        Text(detail, style = MekaType.caption, color = if (lit) Meka.colors.accent else Meka.colors.textTertiary, modifier = Modifier.padding(start = MekaSpace.xs))
     }
 }
 
@@ -317,7 +317,7 @@ private fun ReviewedCheck(visible: Boolean) {
             fadeIn(MekaMotion.appear(false)),
         exit = fadeOut(MekaMotion.appear(reduced)),
     ) {
-        Box(Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent).padding(horizontal = MekaSpace.l, vertical = MekaSpace.s)) {
+        Box(Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent).padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs)) {
             Text("✓", style = MekaType.upNextTitle, color = Meka.colors.onAccent)
         }
     }

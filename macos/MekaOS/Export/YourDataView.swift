@@ -13,7 +13,7 @@ struct YourDataSection: View {
     var firstIndex = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("EXPORT EVERYTHING")
                 .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking).foregroundStyle(palette.textTertiary)
                 .staggeredAppear(firstIndex)
@@ -89,7 +89,7 @@ struct YourDataSheet: View {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.l)
         .frame(width: 460)

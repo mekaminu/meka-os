@@ -57,6 +57,7 @@ import kotlinx.coroutines.delay
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.MotionPrefs
@@ -376,7 +377,7 @@ fun DayRingSheet(
             .padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.l),
     ) {
         Text(backLabel, style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0))) {
             Text("Your whole day", style = MekaType.greeting, color = Meka.colors.textPrimary)
             Text(if (onOpenArc != null) "Midnight at the top · tap an arc to open it" else "Midnight at the top", style = MekaType.itemMeta, color = Meka.colors.textSecondary,

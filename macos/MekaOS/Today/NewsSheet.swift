@@ -24,7 +24,7 @@ struct NewsSheet: View {
     @State private var forward = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if let place = model.newsPlace {
                 if let id = openId, let d = place.detail(id: id) {
                     detail(d)
@@ -76,7 +76,7 @@ struct NewsSheet: View {
                     Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).staggeredAppear(1)
                 }
                 ForEach(Array(place.lanes.enumerated()), id: \.element.topicId) { i, lane in
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         if lane.isBarca {
                             Text(lane.label.uppercased())
                                 .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
@@ -104,9 +104,9 @@ struct NewsSheet: View {
 
     /// Matchday: "MATCHDAY" (or "ON NOW") in Barça's colour over the fixture's line; the line cross-fades as it changes.
     private func matchday(_ md: NewsMatchday) -> some View {
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             Circle().fill(palette.barca).frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(md.live ? "ON NOW" : "MATCHDAY")
                     .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                     .foregroundStyle(palette.barca)
@@ -117,15 +117,15 @@ struct NewsSheet: View {
             .animation(MekaMotion.appear(reduced: reduceMotion), value: md.line)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.s)
+        .padding(MekaSpace.m)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-        .padding(.bottom, MekaSpace.s)
+        .padding(.bottom, MekaSpace.m)
         .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
     private func detail(_ d: NewsDetail) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack {
                 Button("‹ News") { close() }.buttonStyle(.borderless).foregroundStyle(palette.accent)
                     .keyboardShortcut(.cancelAction)
@@ -133,12 +133,12 @@ struct NewsSheet: View {
                 Text(d.position).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
             ScrollView {
-                VStack(alignment: .leading, spacing: MekaSpace.s) {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     if d.item.imageKey != nil {
                         NewsThumb(item: d.item, palette: palette, corner: MekaRadius.m, initialFont: MekaType.upNextTitle)
                             .aspectRatio(16.0 / 9.0, contentMode: .fit)
                             .frame(maxWidth: .infinity)
-                            .padding(.bottom, MekaSpace.s)
+                            .padding(.bottom, MekaSpace.xs)
                     }
                     Text(d.item.title).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -147,7 +147,7 @@ struct NewsSheet: View {
                         .font(MekaType.body)
                         .foregroundStyle(d.item.summary != nil ? palette.textPrimary : palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, MekaSpace.s)
+                        .padding(.top, MekaSpace.xs)
                     if let url = Self.safeURL(d.item.url) {
                         Button("Read full story") { openURL(url) }
                             .buttonStyle(.borderedProminent).tint(palette.accent)
@@ -194,17 +194,17 @@ private struct StoryRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: MekaSpace.s) {
+        HStack(alignment: .top, spacing: MekaSpace.xs) {
             Circle().fill(item.topic == "barca" ? palette.barca : palette.textTertiary).frame(width: 6, height: 6)
-                .padding(.top, 8)
-            VStack(alignment: .leading, spacing: 2) {
+                .padding(.top, MekaSpace.xs)
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(item.title).font(MekaType.body)
                     .foregroundStyle(hovering ? palette.accent : palette.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(item.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
-            Spacer(minLength: MekaSpace.s)
-            NewsThumb(item: item, palette: palette).frame(width: 72, height: 54).padding(.top, 2)
+            Spacer(minLength: MekaSpace.xs)
+            NewsThumb(item: item, palette: palette).frame(width: 72, height: 54).padding(.top, 2) // rhythm: ok (lines the picture up with the title's first line)
         }
         .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)

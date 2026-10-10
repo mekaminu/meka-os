@@ -14,7 +14,7 @@ struct FoldUpdateSheet: View {
     let palette: MekaPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Publish to the Fold").font(MekaType.upNextTitle).staggeredAppear(0)
             Group {
                 if let done = model.foldUpdateOutcome {
@@ -53,7 +53,7 @@ struct FoldUpdateSheet: View {
                         .disabled(model.foldUpdateCheck?.summary == nil || model.publishingFoldUpdate)
                 }
             }
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.l)
         .frame(width: 440)

@@ -74,6 +74,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -345,10 +346,10 @@ private fun BedsideTalkPane(core: MekaCore, onClose: () -> Unit) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                 .windowInsetsPadding(WindowInsets.safeDrawing).padding(MekaSpace.gutter),
-            verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             Text(TalkStartRules.BEDSIDE_BACK, style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onClose() }.minTouch())
             Text(TalkStartRules.BEDSIDE_TITLE, style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
             // Search isn't reachable at the bedside: when asking can't work, the field's tap just closes the pane.
             os.meka.android.ask.AskMekaSection(core, undo, openSearch = { _, _ -> onClose() }, modifier = Modifier.appear(rememberAppearance(1)), matches = false)

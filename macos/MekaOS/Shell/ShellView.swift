@@ -152,23 +152,23 @@ struct NeedsYouView: View {
                         .staggeredAppear(0)
                     // What the Fold held at work (synced): the card after work, a quiet count during it.
                     AfterWorkCard(palette: palette)
-                        .padding(.bottom, MekaSpace.s)
+                        .padding(.bottom, MekaSpace.m)
                         .staggeredAppear(1)
                     // Messages the Fold triaged (V1, messages slice 3), then requests from people Meka watches
                     // (V1, requests slice 4), above the stack.
                     TriageCardsView(palette: palette)
-                        .padding(.bottom, model.triage.isEmpty ? 0 : MekaSpace.s)
+                        .padding(.bottom, model.triage.isEmpty ? 0 : MekaSpace.m)
                     RequestCardsView(palette: palette, firstIndex: 2 + model.triage.count)
-                        .padding(.bottom, model.requests.isEmpty ? 0 : MekaSpace.s)
+                        .padding(.bottom, model.requests.isEmpty ? 0 : MekaSpace.m)
                     // The group digest the Fold made at 12:30 / 18:30 (V1, messages slice 4b): gists, never the messages.
                     GroupGistsView(palette: palette, firstIndex: 2 + model.triage.count + model.requests.count)
-                        .padding(.bottom, model.groupGists.isEmpty ? 0 : MekaSpace.s)
+                        .padding(.bottom, model.groupGists.isEmpty ? 0 : MekaSpace.m)
                     if model.needsYouCards.isEmpty && model.requests.isEmpty && model.triage.isEmpty {
                         // The breathing check ring beside a light line and what lands here (catalogue "Empty
                         // states"; Fold review 2026-10-08, item 7); Off: still.
                         HStack(spacing: MekaSpace.m) {
                             BreathingRingView(palette: palette, check: true)
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                                 Text(NeedsYouStackRules.shared.EMPTY_LINE)
                                     .font(MekaType.body).foregroundStyle(palette.textPrimary)
                                 Text(NeedsYouStackRules.shared.EMPTY_CAPTION)

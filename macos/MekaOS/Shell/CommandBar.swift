@@ -31,7 +31,7 @@ struct CommandBarOverlay: View {
                 .onTapGesture { close() }
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: MekaSpace.s) {
+                HStack(spacing: MekaSpace.xs) {
                     Image(systemName: "command").foregroundStyle(palette.accent)
                     TextField("Go to, do, find or add…", text: $query)
                         .textFieldStyle(.plain)
@@ -49,14 +49,14 @@ struct CommandBarOverlay: View {
                 Rectangle().fill(palette.hairline).frame(height: 1)
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 2) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
                             ForEach(sections(results)) { section in
                                 if let label = section.label {
                                     Text(label.uppercased())
                                         .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                                         .foregroundStyle(palette.textTertiary)
-                                        .padding(.horizontal, MekaSpace.s)
-                                        .padding(.top, MekaSpace.s)
+                                        .padding(.horizontal, MekaSpace.xs)
+                                        .padding(.top, MekaSpace.m)
                                 }
                                 ForEach(section.items) { item in
                                     CommandBarRowView(
@@ -85,7 +85,7 @@ struct CommandBarOverlay: View {
             .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).stroke(palette.hairline, lineWidth: 1))
             .clipShape(RoundedRectangle(cornerRadius: MekaRadius.m))
             .shadow(color: .black.opacity(0.35), radius: 24, y: 12)
-            .padding(.top, 72)
+            .padding(.top, 72) // rhythm: ok (the bar's drop from the window's top, 3 × 24)
         }
         .onAppear { fieldFocused = true }
         .onChange(of: query) { lit = 0 }
@@ -147,22 +147,22 @@ private struct CommandBarRowView: View {
     let highlight: Namespace.ID
 
     var body: some View {
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             Image(systemName: CommandBarNav.symbol(row.action))
                 .frame(width: 20)
                 .foregroundStyle(lit ? palette.accent : palette.textSecondary)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
                 if let detail = row.detail {
                     Text(detail).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
                 }
             }
-            Spacer(minLength: MekaSpace.s)
+            Spacer(minLength: MekaSpace.xs)
             if let shortcut {
                 Text(shortcut).font(MekaType.caption).monospaced().foregroundStyle(palette.textTertiary)
             }
         }
-        .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.xs)
         .background {
             if lit {
                 RoundedRectangle(cornerRadius: MekaRadius.s)

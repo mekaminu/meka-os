@@ -63,6 +63,7 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.core.facade.ConnectStart
 import os.meka.core.facade.ConnectedAccount
@@ -115,9 +116,9 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
         else { accounts = now; note = CalendarAccessRules.stoppedLine(a.provider) }
     }
 
-    Column(Modifier.fillMaxSize().padding(MekaSpace.gutter).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    Column(Modifier.fillMaxSize().padding(MekaSpace.gutter).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Text("Calendars", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.CALENDARS)))
         Crossfade(CalendarAccessRules.header(accounts.orEmpty().any { it.canEdit }), animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "calendars-header") {
@@ -233,7 +234,7 @@ internal fun CalendarSwitchRow(c: CalendarChoice, modifier: Modifier = Modifier,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                         .clickable(role = Role.Button) { haptics.tick(); renaming = !renaming }
                         .semantics { contentDescription = if (renaming) "Cancel renaming ${c.label}" else "Rename ${c.label}" }
-                        .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs))
+                        .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs))
             }
             Text(if (c.onToday) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(pill).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs))
@@ -257,7 +258,7 @@ private fun CalendarNameField(c: CalendarChoice, onDone: (String) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Box(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+                .minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
         ) {
             if (text.isEmpty()) Text(c.defaultLabel, style = MekaType.body, color = Meka.colors.textTertiary)
             BasicTextField(

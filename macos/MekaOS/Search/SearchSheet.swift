@@ -26,7 +26,7 @@ struct SearchSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Search").font(MekaType.upNextTitle).staggeredAppear(0)
             TextField("Search everything…", text: $query)
                 .textFieldStyle(.roundedBorder)
@@ -42,7 +42,7 @@ struct SearchSheet: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: MekaSpace.xs) {
                         ForEach(Array((view?.groups ?? []).enumerated()), id: \.element.kind) { i, g in
-                            SectionLabel(g.label, palette).padding(.top, MekaSpace.s).staggeredAppear(min(i + 2, 8))
+                            SectionLabel(g.label, palette).padding(.top, MekaSpace.m).staggeredAppear(min(i + 2, 8))
                             ForEach(g.hits, id: \.id) { hit in
                                 SearchRow(hit: hit, chosen: chosen == hit.id, unfolded: unfolded == hit.id, palette: palette,
                                           onTap: { choose(hit) }, onReopen: { unfolded = nil; model.reopen(hit.id) })
@@ -120,7 +120,7 @@ private struct SearchRow: View {
     private var tappable: Bool { hit.kind == .done || hit.target == .task || SearchNav.destination(hit.target) != nil }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             Text(hit.title).font(MekaType.itemTitle)
                 .foregroundStyle(hit.kind == .done ? palette.textSecondary : (hovering && tappable ? palette.accent : palette.textPrimary))
                 .lineLimit(2)
@@ -137,7 +137,7 @@ private struct SearchRow: View {
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(chosen ? palette.surfaceRaised : palette.surface))
         .contentShape(Rectangle())

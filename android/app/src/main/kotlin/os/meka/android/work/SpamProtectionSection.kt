@@ -51,6 +51,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -155,10 +156,10 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
                 }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Box(
                 Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                    .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+                    .minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
             ) {
                 if (typed.isEmpty()) Text("Number to block", style = MekaType.body, color = Meka.colors.textTertiary)
                 BasicTextField(

@@ -45,6 +45,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.SkeletonRows
 import os.meka.android.designsystem.appear
@@ -120,11 +121,11 @@ fun YourData(core: MekaCore, modifier: Modifier = Modifier, onClose: (() -> Unit
     val reduced = Meka.reducedMotion
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         if (onClose != null) {
             Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+                modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         }
         // Over Ask the title arrives from its More row; as the Vault it arrives across the shell from Ask's Vault row.
         Text(if (vaultLine != null) "Vault" else "Your data", style = MekaType.greeting, color = Meka.colors.textPrimary,
@@ -148,7 +149,7 @@ fun YourData(core: MekaCore, modifier: Modifier = Modifier, onClose: (() -> Unit
             }
         }
 
-        Spacer(Modifier.height(MekaSpace.s))
+        Spacer(Modifier.height(MekaSpace.m))
         Column(Modifier.fillMaxWidth().appear(rememberAppearance(3)), horizontalAlignment = Alignment.CenterHorizontally) {
             SavedCheck(phase as? ExportPhase.Saved)
             Crossfade(phase, animationSpec = MekaMotion.appear(reduced), label = "export-phase") { p ->
@@ -186,7 +187,7 @@ private fun SavedCheck(saved: ExportPhase.Saved?) {
         exit = fadeOut(MekaMotion.appear(reduced)),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = MekaSpace.m)) {
-            Box(Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent).padding(horizontal = MekaSpace.l, vertical = MekaSpace.s)) {
+            Box(Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent).padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs)) {
                 Text("✓", style = MekaType.upNextTitle, color = Meka.colors.onAccent)
             }
             saved?.let {

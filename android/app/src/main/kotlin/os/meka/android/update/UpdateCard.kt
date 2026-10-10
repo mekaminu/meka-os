@@ -83,7 +83,7 @@ internal fun UpdateCard(state: UpdateState, updater: AppUpdater, modifier: Modif
             val fill = remember { Animatable(0f) }
             LaunchedEffect(target) { if (reduced) fill.snapTo(target) else fill.animateTo(target, MekaMotion.replan(false)) }
             Box(
-                Modifier.padding(top = MekaSpace.s).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                Modifier.padding(top = MekaSpace.xs).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(MekaRadius.pill))
                     .background(Meka.colors.surface),
             ) {
                 Box(Modifier.fillMaxWidth(fill.value.coerceIn(0f, 1f)).height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
@@ -98,7 +98,7 @@ internal fun UpdateCard(state: UpdateState, updater: AppUpdater, modifier: Modif
         }
         if (chips.isNotEmpty()) {
             Row(
-                Modifier.padding(top = MekaSpace.s).horizontalScroll(rememberScrollState()),
+                Modifier.padding(top = MekaSpace.m).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 chips.forEachIndexed { i, (label, action) -> Chip(label, lit = i == 0, onClick = action) }

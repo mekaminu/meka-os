@@ -48,6 +48,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -170,7 +171,7 @@ private fun NotifyNowPill(name: String, state: NotifyNowState) {
                 contentDescription = RequestWatchRules.notifySpoken(name, state.on)
                 stateDescription = RequestWatchRules.notifyLabel(state.on)
             }
-            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs),
+            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
     )
 }
 
@@ -181,7 +182,7 @@ private fun GroupNameField(onDone: (String) -> Unit) {
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+            .minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
     ) {
         if (text.isEmpty()) Text("Group name, as in WhatsApp", style = MekaType.body, color = Meka.colors.textTertiary)
         BasicTextField(

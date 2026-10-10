@@ -22,7 +22,7 @@ struct AfterWorkSheet: View {
                 .staggeredAppear(0)
             if let summary, !summary.isEmpty {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: MekaSpace.s) {
+                    VStack(alignment: .leading, spacing: MekaSpace.m) {
                         ForEach(Array(summary.people.enumerated()), id: \.element.personName) { i, p in
                             person(p).staggeredAppear(i + 1)
                         }
@@ -47,7 +47,7 @@ struct AfterWorkSheet: View {
                         .keyboardShortcut(.defaultAction)
                 }
             }
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.l)
         .frame(width: 520)
@@ -75,7 +75,7 @@ struct AfterWorkSheet: View {
             if expanded {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     ForEach(p.items, id: \.id) { item in
-                        HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+                        HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                             Text(Self.time(item.atMs)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                                 .monospacedDigit().frame(width: 44, alignment: .leading)
                             VStack(alignment: .leading, spacing: 0) {
@@ -215,7 +215,7 @@ struct HeldPreviewView: View {
             .accessibilityHint(open ? HeldPreviewRules.shared.HIDE_HINT : HeldPreviewRules.shared.SHOW_HINT)
 
             if open && !preview.isEmpty {
-                VStack(alignment: .leading, spacing: MekaSpace.s) {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     ForEach(Array(preview.rows.enumerated()), id: \.element.id) { i, r in
                         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                             HStack(spacing: MekaSpace.xs) {

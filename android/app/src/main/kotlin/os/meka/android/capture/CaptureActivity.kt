@@ -188,7 +188,7 @@ private fun CaptureSheet(request: CaptureRequest, listenOnOpen: Boolean, save: s
                 .clickable(remember { MutableInteractionSource() }, indication = null) {} // taps inside don't dismiss
                 .navigationBarsPadding()
                 .padding(MekaSpace.gutter),
-            verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             AnimatedContent(
                 targetState = captured,
@@ -204,11 +204,11 @@ private fun CaptureSheet(request: CaptureRequest, listenOnOpen: Boolean, save: s
                         Box(Modifier.size(28.dp).clip(CircleShape).background(Meka.colors.success), contentAlignment = Alignment.Center) {
                             Text("✓", color = Meka.colors.background, style = MekaType.itemMeta)
                         }
-                        Spacer(Modifier.width(MekaSpace.s))
+                        Spacer(Modifier.width(MekaSpace.xs))
                         Text("Captured", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
                     }
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Text("CAPTURE", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
