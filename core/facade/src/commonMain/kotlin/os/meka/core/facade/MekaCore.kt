@@ -1329,6 +1329,15 @@ class MekaCore(
         os.meka.core.domain.DateNightRules.skipLine(day, todayEpochDay(), skip)
     }
 
+    /**
+     * Booked on the week-before card in Needs you (slice 2): somewhere is booked and cover arranged, so the card and its
+     * heads-up leave both apps; [booked] false (the undo bar) asks again. Returns the line to show, or null.
+     */
+    suspend fun bookDateNight(day: Long, booked: Boolean): String? = onCore {
+        if (!dateNight.book(day, booked)) return@onCore null
+        os.meka.core.domain.DateNightRules.bookedLine(day, todayEpochDay(), booked)
+    }
+
     // ---- School rhythm (V1, slice 1; Ask → More → School, and Needs you's cover questions) ----
 
     /**
@@ -3038,7 +3047,7 @@ class MekaCore(
             dinner = mealPlan.tonight(),
             dateNight = os.meka.core.domain.DateNightRules.todayLine(dateNightNow, todayDay, cal.minuteOfDay(nowMs())),
         )
-        _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay)
+        _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(
@@ -3121,6 +3130,7 @@ class MekaCore(
             lines = lineStatus.snapshot(), office = officeToday(),
             callCredit = callCredit.current(), callAssistantOn = _workMode.value.callAssistant,
             school = school.items(), schoolCovers = _school.value.covers,
+            dateNight = dateNight.setting(),
         )
 
     /** Today's office window (Places item 2): a work day that isn't a work-from-home day, or null. */

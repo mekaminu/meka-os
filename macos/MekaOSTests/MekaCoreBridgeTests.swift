@@ -1343,14 +1343,33 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.WEEKDAY_CHOICES.count, 7)
         XCTAssertEqual(rules.START_CHOICES.map { $0.int32Value }.first, 18 * 60)
         XCTAssertEqual(LocalClock.companion.formatMinute(m: 19 * 60), "19:00")
-        let setting = DateNightSetting(weekday: 5, startMin: 19 * 60, anchorDay: fri, skipped: [])
-        let v = rules.view(s: setting, today: sat)
+        let setting = DateNightSetting(weekday: 5, startMin: 19 * 60, anchorDay: fri, skipped: [], booked: [])
+        let v = rules.view(s: setting, today: sat, minuteOfDay: 10 * 60)
         XCTAssertEqual(v.summary, "Every other Friday from 19:00 · next Fri 16 Oct")
         XCTAssertEqual(v.nights.first?.day, fri)
         XCTAssertEqual(v.starts.map(\.chosen), [true, false])
         XCTAssertEqual(rules.todayLine(s: setting, today: fri, minuteOfDay: 13 * 60)?.text, "Date night tonight from 19:00")
         XCTAssertEqual(rules.skipLine(day: fri, today: sat, skip: true), "Skipped Fri 16 Oct · the evening is free to plan")
         XCTAssertEqual(DateNightView.companion.EMPTY.summary, rules.OFF_LINE)
+    }
+
+    func testDateNightNudgeReachesSwift() {
+        // Date night, slice 2: Needs you's week-before card and its heads-up's row in Notifications reach the Mac; the
+        // card's buttons send only an Int64 and a Bool (the undo bar gets a String back).
+        let rules = DateNightRules.shared
+        let fri16 = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 16)
+        let setting = DateNightSetting(weekday: 5, startMin: 19 * 60, anchorDay: fri16 + 7, skipped: [], booked: [])
+        let card = rules.nudge(s: setting, today: fri16, minuteOfDay: 9 * 60)
+        XCTAssertEqual(card?.day, fri16 + 7)
+        XCTAssertEqual(card?.title, "Date night · Fri 23 Oct")
+        XCTAssertEqual(card?.line, "In 7 days · from 19:00")
+        XCTAssertEqual(card?.bookedLabel, "Booked")
+        XCTAssertEqual(card?.skipLabel, "Skip this one")
+        XCTAssertEqual(rules.view(s: setting, today: fri16, minuteOfDay: 9 * 60).nudge?.day, fri16 + 7)
+        XCTAssertEqual(rules.bookedLine(day: fri16 + 7, today: fri16, booked: true), "Date night Fri 23 Oct · booked")
+        let booked = DateNightSetting(weekday: 5, startMin: 19 * 60, anchorDay: fri16 + 7, skipped: [], booked: [KotlinLong(longLong: fri16 + 7)])
+        XCTAssertNil(rules.nudge(s: booked, today: fri16, minuteOfDay: 9 * 60))
+        XCTAssertEqual(NoticeSource.dateNight.label, "Date night")
     }
 
     func testSchoolReachesSwift() {

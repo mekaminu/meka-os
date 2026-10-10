@@ -66,4 +66,42 @@ class DateNightFacadeTest {
         assertEquals(DateNightRules.OFF_LINE, mac.dateNightView.value.summary)
         assertNull(mac.today.value.dateNight)
     }
+
+    /** Slice 2: a week before, Needs you's card and the 09:00 heads-up on both apps; Booked on one clears both; Undo asks again. */
+    @Test
+    fun theWeekBeforeCardAndHeadsUpGoOnceBooked() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        val fri23 = CivilDate.toEpochDay(2026, 10, 23)
+        fold.setDateNight(5, 19 * 60, fri23)
+        fold.syncNow(); mac.syncNow()
+        mac.tick()
+        assertNull(mac.dateNightView.value.nudge) // 13 days off
+
+        // Fri 16 Oct, 09:30: the card on the Mac and the heads-up through the governor.
+        now += 6 * 86_400_000L - 30 * 60_000L
+        mac.tick()
+        val card = mac.dateNightView.value.nudge!!
+        assertEquals(fri23, card.day)
+        assertEquals("Date night · Fri 23 Oct", card.title)
+        fun dateNight(r: os.meka.core.domain.GovernorResult) = r.post.filter { it.source == os.meka.core.domain.NoticeSource.DATE_NIGHT }
+        val gov = mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        assertEquals(listOf("Date night · Fri 23 Oct" to "Book somewhere and arrange cover · from 19:00"), dateNight(gov).map { it.title to it.text })
+        assertTrue(dateNight(mac.governNotifications(gov.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty()) // once
+
+        // Booked on the Fold: gone from the Mac's Needs you and its governor.
+        assertEquals("Date night Fri 23 Oct · booked", fold.bookDateNight(fri23, true))
+        assertNull(fold.bookDateNight(fri23, true))
+        fold.syncNow(); mac.syncNow()
+        mac.tick()
+        assertNull(mac.dateNightView.value.nudge)
+        assertTrue(dateNight(mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty())
+        assertEquals("19:00 · kept clear · booked", mac.dateNightView.value.nights.first().line)
+
+        // Undo on the Fold's bar: the card is back.
+        assertEquals("Date night Fri 23 Oct · not booked yet", fold.bookDateNight(fri23, false))
+        fold.syncNow(); mac.syncNow()
+        mac.tick()
+        assertEquals(fri23, mac.dateNightView.value.nudge?.day)
+    }
 }

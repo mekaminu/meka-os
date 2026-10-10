@@ -116,4 +116,54 @@ class DateNightTest {
         assertNull(DateNightRules.todayLine(s, fri16, 23 * 60))
         assertNull(DateNightRules.todayLine(s, fri16 + 7, 13 * 60))
     }
+
+    /** Slice 2: the nudge a week before — a Needs you card and a 09:00 heads-up — gone once booked (on either device) or skipped. */
+    @Test
+    fun theWeekBeforeNudgeAsksToBookUntilBookedOrSkipped() {
+        nFold.set(5, 19 * 60, fri16 + 7) // Fri 23 Oct, 13 days off
+        assertNull(DateNightRules.nudge(nFold.setting(), sat, 10 * 60))
+        assertTrue(DateNightRules.notices(nFold.setting(), at(sat, 10), cal).isEmpty())
+
+        // From Fri 16 Oct, a week before: the card, and the heads-up due at 09:00 that day until the evening starts.
+        val n = DateNightRules.nudge(nFold.setting(), fri16, 8 * 60)!!
+        assertEquals(fri16 + 7, n.day)
+        assertEquals("In 7 days · from 19:00", n.line)
+        assertEquals("Date night · Fri 23 Oct", n.title)
+        assertEquals("Book somewhere and arrange cover", n.question)
+        assertEquals("Date night on Fri 23 Oct from 19:00. Book somewhere and arrange cover.", n.spoken)
+        val notice = DateNightRules.notices(nFold.setting(), at(fri16, 8), cal).single()
+        assertEquals(NoticeSource.DATE_NIGHT, notice.source)
+        assertEquals(NoticeTarget.NEEDS_YOU, notice.target)
+        assertEquals(at(fri16, 9), notice.atMs)
+        assertEquals(at(fri16 + 7, 19), notice.expiresAtMs)
+        assertEquals("Tomorrow · from 19:00", DateNightRules.nudge(nFold.setting(), fri16 + 6, 12 * 60)!!.line)
+        assertEquals("Tonight · from 19:00", DateNightRules.nudge(nFold.setting(), fri16 + 7, 18 * 60)!!.line)
+        assertNull(DateNightRules.nudge(nFold.setting(), fri16 + 7, 19 * 60)) // the evening has started
+        assertEquals(n, DateNightRules.view(nFold.setting(), fri16, 8 * 60).nudge)
+
+        // Booked on the Mac: gone from both apps, the night's row says so; taking it back brings the card back.
+        world.clock.nowMs = at(fri16, 10)
+        sync()
+        assertTrue(nMac.book(fri16 + 7, true))
+        assertFalse(nMac.book(fri16 + 7, true))
+        assertFalse(nMac.book(fri16 + 8, true)) // not a date night
+        sync()
+        assertNull(DateNightRules.nudge(nFold.setting(), fri16, 10 * 60))
+        assertTrue(DateNightRules.notices(nFold.setting(), at(fri16, 10), cal).isEmpty())
+        assertEquals("19:00 · kept clear · booked", DateNightRules.view(nFold.setting(), fri16).nights.first().line)
+        assertEquals("Date night Fri 23 Oct · booked", DateNightRules.bookedLine(fri16 + 7, fri16, true))
+        assertEquals("Date night tomorrow · booked", DateNightRules.bookedLine(fri16 + 7, fri16 + 6, true))
+        assertTrue(nFold.book(fri16 + 7, false))
+        assertEquals(fri16 + 7, DateNightRules.nudge(nFold.setting(), fri16, 10 * 60)?.day)
+
+        // Skipped: no card, no heads-up; the fortnight after is asked about a week before it.
+        assertTrue(nFold.skip(fri16 + 7, true))
+        assertNull(DateNightRules.nudge(nFold.setting(), fri16, 10 * 60))
+        assertEquals(fri16 + 21, DateNightRules.nudge(nFold.setting(), fri16 + 14, 10 * 60)?.day)
+
+        // A new rhythm starts with nothing booked.
+        nFold.book(fri16 + 21, true)
+        assertTrue(nFold.set(5, 19 * 60, fri16 + 14))
+        assertTrue(nFold.setting()!!.booked.isEmpty())
+    }
 }

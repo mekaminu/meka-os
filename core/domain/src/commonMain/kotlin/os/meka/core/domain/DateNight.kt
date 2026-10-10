@@ -8,12 +8,13 @@ import os.meka.core.sync.fv
  * Date night (V1, Meka approved 2026-10-10), slice 1: a protected evening every two weeks. Meka picks the evening once
  * (a weekday, a start time and which week it starts); from then on the planner ([DayPlanner]) and Gym bookings
  * ([SessionRules.book]) keep that evening clear, Today's header says "Date night tonight from 19:00" on the day, and
- * one night can be skipped (that evening is free to plan again). Slice 2 adds the nudge a week before (book somewhere,
- * arrange cover).
+ * one night can be skipped (that evening is free to plan again). Slice 2: the nudge a week before — a Needs you card
+ * ("Date night · Fri 23 Oct" · "Book somewhere and arrange cover" · Booked · Skip this one) and a heads-up at 09:00
+ * seven days ahead ([DateNightRules.notices]), both gone once the night is booked or skipped.
  *
  * Stored as one `context_mode` entity, id [DateNightRules.ENTITY_ID] (ADR-008 addendum 2026-10-10): `weekday`
  * (ISO 1..7; 0 = off), `startMin`, `anchorDay` (the epoch day of one date night: the fortnight's phase), `skipped`
- * (comma-separated epoch days). All LWW, so the latest choice on any device wins. Plain, non-AI rules; nothing leaves
+ * (comma-separated epoch days), `booked` (the nights Meka has booked, the same way; slice 2). All LWW, so the latest choice on any device wins. Plain, non-AI rules; nothing leaves
  * Meka's own synced data.
  */
 object DateNightFields {
@@ -21,15 +22,34 @@ object DateNightFields {
     const val START = "startMin"
     const val ANCHOR = "anchorDay"
     const val SKIPPED = "skipped"
+    const val BOOKED = "booked"
 }
 
 /** The setting as stored. [weekday] 0 is off. */
-data class DateNightSetting(val weekday: Int, val startMin: Int, val anchorDay: Long, val skipped: Set<Long> = emptySet()) {
+data class DateNightSetting(
+    val weekday: Int, val startMin: Int, val anchorDay: Long, val skipped: Set<Long> = emptySet(), val booked: Set<Long> = emptySet(),
+) {
     val on: Boolean get() = weekday in 1..7
 }
 
 /** One coming date night in the pane: "Fri 23 Oct" · "19:00 · kept clear", or "Skipped · the evening is free to plan". */
 data class DateNightRow(val day: Long, val label: String, val line: String, val skipped: Boolean, val spoken: String)
+
+/**
+ * The nudge before a kept night that isn't booked (slice 2), in Needs you on both apps: "In 7 days · from 19:00" ·
+ * "Date night · Fri 23 Oct" · "Book somewhere and arrange cover" · [bookedLabel] · [skipLabel].
+ */
+data class DateNightNudge(
+    val day: Long,
+    val line: String,
+    val title: String,
+    val question: String,
+    /** What the buttons do: "Booked takes this off Needs you. Skip this one frees the evening." */
+    val detail: String,
+    val spoken: String,
+    val bookedLabel: String = DateNightRules.BOOKED_LABEL,
+    val skipLabel: String = DateNightRules.SKIP_LABEL,
+)
 
 /** A choice of first night ("Fri 16 Oct" or "Fri 23 Oct"): which fortnight the evenings fall in. */
 data class DateNightStart(val day: Long, val label: String, val chosen: Boolean)
@@ -48,6 +68,8 @@ data class DateNightView(
     val nights: List<DateNightRow>,
     /** The two possible first nights for the chosen weekday; empty when off. */
     val starts: List<DateNightStart>,
+    /** The week-before card for Needs you (slice 2); null when there's nothing to book. */
+    val nudge: DateNightNudge? = null,
 ) {
     companion object {
         val EMPTY = DateNightView(false, DateNightRules.DEFAULT_WEEKDAY, DateNightRules.DEFAULT_START, DateNightRules.OFF_LINE, emptyList(), emptyList())
@@ -75,13 +97,22 @@ object DateNightRules {
     const val OFF_LABEL = "Turn off"
     const val SKIP_LABEL = "Skip this one"
     const val KEEP_LABEL = "Keep it"
+    const val BOOKED_LABEL = "Booked"
+    /** The nudge shows from this many days before a kept night, until it starts. */
+    const val NUDGE_DAYS = 7
+    /** The heads-up's time, [NUDGE_DAYS] before the night. */
+    const val NUDGE_NOTICE_MIN = 9 * 60
+    const val NUDGE_QUESTION = "Book somewhere and arrange cover"
+    const val NUDGE_DETAIL = "Booked takes this off Needs you. Skip this one frees the evening to plan."
 
     fun read(fields: Map<String, FieldValue>?): DateNightSetting? {
         if (fields == null) return null
         val weekday = fields[DateNightFields.WEEKDAY]?.longOrNull?.toInt() ?: return null
         val start = fields[DateNightFields.START]?.longOrNull?.toInt()?.takeIf { it in 0 until LocalClock.MINUTES_PER_DAY } ?: DEFAULT_START
         val anchor = fields[DateNightFields.ANCHOR]?.longOrNull ?: return null
-        return DateNightSetting(weekday, start, anchor, decodeDays(fields[DateNightFields.SKIPPED]?.textOrNull))
+        return DateNightSetting(
+            weekday, start, anchor, decodeDays(fields[DateNightFields.SKIPPED]?.textOrNull), decodeDays(fields[DateNightFields.BOOKED]?.textOrNull),
+        )
     }
 
     fun decodeDays(text: String?): Set<Long> = text.orEmpty().split(',').mapNotNull { it.trim().toLongOrNull() }.toSet()
@@ -130,14 +161,66 @@ object DateNightRules {
     fun everyLine(s: DateNightSetting): String =
         "Every other ${CivilDate.DAY_LONG[s.weekday - 1]} from ${LocalClock.formatMinute(s.startMin)}"
 
-    fun view(s: DateNightSetting?, today: Long): DateNightView {
+    /** "In 7 days", "In 2 days", "Tomorrow", "Tonight". */
+    fun inDays(day: Long, today: Long): String = when (val n = day - today) {
+        0L -> "Tonight"
+        1L -> "Tomorrow"
+        else -> "In $n days"
+    }
+
+    /**
+     * The week-before card: the soonest kept night from [NUDGE_DAYS] days ahead that isn't booked, until its evening
+     * starts ([minuteOfDay] on the night itself). Null when off, booked, skipped or further off.
+     */
+    fun nudge(s: DateNightSetting?, today: Long, minuteOfDay: Int): DateNightNudge? {
+        if (s == null || !s.on) return null
+        val day = nights(s, today, 2).firstOrNull { d ->
+            d - today <= NUDGE_DAYS && kept(s, d) && d !in s.booked && !(d == today && minuteOfDay >= s.startMin)
+        } ?: return null
+        val hhmm = LocalClock.formatMinute(s.startMin)
+        val line = "${inDays(day, today)} · from $hhmm"
+        val title = "$TITLE · ${CivilDate.shortLabel(day)}"
+        return DateNightNudge(day, line, title, NUDGE_QUESTION, NUDGE_DETAIL, spoken = "$TITLE on ${CivilDate.shortLabel(day)} from $hhmm. $NUDGE_QUESTION.")
+    }
+
+    /**
+     * The nudge's heads-up (source [NoticeSource.DATE_NIGHT]) through the governor like every notice, so quiet hours and
+     * Meka's tier apply: at [NUDGE_NOTICE_MIN] [NUDGE_DAYS] days before, standing until the evening starts. Gone once
+     * the night is booked or skipped (rules re-run each evaluation). A night set up less than a week ahead posts at once.
+     */
+    fun notices(s: DateNightSetting?, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        val n = nudge(s, cal.epochDayOf(nowMs), cal.minuteOfDay(nowMs)) ?: return emptyList()
+        return listOf(Notice(
+            key = "date-night:${n.day}:nudge", source = NoticeSource.DATE_NIGHT, tier = NoticeTier.HEADS_UP,
+            title = n.title, text = "${n.question} · from ${LocalClock.formatMinute(s!!.startMin)}",
+            atMs = cal.toEpochMs(n.day - NUDGE_DAYS, NUDGE_NOTICE_MIN), target = NoticeTarget.NEEDS_YOU,
+            expiresAtMs = cal.toEpochMs(n.day, s.startMin),
+        ))
+    }
+
+    /** The undo bar's line after Booked: "Date night Fri 23 Oct · booked"; after taking it back, "… · not booked". */
+    fun bookedLine(day: Long, today: Long, booked: Boolean): String {
+        val label = if (day == today) "tonight" else dayLabel(day, today).let { if (it == "Tomorrow") "tomorrow" else it }
+        return "$TITLE $label · ${if (booked) "booked" else "not booked yet"}"
+    }
+
+    fun view(s: DateNightSetting?, today: Long, minuteOfDay: Int = 0): DateNightView {
         if (s == null || !s.on) return DateNightView.EMPTY.copy(weekday = s?.weekday?.takeIf { it in 1..7 } ?: DEFAULT_WEEKDAY, startMin = s?.startMin ?: DEFAULT_START)
         val coming = nights(s, today, SHOWN)
         val rows = coming.map { d ->
             val label = dayLabel(d, today)
             val skipped = d in s.skipped
-            val line = if (skipped) "Skipped · the evening is free to plan" else "${LocalClock.formatMinute(s.startMin)} · kept clear"
-            DateNightRow(d, label, line, skipped, if (skipped) "$label: skipped." else "$label: date night from ${LocalClock.formatMinute(s.startMin)}, kept clear.")
+            val booked = !skipped && d in s.booked
+            val line = when {
+                skipped -> "Skipped · the evening is free to plan"
+                booked -> "${LocalClock.formatMinute(s.startMin)} · kept clear · booked"
+                else -> "${LocalClock.formatMinute(s.startMin)} · kept clear"
+            }
+            val spoken = when {
+                skipped -> "$label: skipped."
+                else -> "$label: date night from ${LocalClock.formatMinute(s.startMin)}, kept clear${if (booked) ", booked" else ""}."
+            }
+            DateNightRow(d, label, line, skipped, spoken)
         }
         val next = coming.firstOrNull { it !in s.skipped }
         val nextPart = when (next) {
@@ -147,7 +230,7 @@ object DateNightRules {
         }
         val first = firstNight(s.weekday, today)
         val starts = listOf(first, first + 7).map { DateNightStart(it, CivilDate.shortLabel(it), isNight(s, it)) }
-        return DateNightView(true, s.weekday, s.startMin, "${everyLine(s)} · $nextPart", rows, starts)
+        return DateNightView(true, s.weekday, s.startMin, "${everyLine(s)} · $nextPart", rows, starts, nudge(s, today, minuteOfDay))
     }
 
     /** Today's header on a kept date night, from noon until the evening is over; null otherwise. */
@@ -194,8 +277,9 @@ class DateNight(
         )
         if (!sameNights) {
             fields[DateNightFields.ANCHOR] = firstDay.fv()
-            // A new rhythm starts with nothing skipped.
+            // A new rhythm starts with nothing skipped or booked.
             if (old?.skipped?.isNotEmpty() == true) fields[DateNightFields.SKIPPED] = "".fv()
+            if (old?.booked?.isNotEmpty() == true) fields[DateNightFields.BOOKED] = "".fv()
         }
         replica.commitLocal(EntityTypes.CONTEXT_MODE, DateNightRules.ENTITY_ID, fields)
         return true
@@ -218,6 +302,21 @@ class DateNight(
         val kept = s.skipped.filter { it >= today }.toSet()
         val next = if (skip) kept + day else kept - day
         replica.commitLocal(EntityTypes.CONTEXT_MODE, DateNightRules.ENTITY_ID, mapOf(DateNightFields.SKIPPED to DateNightRules.encodeDays(next).fv()))
+        return true
+    }
+
+    /**
+     * Marks a coming kept night as booked (somewhere booked, cover arranged: the nudge leaves both apps), or takes that
+     * back. False when nothing changes.
+     */
+    fun book(day: Long, booked: Boolean): Boolean {
+        val s = setting() ?: return false
+        val today = today()
+        if (!DateNightRules.isNight(s, day) || day < today) return false
+        if ((day in s.booked) == booked) return false
+        val kept = s.booked.filter { it >= today }.toSet()
+        val next = if (booked) kept + day else kept - day
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, DateNightRules.ENTITY_ID, mapOf(DateNightFields.BOOKED to DateNightRules.encodeDays(next).fv()))
         return true
     }
 }

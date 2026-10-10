@@ -91,7 +91,7 @@ struct ShellView: View {
     }
 
     /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).
-    private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue + model.requests.count + model.triage.filter { TriageReplyRules.shared.secondary(card: $0) != nil }.count + model.schoolCovers.count }
+    private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue + model.requests.count + model.triage.filter { TriageReplyRules.shared.secondary(card: $0) != nil }.count + model.needsYouAsks }
 
     /// Sidebar selection that animates the switch (the List only ever sets a value; nil is ignored).
     private var selection: Binding<ShellDestination?> {
@@ -168,13 +168,13 @@ struct NeedsYouView: View {
                         .padding(.bottom, model.triage.isEmpty ? 0 : MekaSpace.m)
                     // School days off on office days, a week ahead (school rhythm, slice 1), above the requests.
                     SchoolCoversView(palette: palette, firstIndex: 2 + model.triage.count)
-                        .padding(.bottom, model.schoolCovers.isEmpty ? 0 : MekaSpace.m)
-                    RequestCardsView(palette: palette, firstIndex: 2 + model.triage.count + model.schoolCovers.count)
+                        .padding(.bottom, model.needsYouAsks == 0 ? 0 : MekaSpace.m)
+                    RequestCardsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks)
                         .padding(.bottom, model.requests.isEmpty ? 0 : MekaSpace.m)
                     // The group digest the Fold made at 12:30 / 18:30 (V1, messages slice 4b): gists, never the messages.
-                    GroupGistsView(palette: palette, firstIndex: 2 + model.triage.count + model.schoolCovers.count + model.requests.count)
+                    GroupGistsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                         .padding(.bottom, model.groupGists.isEmpty ? 0 : MekaSpace.m)
-                    if model.needsYouCards.isEmpty && model.requests.isEmpty && model.triage.isEmpty && model.schoolCovers.isEmpty {
+                    if model.needsYouCards.isEmpty && model.requests.isEmpty && model.triage.isEmpty && model.needsYouAsks == 0 {
                         // The breathing check ring beside a light line and what lands here (catalogue "Empty
                         // states"; Fold review 2026-10-08, item 7); Off: still.
                         HStack(spacing: MekaSpace.m) {

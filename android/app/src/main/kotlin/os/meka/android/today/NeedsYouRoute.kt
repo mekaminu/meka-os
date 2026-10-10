@@ -260,6 +260,10 @@ internal fun NeedsYouColumn(
     val triage by core.triage.collectAsState()
     val school by core.schoolView.collectAsState()
     val covers = school.covers
+    // Date night's week-before card (slice 2) sits with the school's questions: Meka's own plans to make.
+    val dateNight by core.dateNightView.collectAsState()
+    val nudge = dateNight.nudge
+    val asks = covers.size + (if (nudge != null) 1 else 0)
     val live by LiveReplies.live.collectAsState()
     val sendAll = remember(triage, live) { TriageReplyRules.sendAll(triage, live) }
     // Meka's edits of MEKA's drafts, by message id, so Send and "Send all" send what each card shows.
@@ -281,7 +285,7 @@ internal fun NeedsYouColumn(
     ) {
         item(key = "title") {
             if (compact) {
-                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + requests.size + triage.size + covers.size), Modifier.animateItem().appear(rememberAppearance(0, play)))
+                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + requests.size + triage.size + asks), Modifier.animateItem().appear(rememberAppearance(0, play)))
             } else {
                 Text("Needs you", style = MekaType.greeting, color = Meka.colors.textPrimary,
                     modifier = Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play)))
@@ -321,22 +325,37 @@ internal fun NeedsYouColumn(
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + i, play)))
             }
         }
+        nudge?.let { card ->
+            item(key = "date-night-${card.day}") {
+                DateNightCardView(card, onBooked = {
+                    scope.launch {
+                        runCatching { core.bookDateNight(card.day, true) }.getOrNull()
+                            ?.let { line -> moves.undoLine(line) { core.bookDateNight(card.day, false) } }
+                    }
+                }, onSkip = {
+                    scope.launch {
+                        runCatching { core.skipDateNight(card.day, true) }.getOrNull()
+                            ?.let { line -> moves.undoLine(line) { core.skipDateNight(card.day, false) } }
+                    }
+                }, Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + covers.size, play)))
+            }
+        }
         // Requests from people Meka watches, oldest first, above the stack (V1, requests slice 4): each staggers in
         // after the after-work card and folds away with the list's item motion once answered.
         requests.forEachIndexed { i, card ->
             item(key = "request-${card.id}") {
                 RequestCardView(card, { moves.onRequest(card, it) },
-                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + covers.size + i, play)))
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + asks + i, play)))
             }
         }
         // Between digests, groups with news are one quiet line under the cards that Meka can open on demand.
         digest?.takeIf { !it.due }?.let { d ->
             item(key = "group-digest") {
                 GroupDigestSection(d, captures, core, moves.undoLine,
-                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + covers.size + requests.size, play)))
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + asks + requests.size, play)))
             }
         }
-        if (cards.isEmpty() && requests.isEmpty() && triage.isEmpty() && covers.isEmpty()) {
+        if (cards.isEmpty() && requests.isEmpty() && triage.isEmpty() && asks == 0) {
             item(key = "clear") {
                 // The breathing check ring beside a light line (catalogue "Empty states"; Fold review 2026-10-08,
                 // item 7), on the full page and in the open Fold's column alike (Fold review 2026-10-09 00:10, item 6);

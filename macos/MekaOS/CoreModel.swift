@@ -27,6 +27,10 @@ final class CoreModel {
     private(set) var school: SchoolView?
     /// The open cover questions (none until the core has said).
     var schoolCovers: [SchoolCover] { school?.covers ?? [] }
+    /// Date night's week-before card (slice 2), in Needs you beside the school's questions; nil when nothing to book.
+    var dateNightNudge: DateNightNudge? { dateNight?.nudge }
+    /// The school's questions and date night's card: the plans Needs you asks Meka to make (counts and stagger places).
+    var needsYouAsks: Int { schoolCovers.count + (dateNightNudge == nil ? 0 : 1) }
     /// Ask → More → School.
     var showSchool = false
     /// Meal plan → shopping (V1, slice 1): favourite dinners, the week's dinners and what "Add to shopping" would add
@@ -1778,6 +1782,8 @@ final class CoreModel {
         case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }
         case .request(let done): run { _ = try await $0.undoRequest(done: done) }
         case .schoolCover(let done): run { _ = try await $0.undoSchoolCover(done: done) }
+        case .dateNightBooked(let day): run { _ = try await $0.bookDateNight(day: day, booked: false) }
+        case .dateNightSkipped(let day): run { _ = try await $0.skipDateNight(day: day, skip: false) }
         case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
@@ -1881,6 +1887,22 @@ final class CoreModel {
 
     /// The sheet closed: its line goes with it.
     func forgetDateNightSaid() { dateNightSaid = nil }
+
+    /// Booked · Skip this one on Needs you's week-before card (slice 2): an Int64 and a Bool cross, a String comes back
+    /// for the undo bar. Booked only takes the card and its heads-up away on both apps; MEKA books nothing.
+    func answerDateNight(day: Int64, booked: Bool) {
+        guard let core else { return }
+        if booked { MekaHaptics.light() } else { MekaHaptics.tick() }
+        Task {
+            do {
+                if booked {
+                    if let line = try await core.bookDateNight(day: day, booked: true) { offerEventUndo(line, .dateNightBooked(day)) }
+                } else {
+                    if let line = try await core.skipDateNight(day: day, skip: true) { offerEventUndo(line, .dateNightSkipped(day)) }
+                }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
 
     // MARK: School rhythm (slice 1)
 
@@ -2180,6 +2202,10 @@ struct EventUndoOffer: Identifiable, Equatable {
         case request(RequestDone)
         /// I'll work from home · Covered on a school day off: the question opens again, its work-from-home days go.
         case schoolCover(SchoolCoverDone)
+        /// Booked on date night's week-before card: the card asks again.
+        case dateNightBooked(Int64)
+        /// Skip this one on date night's week-before card: the night is kept clear again.
+        case dateNightSkipped(Int64)
         /// Caught up on the group digest: its cards come back on both devices.
         case groupDigest(GroupDigestUndo)
     }
