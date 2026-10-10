@@ -1997,7 +1997,8 @@ class MekaCore(
             os.meka.core.domain.AskRules.context(_today.value, nowMs(), cal,
                 os.meka.core.domain.WeatherRules.askLines(weather.forecast(), nowMs(), cal)
                     .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - hereLines.size - routeLines.size) +
-                    hereLines + workLines + routeLines)
+                    hereLines + workLines + routeLines,
+                shopping.view())
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -2045,6 +2046,10 @@ class MekaCore(
                     ?: throw os.meka.core.domain.ValidationException("That can't be set")
                 os.meka.core.domain.AskUndo.CancelAlarm(alarms.setQuick(q) ?: throw os.meka.core.domain.ValidationException("That can't be set"))
             }
+            is os.meka.core.domain.AskProposal.AddShopping -> {
+                val a = shopping.addTracked(p.items.joinToString("\n"))
+                os.meka.core.domain.AskUndo.TakeBackShopping(a.created, a.revived)
+            }
         }
         os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
@@ -2063,6 +2068,7 @@ class MekaCore(
                 tasks.putBack(undo.taskId, undo.before, undo.after).also { if (it) followBlocks(listOf(undo.taskId)) }
             is os.meka.core.domain.AskUndo.DiscardFast -> fasting.discardIfOpen(undo.fastId)
             is os.meka.core.domain.AskUndo.CancelAlarm -> alarms.cancel(undo.alarmId)
+            is os.meka.core.domain.AskUndo.TakeBackShopping -> shopping.takeBack(undo.added, undo.revived)
         }
     }
 
@@ -2452,6 +2458,8 @@ class MekaCore(
             is os.meka.core.domain.AskProposal.CompleteTask, is os.meka.core.domain.AskProposal.MoveTask -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
             is os.meka.core.domain.AskProposal.StartFast -> ActionType.CREATE_TASK to PolicyDomain.HEALTH
             is os.meka.core.domain.AskProposal.Timer, is os.meka.core.domain.AskProposal.Alarm -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+            // Meka's own list (Jeanette sees it, but adding to it sends nothing to anyone).
+            is os.meka.core.domain.AskProposal.AddShopping -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         }
         val decision = PolicyEngine(PolicyConfig()).decide(
             ActionRequest(
@@ -2652,6 +2660,7 @@ class MekaCore(
             renewals = _lists.value.renewals.all,
             habits = _goals.value.habits,
             goals = _goals.value.goals,
+            shopping = _lists.value.shopping.let { it.toBuy + it.got },
         )
         return Search.run(searchQuery, sources, nowMs(), ZoneCalendar(timeZone))
     }

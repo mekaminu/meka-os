@@ -205,6 +205,7 @@ object TalkRules {
         is AskProposal.StartFast -> (if (past) "started a " else "start a ") + fastWords(p.hours) + " fast"
         is AskProposal.Timer -> "set a timer for " + durationWords(p.minutes)
         is AskProposal.Alarm -> "set an alarm for " + LocalClock.formatMinute(p.minute)
+        is AskProposal.AddShopping -> (if (past) "added " else "add ") + clean(AskRules.shoppingNames(p.items)) + " to the shopping list"
     }
 
     /** "today at 14:30", "tomorrow", "Friday 9 October at 09:00". */

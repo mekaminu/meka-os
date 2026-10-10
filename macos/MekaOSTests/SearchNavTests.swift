@@ -13,6 +13,9 @@ final class SearchNavTests: XCTestCase {
         XCTAssertEqual(SearchNav.listTab(.listsSomeday), .someday)
         XCTAssertEqual(SearchNav.listTab(.listsDecisions), .decisions)
         XCTAssertEqual(SearchNav.listTab(.listsRenewals), .renewals)
+        XCTAssertEqual(SearchNav.destination(.listsShopping), .lists)
+        XCTAssertEqual(SearchNav.listTab(.listsShopping), .shopping)
+        XCTAssertEqual(SearchNav.hint(.listsShopping), "Opens Shopping")
         XCTAssertNil(SearchNav.listTab(.goals))
     }
 

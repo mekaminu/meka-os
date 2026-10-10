@@ -57,10 +57,12 @@ class AiAskTest {
     fun onlyMekasOwnActionsAboutTasksItWasToldOfComeBack() {
         val model = FakeModel(answered(
             """{"answer":"Done.","actions":[{"kind":"send_email","title":"files"},{"kind":"complete_task","ref":"t7"},
-               {"kind":"complete_task","ref":"t1"},{"kind":"set_timer","minutes":20}]}""",
+               {"kind":"complete_task","ref":"t1"},{"kind":"set_timer","minutes":20},{"kind":"add_shopping","title":"milk, eggs"}]}""",
         ))
         val r = AskService(model).ask(request)
-        assertEquals(listOf("complete_task" to "t1", "set_timer" to null), r.actions.map { it.kind to it.ref })
+        assertEquals(listOf("complete_task" to "t1", "set_timer" to null, "add_shopping" to null), r.actions.map { it.kind to it.ref })
+        assertEquals("milk, eggs", r.actions.last().title)
+        assertTrue("add_shopping" in AskService.SYSTEM)
         // A chatty answer that isn't the JSON is words only, with nothing to act on.
         model.outcome = answered("Sure — I've moved it for you!")
         val plain = AskService(model).ask(request)

@@ -15,6 +15,9 @@ class AskCodecTest {
     @Test
     fun aRequestRoundTripsAndLimitsAreRefusedNotTrimmed() {
         assertEquals(req, AskCodec.decodeRequest(AskCodec.encodeRequest(req)))
+        // The shopping list's one line (family sharing): a kind of its own.
+        val shop = req.copy(items = listOf(AskCodec.Item("", "shopping", "Shopping list · 2 to buy: milk, eggs")))
+        assertEquals(shop, AskCodec.decodeRequest(AskCodec.encodeRequest(shop)))
         fun bad(r: AskCodec.Request) = assertFailsWith<WireFormatException> { AskCodec.decodeRequest(AskCodec.encodeRequest(r)) }
         bad(req.copy(question = "  "))
         bad(req.copy(question = "q".repeat(501)))

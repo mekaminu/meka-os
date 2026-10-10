@@ -13,7 +13,7 @@ enum SearchNav {
     /// The destination that shows `target`; nil for results that open in place (tasks) or not at all (events).
     static func destination(_ target: SearchTarget) -> ShellDestination? {
         switch target {
-        case .listsWaiting, .listsSomeday, .listsDecisions, .listsRenewals: .lists
+        case .listsWaiting, .listsSomeday, .listsDecisions, .listsRenewals, .listsShopping: .lists
         case .goals: .goals
         default: nil
         }
@@ -26,6 +26,7 @@ enum SearchNav {
         case .listsSomeday: .someday
         case .listsDecisions: .decisions
         case .listsRenewals: .renewals
+        case .listsShopping: .shopping
         default: nil
         }
     }
@@ -38,6 +39,7 @@ enum SearchNav {
         case .listsSomeday: "Opens Someday"
         case .listsDecisions: "Opens Decisions"
         case .listsRenewals: "Opens Renewals"
+        case .listsShopping: "Opens Shopping"
         case .goals: "Opens Goals"
         default: nil
         }

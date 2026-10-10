@@ -26,7 +26,12 @@ object ShoppingFields {
 data class ShoppingItem(val id: String, val title: String, val got: Boolean, val meta: String?, val by: String, val atMs: Long)
 
 /** What one typed line adds ([ShoppingRules.add]): the ids now to buy in order, and each entity's fields to write. */
-data class ShoppingAdd(val ids: List<String>, val writes: List<Pair<String, Map<String, FieldValue>>>)
+data class ShoppingAdd(val ids: List<String>, val writes: List<Pair<String, Map<String, FieldValue>>>) {
+    /** New entities this add makes (their writes carry a title). */
+    val created: List<String> get() = writes.filter { ShoppingFields.TITLE in it.second }.map { it.first }
+    /** Got items this add brings back to buy. */
+    val revived: List<String> get() = writes.filter { ShoppingFields.TITLE !in it.second }.map { it.first }
+}
 
 data class ShoppingView(
     /** Still to buy, in the order they were added (oldest first, so the list reads like a note). */
@@ -187,10 +192,24 @@ class Shopping(
      * Adds each thing in [text] ([ShoppingRules.add]) for [by]. Returns the ids now to buy, in order; empty when nothing
      * was typed.
      */
-    fun add(text: String, by: String = ShoppingRules.OWNER): List<String> {
+    fun add(text: String, by: String = ShoppingRules.OWNER): List<String> = addTracked(text, by).ids
+
+    /** As [add], saying which things were new and which came back from Got, so the change can be taken back ([takeBack]). */
+    fun addTracked(text: String, by: String = ShoppingRules.OWNER): ShoppingAdd {
         val a = ShoppingRules.add(text, items(), by, nowMs(), newId)
         a.writes.forEach { (id, fields) -> replica.commitLocal(EntityTypes.SHOPPING_ITEM, id, fields) }
-        return a.ids
+        return a
+    }
+
+    /**
+     * Takes back an add (Ask's undo): [added] things still on the list leave it, [revived] ones still to buy go back
+     * under Got. A thing ticked or removed since is left as it is. True when anything changed.
+     */
+    fun takeBack(added: List<String>, revived: List<String>): Boolean {
+        var any = false
+        added.forEach { if (live(it) != null && remove(it)) any = true }
+        revived.forEach { if (got(it)) any = true }
+        return any
     }
 
     /** Ticks [id] as bought; false when it isn't on the list or is already got. */

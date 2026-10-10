@@ -1106,6 +1106,24 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(ListsView.companion.EMPTY.shopping.count, 0)
     }
 
+    func testShoppingFromAskReachesSwift() async throws {
+        // "Add milk to shopping" in Ask and Talk: the card, its undo and Search's Shopping kind reach the Mac.
+        let card = AskRules.shared.cardOf(p: AskProposalAddShopping(items: ["milk", "eggs"]), today: 0)
+        XCTAssertEqual(card.line, "Add to shopping · milk and eggs")
+        XCTAssertEqual(AskFieldRules.shared.kindWord(kind: .shopping), "Shopping")
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "askshop-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let done = try await core.doAsk(card: card)
+        XCTAssertEqual(done.line, "Added milk and eggs to shopping")
+        XCTAssertTrue(done.undo is AskUndoTakeBackShopping)
+        let undo = try XCTUnwrap(done.undo)
+        let back = try await core.undoAsk(undo: undo)
+        XCTAssertTrue(back.boolValue)
+    }
+
     func testFamilyReachesSwift() {
         // Family sharing, slice 4: Settings → Family's rules reach the Mac (only Strings cross from the sheet).
         let rules = FamilyRules.shared

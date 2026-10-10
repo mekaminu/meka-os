@@ -28,7 +28,7 @@ object AskCodec {
     /** At most this many proposals are read from a model's answer (the device shows at most three). */
     const val MAX_ACTIONS = 5
     const val MAX_FIELD = 200
-    val KINDS = setOf("needs_you", "task", "done", "event", "weather")
+    val KINDS = setOf("needs_you", "task", "done", "event", "weather", "shopping")
 
     private val REF = Regex("t[1-9][0-9]{0,2}")
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")

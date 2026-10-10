@@ -250,6 +250,39 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun addToShoppingFromAskAddsToTheListTakesBackAndSearchFindsIt() = runTest {
+        val c = core()
+        c.addShopping("eggs, bread")
+        val bread = c.listsView.value.shopping.toBuy.single { it.title == "bread" }.id
+        c.gotShopping(bread)
+        server.reply = AskReply.Answered("Added.", listOf(AskRawAction("add_shopping", title = "eggs, bread, milk")))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("we need eggs, bread and milk"))
+        // The list went with the question as one line.
+        val line = server.asked.single().second.items.single { it.kind == os.meka.core.domain.AskItemKind.SHOPPING }
+        assertEquals("Shopping list · 1 to buy: eggs", line.line)
+        val card = out.answer.cards.single()
+        assertEquals("Add to shopping · eggs, bread and milk", card.line)
+        // Nothing until tapped.
+        assertEquals(listOf("eggs"), c.listsView.value.shopping.toBuy.map { it.title })
+
+        val done = c.doAsk(card)
+        assertEquals("Added eggs, bread and milk to shopping", done.line)
+        assertEquals(listOf("eggs", "bread", "milk"), c.listsView.value.shopping.toBuy.map { it.title })
+        c.search("bread")
+        val hit = c.searchView.value.hits.single()
+        assertEquals(os.meka.core.domain.SearchTarget.LISTS_SHOPPING, hit.target)
+        assertEquals("To buy", hit.detail)
+
+        // Undo: milk leaves, bread goes back under Got, eggs (already there) stay.
+        val undo = assertIs<AskUndo.TakeBackShopping>(done.undo)
+        assertTrue(c.undoAsk(undo))
+        assertEquals(listOf("eggs"), c.listsView.value.shopping.toBuy.map { it.title })
+        assertEquals(listOf("bread"), c.listsView.value.shopping.got.map { it.title })
+        assertEquals("Got today", c.searchView.value.hits.single().detail)
+        assertFalse(c.undoAsk(undo))
+    }
+
+    @Test
     fun everyCardCanBeTakenBack() = runTest {
         val c = core()
         c.addTask("Book dentist")

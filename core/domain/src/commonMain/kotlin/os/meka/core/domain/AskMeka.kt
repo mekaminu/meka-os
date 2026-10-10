@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -52,6 +52,8 @@ sealed interface AskProposal {
     data class StartFast(val hours: Int) : AskProposal
     data class Timer(val minutes: Int) : AskProposal
     data class Alarm(val minute: Int) : AskProposal
+    /** Adds [items] to the shopping list (the list's own add: a name already to buy stays one row, a got one comes back). */
+    data class AddShopping(val items: List<String>) : AskProposal
 }
 
 /** A proposal as Ask shows it: "Add “Call the dentist” · Tomorrow · 09:00" with its button ("Add"). */
@@ -76,6 +78,8 @@ sealed interface AskUndo {
     data class PutBack(val taskId: String, val before: TaskTiming, val after: TaskTiming) : AskUndo
     data class DiscardFast(val fastId: String) : AskUndo
     data class CancelAlarm(val alarmId: String) : AskUndo
+    /** The shopping card's things: [added] ones leave the list, [revived] ones (back from Got) go back under Got. */
+    data class TakeBackShopping(val added: List<String>, val revived: List<String>) : AskUndo
 }
 
 /** What a tapped card did: the undo bar's line ("Added “Milk”") and how to take it back. */
@@ -100,9 +104,11 @@ object AskRules {
     const val FAST_MIN_HOURS = 12
     const val FAST_MAX_HOURS = FastingRules.MAX_TARGET_HOURS
     const val TIMER_MAX_MIN = 24 * 60
+    /** Things one shopping card adds at most. */
+    const val MAX_SHOPPING = 10
 
     /** The kinds of proposal MEKA understands; anything else is dropped. Wire names, never renamed. */
-    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm")
+    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping")
 
     /** The question as sent: one line, trimmed, at most [MAX_QUESTION] characters; null when there's nothing to ask. */
     fun question(text: String?): String? =
@@ -112,7 +118,7 @@ object AskRules {
      * Today as MEKA describes it to the model: Needs you first, then Up next and the day's other tasks, what's done and
      * the calendar (finished events included, marked). At most [MAX_ITEMS] lines of at most [MAX_LINE] characters.
      */
-    fun context(today: Today, nowMs: Long, cal: LocalCalendar, weather: List<String> = emptyList()): AskContext {
+    fun context(today: Today, nowMs: Long, cal: LocalCalendar, weather: List<String> = emptyList(), shopping: ShoppingView? = null): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -150,11 +156,24 @@ object AskRules {
             val ended = !e.allDay && e.endAtMs <= nowMs
             items += AskItem("", AskItemKind.EVENT, line(time, e.title, if (e.isFixture) e.calendarName else CalendarRules.name(e), e.location, if (ended) "over" else null))
         }
+        // The shopping list (one line: what's to buy, oldest first), so "what's on the shopping list?" can be answered.
+        val shop = shopping?.takeIf { it.toBuy.isNotEmpty() || it.got.isNotEmpty() }?.let { shoppingLine(it) }
         // The forecast (weather item): numbers MEKA wrote into words itself, so never untrusted; kept whatever the day holds.
         val forecast = weather.take(WeatherRules.MAX_ASK_LINES).map { AskItem("", AskItemKind.WEATHER, it.take(MAX_LINE)) }
-        val kept = items.take(MAX_ITEMS - forecast.size) + forecast
+        val tail = listOfNotNull(shop) + forecast
+        val kept = items.take(MAX_ITEMS - tail.size) + tail
         val keptRefs = kept.map { it.ref }.toSet()
-        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty())
+        // Things Jeanette added are someone else's words, like a calendar invitation's title.
+        val fromOthers = shop != null && shopping.toBuy.any { ShoppingRules.byName(it.by) != null }
+        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || fromOthers)
+    }
+
+    /** "Shopping list · 3 to buy: milk, eggs, bread" / "Shopping list · nothing to buy". */
+    fun shoppingLine(v: ShoppingView): AskItem {
+        val head = if (v.toBuy.isEmpty()) "Shopping list · nothing to buy" else "Shopping list · ${v.toBuy.size} to buy: "
+        val names = v.toBuy.joinToString(", ") { it.title.replace(Regex("""\s+"""), " ").trim() }
+        val text = (head + names).let { if (it.length > MAX_LINE) it.take(MAX_LINE - 1).trimEnd(' ', ',') + "…" else it }
+        return AskItem("", AskItemKind.SHOPPING, text)
     }
 
     private fun line(vararg parts: String?): String =
@@ -208,6 +227,9 @@ object AskRules {
             "start_fast" -> AskProposal.StartFast(a.hours?.takeIf { it in FAST_MIN_HOURS..FAST_MAX_HOURS } ?: return null)
             "set_timer" -> AskProposal.Timer(a.minutes?.takeIf { it in 1..TIMER_MAX_MIN } ?: return null)
             "set_alarm" -> AskProposal.Alarm(minute ?: return null)
+            "add_shopping" -> AskProposal.AddShopping(
+                ShoppingRules.split(a.title ?: return null).take(MAX_SHOPPING).takeIf { it.isNotEmpty() } ?: return null,
+            )
             else -> return null
         }
         return cardOf(proposal, today)
@@ -281,6 +303,7 @@ object AskRules {
         is AskProposal.StartFast -> "Started a ${fastLabel(p.hours)} fast"
         is AskProposal.Timer -> "Timer set · ${durationLabel(p.minutes)}"
         is AskProposal.Alarm -> "Alarm set · ${LocalClock.formatMinute(p.minute)}"
+        is AskProposal.AddShopping -> "Added ${shoppingNames(p.items)} to shopping"
     }
 
     /** The card's words for [p]. */
@@ -291,6 +314,14 @@ object AskRules {
         is AskProposal.StartFast -> AskCard(p, "Start a ${fastLabel(p.hours)} fast", "Start")
         is AskProposal.Timer -> AskCard(p, "Timer · ${durationLabel(p.minutes)}", "Set")
         is AskProposal.Alarm -> AskCard(p, "Alarm · ${LocalClock.formatMinute(p.minute)}", "Set")
+        is AskProposal.AddShopping -> AskCard(p, "Add to shopping · ${shoppingNames(p.items)}", "Add")
+    }
+
+    /** "milk", "milk and eggs", "milk, eggs and bread", as typed. */
+    fun shoppingNames(items: List<String>): String = when (items.size) {
+        0 -> ""
+        1 -> items[0]
+        else -> items.dropLast(1).joinToString(", ") + " and " + items.last()
     }
 
     /** "36 h", "2 days" (the extended fast's own names where they match). */

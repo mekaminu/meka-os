@@ -13,7 +13,8 @@ data class OpenItem(val target: SearchTarget, val id: String)
 object SearchNav {
     /** The destination that shows [target]; null for results that open in place (tasks) or not at all (events). */
     fun destination(target: SearchTarget): ShellDestination? = when (target) {
-        SearchTarget.LISTS_WAITING, SearchTarget.LISTS_SOMEDAY, SearchTarget.LISTS_DECISIONS, SearchTarget.LISTS_RENEWALS -> ShellDestination.LISTS
+        SearchTarget.LISTS_WAITING, SearchTarget.LISTS_SOMEDAY, SearchTarget.LISTS_DECISIONS, SearchTarget.LISTS_RENEWALS,
+        SearchTarget.LISTS_SHOPPING -> ShellDestination.LISTS
         SearchTarget.GOALS -> ShellDestination.GOALS
         SearchTarget.TASK, SearchTarget.INFO -> null
     }
@@ -24,6 +25,7 @@ object SearchNav {
         SearchTarget.LISTS_SOMEDAY -> ListTab.SOMEDAY
         SearchTarget.LISTS_DECISIONS -> ListTab.DECISIONS
         SearchTarget.LISTS_RENEWALS -> ListTab.RENEWALS
+        SearchTarget.LISTS_SHOPPING -> ListTab.SHOPPING
         else -> null
     }
 
@@ -34,6 +36,7 @@ object SearchNav {
         SearchTarget.LISTS_SOMEDAY -> "Opens Someday"
         SearchTarget.LISTS_DECISIONS -> "Opens Decisions"
         SearchTarget.LISTS_RENEWALS -> "Opens Renewals"
+        SearchTarget.LISTS_SHOPPING -> "Opens Shopping"
         SearchTarget.GOALS -> "Opens Goals"
         SearchTarget.INFO -> null
     }

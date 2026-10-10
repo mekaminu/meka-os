@@ -2,7 +2,7 @@ package os.meka.core.domain
 
 /**
  * Search everything (build plan M1): tasks (open, Someday and done), calendar events, Waiting for, decisions (replaced
- * ones too), renewals and bills, habits and goals, searched on the device over what is already synced. Documents join
+ * ones too), renewals and bills, the shopping list, habits and goals, searched on the device over what is already synced. Documents join
  * when the Vault lands.
  *
  * Non-AI and local: nothing is sent anywhere, nothing is stored, no index is kept (the data is small enough to scan on
@@ -17,6 +17,7 @@ enum class SearchKind(val label: String) {
     WAITING("Waiting for"),
     DECISION("Decisions"),
     RENEWAL("Renewals and bills"),
+    SHOPPING("Shopping"),
     SOMEDAY("Someday"),
     GOAL("Goals"),
     HABIT("Habits"),
@@ -31,6 +32,7 @@ enum class SearchTarget {
     LISTS_SOMEDAY,
     LISTS_DECISIONS,
     LISTS_RENEWALS,
+    LISTS_SHOPPING,
     GOALS,
     /** Shown for information only (calendar events are read-only). */
     INFO,
@@ -95,6 +97,8 @@ data class SearchSources(
     val renewals: List<RenewalItem>,
     val habits: List<HabitItem>,
     val goals: List<GoalItem>,
+    /** The shopping list: still to buy and Got (the last week's). */
+    val shopping: List<ShoppingItem> = emptyList(),
 )
 
 object SearchRules {
@@ -281,6 +285,12 @@ object Search {
             add(r.id, SearchKind.RENEWAL, r.title, r.meta, SearchTarget.LISTS_RENEWALS, null, r.dueDay,
                 listOf(SearchRules.Field(r.title, 3), SearchRules.Field(r.subject, 2),
                     SearchRules.Field(RenewalRules.kindLabel(r.kind), 1), SearchRules.Field(r.notes, 1, snippetSource = true)))
+        }
+        // Shopping: still to buy first (in the list's order), then Got (newest first).
+        sources.shopping.forEach { s ->
+            val detail = if (s.got) s.meta else listOfNotNull("To buy", s.meta).joinToString(" · ")
+            add(s.id, SearchKind.SHOPPING, s.title, detail, SearchTarget.LISTS_SHOPPING, null,
+                if (s.got) Long.MAX_VALUE / 2 - s.atMs else s.atMs - Long.MAX_VALUE / 2, listOf(SearchRules.Field(s.title, 3)))
         }
         sources.goals.forEach { g ->
             add(g.id, SearchKind.GOAL, g.title, g.meta, SearchTarget.GOALS, null, 0,

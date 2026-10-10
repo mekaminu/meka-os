@@ -48,7 +48,7 @@ object AskFieldRules {
 
     /** The line under the field before anything is typed. */
     fun idleLine(canAsk: Boolean, mac: Boolean = false): String =
-        if (canAsk) "Type to find tasks, events and lists; Return asks MEKA about your day, or to add, move or tick off a task, start a fast or set a timer. Nothing happens until you ${if (mac) "click" else "tap"}."
+        if (canAsk) "Type to find tasks, events and lists; Return asks MEKA about your day, or to add, move or tick off a task, add to shopping, start a fast or set a timer. Nothing happens until you ${if (mac) "click" else "tap"}."
         else "Type to find tasks, events, lists, goals and habits. Searched on this ${if (mac) "Mac" else "phone"}; nothing leaves it."
 
     /** The kind as one word in front of a match's line. */
@@ -58,6 +58,7 @@ object AskFieldRules {
         SearchKind.WAITING -> "Waiting for"
         SearchKind.DECISION -> "Decision"
         SearchKind.RENEWAL -> "Renewal"
+        SearchKind.SHOPPING -> "Shopping"
         SearchKind.SOMEDAY -> "Someday"
         SearchKind.GOAL -> "Goal"
         SearchKind.HABIT -> "Habit"
