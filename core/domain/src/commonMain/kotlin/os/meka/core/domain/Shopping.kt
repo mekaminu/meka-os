@@ -129,16 +129,19 @@ class Shopping(
         val live = replica.entities(EntityTypes.SHOPPING_ITEM).filter { it[ShoppingFields.DELETED].boolOrNull != true }
         val byKey = live.groupBy { ShoppingRules.key(it[ShoppingFields.TITLE].textOrNull.orEmpty()) }
         val who = by.trim().lowercase().ifEmpty { ShoppingRules.OWNER }.take(40)
-        return names.map { name ->
+        val now = nowMs()
+        // Several things in one line keep their typed order: each is stamped a millisecond after the one before.
+        return names.mapIndexed { i, name ->
+            val at = now + i
             val same = byKey[ShoppingRules.key(name)].orEmpty()
-            same.firstOrNull { it[ShoppingFields.GOT].boolOrNull != true }?.let { return@map it.ref.entityId }
+            same.firstOrNull { it[ShoppingFields.GOT].boolOrNull != true }?.let { return@mapIndexed it.ref.entityId }
             val back = same.maxByOrNull { it[ShoppingFields.GOT_AT].longOrNull ?: 0L }
             if (back != null) {
                 replica.commitLocal(
                     EntityTypes.SHOPPING_ITEM, back.ref.entityId,
-                    mapOf(ShoppingFields.GOT to false.fv(), ShoppingFields.ADDED_AT to nowMs().fv(), ShoppingFields.BY to who.fv()),
+                    mapOf(ShoppingFields.GOT to false.fv(), ShoppingFields.ADDED_AT to at.fv(), ShoppingFields.BY to who.fv()),
                 )
-                return@map back.ref.entityId
+                return@mapIndexed back.ref.entityId
             }
             val id = newId()
             replica.commitLocal(
@@ -146,7 +149,7 @@ class Shopping(
                 mapOf(
                     ShoppingFields.TITLE to name.fv(),
                     ShoppingFields.GOT to false.fv(),
-                    ShoppingFields.ADDED_AT to nowMs().fv(),
+                    ShoppingFields.ADDED_AT to at.fv(),
                     ShoppingFields.BY to who.fv(),
                 ),
             )

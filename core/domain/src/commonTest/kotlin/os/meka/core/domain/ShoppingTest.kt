@@ -18,7 +18,7 @@ class ShoppingTest {
     private var n = 0
     private val fold = world.device("android")
     private val mac = world.device("mac")
-    private fun shopping(d: Device) = Shopping(d.replica, { "shop${n++}" }, { world.clock.nowMs }, cal)
+    private fun shopping(d: Device) = Shopping(d.replica, { "shop${99 - n++}" }, { world.clock.nowMs }, cal)
     private val sFold = shopping(fold)
     private val sMac = shopping(mac)
 
