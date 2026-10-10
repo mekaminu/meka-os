@@ -71,6 +71,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     /** Rain or snow due at today's plans you go out for (Weather): "Light rain at 17:30 — Training at SG18". */
     WEATHER("Weather for your plans", NoticeTier.DIGEST),
     /**
+     * A line on Meka's route to or from work not running well during the commute (Places item 4, from TfL's status
+     * until live departures land): "Thameslink severe delays" · "Great Northern to King's Cross is running".
+     */
+    TRAINS("Trains on your route", NoticeTier.HEADS_UP),
+    /**
      * A request card from someone Meka watches (V1, requests): summed in the next digest, or a heads-up straight away
      * for the people he marked "Notify straight away" ([NotificationSettings.requestNow]).
      */
@@ -416,6 +421,7 @@ object Governor {
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
         NoticeSource.OVERDUE -> plural(n, "overdue task")
         NoticeSource.WEATHER -> "rain on " + plural(n, "plan")
+        NoticeSource.TRAINS -> if (n == 1) "a line on your route" else "$n lines on your route"
         NoticeSource.REQUEST -> plural(n, "request")
     }
 }
@@ -447,6 +453,8 @@ object NoticeSources {
         requests: List<RequestCard> = emptyList(),
         settings: NotificationSettings = NotificationSettings.DEFAULT,
         signIns: List<SignIn> = emptyList(),
+        lines: LineStatusSnapshot = LineStatusSnapshot.EMPTY,
+        office: OfficeWindow? = null,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -550,6 +558,8 @@ object NoticeSources {
         // Rain at today's plans you go out for (Weather), summed in the next digest.
         out += WeatherRules.notices(forecast, events, marks, sessions, nowMs, cal)
         out += SignInRules.notices(signIns, nowMs, cal)
+        // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
+        out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.
         out += requestNotices(requests, settings)
         return out

@@ -130,4 +130,70 @@ class RouteTest {
         assertEquals(at(fri, 7), seen.checkedMs)
         assertEquals("Train lines", CalendarAccountRules.providerLabel("lines"))
     }
+
+    private val quiet = QuietHours.DEFAULT // 22:00–07:00
+
+    @Test
+    fun aLineOnTheRouteNotRunningWellDuringTheCommuteIsAHeadsUpOnce() {
+        // 07:30: Thameslink suspended, Great Northern running: one heads-up naming the fallback.
+        val bad = snap(2, 10, 10, checked = at(fri, 7, 30))
+        val n = RouteRules.notices(bad, office, quiet, at(fri, 7, 40), cal).single()
+        assertEquals("Thameslink suspended", n.title)
+        assertEquals("Great Northern to King's Cross is running · TfL 07:30", n.text)
+        assertEquals(NoticeSource.TRAINS, n.source)
+        assertEquals(NoticeTier.HEADS_UP, n.tier)
+        assertEquals(at(fri, 7, 30), n.atMs)
+        assertEquals(at(fri, 9), n.expiresAtMs)
+        assertEquals(NoticeTarget.TODAY, n.target)
+        // Severe delays a little later: the same key, so it doesn't buzz again.
+        val worse = RouteRules.notices(snap(6, 10, 10, checked = at(fri, 8)), office, quiet, at(fri, 8, 5), cal).single()
+        assertEquals(n.key, worse.key)
+        val gov = Governor.evaluate(listOf(n), NotificationSettings.DEFAULT, DeviceAlerts.ALL, GovernorState(), at(fri, 7, 40), cal)
+        assertEquals(listOf(n.key), gov.post.map { it.key })
+        assertTrue(Governor.evaluate(listOf(worse), NotificationSettings.DEFAULT, DeviceAlerts.ALL, gov.state, at(fri, 8, 5), cal).post.isEmpty())
+        // The fallback not running either, or unknown.
+        assertEquals("Great Northern severe delays too · TfL 07:30",
+            RouteRules.notices(snap(2, 6, 10, checked = at(fri, 7, 30)), office, quiet, at(fri, 7, 40), cal).single().text)
+        assertEquals("Check before you leave · TfL 07:30",
+            RouteRules.notices(snap(2, null, 10, checked = at(fri, 7, 30)), office, quiet, at(fri, 7, 40), cal).single().text)
+        // The Elizabeth line: the onward leg in the morning, the first leg home in the evening (ordered as travelled).
+        val both = RouteRules.notices(snap(6, 10, 1, checked = at(fri, 16, 30)), office, quiet, at(fri, 16, 50), cal)
+        assertEquals(listOf("Elizabeth line closed", "Thameslink severe delays"), both.map { it.title })
+        assertEquals("Your first leg, to Farringdon · TfL 16:30", both[0].text)
+        assertEquals("Great Northern from King's Cross is running · TfL 16:30", both[1].text)
+        assertEquals(at(fri, 19), both[0].expiresAtMs)
+        assertTrue(both[0].key != n.key)
+    }
+
+    @Test
+    fun goodOrMinorStaleOrOffCommuteTellsNothingAndQuietHoursHoldItUntilTheyEnd() {
+        val now = at(fri, 7, 40)
+        assertTrue(RouteRules.notices(snap(10, 10, 10, checked = at(fri, 7, 30)), office, quiet, now, cal).isEmpty())
+        // Minor delays stay on Today's line.
+        assertTrue(RouteRules.notices(snap(9, 10, 9, checked = at(fri, 7, 30)), office, quiet, now, cal).isEmpty())
+        // A stale status, at work, the weekend, a work-from-home day.
+        assertTrue(RouteRules.notices(snap(2, 10, 10, checked = at(fri, 5)), office, quiet, now, cal).isEmpty())
+        assertTrue(RouteRules.notices(snap(2, 10, 10, checked = at(fri, 10)), office, quiet, at(fri, 10, 10), cal).isEmpty())
+        assertTrue(RouteRules.notices(snap(2, 10, 10, checked = at(sat, 7, 30)), PlacesRules.officeWindow(hours, sat, cal), quiet, at(sat, 7, 40), cal).isEmpty())
+        assertTrue(RouteRules.notices(snap(2, 10, 10, checked = at(fri, 7, 30)),
+            PlacesRules.officeWindow(hours.copy(homeDays = setOf(fri)), fri, cal), quiet, now, cal).isEmpty())
+        // Read at 06:30 (quiet until 07:00): due at 07:00, so it posts then rather than being lost to a later digest.
+        val early = RouteRules.notices(snap(2, 10, 10, checked = at(fri, 6, 30)), office, quiet, at(fri, 6, 35), cal).single()
+        assertEquals(at(fri, 7), early.atMs)
+        val settings = NotificationSettings.DEFAULT
+        assertTrue(Governor.evaluate(listOf(early), settings, DeviceAlerts.ALL, GovernorState(), at(fri, 6, 35), cal).post.isEmpty())
+        assertEquals(listOf(early.key), Governor.evaluate(listOf(early), settings, DeviceAlerts.ALL, GovernorState(), at(fri, 7, 1), cal).post.map { it.key })
+        // Lowered in Notifications to App only: never posted.
+        val silent = settings.copy(tiers = mapOf(NoticeSource.TRAINS to NoticeTier.SILENT))
+        assertTrue(Governor.evaluate(listOf(early), silent, DeviceAlerts.ALL, GovernorState(), at(fri, 7, 1), cal).post.isEmpty())
+    }
+
+    @Test
+    fun theHeadsUpComesThroughTheNoticeSources() {
+        val all = NoticeSources.collect(
+            ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, Today(emptyList(), null, emptyList(), emptyList()), at(fri, 7, 40), cal,
+            lines = snap(6, 10, 10, checked = at(fri, 7, 30)), office = office,
+        )
+        assertEquals(listOf("Thameslink severe delays"), all.filter { it.source == NoticeSource.TRAINS }.map { it.title })
+    }
 }

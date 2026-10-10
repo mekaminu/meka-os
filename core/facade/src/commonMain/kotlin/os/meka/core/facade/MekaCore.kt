@@ -2530,7 +2530,15 @@ class MekaCore(
             _lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card,
             currentEvents(), _eventMarks.value, _sessions.value, all, weather.forecast(),
             requests = requestCards.open(), settings = notifyPrefs.settings(), signIns = signIns.all(),
+            lines = lineStatus.snapshot(), office = officeToday(),
         )
+
+    /** Today's office window (Places item 2): a work day that isn't a work-from-home day, or null. */
+    private fun officeToday(): os.meka.core.domain.OfficeWindow? {
+        val day = todayEpochDay()
+        val hours = os.meka.core.domain.WorkHours.of(work.state(localClock(), day), bankHolidays.calendar(), day, work.homeDays(day))
+        return os.meka.core.domain.PlacesRules.officeWindow(hours, day, ZoneCalendar(timeZone))
+    }
 
     /** The watch face's next 12 hours: events, planned tasks, the week's booked sessions, today's and tomorrow's work. */
     private fun watchFaceNow(

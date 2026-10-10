@@ -180,6 +180,52 @@ object RouteRules {
         return listOf("train lines on Meka's route (TfL status, checked $at): " + known.joinToString("; "))
     }
 
+    /**
+     * The commute's heads-ups (Places item 4, before live departures): on an office day's commute, with a fresh status,
+     * one [NoticeSource.TRAINS] heads-up for each leg of the route ([THAMESLINK], the [ELIZABETH] line) that isn't
+     * running well ([LineLevel.MAJOR]: severe delays, suspended, closed…; minor delays are left to Today's line).
+     * "Thameslink severe delays" · "Great Northern to King's Cross is running · TfL 07:30". Once per leg per commute
+     * (the key holds the day and the commute, not the status, so a line going from severe delays to suspended doesn't
+     * buzz again); due when the status was read, or when quiet hours end if that was in them (so a 06:30 problem
+     * reaches Meka at 07:00 rather than being lost to a digest after he has left); stale once the commute is over
+     * (work starts, or 90 minutes after it ends).
+     */
+    fun notices(s: LineStatusSnapshot, office: OfficeWindow?, quiet: QuietHours, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        val commute = commute(office, nowMs, cal) ?: return emptyList()
+        if (!fresh(s, nowMs)) return emptyList()
+        office!!
+        val morning = commute == Commute.MORNING
+        val from = if (morning) cal.toEpochMs(cal.epochDayOf(office.startMs), MORNING_FROM_MIN) else office.endMs - EVENING_LEAD_MS
+        val until = if (morning) office.startMs else office.endMs + EVENING_AFTER_MS
+        val read = maxOf(from, s.checkedMs!!)
+        val atMs = quiet.endAfter(read, cal)
+        if (atMs >= until) return emptyList()
+        val checked = LocalClock.formatMinute(cal.minuteOfDay(s.checkedMs))
+        val day = cal.epochDayOf(office.startMs)
+        val legs = if (morning) listOf(THAMESLINK, ELIZABETH) else listOf(ELIZABETH, THAMESLINK)
+        return legs.mapNotNull { id ->
+            val sev = s.severityOf(id) ?: return@mapNotNull null
+            if (level(sev) != LineLevel.MAJOR) return@mapNotNull null
+            val advice = when (id) {
+                THAMESLINK -> {
+                    val gn = s.severityOf(GREAT_NORTHERN)
+                    when {
+                        gn != null && level(gn) == LineLevel.GOOD ->
+                            if (morning) "Great Northern to King's Cross is running" else "Great Northern from King's Cross is running"
+                        gn != null -> "Great Northern ${words(gn)} too"
+                        else -> "Check before you leave"
+                    }
+                }
+                else -> if (morning) "Your onward leg from Farringdon" else "Your first leg, to Farringdon"
+            }
+            Notice(
+                key = "trains:$day:${commute.name.lowercase()}:$id", source = NoticeSource.TRAINS, tier = NoticeTier.HEADS_UP,
+                title = part(id, sev).replaceFirstChar { it.uppercaseChar() }, text = "$advice · TfL $checked",
+                atMs = atMs, target = NoticeTarget.TODAY, expiresAtMs = until,
+            )
+        }
+    }
+
     /** The server's checked time, rounded down so a quiet line writes at most twice an hour. */
     fun checkedStep(nowMs: Long): Long = nowMs.floorDiv(CHECKED_STEP_MS) * CHECKED_STEP_MS
 }

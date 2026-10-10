@@ -184,6 +184,12 @@ class AskMekaFacadeTest {
         val route = c.weatherView.value.route!!
         assertEquals("Thameslink severe delays · Elizabeth line good service — Great Northern to King's Cross is running", route.text)
         assertTrue(route.lit)
+        // The same status is a heads-up once on this commute (Places item 4, before live departures).
+        val gov = c.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        assertEquals(listOf("Thameslink severe delays" to "Great Northern to King's Cross is running · TfL 07:00"),
+            gov.post.filter { it.source == os.meka.core.domain.NoticeSource.TRAINS }.map { it.title to it.text })
+        assertTrue(c.governNotifications(gov.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL).post
+            .none { it.source == os.meka.core.domain.NoticeSource.TRAINS })
 
         c.askMeka("are the trains ok?")
         val lines = server.asked.single().second.items.filter { it.kind == os.meka.core.domain.AskItemKind.WEATHER }.map { it.line }
