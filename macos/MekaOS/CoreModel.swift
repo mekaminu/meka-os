@@ -48,6 +48,8 @@ final class CoreModel {
     private(set) var emergency: EmergencyView?
     /// Ask → More → Emergency card.
     var showEmergency = false
+    /// Work wins (V1, slice 1): the reviewed week's wins and this quarter's, shown in Review. Synced with the Fold.
+    private(set) var wins: WinsView?
     /// The line after a skip or keep ("Skipped Fri 23 Oct · the evening is free to plan"), until the sheet closes.
     private(set) var dateNightSaid: String?
     /// What the last "Add to shopping" did, kept here so only its line and whether it can be undone reach the sheet.
@@ -259,6 +261,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await e in core.emergencyView { self?.emergency = e }
+        })
+        observers.append(Task { [weak self] in
+            for await w in core.winsView { self?.wins = w }
         })
         observers.append(Task { [weak self] in
             for await t in core.triage { self?.triage = t }
@@ -1852,6 +1857,30 @@ final class CoreModel {
     }
 
     func removeEmergency(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeEmergency(id: id) } }
+
+    // MARK: Work wins (slice 1)
+
+    /// What keeping a win said: the line to show under the field and whether it was turned away.
+    struct WinSaid: Equatable {
+        let line: String
+        let refused: Bool
+    }
+
+    /// Keeps one typed line for the week Review shows (today, or that week's Friday); only a String crosses.
+    func addWin(_ text: String) async -> WinSaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            let r = try await core.addWin(text: t)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return WinSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func removeWin(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeWin(id: id) } }
 
     // MARK: Meal plan → shopping (slice 1)
 

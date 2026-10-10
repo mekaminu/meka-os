@@ -33,6 +33,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -60,6 +62,9 @@ import os.meka.core.domain.ReviewGoal
 import os.meka.core.domain.ReviewHabit
 import os.meka.core.domain.ReviewTile
 import os.meka.core.domain.WeeklyReviewView
+import os.meka.core.domain.WinAdded
+import os.meka.core.domain.WinRow
+import os.meka.core.domain.WinsView
 import os.meka.core.facade.MekaCore
 import os.meka.android.designsystem.LocalPlaceTitleKey
 import os.meka.android.designsystem.sharedPlace
@@ -67,8 +72,8 @@ import os.meka.android.designsystem.sharedPlace
 /**
  * REVIEW (build plan M1, ADR-013): the weekly review. One Monday–Sunday week looked back on — numbers at the top,
  * what got done, habits, goals, fasts, what closed on your lists, what is still open — then the week ahead and the
- * north-star numbers. ‹ › step between weeks (back twelve). "Done reviewing" is synced to the Mac. Nothing else here
- * changes anything.
+ * north-star numbers. ‹ › step between weeks (back twelve). "Done reviewing" is synced to the Mac. Work wins (V1)
+ * sit under the numbers: the week's wins, a field to keep one, and this quarter's ([winsItems]).
  *
  * Motion (catalogue "Weekly review"): numbers count up, tiles and sections stagger in 40 ms apart, goal bars fill on
  * appear; stepping weeks slides the week across the way you moved with a tick haptic; Done reviewing pops a check
@@ -77,6 +82,9 @@ import os.meka.android.designsystem.sharedPlace
 @Composable
 fun ReviewRoute(core: MekaCore) {
     val v by core.reviewView.collectAsState()
+    val wins by core.winsView.collectAsState()
+    // What the last Add said, for the week it was said in.
+    var said by remember { mutableStateOf<Pair<Long, WinAdded>?>(null) }
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -97,15 +105,39 @@ fun ReviewRoute(core: MekaCore) {
         label = "review-week",
         modifier = Modifier.fillMaxSize().background(Meka.colors.background),
     ) { week ->
-        Week(week, step) {
-            haptics.light()
-            scope.launch { runCatching { core.reviewDone() } }
-        }
+        Week(
+            week, wins, said?.takeIf { it.first == week.weekStart }?.second, step,
+            reviewDone = {
+                haptics.light()
+                scope.launch { runCatching { core.reviewDone() } }
+            },
+            addWin = { typed ->
+                scope.launch {
+                    val r = runCatching { core.addWin(typed) }.getOrNull() ?: return@launch
+                    said = week.weekStart to r
+                    if (r.refused) haptics.tick() else haptics.light()
+                }
+            },
+            removeWin = { w ->
+                haptics.tick()
+                scope.launch { runCatching { core.removeWin(w.id) } }
+            },
+            toggleQuarter = { haptics.tick() },
+        )
     }
 }
 
 @Composable
-private fun Week(v: WeeklyReviewView, step: (Int) -> Unit, reviewDone: () -> Unit) {
+private fun Week(
+    v: WeeklyReviewView,
+    wins: WinsView,
+    said: WinAdded?,
+    step: (Int) -> Unit,
+    reviewDone: () -> Unit,
+    addWin: (String) -> Unit,
+    removeWin: (WinRow) -> Unit,
+    toggleQuarter: () -> Unit,
+) {
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
@@ -139,6 +171,9 @@ private fun Week(v: WeeklyReviewView, step: (Int) -> Unit, reviewDone: () -> Uni
                 }
             }
         }
+
+        // Wins (work wins log): the week's, a field, and this quarter's.
+        winsItems(wins, said, 4, addWin, removeWin, toggleQuarter)
 
         // Done
         item(key = "h-done") { Section("Done", 4) }

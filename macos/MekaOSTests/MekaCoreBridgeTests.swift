@@ -1349,6 +1349,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(link.note, rules.NOTE)
     }
 
+    func testWorkWinsReachSwift() {
+        // Work wins, slice 1: a typed line is tidied by the core's rules, a past week's win is dated its Friday, and the
+        // review's empty section reaches the Mac (only a String crosses from the field).
+        let rules = WinRules.shared
+        XCTAssertEqual(rules.read(text: "  - shipped   the Q3 report "), "Shipped the Q3 report")
+        XCTAssertNil(rules.read(text: "   "))
+        let mon5 = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 5)
+        XCTAssertEqual(rules.dayFor(weekStart: mon5, today: mon5 + 7), mon5 + 4)
+        let empty = WinsView.companion.EMPTY
+        XCTAssertEqual(empty.weekLine, rules.NONE_THIS_WEEK)
+        XCTAssertEqual(empty.hint, rules.HINT_THIS_WEEK)
+        XCTAssertFalse(empty.asking)
+        XCTAssertEqual(NoticeSource.wins.defaultTier, NoticeTier.headsUp)
+    }
+
     func testEmergencyCardReachesSwift() {
         // Emergency card, slice 1: a typed line is read by the core's rules, secrets and numbers are turned away, and the
         // card's parts reach the Mac (only Strings cross from the sheet).

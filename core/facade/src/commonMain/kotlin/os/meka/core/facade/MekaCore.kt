@@ -136,6 +136,7 @@ class MekaCore(
     private val school = os.meka.core.domain.School(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val mealPlan = os.meka.core.domain.MealPlan(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val emergency = os.meka.core.domain.EmergencyCard(replica, ids::next, nowMs)
+    private val wins = os.meka.core.domain.WorkWins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -302,6 +303,13 @@ class MekaCore(
      * north-star numbers (ADR-013). Step weeks with [showReviewWeek]. Synced "Done reviewing"; moves with the clock.
      */
     val reviewView: StateFlow<WeeklyReviewView> = _review.asStateFlow()
+
+    private val _wins = MutableStateFlow(os.meka.core.domain.WinsView.EMPTY)
+    /**
+     * Work wins (V1, slice 1): the reviewed week's wins (it follows [showReviewWeek]) and this quarter's, week by week.
+     * Shown in the Review tab on both apps; Friday at 16:00 MEKA asks "What went well this week?". Synced.
+     */
+    val winsView: StateFlow<os.meka.core.domain.WinsView> = _wins.asStateFlow()
 
     private val _calendar = MutableStateFlow(CalendarView.EMPTY)
     /**
@@ -1343,6 +1351,17 @@ class MekaCore(
 
     /** Takes a line off the card for good (on both apps and her page). */
     suspend fun removeEmergency(id: String): Boolean = onCore { emergency.remove(id) }
+
+    // ---- Work wins (V1, slice 1; the Review tab) ----
+
+    /**
+     * Keeps one line ("Shipped the Q3 report") for the week the review shows: dated today in the week in progress, else
+     * that week's Friday. An empty line is refused; the same line twice in a week is kept once.
+     */
+    suspend fun addWin(text: String): os.meka.core.domain.WinAdded = onCore { wins.add(text, _review.value.weekStart) }
+
+    /** Takes a win off the list (both apps). */
+    suspend fun removeWin(id: String): Boolean = onCore { wins.remove(id) }
 
     // ---- Date night (V1, slice 1; Ask → More → Date night) ----
 
@@ -3132,6 +3151,7 @@ class MekaCore(
         _review.value = review.view(reviewOffset, all, dayEvents, _goals.value, fasting.ended()) { day ->
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }
+        _wins.value = wins.view(_review.value.weekStart)
         _search.value = runSearch(all)
         _activity.value = activity.view()
         _calendar.value = CalendarAgenda.build(
@@ -3186,6 +3206,7 @@ class MekaCore(
             callCredit = callCredit.current(), callAssistantOn = _workMode.value.callAssistant,
             school = school.items(), schoolCovers = _school.value.covers,
             dateNight = dateNight.setting(),
+            wins = wins.all(),
         )
 
     /** Today's office window (Places item 2): a work day that isn't a work-from-home day, or null. */

@@ -73,6 +73,8 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     SCHOOL("School", NoticeTier.HEADS_UP),
     /** Date night, slice 2 ([DateNightRules.notices]): a week before a kept night that isn't booked, at 09:00. */
     DATE_NIGHT("Date night", NoticeTier.HEADS_UP),
+    /** Work wins log ([WinRules.notices]): Friday at 16:00, "What went well this week?", until a win is kept. */
+    WINS("What went well this week (Friday)", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -428,6 +430,7 @@ object Governor {
         NoticeSource.CALL_CREDIT -> "call assistant credit"
         NoticeSource.SCHOOL -> plural(n, "school reminder")
         NoticeSource.DATE_NIGHT -> "date night to book"
+        NoticeSource.WINS -> "this week's wins"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -475,6 +478,8 @@ object NoticeSources {
         schoolCovers: List<SchoolCover> = emptyList(),
         /** Date night's setting, for the week-before nudge ([DateNightRules.notices]). */
         dateNight: DateNightSetting? = null,
+        /** The work wins log, for Friday's question ([WinRules.notices]). */
+        wins: List<Win> = emptyList(),
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -583,6 +588,7 @@ object NoticeSources {
         out += CallCreditRules.notices(callCredit, callAssistantOn)
         out += SchoolRules.notices(school, schoolCovers, nowMs, cal)
         out += DateNightRules.notices(dateNight, nowMs, cal)
+        out += WinRules.notices(wins, nowMs, cal)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.
