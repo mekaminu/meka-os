@@ -42,6 +42,9 @@ class AskCodecTest {
         // What MEKA knows (facts page, slice 1): a kind of its own.
         val facts = req.copy(items = listOf(AskCodec.Item("", "facts", "Fact · Car · Car reg: AB12 CDE")))
         assertEquals(facts, AskCodec.decodeRequest(AskCodec.encodeRequest(facts)))
+        // Protected time (slice 4): a kind of its own.
+        val shield = req.copy(items = listOf(AskCodec.Item("", "protected", "Protected today · from 19:00 tonight")))
+        assertEquals(shield, AskCodec.decodeRequest(AskCodec.encodeRequest(shield)))
         fun bad(r: AskCodec.Request) = assertFailsWith<WireFormatException> { AskCodec.decodeRequest(AskCodec.encodeRequest(r)) }
         bad(req.copy(question = "  "))
         bad(req.copy(question = "q".repeat(501)))

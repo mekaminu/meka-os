@@ -2605,7 +2605,9 @@ class MekaCore(
                 // Annual leave, slice 2b: the planner as the pane shows it, so "how many days have I got left?" has an answer.
                 os.meka.core.domain.LeaveAskRules.askLines(_leave.value, work.schedule().enabled, q),
                 // What MEKA knows, slice 1: only the facts that bear on the question, so "what's the car's reg?" has an answer.
-                os.meka.core.domain.FactAskRules.askLines(lifeFacts.all(), q))
+                os.meka.core.domain.FactAskRules.askLines(lifeFacts.all(), q),
+                // Protected time, slice 4: the rules, today and the next two weeks, so "is Saturday protected?" has an answer.
+                os.meka.core.domain.ProtectedRules.askLines(protectedTime.setting(), cal.epochDayOf(nowMs()), work.schedule(), bankHolidays.calendar()))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)

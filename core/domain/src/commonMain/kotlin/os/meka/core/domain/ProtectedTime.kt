@@ -21,8 +21,11 @@ import os.meka.core.sync.fv
  * `fromMin` (local minutes), `weekends` (Bool). All LWW. Off until Meka turns it on. Plain, non-AI rules; nothing
  * leaves Meka's own synced data.
  *
+ * Ask and Talk know the rules ([ProtectedRules.askLines], slice 4): the setting, today, and the next two weeks' whole
+ * days and later evenings go with every question as `protected` lines.
+ *
  * Later slices: work notifications wait until morning (what counts as a work notification is decided with the email
- * work), work email waits until morning (with email triage), and Ask/Talk knowing the rules.
+ * work), and work email waits until morning (with email triage).
  */
 object ProtectedFields {
     const val EVENINGS = "evenings"
@@ -148,6 +151,70 @@ object ProtectedRules {
         if (wholeDay(s, today, schedule, holidays)) return "Today is protected · tasks wait for ${openLabel(s, today, schedule, holidays)}"
         val from = eveningFrom(s, today, schedule, holidays) ?: return null
         return "Protected from ${LocalClock.formatMinute(from)} tonight"
+    }
+
+    /** Days ahead (after today) the Ask lines look for whole protected days and evenings that start later. */
+    const val ASK_DAYS = 14
+    /** At most this many Ask lines (the rules, today, whole days, evenings after a shift). */
+    const val ASK_LINES = 4
+    private const val ASK_LINE_MAX = 160
+
+    /**
+     * Protected time as MEKA describes it to the model (Ask's `protected` lines, slice 4), so "is Saturday protected?"
+     * and "can you plan something tonight?" can be answered:
+     *
+     * - "Protected time · evenings from 19:00, weekends and bank holidays · nothing is planned into them" (or "Protected
+     *   time · off · the planner may use evenings and weekends" — one line only, so "no" is an answer too);
+     * - "Protected today · all day · tasks wait for Mon 12 Oct" / "Protected today · from 19:00 tonight" / "Protected
+     *   today · none (a night shift)";
+     * - "Whole days protected · Sun 11 Oct, Sat 17 Oct (bank holiday), … · open for a shift: Sat 24 Oct" (the next
+     *   [ASK_DAYS] days, while weekends are protected);
+     * - "Evenings that start later · Tue 13 Oct from 20:00 (after the shift) · Wed 14 Oct none (a night shift)" (only
+     *   when a shift moves one, in the same days).
+     *
+     * Meka's own setting and work schedule in MEKA's words, so never untrusted. Each line at most 160 characters,
+     * days left out from the end rather than cut mid-word.
+     */
+    fun askLines(s: ProtectedSetting?, today: Long, schedule: WorkSchedule, holidays: HolidayCalendar): List<String> {
+        if (s == null || !s.on) return listOf("Protected time · off · the planner may use evenings and weekends")
+        val out = mutableListOf("Protected time · " + summary(s).replaceFirstChar { it.lowercase() })
+        out += "Protected today · " + when {
+            wholeDay(s, today, schedule, holidays) -> "all day · tasks wait for ${openLabel(s, today, schedule, holidays)}"
+            else -> eveningFrom(s, today, schedule, holidays)?.let { "from ${LocalClock.formatMinute(it)} tonight" }
+                ?: if (s.evenings) "none (a night shift)" else "none"
+        }
+        val ahead = (1..ASK_DAYS).map { today + it }
+        if (s.weekends) {
+            val whole = ahead.filter { wholeDay(s, it, schedule, holidays) }.map { d ->
+                CivilDate.shortLabel(d) + if (holidays.isHoliday(d)) " (bank holiday)" else ""
+            }
+            val open = ahead.filter { (CivilDate.isoDayOfWeek(it) >= 6 || holidays.isHoliday(it)) && !wholeDay(s, it, schedule, holidays) }
+                .map { CivilDate.shortLabel(it) }
+            val tail = if (open.isEmpty()) "" else " · open for a shift: " + open.joinToString(", ")
+            out += fit("Whole days protected · ", whole.ifEmpty { listOf("none") }, tail)
+        }
+        if (s.evenings) {
+            val moved = ahead.filterNot { wholeDay(s, it, schedule, holidays) }.mapNotNull { d ->
+                val from = eveningFrom(s, d, schedule, holidays)
+                when {
+                    from == null -> CivilDate.shortLabel(d) + " none (a night shift)"
+                    from != s.fromMin -> CivilDate.shortLabel(d) + " from ${LocalClock.formatMinute(from)} (after the shift)"
+                    else -> null
+                }
+            }
+            if (moved.isNotEmpty()) out += fit("Evenings that start later · ", moved, "", sep = " · ")
+        }
+        return out.take(ASK_LINES)
+    }
+
+    /** [head] + as many of [parts] as fit in [ASK_LINE_MAX] with [tail] (tail dropped first, then parts, "…" marking it). */
+    private fun fit(head: String, parts: List<String>, tail: String, sep: String = ", "): String {
+        fun build(n: Int, t: String) = head + parts.take(n).joinToString(sep) + (if (n < parts.size) "$sep…" else "") + t
+        if (build(parts.size, tail).length <= ASK_LINE_MAX) return build(parts.size, tail)
+        for (n in parts.size downTo 1) {
+            build(n, "").takeIf { it.length <= ASK_LINE_MAX }?.let { return it }
+        }
+        return build(1, "").take(ASK_LINE_MAX)
     }
 
     fun view(s: ProtectedSetting?, today: Long, schedule: WorkSchedule, holidays: HolidayCalendar): ProtectedView =

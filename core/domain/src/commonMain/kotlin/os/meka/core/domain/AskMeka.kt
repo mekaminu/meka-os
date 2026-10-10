@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -172,7 +172,8 @@ object AskRules {
     fun context(today: Today, nowMs: Long, cal: LocalCalendar, weather: List<String> = emptyList(), shopping: ShoppingView? = null,
                 school: List<String> = emptyList(), meals: String? = null, mealsFromOthers: Boolean = false,
                 dateNight: String? = null, renewals: List<String> = emptyList(), wins: List<String> = emptyList(),
-                queue: List<String> = emptyList(), leave: List<String> = emptyList(), facts: List<String> = emptyList()): AskContext {
+                queue: List<String> = emptyList(), leave: List<String> = emptyList(), facts: List<String> = emptyList(),
+                protected: List<String> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -234,7 +235,10 @@ object AskRules {
         // What MEKA knows (facts page, [FactAskRules.askLines]): only the facts that bear on the question, Meka's own
         // typed lines, never one kept from the AI; never untrusted.
         val factLines = facts.take(FactAskRules.ASK_ALL + 1).map { AskItem("", AskItemKind.FACTS, line(it)) }
-        val tail = listOfNotNull(shop, dinners, evening) + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
+        // Protected time (slice 4, [ProtectedRules.askLines]): Meka's own setting and work schedule in MEKA's words,
+        // never untrusted.
+        val shield = protected.take(ProtectedRules.ASK_LINES).map { AskItem("", AskItemKind.PROTECTED, line(it)) }
+        val tail = listOfNotNull(shop, dinners, evening) + shield + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
         // Today's own lines keep room for at least [TODAY_ROOM] (the tail's last lines, the forecast's, go first), so a
         // full tail never pushes the context past [MAX_ITEMS].
         val tailKept = tail.take(MAX_ITEMS - minOf(items.size, TODAY_ROOM))

@@ -140,4 +140,42 @@ class ProtectedTimeTest {
         assertNull(LateTaskRules.laterSlot(t, listOf(t), emptyList(), emptyList(), at(fri, 18, 45), window(fri), kept = kept))
         assertEquals(at(fri, 18, 45), LateTaskRules.laterSlot(t, listOf(t), emptyList(), emptyList(), at(fri, 18, 45), window(fri)))
     }
+
+    @Test
+    fun askHearsTheRulesTodayAndTheNextTwoWeeks() {
+        val none = HolidayCalendar.NONE
+        assertEquals(listOf("Protected time · off · the planner may use evenings and weekends"),
+            ProtectedRules.askLines(null, sat, nineToFive, none))
+        // Saturday with a bank holiday Monday: today all day, the next whole days with the holiday named.
+        val bankMonday = HolidayCalendar(mapOf(mon to "Bank holiday"))
+        assertEquals(
+            listOf(
+                "Protected time · evenings from 19:00, weekends and bank holidays · nothing is planned into them",
+                "Protected today · all day · tasks wait for Tue 13 Oct",
+                "Whole days protected · Sun 11 Oct, Mon 12 Oct (bank holiday), Sat 17 Oct, Sun 18 Oct, Sat 24 Oct",
+            ),
+            ProtectedRules.askLines(both, sat, nineToFive, bankMonday),
+        )
+        // A late Friday shift and a Saturday shift: the evening starts later, the Saturday stays open.
+        val shifts = WorkSchedule(setOf(1, 2, 3, 4, 5, 6), 9 * 60, 17 * 60 + 30).withDayHours(5, DayHours(12 * 60, 20 * 60))
+        assertEquals(
+            listOf(
+                "Protected time · evenings from 19:00, weekends and bank holidays · nothing is planned into them",
+                "Protected today · from 19:00 tonight",
+                "Whole days protected · Sun 18 Oct, Sun 25 Oct · open for a shift: Sat 17 Oct, Sat 24 Oct",
+                "Evenings that start later · Fri 16 Oct from 20:00 (after the shift) · Fri 23 Oct from 20:00 (after the shift)",
+            ),
+            ProtectedRules.askLines(both, mon, shifts, none),
+        )
+        // A night shift has no protected evening; weekends only says none today.
+        val night = nineToFive.withDayHours(1, DayHours(22 * 60, 6 * 60))
+        assertEquals("Protected today · none (a night shift)", ProtectedRules.askLines(both, mon, night, none)[1])
+        assertEquals("Protected today · none", ProtectedRules.askLines(both.copy(evenings = false), mon, nineToFive, none)[1])
+        assertTrue(ProtectedRules.askLines(both, mon, night, none).last().contains("Mon 19 Oct none (a night shift)"))
+        // Long lines keep whole days and mark the rest.
+        val holidays = HolidayCalendar((mon..mon + 14).associateWith { "Holiday" })
+        val lines = ProtectedRules.askLines(both, sat, nineToFive, holidays)
+        assertTrue(lines.all { it.length <= 160 })
+        assertTrue(lines[2].endsWith(", …"))
+    }
 }

@@ -76,6 +76,7 @@ class AiAskTest {
         assertTrue("queue_done" in AskService.KINDS && "queue_done" in AskService.SYSTEM)
         assertTrue("leave lines" in AskService.SYSTEM)
         assertTrue("facts lines" in AskService.SYSTEM)
+        assertTrue("protected lines" in AskService.SYSTEM && "never refuse a task" in AskService.SYSTEM)
         assertTrue("book_leave" in AskService.KINDS && "book_leave" in AskService.SYSTEM)
         assertTrue("add_fact" in AskService.KINDS && "add_fact" in AskService.SYSTEM)
         // A chatty answer that isn't the JSON is words only, with nothing to act on.

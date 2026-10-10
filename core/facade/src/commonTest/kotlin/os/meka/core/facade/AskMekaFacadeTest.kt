@@ -503,6 +503,28 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsProtectedTimeSoIsSaturdayProtectedHasAnAnswer() = runTest {
+        val c = core()
+        server.reply = AskReply.Answered("Yes, Saturday's kept free.", emptyList())
+        assertIs<AskOutcome.Answered>(c.askMeka("Is Saturday protected?"))
+        // Off: one line, so "no" is an answer too.
+        assertEquals(
+            listOf("Protected time · off · the planner may use evenings and weekends"),
+            server.asked.last().second.items.filter { it.kind == AskItemKind.PROTECTED }.map { it.line },
+        )
+        c.setProtectedTime(evenings = true, fromMin = 19 * 60, weekends = true)
+        assertIs<AskOutcome.Answered>(c.askMeka("Is Saturday protected?"))
+        val ctx = server.asked.last().second
+        assertEquals(
+            listOf("Protected time · evenings from 19:00, weekends and bank holidays · nothing is planned into them",
+                "Protected today · from 19:00 tonight",
+                "Whole days protected · Sat 10 Oct, Sun 11 Oct, Sat 17 Oct, Sun 18 Oct"),
+            ctx.items.filter { it.kind == AskItemKind.PROTECTED }.map { it.line },
+        )
+        assertFalse(ctx.untrusted)
+    }
+
+    @Test
     fun askHearsOnlyTheFactsThatBearOnTheQuestionAndNeverOneKeptFromAi() = runTest {
         val c = core()
         assertEquals("Added Car reg to Car", c.addFact("Car reg: AB12 CDE").line)
