@@ -7,6 +7,12 @@ import javax.sql.DataSource
 
 data class DeviceIdentity(val householdId: String, val deviceId: String)
 
+/** A linked watch as Settings → Watch lists it (Galaxy Watch, slice 1): never its secret or key. */
+data class LinkedDevice(val id: String, val name: String, val linkedAtMs: Long)
+
+/** A linked device's id: only watches join this way (ADR-005 amendment 2026-10-10). */
+fun isLinkedDeviceId(id: String): Boolean = os.meka.core.wire.DeviceLinkCodec.isWatchId(id)
+
 /** What the enrolment code may do (ADR-005 amendment 2026-10-07). */
 sealed interface EnrolOutcome {
     data class Enrolled(val secret: String) : EnrolOutcome
@@ -44,6 +50,18 @@ interface DeviceRegistry {
      * Null when unknown. Only the count leaves the server, never a name or id.
      */
     fun macs(householdId: String): Int? = null
+
+    /**
+     * Enrols a watch Meka approved from a keyed device ([DeviceLink]), registering the key the watch asked with, so its
+     * requests must be signed from the first one. Like the enrolment code, it never brings back a revoked device id.
+     */
+    fun enrolLinked(householdId: String, deviceId: String, name: String, publicKeyB64: String): EnrolOutcome
+
+    /** The household's linked watches that aren't revoked, newest first. */
+    fun linkedDevices(householdId: String): List<LinkedDevice>
+
+    /** Revokes one of the household's linked watches at once. False when it isn't one (or is already unlinked). */
+    fun unlink(householdId: String, deviceId: String): Boolean
 }
 
 object Secrets {
@@ -137,6 +155,40 @@ class PostgresDeviceRegistry(private val ds: DataSource) : DeviceRegistry {
         }
     }
 
+    override fun enrolLinked(householdId: String, deviceId: String, name: String, publicKeyB64: String): EnrolOutcome {
+        if (!isLinkedDeviceId(deviceId)) return EnrolOutcome.Refused(REFUSED_REVOKED)
+        val revoked = ds.connection.use { c ->
+            c.prepareStatement("SELECT revoked_at IS NOT NULL FROM device WHERE household_id = ? AND id = ?").use { st ->
+                st.setString(1, householdId); st.setString(2, deviceId)
+                st.executeQuery().use { rs -> rs.next() && rs.getBoolean(1) }
+            }
+        }
+        if (revoked) return EnrolOutcome.Refused(REFUSED_REVOKED)
+        val secret = enrol(householdId, deviceId, name)
+        if (!registerKey(DeviceIdentity(householdId, deviceId), publicKeyB64)) return EnrolOutcome.Refused(REFUSED_REVOKED)
+        return EnrolOutcome.Enrolled(secret)
+    }
+
+    override fun linkedDevices(householdId: String): List<LinkedDevice> = ds.connection.use { c ->
+        c.prepareStatement(
+            "SELECT id, name, created_at FROM device WHERE household_id = ? AND revoked_at IS NULL AND id LIKE 'watch-%' ORDER BY created_at DESC LIMIT 20",
+        ).use { st ->
+            st.setString(1, householdId)
+            st.executeQuery().use { rs ->
+                buildList { while (rs.next()) add(LinkedDevice(rs.getString(1), rs.getString(2), rs.getTimestamp(3).time)) }
+            }
+        }
+    }
+
+    override fun unlink(householdId: String, deviceId: String): Boolean {
+        if (!isLinkedDeviceId(deviceId)) return false
+        return ds.connection.use { c ->
+            c.prepareStatement("UPDATE device SET revoked_at = now() WHERE household_id = ? AND id = ? AND revoked_at IS NULL").use {
+                it.setString(1, householdId); it.setString(2, deviceId); it.executeUpdate() == 1
+            }
+        }
+    }
+
     fun revoke(householdId: String, deviceId: String) = ds.connection.use { c: Connection ->
         c.prepareStatement("UPDATE device SET revoked_at = now() WHERE household_id = ? AND id = ?").use {
             it.setString(1, householdId); it.setString(2, deviceId); it.executeUpdate()
@@ -149,10 +201,12 @@ class InMemoryDeviceRegistry : DeviceRegistry {
     private val keys = HashMap<DeviceIdentity, String>()
     private val households = HashSet<String>()
     private val revoked = HashSet<DeviceIdentity>()
+    private val names = HashMap<DeviceIdentity, Pair<String, Long>>()
 
     fun enrol(householdId: String, deviceId: String): String = enrol(householdId, deviceId, deviceId)
 
     override fun enrol(householdId: String, deviceId: String, name: String): String {
+        names.getOrPut(DeviceIdentity(householdId, deviceId)) { name to System.currentTimeMillis() }
         byHash.entries.removeAll { it.value == DeviceIdentity(householdId, deviceId) } // re-enrol rotates
         keys.remove(DeviceIdentity(householdId, deviceId))
         revoked.remove(DeviceIdentity(householdId, deviceId))
@@ -179,6 +233,27 @@ class InMemoryDeviceRegistry : DeviceRegistry {
     override fun soleHousehold(): String? = households.singleOrNull()
     override fun macs(householdId: String): Int =
         byHash.values.filter { it.householdId == householdId && it.deviceId.startsWith("mac") && it !in revoked }.distinct().size
+
+    override fun enrolLinked(householdId: String, deviceId: String, name: String, publicKeyB64: String): EnrolOutcome {
+        val who = DeviceIdentity(householdId, deviceId)
+        if (!isLinkedDeviceId(deviceId) || who in revoked) return EnrolOutcome.Refused(REFUSED_REVOKED)
+        val secret = enrol(householdId, deviceId, name)
+        keys[who] = publicKeyB64
+        return EnrolOutcome.Enrolled(secret)
+    }
+
+    override fun linkedDevices(householdId: String): List<LinkedDevice> =
+        byHash.values.filter { it.householdId == householdId && isLinkedDeviceId(it.deviceId) && it !in revoked }.distinct()
+            .map { w -> names[w].let { LinkedDevice(w.deviceId, it?.first ?: w.deviceId, it?.second ?: 0L) } }
+            .sortedByDescending { it.linkedAtMs }
+
+    override fun unlink(householdId: String, deviceId: String): Boolean {
+        val who = DeviceIdentity(householdId, deviceId)
+        if (!isLinkedDeviceId(deviceId) || who in revoked || byHash.values.none { it == who }) return false
+        revoked += who
+        byHash.entries.removeAll { it.value == who }
+        return true
+    }
 }
 
 const val REFUSED_REVOKED = "revoked"

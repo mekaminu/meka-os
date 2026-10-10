@@ -232,6 +232,20 @@ class FamilyUnavailableException(val reason: String) : Exception(reason) {
     }
 }
 
+/**
+ * Linking a watch (Galaxy Watch, slice 1): `POST /v1/devices/link · watches · unlink` from a keyed device. Each throws
+ * [FamilyUnavailableException] when the server can't answer it (no route, no key yet), [LinkRefusedException] when it
+ * refused the code (wrong · wait · revoked) or didn't know the watch, and TransportException offline.
+ */
+interface DeviceLinkApi {
+    suspend fun linkWatch(code: String): os.meka.core.wire.DeviceLinkCodec.Linked
+    suspend fun linkedWatches(): List<os.meka.core.wire.DeviceLinkCodec.Watch>
+    suspend fun unlinkWatch(id: String)
+}
+
+/** The server refused: [reason] is one of DeviceLinkCodec's ERR_ codes. */
+class LinkRefusedException(val reason: String) : Exception(reason)
+
 /** Account management calls, available once the device is connected. */
 interface AccountsApi {
     /** [editing]: ask the provider for permission to change events too (calendar editing). */
@@ -253,7 +267,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi, VoiceMessageApi, FamilyApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -560,6 +574,35 @@ class HttpSyncTransport(
             resp.status.value == 404 -> throw FamilyUnavailableException(FamilyUnavailableException.NO_ROUTE)
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from $path")
             else -> resp.bodyAsText()
+        }
+    }
+
+    override suspend fun linkWatch(code: String): os.meka.core.wire.DeviceLinkCodec.Linked =
+        os.meka.core.wire.DeviceLinkCodec.decodeLinked(deviceLink("/v1/devices/link", os.meka.core.wire.DeviceLinkCodec.encodeApprove(code)))
+
+    override suspend fun linkedWatches(): List<os.meka.core.wire.DeviceLinkCodec.Watch> =
+        os.meka.core.wire.DeviceLinkCodec.decodeWatches(deviceLink("/v1/devices/watches", "{}"))
+
+    override suspend fun unlinkWatch(id: String) {
+        deviceLink("/v1/devices/unlink", os.meka.core.wire.DeviceLinkCodec.encodeUnlink(id))
+    }
+
+    /**
+     * The link routes need the device's signing key on the server. A refusal comes back as JSON (`{"error": …}`) with
+     * 404 · 409 · 429; a bare 404 is a server without the route, a bare 403 a device whose key isn't registered yet.
+     */
+    private suspend fun deviceLink(path: String, body: String): String {
+        prepare()
+        val resp = send(path, body)
+        val text = resp.bodyAsText()
+        val refusal = if (resp.status.value in setOf(404, 409, 429)) os.meka.core.wire.DeviceLinkCodec.decodeError(text) else null
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from $path")
+            resp.status.value == 403 -> throw FamilyUnavailableException(FamilyUnavailableException.NO_KEY)
+            refusal != null -> throw LinkRefusedException(refusal)
+            resp.status.value == 404 -> throw FamilyUnavailableException(FamilyUnavailableException.NO_ROUTE)
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from $path")
+            else -> text
         }
     }
 

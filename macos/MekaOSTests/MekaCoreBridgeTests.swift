@@ -1235,6 +1235,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(link.note, rules.NOTE)
     }
 
+    func testWatchLinkReachesSwift() {
+        // Galaxy Watch, slice 1: Settings → Watch's rules reach the Mac (only Strings cross from the sheet).
+        let rules = WatchLinkRules.shared
+        XCTAssertEqual(rules.normaliseCode(raw: " 1234 5678 "), "12345678")
+        XCTAssertNil(rules.normaliseCode(raw: "1234"))
+        XCTAssertEqual(rules.showCode(code: "12345678"), "1234 5678")
+        XCTAssertEqual(rules.refusal(reason: "wait"), rules.TOO_MANY)
+        XCTAssertEqual(rules.linkedSummary(name: "Galaxy Watch"), "Linked Galaxy Watch")
+        XCTAssertTrue(rules.HOW.contains("8-digit code"))
+    }
+
     func testKeepCallersRecordingsReachesSwift() {
         // Call assistant polish 8c: the "Keep callers' recordings" choice, its line and the summary's note.
         let rules = VoiceRecordingRules.shared

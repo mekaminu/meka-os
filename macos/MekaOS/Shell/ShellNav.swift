@@ -67,7 +67,7 @@ struct MoreSection: Equatable, Identifiable {
 /// Appearance, which shows its choices in the row itself (`ShellNav.unfoldsInPlace`). Today's header keeps only
 /// Search and Plan my day (Today clarity, slice 2): the brief, the shutdown, work mode and the theme moved here.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, review, vault, brief, news, shutdown, work, notifications, appearance, voice, talk, calendars, family, setup, health, activity, yourData
+    case lists, goals, review, vault, brief, news, shutdown, work, notifications, appearance, voice, talk, calendars, family, watch, setup, health, activity, yourData
     var id: Int { rawValue }
 
     var label: String {
@@ -88,6 +88,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .yourData: "Your data"
         case .calendars: "Calendars"
         case .family: "Family"
+        case .watch: "Watch"
         case .setup: "Setup"
         case .health: "Health"
         }
@@ -111,6 +112,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .yourData: "Export everything as one file"
         case .calendars: "Connected accounts and feeds"
         case .family: "Share the shopping list with Jeanette"
+        case .watch: "Link your Galaxy Watch to MEKA"
         case .setup: "Everything MEKA can do, and what's left to set up"
         case .health: "Is everything MEKA needs working?"
         }
@@ -120,7 +122,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         switch self {
         case .lists, .goals, .review, .vault: .places
         case .brief, .news, .shutdown: .daily
-        case .work, .notifications, .appearance, .voice, .talk, .calendars, .family, .setup, .health, .activity, .yourData: .settings
+        case .work, .notifications, .appearance, .voice, .talk, .calendars, .family, .watch, .setup, .health, .activity, .yourData: .settings
         }
     }
 
@@ -130,7 +132,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .goals: .goals
         case .review: .review
         case .vault: .vault
-        case .brief, .news, .shutdown, .work, .notifications, .appearance, .voice, .talk, .activity, .yourData, .calendars, .family, .setup, .health: nil
+        case .brief, .news, .shutdown, .work, .notifications, .appearance, .voice, .talk, .activity, .yourData, .calendars, .family, .watch, .setup, .health: nil
         }
     }
 }
@@ -158,8 +160,10 @@ enum ShellNav {
         max(-1, min(1, to.rawValue - from.rawValue))
     }
 
-    /// Ask's More list; Calendars and Family only once this device is connected (Family's links live on the server).
-    static func more(connected: Bool) -> [MoreItem] { MoreItem.allCases.filter { connected || ($0 != .calendars && $0 != .family) } }
+    /// Ask's More list; Calendars, Family and Watch only once this device is connected (their links live on the server).
+    static func more(connected: Bool) -> [MoreItem] {
+        MoreItem.allCases.filter { connected || ($0 != .calendars && $0 != .family && $0 != .watch) }
+    }
 
     /// More in its sections (Places · Daily · Settings); a section with no rows is left out.
     static func moreSections(connected: Bool) -> [MoreSection] {
@@ -169,7 +173,7 @@ enum ShellNav {
     }
 
     /// Stagger steps for More (after the title 0 and field 1): each section starts one step after the one before
-    /// began; a label leads its rows by one step. Places: 2, rows 3–6 · Daily: 4, rows 5–7 · Settings: 6, rows 7–17.
+    /// began; a label leads its rows by one step. Places: 2, rows 3–6 · Daily: 4, rows 5–7 · Settings: 6, rows 7–18.
     static func moreLabelStep(_ section: Int) -> Int { 2 + 2 * section }
 
     static func moreRowStep(_ section: Int, _ row: Int) -> Int { moreLabelStep(section) + 1 + row }

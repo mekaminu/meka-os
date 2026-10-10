@@ -69,6 +69,12 @@ enum class ActivityKind {
      * Nothing to undo here (Turn off is in Family). Added 2026-10-10.
      */
     FAMILY,
+    /**
+     * A watch linked to MEKA or unlinked from it in Settings → Watch (Galaxy Watch, slice 1): "Linked Galaxy Watch".
+     * Ids come from the watch's device id and the time, so both devices write one entry. Nothing to undo here (Unlink is
+     * in Watch). Added 2026-10-10.
+     */
+    DEVICE,
 }
 
 /** One field MEKA changed: what it was, and what MEKA set. */
@@ -486,6 +492,12 @@ class ActivityLog(
     fun recordFamily(id: String, atMs: Long, summary: String, why: String) {
         if (replica.entity(EntityTypes.AGENT_ACTION, id) != null) return
         write(id, ActivityKind.FAMILY, summary, null, why, "family", atMs = atMs)
+    }
+
+    /** A watch linked or unlinked ([WatchLinkRules.linkedId] etc.) at [atMs]; written once, whichever device sees it first. */
+    fun recordDevice(id: String, atMs: Long, summary: String, why: String) {
+        if (replica.entity(EntityTypes.AGENT_ACTION, id) != null) return
+        write(id, ActivityKind.DEVICE, summary, null, why, "devices", atMs = atMs)
     }
 
     /** A digest this device just posted. */

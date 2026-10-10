@@ -50,6 +50,8 @@ class HttpSyncTransportTest {
         os.meka.core.wire.HereCodec.Response("ok", hours = "497664|12,2,10;12,2,10", days = "2026-10-10=7,13,2,10", away = true),
     )
     private var familyStatus = HttpStatusCode.OK
+    private var linkStatus = HttpStatusCode.OK
+    private val watchId = "watch-0123456789abcdef"
     private val familyId = "fam" + "0123456789abcdef0123"
     private val familyToken = "cd".repeat(32)
     private fun client() = HttpClient(MockEngine { req ->
@@ -73,6 +75,16 @@ class HttpSyncTransportTest {
             "/v1/family/invites/revoke" ->
                 if (familyStatus == HttpStatusCode.NotFound) respond("""{"error":"unknown"}""", familyStatus, json)
                 else respond("""{"id":"$familyId","state":"revoked"}""", familyStatus, json)
+            "/v1/devices/link" -> when (linkStatus) {
+                HttpStatusCode.OK -> respond("""{"deviceId":"$watchId","name":"Galaxy Watch"}""", linkStatus, json)
+                HttpStatusCode.Forbidden -> respond("forbidden", linkStatus)
+                else -> respond("""{"error":"code"}""", linkStatus, json)
+            }
+            "/v1/devices/watches" -> respond("""{"watches":[{"id":"$watchId","name":"Galaxy Watch","linkedAtMs":5}]}""", linkStatus, json)
+            "/v1/link/start" -> respond("""{"linkId":"lnk${"0".repeat(24)}","code":"12345678","expiresAtMs":9}""", linkStatus, json)
+            "/v1/link/status" -> respond(
+                """{"state":"linked","householdId":"home","deviceId":"$watchId","secret":"${"ab".repeat(32)}"}""", linkStatus, json,
+            )
             else -> respond("", HttpStatusCode.NotFound)
         }
     })
@@ -162,6 +174,40 @@ class HttpSyncTransportTest {
         familyStatus = HttpStatusCode.Forbidden
         val e = kotlin.runCatching { t.familyInvites() }.exceptionOrNull()
         assertEquals(FamilyUnavailableException.NO_KEY, (e as FamilyUnavailableException).reason)
+    }
+
+    @Test
+    fun aWatchIsLinkedListedAndRefusalsComeBackAsTheirReason() = runTest {
+        val t = HttpSyncTransport(client(), "https://meka.example/", RecordingKey()) { "s".repeat(64) }
+        assertEquals(watchId, t.linkWatch("12345678").deviceId)
+        val link = requests.last()
+        assertEquals("/v1/devices/link", link.url.encodedPath)
+        assertEquals("""{"code":"12345678"}""", (link.body as TextContent).text)
+        assertTrue(link.headers[RequestSigning.HEADER_SIGNATURE] != null)
+        assertEquals(listOf(watchId), t.linkedWatches().map { it.id })
+        linkStatus = HttpStatusCode.NotFound
+        val wrong = kotlin.runCatching { t.linkWatch("12345678") }.exceptionOrNull()
+        assertEquals(os.meka.core.wire.DeviceLinkCodec.ERR_CODE, (wrong as LinkRefusedException).reason)
+        linkStatus = HttpStatusCode.Forbidden
+        val noKey = kotlin.runCatching { t.linkWatch("12345678") }.exceptionOrNull()
+        assertEquals(FamilyUnavailableException.NO_KEY, (noKey as FamilyUnavailableException).reason)
+    }
+
+    @Test
+    fun theWatchAsksForItsCodeAndPicksUpItsSecretSignedWithNoBearer() = runTest {
+        val key = RecordingKey()
+        val started = WatchLink.start(client(), "https://meka.example", key, watchId, "Galaxy Watch", nowMs = 1_000)
+        assertEquals("12345678", (started as WatchLink.Started.Code).code)
+        val start = requests.last()
+        assertEquals("/v1/link/start", start.url.encodedPath)
+        assertNull(start.headers["Authorization"])
+        assertEquals("1000", start.headers[RequestSigning.HEADER_TIME])
+        assertTrue(start.headers[RequestSigning.HEADER_SIGNATURE] != null)
+        val linked = WatchLink.status(client(), "https://meka.example", key, started.linkId, nowMs = 2_000)
+        assertEquals(WatchLink.Status.Linked("home", watchId, "ab".repeat(32)), linked)
+        assertTrue(WatchLink.start(client(), "http://meka.example", key, watchId, "Galaxy Watch", 1) is WatchLink.Started.Failed)
+        linkStatus = HttpStatusCode.TooManyRequests
+        assertEquals(WatchLink.Started.Busy, WatchLink.start(client(), "https://meka.example", key, watchId, "Galaxy Watch", 1))
     }
 
     @Test

@@ -186,6 +186,10 @@ class MekaCore(
     /** Family (sharing slice 4): the links as the server last listed them, in memory only (the server holds them). */
     private var familyMembers: List<os.meka.core.domain.FamilyMember> = emptyList()
     private val _family = MutableStateFlow<os.meka.core.domain.FamilyView?>(null)
+    private var deviceLinkApi: DeviceLinkApi? = transport as? DeviceLinkApi
+    /** Watch (Galaxy Watch slice 1): the linked watches as the server last listed them, in memory only. */
+    private var linkedWatches: List<os.meka.core.domain.LinkedWatch> = emptyList()
+    private val _watchLink = MutableStateFlow<os.meka.core.domain.WatchLinkView?>(null)
     /** "Where I am now" (Places item 3): the last answer, in memory only (never stored or synced), on the core thread. */
     private var hereFix: os.meka.core.domain.HereFix? = null
     /** MEKA's voice: the synced choice, the clips said so far (in memory, newest last) and a pause after a refusal. */
@@ -1730,7 +1734,7 @@ class MekaCore(
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
             speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; healthApi = transport as? HealthApi
-            voiceMessageApi = transport as? VoiceMessageApi; familyApi = transport as? FamilyApi
+            voiceMessageApi = transport as? VoiceMessageApi; familyApi = transport as? FamilyApi; deviceLinkApi = transport as? DeviceLinkApi
         }
         startSync()
     }
@@ -2405,6 +2409,97 @@ class MekaCore(
     /** On the core thread. */
     private fun familyNow(problem: String?): os.meka.core.domain.FamilyView =
         os.meka.core.domain.FamilyRules.view(familyMembers, nowMs(), ZoneCalendar(timeZone), problem).also { _family.value = it }
+
+    // ---- Watch (Galaxy Watch, slice 1) ----
+
+    /** Ask → More → Watch: the linked watches and what to do on the watch. Null until [refreshWatches] has run once. */
+    val watchLinkView: StateFlow<os.meka.core.domain.WatchLinkView?> = _watchLink.asStateFlow()
+
+    /** Reads the linked watches from MEKA's server; when it can't be read the last rows stay, with the reason. */
+    suspend fun refreshWatches(): os.meka.core.domain.WatchLinkView {
+        val api = deviceLinkApi ?: return showWatches(os.meka.core.domain.WatchLinkRules.NOT_CONNECTED)
+        val listed = try {
+            api.linkedWatches()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return showWatches(watchProblem(e))
+        }
+        return onCore {
+            linkedWatches = listed.map { os.meka.core.domain.LinkedWatch(it.id, it.name, it.linkedAtMs) }
+            watchesNow(null)
+        }
+    }
+
+    /**
+     * Links the watch showing [code] ("1234 5678", however it was typed): it becomes a device of this household and
+     * picks up its secret by itself. False when it couldn't be linked ([watchLinkView]'s problem says why).
+     */
+    suspend fun linkWatch(code: String): Boolean {
+        val clean = os.meka.core.domain.WatchLinkRules.normaliseCode(code) ?: run {
+            showWatches(os.meka.core.domain.WatchLinkRules.NOT_A_CODE); return false
+        }
+        val api = deviceLinkApi ?: run { showWatches(os.meka.core.domain.WatchLinkRules.NOT_CONNECTED); return false }
+        val linked = try {
+            api.linkWatch(clean)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            showWatches(watchProblem(e)); return false
+        }
+        onCore {
+            linkedWatches = listOf(os.meka.core.domain.LinkedWatch(linked.deviceId, linked.name, nowMs())) +
+                linkedWatches.filter { it.id != linked.deviceId }
+            activity.recordDevice(
+                os.meka.core.domain.WatchLinkRules.linkedId(linked.deviceId), nowMs(),
+                os.meka.core.domain.WatchLinkRules.linkedSummary(linked.name), os.meka.core.domain.WatchLinkRules.WHY_YOU,
+            )
+            refresh()
+            watchesNow(null)
+        }
+        return true
+    }
+
+    /** Unlinks [id] at once: the watch's next request is refused. False when it couldn't be (the problem says why). */
+    suspend fun unlinkWatch(id: String): Boolean {
+        val api = deviceLinkApi ?: run { showWatches(os.meka.core.domain.WatchLinkRules.NOT_CONNECTED); return false }
+        val gone = try {
+            api.unlinkWatch(id); true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: LinkRefusedException) {
+            false // the server didn't know it: already unlinked
+        } catch (e: Exception) {
+            showWatches(watchProblem(e)); return false
+        }
+        onCore {
+            val w = linkedWatches.firstOrNull { it.id == id }
+            linkedWatches = linkedWatches.filter { it.id != id }
+            if (gone && w != null) {
+                activity.recordDevice(
+                    os.meka.core.domain.WatchLinkRules.unlinkedId(id), nowMs(),
+                    os.meka.core.domain.WatchLinkRules.unlinkedSummary(w.name), os.meka.core.domain.WatchLinkRules.WHY_YOU,
+                )
+            }
+            refresh()
+            watchesNow(null)
+        }
+        return true
+    }
+
+    private fun watchProblem(e: Exception): String = when {
+        e is LinkRefusedException -> os.meka.core.domain.WatchLinkRules.refusal(e.reason)
+        e is FamilyUnavailableException && e.reason == FamilyUnavailableException.NO_KEY -> os.meka.core.domain.WatchLinkRules.NO_KEY
+        e is FamilyUnavailableException -> os.meka.core.domain.WatchLinkRules.NO_ROUTE
+        e is AuthRejectedException -> SIGNED_OUT_MESSAGE
+        else -> os.meka.core.domain.WatchLinkRules.OFFLINE
+    }
+
+    private suspend fun showWatches(problem: String?): os.meka.core.domain.WatchLinkView = onCore { watchesNow(problem) }
+
+    /** On the core thread. */
+    private fun watchesNow(problem: String?): os.meka.core.domain.WatchLinkView =
+        os.meka.core.domain.WatchLinkRules.view(linkedWatches, nowMs(), ZoneCalendar(timeZone), problem).also { _watchLink.value = it }
 
     /** The settings row (Ask → More → Settings → Where I am now); the switch itself is kept on each device. */
     fun hereSetting(on: Boolean, permitted: Boolean): os.meka.core.domain.HereSettingView =

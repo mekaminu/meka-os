@@ -66,6 +66,7 @@ enum class MoreItem(val label: String, val line: String, val destination: ShellD
     TALK("Talk", "The side button and your headphones", null, MoreGroup.SETTINGS),
     CALENDARS("Calendars", "Connected accounts and feeds", null, MoreGroup.SETTINGS),
     FAMILY("Family", "Share the shopping list with Jeanette", null, MoreGroup.SETTINGS),
+    WATCH("Watch", "Link your Galaxy Watch to MEKA", null, MoreGroup.SETTINGS),
     SETUP("Setup", "Everything MEKA can do, and what's left to set up", null, MoreGroup.SETTINGS),
     HEALTH("Health", "Is everything MEKA needs working?", null, MoreGroup.SETTINGS),
     ACTIVITY("Activity", "What MEKA did and why", null, MoreGroup.SETTINGS),
@@ -102,7 +103,7 @@ object ShellNav {
      * Family's links live on MEKA's server).
      */
     fun more(connected: Boolean): List<MoreItem> =
-        MoreItem.entries.filter { connected || (it != MoreItem.CALENDARS && it != MoreItem.FAMILY) }
+        MoreItem.entries.filter { connected || (it != MoreItem.CALENDARS && it != MoreItem.FAMILY && it != MoreItem.WATCH) }
 
     /** More in its sections (Places · Daily · Settings), each with its rows; a section with no rows is left out. */
     fun moreSections(connected: Boolean): List<MoreSection> =
@@ -111,7 +112,7 @@ object ShellNav {
     /**
      * Stagger steps for More (40 ms apart, after the title 0, field 1): each section starts one step after the one
      * before began rather than after its last row, so the list settles quickly; a label leads its rows by one step.
-     * Places: label 2, rows 3–6 · Daily: label 4, rows 5–7 · Settings: label 6, rows 7–17.
+     * Places: label 2, rows 3–6 · Daily: label 4, rows 5–7 · Settings: label 6, rows 7–18.
      */
     fun moreLabelStep(section: Int): Int = 2 + 2 * section
 

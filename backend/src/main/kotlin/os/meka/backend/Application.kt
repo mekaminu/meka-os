@@ -99,6 +99,8 @@ fun Application.mekaSync(
     here: HereWeather? = integrations?.hereWeather(),
     /** The family page (family sharing with Jeanette, slice 2); null leaves its routes out. */
     family: FamilyShare? = null,
+    /** Linking a watch without the enrolment code (Galaxy Watch, slice 1); null leaves its routes out. */
+    deviceLink: DeviceLink? = DeviceLink(devices, verifier),
 ) {
     val sync = SyncService(opStore)
 
@@ -156,6 +158,40 @@ fun Application.mekaSync(
             if (!stored) throw Forbidden()
             call.application.environment.log.info("device key registered")
             call.respondText(WireCodec.encodeDeviceKey(pub), ContentType.Application.Json)
+        }
+
+        if (deviceLink != null) {
+            // A watch asks for a code and later picks up its secret, both signed with its own new key (no bearer yet).
+            post("/v1/link/start") {
+                if (call.isPublisher()) throw Forbidden()
+                val body = call.boundedBody()
+                val h = call.request.headers
+                call.linkReply(deviceLink.start(call.request.path(), body, h["X-Meka-Time"], h["X-Meka-Nonce"], h["X-Meka-Signature"]))
+            }
+            post("/v1/link/status") {
+                if (call.isPublisher()) throw Forbidden()
+                val body = call.boundedBody()
+                val h = call.request.headers
+                val r = deviceLink.status(call.request.path(), body, h["X-Meka-Time"], h["X-Meka-Nonce"], h["X-Meka-Signature"])
+                if (r.body.contains("\"linked\"")) call.application.environment.log.info("watch linked") // no identifiers in logs
+                call.linkReply(r)
+            }
+            // Meka's side, from a keyed device: type the watch's code, list the watches, unlink one (Settings → Watch).
+            post("/v1/devices/link") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                call.linkReply(withContext(Dispatchers.IO) { deviceLink.approve(who, body) })
+            }
+            post("/v1/devices/watches") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                call.linkReply(withContext(Dispatchers.IO) { deviceLink.watches(who) })
+            }
+            post("/v1/devices/unlink") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                call.linkReply(withContext(Dispatchers.IO) { deviceLink.unlink(who, body) })
+            }
         }
 
         if (family != null) {
@@ -584,6 +620,11 @@ private suspend fun ApplicationCall.familyAsset(name: String, type: ContentType)
 }
 
 private suspend fun ApplicationCall.familyReply(r: FamilyReply) {
+    response.header("Cache-Control", "no-store")
+    respondText(r.body, ContentType.Application.Json, HttpStatusCode.fromValue(r.status))
+}
+
+private suspend fun ApplicationCall.linkReply(r: LinkReply) {
     response.header("Cache-Control", "no-store")
     respondText(r.body, ContentType.Application.Json, HttpStatusCode.fromValue(r.status))
 }

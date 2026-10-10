@@ -151,6 +151,12 @@ final class CoreModel {
     private(set) var family: FamilyView?
     /// A link is being made or turned off.
     private(set) var familyBusy = false
+    /// Ask → More → Watch (Galaxy Watch slice 1): link a watch with the code it shows.
+    var showWatch = false
+    /// The linked watches as the server last listed them; nil until read once.
+    private(set) var watchLink: WatchLinkView?
+    /// A watch is being linked or unlinked.
+    private(set) var watchLinkBusy = false
     var showPlan = false
     private(set) var plan: DayPlanner.Plan?
     /// Plan my day's "Also add the blocks to Google" (calendar editing slice 2e); nil until read.
@@ -257,6 +263,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await f in core.familyView { self?.family = f }
+        })
+        observers.append(Task { [weak self] in
+            for await w in core.watchLinkView { self?.watchLink = w }
         })
         observers.append(Task { [weak self] in
             for await v in core.setupView { self?.setup = v }
@@ -1010,6 +1019,31 @@ final class CoreModel {
         familyBusy = true
         defer { familyBusy = false }
         _ = try? await core.turnOffFamily(id: id)
+    }
+
+    // MARK: Watch (Galaxy Watch, slice 1)
+
+    /// Reads the linked watches from MEKA's server.
+    func refreshWatches() async {
+        guard let core else { return }
+        _ = try? await core.refreshWatches()
+    }
+
+    /// Links the watch showing `code`; false when it couldn't be (the view's problem says why). Only the String crosses.
+    func linkWatch(_ code: String) async -> Bool {
+        guard let core, !watchLinkBusy else { return false }
+        watchLinkBusy = true
+        defer { watchLinkBusy = false }
+        _ = try? await core.linkWatch(code: code)
+        return watchLink?.problem == nil
+    }
+
+    /// Unlinks a watch at once. Only the id String crosses.
+    func unlinkWatch(_ id: String) async {
+        guard let core, !watchLinkBusy else { return }
+        watchLinkBusy = true
+        defer { watchLinkBusy = false }
+        _ = try? await core.unlinkWatch(id: id)
     }
 
     // MARK: Setup checklist (Meka approved 2026-10-09)

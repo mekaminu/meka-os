@@ -53,12 +53,13 @@ class ShellNavTest {
         assertEquals(
             listOf(
                 "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Work mode", "Notifications",
-                "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Setup", "Health", "Activity", "Your data",
+                "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "Activity", "Your data",
             ),
             ShellNav.more(connected = true).map { it.label },
         )
         assertFalse(MoreItem.CALENDARS in ShellNav.more(connected = false))
         assertFalse(MoreItem.FAMILY in ShellNav.more(connected = false))
+        assertFalse(MoreItem.WATCH in ShellNav.more(connected = false))
         // Every place behind Ask is reachable from More.
         val places = ShellNav.more(connected = false).mapNotNull { it.destination }.toSet()
         assertEquals(ShellDestination.entries.filter { ShellNav.parent(it) != null }.toSet(), places)
@@ -72,7 +73,7 @@ class ShellNavTest {
         assertEquals(listOf("Lists", "Goals and habits", "Review", "Vault"), sections[0].items.map { it.label })
         assertEquals(listOf("Morning brief", "News", "Shut down the day"), sections[1].items.map { it.label })
         assertEquals(
-            listOf("Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Setup", "Health", "Activity", "Your data"),
+            listOf("Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "Activity", "Your data"),
             sections[2].items.map { it.label },
         )
         // The same rows as the flat list, in the same order; the places are exactly the Places section.
@@ -84,6 +85,7 @@ class ShellNavTest {
         assertEquals(3, offline.size)
         assertFalse(MoreItem.CALENDARS in offline[2].items)
         assertFalse(MoreItem.FAMILY in offline[2].items)
+        assertFalse(MoreItem.WATCH in offline[2].items)
     }
 
     @Test
