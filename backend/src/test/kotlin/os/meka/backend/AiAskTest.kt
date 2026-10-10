@@ -64,6 +64,8 @@ class AiAskTest {
         assertEquals("milk, eggs", r.actions.last().title)
         assertTrue("add_shopping" in AskService.SYSTEM)
         assertTrue("school lines" in AskService.SYSTEM)
+        assertTrue("meals line" in AskService.SYSTEM)
+        assertTrue("plan_dinner" in AskService.KINDS)
         // A chatty answer that isn't the JSON is words only, with nothing to act on.
         model.outcome = answered("Sure — I've moved it for you!")
         val plain = AskService(model).ask(request)

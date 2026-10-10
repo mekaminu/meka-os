@@ -134,4 +134,48 @@ class MealPlanTest {
         assertTrue(line.endsWith("favourites: Chilli"), line)
         assertNull(MealRules.askLine(MealPlanView.EMPTY))
     }
+
+    // ---- Slice 2: Ask and Talk hear the week, and "plan chilli for Friday" is a card ----
+
+    private fun card(title: String?, date: String?, meals: List<Meal>) =
+        AskRules.card(AskRawAction("plan_dinner", title = title, date = date), AskContext.EMPTY, emptyMap(), world.clock.nowMs, cal, meals)
+
+    @Test
+    fun askHearsTheWeekAndPlanDinnerIsACardForAFavouriteOrANewOne() {
+        mFold.add("Chilli: mince, kidney beans, rice")
+        mFold.add("Fajitas: chicken, peppers, wraps")
+        val chilli = mFold.meals().first { it.title == "Chilli" }
+        assertTrue(mFold.set(sat, chilli.id))
+        val line = MealRules.askLine(mFold.view(emptySet()))!!
+        assertTrue(line.startsWith("Dinners · tonight: Chilli · Tomorrow: not planned"), line)
+        // The week goes with a question as one meals line; Jeanette's favourites make it someone else's words.
+        val today = TodayProjection.project(emptyList(), world.clock.nowMs, DayWindow(at(sat, 0), at(sat + 1, 0)))
+        val ctx = AskRules.context(today, world.clock.nowMs, cal, meals = line)
+        assertEquals(listOf(line.take(AskRules.MAX_LINE)), ctx.items.filter { it.kind == AskItemKind.MEALS }.map { it.line })
+        assertFalse(ctx.untrusted)
+        assertTrue(AskRules.context(today, world.clock.nowMs, cal, meals = line, mealsFromOthers = true).untrusted)
+
+        val meals = mFold.meals()
+        // A favourite by name, any case; Friday is "Fri 16 Oct"; no date means tonight.
+        val fri = card("fajitas", "2026-10-16", meals)!!
+        assertEquals(AskProposal.PlanDinner(d(10, 16), "Fajitas", meals.first { it.title == "Fajitas" }.id), fri.proposal)
+        assertEquals("Dinner · Fajitas for Fri 16 Oct", fri.line)
+        assertEquals("Plan", fri.button)
+        assertEquals("Dinner · Chilli for tonight", card("Chilli", null, meals)!!.line)
+        // A dinner that isn't a favourite yet becomes one (its name only).
+        val pizza = card("pizza", "2026-10-11", meals)!!
+        assertEquals(AskProposal.PlanDinner(sat + 1, "Pizza", null), pizza.proposal)
+        assertEquals("Dinner · Pizza for tomorrow · new favourite", pizza.line)
+        assertEquals("Planned Pizza for tomorrow", AskRules.doneLine(pizza.proposal, sat))
+        // Gone, too far, no name, a bad date: no card.
+        assertNull(card("Chilli", "2026-10-09", meals))
+        assertNull(card("Chilli", "2026-10-25", meals))
+        assertNull(card("  ", "2026-10-12", meals))
+        assertNull(card(null, "2026-10-12", meals))
+        assertNull(card("Chilli", "Friday", meals))
+        assertTrue("plan_dinner" in AskRules.KINDS)
+        // Talk says it in words.
+        assertEquals("plan Fajitas for dinner on Friday 16 October", TalkRules.phrase(fri.proposal, sat, past = false))
+        assertEquals("planned Pizza for dinner tomorrow", TalkRules.phrase(pizza.proposal, sat, past = true))
+    }
 }

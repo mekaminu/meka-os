@@ -2262,7 +2262,10 @@ class MekaCore(
                     hereLines + workLines + routeLines,
                 shopping.view(),
                 // School rhythm, slice 2b: the school year, so "when's half term?" has an answer.
-                os.meka.core.domain.SchoolRules.askLines(school.items(), cal.epochDayOf(nowMs()), bankHolidays.calendar()))
+                os.meka.core.domain.SchoolRules.askLines(school.items(), cal.epochDayOf(nowMs()), bankHolidays.calendar()),
+                // Meal plan, slice 2: the week's dinners and the favourites, so "what's for dinner tonight?" has an answer.
+                os.meka.core.domain.MealRules.askLine(mealPlan.view(emptySet())),
+                mealPlan.meals().any { os.meka.core.domain.ShoppingRules.byName(it.by) != null })
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -2271,7 +2274,7 @@ class MekaCore(
             is AskReply.Unavailable -> os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
             is AskReply.Answered -> onCore {
                 val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
-                val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal)
+                val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals())
                 os.meka.core.domain.AskOutcome.Answered(answer.copy(cards = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }))
             }
         }
@@ -2314,6 +2317,22 @@ class MekaCore(
                 val a = shopping.addTracked(p.items.joinToString("\n"))
                 os.meka.core.domain.AskUndo.TakeBackShopping(a.created, a.revived)
             }
+            is os.meka.core.domain.AskProposal.PlanDinner -> {
+                val before = mealPlan.plan()[p.day]
+                // The favourite by name now (it may have been added or removed since the card was made), else a new one.
+                val existing = mealPlan.meals().firstOrNull { os.meka.core.domain.MealRules.key(it.title) == os.meka.core.domain.MealRules.key(p.title) }
+                val created = if (existing == null) {
+                    mealPlan.add(p.title) ?: throw os.meka.core.domain.ValidationException("That dinner can't be added")
+                    mealPlan.meals().firstOrNull { os.meka.core.domain.MealRules.key(it.title) == os.meka.core.domain.MealRules.key(p.title) }?.id
+                        ?: throw os.meka.core.domain.ValidationException("That dinner can't be added")
+                } else null
+                val id = existing?.id ?: created!!
+                if (before != id && !mealPlan.set(p.day, id)) {
+                    created?.let { mealPlan.remove(it) }
+                    throw os.meka.core.domain.ValidationException("That day can't be planned any more")
+                }
+                os.meka.core.domain.AskUndo.PutBackDinner(p.day, before, id, created)
+            }
         }
         os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
@@ -2333,6 +2352,16 @@ class MekaCore(
             is os.meka.core.domain.AskUndo.DiscardFast -> fasting.discardIfOpen(undo.fastId)
             is os.meka.core.domain.AskUndo.CancelAlarm -> alarms.cancel(undo.alarmId)
             is os.meka.core.domain.AskUndo.TakeBackShopping -> shopping.takeBack(undo.added, undo.revived)
+            is os.meka.core.domain.AskUndo.PutBackDinner -> {
+                // Only while the day still has the card's dinner (a change since, here or on the other device, wins).
+                val putBack = mealPlan.plan()[undo.day] == undo.after && (
+                    undo.before == undo.after ||
+                        mealPlan.set(undo.day, undo.before?.takeIf { b -> mealPlan.meals().any { it.id == b } })
+                    )
+                // The favourite the card made goes too, unless a day still has it.
+                val removed = undo.createdMealId?.takeIf { it !in mealPlan.plan().values }?.let { mealPlan.remove(it) } ?: false
+                putBack || removed
+            }
         }
     }
 
@@ -2826,6 +2855,8 @@ class MekaCore(
             is os.meka.core.domain.AskProposal.Timer, is os.meka.core.domain.AskProposal.Alarm -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             // Meka's own list (Jeanette sees it, but adding to it sends nothing to anyone).
             is os.meka.core.domain.AskProposal.AddShopping -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+            // The week's dinners: Meka's own plan (nothing is sent or bought).
+            is os.meka.core.domain.AskProposal.PlanDinner -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         }
         val decision = PolicyEngine(PolicyConfig()).decide(
             ActionRequest(

@@ -300,6 +300,42 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheWeeksDinnersAndPlanDinnerPlansAFavouriteOrANewOneWithUndo() = runTest {
+        val c = core()
+        c.askMeka("What's for dinner?")
+        assertTrue(server.asked.last().second.items.none { it.kind == os.meka.core.domain.AskItemKind.MEALS })
+        c.addMeal("Chilli: mince, kidney beans, rice")
+        val chilli = c.mealsView.value.favourites.single().id
+        c.planMeal(c.mealsView.value.week[0].day, chilli)
+
+        server.reply = AskReply.Answered("Done.", listOf(
+            AskRawAction("plan_dinner", title = "chilli", date = "2026-10-10"),
+            AskRawAction("plan_dinner", title = "Pizza", date = "2026-10-09"),
+        ))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("Plan chilli for Saturday and pizza tomorrow"))
+        val line = server.asked.last().second.items.single { it.kind == os.meka.core.domain.AskItemKind.MEALS }.line
+        assertTrue(line.startsWith("Dinners · tonight: Chilli · Tomorrow: not planned"), line)
+        assertEquals(listOf("Dinner · Chilli for Sat 10 Oct", "Dinner · Pizza for tomorrow · new favourite"), out.answer.cards.map { it.line })
+        // Nothing until tapped.
+        assertEquals(listOf("Chilli", null, null), c.mealsView.value.week.take(3).map { it.title })
+
+        val sat = c.doAsk(out.answer.cards[0])
+        assertEquals("Planned Chilli for Sat 10 Oct", sat.line)
+        val pizza = c.doAsk(out.answer.cards[1])
+        assertEquals("Planned Pizza for tomorrow", pizza.line)
+        assertEquals(listOf("Chilli", "Pizza", "Chilli"), c.mealsView.value.week.take(3).map { it.title })
+        assertEquals(listOf("Chilli", "Pizza"), c.mealsView.value.favourites.map { it.title })
+
+        // Undo: the new favourite goes with its day; Saturday is empty again.
+        assertTrue(c.undoAsk(assertIs<AskUndo.PutBackDinner>(pizza.undo)))
+        assertEquals(listOf("Chilli"), c.mealsView.value.favourites.map { it.title })
+        assertTrue(c.undoAsk(assertIs<AskUndo.PutBackDinner>(sat.undo)))
+        assertEquals(listOf("Chilli", null, null), c.mealsView.value.week.take(3).map { it.title })
+        // Changed since: nothing left to take back.
+        assertFalse(c.undoAsk(sat.undo!!))
+    }
+
+    @Test
     fun everyCardCanBeTakenBack() = runTest {
         val c = core()
         c.addTask("Book dentist")
