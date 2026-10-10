@@ -24,7 +24,8 @@ struct TodayView: View {
     /// The arc clicked in that sheet, opened once the sheet has gone.
     @State private var dayRingArc: DayArc?
     private var play: Bool { !introPlayed }
-    private static let sections = 6 // greeting, needs you, up next, your day (header), your day (rows), done
+    /// The opening stagger's steps, in the order Today's sections sit (Calm Today, slice 3: core TodayOrderRules).
+    private static let sections = Int(TodayOrderRules.shared.SECTIONS)
 
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
     @Namespace private var selection
@@ -178,50 +179,6 @@ struct TodayView: View {
                     }
                     Spacer().frame(height: MekaSpace.l)
 
-                    // Motion pass 2: with Reduce Motion on and nothing chosen in Appearance → Motion, a one-time card.
-                    MotionSystemCardView(palette: palette)
-                        .staggeredAppear(1, play: play)
-
-                    // Morning brief: the card rises in when the morning starts and goes at noon or once read (Got it, or
-                    // the sheet open long enough to read: Calm Today); it folds away, shrinking to its top as it fades.
-                    if let b = model.brief, b.offered {
-                        BriefCard(brief: b, palette: palette)
-                            .transition(reduceMotion ? AnyTransition.opacity : .asymmetric(
-                                insertion: AnyTransition.opacity.combined(with: .move(edge: .bottom)),
-                                removal: AnyTransition.opacity.combined(with: .scale(scale: 0.96, anchor: .top))))
-                            .padding(.bottom, MekaSpace.l)
-                            .staggeredAppear(1, play: play)
-                    } else if let line = model.brief?.readElsewhereLine {
-                        // Read on the Fold this morning: a slim line in the card's place until noon.
-                        BriefReadLineView(line: line, palette: palette)
-                            .transition(.opacity)
-                            .padding(.bottom, MekaSpace.l)
-                            .staggeredAppear(1, play: play)
-                    }
-
-                    // Weekly review: the card rises in on Sunday evening and stays through Monday until reviewed.
-                    if let c = model.review?.card, c.offered {
-                        ReviewCardView(card: c, palette: palette)
-                            .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
-                            .padding(.bottom, MekaSpace.l)
-                            .staggeredAppear(1, play: play)
-                    }
-
-                    // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.
-                    if let s = model.shutdown {
-                        if s.offered {
-                            ShutdownCard(shutdown: s, palette: palette)
-                                .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
-                                .padding(.bottom, MekaSpace.l)
-                                .staggeredAppear(1, play: play)
-                        } else if s.evening || s.doneLine != nil {
-                            // Tomorrow at a glance once the evening starts (after shutting down, or while still at work).
-                            TomorrowGlanceView(doneLine: s.doneLine, glance: s.evening ? s.tomorrow.glance : nil, palette: palette)
-                                .padding(.bottom, MekaSpace.l)
-                                .transition(.opacity)
-                        }
-                    }
-
                     if let today = model.today {
                         // "You're clear." only when nothing at all is left today; "Nothing else timed today" beside
                         // all-day items (Today clarity).
@@ -233,21 +190,13 @@ struct TodayView: View {
                                     .font(today.isAllClear ? MekaType.upNextTitle : MekaType.body)
                                     .foregroundStyle(palette.textSecondary)
                             }
-                            .staggeredAppear(1, play: play)
-                        }
-                        // The Needs you column beside Today lists them (never shown twice).
-                        if !today.needsYou.isEmpty && CommandCentreRules.shared.todayListsNeedsYou(layout: CommandCentreRules.shared.layout(contentWidthDp: Float(width))) {
-                            SectionLabel("Needs you", palette).staggeredAppear(1, play: play)
-                            ForEach(today.needsYou, id: \.task.id) { item in
-                                TaskRow(task: item.task, reason: item.reason, palette: palette).staggeredAppear(1, play: play)
-                            }
-                            Spacer().frame(height: MekaSpace.l)
+                            .staggeredAppear(step(.clear), play: play)
                         }
                         // Up next is the menu bar's card here too (Fold review 2026-10-09, item 3): it carries its own
                         // "UP NEXT", so the section label only heads a lone next event.
                         let upNextCard = model.upNextCard
                         if upNextCard == nil && today.timeline.nextEvent != nil {
-                            SectionLabel("Up next", palette).staggeredAppear(2, play: play)
+                            SectionLabel("Up next", palette).staggeredAppear(step(.upNext), play: play)
                         }
                         if let card = upNextCard, let next = card.task {
                             // Up next changes: the new card pushes in from the right (cross-fade with Reduce Motion).
@@ -255,7 +204,7 @@ struct TodayView: View {
                                 .id(next.id)
                                 .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.push(from: .trailing))
                                 .padding(.bottom, today.timeline.nextEvent == nil ? MekaSpace.l : MekaSpace.xs)
-                                .staggeredAppear(2, play: play)
+                                .staggeredAppear(step(.upNext), play: play)
                         }
                         // The next event within the hour: "Call with Tunde in 25 min", under Up next's card as the menu
                         // bar's "Then: …" is.
@@ -263,20 +212,20 @@ struct TodayView: View {
                             NextEventCard(next: e, palette: palette)
                                 .padding(.bottom, MekaSpace.l)
                                 .transition(.opacity)
-                                .staggeredAppear(2, play: play)
+                                .staggeredAppear(step(.upNext), play: play)
                         }
                         // The Gym (booked habits): today's session, "Did you go?" once it's over, or where it was rebooked.
                         if !(model.sessions?.cards ?? []).isEmpty {
                             SessionCardsView(palette: palette)
                                 .padding(.bottom, MekaSpace.l)
                                 .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
-                                .staggeredAppear(2, play: play)
+                                .staggeredAppear(step(.upNext), play: play)
                         }
                         // Quick alarms and timers typed into capture ("alarm 6:30", "timer 20 min"), each with ✕.
                         if !model.quickAlarms.isEmpty {
                             QuickAlarmRowsView(palette: palette)
                                 .padding(.bottom, MekaSpace.l)
-                                .staggeredAppear(2, play: play)
+                                .staggeredAppear(step(.upNext), play: play)
                         }
                         // One timeline under "Today": the All day group first (one row each, at most 3 then "+2
                         // more"), finished events folded, events and planned tasks in time order with the now line
@@ -285,32 +234,90 @@ struct TodayView: View {
                         // The label says what the section holds ("Today · Work 09:00–17:30 · 2 events"; Fold review
                         // 2026-10-09 07:26, item 6), as on the Fold.
                         if tl.head != nil {
-                            SectionLabel(tl.sectionLabel, palette).staggeredAppear(3, play: play)
+                            SectionLabel(tl.sectionLabel, palette).staggeredAppear(step(.timeline), play: play)
                             if !tl.allDayItems.isEmpty {
-                                AllDayLabel(label: tl.allDayLabel, palette: palette).staggeredAppear(3, play: play)
+                                AllDayLabel(label: tl.allDayLabel, palette: palette).staggeredAppear(step(.timeline), play: play)
                             }
                             ForEach(AllDayRules.shared.shown(items: tl.allDayItems, open: allDayOpen), id: \.event.id) { a in
                                 AllDayRow(item: a, palette: palette)
                                     .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .top)))
-                                    .staggeredAppear(3, play: play)
+                                    .staggeredAppear(step(.timeline), play: play)
                             }
                             if let more = AllDayRules.shared.moreLabel(items: tl.allDayItems, open: allDayOpen) {
-                                AllDayMore(label: more, open: $allDayOpen, palette: palette).staggeredAppear(3, play: play)
+                                AllDayMore(label: more, open: $allDayOpen, palette: palette).staggeredAppear(step(.timeline), play: play)
                             }
                             if let label = tl.earlierLabel {
-                                EarlierToggle(label: label, open: $earlierOpen, palette: palette).staggeredAppear(3, play: play)
+                                EarlierToggle(label: label, open: $earlierOpen, palette: palette).staggeredAppear(step(.timeline), play: play)
                                 if earlierOpen {
                                     ForEach(tl.earlier, id: \.id) { r in TimelineEventRow(row: r, past: true, palette: palette).transition(.opacity) }
                                 }
                             }
                             ForEach(tl.rows, id: \.id) { r in
-                                timelineRow(r).staggeredAppear(4, play: play)
+                                timelineRow(r).staggeredAppear(Int(TodayOrderRules.shared.TIMELINE_ROWS_STEP), play: play)
+                            }
+                            Spacer().frame(height: MekaSpace.l)
+                        }
+                    }
+
+                    // Calm Today, slice 3: Up next and the timeline lead; the moment cards follow them (core
+                    // TodayOrderRules), then Needs you, Anytime today and done today.
+                    // Motion pass 2: with Reduce Motion on and nothing chosen in Appearance → Motion, a one-time card.
+                    MotionSystemCardView(palette: palette)
+                        .staggeredAppear(step(.cards), play: play)
+
+                    // Morning brief: the card rises in when the morning starts and goes at noon or once read (Got it, or
+                    // the sheet open long enough to read: Calm Today); it folds away, shrinking to its top as it fades.
+                    if let b = model.brief, b.offered {
+                        BriefCard(brief: b, palette: palette)
+                            .transition(reduceMotion ? AnyTransition.opacity : .asymmetric(
+                                insertion: AnyTransition.opacity.combined(with: .move(edge: .bottom)),
+                                removal: AnyTransition.opacity.combined(with: .scale(scale: 0.96, anchor: .top))))
+                            .padding(.bottom, MekaSpace.l)
+                            .staggeredAppear(step(.cards), play: play)
+                    } else if let line = model.brief?.readElsewhereLine {
+                        // Read on the Fold this morning: a slim line in the card's place until noon.
+                        BriefReadLineView(line: line, palette: palette)
+                            .transition(.opacity)
+                            .padding(.bottom, MekaSpace.l)
+                            .staggeredAppear(step(.cards), play: play)
+                    }
+
+                    // Weekly review: the card rises in on Sunday evening and stays through Monday until reviewed.
+                    if let c = model.review?.card, c.offered {
+                        ReviewCardView(card: c, palette: palette)
+                            .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
+                            .padding(.bottom, MekaSpace.l)
+                            .staggeredAppear(step(.cards), play: play)
+                    }
+
+                    // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.
+                    if let s = model.shutdown {
+                        if s.offered {
+                            ShutdownCard(shutdown: s, palette: palette)
+                                .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .bottom)))
+                                .padding(.bottom, MekaSpace.l)
+                                .staggeredAppear(step(.cards), play: play)
+                        } else if s.evening || s.doneLine != nil {
+                            // Tomorrow at a glance once the evening starts (after shutting down, or while still at work).
+                            TomorrowGlanceView(doneLine: s.doneLine, glance: s.evening ? s.tomorrow.glance : nil, palette: palette)
+                                .padding(.bottom, MekaSpace.l)
+                                .transition(.opacity)
+                        }
+                    }
+
+                    if let today = model.today {
+                        let tl = today.timeline
+                        // The Needs you column beside Today lists them (never shown twice).
+                        if !today.needsYou.isEmpty && CommandCentreRules.shared.todayListsNeedsYou(layout: CommandCentreRules.shared.layout(contentWidthDp: Float(width))) {
+                            SectionLabel("Needs you", palette).staggeredAppear(step(.needsYou), play: play)
+                            ForEach(today.needsYou, id: \.task.id) { item in
+                                TaskRow(task: item.task, reason: item.reason, palette: palette).staggeredAppear(step(.needsYou), play: play)
                             }
                             Spacer().frame(height: MekaSpace.l)
                         }
                         if !tl.anytime.isEmpty {
-                            SectionLabel("Anytime today", palette).staggeredAppear(4, play: play)
-                            ForEach(tl.anytime, id: \.id) { t in TaskRow(task: t, reason: nil, palette: palette).staggeredAppear(4, play: play) }
+                            SectionLabel("Anytime today", palette).staggeredAppear(step(.anytime), play: play)
+                            ForEach(tl.anytime, id: \.id) { t in TaskRow(task: t, reason: nil, palette: palette).staggeredAppear(step(.anytime), play: play) }
                         }
                         if !today.doneToday.isEmpty {
                             // Straight under the day's section, which already ends with its own spacing (Meka's
@@ -318,7 +325,7 @@ struct TodayView: View {
                             Text("\(today.doneToday.count) done today")
                                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                                 .padding(.top, tl.head != nil && tl.anytime.isEmpty ? 0 : MekaSpace.l)
-                                .staggeredAppear(5, play: play)
+                                .staggeredAppear(step(.done), play: play)
                         }
                     }
                 }
@@ -382,6 +389,9 @@ struct TodayView: View {
         introPlayed = false
         openings += 1
     }
+
+    /// A section's step in the opening stagger, in the order Today's sections sit (Calm Today, slice 3).
+    private func step(_ slot: TodaySlot) -> Int { Int(TodayOrderRules.shared.stagger(slot: slot)) }
 
     @ViewBuilder
     private func timelineRow(_ r: TimelineRow) -> some View {

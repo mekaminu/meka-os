@@ -6,6 +6,8 @@ import os.meka.android.work.AfterWorkHost
 import os.meka.core.domain.CommandCentreRules
 import os.meka.core.domain.NowKind
 import os.meka.core.domain.NowView
+import os.meka.core.domain.TodayOrderRules
+import os.meka.core.domain.TodaySlot
 import os.meka.android.fold.NowCard
 import os.meka.android.fold.NowHandlers
 import os.meka.core.domain.CommandLayout
@@ -453,8 +455,8 @@ internal fun BoxWithConstraintsScope.TwoPaneMorph(
 /** How a task row takes part in shared transitions: whether its title travels, whether it draws it, a soft light on landing. */
 internal data class RowMotion(val shareTitle: Boolean = false, val titleVisible: Boolean = true, val landed: Boolean = false)
 
-/** Stagger groups on Today: greeting, needs you, up next, the timeline (header and all day), the timeline (rows), done. */
-private const val TODAY_SECTIONS = 6
+/** Stagger groups on Today, in the order they sit (Calm Today, slice 3): the header, then core TodayOrderRules' steps. */
+private const val TODAY_SECTIONS = TodayOrderRules.SECTIONS
 
 /** Present only while the device isn't enrolled for sync. */
 data class ConnectHook(val defaultUrl: String, val connect: suspend (url: String, code: String) -> String?)
@@ -734,16 +736,28 @@ private fun TodayPane(
                     }
                 }
             }
+            // Calm Today, slice 3: Up next and the timeline lead, the moment cards follow them (core TodayOrderRules), and
+            // the opening stagger arrives in the same order.
+            val nowCard = now?.takeIf { it.kind != NowKind.CLEAR }
+            val upNextCard = upNext?.takeIf { nowCard == null && upNextHandlers != null }
+            val tl = today.timeline
+            val head = tl.head
+            val cardsStep = TodayOrderRules.stagger(TodaySlot.CARDS)
+            val nextStep = TodayOrderRules.stagger(TodaySlot.UP_NEXT)
+            val dayStep = TodayOrderRules.stagger(TodaySlot.TIMELINE)
+            val rowsStep = TodayOrderRules.TIMELINE_ROWS_STEP
+            for (slot in TodayOrderRules.ORDER) when (slot) {
+            TodaySlot.CARDS -> {
             // Motion pass 2: with the phone's animations off and nothing chosen in Appearance → Motion, a one-time card.
             motionCard?.let { card ->
                 item(key = "motion") {
-                    MotionSystemCard(card, motion, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
+                    MotionSystemCard(card, motion, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)))
                 }
             }
             // Self-updating phone app: the card rises in when the Mac has published a newer build.
             if (update !is UpdateState.None && updater != null) {
                 item(key = "update") {
-                    UpdateCard(update, updater, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
+                    UpdateCard(update, updater, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)))
                 }
             }
             // Morning brief: the card rises in when the morning starts and goes at noon or once read (Got it, or the
@@ -751,27 +765,27 @@ private fun TodayPane(
             if (brief.offered) {
                 item(key = "brief") {
                     // Its title travels into the brief pane's (Four tabs, slice 3).
-                    BriefCard(brief, openBrief, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)),
+                    BriefCard(brief, openBrief, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
                         titleModifier = Modifier.sharedTitle(SharedMotion.paneKey(SharedMotion.BRIEF), !briefOpen))
                 }
             } else if (brief.readElsewhereLine != null) {
                 // Read on the Mac this morning: a slim line in the card's place until noon (Fold review 2026-10-08).
                 item(key = "brief-read") {
-                    BriefReadLine(brief.readElsewhereLine!!, openBrief, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)))
+                    BriefReadLine(brief.readElsewhereLine!!, openBrief, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)))
                 }
             }
             // Weekly review: the card rises in on Sunday evening and stays through Monday until reviewed.
             if (reviewCard.offered) {
                 item(key = "review") {
                     // Its title travels across the shell into the Review tab's.
-                    ReviewCardTile(reviewCard, openReviewCard, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)),
+                    ReviewCardTile(reviewCard, openReviewCard, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
                         titleModifier = Modifier.sharedPlace(SharedMotion.placeKey(ShellDestination.REVIEW, PlaceVia.CARD)))
                 }
             }
             // Evening shutdown: the card rises in when the evening starts; once done, one quiet line stays.
             if (shutdown.offered) {
                 item(key = "shutdown") {
-                    ShutdownCard(shutdown, openShutdown, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)),
+                    ShutdownCard(shutdown, openShutdown, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
                         titleModifier = Modifier.sharedTitle(SharedMotion.paneKey(SharedMotion.SHUTDOWN), !shutdownOpen))
                 }
             } else if (shutdown.evening || shutdown.doneLine != null) {
@@ -780,42 +794,47 @@ private fun TodayPane(
                 item(key = "shutdown-done") {
                     TomorrowGlance(
                         shutdown.doneLine, shutdown.tomorrow.glance.takeIf { shutdown.evening }, openShutdown,
-                        Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(1, play)),
+                        Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
                     )
                 }
             }
+            }
+            TodaySlot.CLEAR -> {
             // "You're clear." only when nothing at all is left today; "Nothing else timed today" beside all-day items.
             today.clearLine?.let { line ->
                 item(key = "clear") {
                     // All clear: the brass ring breathes beside it (catalogue "Empty states"); Off: still.
-                    Row(Modifier.animateItem().appear(rememberAppearance(1, play)), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(bottom = MekaSpace.s).animateItem().appear(rememberAppearance(TodayOrderRules.stagger(TodaySlot.CLEAR), play)), verticalAlignment = Alignment.CenterVertically) {
                         if (today.isAllClear) BreathingRing(Modifier.padding(end = MekaSpace.s))
                         Text(line, style = if (today.isAllClear) MekaType.upNextTitle else MekaType.body, color = Meka.colors.textSecondary)
                     }
                 }
             }
+            }
+            TodaySlot.NEEDS_YOU -> {
             if (listsNeedsYou && today.needsYou.isNotEmpty()) {
-                item(key = "h-needs") { SectionLabel("Needs you", Modifier.animateItem().appear(rememberAppearance(1, play))) }
+                val needsStep = TodayOrderRules.stagger(TodaySlot.NEEDS_YOU)
+                item(key = "h-needs") { SectionLabel("Needs you", Modifier.animateItem().appear(rememberAppearance(needsStep, play))) }
                 items(today.needsYou, key = { "n-" + it.task.id }) { n ->
                     TaskRow(n.task, actions, reason = n.reason, motion = rowMotion(n.task.id),
-                        modifier = Modifier.animateItem().appear(rememberAppearance(1, play)))
+                        modifier = Modifier.animateItem().appear(rememberAppearance(needsStep, play)))
                 }
                 item(key = "s-needs") { Spacer(Modifier.height(MekaSpace.l)) }
             }
-            val nowCard = now?.takeIf { it.kind != NowKind.CLEAR }
+            }
+            TodaySlot.UP_NEXT -> {
             if (nowCard != null && nowHandlers != null) {
                 // One stable slot: when the thing changes, the card's content cross-slides.
                 item(key = "now") {
                     NowCard(
-                        nowCard, nowHandlers, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(2, play)),
+                        nowCard, nowHandlers, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(nextStep, play)),
                         titleModifier = { id -> rowMotion(id).let { m -> if (m.shareTitle) Modifier.sharedTitle(SharedMotion.taskKey(id), m.titleVisible) else Modifier } },
                     )
                 }
             } else if (today.timeline.nextEvent != null && (upNext == null || upNextHandlers == null)) {
                 // The Up next card carries its own label, so the section label only heads a lone next event.
-                item(key = "h-next") { SectionLabel("Up next", Modifier.animateItem().appear(rememberAppearance(2, play))) }
+                item(key = "h-next") { SectionLabel("Up next", Modifier.animateItem().appear(rememberAppearance(nextStep, play))) }
             }
-            val upNextCard = upNext?.takeIf { nowCard == null && upNextHandlers != null }
             if (upNextCard != null && upNextHandlers != null) {
                 // One stable slot: when up next changes, the card's content cross-slides instead of the row swapping.
                 // The closed Fold's card (UP NEXT, title, line, Done · Tomorrow · Open) on every screen.
@@ -823,7 +842,7 @@ private fun TodayPane(
                     NowCard(
                         upNextCard, upNextHandlers,
                         Modifier.padding(bottom = if (today.timeline.nextEvent != null) MekaSpace.xs else 0.dp)
-                            .animateItem().appear(rememberAppearance(2, play)),
+                            .animateItem().appear(rememberAppearance(nextStep, play)),
                         titleModifier = { id -> rowMotion(id).let { m -> if (m.shareTitle) Modifier.sharedTitle(SharedMotion.taskKey(id), m.titleVisible) else Modifier } },
                     )
                 }
@@ -832,7 +851,7 @@ private fun TodayPane(
             // "Then: …" is (the "now" card carries it there).
             if (nowCard == null) today.timeline.nextEvent?.let { e ->
                 item(key = "nextevent") {
-                    NextEventCard(e, Modifier.animateItem().appear(rememberAppearance(2, play)), openEvent)
+                    NextEventCard(e, Modifier.animateItem().appear(rememberAppearance(nextStep, play)), openEvent)
                 }
             }
             if (nowCard == null && (upNextCard != null || today.timeline.nextEvent != null)) {
@@ -841,35 +860,35 @@ private fun TodayPane(
             // The Gym (booked habits): today's session, "Did you go?" once it's over, or where it was rebooked. Only when
             // there is one: an empty item still costs the list's spacing, pushing the timeline further down.
             if (core != null && sessionCards) item(key = "session") {
-                os.meka.android.goals.SessionCards(core, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(2, play)))
+                os.meka.android.goals.SessionCards(core, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(nextStep, play)))
             }
             // Quick alarms and timers typed into capture ("alarm 6:30", "timer 20 min"), each with a cancel ✕.
             if (core != null && quickAlarms) item(key = "quick-alarms") {
-                QuickAlarmRows(core, Modifier.animateItem().appear(rememberAppearance(2, play)))
+                QuickAlarmRows(core, Modifier.animateItem().appear(rememberAppearance(nextStep, play)))
             }
+            }
+            TodaySlot.TIMELINE -> {
             // One timeline under "Today": the "All day" group first (one row each, at most 3 then "+2 more"), finished
-            // events folded, events and planned tasks in time order with the now line and free gaps; then tasks with no time.
+            // events folded, events and planned tasks in time order with the now line and free gaps.
             // The label says what the section holds ("Today · Work 09:00–17:30 · 2 events") and rides with the first
             // thing under it (Fold review 2026-10-09 07:26, item 6), so it never stands alone over the capture bar.
-            val tl = today.timeline
-            val head = tl.head
             if (head != null) {
                 if (head == DayHead.ALL_DAY) item(key = "allday-label") {
-                    Headed(tl.sectionLabel, Modifier.animateItem().appear(rememberAppearance(3, play))) { m ->
+                    Headed(tl.sectionLabel, Modifier.animateItem().appear(rememberAppearance(dayStep, play))) { m ->
                         AllDayLabel(tl.allDayLabel, m)
                     }
                 }
                 items(AllDayRules.shown(tl.allDayItems, allDayOpen), key = { "a-" + it.event.id }) { a ->
-                    AllDayRow(a, Modifier.animateItem().appear(rememberAppearance(3, play)), openEvent, eventHandlers)
+                    AllDayRow(a, Modifier.animateItem().appear(rememberAppearance(dayStep, play)), openEvent, eventHandlers)
                 }
                 AllDayRules.moreLabel(tl.allDayItems, allDayOpen)?.let { more ->
                     item(key = "allday-more") {
-                        AllDayMore(more, { allDayOpen = true }, Modifier.animateItem().appear(rememberAppearance(3, play)))
+                        AllDayMore(more, { allDayOpen = true }, Modifier.animateItem().appear(rememberAppearance(dayStep, play)))
                     }
                 }
                 tl.earlierLabel?.let { label ->
                     item(key = "earlier") {
-                        Headed(tl.sectionLabel.takeIf { head == DayHead.EARLIER }, Modifier.animateItem().appear(rememberAppearance(3, play))) { m ->
+                        Headed(tl.sectionLabel.takeIf { head == DayHead.EARLIER }, Modifier.animateItem().appear(rememberAppearance(dayStep, play))) { m ->
                             EarlierToggle(label, earlierOpen, { earlierOpen = !earlierOpen }, m)
                         }
                     }
@@ -880,7 +899,7 @@ private fun TodayPane(
                     }
                 }
                 itemsIndexed(tl.rows, key = { _, r -> "r-" + r.id }) { i, r ->
-                    Headed(tl.sectionLabel.takeIf { i == 0 && head == DayHead.ROW }, Modifier.animateItem().appear(rememberAppearance(4, play))) { m ->
+                    Headed(tl.sectionLabel.takeIf { i == 0 && head == DayHead.ROW }, Modifier.animateItem().appear(rememberAppearance(rowsStep, play))) { m ->
                         when (r.kind) {
                             TimelineKind.EVENT -> SwipeableEvent(r.event, eventHandlers, m, onOpen = openEvent) { sm ->
                                 TimelineEventRow(r, past = false, modifier = sm)
@@ -899,21 +918,28 @@ private fun TodayPane(
                 }
                 item(key = "s-day") { Spacer(Modifier.height(MekaSpace.l)) }
             }
+            }
+            TodaySlot.ANYTIME -> {
             if (tl.anytime.isNotEmpty()) {
+                val anyStep = TodayOrderRules.stagger(TodaySlot.ANYTIME)
                 itemsIndexed(tl.anytime, key = { _, t -> "d-" + t.id }) { i, t ->
-                    Headed(ANYTIME_LABEL.takeIf { i == 0 }, Modifier.animateItem().appear(rememberAppearance(4, play))) { m ->
+                    Headed(ANYTIME_LABEL.takeIf { i == 0 }, Modifier.animateItem().appear(rememberAppearance(anyStep, play))) { m ->
                         TaskRow(t, actions, motion = rowMotion(t.id), modifier = m)
                     }
                 }
+                if (today.doneToday.isNotEmpty()) item(key = "s-anytime") { Spacer(Modifier.height(MekaSpace.l)) }
             }
+            }
+            TodaySlot.DONE -> {
             if (today.doneToday.isNotEmpty()) {
-                // Straight under what's above: the day's section already ends with its own spacing, so a second gap
-                // left a large empty stretch above it (Meka's 10:48 screenshots, 2026-10-09).
-                val doneTop = if (head != null && tl.anytime.isEmpty()) 0.dp else MekaSpace.l
+                // Last, straight under what's above: every section before it already ends with its own spacing, so a
+                // second gap left a large empty stretch above it (Meka's 10:48 screenshots, 2026-10-09).
                 item(key = "done") {
                     Text("${today.doneToday.size} done today", style = MekaType.caption, color = Meka.colors.textTertiary,
-                        modifier = Modifier.padding(top = doneTop).animateItem().appear(rememberAppearance(5, play)))
+                        modifier = Modifier.animateItem().appear(rememberAppearance(TodayOrderRules.stagger(TodaySlot.DONE), play)))
                 }
+            }
+            }
             }
         }
         }

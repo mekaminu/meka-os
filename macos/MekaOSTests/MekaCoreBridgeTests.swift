@@ -801,6 +801,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.spokenLine(dots: dots), " Habits: Stretch, not yet; Read, done.")
     }
 
+    /// Calm Today, slice 3: Up next and the timeline lead Today, the moment cards follow them, and the opening
+    /// stagger arrives in the same order.
+    func testTodayOrderReachesSwift() {
+        let rules = TodayOrderRules.shared
+        XCTAssertEqual(rules.ORDER, [TodaySlot.clear, .upNext, .timeline, .cards, .needsYou, .anytime, .done])
+        XCTAssertTrue(rules.leads(slot: .timeline))
+        XCTAssertFalse(rules.leads(slot: .cards))
+        XCTAssertLessThan(rules.stagger(slot: .upNext), rules.stagger(slot: .cards))
+        XCTAssertLessThan(rules.TIMELINE_ROWS_STEP, rules.stagger(slot: .cards))
+        XCTAssertEqual(rules.SECTIONS, 7)
+    }
+
     /// A hand-made gym habit is offered booking instead of a second "Add Gym" (Fold review 2026-10-09 13:45, item 2).
     func testGymBookOfferReachesSwift() {
         let rules = SessionRules.shared
