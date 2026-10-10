@@ -60,4 +60,22 @@ class SchoolFacadeTest {
         assertTrue(fold.removeSchool(cover.id))
         assertTrue(fold.schoolView.value.off.isEmpty())
     }
+
+    @Test
+    fun theSchoolDayShowsOnTodayAndInTheBriefAndThePeKitTheEveningBefore() = runTest {
+        val fold = core("android")
+        assertNull(fold.today.value.school)
+        fold.addSchool("Logan's football tournament Sat 10 Oct")
+        fold.addSchool("Rex PE Mon")
+        assertEquals("Logan: Football tournament today", fold.today.value.school?.text)
+        assertEquals("Logan: Football tournament today", fold.briefView.value.school?.text)
+        assertTrue(fold.briefView.value.cardLine.contains("Logan: Football tournament today"), fold.briefView.value.cardLine)
+        assertTrue(os.meka.core.domain.BriefSpeech.script(fold.briefView.value).contains("School today: Logan has Football tournament."))
+        assertNull(fold.shutdownView.value.tomorrow.school) // Sunday tomorrow
+
+        now += 33 * 3_600_000L // Sun 11 Oct, 19:00
+        fold.tick()
+        assertNull(fold.today.value.school)
+        assertEquals("Tomorrow · Rex: PE kit", fold.shutdownView.value.tomorrow.school?.text)
+    }
 }

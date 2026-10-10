@@ -701,6 +701,14 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = r.spoken })
                         }
                     }
+                    // School rhythm, slice 2: what the school says about today, "Rex: PE today"; cross-fades as it changes.
+                    today.school?.let { school ->
+                        Crossfade(school, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "school-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
                     SyncLine(sync)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),

@@ -144,4 +144,45 @@ class SchoolTest {
         assertEquals(SchoolRules.NOTHING_OFF, later.summary)
         assertEquals("Next: Tue 20 Oct", later.weekly[0].note)
     }
+
+    // ---- Slice 2: the school day on Today, in the brief and the evening before ----
+
+    @Test
+    fun eachDaySaysWhatTheSchoolSaysAndTheEveningBeforeAsksForTheKit() {
+        listOf("INSET 12 Oct", "Rex PE Tue", "Logan swimming Thursdays", "Logan swimming Mon", "Rex off 15 Oct", "Non-uniform day Fri 16 Oct")
+            .forEach { assertTrue(sFold.add(it) != null, it) }
+        val items = sFold.items()
+        val none = HolidayCalendar.NONE
+        // An INSET Monday: no school, so Logan's Monday swimming isn't on.
+        assertEquals(SchoolLine("INSET day today", "School today: INSET day, no school."), SchoolRules.todayLine(items, d(10, 12), none))
+        assertEquals(SchoolLine("Tomorrow · Rex: PE kit", "School tomorrow: Rex needs PE kit."), SchoolRules.tomorrowLine(items, d(10, 12), none))
+        assertEquals("Rex: PE today", SchoolRules.todayLine(items, d(10, 13), none)?.text)
+        // Rex off, Logan at school: the day off first, then the weekly thing.
+        assertEquals(
+            SchoolLine("Rex: No school · Logan: Swimming today", "School today: Rex is off and Logan has Swimming."),
+            SchoolRules.todayLine(items, d(10, 15), none),
+        )
+        assertEquals(SchoolLine("Tomorrow · Rex: No school · Logan: Swimming kit", "School tomorrow: Rex is off and Logan needs Swimming kit."),
+            SchoolRules.tomorrowLine(items, d(10, 14), none))
+        assertEquals("Tomorrow · Non-uniform day", SchoolRules.tomorrowLine(items, d(10, 15), none)?.text)
+        // The weekend says nothing; the next Monday swimming is on again.
+        assertNull(SchoolRules.todayLine(items, d(10, 17), none))
+        assertNull(SchoolRules.tomorrowLine(items, d(10, 17), none))
+        assertEquals("Logan: Swimming today", SchoolRules.todayLine(items, d(10, 19), none)?.text)
+        // Something not packed (a club with no kit word) stays as typed the evening before.
+        assertEquals("Rex: Chess club", SchoolRules.thingText(SchoolThing("x", SchoolKind.WEEKLY, "Chess club", "Rex"), kit = true))
+        assertEquals("PE kit", SchoolRules.thingText(SchoolThing("x", SchoolKind.WEEKLY, "PE kit", ""), kit = true))
+    }
+
+    @Test
+    fun aDayOffOnABankHolidayIsLeftToTheHolidayAndAWeekendDateStillShows() {
+        sFold.add("Christmas holidays 18 Dec – 4 Jan")
+        sFold.add("Logan's football tournament Sat 17 Oct")
+        val items = sFold.items()
+        val boxing = d(12, 28) // the Boxing Day substitute, a Monday
+        val holidays = HolidayCalendar(mapOf(boxing to "Boxing Day (substitute day)"))
+        assertNull(SchoolRules.todayLine(items, boxing, holidays))
+        assertEquals("Christmas holidays today", SchoolRules.todayLine(items, boxing + 1, holidays)?.text)
+        assertEquals("Logan: Football tournament today", SchoolRules.todayLine(items, d(10, 17), holidays)?.text)
+    }
 }

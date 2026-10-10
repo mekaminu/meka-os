@@ -2888,9 +2888,15 @@ class MekaCore(
             os.meka.core.domain.WorkHours.of(workState, holidays, todayDay, work.homeDays(todayDay)), todayDay, cal,
         )
         val placesLine = office?.let { os.meka.core.domain.PlacesRules.placesLine(forecast, workForecast, nowMs(), it, cal) }
+        // School rhythm, slice 2: what the school says about today (Today's header, the brief) and tomorrow (the shutdown).
+        val schoolItems = school.items()
+        val schoolToday = os.meka.core.domain.SchoolRules.todayLine(schoolItems, todayDay, holidays)
         val shutdownRaw = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), holidays)
         val shutdownNow = shutdownRaw.copy(
-            tomorrow = shutdownRaw.tomorrow.copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal)),
+            tomorrow = shutdownRaw.tomorrow.copy(
+                weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal),
+                school = os.meka.core.domain.SchoolRules.tomorrowLine(schoolItems, todayDay, holidays),
+            ),
         )
         // The live tiles under the Day ring: next event, a running fast, habits today, renewals due.
         // A running fast also shows as the Day ring's inner arc (Living Today, slice 3); once the day is shut down the
@@ -2906,6 +2912,7 @@ class MekaCore(
             ),
             // The watch face (Fold review 2026-10-09 07:26, item 2): the next 12 hours, across midnight.
             watchFace = watchFaceNow(all, dayEvents, cal),
+            school = schoolToday,
         )
         _lists.value = listsNow
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(
@@ -2922,7 +2929,7 @@ class MekaCore(
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
-            news.all(), news.choices(), holidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal)).copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal))
+            news.all(), news.choices(), holidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolToday).copy(weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal))
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))
         val weatherNow = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted(), workForecast, workPlace.wanted(), office)
             // The trains on an office day's commute (Places item 4), under the weather line.

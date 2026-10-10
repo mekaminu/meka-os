@@ -34,6 +34,8 @@ data class Today(
      * late or today has no room left.
      */
     val upNextLaterMs: Long? = null,
+    /** School rhythm, slice 2: "Rex: PE today" under the weather in Today's header ([SchoolRules.todayLine]); set by the facade. */
+    val school: SchoolLine? = null,
 ) {
     /** The Up next task is a planned task whose time has gone by ([LateTaskRules.isLate]). */
     fun upNextLate(nowMs: Long): Boolean = upNext?.let { LateTaskRules.isLate(it, nowMs) } ?: false

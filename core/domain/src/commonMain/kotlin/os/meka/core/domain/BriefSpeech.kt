@@ -36,6 +36,7 @@ object BriefSpeech {
         if (v.dateLabel.isNotBlank()) out += "It's ${spokenDate(v.dateLabel)}."
         v.workLine?.let { out += sentence(it.replace(WORK_HOURS) { m -> "Work is from ${m.groupValues[1]} to ${m.groupValues[2]}" }) }
         v.weatherLine?.let { out += sentence("Today, " + it) }
+        v.school?.let { out += it.spoken }
 
         if (v.day.isEmpty()) {
             out += "Nothing's planned yet."

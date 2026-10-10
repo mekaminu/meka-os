@@ -1325,6 +1325,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.HOME_LABEL, "I'll work from home")
     }
 
+    func testSchoolDayLinesReachSwift() {
+        // School rhythm, slice 2: Today's header, the brief and the shutdown read SchoolLine's two Strings.
+        let rules = SchoolRules.shared
+        let pe = SchoolThing(id: "x", kind: .weekly, title: "PE", who: "Rex")
+        XCTAssertEqual(rules.thingText(t: pe, kit: false), "Rex: PE")
+        XCTAssertEqual(rules.thingText(t: pe, kit: true), "Rex: PE kit")
+        XCTAssertEqual(rules.spokenThing(t: pe), "Rex has PE")
+        let line = SchoolLine(text: "Rex: PE today", spoken: "School today: Rex has PE.")
+        XCTAssertEqual(line.text, "Rex: PE today")
+    }
+
     func testWatchLinkReachesSwift() {
         // Galaxy Watch, slice 1: Settings → Watch's rules reach the Mac (only Strings cross from the sheet).
         let rules = WatchLinkRules.shared

@@ -113,6 +113,14 @@ struct TodayView: View {
                             .accessibilityLabel(route.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // School rhythm, slice 2: what the school says about today, "Rex: PE today"; cross-fades as it changes.
+                    if let school = model.today?.school {
+                        Text(school.text).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: school.text)
+                            .accessibilityLabel(school.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     // A calendar sign-in about to end or expired (Reliability first, item 2): one line, Reconnect.
                     if let line = model.signInLines.first {
                         SignInLineView(line: line, palette: palette)

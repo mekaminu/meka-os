@@ -100,6 +100,15 @@ data class SchoolCover(
     val spoken: String,
 )
 
+/**
+ * The school's say on one day (slice 2): Today's header and the brief ("Rex: PE today"), the shutdown's tomorrow
+ * ("Tomorrow · Rex: PE kit"). [spoken] is the screen reader's and the read-aloud brief's sentence.
+ */
+data class SchoolLine(val text: String, val spoken: String)
+
+/** One school thing on a day ([SchoolRules.onDay]): a day off, a one-off date or a weekly thing, and whose it is. */
+data class SchoolThing(val id: String, val kind: SchoolKind, val title: String, val who: String)
+
 /** What answering a cover question did, so Undo can take it back. */
 data class SchoolCoverDone(val id: String, val line: String, val homeDays: List<Long>)
 
@@ -440,6 +449,56 @@ object SchoolRules {
     /** The undo bar's line after answering: "Working from home Mon 27 Oct" · "Covered · INSET day". */
     fun coverLine(cover: SchoolCover, home: Boolean, item: String): String =
         if (home) "Working from home ${cover.days.joinToString(", ") { CivilDate.shortLabel(it) }}" else "$COVERED_LABEL · $item"
+
+    // ---- Slice 2: the school day on Today, in the brief and the evening before ----
+
+    /** Weekly things that need something packed the evening before: "PE" → "PE kit", "Swimming" → "Swimming kit". */
+    private val kitRe = Regex("""\b(pe|games|sports?|swim(?:ming)?|football|gym(?:nastics)?|dance|forest\s+school)\b""", I)
+
+    /**
+     * What the school says about [day]: days off on a weekday that isn't a bank holiday (the holiday says it already),
+     * one-off dates on that day, then weekly things on that weekday when it is a school day for that boy. In that order,
+     * each in the order entered.
+     */
+    fun onDay(items: List<SchoolItem>, day: Long, holidays: HolidayCalendar): List<SchoolThing> {
+        val ordered = items.sortedWith(compareBy<SchoolItem> { it.addedAtMs }.thenBy { it.id })
+        val weekday = CivilDate.isoDayOfWeek(day)
+        val off = if (weekday > 5 || holidays.isHoliday(day)) emptyList()
+        else ordered.filter { it.kind == SchoolKind.OFF && day in it.startDay..it.endDay }
+        val dates = ordered.filter { it.kind == SchoolKind.DAY && day in it.startDay..it.endDay }
+        val weekly = ordered.filter { it.kind == SchoolKind.WEEKLY && it.weekday == weekday && day >= it.startDay && isSchoolDay(items, day, it.who, holidays) }
+        return (off + dates + weekly).map { SchoolThing(it.id, it.kind, it.title, it.who) }
+    }
+
+    /** "Rex: PE", "INSET day" (both boys' things carry no name); the evening before, a PE day reads "Rex: PE kit". */
+    fun thingText(t: SchoolThing, kit: Boolean = false): String {
+        val title = if (kit && t.kind == SchoolKind.WEEKLY && kitRe.containsMatchIn(t.title) && !t.title.endsWith(" kit", ignoreCase = true)) "${t.title} kit" else t.title
+        return if (t.who.isEmpty()) title else "${t.who}: $title"
+    }
+
+    /** "Rex has PE", "Rex is off", "INSET day, no school", "Non-uniform day". */
+    fun spokenThing(t: SchoolThing): String = when {
+        t.kind == SchoolKind.OFF && t.who.isNotEmpty() -> "${t.who} is off" + if (t.title == NO_SCHOOL) "" else ", ${t.title}"
+        t.kind == SchoolKind.OFF -> if (t.title == NO_SCHOOL) "no school" else "${t.title}, no school"
+        t.who.isNotEmpty() -> "${t.who} has ${t.title}"
+        else -> t.title
+    }
+
+    /** Today's header and the brief: "Rex: PE today", "INSET day · Logan: Swimming today"; null when the school says nothing. */
+    fun todayLine(items: List<SchoolItem>, today: Long, holidays: HolidayCalendar): SchoolLine? {
+        val things = onDay(items, today, holidays).takeIf { it.isNotEmpty() } ?: return null
+        return SchoolLine(things.joinToString(" · ") { thingText(it) } + " today", "School today: " + listWords(things.map(::spokenThing)) + ".")
+    }
+
+    /** The evening before, in the shutdown's tomorrow: "Tomorrow · Rex: PE kit · Non-uniform day"; null when nothing. */
+    fun tomorrowLine(items: List<SchoolItem>, today: Long, holidays: HolidayCalendar): SchoolLine? {
+        val things = onDay(items, today + 1, holidays).takeIf { it.isNotEmpty() } ?: return null
+        val spoken = things.map { t ->
+            val kit = thingText(t, kit = true)
+            if (kit != thingText(t)) "${t.who.ifEmpty { "the boys" }} ${if (t.who.isEmpty()) "need" else "needs"} ${kit.substringAfter(": ")}" else spokenThing(t)
+        }
+        return SchoolLine("Tomorrow · " + things.joinToString(" · ") { thingText(it, kit = true) }, "School tomorrow: " + listWords(spoken) + ".")
+    }
 
     /** The line after adding: "Added INSET day · Mon 27 Oct", "Added PE · every Tuesday · Rex". */
     fun addedLine(e: SchoolEntry): String = when (e.kind) {

@@ -30,6 +30,11 @@ struct BriefSheet: View {
                 if let weather = v.weatherLine {
                     Text(weather).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(0)
                 }
+                // School rhythm, slice 2: "Rex: PE today".
+                if let school = v.school {
+                    Text(school.text).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .accessibilityLabel(school.spoken).staggeredAppear(0)
+                }
                 Button { toggleListen(v) } label: {
                     Text(speaker.speaking ? "■  Stop" : "▶  Listen")
                         .font(MekaType.itemMeta).foregroundStyle(palette.accent)

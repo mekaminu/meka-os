@@ -73,6 +73,8 @@ data class MorningBriefView(
     val readElsewhereLine: String? = null,
     /** Today's weather under the date (Weather slice 2): "9–15°, light rain from 15:00 — take a coat"; set by the facade. */
     val weatherLine: String? = null,
+    /** School rhythm, slice 2: "Rex: PE today" under the weather ([SchoolRules.todayLine]); also on the card's line. */
+    val school: SchoolLine? = null,
 ) {
     /** [day] as the brief pane draws it (Fold review 2026-10-09 07:26, item 7): see [BriefRules.dayLine]. */
     val dayLines: List<BriefDayLine> get() = day.map(BriefRules::dayLine)
@@ -193,8 +195,10 @@ object BriefRules {
      */
     fun cardLine(
         weather: String?, eventCount: Int, taskCount: Int, fixture: String?, chaseDue: Int, attention: Int,
+        school: String? = null,
     ): String = listOfNotNull(
         weather?.trim()?.takeIf { it.isNotEmpty() },
+        school?.trim()?.takeIf { it.isNotEmpty() },
         if (eventCount == 0 && taskCount == 0) "Nothing planned yet"
         else listOfNotNull(
             ShutdownRules.count(eventCount, "event").takeIf { eventCount > 0 },
@@ -267,6 +271,8 @@ class MorningBrief(
         holidays: HolidayCalendar = HolidayCalendar.NONE,
         /** The weather now and the rest of today ([WeatherRules.nowLine]) for the card; null when there's no forecast. */
         weatherNow: String? = null,
+        /** What the school says about today ([SchoolRules.todayLine]). */
+        school: SchoolLine? = null,
     ): MorningBriefView {
         val now = nowMs()
         val minute = calendar.minuteOfDay(now)
@@ -352,7 +358,9 @@ class MorningBrief(
             fastingLine = fastingLine,
             cardLine = BriefRules.cardLine(
                 weatherNow, dayEvents.size, dayTasks.size, BriefRules.fixtureLine(events, now, calendar), lists.chaseDue, attention.size,
+                school?.text,
             ),
+            school = school,
             headlines = NewsRules.forBrief(headlines, newsTopics.filter { it.chosen }.map { it.id }, now),
             newsTopics = newsTopics,
             readElsewhereLine = if (readElsewhere) BriefRules.readElsewhereLine(mark?.get(BriefFields.SEEN_ON)?.textOrNull) else null,
