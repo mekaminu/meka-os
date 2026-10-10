@@ -28,6 +28,8 @@ enum class CallReason(val label: String) {
     BLOCKED("On your block list"),
     LIKELY_SPAM("Failed the network's caller check"),
     WITHHELD_QUIET("Withheld number in quiet hours"),
+    /** On Suspected spam (MEKA's AI flagged their message; Meka hasn't chosen Block or Not spam yet). */
+    SUSPECTED_SPAM("On Suspected spam"),
 }
 
 /**
@@ -91,7 +93,8 @@ object CallScreeningRules {
     /**
      * Spam protection runs on every call, any time of day (8b): a number on the [blocked] list (keys from [callerKey])
      * is rejected silently even with the assistant off; with the assistant on, a number that failed the network's
-     * caller check, and a withheld number in quiet hours, go to the assistant instead of ringing. Family, the
+     * caller check, a number on Suspected spam ([suspected]) and a withheld number in quiet hours, go to the assistant
+     * instead of ringing (a redial doesn't get through on the repeat rule). Family, the
      * always-notify list, contacts and anyone Meka called lately are never blocked or treated as spam, and a withheld
      * number calling again within 3 minutes still rings. Then the work rules as before.
      */
@@ -104,6 +107,8 @@ object CallScreeningRules {
         nowMs: Long,
         blocked: Set<String> = emptySet(),
         signals: CallSignals = CallSignals.NONE,
+        /** Numbers on Suspected spam ([BlockedCallersView.suspectedKeys]): to the assistant, as likely spam. */
+        suspected: Set<String> = emptySet(),
     ): CallDecision {
         val key = callerKey(number)
         val listed = number?.let { lists.nameForNumber(it) }
@@ -113,6 +118,7 @@ object CallScreeningRules {
             !trusted && key != WITHHELD && key in blocked -> CallDecision(CallVerdict.BLOCK, CallReason.BLOCKED, key)
             !switchedOn -> CallDecision(CallVerdict.RING, CallReason.SWITCHED_OFF, key, listed)
             !trusted && key != WITHHELD && signals.verificationFailed -> CallDecision(CallVerdict.DECLINE, CallReason.LIKELY_SPAM, key)
+            !trusted && key != WITHHELD && key in suspected -> CallDecision(CallVerdict.DECLINE, CallReason.SUSPECTED_SPAM, key)
             !trusted && key == WITHHELD && signals.quietHours && !repeat -> CallDecision(CallVerdict.DECLINE, CallReason.WITHHELD_QUIET, key)
             !atWork -> CallDecision(CallVerdict.RING, CallReason.OFF_WORK, key, listed)
             listed != null && lists.family.contains(listed) -> CallDecision(CallVerdict.RING, CallReason.FAMILY, key, listed)
@@ -159,6 +165,7 @@ object CallScreeningRules {
         return when (decision.reason) {
             CallReason.BLOCKED -> "Blocked a call from $who" to "It is on your block list"
             CallReason.LIKELY_SPAM -> "Sent a likely spam call from $who to the assistant" to "The network couldn't verify the caller's number"
+            CallReason.SUSPECTED_SPAM -> "Sent a call from $who to the assistant" to "It is on Suspected spam: MEKA's AI thought their last message sounded like a scam"
             CallReason.WITHHELD_QUIET -> "Sent a withheld call to the assistant" to "Withheld numbers don't ring in quiet hours (a second call within 3 minutes does)"
             else -> null
         }

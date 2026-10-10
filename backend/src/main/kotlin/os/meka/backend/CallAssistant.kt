@@ -5,6 +5,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import os.meka.backend.integrations.Integrations
 import os.meka.core.domain.BankHolidayFields
+import os.meka.core.domain.BlockedCallerFields
+import os.meka.core.domain.BlockedCallerRules
 import os.meka.core.domain.BankHolidayStore
 import os.meka.core.domain.CallAssistantRules
 import os.meka.core.domain.CallAssistantScript
@@ -14,6 +16,7 @@ import os.meka.core.domain.HeldMessageFields
 import os.meka.core.domain.MekaVoiceFields
 import os.meka.core.domain.MekaVoiceRules
 import os.meka.core.domain.MekaVoiceStore
+import os.meka.core.domain.SuspectedSpamRules
 import os.meka.core.domain.Urgency
 import os.meka.core.domain.VoiceRecordingRules
 import os.meka.core.domain.WorkFields
@@ -191,6 +194,11 @@ class CallAssistant(
      * Twilio's as the fallback, so the apps show "Transcribing…" until then rather than Twilio's guess first.
      */
     private val transcriber: Transcriber? = null,
+    /**
+     * Suspected spam (polish 8b c): reads a settled message's words with MEKA's AI ([CallScamCheck]); a likely scam puts
+     * the caller's number on Suspected spam. Null (no AI) flags nothing.
+     */
+    private val scamCheck: ScamChecker? = null,
 ) {
     private val clock = HlcClock(Integrations.SERVER_DEVICE, now)
 
@@ -261,7 +269,32 @@ class CallAssistant(
         if (write(hh, id, mapOf(HeldMessageFields.TEXT to text.fv()))) {
             val wasUrgent = fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.URGENT) == FieldValue.Bool(true)
             runCatching { if (Urgency.isUrgent(text) && !wasUrgent) onUrgent(hh) else onWritten(hh) }
+            runCatching { flagIfScam(hh, id, text) }
         }
+    }
+
+    /**
+     * Suspected spam (polish 8b c): asks MEKA's AI about a new message's words (never the number) when its caller is a
+     * real number that isn't blocked, flagged or cleared with Not spam ([SuspectedSpamRules.shouldCheck]); a likely
+     * scam puts the number on Suspected spam ([SuspectedSpamRules.flagFields]) with an Activity entry, and wakes the
+     * devices. Nothing is blocked: Meka chooses. Returns whether it flagged.
+     */
+    fun flagIfScam(hh: String, id: String, words: String): Boolean {
+        val checker = scamCheck ?: return false
+        val number = (fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.PERSON) as? FieldValue.Text)?.value
+        val key = BlockedCallerRules.keyOf(number)
+        fun flag(field: String) = key?.let { (fields.latest(hh, EntityTypes.BLOCKED_CALLER, it, field) as? FieldValue.Bool)?.value }
+        if (!SuspectedSpamRules.shouldCheck(key, flag(BlockedCallerFields.BLOCKED), flag(BlockedCallerFields.SUSPECTED), words)) return false
+        val verdict = checker.check(words) ?: return false
+        if (!verdict.scam || key == null || number == null) return false
+        val at = now()
+        // Op ids from the message, so a retried settle writes nothing more (and a later message can flag again after an unblock).
+        val flagged = write(hh, key, SuspectedSpamRules.flagFields(number, verdict.why, at), EntityTypes.BLOCKED_CALLER, opBase = id + "scam")
+        if (flagged) {
+            write(hh, SuspectedSpamRules.activityId(id), SuspectedSpamRules.activity(number, verdict.why, at), EntityTypes.AGENT_ACTION)
+            runCatching { onWritten(hh) }
+        }
+        return flagged
     }
 
     /**
@@ -409,10 +442,12 @@ class CallAssistant(
     private fun cleared(hh: String, id: String) = fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.CLEARED) == FieldValue.Bool(true)
 
     /** Appends the fields not written before; returns whether anything was written. */
-    private fun write(hh: String, id: String, values: Map<String, FieldValue>, type: String = EntityTypes.HELD_MESSAGE): Boolean = ops.transaction {
+    private fun write(
+        hh: String, id: String, values: Map<String, FieldValue>, type: String = EntityTypes.HELD_MESSAGE, opBase: String = id,
+    ): Boolean = ops.transaction {
         var appended = false
         for ((field, value) in values) {
-            val opId = opId(id, field)
+            val opId = opId(opBase, field)
             if (ops.find(hh, opId) != null) continue
             ops.append(
                 Op(

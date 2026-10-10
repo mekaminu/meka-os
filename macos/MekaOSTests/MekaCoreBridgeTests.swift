@@ -1060,6 +1060,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CallScreeningRules.shared.ONE_SCREENER_LINES.count, 3)
     }
 
+    func testSuspectedSpamReachesSwift() {
+        // Call assistant polish 8b c: the AI's flags arrive as Suspected spam rows with Block · Not spam.
+        XCTAssertEqual(BlockedCallersView.companion.EMPTY.suspects.count, 0)
+        XCTAssertEqual(SuspectedSpamRules.shared.TITLE, "Suspected spam")
+        XCTAssertEqual(SuspectedSpamRules.shared.NOT_SPAM_LABEL, "Not spam")
+        XCTAssertEqual(SuspectedSpamRules.shared.blockWhy(why: "Claims to be HMRC"), "Suspected scam · Claims to be HMRC")
+        XCTAssertNil(SuspectedSpamRules.shared.cleanWhy(why: "see https://x.example"))
+    }
+
     func testVoiceRecordingReachesSwift() {
         // Call assistant polish 8c: the player's line and bar, and only a held id is ever asked for.
         let rules = VoiceRecordingRules.shared

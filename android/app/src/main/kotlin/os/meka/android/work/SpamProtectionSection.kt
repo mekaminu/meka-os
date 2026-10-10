@@ -57,12 +57,14 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.BlockedCallerRules
 import os.meka.core.domain.CallScreeningRules
+import os.meka.core.domain.SuspectedSpamRules
 import os.meka.core.facade.MekaCore
 
 /**
  * Work mode → Call assistant → Spam protection (call assistant polish 8b). The block list (synced: the Mac shows and
  * edits the same list), a field to block a number, and "Recognise callers" (contacts and the call log, read on the
- * phone only so contacts and people Meka called are never stopped). Motion: the summary line cross-fades; rows unfold
+ * phone only so contacts and people Meka called are never stopped). Suspected spam (8b c) lists numbers MEKA's AI
+ * flagged from their message, with Block (light haptic) and Not spam (tick). Motion: the summary line cross-fades; rows unfold
  * and fold away with the expand spring; Block gives a light haptic, Unblock a tick. Reduced motion: cross-fades.
  */
 @Composable
@@ -103,6 +105,36 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
                 "always-notify list, contacts and anyone you called in the last 90 days always get through.",
             style = MekaType.caption, color = Meka.colors.textTertiary,
         )
+        // Suspected spam (8b c): numbers MEKA's AI flagged from their message, waiting for Block or Not spam.
+        AnimatedVisibility(blocked.suspects.isNotEmpty(), enter = enter, exit = exit) {
+            Text(SuspectedSpamRules.TITLE, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs))
+        }
+        blocked.suspects.forEach { row ->
+            key("suspect:" + row.key) {
+                var shown by remember { mutableStateOf(true) }
+                AnimatedVisibility(shown, enter = enter, exit = exit) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(row.number, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+                            Text(row.line, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        }
+                        Text(SuspectedSpamRules.NOT_SPAM_LABEL, style = MekaType.caption, color = Meka.colors.textSecondary,
+                            modifier = Modifier.clickable(role = Role.Button) {
+                                haptics.tick(); shown = false
+                                scope.launch { core.dismissSuspectedCaller(row.key) }
+                            }.padding(MekaSpace.xs))
+                        Text(BlockedCallerRules.BLOCK_LABEL, style = MekaType.caption, color = Meka.colors.critical,
+                            modifier = Modifier.clickable(role = Role.Button) {
+                                haptics.light(); shown = false
+                                scope.launch { core.confirmSuspectedCaller(row.key) }
+                            }.padding(MekaSpace.xs))
+                    }
+                }
+            }
+        }
+        AnimatedVisibility(blocked.suspects.isNotEmpty(), enter = enter, exit = exit) {
+            Text(SuspectedSpamRules.HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
         blocked.rows.forEach { row ->
             key(row.key) {
                 var shown by remember { mutableStateOf(true) }

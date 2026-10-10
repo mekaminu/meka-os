@@ -598,9 +598,9 @@ fun main(args: Array<String>) {
             // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
             val speech = speechFromEnv(ds)?.also { startSpeechWarm(it) }
-            val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech)
-            voice?.let { startRecordingSweep(it.assistant) }
             val ai = aiFromEnv(ds)?.also { startAiCheck(it.health) }
+            val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech, ai)
+            voice?.let { startRecordingSweep(it.assistant) }
             embeddedServer(Netty, port = port) {
                 mekaSync(
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
@@ -648,7 +648,7 @@ fun opStoreReader(opStore: PostgresOpStore): EntityReader = object : EntityReade
  * The call assistant's webhooks. Null unless the deployment names the Twilio secret and a public URL; while the secret
  * is still `{}` every webhook is refused (no auth token to check signatures with).
  */
-fun voiceFromEnv(opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?, speech: SpeechService? = null): VoiceRoutes? {
+fun voiceFromEnv(opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?, speech: SpeechService? = null, ai: AiLayer? = null): VoiceRoutes? {
     val secret = System.getenv("MEKA_VOICE_TWILIO_SECRET")?.takeIf { it.isNotBlank() } ?: return null
     val publicUrl = System.getenv("MEKA_PUBLIC_URL")?.takeIf { it.isNotBlank() } ?: return null
     // Callers' recordings (polish 8c) in MEKA's own private bucket; none kept without one.
@@ -663,6 +663,8 @@ fun voiceFromEnv(opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?,
         transcriber = if (bucket != null && recordings != null && System.getenv("MEKA_TRANSCRIBE_ENGINE") == "transcribe") {
             BatchTranscriber(AwsTranscribeJobs(System.getenv("MEKA_KMS_KEY_ID")?.takeIf { it.isNotBlank() }), bucket, recordings)
         } else null,
+        // Suspected spam (8b c): MEKA's AI reads a message's words (never the number); metered, off with the AI.
+        scamCheck = ai?.provider?.let { CallScamCheck(it) },
     )
     return VoiceRoutes(assistant, listOf(TwilioVoice.fromSecret(secret)), publicUrl)
 }

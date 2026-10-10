@@ -1429,6 +1429,15 @@ class MekaCore(
     /** Takes a number ([key], from [blockedCallers]' rows) off the block list; its calls ring again. */
     suspend fun unblockCaller(key: String): Boolean = onCore { blockList.unblock(key).also { refresh() } }
 
+    /**
+     * Block on a Suspected spam row ([blockedCallers]' `suspects`; call assistant polish 8b c): the number goes on the
+     * block list with the AI's reason. False when [key] isn't a suspect any more.
+     */
+    suspend fun confirmSuspectedCaller(key: String): Boolean = onCore { blockList.confirmSuspect(key).also { refresh() } }
+
+    /** Not spam on a Suspected spam row: its calls are screened as before and MEKA never flags the number again. */
+    suspend fun dismissSuspectedCaller(key: String): Boolean = onCore { blockList.dismissSuspect(key).also { refresh() } }
+
     /** The Fold, the first time it screens calls: puts the 9 Oct scam number on the list unless it was ever there. */
     suspend fun seedBlockList(): Boolean = onCore { blockList.seed().also { if (it) refresh() } }
 
@@ -1452,7 +1461,7 @@ class MekaCore(
 
     /**
      * The Fold's call screening asks this about every incoming call: the call assistant's switch, work mode, quiet
-     * hours (filled in here) and the block list decide, with what the phone knows about the caller ([signals]: contacts,
+     * hours (filled in here), the block list and Suspected spam decide, with what the phone knows about the caller ([signals]: contacts,
      * recent calls, the network's caller check; never sent anywhere). A call spam protection stopped goes in Activity.
      */
     suspend fun screenIncomingCall(
@@ -1464,8 +1473,9 @@ class MekaCore(
         val state = work.state(localClock(), todayEpochDay())
         val now = nowMs()
         val quiet = notifyPrefs.settings().quiet.isQuietAt(now, ZoneCalendar(timeZone))
+        val list = blockList.view()
         val decision = os.meka.core.domain.CallScreeningRules.decide(
-            state.callAssistant, state.atWork, number, lists, recent, now, blockList.view().keys, signals.copy(quietHours = quiet),
+            state.callAssistant, state.atWork, number, lists, recent, now, list.keys, signals.copy(quietHours = quiet), list.suspectedKeys,
         )
         os.meka.core.domain.CallScreeningRules.activityLine(decision, number)?.let { (summary, why) ->
             activity.recordScreened(decision.callerKey, now, summary, why)

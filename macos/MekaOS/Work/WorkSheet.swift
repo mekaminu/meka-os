@@ -130,7 +130,8 @@ struct WorkSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: recordingDays)
     }
 
-    /// Spam protection (call assistant polish 8b): the synced block list; the Fold does the blocking. Rows fade and
+    /// Spam protection (call assistant polish 8b): the synced block list and Suspected spam (8b c, Block · Not spam);
+    /// the Fold does the blocking. Rows fade and
     /// slide in and out on the expand spring; the summary line cross-fades.
     private var spam: some View {
         let view = model.blockedCallers
@@ -143,6 +144,31 @@ struct WorkSheet: View {
             Text("Blocked numbers never ring on the Fold, any time of day. With the call assistant on, numbers the network can't verify and withheld numbers in quiet hours go to the assistant. Family, always-notify, contacts and anyone you called in the last 90 days always get through.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
+            // Suspected spam (8b c): numbers MEKA's AI flagged from their message, waiting for Block or Not spam.
+            if !(view?.suspects ?? []).isEmpty {
+                Text(SuspectedSpamRules.shared.TITLE).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    .padding(.top, MekaSpace.xxs)
+                    .transition(.opacity)
+            }
+            ForEach(view?.suspects ?? [], id: \.key) { row in
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.number).font(MekaType.itemMeta)
+                        Text(row.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    }
+                    Spacer()
+                    Button(SuspectedSpamRules.shared.NOT_SPAM_LABEL) { model.dismissSuspectedCaller(row.key) }
+                        .buttonStyle(MekaPressStyle()).foregroundStyle(palette.textSecondary)
+                    Button(BlockedCallerRules.shared.BLOCK_LABEL) { model.confirmSuspectedCaller(row.key) }
+                        .buttonStyle(MekaPressStyle()).foregroundStyle(palette.critical)
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+            if !(view?.suspects ?? []).isEmpty {
+                Text(SuspectedSpamRules.shared.HINT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
             ForEach(view?.rows ?? [], id: \.key) { row in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
@@ -175,6 +201,7 @@ struct WorkSheet: View {
             }
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.rows.map(\.key) ?? [])
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.suspects.map(\.key) ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: blockRefused)
     }
 

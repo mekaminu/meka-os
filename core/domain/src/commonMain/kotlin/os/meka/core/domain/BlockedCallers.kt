@@ -1,5 +1,6 @@
 package os.meka.core.domain
 
+import os.meka.core.sync.FieldValue
 import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
 
@@ -19,13 +20,31 @@ object BlockedCallerFields {
     const val AT = "atMs"
     /** Why it was blocked ("Scam call: claimed to be the police"), display only. */
     const val WHY = "why"
+    /**
+     * MEKA's AI thought a message this number left sounded like a scam ("Suspected spam", call assistant polish 8b c;
+     * written true by the server, false by Not spam on either device; last writer wins). Absent = never flagged. A
+     * suspect is not blocked: its calls go to the assistant until Meka blocks it or says it isn't spam. Added 2026-10-10.
+     */
+    const val SUSPECTED = "suspected"
+    /** The AI's reason in a few words ("Claims to be the police and asks for payment"), display only (untrusted). */
+    const val SUSPECTED_WHY = "suspectedWhy"
+    const val SUSPECTED_AT = "suspectedAtMs"
 }
+
+/** One row of Spam protection's Suspected spam: a number MEKA's AI flagged, waiting for Meka's Block or Not spam. */
+data class SuspectedCallerRow(val key: String, val number: String, val line: String)
 
 /** One row of Work mode's Blocked numbers. */
 data class BlockedCallerRow(val key: String, val number: String, val line: String)
 
-data class BlockedCallersView(val rows: List<BlockedCallerRow>, val line: String) {
+data class BlockedCallersView(
+    val rows: List<BlockedCallerRow>,
+    val line: String,
+    /** Numbers MEKA's AI flagged and Meka hasn't answered yet (never a blocked one), newest first. */
+    val suspects: List<SuspectedCallerRow> = emptyList(),
+) {
     val keys: Set<String> get() = rows.map { it.key }.toSet()
+    val suspectedKeys: Set<String> get() = suspects.map { it.key }.toSet()
 
     /** Whether [number] is on the list now (a held message's Block shows "Blocked" instead). */
     fun has(number: String?): Boolean = BlockedCallerRules.keyOf(number)?.let { it in keys } == true
@@ -130,7 +149,37 @@ class BlockedCallers(
                 val number = s[BlockedCallerFields.NUMBER].textOrNull ?: key.removePrefix("tel:")
                 BlockedCallerRow(key, BlockedCallerRules.display(number), BlockedCallerRules.line(at, s[BlockedCallerFields.WHY].textOrNull, now, calendar))
             }
-        return BlockedCallersView(rows, BlockedCallerRules.summary(rows.size))
+        val suspects = replica.entities(EntityTypes.BLOCKED_CALLER)
+            .filter { it[BlockedCallerFields.SUSPECTED].boolOrNull == true && it[BlockedCallerFields.BLOCKED].boolOrNull != true }
+            .map { s -> Triple(s[BlockedCallerFields.SUSPECTED_AT].longOrNull ?: 0L, s.ref.entityId, s) }
+            .sortedWith(compareByDescending<Triple<Long, String, *>> { it.first }.thenBy { it.second })
+            .map { (at, key, s) ->
+                val number = s[BlockedCallerFields.NUMBER].textOrNull ?: key.removePrefix("tel:")
+                SuspectedCallerRow(key, BlockedCallerRules.display(number), SuspectedSpamRules.line(at, s[BlockedCallerFields.SUSPECTED_WHY].textOrNull, now, calendar))
+            }
+        return BlockedCallersView(rows, BlockedCallerRules.summary(rows.size), suspects)
+    }
+
+    /**
+     * Block on a Suspected spam row: the number goes on the block list with the AI's reason ("Suspected scam · Claims
+     * to be the police"), which takes it off Suspected spam. False when [key] isn't a suspect.
+     */
+    fun confirmSuspect(key: String): Boolean {
+        val s = replica.entity(EntityTypes.BLOCKED_CALLER, key) ?: return false
+        if (s[BlockedCallerFields.SUSPECTED].boolOrNull != true || s[BlockedCallerFields.BLOCKED].boolOrNull == true) return false
+        val number = s[BlockedCallerFields.NUMBER].textOrNull ?: key.removePrefix("tel:")
+        return block(number, SuspectedSpamRules.blockWhy(s[BlockedCallerFields.SUSPECTED_WHY].textOrNull))
+    }
+
+    /**
+     * Not spam on a Suspected spam row: off the list, its calls are screened as before, and the server never flags
+     * this number again ([SuspectedSpamRules.shouldCheck]). False when [key] isn't a suspect.
+     */
+    fun dismissSuspect(key: String): Boolean {
+        val s = replica.entity(EntityTypes.BLOCKED_CALLER, key) ?: return false
+        if (s[BlockedCallerFields.SUSPECTED].boolOrNull != true) return false
+        replica.commitLocal(EntityTypes.BLOCKED_CALLER, key, mapOf(BlockedCallerFields.SUSPECTED to false.fv()))
+        return true
     }
 
     /** Blocks [number]; false (nothing saved) when it can't be a phone number. Blocking it again just updates why. */
@@ -165,4 +214,68 @@ class BlockedCallers(
         if (replica.entity(EntityTypes.BLOCKED_CALLER, key) != null) return false
         return block(BlockedCallerRules.SEED_NUMBER, BlockedCallerRules.SEED_WHY)
     }
+}
+
+/**
+ * Suspected spam (call assistant polish 8b c, Meka 2026-10-09: "this is the police, you owe…" → flagged scam,
+ * auto-added for Meka to confirm). Once a voice message's words are in, MEKA's server asks the small model, with no
+ * tools, whether they sound like a scam (ADR-006 addendum 2026-10-10; the words only, never the number); a yes puts the
+ * number on Suspected spam ([BlockedCallerFields.SUSPECTED]). Nothing is blocked by the AI: the number's calls go to the
+ * assistant instead of ringing (never for family, always-notify, contacts or anyone Meka called lately) until Meka taps
+ * Block or Not spam. Non-AI and pure.
+ */
+object SuspectedSpamRules {
+    const val TITLE = "Suspected spam"
+    const val HINT = "MEKA's AI thought these callers' messages sounded like scams. Until you choose, their calls go to " +
+        "the assistant instead of ringing; family, contacts and people you've called still ring."
+    const val NOT_SPAM_LABEL = "Not spam"
+    const val MAX_WHY = 80
+    /** The voice message's words must be at least this long to be worth asking about. */
+    const val MIN_WORDS = 3
+
+    /**
+     * Whether the server should ask about a new message from a number: a real number, not on the block list, never
+     * flagged before (true: already a suspect) and never cleared with Not spam (false: Meka's answer stands).
+     */
+    fun shouldCheck(numberKey: String?, blocked: Boolean?, suspected: Boolean?, text: String?): Boolean =
+        numberKey != null && blocked != true && suspected == null &&
+            (text?.trim()?.split(Regex("\\s+"))?.count { it.isNotEmpty() } ?: 0) >= MIN_WORDS
+
+    /** The AI's reason as shown: one line, no angle brackets or links, at most [MAX_WHY]; null when empty. */
+    fun cleanWhy(why: String?): String? {
+        val t = why?.replace(Regex("\\s+"), " ")?.replace(Regex("[<>]"), "")?.trim()?.trimEnd('.')?.take(MAX_WHY)?.trim()
+        if (t.isNullOrEmpty() || t.contains("://") || t.contains("www.", ignoreCase = true)) return null
+        return t
+    }
+
+    /** "Flagged today · Claims to be the police and asks for payment", "Flagged Fri 9 Oct". */
+    fun line(atMs: Long, why: String?, nowMs: Long, cal: LocalCalendar): String {
+        val label = SearchRules.dayLabel(cal.epochDayOf(atMs), cal.epochDayOf(nowMs))
+        val day = if (label == "Today" || label == "Yesterday") label.lowercase() else label
+        return "Flagged $day" + (cleanWhy(why)?.let { " · $it" } ?: "")
+    }
+
+    /** Why a confirmed suspect is on the block list: "Suspected scam · Claims to be the police". */
+    fun blockWhy(why: String?): String = ("Suspected scam" + (cleanWhy(why)?.let { " · $it" } ?: "")).take(BlockedCallerRules.MAX_WHY)
+
+    /** The fields the server writes on the number's `blocked_caller` entity when the AI flags it. */
+    fun flagFields(number: String, why: String?, atMs: Long): Map<String, FieldValue> = buildMap {
+        put(BlockedCallerFields.NUMBER, FieldValue.Text(number.trim().take(40)))
+        put(BlockedCallerFields.SUSPECTED, FieldValue.Bool(true))
+        put(BlockedCallerFields.SUSPECTED_AT, FieldValue.Int64(atMs))
+        cleanWhy(why)?.let { put(BlockedCallerFields.SUSPECTED_WHY, FieldValue.Text(it)) }
+    }
+
+    /** The Activity entry for a flag: "Added 01904 618691 to Suspected spam" · the reason. */
+    fun activity(number: String, why: String?, atMs: Long): Map<String, FieldValue> = linkedMapOf(
+        ActivityFields.AT to FieldValue.Int64(atMs),
+        ActivityFields.KIND to FieldValue.Text(ActivityKind.CALL.name),
+        ActivityFields.SUMMARY to FieldValue.Text("Added ${BlockedCallerRules.display(number)} to Suspected spam".take(ActivityRules.MAX_LINE)),
+        ActivityFields.DETAIL to FieldValue.Text((cleanWhy(why) ?: "Their message sounded like a scam").take(ActivityRules.MAX_LINE)),
+        ActivityFields.WHY to FieldValue.Text("Call assistant · MEKA's AI read their message; you choose Block or Not spam"),
+        ActivityFields.SOURCE to FieldValue.Text("calls"),
+    )
+
+    /** The entry id of that flag: one per voice message, however often it is settled. */
+    fun activityId(heldId: String): String = "v" + ActivityRules.fnv64("suspected:$heldId")
 }

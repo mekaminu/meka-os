@@ -20,9 +20,11 @@ import kotlin.test.assertTrue
 class CallSpamFacadeTest {
     private var now = 1_791_622_800_000L // Sat 10 Oct 2026, 10:00 in London
 
+    private val ops = InMemoryServerOpStore()
+
     private fun core() = MekaCore(
         householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(),
-        transport = os.meka.core.testing.FaultyTransport(SyncService(InMemoryServerOpStore())),
+        transport = os.meka.core.testing.FaultyTransport(SyncService(ops)),
         secureRandom = Random(1), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
 
@@ -96,5 +98,35 @@ class CallSpamFacadeTest {
         assertTrue(c.blockCaller(o.number, o.why))
         assertEquals("Blocked today · Missed call · Sat 10 Oct", c.blockedCallers.value.rows.single().line)
         assertEquals(null, c.unknownCallOffer("01632 960001", os.meka.core.domain.CallOutcome.MISSED, 0, now, emptyList()))
+    }
+
+    @Test
+    fun aSuspectFromTheServerGoesToTheAssistantUntilMekaBlocksItOrSaysNotSpam() = runTest {
+        val c = core()
+        c.setCallAssistant(true)
+        var seq = 0
+        fun flag(number: String) {
+            val key = os.meka.core.domain.BlockedCallerRules.keyOf(number)!!
+            for ((f, v) in os.meka.core.domain.SuspectedSpamRules.flagFields(number, "Claims to be the police", now)) {
+                ops.append(os.meka.core.sync.Op("s${seq++}", "hh", os.meka.core.domain.EntityTypes.BLOCKED_CALLER, key, f, v, os.meka.core.sync.Hlc(now, seq, "server"), emptyList(), "server"))
+            }
+        }
+        flag("+441904618691")
+        flag("+447700900555")
+        c.syncNow()
+        val suspects = c.blockedCallers.value.suspects
+        assertEquals(listOf("01904 618691", "07700 900555"), suspects.map { it.number }.sorted())
+
+        val d = c.screenIncomingCall("01904 618691", lists, emptyList(), CallSignals.NONE)
+        assertEquals(CallReason.SUSPECTED_SPAM, d.reason)
+        assertEquals(CallVerdict.DECLINE, d.verdict)
+        assertTrue(c.screenIncomingCall("07700 900555", lists, emptyList(), CallSignals(knownContact = true)).rings)
+
+        assertTrue(c.confirmSuspectedCaller(suspects.first { it.number == "01904 618691" }.key))
+        assertEquals(listOf("01904 618691"), c.blockedCallers.value.rows.map { it.number })
+        assertEquals(CallVerdict.BLOCK, c.screenIncomingCall("01904 618691", lists, emptyList(), CallSignals.NONE).verdict)
+        assertTrue(c.dismissSuspectedCaller(suspects.first { it.number == "07700 900555" }.key))
+        assertTrue(c.blockedCallers.value.suspects.isEmpty())
+        assertFalse(c.screenIncomingCall("07700 900555", lists, emptyList(), CallSignals.NONE).verdict == CallVerdict.BLOCK)
     }
 }

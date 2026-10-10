@@ -1207,6 +1207,10 @@ final class CoreModel {
         }
     }
     func unblockCaller(_ key: String) { MekaHaptics.tick(); run { _ = try await $0.unblockCaller(key: key) } }
+    /// Suspected spam (call assistant polish 8b c): Block puts the AI-flagged number on the block list with its reason.
+    func confirmSuspectedCaller(_ key: String) { MekaHaptics.light(); run { _ = try await $0.confirmSuspectedCaller(key: key) } }
+    /// Not spam: off Suspected spam; its calls are screened as before and MEKA never flags it again.
+    func dismissSuspectedCaller(_ key: String) { MekaHaptics.tick(); run { _ = try await $0.dismissSuspectedCaller(key: key) } }
     /// Weather place setting (Calendars → Weather): the town the forecast is for; blank or "Biggleswade" is home.
     /// False (nothing saved) for a name that can't be a town. The server follows it at its next poll.
     func setWeatherPlace(_ name: String) async -> Bool {

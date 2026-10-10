@@ -62,13 +62,13 @@ object UnknownCallRules {
     /**
      * Whether the phone should look at this call afterwards: a real number, not on the family or always-notify lists,
      * not a contact, not someone Meka called lately, not this phone's own number, and either let ring or sent to the
-     * assistant as likely spam. Blocked calls, calls declined at work, the off switch's own logic and withheld
+     * assistant as likely spam (or as a Suspected spam number). Blocked calls, calls declined at work, the off switch's own logic and withheld
      * numbers (nothing to block) are left alone.
      */
     fun watch(decision: CallDecision, number: String?, signals: CallSignals, ownNumber: Boolean = false): Boolean {
         if (BlockedCallerRules.keyOf(number) == null || ownNumber) return false
         if (decision.listedName != null || signals.knownContact || signals.calledRecently) return false
-        return decision.verdict == CallVerdict.RING || decision.reason == CallReason.LIKELY_SPAM
+        return decision.verdict == CallVerdict.RING || decision.reason == CallReason.LIKELY_SPAM || decision.reason == CallReason.SUSPECTED_SPAM
     }
 
     /** How a call ended, from its call-log [type] and [durationS]; null [type] (no entry, no permission) is [CallOutcome.UNKNOWN]. */
