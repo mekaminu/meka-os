@@ -69,7 +69,8 @@ object CallScreeningRules {
         "Android lets one app screen calls. While MEKA does, Truecaller (or any other caller-ID app) stops screening " +
             "and blocking calls; its app still opens and still looks numbers up.",
         "MEKA's spam protection covers what it did: your block list, numbers your network can't verify, withheld " +
-            "numbers in quiet hours, and Block · Report to 7726 on a message left by someone you don't know.",
+            "numbers in quiet hours, and Block · Report to 7726 on a message left by someone you don't know and in a quiet " +
+            "notification after their call.",
         "To switch back: Settings → Apps → Choose default apps → Caller ID & spam app → Truecaller. MEKA's work-hours " +
             "screening stops until you pick MEKA again.",
     )

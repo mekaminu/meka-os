@@ -1433,6 +1433,24 @@ class MekaCore(
     suspend fun seedBlockList(): Boolean = onCore { blockList.seed().also { if (it) refresh() } }
 
     /**
+     * "Unknown caller · Block?" (call assistant polish 8b b): the Fold, a minute after a call its screening marked with
+     * [os.meka.core.domain.UnknownCallRules.watch], asks what to post for it — the call from [number] at [atMs] that
+     * ended as [outcome] (read from the phone's own call log). Null when the number is on the block list by now or was
+     * offered in the last day ([offered], the phone's own record).
+     */
+    suspend fun unknownCallOffer(
+        number: String?,
+        outcome: os.meka.core.domain.CallOutcome,
+        durationS: Long,
+        atMs: Long,
+        offered: List<os.meka.core.domain.ScreenedCall>,
+    ): os.meka.core.domain.UnknownCallOffer? = onCore {
+        os.meka.core.domain.UnknownCallRules.offer(
+            number, outcome, durationS, atMs, nowMs(), blockList.view().keys, offered, ZoneCalendar(timeZone),
+        )
+    }
+
+    /**
      * The Fold's call screening asks this about every incoming call: the call assistant's switch, work mode, quiet
      * hours (filled in here) and the block list decide, with what the phone knows about the caller ([signals]: contacts,
      * recent calls, the network's caller check; never sent anywhere). A call spam protection stopped goes in Activity.

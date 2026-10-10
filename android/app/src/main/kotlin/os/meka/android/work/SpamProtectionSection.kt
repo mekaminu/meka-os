@@ -156,7 +156,7 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
             }.padding(vertical = MekaSpace.xxs))
         AnimatedVisibility(!recognising, enter = enter, exit = exit) {
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                Text("Recognise callers · let MEKA check your contacts and recent calls, and name who left a message", style = MekaType.itemMeta, color = Meka.colors.accent,
+                Text("Recognise callers · let MEKA check your contacts and recent calls, name who left a message, and say how an unknown call ended", style = MekaType.itemMeta, color = Meka.colors.accent,
                     modifier = Modifier.clickable(role = Role.Button) {
                         haptics.tick(); runCatching { ask.launch(CallerLookup.PERMISSIONS) }
                     }.padding(vertical = MekaSpace.xxs))

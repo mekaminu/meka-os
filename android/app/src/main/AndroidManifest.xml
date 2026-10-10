@@ -257,6 +257,10 @@
         <receiver
             android:name=".notify.OngoingDismissReceiver"
             android:exported="false" />
+        <!-- Call assistant polish 8b b: Block on the quiet "Unknown caller · Block?" notification. -->
+        <receiver
+            android:name=".work.UnknownCallReceiver"
+            android:exported="false" />
         <!-- Gym slice 2b: Went / Didn't go on "Did you go?", and the Undo on the note that replaces it. -->
         <receiver
             android:name=".notify.NoticeActionReceiver"

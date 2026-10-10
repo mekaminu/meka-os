@@ -16,10 +16,13 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import os.meka.android.MekaApplication
+import os.meka.core.domain.CallDecision
 import os.meka.core.domain.CallScreeningRules
 import os.meka.core.domain.CallerNames
 import os.meka.core.domain.CallSignals
 import os.meka.core.domain.CallVerdict
+import os.meka.core.domain.People
+import os.meka.core.domain.UnknownCallRules
 
 /**
  * The call assistant's screening on the Fold (build plan M1, Needs Meka #9). Android asks this service about every
@@ -35,6 +38,8 @@ import os.meka.core.domain.CallVerdict
  * rejected silently, and with the switch on a number that failed the network's caller check, or a withheld number in
  * quiet hours, goes to the assistant. Contacts and anyone Meka called in the last 90 days are never stopped; the phone
  * reads both itself (only with the contacts and call-log permissions Meka granted in Work mode) and sends neither.
+ * After a call from a number nobody knows (rung, or sent to the assistant as likely spam), [UnknownCallNotice] posts a
+ * quiet "Unknown caller · Block?" once the call is over (8b b).
  */
 class MekaCallScreeningService : CallScreeningService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -57,15 +62,27 @@ class MekaCallScreeningService : CallScreeningService() {
                     )
                     val d = meka.core.screenIncomingCall(number, meka.captures.lists.value, recent, signals)
                     RecentDeclines.save(ctx, CallScreeningRules.remember(recent, d, now))
-                    d
+                    Screened(d, number, signals, now)
                 }.getOrNull()
             }
-            when (decision?.verdict) {
+            when (decision?.decision?.verdict) {
                 CallVerdict.DECLINE -> decline(details)
                 CallVerdict.BLOCK -> block(details)
                 else -> allow(details)
             }
+            // Android has its answer; now, unhurried: a caller nobody knows gets "Unknown caller · Block?" afterwards.
+            decision?.let { s -> runCatching { watchUnknown(s) } }
         }
+    }
+
+    private class Screened(val decision: CallDecision, val number: String?, val signals: CallSignals, val atMs: Long)
+
+    private fun watchUnknown(s: Screened) {
+        val number = s.number ?: return
+        val key = People.key(number)
+        val own = CallerLookup.ownNumbers(this).any { People.key(it) == key }
+        if (!UnknownCallRules.watch(s.decision, number, s.signals, own)) return
+        UnknownCallNotice.schedule(this, number, s.atMs, toAssistant = s.decision.verdict == CallVerdict.DECLINE)
     }
 
     override fun onDestroy() {
