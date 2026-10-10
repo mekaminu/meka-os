@@ -703,8 +703,9 @@ private struct PlanSheet: View {
                         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(r.suggested ? palette.surfaceRaised : .clear))
                         .staggeredAppear(i)
                     }
-                    if !plan.unplaced.isEmpty {
-                        Text("Won't fit today: " + plan.unplaced.map(\.title).joined(separator: ", "))
+                    // "Won't fit today: …", or "Waits for Mon 12 Oct: …" on a protected day (Protected time).
+                    if let line = plan.unplacedLine {
+                        Text(line)
                             .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     }
                     if let note = habitNote {

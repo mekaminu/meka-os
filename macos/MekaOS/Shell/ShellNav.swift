@@ -67,7 +67,7 @@ struct MoreSection: Equatable, Identifiable {
 /// Appearance, which shows its choices in the row itself (`ShellNav.unfoldsInPlace`). Today's header keeps only
 /// Search and Plan my day (Today clarity, slice 2): the brief, the shutdown, work mode and the theme moved here.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, review, vault, brief, news, shutdown, school, leave, dinners, dateNight, emergency, trainQueue, facts, work, notifications, appearance, voice, talk, calendars, family, watch, setup, health, activity, yourData
+    case lists, goals, review, vault, brief, news, shutdown, school, leave, dinners, dateNight, emergency, trainQueue, facts, work, protectedTime, notifications, appearance, voice, talk, calendars, family, watch, setup, health, activity, yourData
     var id: Int { rawValue }
 
     var label: String {
@@ -87,6 +87,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .trainQueue: "Train queue"
         case .facts: "What MEKA knows"
         case .work: "Work mode"
+        case .protectedTime: "Protected time"
         case .notifications: "Notifications"
         case .appearance: "Appearance"
         case .voice: "MEKA's voice"
@@ -118,6 +119,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .trainQueue: "Links and podcasts saved for the commute"
         case .facts: "Car reg, GP, sizes · the facts MEKA answers from"
         case .work: "Work hours and the Work switch"
+        case .protectedTime: "Evenings and weekends, kept free of tasks"
         case .notifications: "Quiet hours, digests and what reaches you"
         case .appearance: "Dark, Light or Auto"
         case .voice: "How MEKA sounds in Talk, the brief and calls"
@@ -136,7 +138,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         switch self {
         case .lists, .goals, .review, .vault: .places
         case .brief, .news, .shutdown, .school, .leave, .dinners, .dateNight, .emergency, .trainQueue, .facts: .daily
-        case .work, .notifications, .appearance, .voice, .talk, .calendars, .family, .watch, .setup, .health, .activity, .yourData: .settings
+        case .work, .protectedTime, .notifications, .appearance, .voice, .talk, .calendars, .family, .watch, .setup, .health, .activity, .yourData: .settings
         }
     }
 
@@ -146,7 +148,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .goals: .goals
         case .review: .review
         case .vault: .vault
-        case .brief, .news, .shutdown, .school, .leave, .dinners, .dateNight, .emergency, .trainQueue, .facts, .work, .notifications, .appearance, .voice, .talk, .activity, .yourData, .calendars, .family, .watch, .setup, .health: nil
+        case .brief, .news, .shutdown, .school, .leave, .dinners, .dateNight, .emergency, .trainQueue, .facts, .work, .protectedTime, .notifications, .appearance, .voice, .talk, .activity, .yourData, .calendars, .family, .watch, .setup, .health: nil
         }
     }
 }

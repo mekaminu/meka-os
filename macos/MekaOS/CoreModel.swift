@@ -43,6 +43,11 @@ final class CoreModel {
     private(set) var dateNight: DateNightView?
     /// Ask → More → Date night.
     var showDateNight = false
+    /// Protected time (V1, slice 1): the evenings and weekends Plan my day and Move to later keep tasks out of
+    /// (Ask → More → Protected time). Synced with the Fold.
+    private(set) var protectedTime: ProtectedView?
+    /// Ask → More → Protected time.
+    var showProtected = false
     /// The emergency card (V1, slice 1): who to call, where things are and key accounts by name (Ask → More →
     /// Emergency card). Synced with the Fold; Jeanette reads it on her family page.
     private(set) var emergency: EmergencyView?
@@ -273,6 +278,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await d in core.dateNightView { self?.dateNight = d }
+        })
+        observers.append(Task { [weak self] in
+            for await p in core.protectedView { self?.protectedTime = p }
         })
         observers.append(Task { [weak self] in
             for await e in core.emergencyView { self?.emergency = e }
@@ -2089,6 +2097,14 @@ final class CoreModel {
         lastMealsShopped = nil
         mealsShoppedLine = nil
         mealsShoppedCanUndo = false
+    }
+
+    // MARK: Protected time (slice 1)
+
+    /// Evenings from `fromMin` and weekends (with bank holidays) kept free of tasks; only two Bools and an Int cross.
+    func setProtectedTime(evenings: Bool, fromMin: Int32, weekends: Bool) {
+        MekaHaptics.tick()
+        run { _ = try await $0.setProtectedTime(evenings: evenings, fromMin: fromMin, weekends: weekends) }
     }
 
     // MARK: Date night (slice 1)

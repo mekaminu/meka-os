@@ -17,6 +17,10 @@ package os.meka.core.domain
  * Meals from the fasting tracker (see [Fasting.plannerMeals]: breaking a fast, the last meal before the eating window
  * closes) are kept free like events, so nothing is planned over them. They are shown, not applied. Date night
  * ([DateNightRules.block]) is kept free the same way.
+ *
+ * Protected time ([ProtectedRules.slots]: evenings and weekends Meka has protected) takes no tasks. Habit room, booked
+ * sessions and kept-free blocks are his own time and are placed as before; the note under the plan says what was
+ * protected, and on a wholly protected day the leftover tasks "wait for Mon 12 Oct" rather than "won't fit today".
  */
 object DayPlanner {
     data class Prefs(
@@ -56,9 +60,18 @@ object DayPlanner {
         val habitsUnplaced: List<PlannerHabit> = emptyList(),
         /** Blocks kept free (fasting's meals, date night), in time order. */
         val meals: List<MealBlock> = emptyList(),
+        /** Protected time's note ([ProtectedRules.planNote]), or null when today has none. */
+        val protectedNote: String? = null,
+        /** What the leftover tasks are called: "Won't fit today", or "Waits for Mon 12 Oct" on a protected day. */
+        val waitLabel: String = WONT_FIT,
     ) {
-        /** The note under the plan for its kept-free blocks, or null when there are none. */
-        val keptLine: String? get() {
+        /** "Won't fit today: Send the invoice, Call the bank", or null when every task found room. */
+        val unplacedLine: String? get() = unplaced.takeIf { it.isNotEmpty() }?.let { "$waitLabel: " + it.joinToString(", ") { t -> t.title } }
+
+        /** The note under the plan for its kept-free blocks and protected time, or null when there are none. */
+        val keptLine: String? get() = listOfNotNull(mealsLine, protectedNote).takeIf { it.isNotEmpty() }?.joinToString("\n")
+
+        private val mealsLine: String? get() {
             if (meals.isEmpty()) return null
             val date = meals.any { it.title == DateNightRules.TITLE }
             val fast = meals.any { it.title != DateNightRules.TITLE }
@@ -76,6 +89,7 @@ object DayPlanner {
     }
 
     private const val MIN = 60_000L
+    const val WONT_FIT = "Won't fit today"
 
     fun plan(
         tasks: List<Task>,
@@ -86,6 +100,9 @@ object DayPlanner {
         habits: List<PlannerHabit> = emptyList(),
         meals: List<MealBlock> = emptyList(),
         sessions: List<HabitPlacement> = emptyList(),
+        protected: List<Slot> = emptyList(),
+        protectedNote: String? = null,
+        waitLabel: String? = null,
     ): Plan {
         val g = prefs.granularityMin * MIN
         val windowStart = maxOf(day.startMs + prefs.dayStartMin * MIN, ceilTo(nowMs, day.startMs, g))
@@ -120,6 +137,11 @@ object DayPlanner {
             .filter { !it.waitsForItsDay(day.epochDay) } // a later occurrence or a snoozed item waits too
             .sortedWith(compareBy<Task> { it.dueAtMs ?: Long.MAX_VALUE }.thenByDescending { it.priority }.thenBy { it.createdAtMs })
 
+        // Protected time takes no tasks (habit room and booked sessions above are Meka's own time); it still counts as
+        // free in "still free".
+        val open = free
+        free = subtract(free, protected)
+        val taken = mutableListOf<Slot>()
         val placements = mutableListOf<Placement>()
         val unplaced = mutableListOf<Task>()
         for (t in candidates) {
@@ -128,10 +150,15 @@ object DayPlanner {
             if (start == null) { unplaced += t; continue }
             val p = Placement(t, start, start + need)
             placements += p
-            free = subtract(free, listOf(Slot(p.startMs, ceilTo(p.endMs, day.startMs, g))))
+            val slot = Slot(p.startMs, ceilTo(p.endMs, day.startMs, g))
+            taken += slot
+            free = subtract(free, listOf(slot))
         }
-        val left = free.sumOf { (it.endMs - it.startMs) / MIN }.toInt()
-        return Plan(placements, unplaced, left, timed.sortedBy { it.startAtMs }, habitPlacements, habitsUnplaced, todaysMeals)
+        val left = subtract(open, taken).sumOf { (it.endMs - it.startMs) / MIN }.toInt()
+        return Plan(
+            placements, unplaced, left, timed.sortedBy { it.startAtMs }, habitPlacements, habitsUnplaced, todaysMeals,
+            protectedNote = protectedNote, waitLabel = waitLabel ?: WONT_FIT,
+        )
     }
 
     /** The first aligned start in [free] with [need] ms of room, or null. */

@@ -123,9 +123,10 @@ fun PlanPane(
                 )
             }
         }
-        if (p.unplaced.isNotEmpty()) {
+        p.unplacedLine?.let { line ->
             Spacer(Modifier.height(MekaSpace.xs))
-            Text("Won't fit today: " + p.unplaced.joinToString(", ") { it.title }, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+            // "Won't fit today: …", or "Waits for Mon 12 Oct: …" on a protected day (Protected time).
+            Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
         if (p.habits.isNotEmpty()) {
             Text("↻ Room for habits that are due. Tick them in Goals when they're done.", style = MekaType.caption, color = Meka.colors.textTertiary)

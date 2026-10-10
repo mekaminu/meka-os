@@ -11,7 +11,7 @@ package os.meka.core.domain
  *   when it's late its label is lit and its line reads "Since 09:15 · 30 min".
  * - "Move to later" re-plans it in one tap: the first free stretch from now (on the quarter hour) long enough for it,
  *   before the planner's day end, around today's events (with the planner's buffer), booked sessions and the other
- *   planned tasks. Work hours aren't in the way (a work task belongs there). No room left today: no "Move to later",
+ *   planned tasks, and never into protected time or date night (`kept`). Work hours aren't in the way (a work task belongs there). No room left today: no "Move to later",
  *   Tomorrow is still there.
  */
 object LateTaskRules {
@@ -46,6 +46,7 @@ object LateTaskRules {
         nowMs: Long,
         day: DayWindow,
         prefs: DayPlanner.Prefs = DayPlanner.Prefs(),
+        kept: List<DayPlanner.Slot> = emptyList(),
     ): Long? {
         val g = prefs.granularityMin * MIN
         val start = ceilTo(nowMs, day.startMs, g)
@@ -56,6 +57,7 @@ object LateTaskRules {
                 add(DayPlanner.Slot(it.startAtMs - prefs.bufferMin * MIN, it.endAtMs + prefs.bufferMin * MIN))
             }
             sessions.forEach { add(DayPlanner.Slot(it.startMs, it.endMs)) }
+            addAll(kept)
             planned.filter { it.id != task.id && it.scheduledAtMs != null && it.scheduledAtMs in day }.forEach {
                 add(DayPlanner.Slot(it.scheduledAtMs!!, it.scheduledAtMs + lengthMs(it)))
             }

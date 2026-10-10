@@ -1532,6 +1532,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(DateNightView.companion.EMPTY.summary, rules.OFF_LINE)
     }
 
+    func testProtectedTimeReachesSwift() {
+        // Protected time, slice 1: the sheet's chips and lines come from the core's rules (only two Bools and an Int
+        // cross from the sheet).
+        let rules = ProtectedRules.shared
+        XCTAssertEqual(rules.FROM_CHOICES.map { $0.int32Value }, [18 * 60, 18 * 60 + 30, 19 * 60, 19 * 60 + 30, 20 * 60])
+        XCTAssertEqual(ProtectedView.companion.EMPTY.summary, rules.OFF_LINE)
+        XCTAssertNil(ProtectedView.companion.EMPTY.todayLine)
+        let setting = ProtectedSetting(evenings: true, fromMin: 19 * 60, weekends: true)
+        XCTAssertTrue(setting.on)
+        XCTAssertEqual(rules.summary(s: setting), "Evenings from 19:00, weekends and bank holidays · nothing is planned into them")
+        XCTAssertEqual(rules.summary(s: nil), rules.OFF_LINE)
+    }
+
     func testDateNightNudgeReachesSwift() {
         // Date night, slice 2: Needs you's week-before card and its heads-up's row in Notifications reach the Mac; the
         // card's buttons send only an Int64 and a Bool (the undo bar gets a String back).

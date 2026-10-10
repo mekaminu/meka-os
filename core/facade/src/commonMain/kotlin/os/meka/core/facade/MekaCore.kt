@@ -142,6 +142,7 @@ class MekaCore(
     private val trainQueue = os.meka.core.domain.TrainQueue(replica, ids::next, nowMs)
     private val wins = os.meka.core.domain.WorkWins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
+    private val protectedTime = os.meka.core.domain.ProtectedTime(replica)
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shutdown = EveningShutdown(replica, tasks, nowMs, ZoneCalendar(timeZone))
@@ -427,6 +428,13 @@ class MekaCore(
      */
     val dateNightView: StateFlow<os.meka.core.domain.DateNightView> = _dateNight.asStateFlow()
 
+    private val _protected = MutableStateFlow(os.meka.core.domain.ProtectedView.EMPTY)
+    /**
+     * Protected time (V1, slice 1): evenings and weekends the planner and Move to later keep tasks out of (Ask → More →
+     * Protected time). Synced.
+     */
+    val protectedView: StateFlow<os.meka.core.domain.ProtectedView> = _protected.asStateFlow()
+
     private val _requests = MutableStateFlow<List<os.meka.core.domain.RequestCard>>(emptyList())
     /**
      * Requests from people Meka watches (V1, slice 2): the open Needs you cards MEKA proposed from their messages,
@@ -545,8 +553,11 @@ class MekaCore(
             (it.lifecycle == os.meka.core.domain.Lifecycle.ACTIVE || it.lifecycle == os.meka.core.domain.Lifecycle.INBOX) &&
                 !it.waitsForItsDay(day.epochDay)
         }
+        // Protected time and date night stay clear of a moved task too.
+        val cal = ZoneCalendar(timeZone)
+        val kept = protectedSlots(day.epochDay) + listOfNotNull(os.meka.core.domain.DateNightRules.slot(dateNight.setting(), day.epochDay, cal))
         val to = os.meka.core.domain.LateTaskRules.laterSlot(
-            t, open, visibleEvents(all), _sessions.value.todayBlocks(day.epochDay, now), now, day,
+            t, open, visibleEvents(all), _sessions.value.todayBlocks(day.epochDay, now), now, day, kept = kept,
         ) ?: return@onCore null
         tasks.edit(taskId, TaskEdit(scheduledAtMs = to))
         followBlocks(listOf(taskId))
@@ -573,8 +584,21 @@ class MekaCore(
             .map { DayPlanner.HabitPlacement(it.habitId, listOfNotNull(it.title, it.label).joinToString(" · "), it.startMs, it.endMs, behind = false) }
         // Date night (slice 1) is kept free like a fasting meal.
         val kept = fasting.plannerMeals(day) + listOfNotNull(os.meka.core.domain.DateNightRules.block(dateNight.setting(), day.epochDay, ZoneCalendar(timeZone)))
-        DayPlanner.plan(all, visibleEvents(all), now, day, habits = goals.plannerHabits(), meals = kept.sortedBy { it.startMs }, sessions = sessions)
+        // Protected time (slice 1): no tasks in the protected evening or on a protected day.
+        val shield = protectedTime.setting()
+        val schedule = work.schedule()
+        val holidays = bankHolidays.calendar()
+        DayPlanner.plan(
+            all, visibleEvents(all), now, day, habits = goals.plannerHabits(), meals = kept.sortedBy { it.startMs }, sessions = sessions,
+            protected = protectedSlots(day.epochDay),
+            protectedNote = os.meka.core.domain.ProtectedRules.planNote(shield, day.epochDay, schedule, holidays),
+            waitLabel = os.meka.core.domain.ProtectedRules.waitLabel(shield, day.epochDay, schedule, holidays),
+        )
     }
+
+    /** [day]'s protected time (Protected time, slice 1) as the planner's slots. */
+    private fun protectedSlots(day: Long): List<DayPlanner.Slot> =
+        os.meka.core.domain.ProtectedRules.slots(protectedTime.setting(), day, work.schedule(), bankHolidays.calendar(), ZoneCalendar(timeZone))
 
     /**
      * Schedules each planned task at its suggested time; everything syncs like a manual edit. With "Also add the
@@ -1508,6 +1532,17 @@ class MekaCore(
 
     /** Takes a fact off the page for good (on both apps). */
     suspend fun removeFact(id: String): Boolean = onCore { lifeFacts.remove(id) }
+
+    // ---- Protected time (V1, slice 1; Ask → More → Protected time) ----
+
+    /**
+     * Sets protected time: [evenings] from [fromMin] (local minutes) and [weekends] (with bank holidays). Returns the
+     * summary line, or null when nothing changed.
+     */
+    suspend fun setProtectedTime(evenings: Boolean, fromMin: Int, weekends: Boolean): String? = onCore {
+        if (!protectedTime.set(evenings, fromMin, weekends)) return@onCore null
+        os.meka.core.domain.ProtectedRules.summary(protectedTime.setting())
+    }
 
     // ---- Date night (V1, slice 1; Ask → More → Date night) ----
 
@@ -3445,6 +3480,7 @@ class MekaCore(
             trainQueue = os.meka.core.domain.QueueRules.trainLine(trainQueue.items(), office, nowMs(), cal),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
+        _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _emergency.value = emergency.view()
