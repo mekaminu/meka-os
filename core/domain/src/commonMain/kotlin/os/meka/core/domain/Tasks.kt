@@ -504,6 +504,24 @@ class Tasks(
         return id
     }
 
+    /**
+     * A step under a chosen id (unticked, at [position]), so two devices laying down the same list offline converge
+     * on one; a deleted one under that id comes back.
+     */
+    fun putChecklistItem(itemId: String, taskId: String, text: String, position: Long) {
+        requireExists(taskId)
+        val t = text.trim()
+        if (t.isEmpty()) throw ValidationException("Checklist item needs text")
+        val fields = linkedMapOf(
+            ChecklistFields.TASK_ID to taskId.fv(),
+            ChecklistFields.TEXT to t.fv(),
+            ChecklistFields.CHECKED to false.fv(),
+            ChecklistFields.POSITION to position.fv(),
+        )
+        if (replica.entity(EntityTypes.CHECKLIST_ITEM, itemId)?.deleted == true) fields[ActionableFields.DELETED] = false.fv()
+        replica.commitLocal(EntityTypes.CHECKLIST_ITEM, itemId, fields)
+    }
+
     fun renameChecklistItem(itemId: String, text: String) {
         val t = text.trim()
         if (t.isEmpty()) throw ValidationException("Checklist item needs text")

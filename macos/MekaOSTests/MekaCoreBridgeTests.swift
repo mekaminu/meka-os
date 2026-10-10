@@ -1106,6 +1106,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(ListsView.companion.EMPTY.shopping.count, 0)
     }
 
+    func testKitReminderReachesSwift() {
+        // Weekend football, slice 1: club fixtures, the chip and the kit list reach the Mac.
+        XCTAssertEqual(FootballRules.shared.clubIn(text: "BUFC U9s v Arlesey"), "BUFC")
+        XCTAssertEqual(FootballRules.shared.clubIn(text: "sjfc training"), "SJFC")
+        XCTAssertNil(FootballRules.shared.clubIn(text: "BUFCX"))
+        XCTAssertEqual(FootballRules.shared.CHIP, "Kit reminder")
+        XCTAssertEqual(FootballRules.shared.kitTaskId(eventId: "ev1"), "kev1")
+        XCTAssertEqual(FootballRules.shared.kitList(tasks: []).first, "Boots")
+        XCTAssertEqual(EventMarks.companion.NONE.kitTasks.count, 0)
+    }
+
     func testShoppingFromAskReachesSwift() async throws {
         // "Add milk to shopping" in Ask and Talk: the card, its undo and Search's Shopping kind reach the Mac.
         let card = AskRules.shared.cardOf(p: AskProposalAddShopping(items: ["milk", "eggs"]), today: 0)

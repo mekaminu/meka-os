@@ -1521,6 +1521,19 @@ final class CoreModel {
         }
     }
 
+    /// Weekend football: Kit reminder on a club fixture makes its kit list, planned and reminded at 19:00 the evening
+    /// before ("Kit reminder tomorrow 19:00"); Undo deletes it.
+    func addKitReminder(_ event: CalendarEvent) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                guard let added = try await core.addKitReminder(event: event) else { return }
+                offerEventUndo(added.line, .deleteTask(added.taskId))
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Hides an event from my day (timeline, planner, brief, shutdown, review); Undo shows it again.
     func hideEvent(_ eventID: String, offerUndo: Bool = true) {
         MekaHaptics.light()

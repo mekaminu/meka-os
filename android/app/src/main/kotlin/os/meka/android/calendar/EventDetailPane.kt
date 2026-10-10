@@ -167,6 +167,16 @@ private fun DetailContent(
                     scope.launch { runCatching { core.addPrepTask(event) } }
                 }
             }
+            // Weekend football: a club fixture's kit list, planned and reminded at 19:00 the evening before.
+            if (d.canKit) {
+                ActionChip(os.meka.core.domain.FootballRules.CHIP) {
+                    haptics.light()
+                    scope.launch {
+                        val added = runCatching { core.addKitReminder(event) }.getOrNull() ?: return@launch
+                        undo?.show(added.line) { core.delete(added.taskId) }
+                    }
+                }
+            }
             ActionChip(if (d.hidden) "Show in my day" else "Hide from my day") {
                 haptics.light()
                 scope.launch { runCatching { if (d.hidden) core.showEvent(event.id) else core.hideEvent(event.id) } }
@@ -266,7 +276,7 @@ private fun DetailContent(
                 },
             )
         }
-        val actionNote = listOfNotNull(d.prepLine, d.reminderLine, if (d.hidden) "Hidden from your day" else null).joinToString(" · ")
+        val actionNote = listOfNotNull(d.prepLine, d.kitLine, d.reminderLine, if (d.hidden) "Hidden from your day" else null).joinToString(" · ")
         val reduced = Meka.reducedMotion
         AnimatedContent(
             targetState = actionNote,

@@ -23,6 +23,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -643,6 +644,29 @@ class MekaCoreTest {
         m.setEventReminder(call.id, 0)
         m.syncNow(); a.syncNow()
         assertEquals(null, a.eventDetail(call).reminderLine)
+    }
+
+    @Test
+    fun kitReminderOnAClubFixtureIsATaskTheEveningBeforeOnBothDevices() = runTest {
+        val london = TimeZone.of("Europe/London")
+        fun at(day: Int, h: Int, min: Int = 0) = kotlinx.datetime.LocalDateTime(2026, 10, day, h, min).toInstant(london).toEpochMilliseconds()
+        now = at(8, 12) // Thu 8 Oct
+        val a = core("android"); val m = core("mac")
+        val match = os.meka.core.domain.CalendarEvent("evfc", "BUFC U9s v Arlesey", at(10, 10), at(10, 11), false, "Bury Field", "google", "meka@gmail.com", "Personal")
+        assertTrue(a.eventDetail(match).canKit)
+        val added = assertNotNull(a.addKitReminder(match))
+        assertEquals("Kit reminder tomorrow 19:00", added.line)
+        assertEquals(null, a.addKitReminder(match))
+        val t = assertNotNull(a.eventMarks.value.kitTasks["evfc"])
+        assertEquals(added.taskId, t.id)
+        assertEquals(at(9, 19), t.remindAtMs)
+        assertEquals(5, t.checklist.size)
+        assertEquals("Kit reminder tomorrow 19:00 · 0 of 5 packed", a.eventDetail(match).kitLine)
+        a.syncNow(); m.syncNow()
+        assertEquals("Kit reminder tomorrow 19:00 · 0 of 5 packed", m.eventDetail(match).kitLine)
+        assertTrue(!m.eventDetail(match).canKit)
+        // Not a club fixture: nothing.
+        assertEquals(null, a.addKitReminder(match.copy(id = "evx", title = "Dentist")))
     }
 
     @Test

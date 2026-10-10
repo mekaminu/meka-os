@@ -1,0 +1,126 @@
+package os.meka.core.domain
+
+/** A kit task just made: its id (Undo deletes it) and the undo bar's line ("Kit reminder tomorrow 19:00"). */
+data class KitAdded(val taskId: String, val line: String)
+
+/**
+ * Weekend football logistics, slice 1 (Meka approved 2026-10-09): the **kit reminder** for the kids' club fixtures in
+ * his calendar. Non-AI, pure.
+ *
+ * - A **club fixture** is an event of Meka's own calendars whose title or calendar names one of the clubs ([CLUBS],
+ *   "BUFC" and "SJFC", as whole words, any case): "BUFC U9s v Arlesey", "SJFC training" on a calendar called "SJFC".
+ *   The fixtures feed (Barça) never counts, nor does an event still on its way to Google.
+ * - **Kit reminder** on a club fixture's detail makes its kit task: "Pack the kit for BUFC U9s v Arlesey", planned at
+ *   [EVENING_MIN] (19:00) the evening before for [KIT_MINUTES] minutes, due at kick-off, with Remind me at that time
+ *   (a heads-up through the task reminders), and the kit list as its steps to tick. Too late for the evening before
+ *   (it's already past 19:00 that evening): no planned time and no reminder, just due at kick-off.
+ * - **The list is Meka's own:** the steps of the most recent kit task that has any are the next one's list, so
+ *   adding "Gloves" or removing "Coat" on one fixture's task carries on to the next; until then [DEFAULT_KIT].
+ * - Its id comes from the event ([kitTaskId]), so a double tap or both devices offline make one task, and adding it
+ *   again after deleting it brings the same task back with the list unticked.
+ */
+object FootballRules {
+    /** The clubs whose fixtures get kit reminders (whole words in the title or the calendar's name). */
+    val CLUBS = listOf("BUFC", "SJFC")
+    val DEFAULT_KIT = listOf("Boots", "Shin pads", "Kit and socks", "Water bottle", "Coat")
+    /** The kit list's longest: more is dropped. */
+    const val MAX_KIT = 20
+    const val MAX_ITEM = 60
+    /** 19:00 the evening before. */
+    const val EVENING_MIN = 19 * 60
+    const val KIT_MINUTES = 10
+    const val CHIP = "Kit reminder"
+
+    /** The kit task's id for an event: the same on every device. */
+    fun kitTaskId(eventId: String) = "k$eventId"
+
+    /** Whether [t] is a fixture's kit task. */
+    fun isKitTask(t: Task): Boolean = t.eventId != null && t.id == kitTaskId(t.eventId)
+
+    /** The club [e] is a fixture of ("BUFC"), or null when it isn't one. */
+    fun club(e: CalendarEvent): String? {
+        if (e.isFixture || e.isProvisional) return null
+        return listOfNotNull(e.title, e.calendarTitle, e.calendarName).firstNotNullOfOrNull { clubIn(it) }
+    }
+
+    fun isClubFixture(e: CalendarEvent): Boolean = club(e) != null
+
+    /** The first club named in [text] as a whole word, any case. */
+    fun clubIn(text: String): String? {
+        val words = text.split(Regex("[^A-Za-z0-9]+")).map { it.uppercase() }.toSet()
+        return CLUBS.firstOrNull { it in words }
+    }
+
+    /** The local day the fixture is on: an all-day one's first day (its bounds are UTC midnights). */
+    fun matchDay(e: CalendarEvent, cal: LocalCalendar): Long =
+        if (e.allDay) e.startAtMs.floorDiv(CivilDate.DAY_MS) else cal.epochDayOf(e.startAtMs)
+
+    /** When the fixture starts as a moment: an all-day one at 09:00 local on its first day. */
+    fun kickOffMs(e: CalendarEvent, cal: LocalCalendar): Long =
+        if (e.allDay) cal.toEpochMs(matchDay(e, cal), 9 * 60) else e.startAtMs
+
+    /** The kit task as it is made: title, planned and reminded the evening before (null once that's gone), due at kick-off. */
+    data class Plan(val title: String, val scheduledAtMs: Long?, val remindAtMs: Long?, val dueAtMs: Long)
+
+    fun plan(e: CalendarEvent, nowMs: Long, cal: LocalCalendar): Plan {
+        val evening = cal.toEpochMs(matchDay(e, cal) - 1, EVENING_MIN)
+        val ahead = evening.takeIf { it > nowMs }
+        return Plan(title(e), ahead, ahead, kickOffMs(e, cal))
+    }
+
+    /** "Pack the kit for BUFC U9s v Arlesey" (cut at a word to the task title's limit). */
+    fun title(e: CalendarEvent): String {
+        val s = "Pack the kit for ${e.title.trim().ifEmpty { club(e) ?: "football" }}"
+        if (s.length <= PrepRules.MAX_TITLE) return s
+        val head = s.take(PrepRules.MAX_TITLE - 1)
+        val space = head.lastIndexOf(' ')
+        return (if (space > PrepRules.MAX_TITLE / 2) head.take(space) else head).trimEnd() + "…"
+    }
+
+    /**
+     * The kit list for the next kit task: the steps of the most recent kit task that has any (by when it was made),
+     * else [DEFAULT_KIT]; trimmed, blank and repeated ones dropped, at most [MAX_KIT].
+     */
+    fun kitList(tasks: List<Task>): List<String> {
+        val last = tasks.filter { isKitTask(it) && it.checklist.any { c -> c.text.isNotBlank() } }
+            .maxByOrNull { it.createdAtMs }
+        val raw = last?.checklist?.sortedBy { it.position }?.map { it.text } ?: DEFAULT_KIT
+        val seen = HashSet<String>()
+        return raw.map { it.trim().take(MAX_ITEM) }.filter { it.isNotEmpty() && seen.add(it.lowercase()) }.take(MAX_KIT)
+    }
+
+    /** Whether the detail offers Kit reminder: a club fixture not yet started, with no kit task (a done one counts). */
+    fun canKit(e: CalendarEvent, kit: Task?, nowMs: Long, cal: LocalCalendar): Boolean =
+        isClubFixture(e) && kickOffMs(e, cal) > nowMs && (kit == null || kit.lifecycle == Lifecycle.CANCELLED)
+
+    /**
+     * The detail's kit line: "Kit reminder Fri 19:00 · 2 of 5 packed" · "Kit list · 2 of 5 packed" (no reminder) ·
+     * "Kit packed" (every step ticked, or the task done); null without a kit task.
+     */
+    fun line(kit: Task?, nowMs: Long, cal: LocalCalendar): String? {
+        if (kit == null || kit.lifecycle == Lifecycle.CANCELLED) return null
+        val steps = kit.checklist
+        val packed = steps.count { it.checked }
+        if (kit.isDone || (steps.isNotEmpty() && packed == steps.size)) return "Kit packed"
+        val count = if (steps.isEmpty()) null else "$packed of ${steps.size} packed"
+        val remind = kit.remindAtMs?.takeIf { it > nowMs }?.let { "Kit reminder ${whenLabel(it, nowMs, cal)}" }
+        return listOfNotNull(remind ?: "Kit list", count).joinToString(" · ")
+    }
+
+    /** What the undo bar says once the kit task is made: "Kit reminder tomorrow 19:00" · "Kit list added". */
+    fun addedLine(plan: Plan, nowMs: Long, cal: LocalCalendar): String {
+        val at = plan.remindAtMs ?: return "Kit list added"
+        return "Kit reminder ${whenLabel(at, nowMs, cal)}"
+    }
+
+    /** "today 19:00" · "tomorrow 19:00" · "Fri 19:00". */
+    private fun whenLabel(at: Long, nowMs: Long, cal: LocalCalendar): String {
+        val day = cal.epochDayOf(at)
+        val dayLabel = when (day - cal.epochDayOf(nowMs)) {
+            0L -> "today"
+            1L -> "tomorrow"
+            else -> LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(day) - 1]
+        }
+        return "$dayLabel ${LocalClock.formatMinute(cal.minuteOfDay(at))}"
+    }
+}

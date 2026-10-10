@@ -705,6 +705,18 @@ class MekaCore(
 
     /** Adds the event's prep task ("Prepare for …", planned 30 min before, due at its start); returns the task id. */
     suspend fun addPrepTask(event: os.meka.core.domain.CalendarEvent): String = onCore { eventActions.addPrep(event) }
+    /**
+     * Weekend football: Kit reminder on a club fixture ([os.meka.core.domain.FootballRules]) makes its kit task
+     * ("Pack the kit for …", planned and reminded at 19:00 the evening before, the kit list as its steps). Returns the
+     * task and the undo bar's line, or null when the event isn't a club fixture still to come or already has one open.
+     */
+    suspend fun addKitReminder(event: os.meka.core.domain.CalendarEvent): os.meka.core.domain.KitAdded? = onCore {
+        val cal = ZoneCalendar(timeZone)
+        val open = tasks.get(os.meka.core.domain.FootballRules.kitTaskId(event.id))?.takeIf { !it.lifecycle.isTerminal }
+        if (open != null) return@onCore null
+        val plan = os.meka.core.domain.FootballRules.plan(event, nowMs(), cal)
+        eventActions.addKit(event)?.let { os.meka.core.domain.KitAdded(it, os.meka.core.domain.FootballRules.addedLine(plan, nowMs(), cal)) }
+    }
     /** Hides an event from my day (timeline, planner, brief, shutdown, review); the Calendar tab still lists it. */
     suspend fun hideEvent(eventId: String) = onCore { eventActions.hide(eventId) }
     /**

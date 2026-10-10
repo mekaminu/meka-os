@@ -74,6 +74,10 @@ struct EventDetailSheet: View {
                 if d.canPrep {
                     Button("Prep task") { model.addPrepTask(event) }
                 }
+                // Weekend football: a club fixture's kit list, planned and reminded at 19:00 the evening before.
+                if d.canKit {
+                    Button(FootballRules.shared.CHIP) { model.addKitReminder(event) }
+                }
                 Button(d.hidden ? "Show in my day" : "Hide from my day") {
                     if d.hidden { model.showEvent(d.id) } else { model.hideEvent(d.id, offerUndo: false) }
                 }
@@ -81,7 +85,7 @@ struct EventDetailSheet: View {
                 if d.editable && !(d.edit?.waiting ?? false) {
                     Button("Edit") { MekaHaptics.tick(); editing = true }
                 }
-                let note = [d.prepLine, d.reminderLine, d.hidden ? "Hidden from your day" : nil].compactMap { $0 }.joined(separator: " · ")
+                let note = [d.prepLine, d.kitLine, d.reminderLine, d.hidden ? "Hidden from your day" : nil].compactMap { $0 }.joined(separator: " · ")
                 if !note.isEmpty {
                     Text(note).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .contentTransition(.opacity)

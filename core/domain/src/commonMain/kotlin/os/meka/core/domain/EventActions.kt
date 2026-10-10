@@ -32,6 +32,8 @@ data class EventMarks(
     val leaveAlarms: Set<String> = emptySet(),
     /** Calendars Meka turned on in Calendars (a mark with `hiddenFromToday = false`): a holiday calendar shows then. */
     val shownCalendars: Set<String> = emptySet(),
+    /** Event id → its kit task (weekend football, [FootballRules]; open or done; deleted ones are gone). */
+    val kitTasks: Map<String, Task> = emptyMap(),
 ) {
     fun isHidden(eventId: String) = eventId in hidden
 
@@ -115,7 +117,8 @@ class EventActions(
                 key to (c[CalendarMarkFields.LABEL].textOrNull ?: "")
             }.toMap()
         val leaveAlarms = entities.filter { it[EventMarkFields.LEAVE_ALARM].boolOrNull == true }.map { it.ref.entityId }.toSet()
-        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars, leaveAlarms, shown)
+        val kit = all.filter { FootballRules.isKitTask(it) && it.lifecycle != Lifecycle.CANCELLED }.associateBy { it.eventId!! }
+        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars, leaveAlarms, shown, kit)
     }
 
     /**
@@ -206,6 +209,32 @@ class EventActions(
             NewTask(p.title, dueAtMs = p.dueAtMs, scheduledAtMs = p.scheduledAtMs, estimateMinutes = PREP_MINUTES),
             mapOf(TaskFields.EVENT_ID to event.id.fv()),
         )
+        return id
+    }
+
+    /**
+     * Kit reminder on a club fixture ([FootballRules]): makes (or brings back) its kit task, planned and reminded at
+     * 19:00 the evening before, due at kick-off, with the kit list as its steps. The steps get ids from the task's, so
+     * both devices offline make one list; an open kit task is left as it is. Returns the task's id, or null when [event]
+     * isn't a club fixture still to come.
+     */
+    fun addKit(event: CalendarEvent): String? {
+        val id = FootballRules.kitTaskId(event.id)
+        val existing = tasks.get(id)
+        if (existing != null && !existing.lifecycle.isTerminal) return id
+        val now = nowMs()
+        if (!FootballRules.canKit(event, existing, now, calendar)) return null
+        val list = FootballRules.kitList(tasks.all().filter { it.id != id })
+        val p = FootballRules.plan(event, now, calendar)
+        tasks.createWithId(
+            id,
+            NewTask(p.title, dueAtMs = p.dueAtMs, scheduledAtMs = p.scheduledAtMs, estimateMinutes = FootballRules.KIT_MINUTES),
+            mapOf(TaskFields.EVENT_ID to event.id.fv()),
+        )
+        // A kit task brought back keeps no old steps: the list is laid down afresh, unticked.
+        tasks.get(id)?.checklist?.forEach { tasks.deleteChecklistItem(it.id) }
+        list.forEachIndexed { i, text -> tasks.putChecklistItem("$id.kit$i", id, text, i.toLong()) }
+        p.remindAtMs?.let { tasks.setReminder(id, it) }
         return id
     }
 

@@ -1,0 +1,154 @@
+package os.meka.core.domain
+
+import os.meka.core.testing.Device
+import os.meka.core.testing.SyncWorld
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/** Weekend football logistics, slice 1: the kit reminder the evening before a club fixture. */
+class FootballTest {
+    private val hour = 3_600_000L
+    private val world = SyncWorld()
+    // Fixed +1 h (London in October before the clocks go back).
+    private val cal = LocalCalendar.fixedOffset(hour)
+    private val thu = CivilDate.toEpochDay(2026, 10, 8)
+    private fun at(day: Long, h: Int, m: Int = 0) = cal.toEpochMs(day, h * 60 + m)
+
+    private val fold = world.device("android")
+    private val mac = world.device("mac")
+    private fun actions(d: Device) = EventActions(d.replica, d.tasks, { world.clock.nowMs }, cal)
+    private val eaFold = actions(fold)
+    private val eaMac = actions(mac)
+
+    init { world.clock.nowMs = at(thu, 12) }
+
+    private fun event(
+        id: String = "ev1",
+        title: String = "BUFC U9s v Arlesey",
+        start: Long = at(thu + 2, 10),
+        calendarName: String? = "Personal",
+        provider: String = "google",
+        allDay: Boolean = false,
+    ) = CalendarEvent(id, title, start, start + hour, allDay, "Bury Field", provider, "meka@gmail.com", calendarName)
+
+    private fun sync() { fold.sync(); mac.sync(); fold.sync() }
+
+    @Test
+    fun clubFixturesAreTheClubsNamedAsWholeWordsNeverBarcaOrLookAlikes() {
+        assertEquals("BUFC", FootballRules.club(event()))
+        assertEquals("SJFC", FootballRules.club(event(title = "Match", calendarName = "sjfc u11s")))
+        assertEquals("SJFC", FootballRules.club(event(title = "SJFC: away at Potton")))
+        assertNull(FootballRules.club(event(title = "BUFCX training")))
+        assertNull(FootballRules.club(event(title = "Training", calendarName = "Club")))
+        // The fixtures feed (Barça) never counts.
+        assertNull(FootballRules.club(event(title = "BUFC v Barça", provider = "fixtures")))
+    }
+
+    @Test
+    fun kitReminderPlansThePackingAt19TheEveningBeforeWithTheDefaultList() {
+        val e = event()
+        val id = assertNotNull(eaFold.addKit(e))
+        assertEquals(FootballRules.kitTaskId("ev1"), id)
+        val t = assertNotNull(fold.tasks.get(id))
+        assertEquals("Pack the kit for BUFC U9s v Arlesey", t.title)
+        assertEquals(at(thu + 1, 19), t.scheduledAtMs)
+        assertEquals(at(thu + 1, 19), t.remindAtMs)
+        assertEquals(at(thu + 2, 10), t.dueAtMs)
+        assertEquals("ev1", t.eventId)
+        assertEquals(FootballRules.DEFAULT_KIT, t.checklist.map { it.text })
+
+        val d = EventDetails.build(e, world.clock.nowMs, cal, eaFold.marks())
+        assertFalse(d.canKit)
+        assertEquals(id, d.kitTaskId)
+        assertEquals("Kit reminder tomorrow 19:00 · 0 of 5 packed", d.kitLine)
+        // The kit task is not the event's prep task.
+        assertNull(eaFold.marks().prepTasks["ev1"])
+        // Further ahead it names the day.
+        assertEquals("Kit reminder Fri 19:00 · 0 of 5 packed", EventDetails.build(e, at(thu - 1, 12), cal, eaFold.marks()).kitLine)
+        assertEquals("Kit reminder tomorrow 19:00", FootballRules.addedLine(FootballRules.plan(e, at(thu, 9), cal), at(thu, 9), cal))
+
+        // A second tap leaves the open one as it is.
+        fold.tasks.setChecklistItemChecked(t.checklist.first().id, true)
+        assertEquals(id, eaFold.addKit(e))
+        assertEquals("Kit reminder tomorrow 19:00 · 1 of 5 packed", EventDetails.build(e, world.clock.nowMs, cal, eaFold.marks()).kitLine)
+    }
+
+    @Test
+    fun onlyClubFixturesStillToComeOfferIt() {
+        assertTrue(EventDetails.build(event(), world.clock.nowMs, cal, eaFold.marks()).canKit)
+        assertFalse(EventDetails.build(event(title = "Dentist"), world.clock.nowMs, cal, eaFold.marks()).canKit)
+        assertNull(eaFold.addKit(event(title = "Dentist")))
+        val started = event(start = at(thu, 11))
+        assertFalse(EventDetails.build(started, world.clock.nowMs, cal, eaFold.marks()).canKit)
+        assertNull(eaFold.addKit(started))
+    }
+
+    @Test
+    fun tooLateForTheEveningBeforeItIsJustTheListDueAtKickOff() {
+        world.clock.nowMs = at(thu + 1, 20)
+        val e = event()
+        val id = assertNotNull(eaFold.addKit(e))
+        val t = assertNotNull(fold.tasks.get(id))
+        assertNull(t.scheduledAtMs)
+        assertNull(t.remindAtMs)
+        assertEquals(at(thu + 2, 10), t.dueAtMs)
+        assertEquals("Kit list · 0 of 5 packed", EventDetails.build(e, world.clock.nowMs, cal, eaFold.marks()).kitLine)
+        assertEquals("Kit list added", FootballRules.addedLine(FootballRules.plan(e, world.clock.nowMs, cal), world.clock.nowMs, cal))
+        t.checklist.forEach { fold.tasks.setChecklistItemChecked(it.id, true) }
+        assertEquals("Kit packed", EventDetails.build(e, world.clock.nowMs, cal, eaFold.marks()).kitLine)
+    }
+
+    @Test
+    fun anAllDayTournamentIsRemindedTheEveningBeforeItsFirstDay() {
+        val sat = thu + 2
+        val e = event(title = "SJFC tournament", start = sat * CivilDate.DAY_MS, allDay = true)
+            .copy(endAtMs = (sat + 1) * CivilDate.DAY_MS)
+        val t = assertNotNull(fold.tasks.get(assertNotNull(eaFold.addKit(e))))
+        assertEquals(at(thu + 1, 19), t.remindAtMs)
+        assertEquals(at(sat, 9), t.dueAtMs)
+    }
+
+    @Test
+    fun mekasOwnListCarriesOnToTheNextFixture() {
+        val first = assertNotNull(fold.tasks.get(assertNotNull(eaFold.addKit(event()))))
+        fold.tasks.deleteChecklistItem(first.checklist.last().id) // Coat
+        fold.tasks.addChecklistItem(first.id, "Gloves")
+        world.clock.nowMs += 1_000
+
+        val next = event(id = "ev2", title = "BUFC U9s v Potton", start = at(thu + 9, 10))
+        val t = assertNotNull(fold.tasks.get(assertNotNull(eaFold.addKit(next))))
+        assertEquals(listOf("Boots", "Shin pads", "Kit and socks", "Water bottle", "Gloves"), t.checklist.map { it.text })
+        assertEquals(listOf("Boots", "Shin pads", "Kit and socks", "Water bottle", "Gloves"), FootballRules.kitList(fold.tasks.all()))
+    }
+
+    @Test
+    fun bothDevicesOfflineMakeOneKitTaskWithOneList() {
+        eaFold.addKit(event())
+        eaMac.addKit(event())
+        sync()
+        val kits = fold.tasks.all().filter { FootballRules.isKitTask(it) }
+        assertEquals(1, kits.size)
+        assertEquals(FootballRules.DEFAULT_KIT, kits.single().checklist.map { it.text })
+        assertEquals(FootballRules.DEFAULT_KIT, assertNotNull(mac.tasks.get(kits.single().id)).checklist.map { it.text })
+    }
+
+    @Test
+    fun deletedAndAddedAgainItComesBackWithTheListUnticked() {
+        val e = event()
+        val id = assertNotNull(eaFold.addKit(e))
+        fold.tasks.get(id)!!.checklist.forEach { fold.tasks.setChecklistItemChecked(it.id, true) }
+        fold.tasks.delete(id)
+        assertNull(EventDetails.build(e, world.clock.nowMs, cal, eaFold.marks()).kitLine)
+        assertTrue(EventDetails.build(e, world.clock.nowMs, cal, eaFold.marks()).canKit)
+
+        assertEquals(id, eaFold.addKit(e))
+        val back = assertNotNull(fold.tasks.get(id))
+        assertEquals(FootballRules.DEFAULT_KIT, back.checklist.map { it.text })
+        assertTrue(back.checklist.none { it.checked })
+        assertEquals(at(thu + 1, 19), back.remindAtMs)
+    }
+}

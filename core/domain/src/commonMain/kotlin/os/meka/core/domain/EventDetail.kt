@@ -58,6 +58,12 @@ data class EventDetailView(
      * ("Adding “Dentist” to Google") and no actions until the real event lands.
      */
     val provisional: Boolean = false,
+    /** Weekend football: a club fixture still to come with no open kit task, so the pane offers Kit reminder. */
+    val canKit: Boolean = false,
+    /** The fixture's kit task (open or done), to open it; null without one. */
+    val kitTaskId: String? = null,
+    /** "Kit reminder Fri 19:00 · 2 of 5 packed" · "Kit list · 2 of 5 packed" · "Kit packed"; null without a kit task. */
+    val kitLine: String? = null,
 )
 
 /**
@@ -193,6 +199,9 @@ object EventDetails {
             openIn = openLink(e),
             leaveAlarm = e.id in marks.leaveAlarms,
             provisional = e.isProvisional,
+            canKit = FootballRules.canKit(e, marks.kitTasks[e.id], nowMs, calendar),
+            kitTaskId = marks.kitTasks[e.id]?.id,
+            kitLine = FootballRules.line(marks.kitTasks[e.id], nowMs, calendar),
         )
     }
 
