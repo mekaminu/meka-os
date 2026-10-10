@@ -145,16 +145,28 @@ object EmergencyRules {
             // phone number under "Who to call".
             if (digitsOf(m.value) >= 6 && !(section == EmergencySection.CALL && isPhone(m.value))) return REFUSED_NUMBER
         }
-        SECRET.find(text)?.let { m ->
-            // "Passwords: in the family password manager" says where; "PIN: 4821" or "wifi password is BlueFox77" doesn't.
-            // Only the first secret word counts, so "password manager" later in a "where" line is fine.
-            val after = text.substring(m.range.last + 1).split(Regex("[\\s:=]+"))
-                .map { it.trim(',', '.', ';', '“', '”', '"', '\'') }
-                .filter { it.isNotEmpty() && it.lowercase() !in FILLER }
-            if (after.size < 2) return REFUSED_SECRET
-        }
+        if (holdsSecret(text)) return REFUSED_SECRET
         return null
     }
+
+    /**
+     * Whether [text] holds a password, PIN or the like rather than saying where it's kept: "Passwords: in the family
+     * password manager" says where; "PIN: 4821" or "wifi password is BlueFox77" doesn't. Only the first secret word
+     * counts, so "password manager" later in a "where" line is fine. Shared with the facts page ([FactRules]).
+     */
+    fun holdsSecret(text: String): Boolean {
+        val m = SECRET.find(text) ?: return false
+        val after = text.substring(m.range.last + 1).split(Regex("[\\s:=]+"))
+            .map { it.trim(',', '.', ';', '“', '”', '"', '\'') }
+            .filter { it.isNotEmpty() && it.lowercase() !in FILLER }
+        return after.size < 2
+    }
+
+    /** A sort code ("20-00-00") anywhere in [text]. Shared with the facts page ([FactRules]). */
+    fun holdsSortCode(text: String): Boolean = SORT_CODE.containsMatchIn(text)
+
+    /** Every run of digits in [text] (single spaces or hyphens allowed between them, a leading + kept). */
+    fun digitRuns(text: String): List<String> = DIGIT_RUN.findAll(text).map { it.value }.toList()
 
     /** The phone number in a "Who to call" line, as digits (a leading + kept); null when there is none. */
     fun phone(detail: String): String? = DIGIT_RUN.findAll(detail).map { it.value }.firstOrNull(::isPhone)

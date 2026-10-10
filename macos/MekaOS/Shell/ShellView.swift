@@ -90,6 +90,8 @@ struct ShellView: View {
         .sheet(isPresented: Binding(get: { model.showLeave }, set: { model.showLeave = $0 })) { LeaveSheet(palette: palette) }
         // Train queue (Ask → More, or Today's "For the train"): links and podcasts saved for the commute.
         .sheet(isPresented: Binding(get: { model.showTrainQueue }, set: { model.showTrainQueue = $0 })) { TrainQueueSheet(palette: palette) }
+        // What MEKA knows (Ask → More): the facts page Ask and Talk answer from.
+        .sheet(isPresented: Binding(get: { model.showFacts }, set: { model.showFacts = $0 })) { FactsSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showNews }, set: { model.showNews = $0 })) { NewsSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showNotifications }, set: { model.showNotifications = $0 })) {
             NotificationsSheet(palette: palette)

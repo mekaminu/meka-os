@@ -138,6 +138,7 @@ class MekaCore(
     private val school = os.meka.core.domain.School(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val mealPlan = os.meka.core.domain.MealPlan(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val emergency = os.meka.core.domain.EmergencyCard(replica, ids::next, nowMs)
+    private val lifeFacts = os.meka.core.domain.LifeFacts(replica, ids::next, nowMs)
     private val trainQueue = os.meka.core.domain.TrainQueue(replica, ids::next, nowMs)
     private val wins = os.meka.core.domain.WorkWins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
@@ -395,6 +396,15 @@ class MekaCore(
      * card or account number ([os.meka.core.domain.EmergencyRules.refusal]).
      */
     val emergencyView: StateFlow<os.meka.core.domain.EmergencyView> = _emergency.asStateFlow()
+
+    private val _facts = MutableStateFlow(os.meka.core.domain.FactsView.EMPTY)
+    /**
+     * What MEKA knows about Meka's life (V1, slice 1; Ask → More → What MEKA knows): the facts he keeps (the car's reg,
+     * the GP, sizes, the utilities) in groups, each visible, editable and deletable, and each can be kept from the AI.
+     * Synced between his devices only. Never a password, PIN or card, bank or ID number
+     * ([os.meka.core.domain.FactRules.refusal]).
+     */
+    val factsView: StateFlow<os.meka.core.domain.FactsView> = _facts.asStateFlow()
 
     private val _queue = MutableStateFlow(os.meka.core.domain.QueueView.EMPTY)
     /**
@@ -1478,6 +1488,20 @@ class MekaCore(
     /** Takes a win off the list (both apps). */
     suspend fun removeWin(id: String): Boolean = onCore { wins.remove(id) }
 
+    // ---- What MEKA knows (V1, slice 1; Ask → More → What MEKA knows) ----
+
+    /**
+     * Adds one typed fact ("Car reg: AB12 CDE", "my shoe size is 10"); the same name again changes it. A line holding a
+     * password, PIN or card, bank or ID number is refused and nothing is written; the answer says why (`refused`).
+     */
+    suspend fun addFact(text: String): os.meka.core.domain.FactAdded = onCore { lifeFacts.add(text) }
+
+    /** Lets MEKA's AI answer from a fact ([use] true) or keeps it from the AI (it stays on the page). */
+    suspend fun setFactAi(id: String, use: Boolean): Boolean = onCore { lifeFacts.setAi(id, use) }
+
+    /** Takes a fact off the page for good (on both apps). */
+    suspend fun removeFact(id: String): Boolean = onCore { lifeFacts.remove(id) }
+
     // ---- Date night (V1, slice 1; Ask → More → Date night) ----
 
     /**
@@ -2537,7 +2561,9 @@ class MekaCore(
                 // Train-time queue, slice 3: the saved links, so "what's in my train queue?" has an answer.
                 os.meka.core.domain.QueueAskRules.askLines(trainQueue.items(), nowMs(), cal),
                 // Annual leave, slice 2b: the planner as the pane shows it, so "how many days have I got left?" has an answer.
-                os.meka.core.domain.LeaveAskRules.askLines(_leave.value, work.schedule().enabled, q))
+                os.meka.core.domain.LeaveAskRules.askLines(_leave.value, work.schedule().enabled, q),
+                // What MEKA knows, slice 1: only the facts that bear on the question, so "what's the car's reg?" has an answer.
+                os.meka.core.domain.FactAskRules.askLines(lifeFacts.all(), q))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -3403,6 +3429,7 @@ class MekaCore(
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _emergency.value = emergency.view()
+        _facts.value = lifeFacts.view()
         _queue.value = trainQueue.view()
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(
             _today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone),

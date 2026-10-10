@@ -39,6 +39,9 @@ class AskCodecTest {
         // Annual leave (annual leave, slice 2b): a kind of its own.
         val leave = req.copy(items = listOf(AskCodec.Item("", "leave", "Annual leave · 4 of 25 days booked · 21 days left · Leave year Jan – Dec 2026")))
         assertEquals(leave, AskCodec.decodeRequest(AskCodec.encodeRequest(leave)))
+        // What MEKA knows (facts page, slice 1): a kind of its own.
+        val facts = req.copy(items = listOf(AskCodec.Item("", "facts", "Fact · Car · Car reg: AB12 CDE")))
+        assertEquals(facts, AskCodec.decodeRequest(AskCodec.encodeRequest(facts)))
         fun bad(r: AskCodec.Request) = assertFailsWith<WireFormatException> { AskCodec.decodeRequest(AskCodec.encodeRequest(r)) }
         bad(req.copy(question = "  "))
         bad(req.copy(question = "q".repeat(501)))

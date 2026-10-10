@@ -1437,6 +1437,28 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(empty.waiting.isEmpty)
     }
 
+    func testFactsPageReachesSwift() {
+        // What MEKA knows (facts page, slice 1): a typed fact is read by the core's rules and grouped, secrets and card,
+        // bank or ID numbers are turned away, and only the facts that bear on a question go with it.
+        let rules = FactRules.shared
+        let reg = rules.read(text: "my car reg is AB12 CDE")
+        XCTAssertEqual(reg?.label, "Car reg")
+        XCTAssertEqual(reg?.value, "AB12 CDE")
+        XCTAssertEqual(rules.groupOf(label: "Car reg"), FactGroup.car)
+        XCTAssertNil(rules.refusal(text: "GP: Dr Patel, 01767 123456"))
+        XCTAssertEqual(rules.refusal(text: "Wifi password: BlueFox77"), rules.REFUSED_SECRET)
+        XCTAssertEqual(rules.refusal(text: "Bank card: 4111 1111 1111 1111"), rules.REFUSED_BANK)
+        XCTAssertEqual(rules.refusal(text: "Passport: 123456789"), rules.REFUSED_ID)
+        let fact = LifeFact(id: "f1", label: "Car reg", value: "AB12 CDE", group: .car, aiOff: false, addedAtMs: 0)
+        XCTAssertEqual(FactAskRules.shared.askLines(facts: [fact], question: "what's the car's reg?"),
+                       ["Facts · 1 kept · all below", "Fact · Car · Car reg: AB12 CDE"])
+        let view = rules.view(facts: [fact])
+        XCTAssertEqual(view.summary, "1 fact · MEKA answers from them")
+        XCTAssertEqual(view.groups.map(\.label), ["Car"])
+        XCTAssertEqual(view.groups.first?.rows.first?.aiButton, rules.KEEP_BUTTON)
+        XCTAssertEqual(FactsView.companion.EMPTY.summary, rules.EMPTY_SUMMARY)
+    }
+
     func testEmergencyCardReachesSwift() {
         // Emergency card, slice 1: a typed line is read by the core's rules, secrets and numbers are turned away, and the
         // card's parts reach the Mac (only Strings cross from the sheet).

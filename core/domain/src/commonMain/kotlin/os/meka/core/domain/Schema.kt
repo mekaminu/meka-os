@@ -68,13 +68,15 @@ object EntityTypes {
     const val WIN = "win"
     /** One stretch of booked annual leave (see [Leave]). */
     const val LEAVE = "leave"
+    /** One fact on the "What MEKA knows" page (see [LifeFacts]). */
+    const val LIFE_FACT = "life_fact"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
-        EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE,
+        EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT,
     )
 }
 
@@ -318,6 +320,9 @@ object MekaSchema : SchemaRegistry {
         // Annual leave: a stretch removed on any device is gone for good; its days and name, the latest edit wins.
         entityType == EntityTypes.LEAVE && field == LeaveFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.LEAVE -> MergePolicy.Lww
+        // Facts: a fact removed on any device is gone for good; its value and AI choice, the latest edit wins.
+        entityType == EntityTypes.LIFE_FACT && field == FactFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.LIFE_FACT -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

@@ -503,6 +503,38 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsOnlyTheFactsThatBearOnTheQuestionAndNeverOneKeptFromAi() = runTest {
+        val c = core()
+        assertEquals("Added Car reg to Car", c.addFact("Car reg: AB12 CDE").line)
+        now += 1_000
+        assertEquals("Added Shoe size to Sizes", c.addFact("my shoe size is 10").line)
+        now += 1_000
+        assertEquals("Added GP to Health and care", c.addFact("GP: Dr Patel, Ivel Medical Centre").line)
+        assertTrue(c.addFact("Bank card: 4111 1111 1111 1111").refused)
+        assertEquals("3 facts · MEKA answers from them", c.factsView.value.summary)
+
+        assertIs<AskOutcome.Answered>(c.askMeka("What's the car's reg?"))
+        val ctx = server.asked.last().second
+        assertEquals(
+            listOf("Facts · 3 kept · 1 bears on the question", "Fact · Car · Car reg: AB12 CDE"),
+            ctx.items.filter { it.kind == AskItemKind.FACTS }.map { it.line },
+        )
+        assertFalse(ctx.untrusted)
+
+        // Kept from AI: still on the page, never sent.
+        val car = c.factsView.value.groups.first { it.group == "car" }.rows.single()
+        assertTrue(c.setFactAi(car.id, use = false))
+        assertEquals("3 facts · MEKA answers from 2 · 1 kept from AI", c.factsView.value.summary)
+        assertIs<AskOutcome.Answered>(c.askMeka("What do you know about me?"))
+        assertEquals(
+            listOf("Facts · 2 kept · all below", "Fact · Sizes · Shoe size: 10", "Fact · Health and care · GP: Dr Patel, Ivel Medical Centre"),
+            server.asked.last().second.items.filter { it.kind == AskItemKind.FACTS }.map { it.line },
+        )
+        assertTrue(c.removeFact(car.id))
+        assertEquals(2, c.factsView.value.count)
+    }
+
+    @Test
     fun everyCardCanBeTakenBack() = runTest {
         val c = core()
         c.addTask("Book dentist")

@@ -45,7 +45,7 @@ final class ShellNavTests: XCTestCase {
     func testMoreListsEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
         XCTAssertEqual(
             ShellNav.more(connected: true).map(\.label),
-            ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "School", "Annual leave", "Dinners", "Date night", "Emergency card", "Train queue", "Work mode", "Notifications",
+            ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "School", "Annual leave", "Dinners", "Date night", "Emergency card", "Train queue", "What MEKA knows", "Work mode", "Notifications",
              "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "Activity", "Your data"]
         )
         XCTAssertFalse(ShellNav.more(connected: false).contains(.calendars))
@@ -61,7 +61,7 @@ final class ShellNavTests: XCTestCase {
         let sections = ShellNav.moreSections(connected: true)
         XCTAssertEqual(sections.map(\.group.label), ["Places", "Daily", "Settings"])
         XCTAssertEqual(sections[0].items.map(\.label), ["Lists", "Goals and habits", "Review", "Vault"])
-        XCTAssertEqual(sections[1].items.map(\.label), ["Morning brief", "News", "Shut down the day", "School", "Annual leave", "Dinners", "Date night", "Emergency card", "Train queue"])
+        XCTAssertEqual(sections[1].items.map(\.label), ["Morning brief", "News", "Shut down the day", "School", "Annual leave", "Dinners", "Date night", "Emergency card", "Train queue", "What MEKA knows"])
         XCTAssertNil(MoreItem.dateNight.destination)
         // School (school rhythm, slice 1) is a sheet under Daily, there before this Mac is connected.
         XCTAssertNil(MoreItem.school.destination)

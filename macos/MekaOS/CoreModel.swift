@@ -48,6 +48,11 @@ final class CoreModel {
     private(set) var emergency: EmergencyView?
     /// Ask → More → Emergency card.
     var showEmergency = false
+    /// What MEKA knows (facts page, slice 1): the facts Ask and Talk answer from, in groups (Ask → More → What MEKA
+    /// knows). Synced with the Fold.
+    private(set) var facts: FactsView?
+    /// Ask → More → What MEKA knows.
+    var showFacts = false
     /// The train queue (V1, train-time queue slice 1): links and podcasts saved for the commute, waiting and done
     /// lately (Ask → More → Train queue). Synced with the Fold, where the share sheet saves them.
     private(set) var queue: QueueView?
@@ -271,6 +276,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await e in core.emergencyView { self?.emergency = e }
+        })
+        observers.append(Task { [weak self] in
+            for await f in core.factsView { self?.facts = f }
         })
         observers.append(Task { [weak self] in
             for await q in core.queueView { self?.queue = q }
@@ -1898,6 +1906,31 @@ final class CoreModel {
             return nil
         }
     }
+
+    /// What adding a fact said: the line to show and whether it was turned away (a secret or a card, bank or ID number).
+    struct FactSaid: Equatable {
+        let line: String
+        let refused: Bool
+    }
+
+    /// Adds one typed fact ("Car reg: AB12 CDE"); the same name again changes it. Only a String crosses.
+    func addFact(_ text: String) async -> FactSaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            let r = try await core.addFact(text: t)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return FactSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Lets MEKA's AI answer from a fact, or keeps it from the AI (only a String and a Bool cross).
+    func setFactAi(_ id: String, use: Bool) { MekaHaptics.tick(); run { _ = try await $0.setFactAi(id: id, use: use) } }
+
+    func removeFact(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeFact(id: id) } }
 
     func removeEmergency(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeEmergency(id: id) } }
 
