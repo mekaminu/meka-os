@@ -1548,6 +1548,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(DateNightView.companion.EMPTY.summary, rules.OFF_LINE)
     }
 
+    func testAutonomyReachesSwift() {
+        // What MEKA may do (policy engine UI, slice 1): the sheet's rows and lines come from the core's rules (only a
+        // Bool or a kind's key crosses from the sheet).
+        let rules = AutonomyRules.shared
+        let empty = AutonomyView.companion.EMPTY
+        XCTAssertFalse(empty.paused)
+        XCTAssertEqual(empty.summary, rules.NONE_LINE)
+        XCTAssertEqual(empty.pauseButton, rules.PAUSE)
+        XCTAssertEqual(empty.sections.map(\.label), [rules.LISTS_LABEL, rules.LOCKED_LABEL])
+        XCTAssertEqual(empty.sections[0].rows.map(\.key), ["add_task", "tick_off", "shopping", "win"])
+        XCTAssertTrue(empty.sections[1].rows.allSatisfy { $0.locked && $0.action == nil })
+        let trusted = rules.trustRow(k: TrustKind.addTask, s: TrustState(streak: TrustRules.shared.STREAK, trusted: true, declined: false), paused: false)
+        XCTAssertEqual(trusted.action, rules.ASK_FIRST)
+        XCTAssertTrue(trusted.onItsOwn)
+    }
+
     func testProtectedTimeReachesSwift() {
         // Protected time, slice 1: the sheet's chips and lines come from the core's rules (only two Bools and an Int
         // cross from the sheet).

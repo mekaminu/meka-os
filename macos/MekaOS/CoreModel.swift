@@ -48,6 +48,13 @@ final class CoreModel {
     private(set) var protectedTime: ProtectedView?
     /// Ask → More → Protected time.
     var showProtected = false
+    /// What MEKA may do (policy engine UI, slice 1): the pause switch, earned trust per kind and the locked rows
+    /// (Ask → More → What MEKA may do). Synced with the Fold.
+    private(set) var autonomy: AutonomyView?
+    /// Ask → More → What MEKA may do.
+    var showAutonomy = false
+    /// The answer to the sheet's last tap ("Paused · MEKA asks before everything"), shown under its summary.
+    private(set) var autonomySaid: String?
     /// The emergency card (V1, slice 1): who to call, where things are and key accounts by name (Ask → More →
     /// Emergency card). Synced with the Fold; Jeanette reads it on her family page.
     private(set) var emergency: EmergencyView?
@@ -281,6 +288,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await p in core.protectedView { self?.protectedTime = p }
+        })
+        observers.append(Task { [weak self] in
+            for await a in core.autonomyView { self?.autonomy = a }
         })
         observers.append(Task { [weak self] in
             for await e in core.emergencyView { self?.emergency = e }
@@ -2097,6 +2107,23 @@ final class CoreModel {
         lastMealsShopped = nil
         mealsShoppedLine = nil
         mealsShoppedCanUndo = false
+    }
+
+    // MARK: What MEKA may do (policy engine UI, slice 1)
+
+    /// Pause or resume everything MEKA does on its own; only a Bool crosses (a String comes back), shown under the
+    /// sheet's summary.
+    func setAutonomyPaused(_ paused: Bool) async {
+        guard let core else { return }
+        MekaHaptics.light()
+        if let line = try? await core.setAutonomyPaused(paused: paused) { autonomySaid = line }
+    }
+
+    /// A row's Ask first / Let MEKA offer again; only the kind's key (a String) crosses.
+    func resetTrust(_ kindKey: String) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        if let line = try? await core.resetTrust(kindKey: kindKey) { autonomySaid = line }
     }
 
     // MARK: Protected time (slice 1)

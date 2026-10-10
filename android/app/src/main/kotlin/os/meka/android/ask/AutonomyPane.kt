@@ -1,0 +1,176 @@
+package os.meka.android.ask
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaMotion
+import os.meka.android.designsystem.MekaRadius
+import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.appear
+import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.rememberAppearance
+import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.designsystem.sharedTitleInPane
+import os.meka.android.lists.fold
+import os.meka.android.lists.unfold
+import os.meka.android.shell.MoreItem
+import os.meka.android.shell.SharedMotion
+import os.meka.android.today.SectionLabel
+import os.meka.core.domain.AutonomyRow
+import os.meka.core.domain.AutonomyRules
+import os.meka.core.facade.MekaCore
+
+/**
+ * Ask → More → What MEKA may do (policy engine UI, slice 1): the kill switch on top ("Pause everything MEKA does on its
+ * own" · Pause / Resume), then each earned-trust kind under Your lists ("Does it for you" with Ask first, "Asks first ·
+ * 3 of 5 yeses in a row", "Asks first · you said keep asking" with Let MEKA offer again), then the locked rows no
+ * setting changes (messages, email, money, trading, documents, other people's words, everything else). Synced.
+ *
+ * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary, each row's line and the pause
+ * button cross-fade; the sections stagger in 40 ms apart; a row's dot blends to the accent while MEKA does it on its own;
+ * Pause / Resume gives a light haptic, Ask first a tick; the answer's line unfolds on the expand spring. Reduced motion:
+ * cross-fades.
+ */
+@Composable
+fun AutonomyPane(core: MekaCore, onClose: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    val v by core.autonomyView.collectAsState()
+    var said by remember { mutableStateOf<String?>(null) }
+
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
+        Text("What MEKA may do", style = MekaType.greeting, color = Meka.colors.textPrimary,
+            modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.AUTONOMY)).appear(rememberAppearance(0)))
+        Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "autonomy-summary") { s ->
+            Text(s, style = MekaType.body, color = if (v.paused) Meka.colors.accent else Meka.colors.textSecondary,
+                modifier = Modifier.appear(rememberAppearance(1)))
+        }
+        AnimatedVisibility(said != null, enter = unfold(), exit = fold()) {
+            Crossfade(said.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "autonomy-said") { line ->
+                Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
+        }
+
+        // The kill switch.
+        Row(
+            Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+                .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).appear(rememberAppearance(2)),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(AutonomyRules.PAUSE_TITLE, style = MekaType.body, color = Meka.colors.textPrimary)
+                Text(AutonomyRules.PAUSE_LINE, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+            Pill(v.pauseButton, lit = v.paused) {
+                haptics.light()
+                scope.launch { runCatching { core.setAutonomyPaused(!v.paused) }.getOrNull()?.let { said = it } }
+            }
+        }
+
+        var step = 3
+        v.sections.forEach { section ->
+            SectionLabel(section.label.uppercase(), Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(step++)))
+            section.rows.forEach { row ->
+                AutonomyRowView(row, Modifier.appear(rememberAppearance(step))) {
+                    haptics.tick()
+                    scope.launch { runCatching { core.resetTrust(row.key) }.getOrNull()?.let { said = it } }
+                }
+            }
+            step++
+        }
+        Text(AutonomyRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+            modifier = Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(step)))
+    }
+}
+
+@Composable
+private fun AutonomyRowView(row: AutonomyRow, modifier: Modifier, onAction: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val dot by animateColorAsState(
+        when {
+            row.onItsOwn -> Meka.colors.accent
+            row.locked -> Meka.colors.textTertiary
+            else -> Meka.colors.surfaceRaised
+        },
+        MekaMotion.appear(reduced), label = "autonomy-dot",
+    )
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
+            .semantics(mergeDescendants = true) {
+                contentDescription = row.title + ". " + row.line + if (row.locked) ". Locked" else ""
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
+        Column(Modifier.weight(1f)) {
+            Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "autonomy-line") { l ->
+                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+        }
+        val action = row.action
+        if (row.locked) {
+            Text("Locked", style = MekaType.caption, color = Meka.colors.textTertiary)
+        } else if (action != null) {
+            Pill(action, lit = false, onClick = onAction)
+        }
+    }
+}
+
+@Composable
+private fun Pill(label: String, lit: Boolean, onClick: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val fill by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "autonomy-pill")
+    val ink by animateColorAsState(if (lit) Meka.colors.onAccent else Meka.colors.accent, MekaMotion.appear(reduced), label = "autonomy-pill-ink")
+    Box(
+        Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+            .clickable(role = Role.Button, onClick = onClick)
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        contentAlignment = Alignment.Center,
+    ) {
+        Crossfade(label, animationSpec = MekaMotion.appear(reduced), label = "autonomy-pill-label") { t ->
+            Text(t, style = MekaType.itemMeta, color = ink)
+        }
+    }
+}

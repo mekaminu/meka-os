@@ -53,7 +53,7 @@ class ShellNavTest {
         assertEquals(
             listOf(
                 "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "School", "Annual leave", "Dinners", "Date night", "Emergency card", "Train queue", "What MEKA knows", "Work mode", "Protected time", "Notifications",
-                "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "Activity", "Your data",
+                "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "What MEKA may do", "Activity", "Your data",
             ),
             ShellNav.more(connected = true).map { it.label },
         )
@@ -73,7 +73,7 @@ class ShellNavTest {
         assertEquals(listOf("Lists", "Goals and habits", "Review", "Vault"), sections[0].items.map { it.label })
         assertEquals(listOf("Morning brief", "News", "Shut down the day", "School", "Annual leave", "Dinners", "Date night", "Emergency card", "Train queue", "What MEKA knows"), sections[1].items.map { it.label })
         assertEquals(
-            listOf("Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "Activity", "Your data"),
+            listOf("Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "What MEKA may do", "Activity", "Your data"),
             sections[2].items.map { it.label },
         )
         // The same rows as the flat list, in the same order; the places are exactly the Places section.

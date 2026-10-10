@@ -46,7 +46,7 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(
             ShellNav.more(connected: true).map(\.label),
             ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "School", "Annual leave", "Dinners", "Date night", "Emergency card", "Train queue", "What MEKA knows", "Work mode", "Protected time", "Notifications",
-             "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "Activity", "Your data"]
+             "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "What MEKA may do", "Activity", "Your data"]
         )
         XCTAssertFalse(ShellNav.more(connected: false).contains(.calendars))
         XCTAssertFalse(ShellNav.more(connected: false).contains(.family))
@@ -66,7 +66,7 @@ final class ShellNavTests: XCTestCase {
         // School (school rhythm, slice 1) is a sheet under Daily, there before this Mac is connected.
         XCTAssertNil(MoreItem.school.destination)
         XCTAssertTrue(ShellNav.more(connected: false).contains(.school))
-        XCTAssertEqual(sections[2].items.map(\.label), ["Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "Activity", "Your data"])
+        XCTAssertEqual(sections[2].items.map(\.label), ["Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "What MEKA may do", "Activity", "Your data"])
         XCTAssertEqual(sections.flatMap(\.items), ShellNav.more(connected: true))
         XCTAssertTrue(sections[0].items.allSatisfy { $0.destination != nil })
         XCTAssertTrue(sections.dropFirst().flatMap(\.items).allSatisfy { $0.destination == nil })

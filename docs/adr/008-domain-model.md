@@ -258,3 +258,5 @@ Earned trust keeps its state on `context_mode` id `trust` (LWW, additive): per k
 
 ## Addendum, 2026-10-10: what a reminder was about
 `agent_action` gains one optional LWW text field, `about`, on reminder entries only (`task:<id>` or `renewal:<id>:<epoch day>`), for ADR-013's prevented misses. Additive; older apps ignore it; nothing migrates.
+
+*Addendum, 2026-10-10 (What MEKA may do, policy engine UI slice 1):* no new entity type. The kill switch is one `context_mode` entity, id `autonomy`: `paused` (Bool) and `pausedAtMs` (Int64, 0 when resumed). Both LWW, so the latest Pause or Resume on any device wins; absent means not paused. Read by `AutonomyRules` (non-AI, pure). Additive; no migration.

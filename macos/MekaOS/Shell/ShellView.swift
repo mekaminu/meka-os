@@ -82,6 +82,8 @@ struct ShellView: View {
         .sheet(isPresented: Binding(get: { model.showSchool }, set: { model.showSchool = $0 })) { SchoolSheet(palette: palette) }
         // Dinners (Ask → More): favourites, the week's dinners and their shopping (meal plan, slice 1).
         .sheet(isPresented: Binding(get: { model.showMeals }, set: { model.showMeals = $0 })) { MealsSheet(palette: palette) }
+        // What MEKA may do (Ask → More): the pause switch, earned trust and the locked rows (policy engine UI, slice 1).
+        .sheet(isPresented: Binding(get: { model.showAutonomy }, set: { model.showAutonomy = $0 })) { AutonomySheet(palette: palette) }
         // Protected time (Ask → More): evenings and weekends kept free of tasks (protected time, slice 1).
         .sheet(isPresented: Binding(get: { model.showProtected }, set: { model.showProtected = $0 })) { ProtectedTimeSheet(palette: palette) }
         // Date night (Ask → More): the fortnightly evening kept clear (date night, slice 1).

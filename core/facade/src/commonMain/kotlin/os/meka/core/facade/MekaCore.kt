@@ -143,6 +143,7 @@ class MekaCore(
     private val wins = os.meka.core.domain.WorkWins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
     private val protectedTime = os.meka.core.domain.ProtectedTime(replica)
+    private val autonomy = os.meka.core.domain.Autonomy(replica, nowMs)
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shutdown = EveningShutdown(replica, tasks, nowMs, ZoneCalendar(timeZone))
@@ -434,6 +435,13 @@ class MekaCore(
      * Protected time). Synced.
      */
     val protectedView: StateFlow<os.meka.core.domain.ProtectedView> = _protected.asStateFlow()
+
+    private val _autonomy = MutableStateFlow(os.meka.core.domain.AutonomyView.EMPTY)
+    /**
+     * What MEKA may do (V1, policy engine UI, slice 1): the kill switch, each earned-trust kind and the locked rows
+     * (Ask → More → What MEKA may do). Synced.
+     */
+    val autonomyView: StateFlow<os.meka.core.domain.AutonomyView> = _autonomy.asStateFlow()
 
     private val _requests = MutableStateFlow<List<os.meka.core.domain.RequestCard>>(emptyList())
     /**
@@ -1921,6 +1929,29 @@ class MekaCore(
         os.meka.core.domain.TrustRules.answerLine(kind, yes)
     }
 
+    // ---- What MEKA may do (V1, policy engine UI, slice 1; Ask → More → What MEKA may do) ----
+
+    /**
+     * The kill switch: while [paused], nothing runs on its own (the policy engine's `killSwitch`), so every
+     * earned-trust kind waits for a tap; trust is kept for Resume. Synced. Returns the undo bar's line, or null when it
+     * already was.
+     */
+    suspend fun setAutonomyPaused(paused: Boolean): String? = onCore {
+        if (!autonomy.setPaused(paused)) return@onCore null
+        os.meka.core.domain.AutonomyRules.pausedLine(paused)
+    }
+
+    /**
+     * A row's action on the page: a trusted kind goes back to asking first ("Ask first"), a "keep asking" may be
+     * offered again ("Let MEKA offer again"). Either way trust is earned again from nothing. Returns the line, or null
+     * when the row offers nothing.
+     */
+    suspend fun resetTrust(kindKey: String): String? = onCore {
+        val kind = os.meka.core.domain.TrustKind.of(kindKey) ?: return@onCore null
+        val before = trust.reset(kind) ?: return@onCore null
+        os.meka.core.domain.AutonomyRules.resetLine(kind, before)
+    }
+
     // ---- Work mode ----
 
     /** The Work switch. Choosing what the schedule already says returns to the schedule. */
@@ -3292,7 +3323,11 @@ class MekaCore(
     private fun askAuto(p: os.meka.core.domain.AskProposal, kind: os.meka.core.domain.TrustKind, untrusted: Boolean): Boolean {
         val (type, domain) = askAction(p)
         val rule = os.meka.core.domain.TrustRules.ruleId(kind)
-        val config = PolicyConfig(levels = mapOf((domain to type) to AutonomyLevel.AUTO_UNDER_RULE), autoRules = mapOf(rule to type))
+        // The kill switch ("What MEKA may do" → Pause) holds every kind at asking first.
+        val config = PolicyConfig(
+            levels = mapOf((domain to type) to AutonomyLevel.AUTO_UNDER_RULE), autoRules = mapOf(rule to type),
+            killSwitch = autonomy.paused(),
+        )
         val decision = PolicyEngine(config).decide(
             ActionRequest(
                 type, domain,
@@ -3483,6 +3518,7 @@ class MekaCore(
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
+        _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs())
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _emergency.value = emergency.view()

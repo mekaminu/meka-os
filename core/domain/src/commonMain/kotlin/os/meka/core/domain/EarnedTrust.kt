@@ -152,6 +152,18 @@ class EarnedTrust(private val replica: Replica) {
 
     fun answer(k: TrustKind, yes: Boolean) { update(k) { TrustRules.answered(yes) } }
 
+    /**
+     * "What MEKA may do" (policy engine UI): back to the start for [k] — a trusted kind asks first again and a "keep
+     * asking" may be offered again after another run of yeses. Returns the state before, or null when there was nothing
+     * to reset (still earning).
+     */
+    fun reset(k: TrustKind): TrustState? {
+        val before = state(k)
+        if (!before.trusted && !before.declined) return null
+        update(k, TrustRules::autoUndone)
+        return before
+    }
+
     companion object {
         const val SETTINGS_ID = "trust"
     }
