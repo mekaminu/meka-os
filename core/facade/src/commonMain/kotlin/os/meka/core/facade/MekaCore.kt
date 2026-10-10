@@ -1137,13 +1137,15 @@ class MekaCore(
 
     /**
      * Weekend football, slice 2: "Leave by 09:15 · as last time" on a club fixture's detail sets the travel time Meka
-     * set at that ground before, and Ring as an alarm when it rang then. Returns the offer taken (its line is the undo
-     * bar's: "Leave by 09:15 · 25 min away · alarm"), or null when there was none.
+     * set at that ground before (slice 2b/2c: or "Leave by 08:55 · 25 min drive", which then follows the traffic),
+     * and Ring as an alarm when it rang then. Returns the offer taken (its line is the undo bar's: "Leave by 09:15 ·
+     * 25 min away · alarm"), or null when there was none.
      */
     suspend fun useLastLeaveBy(event: os.meka.core.domain.CalendarEvent): os.meka.core.domain.LeaveOffer? = onCore {
         val offer = os.meka.core.domain.FootballRules.leaveOffer(event, eventActions.marks(), nowMs(), ZoneCalendar(timeZone))
             ?: return@onCore null
-        eventActions.setLeaveBy(event.id, offer.travelMin)
+        // Slice 2c: taken from the drive, it follows later traffic answers ([os.meka.core.domain.TravelRules.follow]).
+        eventActions.setLeaveBy(event.id, offer.travelMin, offer.driveKey)
         if (offer.rings) eventActions.setLeaveAlarm(event.id, true)
         offer
     }

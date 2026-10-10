@@ -16,6 +16,12 @@ object EventMarkFields {
     /** Leave by rings as an alarm instead of a heads-up (Bool; Alarms, slice 3, [LeaveAlarmRules]). */
     const val LEAVE_ALARM = "leaveAlarm"
     /**
+     * Weekend football, slice 2c: Leave by was set from the server's drive (the "· 25 min drive" offer) at the ground
+     * with this key ([FootballRules.venueKey]), so it follows later traffic answers there ([TravelRules.follow]).
+     * Null (the default, and whenever Meka picks a travel time himself): the travel time is Meka's and stays put.
+     */
+    const val TRAVEL_DRIVE_KEY = "travelDriveKey"
+    /**
      * Weekend football, slice 4 ([FixtureResult]): a club fixture's score (Ints, Meka's kid's team first; both or
      * neither), the scorers and a note (Text), and when they were kept. Null clears each.
      */
@@ -49,6 +55,11 @@ data class EventMarks(
     val results: Map<String, FixtureResult> = emptyMap(),
     /** Event id → its drive from home as the server last worked it out (weekend football, slice 2b, [TravelRules]). */
     val routes: Map<String, TravelTime> = emptyMap(),
+    /**
+     * Event id → the drive its Leave by follows now (weekend football, slice 2c, [TravelRules.follow]); [travel] already
+     * holds the travel time worked out from it.
+     */
+    val drives: Map<String, DriveFollow> = emptyMap(),
 ) {
     /** For Swift: the result kept for [eventId], or null. */
     fun resultOf(eventId: String): FixtureResult? = results[eventId]
@@ -143,7 +154,12 @@ class EventActions(
         }.toMap()
         val results = entities.mapNotNull { e -> resultIn(e)?.let { e.ref.entityId to it } }.toMap()
         val routes = replica.entities(EntityTypes.TRAVEL_TIME).mapNotNull { TravelRules.read(it) }.associateBy { it.eventId }
-        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), minutes(EventMarkFields.TRAVEL_MIN), calendars, leaveAlarms, shown, kit, venues, results, routes)
+        // Slice 2c: a Leave by set from the drive follows the server's later answers for that ground.
+        val setTravel = minutes(EventMarkFields.TRAVEL_MIN)
+        val driveKeys = entities.mapNotNull { e -> e[EventMarkFields.TRAVEL_DRIVE_KEY].textOrNull?.let { e.ref.entityId to it } }.toMap()
+        val drives = TravelRules.follow(setTravel, driveKeys, routes)
+        val travel = setTravel + drives.mapValues { TravelRules.travelMin(it.value.driveMin) }
+        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), travel, calendars, leaveAlarms, shown, kit, venues, results, routes, drives)
     }
 
     private fun resultIn(e: os.meka.core.sync.EntitySnapshot): FixtureResult? {
@@ -256,8 +272,23 @@ class EventActions(
     /** Remind me [minutes] before [eventId] starts; null (or 0) turns the reminder off. */
     fun setReminder(eventId: String, minutes: Int?) = setMinutes(eventId, EventMarkFields.REMIND_MIN, minutes)
 
-    /** A leave-by reminder [travelMinutes] before [eventId] starts (how long it takes to get there); null (or 0) turns it off. */
-    fun setLeaveBy(eventId: String, travelMinutes: Int?) = setMinutes(eventId, EventMarkFields.TRAVEL_MIN, travelMinutes)
+    /**
+     * A leave-by reminder [travelMinutes] before [eventId] starts (how long it takes to get there); null (or 0) turns it
+     * off. [driveKey] (slice 2c) is the ground's key when the time came from the server's drive, so it follows later
+     * traffic answers there; a time Meka picks himself (no key) stays put.
+     */
+    fun setLeaveBy(eventId: String, travelMinutes: Int?, driveKey: String? = null) {
+        // An event added in MEKA that isn't in the mirror yet gets no marks (its id goes when the real one lands).
+        if (PendingEditRules.isProvisional(eventId)) return
+        val m = travelMinutes?.takeIf { it != 0 }
+        require(m == null || m in 1..ReminderRules.MAX_MIN) { "minutes must be 1..${ReminderRules.MAX_MIN}" }
+        val key = driveKey?.takeIf { m != null && it.isNotEmpty() }
+        val mark = replica.entity(EntityTypes.EVENT_MARK, eventId)
+        val current = mark?.get(EventMarkFields.TRAVEL_MIN)?.longOrNull?.toInt()
+        val currentKey = mark?.get(EventMarkFields.TRAVEL_DRIVE_KEY)?.textOrNull
+        if (current == m && currentKey == key) return
+        replica.commitLocal(EntityTypes.EVENT_MARK, eventId, mapOf(EventMarkFields.TRAVEL_MIN to m.fv(), EventMarkFields.TRAVEL_DRIVE_KEY to key.fv()))
+    }
 
     /**
      * Ring as an alarm (Alarms, slice 3): [eventId]'s leave-by rings like the wake alarm instead of posting a heads-up.
@@ -418,7 +449,7 @@ object ReminderRules {
 
     fun notices(events: List<CalendarEvent>, marks: EventMarks, nowMs: Long, cal: LocalCalendar): List<Notice> {
         if (marks.reminders.isEmpty() && marks.travel.isEmpty()) return emptyList()
-        val out = mutableListOf<Notice>()
+        val out = TravelRules.trafficNotices(events, marks, nowMs, cal).toMutableList()
         for (e in events) {
             if (e.allDay || e.startAtMs <= nowMs || marks.isHidden(e.id)) continue
             val start = LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))
@@ -462,8 +493,10 @@ object ReminderRules {
         val parts = mutableListOf<String>()
         marks.reminders[e.id]?.let { parts += "Reminder ${EventDetails.durationLabel(it * MIN_MS)} before" }
         marks.travel[e.id]?.takeIf { !e.allDay }?.let {
-            parts += "Leave by ${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs - it * MIN_MS))} · ${EventDetails.durationLabel(it * MIN_MS)} away" +
-                if (LeaveAlarmRules.rings(e, marks)) " · $ALARM_WORD" else ""
+            // Slice 2c: one that follows the drive says so ("Leave by 08:45 · 35 min drive").
+            val leave = marks.drives[e.id]?.let { d -> TravelRules.leaveLine(e, d, cal) }
+                ?: "Leave by ${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs - it * MIN_MS))} · ${EventDetails.durationLabel(it * MIN_MS)} away"
+            parts += leave + if (LeaveAlarmRules.rings(e, marks)) " · $ALARM_WORD" else ""
         }
         return parts.joinToString(" · ").ifEmpty { null }
     }

@@ -739,6 +739,61 @@ class MekaCoreTest {
     }
 
     @Test
+    fun aLeaveByTakenFromTheDriveFollowsTheServersLaterTrafficAnswerOnBothDevices() = runTest {
+        val london = TimeZone.of("Europe/London")
+        fun at(day: Int, h: Int, min: Int = 0) = kotlinx.datetime.LocalDateTime(2026, 10, day, h, min).toInstant(london).toEpochMilliseconds()
+        now = at(8, 12) // Thu 8 Oct
+        val a = core("android"); val m = core("mac")
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        var k = 0
+        val place = "Bury Field, Biggleswade"
+        mapOf(
+            os.meka.core.domain.EventFields.TITLE to os.meka.core.sync.FieldValue.Text("BUFC U7s v Arlesey"),
+            os.meka.core.domain.EventFields.START_AT to os.meka.core.sync.FieldValue.Int64(at(10, 10)),
+            os.meka.core.domain.EventFields.END_AT to os.meka.core.sync.FieldValue.Int64(at(10, 11)),
+            os.meka.core.domain.EventFields.ALL_DAY to os.meka.core.sync.FieldValue.Bool(false),
+            os.meka.core.domain.EventFields.LOCATION to os.meka.core.sync.FieldValue.Text(place),
+            os.meka.core.domain.EventFields.PROVIDER to os.meka.core.sync.FieldValue.Text("google"),
+            os.meka.core.domain.EventFields.ACCOUNT to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
+            os.meka.core.domain.EventFields.CALENDAR to os.meka.core.sync.FieldValue.Text("Personal"),
+            os.meka.core.domain.EventFields.REMOVED to os.meka.core.sync.FieldValue.Bool(false),
+        ).forEach { (f, v) ->
+            serverOps.append(os.meka.core.sync.Op("srvtt${k++}", "hh", os.meka.core.domain.EntityTypes.EVENT, "tt1", f, v, clock.now(), emptyList(), "server"))
+        }
+        val e = os.meka.core.domain.CalendarEvent("tt1", "BUFC U7s v Arlesey", at(10, 10), at(10, 11), false, place, "google", "meka@gmail.com", "Personal")
+        // What the server's travel feed writes ([os.meka.core.domain.TravelRules.fields]).
+        fun serverDrive(drive: Int) {
+            val l = os.meka.core.domain.TravelRules.Lookup("tt1", place, "bury field biggleswade", e.startAtMs - drive * 60_000L, e.startAtMs)
+            os.meka.core.domain.TravelRules.fields(l, drive, now).forEach { (f, v) ->
+                serverOps.append(os.meka.core.sync.Op("srvtt${k++}", "hh", os.meka.core.domain.EntityTypes.TRAVEL_TIME, os.meka.core.domain.TravelRules.entityId("tt1"), f, v, clock.now(), emptyList(), "server"))
+            }
+        }
+        serverDrive(25)
+        assertTrue(a.syncNow()); assertTrue(m.syncNow())
+        assertEquals("Leave by 09:10 · 25 min drive", a.eventDetail(e).leaveOfferLabel)
+
+        // Taken on the Fold; the Friday-evening answer says 40 min and both devices move Leave by to 08:55.
+        val used = assertNotNull(a.useLastLeaveBy(e))
+        assertEquals("bury field biggleswade", used.driveKey)
+        assertEquals(50, a.eventMarks.value.travel["tt1"])
+        assertTrue(a.syncNow())
+        now = at(9, 18, 5)
+        serverDrive(40)
+        assertTrue(a.syncNow()); assertTrue(m.syncNow())
+        assertEquals(65, a.eventMarks.value.travel["tt1"])
+        assertEquals(65, m.eventMarks.value.travel["tt1"])
+        assertEquals("Leave by 08:55 · 40 min drive · alarm", m.eventDetail(e).reminderLine)
+
+        // Meka picks his own time on the Mac: it stays, whatever the next answer says.
+        m.setEventLeaveBy("tt1", 45)
+        assertTrue(m.syncNow())
+        serverDrive(30)
+        assertTrue(a.syncNow()); assertTrue(m.syncNow())
+        assertEquals(45, a.eventMarks.value.travel["tt1"])
+        assertEquals(45, m.eventMarks.value.travel["tt1"])
+    }
+
+    @Test
     fun theResultAfterAFixtureIsKeptOnTheFoldSeenOnTheMacAndUndone() = runTest {
         val london = TimeZone.of("Europe/London")
         fun at(day: Int, h: Int, min: Int = 0) = kotlinx.datetime.LocalDateTime(2026, 10, day, h, min).toInstant(london).toEpochMilliseconds()

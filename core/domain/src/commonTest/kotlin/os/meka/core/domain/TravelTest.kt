@@ -146,6 +146,93 @@ class TravelTest {
         assertNull(TravelRules.read(TravelRules.entityId("ev1"), TravelRules.fields(TravelRules.Lookup("ev1", "x", "x", 0, 0), 500, 0)))
     }
 
+    /** The server's answer for [e] at the current time, written as the server writes it (any time, due or not). */
+    private fun answer(e: CalendarEvent, drive: Int) {
+        val key = FootballRules.venueKey(e.location)!!
+        val l = TravelRules.Lookup(e.id, e.location!!, key, TravelRules.leaveMs(e, drive, cal), e.startAtMs)
+        fold.replica.commitLocal(EntityTypes.TRAVEL_TIME, TravelRules.entityId(e.id), TravelRules.fields(l, drive, world.clock.nowMs))
+    }
+
+    @Test
+    fun aLeaveByTakenFromTheDriveFollowsTheTrafficOnBothDevicesUntilMekaPicksHisOwn() {
+        val e = event()
+        answer(e, 25)
+        // Thursday: "Leave by 09:10 · 25 min drive" taken, ringing as an alarm.
+        val offer = assertNotNull(FootballRules.leaveOffer(e, eaFold.marks(), world.clock.nowMs, cal))
+        assertEquals("bury field biggleswade", offer.driveKey)
+        eaFold.setLeaveBy(e.id, offer.travelMin, offer.driveKey)
+        eaFold.setLeaveAlarm(e.id, true)
+        var marks = eaFold.marks()
+        assertEquals(50, marks.travel[e.id])
+        assertEquals(25, marks.drives[e.id]?.driveMin)
+        assertEquals("Leave by 09:10 · 25 min drive · alarm", ReminderRules.line(e, marks, cal))
+        assertEquals(LeaveAlarmRules.id(e.id, e.startAtMs, 50), LeaveAlarmRules.alarms(listOf(e), marks, world.clock.nowMs, cal).single().id)
+        assertEquals(emptyList(), TravelRules.trafficNotices(listOf(e), marks, world.clock.nowMs, cal))
+
+        // Friday 18:05 the evening check says 40 min: Leave by moves to 08:55, the alarm with it, and a heads-up says so.
+        world.clock.nowMs = at(thu + 1, 18, 5)
+        answer(e, 40)
+        marks = eaFold.marks()
+        assertEquals(65, marks.travel[e.id])
+        assertEquals("Leave by 08:55 · 40 min drive · alarm", ReminderRules.line(e, marks, cal))
+        val alarm = LeaveAlarmRules.alarms(listOf(e), marks, world.clock.nowMs, cal).single()
+        assertEquals(at(thu + 2, 8, 55), alarm.atMs)
+        assertEquals(LeaveAlarmRules.id(e.id, e.startAtMs, 65), alarm.id)
+        val notice = ReminderRules.notices(listOf(e), marks, world.clock.nowMs, cal).single()
+        assertEquals("Leave 15 min earlier for BUFC U7s v Arlesey", notice.title)
+        assertEquals("Traffic · leave by 08:55 · 40 min drive", notice.text)
+        assertEquals(world.clock.nowMs, notice.atMs)
+        assertEquals(at(thu + 2, 8, 55), notice.expiresAtMs)
+        assertEquals(NoticeTier.HEADS_UP, notice.tier)
+        // The Mac follows the same answer (the server's entity and the mark both sync).
+        fold.sync(); mac.sync()
+        assertEquals(65, eaMac.marks().travel[e.id])
+        assertEquals(EventDetails.build(e, world.clock.nowMs, cal, eaMac.marks()).travelMin, 65)
+
+        // Saturday 08:00, an hour before: 28 min. Later than he set? 3 min earlier only: no heads-up, the time just moves.
+        world.clock.nowMs = at(thu + 2, 8)
+        answer(e, 28)
+        marks = eaFold.marks()
+        assertEquals(53, marks.travel[e.id])
+        assertEquals(emptyList(), TravelRules.trafficNotices(listOf(e), marks, world.clock.nowMs, cal))
+        assertEquals("Leave by 09:07 · 28 min drive · alarm", ReminderRules.line(e, marks, cal))
+
+        // Meka picks 45 min himself: it stays his, whatever the traffic says next.
+        eaFold.setLeaveBy(e.id, 45)
+        answer(e, 35)
+        marks = eaFold.marks()
+        assertEquals(45, marks.travel[e.id])
+        assertNull(marks.drives[e.id])
+        assertEquals("Leave by 09:15 · 45 min away · alarm", ReminderRules.line(e, marks, cal))
+        // Off: nothing follows.
+        eaFold.setLeaveBy(e.id, null)
+        assertNull(eaFold.marks().travel[e.id])
+        assertTrue(eaFold.marks().drives.isEmpty())
+    }
+
+    @Test
+    fun anAnswerForAnotherPlaceOrAfterLeavingIsNotFollowed() {
+        val key = "bury field biggleswade"
+        val kick = at(thu + 2, 10)
+        fun route(drive: Int, checked: Long, place: String = key) = TravelTime("ev1", place, drive, 0L, checked, kick)
+        val set = mapOf("ev1" to 50)
+        val keys = mapOf("ev1" to key)
+        assertEquals(40, TravelRules.follow(set, keys, mapOf("ev1" to route(40, at(thu + 1, 18))))["ev1"]?.driveMin)
+        // The fixture moved ground: the old answer isn't for it; Meka's 50 stays until the new place is asked.
+        assertNull(TravelRules.follow(set, keys, mapOf("ev1" to route(40, at(thu + 1, 18), place = "potton rec")))["ev1"])
+        // Worked out at or after 09:10 (when he set to leave): he's gone or the alarm rang, so nothing moves.
+        assertNull(TravelRules.follow(set, keys, mapOf("ev1" to route(40, at(thu + 2, 9, 10))))["ev1"])
+        assertEquals(40, TravelRules.follow(set, keys, mapOf("ev1" to route(40, at(thu + 2, 9, 9))))["ev1"]?.driveMin)
+        // No travel time set, or no key (his own time): nothing to follow.
+        assertTrue(TravelRules.follow(emptyMap(), keys, mapOf("ev1" to route(40, 0))).isEmpty())
+        assertTrue(TravelRules.follow(set, emptyMap(), mapOf("ev1" to route(40, 0))).isEmpty())
+        // The ground's "as last time" offer is Meka's own time, so it never follows.
+        assertNull(FootballRules.leaveOffer(event(place = "Potton Rec"), EventMarks.NONE.copy(
+            venues = mapOf("potton rec" to VenueTravel("Potton Rec", 30, false, 0L)),
+        ), world.clock.nowMs, cal)?.driveKey)
+        assertEquals(15, DriveFollow(40, 50, 0L).earlierMin)
+    }
+
     @Test
     fun withoutTheKeySetupAsksForItAndHealthDoesNotCallItTrouble() {
         val off = HealthAccount(TravelRules.PROVIDER, TravelRules.LABEL, TravelRules.LABEL, TravelRules.STATUS_OFF, null)

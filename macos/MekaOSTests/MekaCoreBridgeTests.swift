@@ -1170,6 +1170,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(EventMarks.companion.NONE.venues.count, 0)
     }
 
+    func testLeaveByFollowingTheTrafficReachesSwift() {
+        // Weekend football, slice 2c: a Leave by taken from the drive follows later answers; the Mac reads the same marks.
+        XCTAssertEqual(TravelRules.shared.EARLIER_NOTICE_MIN, 10)
+        XCTAssertEqual(DriveFollow(driveMin: 40, setTravelMin: 50, checkedAtMs: 0).earlierMin, 15)
+        XCTAssertEqual(EventMarks.companion.NONE.drives.count, 0)
+        XCTAssertEqual(EventMarkFields.shared.TRAVEL_DRIVE_KEY, "travelDriveKey")
+    }
+
     func testLateDraftsReachSwift() {
         // Weekend football, slice 3: the "running late" wording and choices reach the Mac.
         XCTAssertEqual(FootballRules.shared.LATE_TITLE, "Running late?")

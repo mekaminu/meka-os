@@ -26,6 +26,15 @@ object TravelTimeFields {
 data class TravelTime(val eventId: String, val placeKey: String, val driveMin: Int, val departAtMs: Long, val checkedAtMs: Long, val kickOffMs: Long = 0L)
 
 /**
+ * A Leave by that follows the drive (weekend football, slice 2c): the server's latest [driveMin] for the ground, the
+ * travel time Meka took with the offer ([setTravelMin]) and when the server worked the drive out ([checkedAtMs]).
+ */
+data class DriveFollow(val driveMin: Int, val setTravelMin: Int, val checkedAtMs: Long) {
+    /** Minutes earlier than when Meka set it (negative: later). */
+    val earlierMin: Int get() = TravelRules.travelMin(driveMin) - setTravelMin
+}
+
+/**
  * Weekend football, slice 2b (Meka chose Google's Routes API 2026-10-10, Needs Meka #19): the leave-by from a drive
  * time worked out with traffic. Non-AI, pure, unit-tested; the server decides with it when to ask and the devices
  * turn the answer into the detail's offer ([FootballRules.leaveOffer]).
@@ -142,6 +151,56 @@ object TravelRules {
     fun current(e: CalendarEvent, routes: Map<String, TravelTime>): TravelTime? {
         val key = FootballRules.venueKey(LeaveAlarmRules.place(e)) ?: return null
         return routes[e.id]?.takeIf { it.placeKey == key }
+    }
+
+    // ---- Slice 2c: Leave by follows the traffic ----
+
+    /** A Leave by moved at least this much earlier by traffic gets a heads-up ([trafficNotices]). */
+    const val EARLIER_NOTICE_MIN = 10
+
+    /**
+     * The Leave bys that follow the server's drive now. One taken from the "· 25 min drive" offer keeps the ground's
+     * key on the fixture's mark ([EventMarkFields.TRAVEL_DRIVE_KEY]); a later answer for the same ground moves it, so
+     * the alarm, the heads-up and the detail's line all follow the traffic. It stops following when:
+     * - Meka picks a travel time himself (the key is cleared) or turns Leave by off;
+     * - the place changed (the answer is for another ground: the time he set stays until the new place is asked);
+     * - the answer came after the leaving time he set ([TravelTime.kickOffMs] less [set]) — by then he has gone, or the
+     *   alarm has rung, and nothing should move under him.
+     * [set] is each event's travel time as stored, [keys] the drive keys, [routes] the server's answers.
+     */
+    fun follow(set: Map<String, Int>, keys: Map<String, String>, routes: Map<String, TravelTime>): Map<String, DriveFollow> =
+        keys.mapNotNull { (id, key) ->
+            val travel = set[id] ?: return@mapNotNull null
+            val r = routes[id]?.takeIf { it.placeKey == key && it.kickOffMs > 0 } ?: return@mapNotNull null
+            if (r.checkedAtMs >= r.kickOffMs - travel * MIN_MS) return@mapNotNull null
+            id to DriveFollow(r.driveMin, travel, r.checkedAtMs)
+        }.toMap()
+
+    /** "Leave by 08:45 · 35 min drive" for a Leave by that follows the drive. */
+    fun leaveLine(e: CalendarEvent, d: DriveFollow, cal: LocalCalendar): String =
+        "Leave by ${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs - travelMin(d.driveMin) * MIN_MS))} · ${driveLabel(d.driveMin)}"
+
+    /**
+     * "Leave 15 min earlier for BUFC U7s v Arlesey" · "Traffic · leave by 08:45 · 40 min drive": a heads-up once traffic
+     * has moved a followed Leave by [EARLIER_NOTICE_MIN] minutes or more earlier than Meka set it, from the answer's time
+     * until the new leaving time (never later). A later leaving time just moves quietly. Hidden and started events
+     * don't notify.
+     */
+    fun trafficNotices(events: List<CalendarEvent>, marks: EventMarks, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        if (marks.drives.isEmpty()) return emptyList()
+        return events.mapNotNull { e ->
+            val d = marks.drives[e.id] ?: return@mapNotNull null
+            if (e.allDay || e.startAtMs <= nowMs || marks.isHidden(e.id) || d.earlierMin < EARLIER_NOTICE_MIN) return@mapNotNull null
+            val travel = travelMin(d.driveMin)
+            val leave = e.startAtMs - travel * MIN_MS
+            if (leave <= d.checkedAtMs) return@mapNotNull null
+            Notice(
+                key = "event:${e.id}:${e.startAtMs}:traffic:$travel", source = NoticeSource.EVENT_REMINDER, tier = NoticeTier.HEADS_UP,
+                title = "Leave ${d.earlierMin} min earlier for ${e.title.trim().take(60)}",
+                text = "Traffic · " + leaveLine(e, d, cal).replaceFirstChar { it.lowercase() },
+                atMs = d.checkedAtMs, target = NoticeTarget.TODAY, expiresAtMs = leave, precision = NoticePrecision.CLOCK,
+            )
+        }
     }
 
     /** "25 min drive" · "1 h 10 min drive". */

@@ -20,7 +20,14 @@ data class VenueTravel(val place: String, val travelMin: Int, val rings: Boolean
  * The detail's offer on a fixture at a ground Meka has set a travel time for before: "Leave by 09:15 · as last time"
  * ([label]); one tap sets the same travel time (and Ring as an alarm when it rang last time). [line] is the undo bar's.
  */
-data class LeaveOffer(val travelMin: Int, val rings: Boolean, val label: String, val line: String)
+data class LeaveOffer(
+    val travelMin: Int,
+    val rings: Boolean,
+    val label: String,
+    val line: String,
+    /** Slice 2c: the ground's key when the offer is the server's drive, so the Leave by it sets follows the traffic. */
+    val driveKey: String? = null,
+)
 
 /**
  * Weekend football, slice 3: a "running late" message Meka can send the coach ([text]), [minutes] late ([label]:
@@ -126,7 +133,7 @@ object FootballRules {
                 val time = LocalClock.formatMinute(cal.minuteOfDay(at))
                 val drive = TravelRules.driveLabel(r.driveMin)
                 val line = "Leave by $time · $drive" + if (rings) " · ${ReminderRules.ALARM_WORD}" else ""
-                return LeaveOffer(travel, rings, "Leave by $time · $drive", line)
+                return LeaveOffer(travel, rings, "Leave by $time · $drive", line, r.placeKey)
             }
         }
         if (v == null) return null
