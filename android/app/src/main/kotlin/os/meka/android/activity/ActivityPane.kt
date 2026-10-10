@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,6 +45,8 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.ActivityRow
+import os.meka.core.domain.ActivityRules
+import os.meka.android.lists.Chip
 import os.meka.core.facade.MekaCore
 import os.meka.android.shell.SharedMotion
 import os.meka.android.shell.MoreItem
@@ -54,7 +58,8 @@ import os.meka.android.designsystem.sharedTitleInPane
  * what is still as MEKA left it). Opened from Today's header.
  *
  * Motion: the pane springs up (MekaPane); day sections stagger in 40 ms apart; Undo gives a light haptic and the
- * row's line cross-fades to "Undone at 09:12"; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this phone lately, the
+ * row's line cross-fades to "Undone at 09:12"; the filter chips (All · Reminders · Done for you · Calendar · Calls ·
+ * Other, only the kinds there are) blend their colour with a tick haptic and the days cross-fade; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this phone lately, the
  * month's characters) fade in once known. Reduced motion: cross-fades.
  */
 @Composable
@@ -111,16 +116,42 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
             if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
         }
         note?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
-        view.days.forEachIndexed { i, day ->
-            Column(Modifier.fillMaxWidth().appear(rememberAppearance(i + 1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Spacer(Modifier.height(MekaSpace.m))
-                Text(day.label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
-                day.rows.forEach { row ->
-                    ActivityRowView(row) {
-                        haptics.light()
-                        scope.launch {
-                            val line = runCatching { core.undoActivity(row.id) }.getOrElse { "Couldn't undo that. Try again." }
-                            note = line.takeIf { it != "Undone" }
+        // Filter (slice 3): only shown when there's more than one kind of thing; this phone's choice, never synced.
+        var filterName by rememberSaveable { mutableStateOf(ActivityRules.filterNamed(null).name) }
+        val chips = ActivityRules.filters(view)
+        val filter = ActivityRules.chosen(view, ActivityRules.filterNamed(filterName))
+        if (chips.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = MekaSpace.s)
+                    .appear(rememberAppearance(1)),
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                chips.forEach { c ->
+                    Chip(c.label, c.filter == filter) {
+                        if (c.filter != filter) { haptics.tick(); filterName = c.filter.name }
+                    }
+                }
+            }
+        }
+        AnimatedContent(
+            targetState = filter,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "activity-filter",
+        ) { f ->
+            val shown = ActivityRules.filtered(view, f)
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                shown.days.forEachIndexed { i, day ->
+                    Column(Modifier.fillMaxWidth().appear(rememberAppearance(i + 2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        Spacer(Modifier.height(MekaSpace.m))
+                        Text(day.label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+                        day.rows.forEach { row ->
+                            ActivityRowView(row) {
+                                haptics.light()
+                                scope.launch {
+                                    val line = runCatching { core.undoActivity(row.id) }.getOrElse { "Couldn't undo that. Try again." }
+                                    note = line.takeIf { it != "Undone" }
+                                }
+                            }
                         }
                     }
                 }

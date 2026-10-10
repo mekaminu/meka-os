@@ -145,6 +145,22 @@ data class ActivityView(
     }
 }
 
+/**
+ * Activity's filter (activity log, slice 3): the screen shows everything, or one kind of thing. Purely a way of looking;
+ * nothing is stored or synced (each device remembers its own choice while the screen is open).
+ */
+enum class ActivityFilter(val label: String, val kinds: Set<ActivityKind>) {
+    ALL("All", ActivityKind.entries.toSet()),
+    REMINDERS("Reminders", setOf(ActivityKind.REMINDED, ActivityKind.DIGEST)),
+    DONE_FOR_YOU("Done for you", setOf(ActivityKind.CHANGED)),
+    CALENDAR("Calendar", setOf(ActivityKind.CALENDAR)),
+    CALLS("Calls", setOf(ActivityKind.SCREENED, ActivityKind.CALL)),
+    OTHER("Other", setOf(ActivityKind.PUBLISHED, ActivityKind.FAMILY, ActivityKind.DEVICE)),
+}
+
+/** One filter chip: "Calls · 3" (All carries no count). */
+data class ActivityFilterChip(val filter: ActivityFilter, val label: String, val count: Int, val spoken: String)
+
 /** What an undo did. */
 enum class UndoOutcome(val line: String) {
     UNDONE("Undone"),
@@ -412,6 +428,44 @@ object ActivityRules {
         )
         val weekLine = if (parts.isEmpty()) "Nothing this week" else "This week: " + parts.joinToString(" · ")
         return ActivityView(if (shown.isEmpty()) "" else weekLine, days, EMPTY_LINE)
+    }
+
+    // ---- Filtering (slice 3) ----
+
+    /**
+     * The chips over Activity's days: All, then each kind of thing present in the last 30 days, in a fixed order, with
+     * how many ("Calls · 3"). Empty when only one kind is there (a filter would show the same list).
+     */
+    fun filters(view: ActivityView): List<ActivityFilterChip> {
+        val kinds = view.days.flatMap { d -> d.rows.map { it.kind } }
+        val present = ActivityFilter.entries.filter { it != ActivityFilter.ALL }.mapNotNull { f ->
+            val n = kinds.count { it in f.kinds }
+            if (n == 0) null else ActivityFilterChip(f, "${f.label} · $n", n, "${f.label}, $n")
+        }
+        if (present.size < 2) return emptyList()
+        val all = ActivityFilterChip(ActivityFilter.ALL, ActivityFilter.ALL.label, kinds.size, "All, ${kinds.size}")
+        return listOf(all) + present
+    }
+
+    /** [chosen] while it still has a chip, else All (the last call of that kind aged out, or a filter no longer applies). */
+    fun chosen(view: ActivityView, chosen: ActivityFilter): ActivityFilter =
+        if (filters(view).any { it.filter == chosen }) chosen else ActivityFilter.ALL
+
+    /** Looks up a filter by its name (as a device remembers it); All for anything unknown. */
+    fun filterNamed(name: String?): ActivityFilter = ActivityFilter.entries.firstOrNull { it.name == name } ?: ActivityFilter.ALL
+
+    /**
+     * [view] showing only [filter]'s kinds: days with none of them drop out; the week line stays the whole week's. An
+     * unavailable filter shows everything (see [chosen]).
+     */
+    fun filtered(view: ActivityView, filter: ActivityFilter): ActivityView {
+        val f = chosen(view, filter)
+        if (f == ActivityFilter.ALL) return view
+        val days = view.days.mapNotNull { d ->
+            val rows = d.rows.filter { it.kind in f.kinds }
+            if (rows.isEmpty()) null else d.copy(rows = rows)
+        }
+        return view.copy(days = days)
     }
 
     private fun row(i: ActivityItem, cal: LocalCalendar, today: Long): ActivityRow {

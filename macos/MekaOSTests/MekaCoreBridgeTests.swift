@@ -819,6 +819,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(SpeechRules.shared.seconds(ms: 1_834), "1.8 s")
     }
 
+    /// Activity's filter (activity log, slice 3): chips for the kinds there are, and the days narrowed to one kind.
+    func testActivityFilterReachesSwift() {
+        func row(_ id: String, _ kind: ActivityKind) -> ActivityRow {
+            ActivityRow(id: id, time: "09:00", kind: kind, summary: "Something", detail: nil, why: "Why: a rule", canUndo: false, undoneLine: nil)
+        }
+        let view = ActivityView(weekLine: "This week: 1 reminder", days: [
+            ActivityDay(day: 2, label: "Today", rows: [row("a", .reminded), row("b", .screened)]),
+            ActivityDay(day: 1, label: "Yesterday", rows: [row("c", .reminded)]),
+        ], emptyLine: ActivityRules.shared.EMPTY_LINE)
+        let rules = ActivityRules.shared
+        XCTAssertEqual(rules.filters(view: view).map(\.label), ["All", "Reminders · 2", "Calls · 1"])
+        let calls = rules.filtered(view: view, filter: rules.filterNamed(name: "CALLS"))
+        XCTAssertEqual(calls.days.map(\.label), ["Today"])
+        XCTAssertEqual(rules.chosen(view: view, chosen: .calendar).name, "ALL")
+    }
+
     /// Activity's daily count of MEKA's AI (default assistant item): Talk first, then Ask, then what MEKA read, and the cost.
     func testAiTodayLineReachesSwift() {
         let rules = AiTodayRules.shared

@@ -5,13 +5,16 @@ import SwiftUI
 /// makes for you, newest first by day, each with the rule or setting behind it. A change can be undone here (only what
 /// is still as MEKA left it). Synced with the Fold. Opened from Today's header or File → Activity… (⇧⌘A).
 /// Motion: the sheet scale-fades; day sections stagger in; Undo gives a light haptic and the row's line cross-fades
-/// to "Undone at 09:12"; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this Mac lately, the month's characters) fade in once known. Reduce Motion:
+/// to "Undone at 09:12"; the filter (All · Reminders · Done for you · Calendar · Calls · Other, only the kinds there are)
+/// is a segmented control (tick haptic) and the days cross-fade; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this Mac lately, the month's characters) fade in once known. Reduce Motion:
 /// cross-fades.
 struct ActivitySheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
+    /// The filter (slice 3), by name: this Mac's choice while the sheet is open, never synced.
+    @State private var filterName = ActivityRules.shared.filterNamed(name: nil).name
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
@@ -38,18 +41,39 @@ struct ActivitySheet: View {
                 if let note = model.activityNote {
                     Text(note).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).transition(.opacity)
                 }
+                let chips = ActivityRules.shared.filters(view: view)
+                let filter = ActivityRules.shared.chosen(view: view, chosen: ActivityRules.shared.filterNamed(name: filterName))
+                if !chips.isEmpty {
+                    Picker("Show", selection: Binding(
+                        get: { filter.name },
+                        set: { name in
+                            guard name != filter.name else { return }
+                            MekaHaptics.tick()
+                            withAnimation(MekaMotion.appear(reduced: reduceMotion)) { filterName = name }
+                        }
+                    )) {
+                        ForEach(chips, id: \.filter.name) { c in
+                            Text(c.label).tag(c.filter.name).accessibilityLabel(c.spoken)
+                        }
+                    }
+                    .pickerStyle(.segmented).labelsHidden()
+                    .staggeredAppear(1)
+                }
+                let shown = ActivityRules.shared.filtered(view: view, filter: filter)
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
-                        ForEach(Array(view.days.enumerated()), id: \.element.day) { i, day in
+                        ForEach(Array(shown.days.enumerated()), id: \.element.day) { i, day in
                             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                                 Text(day.label.uppercased())
                                     .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                                     .foregroundStyle(palette.textTertiary)
                                 ForEach(day.rows, id: \.id) { row in rowView(row) }
                             }
-                            .staggeredAppear(i + 1)
+                            .staggeredAppear(i + 2)
                         }
                     }
+                    .id(filter.name)
+                    .transition(.opacity)
                 }
                 .frame(maxHeight: 460)
             } else {
