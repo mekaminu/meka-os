@@ -214,4 +214,49 @@ class SchoolTest {
         // Gone days drop out; a day off under way still counts.
         assertEquals("Day off · Half term · Mon 26 – Fri 30 Oct · Rex and Logan", SchoolRules.askLines(sFold.items(), d(10, 28), HolidayCalendar.NONE).first())
     }
+    @Test
+    fun theCoverQuestionAndTheSchoolsDatesBecomeHeadsUpsAtTheRightTimes() {
+        listOf("INSET 12 Oct", "Trip payment by 13 Oct", "Logan's trip to the zoo 20 Nov", "Rex PE Tue", "Half term 26–30 Oct")
+            .forEach { assertTrue(sFold.add(it) != null, it) }
+        assertEquals("Trip payment", sFold.items().single { it.kind == SchoolKind.DAY && it.startDay == d(10, 13) }.title)
+        val v = sFold.view(work)
+        // The Dates rows say when their reminder comes.
+        assertEquals(listOf("Reminder Sun 11 Oct, 09:00", "Reminder the evening before"), v.dates.map { it.note })
+        val ns = NoticeSources.collect(
+            ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY,
+            TodayProjection.project(emptyList(), world.clock.nowMs, DayWindow(at(sat, 0), at(sat + 1, 0))), world.clock.nowMs, cal,
+            school = sFold.items(), schoolCovers = v.covers,
+        ).filter { it.source == NoticeSource.SCHOOL }
+        // Nothing for half term yet (no question), the weekly PE or the days off themselves.
+        assertEquals(3, ns.size)
+        val cover = ns[0]
+        assertEquals("Rex and Logan are off Mon 12 Oct" to "You're in the office that day. Who's covering?", cover.title to cover.text)
+        assertEquals(NoticeTarget.NEEDS_YOU, cover.target)
+        assertEquals(cal.toEpochMs(d(10, 5), 9 * 60), cover.atMs)
+        assertEquals(cal.toEpochMs(d(10, 12), 0), cover.expiresAtMs)
+        val pay = ns[1]
+        assertEquals("Due Tue 13 Oct · Trip payment" to "School · Rex and Logan", pay.title to pay.text)
+        assertEquals(at(d(10, 11), 9), pay.atMs)
+        assertEquals(cal.toEpochMs(d(10, 14), 0), pay.expiresAtMs)
+        val zoo = ns[2]
+        assertEquals("Tomorrow · Logan: Trip to the zoo" to "School · Fri 20 Nov · Logan", zoo.title to zoo.text)
+        assertEquals(at(d(11, 19), 19), zoo.atMs)
+        assertEquals(at(d(11, 20), 8), zoo.expiresAtMs)
+        assertTrue(ns.all { it.tier == NoticeTier.HEADS_UP })
+
+        // Through the governor: the question asked late posts now, the payment waits for Sunday morning.
+        val now = Governor.evaluate(ns, NotificationSettings.DEFAULT, DeviceAlerts.ALL, GovernorState(), world.clock.nowMs, cal)
+        assertEquals(listOf(cover.key), now.post.map { it.key })
+        val sun = Governor.evaluate(ns, NotificationSettings.DEFAULT, DeviceAlerts.ALL, now.state, at(d(10, 11), 9) + 60_000, cal)
+        assertEquals(listOf(pay.key), sun.post.map { it.key })
+
+        // Answered, the question asks no more; once its reminder day is past a date's note goes.
+        val inset = sFold.items().single { it.title == "INSET day" }
+        assertTrue(sFold.answer(inset.id, home = false, emptyList()))
+        assertTrue(SchoolRules.notices(sFold.items(), sFold.view(work).covers, world.clock.nowMs, cal).none { it.key == cover.key })
+        val payItem = sFold.items().single { it.title == "Trip payment" }
+        assertNull(SchoolRules.reminderNote(payItem, d(10, 12)))
+        assertEquals("School", NoticeSource.SCHOOL.label)
+        assertTrue(SchoolRules.isDue("Consent form for the zoo") && SchoolRules.isDue("£5 for the trip") && !SchoolRules.isDue("Non-uniform day"))
+    }
 }

@@ -2996,6 +2996,7 @@ class MekaCore(
             requests = requestCards.open(), settings = notifyPrefs.settings(), signIns = signIns.all(),
             lines = lineStatus.snapshot(), office = officeToday(),
             callCredit = callCredit.current(), callAssistantOn = _workMode.value.callAssistant,
+            school = school.items(), schoolCovers = _school.value.covers,
         )
 
     /** Today's office window (Places item 2): a work day that isn't a work-from-home day, or null. */

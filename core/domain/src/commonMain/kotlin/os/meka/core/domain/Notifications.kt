@@ -66,6 +66,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     SIGN_IN("Calendar sign-ins", NoticeTier.HEADS_UP),
     /** The call assistant's credit under £2, or the assistant paused for want of it ([CallCreditRules]). */
     CALL_CREDIT("Call assistant credit", NoticeTier.HEADS_UP),
+    /**
+     * School rhythm ([SchoolRules.notices]): the week-ahead "who's covering?" question, something to pay or send back
+     * two days before, and a trip or non-uniform day the evening before.
+     */
+    SCHOOL("School", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -419,6 +424,7 @@ object Governor {
         NoticeSource.FIXTURE_MOVED -> plural(n, "kick-off") + " moved"
         NoticeSource.SIGN_IN -> plural(n, "sign-in") + " to renew"
         NoticeSource.CALL_CREDIT -> "call assistant credit"
+        NoticeSource.SCHOOL -> plural(n, "school reminder")
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -461,6 +467,9 @@ object NoticeSources {
         /** The call assistant's credit and whether its switch is on ([CallCreditRules.notices]). */
         callCredit: CallCredit? = null,
         callAssistantOn: Boolean = false,
+        /** School rhythm: the school items and the open week-ahead questions ([SchoolRules.notices]). */
+        school: List<SchoolItem> = emptyList(),
+        schoolCovers: List<SchoolCover> = emptyList(),
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -567,6 +576,7 @@ object NoticeSources {
         out += WeatherRules.notices(forecast, events, marks, sessions, nowMs, cal)
         out += SignInRules.notices(signIns, nowMs, cal)
         out += CallCreditRules.notices(callCredit, callAssistantOn)
+        out += SchoolRules.notices(school, schoolCovers, nowMs, cal)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.

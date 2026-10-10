@@ -78,4 +78,27 @@ class SchoolFacadeTest {
         assertNull(fold.today.value.school)
         assertEquals("Tomorrow · Rex: PE kit", fold.shutdownView.value.tomorrow.school?.text)
     }
+    @Test
+    fun theCoverQuestionIsAHeadsUpOnBothAppsUntilItIsAnswered() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.addSchool("INSET 12 Oct")
+        fold.addSchool("Trip payment by 14 Oct")
+        fold.syncNow(); mac.syncNow()
+        fun school(g: os.meka.core.domain.GovernorResult) = g.post.filter { it.source == os.meka.core.domain.NoticeSource.SCHOOL }
+        val gov = mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        assertEquals(listOf("Rex and Logan are off Mon 12 Oct" to "You're in the office that day. Who's covering?"),
+            school(gov).map { it.title to it.text })
+        assertEquals(listOf("Reminder Mon 12 Oct, 09:00"), mac.schoolView.value.dates.map { it.note })
+        // Posted once; answered on the Fold, the Mac has nothing left to ask.
+        assertTrue(school(mac.governNotifications(gov.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty())
+        val cover = fold.schoolView.value.covers.single()
+        fold.coverSchool(cover.id, home = false)
+        fold.syncNow(); mac.syncNow()
+        assertTrue(school(mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty())
+        // Monday 09:00: the payment's heads-up.
+        now += 2 * 24 * 3_600_000L - 3_600_000L + 60_000L
+        mac.syncNow()
+        assertEquals(listOf("Due Wed 14 Oct · Trip payment"), school(mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)).map { it.title })
+    }
 }

@@ -1315,6 +1315,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         let sat = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 10)
         let inset = rules.read(text: "INSET 27 Oct", today: sat)
         XCTAssertEqual(inset?.kind, .off)
+        // Slice 2b(ii): the school's heads-ups are their own row in Notifications on the Mac too.
+        XCTAssertEqual(NoticeSource.school.label, "School")
+        XCTAssertTrue(rules.isDue(title: "Trip payment"))
         XCTAssertEqual(inset?.title, "INSET day")
         XCTAssertEqual(inset?.startDay, CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 27))
         let pe = rules.read(text: "Rex PE Tue", today: sat)

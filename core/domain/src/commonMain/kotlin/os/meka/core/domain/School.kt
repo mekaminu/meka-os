@@ -169,7 +169,7 @@ object SchoolRules {
     private val bothRe = Regex("""\b(both(?:\s+boys)?|the\s+boys|boys|the\s+kids|kids|children)\b""", I)
     private val offRe = Regex("""\b(inset|training\s+day|holidays?|half[\s-]?term|closed|closure|strike|off|break|no\s+school|staff\s+day|bank\s+holiday)\b""", I)
     private val connectorsLead = Regex("""^(?:\s|,|;|:|-|–|—|&|and\b|from\b|on\b)+""", I)
-    private val connectorsTail = Regex("""(?:\s|,|;|:|-|–|—|&|\band|\bfrom|\bon|\bevery|\bthe)+$""", I)
+    private val connectorsTail = Regex("""(?:\s|,|;|:|-|–|—|&|\band|\bfrom|\bon|\bevery|\bthe|\bby)+$""", I)
 
     /** Trimmed, inner runs of spaces made one. */
     fun tidy(text: String): String = text.trim().replace(Regex("""\s+"""), " ")
@@ -405,7 +405,8 @@ object SchoolRules {
         }
         val dateRows = dates.map { d ->
             val line = "${dayWord(d.startDay, today)} · ${whoLabel(d.who)}"
-            SchoolRow(d.id, d.title, line, null, "${d.title}. $line")
+            val note = reminderNote(d, today)
+            SchoolRow(d.id, d.title, line, note, listOfNotNull(d.title, line, note).joinToString(". "))
         }
         val weeklyRows = weekly.map { w ->
             val line = "Every ${CivilDate.DAY_LONG[w.weekday - 1]} · ${whoLabel(w.who)}"
@@ -534,6 +535,83 @@ object SchoolRules {
                 listOfNotNull("Every ${CivilDate.DAY_LONG[w.weekday - 1]}", w.title, whoLabel(w.who), next).joinToString(" · ")
             }
         return off + dates + weekly
+    }
+
+    // ---- Slice 2b(ii): heads-ups for the cover question and the school's dates ----
+
+    /** The cover question's heads-up goes out at 09:00 on the day it starts showing ([LEAD_DAYS] before). */
+    const val COVER_NOTICE_MIN = 9 * 60
+    /** Something to pay, sign or send back: a heads-up at 09:00 this many days before its date. */
+    const val DUE_LEAD_DAYS = 2
+    const val DUE_NOTICE_MIN = 9 * 60
+    /** Any other one-off date (a trip, a non-uniform day): a heads-up the evening before at 19:00, gone by 08:00. */
+    const val EVE_NOTICE_MIN = 19 * 60
+    const val EVE_STALE_MIN = 8 * 60
+
+    /** A one-off date that is a deadline rather than a day out: "Trip payment", "Consent form", "Reply slip". */
+    private val dueRe = Regex("""(£|\b(?:pay|payment|paid|money|cost|fee|form|consent|slip|reply|return|deadline|due|sign|order)\b)""", I)
+
+    /** Whether a one-off date is something to pay, sign or send back by then. */
+    fun isDue(title: String): Boolean = dueRe.containsMatchIn(title)
+
+    /** When a one-off date's heads-up goes out (local day and minute), for the notice and the row's note. */
+    private fun dateNoticeAt(d: SchoolItem): Pair<Long, Int> =
+        if (isDue(d.title)) (d.startDay - DUE_LEAD_DAYS) to DUE_NOTICE_MIN else (d.startDay - 1) to EVE_NOTICE_MIN
+
+    /** The Dates row's note: "Reminder Wed 18 Nov, 09:00" · "Reminder the evening before"; null once it has gone out. */
+    fun reminderNote(d: SchoolItem, today: Long): String? {
+        if (d.kind != SchoolKind.DAY) return null
+        val (day, _) = dateNoticeAt(d)
+        return when {
+            day < today -> null
+            !isDue(d.title) -> "Reminder the evening before"
+            else -> "Reminder ${CivilDate.shortLabel(day)}, ${LocalClock.formatMinute(DUE_NOTICE_MIN)}"
+        }
+    }
+
+    /**
+     * The school's heads-ups (source [NoticeSource.SCHOOL]), through the governor like every other notice, so quiet
+     * hours and the digests apply:
+     * - each open week-ahead question ([covers]) at 09:00 on the day it first shows, standing until the first office day
+     *   off begins: "Rex and Logan are off Mon 27 Oct" · "You're in the office that day. Who's covering?" (Needs you);
+     * - a one-off date that is something to pay, sign or send back ([isDue]) at 09:00 [DUE_LEAD_DAYS] days before,
+     *   standing until the day is over: "Due Fri 20 Nov · Logan: Trip payment";
+     * - any other one-off date (a trip, a non-uniform day) the evening before at 19:00, gone by 08:00 on the day:
+     *   "Tomorrow · Logan: Trip to the zoo".
+     * One posted once per key; nothing for days off (Today's header says those) or weekly things (the shutdown's
+     * tomorrow says "Rex: PE kit").
+     */
+    fun notices(items: List<SchoolItem>, covers: List<SchoolCover>, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        val today = cal.epochDayOf(nowMs)
+        val out = mutableListOf<Notice>()
+        for (c in covers) {
+            val first = c.days.firstOrNull() ?: continue
+            out += Notice(
+                key = "school:${c.id}:cover", source = NoticeSource.SCHOOL, tier = NoticeTier.HEADS_UP,
+                title = c.title, text = c.question,
+                atMs = cal.toEpochMs(first - LEAD_DAYS, COVER_NOTICE_MIN), target = NoticeTarget.NEEDS_YOU,
+                expiresAtMs = cal.toEpochMs(first, 0),
+            )
+        }
+        val dates = items.filter { it.kind == SchoolKind.DAY && it.startDay >= today }
+            .sortedWith(compareBy<SchoolItem> { it.startDay }.thenBy { it.addedAtMs }.thenBy { it.id })
+        for (d in dates) {
+            val thing = thingText(SchoolThing(d.id, d.kind, d.title, d.who))
+            val (day, minute) = dateNoticeAt(d)
+            out += if (isDue(d.title)) Notice(
+                key = "school:${d.id}:due:${d.startDay}", source = NoticeSource.SCHOOL, tier = NoticeTier.HEADS_UP,
+                title = "Due ${dayWord(d.startDay, today).let { if (it == "Today" || it == "Tomorrow") it.lowercase() else it }} · $thing",
+                text = "School · ${whoLabel(d.who)}",
+                atMs = cal.toEpochMs(day, minute), target = NoticeTarget.TODAY,
+                expiresAtMs = cal.toEpochMs(d.startDay + 1, 0),
+            ) else Notice(
+                key = "school:${d.id}:eve:${d.startDay}", source = NoticeSource.SCHOOL, tier = NoticeTier.HEADS_UP,
+                title = "Tomorrow · $thing", text = "School · ${CivilDate.shortLabel(d.startDay)} · ${whoLabel(d.who)}",
+                atMs = cal.toEpochMs(day, minute), target = NoticeTarget.TODAY,
+                expiresAtMs = cal.toEpochMs(d.startDay, EVE_STALE_MIN),
+            )
+        }
+        return out
     }
 
     /** The line after adding: "Added INSET day · Mon 27 Oct", "Added PE · every Tuesday · Rex". */
