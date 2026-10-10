@@ -49,6 +49,9 @@ class HttpSyncTransportTest {
     private val hereReply = os.meka.core.wire.HereCodec.encodeResponse(
         os.meka.core.wire.HereCodec.Response("ok", hours = "497664|12,2,10;12,2,10", days = "2026-10-10=7,13,2,10", away = true),
     )
+    private var familyStatus = HttpStatusCode.OK
+    private val familyId = "fam" + "0123456789abcdef0123"
+    private val familyToken = "cd".repeat(32)
     private fun client() = HttpClient(MockEngine { req ->
         requests += req
         when (req.url.encodedPath) {
@@ -61,6 +64,15 @@ class HttpSyncTransportTest {
             "/v1/ai/message-triage" -> respond(triageReply, triageStatus, json)
             "/v1/ai/group-digest" -> respond(digestReply, digestStatus, json)
             "/v1/weather/here" -> respond(hereReply, hereStatus, json)
+            "/v1/family/invites/list" -> respond(
+                """{"invites":[{"id":"$familyId","name":"jeanette","state":"joined","createdAtMs":1,"claimedAtMs":2}]}""", familyStatus, json,
+            )
+            "/v1/family/invites/create" -> respond(
+                """{"id":"$familyId","name":"jeanette","token":"$familyToken","path":"/family#$familyToken"}""", familyStatus, json,
+            )
+            "/v1/family/invites/revoke" ->
+                if (familyStatus == HttpStatusCode.NotFound) respond("""{"error":"unknown"}""", familyStatus, json)
+                else respond("""{"id":"$familyId","state":"revoked"}""", familyStatus, json)
             else -> respond("", HttpStatusCode.NotFound)
         }
     })
@@ -129,6 +141,27 @@ class HttpSyncTransportTest {
         assertEquals("off", t.speak("Anything else?", null).state)
         // The voices route isn't on this test server either: off, not an error.
         assertEquals("off", t.speechVoices().state)
+    }
+
+    @Test
+    fun familyLinksAreMadeListedAndTurnedOffSignedWithThisServerInFront() = runTest {
+        val t = HttpSyncTransport(client(), "https://meka.example/", RecordingKey()) { "s".repeat(64) }
+        val (made, url) = t.createFamilyInvite("Jeanette")
+        assertEquals(familyId, made.id)
+        assertEquals("https://meka.example/family#$familyToken", url)
+        val create = requests.last()
+        assertEquals("/v1/family/invites/create", create.url.encodedPath)
+        assertEquals("""{"name":"Jeanette"}""", (create.body as TextContent).text)
+        assertTrue(create.headers[RequestSigning.HEADER_SIGNATURE] != null)
+        assertEquals(listOf("joined"), t.familyInvites().map { it.state })
+        assertTrue(t.revokeFamilyInvite(familyId))
+        // The server doesn't know the link: false, not an error.
+        familyStatus = HttpStatusCode.NotFound
+        assertEquals(false, t.revokeFamilyInvite(familyId))
+        // No key registered yet: says so.
+        familyStatus = HttpStatusCode.Forbidden
+        val e = kotlin.runCatching { t.familyInvites() }.exceptionOrNull()
+        assertEquals(FamilyUnavailableException.NO_KEY, (e as FamilyUnavailableException).reason)
     }
 
     @Test

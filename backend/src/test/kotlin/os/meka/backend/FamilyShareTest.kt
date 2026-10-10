@@ -190,4 +190,21 @@ class FamilyShareTest {
         assertEquals(30, LondonCalendar.minuteOfDay(june))
         assertEquals(june, LondonCalendar.toEpochMs(LondonCalendar.epochDayOf(june), 30))
     }
+
+    @Test
+    fun theAppsReadWhatTheServerSaysAboutItsLinks() {
+        // Slice 4: Settings → Family on both apps reads these answers with the core's FamilyCodec.
+        val made = family.invite("hh", os.meka.core.wire.FamilyCodec.encodeCreate("Jeanette"))
+        val link = os.meka.core.wire.FamilyCodec.decodeMade(made.body)
+        assertEquals("jeanette", link.name)
+        val token = link.path.substringAfter('#')
+        nowMs += 60_000L
+        assertEquals(200, claim(token, TestBrowserKey { nowMs }).status)
+        val listed = os.meka.core.wire.FamilyCodec.decodeList(family.list("hh").body).single()
+        assertEquals(link.id, listed.id)
+        assertEquals("joined", listed.state)
+        assertEquals(nowMs, listed.claimedAtMs)
+        assertEquals(200, family.revoke("hh", os.meka.core.wire.FamilyCodec.encodeRevoke(link.id)).status)
+        assertEquals("revoked", os.meka.core.wire.FamilyCodec.decodeList(family.list("hh").body).single().state)
+    }
 }

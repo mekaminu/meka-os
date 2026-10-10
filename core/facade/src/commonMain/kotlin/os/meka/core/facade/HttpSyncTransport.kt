@@ -212,6 +212,26 @@ interface VoiceMessageApi {
     suspend fun voiceMessageAudio(id: String): ByteArray?
 }
 
+/**
+ * Family sharing's links (slice 4): `POST /v1/family/invites/list · create · revoke` from a keyed device. Each throws
+ * [FamilyUnavailableException] when the server can't answer it (no route, no key yet) and TransportException offline.
+ */
+interface FamilyApi {
+    suspend fun familyInvites(): List<os.meka.core.wire.FamilyCodec.Invite>
+    /** The new link's whole address (this server + "/family#<token>"); the token is in it, so it is never kept. */
+    suspend fun createFamilyInvite(name: String): Pair<os.meka.core.wire.FamilyCodec.Made, String>
+    /** False when the server doesn't know the link. */
+    suspend fun revokeFamilyInvite(id: String): Boolean
+}
+
+/** The server can't do this for the device: [reason] is NO_ROUTE (older server) or NO_KEY (key not registered yet). */
+class FamilyUnavailableException(val reason: String) : Exception(reason) {
+    companion object {
+        const val NO_ROUTE = "no-route"
+        const val NO_KEY = "no-key"
+    }
+}
+
 /** Account management calls, available once the device is connected. */
 interface AccountsApi {
     /** [editing]: ask the provider for permission to change events too (calendar editing). */
@@ -233,7 +253,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi, VoiceMessageApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi, VoiceMessageApi, FamilyApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -504,6 +524,42 @@ class HttpSyncTransport(
             resp.status.value == 404 || resp.status.value == 403 -> null
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/health/household")
             else -> os.meka.core.wire.HealthCodec.decodeResponse(resp.bodyAsText())
+        }
+    }
+
+    override suspend fun familyInvites(): List<os.meka.core.wire.FamilyCodec.Invite> =
+        os.meka.core.wire.FamilyCodec.decodeList(family("/v1/family/invites/list", os.meka.core.wire.FamilyCodec.encodeList()))
+
+    override suspend fun createFamilyInvite(name: String): Pair<os.meka.core.wire.FamilyCodec.Made, String> {
+        val made = os.meka.core.wire.FamilyCodec.decodeMade(family("/v1/family/invites/create", os.meka.core.wire.FamilyCodec.encodeCreate(name)))
+        return made to baseUrl.trimEnd('/') + made.path
+    }
+
+    override suspend fun revokeFamilyInvite(id: String): Boolean {
+        prepare()
+        val resp = send("/v1/family/invites/revoke", os.meka.core.wire.FamilyCodec.encodeRevoke(id))
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/family/invites/revoke")
+            resp.status.value == 403 -> throw FamilyUnavailableException(FamilyUnavailableException.NO_KEY)
+            resp.status.value == 404 -> {
+                // 404 with a JSON refusal is "unknown link"; a bare 404 is a server without the route.
+                if (resp.bodyAsText().contains("\"error\"")) false else throw FamilyUnavailableException(FamilyUnavailableException.NO_ROUTE)
+            }
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/family/invites/revoke")
+            else -> true
+        }
+    }
+
+    /** The family routes need the device's signing key on the server. */
+    private suspend fun family(path: String, body: String): String {
+        prepare()
+        val resp = send(path, body)
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from $path")
+            resp.status.value == 403 -> throw FamilyUnavailableException(FamilyUnavailableException.NO_KEY)
+            resp.status.value == 404 -> throw FamilyUnavailableException(FamilyUnavailableException.NO_ROUTE)
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from $path")
+            else -> resp.bodyAsText()
         }
     }
 

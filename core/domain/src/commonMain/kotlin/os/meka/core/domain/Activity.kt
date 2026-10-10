@@ -63,6 +63,12 @@ enum class ActivityKind {
      * polish 8d). Written by the server; nothing to undo. Added 2026-10-09.
      */
     CALL,
+    /**
+     * Family sharing (slice 4): a shopping list link made or turned off in Family, and the day the family member's
+     * phone opened it ("Jeanette joined the shopping list"). Ids come from the invite, so both devices write one entry.
+     * Nothing to undo here (Turn off is in Family). Added 2026-10-10.
+     */
+    FAMILY,
 }
 
 /** One field MEKA changed: what it was, and what MEKA set. */
@@ -476,6 +482,12 @@ class ActivityLog(
         write(id, ActivityKind.SCREENED, summary, null, why, "calls")
     }
 
+    /** A family sharing entry ([FamilyRules.joinedId] etc.) at [atMs]; written once, whichever device sees it first. */
+    fun recordFamily(id: String, atMs: Long, summary: String, why: String) {
+        if (replica.entity(EntityTypes.AGENT_ACTION, id) != null) return
+        write(id, ActivityKind.FAMILY, summary, null, why, "family", atMs = atMs)
+    }
+
     /** A digest this device just posted. */
     fun recordDigest(d: Digest) {
         val now = nowMs()
@@ -552,12 +564,12 @@ class ActivityLog(
 
     private fun write(
         id: String, kind: ActivityKind, summary: String, detail: String?, why: String, source: String,
-        level: String? = null, changes: String? = null,
+        level: String? = null, changes: String? = null, atMs: Long = nowMs(),
     ) {
         replica.commitLocal(
             EntityTypes.AGENT_ACTION, id,
             buildMap {
-                put(ActivityFields.AT, nowMs().fv())
+                put(ActivityFields.AT, atMs.fv())
                 put(ActivityFields.KIND, kind.name.fv())
                 put(ActivityFields.SUMMARY, summary.take(ActivityRules.MAX_LINE).fv())
                 detail?.let { put(ActivityFields.DETAIL, it.take(ActivityRules.MAX_LINE).fv()) }

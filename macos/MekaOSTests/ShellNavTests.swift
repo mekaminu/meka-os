@@ -46,9 +46,10 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(
             ShellNav.more(connected: true).map(\.label),
             ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Work mode", "Notifications",
-             "Appearance", "MEKA's voice", "Talk", "Calendars", "Setup", "Health", "Activity", "Your data"]
+             "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Setup", "Health", "Activity", "Your data"]
         )
         XCTAssertFalse(ShellNav.more(connected: false).contains(.calendars))
+        XCTAssertFalse(ShellNav.more(connected: false).contains(.family))
         let places = Set(ShellNav.more(connected: false).compactMap(\.destination))
         XCTAssertEqual(places, Set(ShellDestination.allCases.filter { ShellNav.parent($0) != nil }))
     }
@@ -60,13 +61,14 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(sections.map(\.group.label), ["Places", "Daily", "Settings"])
         XCTAssertEqual(sections[0].items.map(\.label), ["Lists", "Goals and habits", "Review", "Vault"])
         XCTAssertEqual(sections[1].items.map(\.label), ["Morning brief", "News", "Shut down the day"])
-        XCTAssertEqual(sections[2].items.map(\.label), ["Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Setup", "Health", "Activity", "Your data"])
+        XCTAssertEqual(sections[2].items.map(\.label), ["Work mode", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Setup", "Health", "Activity", "Your data"])
         XCTAssertEqual(sections.flatMap(\.items), ShellNav.more(connected: true))
         XCTAssertTrue(sections[0].items.allSatisfy { $0.destination != nil })
         XCTAssertTrue(sections.dropFirst().flatMap(\.items).allSatisfy { $0.destination == nil })
         let offline = ShellNav.moreSections(connected: false)
         XCTAssertEqual(offline.count, 3)
         XCTAssertFalse(offline[2].items.contains(.calendars))
+        XCTAssertFalse(offline[2].items.contains(.family))
     }
 
     @MainActor

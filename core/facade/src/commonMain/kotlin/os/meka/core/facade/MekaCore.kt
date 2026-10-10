@@ -181,6 +181,10 @@ class MekaCore(
     private var hereApi: HereApi? = transport as? HereApi
     private var healthApi: HealthApi? = transport as? HealthApi
     private var voiceMessageApi: VoiceMessageApi? = transport as? VoiceMessageApi
+    private var familyApi: FamilyApi? = transport as? FamilyApi
+    /** Family (sharing slice 4): the links as the server last listed them, in memory only (the server holds them). */
+    private var familyMembers: List<os.meka.core.domain.FamilyMember> = emptyList()
+    private val _family = MutableStateFlow<os.meka.core.domain.FamilyView?>(null)
     /** "Where I am now" (Places item 3): the last answer, in memory only (never stored or synced), on the core thread. */
     private var hereFix: os.meka.core.domain.HereFix? = null
     /** MEKA's voice: the synced choice, the clips said so far (in memory, newest last) and a pause after a refusal. */
@@ -1651,7 +1655,7 @@ class MekaCore(
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
             speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; healthApi = transport as? HealthApi
-            voiceMessageApi = transport as? VoiceMessageApi
+            voiceMessageApi = transport as? VoiceMessageApi; familyApi = transport as? FamilyApi
         }
         startSync()
     }
@@ -2209,6 +2213,117 @@ class MekaCore(
             Unit
         }
     }
+
+    // ---- Family (family sharing with Jeanette, slice 4) ----
+
+    /**
+     * Ask → More → Family: who can use the shopping list ("Jeanette can see and add to the shopping list") and each
+     * link's state. Null until [refreshFamily] has run once.
+     */
+    val familyView: StateFlow<os.meka.core.domain.FamilyView?> = _family.asStateFlow()
+
+    /**
+     * Reads the links from MEKA's server and logs, once across both devices, the day each was opened ("Jeanette joined
+     * the shopping list"). When the server can't be read the last rows stay, with the reason as the view's problem.
+     */
+    suspend fun refreshFamily(): os.meka.core.domain.FamilyView {
+        val api = familyApi ?: return showFamily(os.meka.core.domain.FamilyRules.NOT_CONNECTED)
+        val listed = try {
+            api.familyInvites()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return showFamily(familyProblem(e))
+        }
+        return onCore {
+            familyMembers = listed.map { familyMember(it) }
+            for (m in familyMembers) {
+                val at = m.claimedAtMs ?: continue
+                activity.recordFamily(
+                    os.meka.core.domain.FamilyRules.joinedId(m.id), at,
+                    os.meka.core.domain.FamilyRules.joinedSummary(m.name), os.meka.core.domain.FamilyRules.WHY_JOINED,
+                )
+            }
+            refresh()
+            familyNow(null)
+        }
+    }
+
+    /**
+     * Makes a link for [name] ("Jeanette"): the whole address and what the share sheet sends with it. Null when it
+     * couldn't be made (a name the server won't take, or the server can't be reached; [familyView]'s problem says why).
+     * The address carries the link's secret, so it is handed to the share sheet once and never kept.
+     */
+    suspend fun inviteFamily(name: String): os.meka.core.domain.FamilyLink? {
+        val clean = os.meka.core.domain.FamilyRules.validName(name) ?: run {
+            showFamily("Use letters only for the name (spaces, hyphens and apostrophes are fine)"); return null
+        }
+        val api = familyApi ?: run { showFamily(os.meka.core.domain.FamilyRules.NOT_CONNECTED); return null }
+        val (made, url) = try {
+            api.createFamilyInvite(clean)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            showFamily(familyProblem(e)); return null
+        }
+        onCore {
+            familyMembers = listOf(
+                os.meka.core.domain.FamilyMember(made.id, made.name, os.meka.core.domain.FamilyState.WAITING, nowMs()),
+            ) + familyMembers.filter { it.id != made.id }
+            activity.recordFamily(
+                os.meka.core.domain.FamilyRules.invitedId(made.id), nowMs(),
+                os.meka.core.domain.FamilyRules.invitedSummary(made.name), os.meka.core.domain.FamilyRules.WHY_YOU,
+            )
+            refresh()
+            familyNow(null)
+        }
+        return os.meka.core.domain.FamilyRules.link(made.id, made.name, url)
+    }
+
+    /** Turns [id]'s link off at once: her page's next request is refused. False when it couldn't be (the problem says why). */
+    suspend fun turnOffFamily(id: String): Boolean {
+        val api = familyApi ?: run { showFamily(os.meka.core.domain.FamilyRules.NOT_CONNECTED); return false }
+        val known = try {
+            api.revokeFamilyInvite(id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            showFamily(familyProblem(e)); return false
+        }
+        onCore {
+            val m = familyMembers.firstOrNull { it.id == id }
+            familyMembers = familyMembers.map { if (it.id == id) it.copy(state = os.meka.core.domain.FamilyState.OFF) else it }
+            if (known && m != null) {
+                activity.recordFamily(
+                    os.meka.core.domain.FamilyRules.turnedOffId(id), nowMs(),
+                    os.meka.core.domain.FamilyRules.turnedOffSummary(m.name), os.meka.core.domain.FamilyRules.WHY_YOU,
+                )
+            }
+            refresh()
+            familyNow(null)
+        }
+        // The server's own word on every link (also when it didn't know this one).
+        refreshFamily()
+        return known
+    }
+
+    private fun familyMember(i: os.meka.core.wire.FamilyCodec.Invite) = os.meka.core.domain.FamilyMember(
+        id = i.id, name = i.name, state = os.meka.core.domain.FamilyRules.state(i.state),
+        createdAtMs = i.createdAtMs, claimedAtMs = i.claimedAtMs, lastSeenAtMs = i.lastSeenAtMs,
+    )
+
+    private fun familyProblem(e: Exception): String = when {
+        e is FamilyUnavailableException && e.reason == FamilyUnavailableException.NO_KEY -> os.meka.core.domain.FamilyRules.NO_KEY
+        e is FamilyUnavailableException -> os.meka.core.domain.FamilyRules.NO_ROUTE
+        e is AuthRejectedException -> SIGNED_OUT_MESSAGE
+        else -> os.meka.core.domain.FamilyRules.OFFLINE
+    }
+
+    private suspend fun showFamily(problem: String?): os.meka.core.domain.FamilyView = onCore { familyNow(problem) }
+
+    /** On the core thread. */
+    private fun familyNow(problem: String?): os.meka.core.domain.FamilyView =
+        os.meka.core.domain.FamilyRules.view(familyMembers, nowMs(), ZoneCalendar(timeZone), problem).also { _family.value = it }
 
     /** The settings row (Ask → More → Settings → Where I am now); the switch itself is kept on each device. */
     fun hereSetting(on: Boolean, permitted: Boolean): os.meka.core.domain.HereSettingView =

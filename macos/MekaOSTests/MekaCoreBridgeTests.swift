@@ -1106,6 +1106,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(ListsView.companion.EMPTY.shopping.count, 0)
     }
 
+    func testFamilyReachesSwift() {
+        // Family sharing, slice 4: Settings → Family's rules reach the Mac (only Strings cross from the sheet).
+        let rules = FamilyRules.shared
+        XCTAssertEqual(rules.validName(raw: "  Jeanette "), "Jeanette")
+        XCTAssertNil(rules.validName(raw: "meka"))
+        XCTAssertEqual(rules.display(name: "jeanette"), "Jeanette")
+        XCTAssertEqual(rules.state(server: "joined"), .joined)
+        let link = rules.link(id: "fam1", name: "jeanette", url: "https://meka.example/family#ab")
+        XCTAssertEqual(link.name, "Jeanette")
+        XCTAssertTrue(link.shareText.hasSuffix("https://meka.example/family#ab"))
+        XCTAssertEqual(link.note, rules.NOTE)
+    }
+
     func testKeepCallersRecordingsReachesSwift() {
         // Call assistant polish 8c: the "Keep callers' recordings" choice, its line and the summary's note.
         let rules = VoiceRecordingRules.shared

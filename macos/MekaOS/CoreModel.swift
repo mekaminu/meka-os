@@ -145,6 +145,12 @@ final class CoreModel {
     private(set) var isConnected = false
     var showConnect = false
     var showCalendars = false
+    /// Ask → More → Family (family sharing slice 4): Jeanette's link to the shopping list.
+    var showFamily = false
+    /// Who can use the shopping list and each link's state, as the server last listed them; nil until read once.
+    private(set) var family: FamilyView?
+    /// A link is being made or turned off.
+    private(set) var familyBusy = false
     var showPlan = false
     private(set) var plan: DayPlanner.Plan?
     /// Plan my day's "Also add the blocks to Google" (calendar editing slice 2e); nil until read.
@@ -248,6 +254,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await h in core.healthView { self?.health = h }
+        })
+        observers.append(Task { [weak self] in
+            for await f in core.familyView { self?.family = f }
         })
         observers.append(Task { [weak self] in
             for await v in core.setupView { self?.setup = v }
@@ -970,6 +979,30 @@ final class CoreModel {
         let device = DeviceHealth(mac: true, batteryExempt: nil, batteryStopped: false, notificationAccess: nil,
                                   lastNotificationMs: nil, callRoleHeld: nil, version: version, updateReady: false)
         _ = try? await core.refreshHealth(device: device, force: force)
+    }
+
+    // MARK: Family (family sharing with Jeanette, slice 4)
+
+    /// Reads the links from MEKA's server (and logs, once across both devices, the day one was opened).
+    func refreshFamily() async {
+        guard let core else { return }
+        _ = try? await core.refreshFamily()
+    }
+
+    /// Makes Jeanette's link; nil when it couldn't be made (the view's problem says why). Only the name crosses.
+    func inviteFamily() async -> FamilyLink? {
+        guard let core, !familyBusy else { return nil }
+        familyBusy = true
+        defer { familyBusy = false }
+        return try? await core.inviteFamily(name: "Jeanette")
+    }
+
+    /// Turns a link off at once. Only the id String crosses.
+    func turnOffFamily(_ id: String) async {
+        guard let core, !familyBusy else { return }
+        familyBusy = true
+        defer { familyBusy = false }
+        _ = try? await core.turnOffFamily(id: id)
     }
 
     // MARK: Setup checklist (Meka approved 2026-10-09)
