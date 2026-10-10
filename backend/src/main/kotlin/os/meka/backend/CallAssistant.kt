@@ -185,6 +185,12 @@ class CallAssistant(
     private val onUrgent: (householdId: String) -> Unit = {},
     /** Where callers' recordings are kept (polish 8c); null keeps none (the phone service's copy is still deleted). */
     private val recordings: RecordingStore? = null,
+    /**
+     * Transcribes kept recordings (polish 8d i, Amazon Transcribe in MEKA's own account); null leaves Twilio's words.
+     * With one (and a store), a message's words are written once Transcribe has had its go ([transcribeKept]), with
+     * Twilio's as the fallback, so the apps show "Transcribing…" until then rather than Twilio's guess first.
+     */
+    private val transcriber: Transcriber? = null,
 ) {
     private val clock = HlcClock(Integrations.SERVER_DEVICE, now)
 
@@ -215,21 +221,46 @@ class CallAssistant(
                 VoiceReply.Goodbye(if (urgent) CallAssistantScript.THANKS_URGENT else CallAssistantScript.thanks(!away(hh, id)))
             }
             is VoiceEvent.Transcribed -> {
-                // Done on a device blanked the summary: a late transcript doesn't bring the words back.
-                if (!exists(hh, id) || fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.CLEARED) == FieldValue.Bool(true)) {
-                    return VoiceReply.Done
-                }
-                val text = CallAssistantRules.transcript(event.text) ?: run {
-                    // No words (transcription failed or heard nothing): the apps stop showing "Transcribing…".
-                    if (write(hh, id, mapOf(HeldMessageFields.NO_TRANSCRIPT to true.fv()))) runCatching { onWritten(hh) }
-                    return VoiceReply.Done
-                }
-                if (write(hh, id, mapOf(HeldMessageFields.TEXT to text.fv()))) {
-                    val wasUrgent = fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.URGENT) == FieldValue.Bool(true)
-                    runCatching { if (Urgency.isUrgent(text) && !wasUrgent) onUrgent(hh) else onWritten(hh) }
-                }
+                // With Transcribe on, the words wait for it ([transcribeKept], off the request); Twilio's are its fallback.
+                if (!transcribesLater(event)) settle(hh, id, event.text)
                 VoiceReply.Done
             }
+        }
+    }
+
+    /** Whether this message's words are written by [transcribeKept] rather than straight from the phone service's. */
+    fun transcribesLater(event: VoiceEvent.Transcribed): Boolean =
+        transcriber != null && recordings != null && event.recording != null
+
+    /**
+     * After [keepRecording] (polish 8d i): Amazon Transcribe hears the kept recording ([kept]) and its words are written;
+     * when it fails, hears nothing or nothing was kept, the phone service's words are written instead (or "no words came
+     * through"). Does nothing unless [transcribesLater]. Never throws past the fallback: the message always settles.
+     */
+    fun transcribeKept(provider: VoiceProvider, event: VoiceEvent.Transcribed, kept: Boolean) {
+        if (!transcribesLater(event)) return
+        val hh = household() ?: return
+        val id = CallAssistantRules.heldId(provider.id, event.callId)
+        // A retried callback finds the words already settled: no second job.
+        if (settled(hh, id)) return
+        val better = if (kept && !cleared(hh, id)) {
+            VoiceRecordingRules.key(hh, id)?.let { key -> runCatching { transcriber?.transcribe(key) }.getOrNull() }
+        } else null
+        settle(hh, id, CallAssistantRules.transcript(better) ?: event.text)
+    }
+
+    /** Writes a message's words (or that none came through) once; nothing for one Meka already dismissed. */
+    private fun settle(hh: String, id: String, raw: String?) {
+        // Done on a device blanked the summary: a late transcript doesn't bring the words back.
+        if (!exists(hh, id) || cleared(hh, id)) return
+        val text = CallAssistantRules.transcript(raw) ?: run {
+            // No words (transcription failed or heard nothing): the apps stop showing "Transcribing…".
+            if (write(hh, id, mapOf(HeldMessageFields.NO_TRANSCRIPT to true.fv()))) runCatching { onWritten(hh) }
+            return
+        }
+        if (write(hh, id, mapOf(HeldMessageFields.TEXT to text.fv()))) {
+            val wasUrgent = fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.URGENT) == FieldValue.Bool(true)
+            runCatching { if (Urgency.isUrgent(text) && !wasUrgent) onUrgent(hh) else onWritten(hh) }
         }
     }
 
@@ -278,7 +309,11 @@ class CallAssistant(
     /** Done on a device (polish 8c): the dismissed messages' recordings are deleted at once. */
     fun forgetRecordings(householdId: String, heldIds: Collection<String>) {
         val store = recordings ?: return
-        for (id in heldIds) VoiceRecordingRules.key(householdId, id)?.let { key -> runCatching { store.delete(key) } }
+        for (id in heldIds) VoiceRecordingRules.key(householdId, id)?.let { key ->
+            runCatching { store.delete(key) }
+            // A transcript still being made is deleted too (Transcribe's own clean-up also removes it).
+            if (transcriber != null) runCatching { store.delete(Transcripts.outputKey(key)) }
+        }
     }
 
     /** MEKA's voice for this call's household ([CallVoice.choose]). Never throws: Polly unreachable reads as off. */
@@ -322,6 +357,9 @@ class CallAssistant(
         fields.latest(hh, EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.CALL_ASSISTANT) == FieldValue.Bool(true)
 
     private fun exists(hh: String, id: String) = ops.find(hh, opId(id, HeldMessageFields.KIND)) != null
+
+    private fun settled(hh: String, id: String) =
+        ops.find(hh, opId(id, HeldMessageFields.TEXT)) != null || ops.find(hh, opId(id, HeldMessageFields.NO_TRANSCRIPT)) != null
 
     private fun cleared(hh: String, id: String) = fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.CLEARED) == FieldValue.Bool(true)
 

@@ -253,6 +253,8 @@ export class MekaStack extends cdk.Stack {
         MEKA_VOICE_TWILIO_SECRET: voiceTwilio.secretArn,
         // MEKA's voice (build plan V1, Weather and a voice: Amazon Polly in MEKA's own account, approved 2026-10-08).
         MEKA_SPEECH_ENGINE: 'polly',
+        // Callers' messages transcribed by Amazon Transcribe in MEKA's own account (call assistant polish 8d i).
+        MEKA_TRANSCRIBE_ENGINE: 'transcribe',
       },
       secrets: {
         MEKA_DB_USER: ecs.Secret.fromSecretsManager(dbSecret, 'username'),
@@ -283,6 +285,13 @@ export class MekaStack extends cdk.Stack {
     // speech tasks). Polly's synthesis actions have no resource-level scoping, so the resource is '*'.
     task.taskRole.addToPrincipalPolicy(new cdk.aws_iam.PolicyStatement({
       actions: ['polly:SynthesizeSpeech', 'polly:DescribeVoices'],
+      resources: ['*'],
+    }));
+    // Callers' messages (call assistant polish 8d i): batch jobs on the recording kept in MEKA's own bucket, the
+    // result written back there (the service's existing bucket and key grants cover both), read once, then the result
+    // and the job deleted. Start, check, delete; nothing else (no streaming, vocabularies or call analytics).
+    task.taskRole.addToPrincipalPolicy(new cdk.aws_iam.PolicyStatement({
+      actions: ['transcribe:StartTranscriptionJob', 'transcribe:GetTranscriptionJob', 'transcribe:DeleteTranscriptionJob'],
       resources: ['*'],
     }));
 

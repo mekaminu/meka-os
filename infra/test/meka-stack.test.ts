@@ -176,6 +176,15 @@ describe('MekaStack security and cost invariants (ADR-004)', () => {
     expect(polly.sort()).toEqual(['polly:DescribeVoices', 'polly:SynthesizeSpeech']);
   });
 
+  test("callers' messages may only be transcribed in batch: start, check and delete a job", () => {
+    t.hasResourceProperties('AWS::ECS::TaskDefinition', {
+      ContainerDefinitions: [Match.objectLike({ Environment: Match.arrayWith([Match.objectLike({ Name: 'MEKA_TRANSCRIBE_ENGINE', Value: 'transcribe' })]) })],
+    });
+    const statements = (Object.values(t.findResources('AWS::IAM::Policy')) as any[]).flatMap((p) => p.Properties.PolicyDocument.Statement);
+    const transcribe = statements.flatMap((s: any) => ([] as string[]).concat(s.Action)).filter((a) => a.startsWith('transcribe:'));
+    expect(transcribe.sort()).toEqual(['transcribe:DeleteTranscriptionJob', 'transcribe:GetTranscriptionJob', 'transcribe:StartTranscriptionJob']);
+  });
+
   test('records the deployed commit only when CI passes one (deploy.yml diffs against it)', () => {
     const sha = '29720ce900d5aa07156abbdf1f420121003b40b9';
     synth({ deployedCommit: sha }).hasOutput('DeployedCommit', { Value: sha });

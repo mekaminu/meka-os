@@ -404,8 +404,12 @@ fun Application.mekaSync(
                 if (event is VoiceEvent.Transcribed) event.recording?.let { rec ->
                     val log = call.application.environment.log
                     background {
-                        runCatching { voice.assistant.keepRecording(provider, event) }
+                        val kept = runCatching { voice.assistant.keepRecording(provider, event) }
                             .onFailure { log.warn("recording not kept: ${it::class.simpleName}") } // no identifiers
+                            .getOrDefault(false)
+                        // Amazon Transcribe on the kept recording, Twilio's words the fallback (8d i).
+                        runCatching { voice.assistant.transcribeKept(provider, event, kept) }
+                            .onFailure { log.warn("transcript not settled: ${it::class.simpleName}") }
                         runCatching { provider.deleteRecording(rec) }
                     }
                 }
@@ -639,12 +643,18 @@ fun opStoreReader(opStore: PostgresOpStore): EntityReader = object : EntityReade
 fun voiceFromEnv(opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?, speech: SpeechService? = null): VoiceRoutes? {
     val secret = System.getenv("MEKA_VOICE_TWILIO_SECRET")?.takeIf { it.isNotBlank() } ?: return null
     val publicUrl = System.getenv("MEKA_PUBLIC_URL")?.takeIf { it.isNotBlank() } ?: return null
+    // Callers' recordings (polish 8c) in MEKA's own private bucket; none kept without one.
+    val bucket = System.getenv("MEKA_BLOB_BUCKET")?.takeIf { it.isNotBlank() }
+    val recordings = bucket?.let { S3RecordingStore(it) }
     val assistant = CallAssistant(
         ops = opStore, fields = FieldReader { hh, type, id, field -> opStore.latestValue(hh, type, id, field) }, household = { devices.soleHousehold() },
         speechVoices = { speech?.offered().orEmpty() },
         onWritten = { hh -> push?.serverChanged(hh) }, onUrgent = { hh -> push?.urgent(hh) },
-        // Callers' recordings (polish 8c) in MEKA's own private bucket; none kept without one.
-        recordings = System.getenv("MEKA_BLOB_BUCKET")?.takeIf { it.isNotBlank() }?.let { S3RecordingStore(it) },
+        recordings = recordings,
+        // Better transcripts (8d i): Amazon Transcribe in MEKA's own account on the kept recording, when switched on.
+        transcriber = if (bucket != null && recordings != null && System.getenv("MEKA_TRANSCRIBE_ENGINE") == "transcribe") {
+            BatchTranscriber(AwsTranscribeJobs(System.getenv("MEKA_KMS_KEY_ID")?.takeIf { it.isNotBlank() }), bucket, recordings)
+        } else null,
     )
     return VoiceRoutes(assistant, listOf(TwilioVoice.fromSecret(secret)), publicUrl)
 }

@@ -24,7 +24,7 @@ logback = "1.5.18"                     # unverified
 testcontainers = "1.21.0"              # unverified
 junit5 = "5.12.2"                      # unverified
 firebase-messaging = "24.1.0"           # unverified; FCM only (push wake-ups), no Analytics
-awssdk = "2.29.0"                      # KMS, Secrets Manager, Polly (MEKA's voice) and S3 (callers' recordings), URL-connection HTTP client
+awssdk = "2.29.0"                      # KMS, Secrets Manager, Polly (MEKA's voice), S3 (callers' recordings) and Transcribe (their words), URL-connection HTTP client
 
 android-compileSdk = "37"   # required by Compose 1.12 / OkHttp 5.5 / SQLCipher 4.19 AARs; targetSdk stays 36
 android-targetSdk = "36"
@@ -60,6 +60,7 @@ awssdk-kms = { module = "software.amazon.awssdk:kms" }
 awssdk-secretsmanager = { module = "software.amazon.awssdk:secretsmanager" }
 awssdk-polly = { module = "software.amazon.awssdk:polly" }
 awssdk-s3 = { module = "software.amazon.awssdk:s3" }
+awssdk-transcribe = { module = "software.amazon.awssdk:transcribe" }
 awssdk-urlconnection = { module = "software.amazon.awssdk:url-connection-client" }
 
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
