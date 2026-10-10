@@ -188,6 +188,8 @@ final class TalkController {
             say(speak.text)
         } else if effect is TalkEffectPlayMessages {
             playMessages()
+        } else if let readOut = effect as? TalkEffectReadOut {
+            readAloud(readOut.read)
         } else if effect is TalkEffectStopSpeaking {
             stopSaying()
         } else if effect is TalkEffectEnd {
@@ -427,6 +429,17 @@ final class TalkController {
         utterance += 1
         let id = utterance
         speaker.playlist(steps) { [weak self] in self?.finishedSaying(id) }
+    }
+
+    /// "Read my brief", "the headlines", "Barça news": the words from the brief and the News place this Mac shows, said
+    /// as a reading (short pieces asked for ahead, so MEKA's voice holds throughout); then MEKA listens again. Headlines
+    /// are only ever read out, never acted on (ADR-006). The read-out stays on the main actor; only the String goes on.
+    private func readAloud(_ readOut: ReadOut) {
+        guard let text = model?.talkReadOut(readOut) else { return fail(.failed) }
+        said = ReadOutRules.shared.showing(read: readOut)
+        utterance += 1
+        let id = utterance
+        speaker.say(text, reading: true) { [weak self] in self?.finishedSaying(id) }
     }
 
     /// Stops whatever is being said, in either voice.

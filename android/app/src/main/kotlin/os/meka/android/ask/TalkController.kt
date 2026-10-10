@@ -196,6 +196,7 @@ class TalkController(
                 say(effect.text)
             }
             TalkEffect.PlayMessages -> playMessages()
+            is TalkEffect.ReadOut -> readOut(effect.read)
             TalkEffect.StopSpeaking -> stopSaying()
             TalkEffect.End -> {
                 recognizer?.cancel()
@@ -299,6 +300,18 @@ class TalkController(
         said = playlist.steps.filterIsInstance<os.meka.core.domain.PlayStep.Say>().firstOrNull()?.text.orEmpty()
         val id = ++utterance
         speaker.playlist(playlist.steps, { core.voiceMessageAudio(it) }) { finishedSaying(id) }
+    }
+
+    /**
+     * "Read my brief", "the headlines", "Barça news": the words from the brief and the News place this phone shows,
+     * said as a reading (short pieces asked for ahead, so MEKA's voice holds throughout); then MEKA listens again.
+     * Headlines are only ever read out, never acted on (ADR-006).
+     */
+    private fun readOut(read: os.meka.core.domain.ReadOut) {
+        val text = core.talkReadOut(read)
+        said = os.meka.core.domain.ReadOutRules.showing(read)
+        val id = ++utterance
+        speaker.say(text, reading = true) { finishedSaying(id) }
     }
 
     /** Stops whatever is being said, in either voice. */

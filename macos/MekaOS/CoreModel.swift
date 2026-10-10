@@ -1290,6 +1290,14 @@ final class CoreModel {
         return PlaylistStep.of(core.voicePlaylist().steps)
     }
 
+    /// Talk's read-outs ("read my brief", "the headlines", "Barça news"): the words to read, from the brief and the News
+    /// place the core holds. Synchronous and on the main actor (no network), so the Kotlin value never crosses
+    /// isolation. Nil when not connected.
+    func talkReadOut(_ read: ReadOut) -> String? {
+        guard let core else { return nil }
+        return core.talkReadOut(read: read)
+    }
+
     func blockHeldCaller(_ person: PersonSummary) {
         guard let core else { return }
         Task {

@@ -1064,6 +1064,18 @@ class MekaCoreTest {
         val place = m.newsPlace.value
         assertEquals(listOf("Summit opens", "New phone launched"), place.items.map { it.title })
         assertEquals("2 of 2", place.detail(place.items[1].id)!!.position)
+        // Talk's read-outs read the same brief and News place ("the headlines", "technology news", "Barça news").
+        val ro = os.meka.core.domain.ReadOut.Kind.entries.associateWith { os.meka.core.domain.ReadOut(it) }
+        assertEquals(
+            "In the news. From BBC News: New phone launched. From BBC News: Summit opens. Anything else?",
+            m.talkReadOut(ro.getValue(os.meka.core.domain.ReadOut.Kind.HEADLINES)),
+        )
+        assertEquals(
+            "The latest technology news. From BBC News: New phone launched. Anything else?",
+            m.talkReadOut(os.meka.core.domain.ReadOut(os.meka.core.domain.ReadOut.Kind.TOPIC, "technology")),
+        )
+        assertTrue(m.talkReadOut(ro.getValue(os.meka.core.domain.ReadOut.Kind.BRIEF)).startsWith("Good morning, Meka."))
+        assertTrue(m.talkReadOut(os.meka.core.domain.ReadOut(os.meka.core.domain.ReadOut.Kind.TOPIC, "health")).startsWith("Health isn't one of your news topics."))
     }
 
     @Test

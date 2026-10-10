@@ -2113,6 +2113,15 @@ class MekaCore(
     /** [voicePlaylistOf] the synced summary as it stands (the Mac's). */
     fun voicePlaylist(): os.meka.core.domain.VoicePlaylist = voicePlaylistOf(_afterWork.value)
 
+    /**
+     * The words for a read-out in Talk ("read my brief", "the headlines", "Barça news";
+     * [os.meka.core.domain.ReadOutRules]): from the brief and the News place this device shows now. Plain text to be
+     * said as a reading; nothing in it is ever acted on. Pure and cheap (no network), so the Mac calls it on the main
+     * actor.
+     */
+    fun talkReadOut(read: os.meka.core.domain.ReadOut): String =
+        os.meka.core.domain.ReadOutRules.text(read, _brief.value, _newsPlace.value)
+
     // ---- Ask MEKA (build plan V1, AI layer slice 3; ADR-006) ----
 
     /**

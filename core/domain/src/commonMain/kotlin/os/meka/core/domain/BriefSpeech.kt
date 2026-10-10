@@ -78,7 +78,7 @@ object BriefSpeech {
     }
 
     /** [title] cut at the last word that fits [MAX_HEADLINE_CHARS]. */
-    private fun shorten(title: String): String {
+    fun shorten(title: String): String {
         if (title.length <= MAX_HEADLINE_CHARS) return title
         val cut = title.lastIndexOf(' ', MAX_HEADLINE_CHARS).takeIf { it > 0 } ?: MAX_HEADLINE_CHARS
         return title.substring(0, cut).trimEnd(',', ';', ':', ' ')

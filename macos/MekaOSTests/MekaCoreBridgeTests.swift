@@ -1159,6 +1159,25 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual((playlist.steps.first as? PlayStepSay)?.text, "No voice messages waiting. Anything else?")
     }
 
+    func testReadOutsReachSwift() {
+        // Talk's read-outs ("read my brief", "the headlines", "Barça news"): recognised on the Mac, no AI call, the words
+        // from the core as one String.
+        XCTAssertEqual(ReadOutRules.shared.request(utterance: "read my brief")?.kind, ReadOutKind.brief)
+        XCTAssertEqual(ReadOutRules.shared.request(utterance: "Barça news")?.topicId, "barca")
+        XCTAssertNil(ReadOutRules.shared.request(utterance: "read my messages"))
+        let step = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "read the headlines")
+        let effect = step.effects.first as? TalkEffectReadOut
+        XCTAssertEqual(effect?.read.kind, ReadOutKind.headlines)
+        XCTAssertEqual(step.session.questions, 0)
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "readout-\(UUID().uuidString).db", deviceKey: nil
+        )
+        XCTAssertEqual(core.talkReadOut(read: ReadOut(kind: .headlines, topicId: nil)), ReadOutRules.shared.NO_HEADLINES)
+        XCTAssertEqual(ReadOutRules.shared.showing(read: ReadOut(kind: .brief, topicId: nil)), "Reading your morning brief…")
+    }
+
     func testShoppingReachesSwift() {
         // Family sharing, slice 1: the shopping list's rules and Lists' new tab reach the Mac.
         XCTAssertEqual(ShoppingRules.shared.split(text: "milk, fish and chips;eggs"), ["milk", "fish and chips", "eggs"])

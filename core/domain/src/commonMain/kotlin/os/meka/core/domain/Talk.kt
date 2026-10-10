@@ -43,6 +43,8 @@ sealed interface TalkReply {
     data object Decline : TalkReply
     /** "Play my messages", "any voice messages?", "who called?" ([VoicePlaylistRules.isPlayRequest]): played on the device, no AI. */
     data class PlayMessages(val question: String) : TalkReply
+    /** "Read my brief", "the headlines", "Barça news" ([ReadOutRules.request]): read aloud on the device, no AI. */
+    data class ReadOut(val question: String, val read: os.meka.core.domain.ReadOut) : TalkReply
     /** Anything else is a new question. */
     data class Ask(val question: String) : TalkReply
 }
@@ -139,6 +141,7 @@ object TalkRules {
             if (cover(ws, NO) != null) return TalkReply.Decline
         }
         if (VoicePlaylistRules.isPlayRequest(question)) return TalkReply.PlayMessages(question)
+        ReadOutRules.request(question)?.let { return TalkReply.ReadOut(question, it) }
         if (isEnding(question)) return TalkReply.End
         return TalkReply.Ask(question)
     }
@@ -289,6 +292,12 @@ sealed interface TalkEffect {
      * speech ([StopSpeaking], [End]) stops the playlist too.
      */
     data object PlayMessages : TalkEffect
+    /**
+     * Read [read] aloud ("read my brief", "the headlines", "Barça news"): the app takes the words from
+     * `MekaCore.talkReadOut` and says them as a reading (short pieces asked for ahead, MEKA's voice throughout), then
+     * reports with [TalkFlow.spoke]. Plain text only: nothing in it is ever acted on (ADR-006).
+     */
+    data class ReadOut(val read: os.meka.core.domain.ReadOut) : TalkEffect
     /** Say [text] on the device, then report with [TalkFlow.spoke]. */
     data class Speak(val text: String) : TalkEffect
     /** Stop speaking at once (Meka talked over MEKA). */
@@ -331,6 +340,10 @@ object TalkFlow {
             is TalkReply.PlayMessages -> TalkStep(
                 s.copy(phase = TalkPhase.SPEAKING, pending = emptyList(), conversation = s.conversation.answered(r.question, VoicePlaylistRules.PLAYED)),
                 listOf(TalkEffect.PlayMessages),
+            )
+            is TalkReply.ReadOut -> TalkStep(
+                s.copy(phase = TalkPhase.SPEAKING, pending = emptyList(), conversation = s.conversation.answered(r.question, ReadOutRules.remembered(r.read))),
+                listOf(TalkEffect.ReadOut(r.read)),
             )
             is TalkReply.Ask -> {
                 if (s.questions >= TalkRules.MAX_QUESTIONS) return say(s.copy(endAfterSpeaking = true), TalkRules.TOO_MANY)
