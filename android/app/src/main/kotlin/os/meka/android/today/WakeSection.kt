@@ -90,7 +90,7 @@ internal fun WakeSection(core: MekaCore, modifier: Modifier = Modifier) {
                 Text(
                     "%02d:%02d".format(m / 60, m % 60), style = MekaType.upNextTitle,
                     color = if (w.isSet) Meka.colors.accent else Meka.colors.textPrimary,
-                    modifier = Modifier.padding(horizontal = MekaSpace.s),
+                    modifier = Modifier.padding(horizontal = MekaSpace.xs),
                 )
             }
             WakeStep("›", "Five minutes later") { step(1) }
@@ -127,7 +127,7 @@ internal fun WakeSection(core: MekaCore, modifier: Modifier = Modifier) {
                 },
             )
         }
-        Text("Time to get ready", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.s))
+        Text("Time to get ready", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.m))
         Row(
             Modifier.horizontalScroll(rememberScrollState()).padding(top = MekaSpace.xxs),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -154,7 +154,7 @@ private fun WakeStep(glyph: String, description: String, onClick: () -> Unit) {
     Text(
         glyph, style = MekaType.upNextTitle, color = Meka.colors.textSecondary,
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).semantics { contentDescription = description }
-            .clickable(role = Role.Button) { onClick() }.padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs),
+            .clickable(role = Role.Button) { onClick() }.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
     )
 }
 

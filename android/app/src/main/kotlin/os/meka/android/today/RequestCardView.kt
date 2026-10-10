@@ -54,7 +54,7 @@ internal fun RequestCardView(card: RequestCard, onChoice: (RequestChoice) -> Uni
         Text(card.quote, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
         Text(card.action, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.xxs))
         card.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
-        Row(Modifier.padding(top = MekaSpace.s), horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+        Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             RequestPill(card.addLabel, filled = true, spoken = "${card.addLabel}: ${card.action}") { haptics.light(); onChoice(RequestChoice.ADD) }
             card.changeLabel?.let { label ->
                 RequestPill(label, filled = false, spoken = "$label ${card.action}") { haptics.light(); onChoice(RequestChoice.CHANGE) }

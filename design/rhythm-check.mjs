@@ -37,6 +37,28 @@ export const ON_RHYTHM = [
   M + 'Today/DayRingView.swift',
   M + 'Today/CommandCentreViews.swift',
   M + 'Today/SignInLineView.swift',
+  // Slice 4b: Needs you and the panes that open from Today (task detail, brief, shutdown, wake alarm, repeat, plan).
+  A + 'today/NeedsYouRoute.kt',
+  A + 'today/DecisionStack.kt',
+  A + 'today/TriageCardView.kt',
+  A + 'today/RequestCardView.kt',
+  A + 'today/GroupDigestSection.kt',
+  A + 'today/TaskDetailRows.kt',
+  A + 'today/BriefPane.kt',
+  A + 'today/ShutdownPane.kt',
+  A + 'today/WakeSection.kt',
+  A + 'today/RepeatSection.kt',
+  A + 'today/PlanPane.kt',
+  M + 'Shell/NeedsYouStackView.swift',
+  M + 'Shell/RequestCardsView.swift',
+  M + 'Shell/TriageCardsView.swift',
+  M + 'Shell/GroupGistsView.swift',
+  M + 'Shell/NeedsYouMeanwhileView.swift',
+  M + 'TaskDetailRows.swift',
+  M + 'Today/BriefSheet.swift',
+  M + 'Today/ShutdownSheet.swift',
+  M + 'Today/WakeSection.swift',
+  M + 'RepeatViews.swift',
 ];
 
 const NUM = String.raw`\b(?!0(?:\.0+)?\b)\d+(?:\.\d+)?`;

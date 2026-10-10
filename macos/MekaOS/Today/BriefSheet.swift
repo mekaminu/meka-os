@@ -20,7 +20,7 @@ struct BriefSheet: View {
     @State private var speaker = MekaSpeaker()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if let v = model.brief {
                 Text("\(v.greeting), Meka").font(MekaType.upNextTitle).staggeredAppear(0)
                 Text([v.dateLabel, v.workLine].compactMap { $0 }.joined(separator: " · "))
@@ -56,7 +56,7 @@ struct BriefSheet: View {
                             SectionLabel("Waiting on", palette).padding(.top, MekaSpace.l).staggeredAppear(2)
                             Text(waitingLine).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(2)
                             ForEach(v.waiting, id: \.id) { w in
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                                     Text(w.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                                     Text(w.meta).font(MekaType.caption)
                                         .foregroundStyle(w.state == .due ? palette.accent : palette.textTertiary)
@@ -73,7 +73,7 @@ struct BriefSheet: View {
                         if !v.attention.isEmpty {
                             SectionLabel("On your lists", palette).padding(.top, MekaSpace.l).staggeredAppear(3)
                             ForEach(v.attention, id: \.id) { a in
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                                     Text(a.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                                     if let d = a.detail { Text(d).font(MekaType.caption).foregroundStyle(palette.accent) }
                                 }
@@ -123,7 +123,7 @@ struct BriefSheet: View {
                 .frame(maxHeight: 460)
 
                 if closing || v.seenToday {
-                    HStack(spacing: MekaSpace.s) {
+                    HStack(spacing: MekaSpace.xs) {
                         Image(systemName: "checkmark.circle.fill").font(.system(size: 22)).foregroundStyle(palette.accent)
                         Text("Read for today").font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     }
@@ -191,7 +191,7 @@ private struct HeadlineRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             Text(headline.title).font(MekaType.itemTitle)
                 .foregroundStyle(hovering && url != nil ? palette.accent : palette.textPrimary)
             Text(headline.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -235,7 +235,7 @@ struct BriefCard: View {
 
     var body: some View {
         Button { model.showBrief = true } label: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text("Morning brief").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                 // "16° · drizzle from 15:00 · 2 tasks · Barça v Getafe tomorrow 17:30" (Fold review 2026-10-09 07:26, item 4);
                 // it cross-fades as the weather or the day changes.
@@ -271,7 +271,7 @@ struct BriefDayRow: View {
                 }
             }
             .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + 5 }
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(line.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let c = line.caption {
                     Text(c).font(MekaType.caption).foregroundStyle(line.lit ? palette.accent : palette.textTertiary)

@@ -14,7 +14,7 @@ struct RequestCardsView: View {
     var firstIndex: Int = 2
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
             ForEach(Array(model.requests.enumerated()), id: \.element.id) { i, card in
                 RequestCardRow(card: card, palette: palette) { model.answerRequest(card, $0) }
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
@@ -38,14 +38,14 @@ private struct RequestCardRow: View {
             if let detail = card.detail {
                 Text(detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
-            HStack(spacing: MekaSpace.s) {
+            HStack(spacing: MekaSpace.xs) {
                 pill(card.addLabel, filled: true, spoken: "\(card.addLabel): \(card.action)") { answer(.add) }
                 if let change = card.changeLabel {
                     pill(change, filled: false, spoken: "\(change) \(card.action)") { answer(.change) }
                 }
                 pill(card.declineLabel, filled: false, quiet: true, spoken: card.declineLabel) { answer(.decline) }
             }
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)

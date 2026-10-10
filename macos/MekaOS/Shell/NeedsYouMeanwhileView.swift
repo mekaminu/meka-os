@@ -57,7 +57,7 @@ struct NeedsYouMeanwhileView: View {
         Button { model.setHabitDone(h.id, !h.doneToday) } label: {
             HStack(spacing: MekaSpace.m) {
                 TickRingView(done: h.doneToday, palette: palette).frame(width: 22, height: 22)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(h.title).font(MekaType.itemTitle)
                         .foregroundStyle(h.doneToday ? palette.textSecondary : palette.textPrimary).lineLimit(1)
                     if !h.meta.isEmpty {
@@ -76,7 +76,7 @@ struct NeedsYouMeanwhileView: View {
 
     private func lineRow(_ l: MeanwhileLine) -> some View {
         Button { model.go(to: .lists, reduced: reduceMotion) } label: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(l.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(2)
                 Text(l.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
             }

@@ -76,7 +76,7 @@ private struct StepRow: View {
     let palette: MekaPalette
 
     var body: some View {
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             Button {
                 model.setStepDone(step.id, !step.checked)
             } label: {

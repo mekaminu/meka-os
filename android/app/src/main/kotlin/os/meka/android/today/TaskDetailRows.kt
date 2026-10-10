@@ -45,6 +45,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.DayPickerDialog
@@ -66,7 +67,7 @@ internal fun WhenSection(task: Task, actions: TodayActions) {
     val v = actions.whenOf(task)
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
-            .clickable(role = Role.Button) { open = !open }.padding(vertical = MekaSpace.s)
+            .clickable(role = Role.Button) { open = !open }.minTouch().padding(vertical = MekaSpace.xs)
             .semantics { contentDescription = "When, ${v.label}" },
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -79,7 +80,7 @@ internal fun WhenSection(task: Task, actions: TodayActions) {
         enter = if (reduced) fadeIn(MekaMotion.expand(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
         exit = if (reduced) fadeOut(MekaMotion.expand(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
     ) {
-        Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.s), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+        Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 v.chips.forEach { c ->
                     WhenChip(c.label, c.selected) {
@@ -98,7 +99,7 @@ internal fun WhenSection(task: Task, actions: TodayActions) {
                         Text(it, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.padding(horizontal = MekaSpace.xs))
                     }
                     StepText("›", "15 minutes later") { haptics.tick(); actions.setWhen(task.id, v.day, TaskWhenRules.step(minute, 1)) }
-                    Spacer(Modifier.padding(start = MekaSpace.s))
+                    Spacer(Modifier.padding(start = MekaSpace.xs))
                     WhenChip("No time", false) { haptics.tick(); actions.setWhen(task.id, v.day, null) }
                 }
             }
@@ -131,7 +132,7 @@ internal fun ReminderSection(task: Task, actions: TodayActions) {
     if (v.choices.isEmpty() && !v.isSet) return
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
-            .clickable(role = Role.Button) { open = !open }.padding(vertical = MekaSpace.s)
+            .clickable(role = Role.Button) { open = !open }.minTouch().padding(vertical = MekaSpace.xs)
             .semantics { contentDescription = "Remind me, ${v.label}" },
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -145,7 +146,7 @@ internal fun ReminderSection(task: Task, actions: TodayActions) {
         exit = if (reduced) fadeOut(MekaMotion.expand(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(bottom = MekaSpace.s).horizontalScroll(rememberScrollState()),
+            Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs).horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             v.choices.forEach { c ->
@@ -235,7 +236,7 @@ private const val NOTES_SAVE_MS = 800L
 @Composable
 internal fun DetailActions(task: Task, actions: TodayActions) {
     val haptics = rememberMekaHaptics()
-    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             DetailPill("Done", filled = true) { haptics.light(); actions.complete(task.id) }
             if (task.isRepeating) DetailPill("Skip", filled = false) { haptics.tick(); actions.skip(task.id) }
@@ -258,6 +259,6 @@ private fun DetailPill(label: String, filled: Boolean, onClick: () -> Unit) {
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
             .background(if (filled) Meka.colors.accent else Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onClick() }
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+            .minTouch().padding(horizontal = MekaSpace.l),
     )
 }

@@ -46,10 +46,10 @@ struct NeedsYouStackView: View {
                         .accessibilityAction(named: Text(top.laterLabel)) { perform(top, .later) }
                         .accessibilityAction(named: Text(top.openLabel)) { perform(top, .open) }
                 }
-                .padding(.bottom, 24)
+                .padding(.bottom, MekaSpace.l)
                 .animation(MekaMotion.approve(reduced: reduceMotion), value: shown.map(\.id))
 
-                HStack(spacing: MekaSpace.s) {
+                HStack(spacing: MekaSpace.xs) {
                     Button("← \(top.laterLabel)") { perform(top, .later) }
                         .help("Left arrow")
                     Button("↑ \(top.openLabel)") { perform(top, .open) }
@@ -160,7 +160,7 @@ private struct DecisionCardFace: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(card.why).font(MekaType.itemMeta).foregroundStyle(card.urgent ? palette.critical : palette.accent)
             Text(card.title).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary).lineLimit(3)
             Text(NeedsYouStackRules.shared.hint(card: card)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)

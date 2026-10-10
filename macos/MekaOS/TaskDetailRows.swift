@@ -14,7 +14,7 @@ struct WhenRow: View {
 
     var body: some View {
         if let v = model.taskWhen(task) {
-            VStack(alignment: .leading, spacing: MekaSpace.s) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 Button {
                     withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open.toggle() }
                 } label: {
@@ -31,7 +31,7 @@ struct WhenRow: View {
                 .accessibilityLabel("When, \(v.label)")
 
                 if open {
-                    VStack(alignment: .leading, spacing: MekaSpace.s) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         HStack(spacing: MekaSpace.xs) {
                             ForEach(v.chips, id: \.day) { c in
                                 chip(c.label, lit: c.selected) {
@@ -49,7 +49,7 @@ struct WhenRow: View {
                                     .animation(MekaMotion.appear(reduced: reduceMotion), value: v.timeLabel)
                                 step("›", "15 minutes later") { model.setWhen(task.id, day: v.day, minute: Int(TaskWhenRules.shared.step(minute: Int32(m), steps: 1))) }
                                 chip("No time", lit: false) { model.setWhen(task.id, day: v.day, minute: nil) }
-                                    .padding(.leading, MekaSpace.s)
+                                    .padding(.leading, MekaSpace.xs)
                             } else {
                                 chip("Add a time", lit: false) { model.setWhen(task.id, day: v.day, minute: Int(v.suggestedMinute)) }
                             }
@@ -118,7 +118,7 @@ struct ReminderRow: View {
 
     var body: some View {
         if let v = model.taskReminder(task), v.isSet || !v.choices.isEmpty {
-            VStack(alignment: .leading, spacing: MekaSpace.s) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 Button {
                     withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open.toggle() }
                 } label: {
@@ -174,7 +174,7 @@ struct NotesEditor: View {
             ZStack(alignment: .topLeading) {
                 if text.isEmpty {
                     Text("Add notes…").font(MekaType.body).foregroundStyle(palette.textTertiary)
-                        .padding(.top, 1).padding(.leading, 5)
+                        .padding(.top, 1).padding(.leading, 5) // rhythm: ok (lines the placeholder up with TextEditor's own text inset)
                 }
                 TextEditor(text: Binding(get: { text }, set: { text = $0; dirty = true }))
                     .font(MekaType.body)
@@ -182,7 +182,7 @@ struct NotesEditor: View {
                     .frame(minHeight: 72)
                     .accessibilityLabel("Notes")
             }
-            .padding(MekaSpace.s)
+            .padding(MekaSpace.xs)
             .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
         }
         .onAppear { text = task.notes ?? "" }
@@ -211,7 +211,7 @@ struct DetailActionPills: View {
     let palette: MekaPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack(spacing: MekaSpace.xs) {
                 pill("Done", filled: true) { MekaHaptics.light(); model.complete(task.id) } // ⌘↩ lives in the Today menu
                 if task.isRepeating { pill("Skip", filled: false) { MekaHaptics.tick(); model.skip(task.id) } }
@@ -229,7 +229,7 @@ struct DetailActionPills: View {
         Button(action: action) {
             Text(label).font(MekaType.caption)
                 .foregroundStyle(filled ? palette.onAccent : palette.textPrimary)
-                .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.s)
+                .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.xs)
                 .background(Capsule().fill(filled ? palette.accent : palette.surfaceRaised))
         }
         .buttonStyle(MekaPressStyle())

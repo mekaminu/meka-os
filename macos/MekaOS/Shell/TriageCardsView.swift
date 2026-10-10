@@ -15,7 +15,7 @@ struct TriageCardsView: View {
     var firstIndex: Int = 2
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
             ForEach(Array(model.triage.enumerated()), id: \.element.id) { i, card in
                 TriageCardRow(card: card, palette: palette) { model.answerTriage(card, lead: $0) }
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
@@ -41,18 +41,18 @@ private struct TriageCardRow: View {
             if let draft = card.draft {
                 Text(draft).font(MekaType.body).foregroundStyle(palette.textSecondary)
                     .textSelection(.enabled)
-                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.s)
+                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
                     .padding(.top, MekaSpace.xs)
             }
-            HStack(spacing: MekaSpace.s) {
+            HStack(spacing: MekaSpace.xs) {
                 pill(lead, filled: true, spoken: card.draft != nil ? rules.copiedLine(card: card) : lead) { answer(true) }
                 if let quiet = rules.secondary(card: card) {
                     pill(quiet, filled: false, quiet: true, spoken: "\(quiet): \(rules.who(card: card))") { answer(false) }
                 }
             }
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)

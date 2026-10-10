@@ -46,6 +46,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.SwipeActionIcon
@@ -80,7 +81,7 @@ fun DecisionStackView(
     val top = shown.firstOrNull() ?: return
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 24.dp), contentAlignment = Alignment.TopCenter) {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = MekaSpace.l), contentAlignment = Alignment.TopCenter) {
             val widthPx = constraints.maxWidth.toFloat()
             // The cards behind: smaller, lower and dimmer, so the stack reads as a pile.
             shown.drop(1).take(2).reversed().forEachIndexed { i, card ->
@@ -166,7 +167,7 @@ private fun TopCard(card: DecisionCard, widthPx: Float, onMove: (DecisionMove, B
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         val x = dx.value
         val y = dy.value
         val progress = (maxOf(abs(x) / thresholdX, -y / thresholdY)).coerceIn(0f, 1f)
@@ -219,7 +220,7 @@ private fun TopCard(card: DecisionCard, widthPx: Float, onMove: (DecisionMove, B
                     }
                 },
         )
-        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             StackButton("← ${card.laterLabel}", primary = false, Modifier.weight(1f)) { perform(DecisionMove.LATER) }
             StackButton("↑ ${card.openLabel}", primary = false, Modifier.weight(1f)) { perform(DecisionMove.OPEN) }
             StackButton("${card.yesLabel} →", primary = true, Modifier.weight(1f)) { perform(DecisionMove.YES) }
@@ -254,7 +255,7 @@ private fun DecisionCardFace(card: DecisionCard, armed: DecisionMove?, progress:
         modifier.fillMaxWidth().heightIn(min = 196.dp).clip(RoundedCornerShape(MekaRadius.l))
             .background(face).padding(MekaSpace.l),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+        Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Text(card.why, style = MekaType.itemMeta, color = if (card.urgent) Meka.colors.critical else Meka.colors.accent)
             Text(card.title, style = MekaType.upNextTitle, color = Meka.colors.textPrimary, maxLines = 3, overflow = TextOverflow.Ellipsis)
             Text(NeedsYouStackRules.hint(card), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
@@ -305,6 +306,6 @@ private fun StackButton(label: String, primary: Boolean, modifier: Modifier, onC
         modifier = modifier.clip(RoundedCornerShape(MekaRadius.m))
             .background(if (primary) Meka.colors.accent else Meka.colors.surfaceRaised)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(vertical = MekaSpace.s, horizontal = MekaSpace.s),
+            .minTouch().padding(horizontal = MekaSpace.xs),
     )
 }

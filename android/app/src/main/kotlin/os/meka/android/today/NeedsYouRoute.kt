@@ -269,12 +269,12 @@ internal fun NeedsYouColumn(
             }
         }
         item(key = "after-work") {
-            AfterWorkCard(core, Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(1, play))) { openAfterWork() }
+            AfterWorkCard(core, Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1, play))) { openAfterWork() }
         }
         digest?.takeIf { it.due }?.let { d ->
             item(key = "group-digest") {
                 GroupDigestSection(d, captures, core, moves.undoLine,
-                    Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(2, play)))
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
             }
         }
         // Messages that need a reply (with MEKA's draft), then FYIs (V1, messages slice 3), above the requests: "Send all"
@@ -292,7 +292,7 @@ internal fun NeedsYouColumn(
         triage.forEachIndexed { i, card ->
             item(key = "triage-${card.id}") {
                 TriageCardView(card, card.id in live, edits[card.id] ?: card.draft.orEmpty(), { edits[card.id] = it }, { moves.onTriage(card, it) },
-                    Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(2 + i, play)))
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + i, play)))
             }
         }
         // Requests from people Meka watches, oldest first, above the stack (V1, requests slice 4): each staggers in
@@ -300,14 +300,14 @@ internal fun NeedsYouColumn(
         requests.forEachIndexed { i, card ->
             item(key = "request-${card.id}") {
                 RequestCardView(card, { moves.onRequest(card, it) },
-                    Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(2 + triage.size + i, play)))
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + i, play)))
             }
         }
         // Between digests, groups with news are one quiet line under the cards that Meka can open on demand.
         digest?.takeIf { !it.due }?.let { d ->
             item(key = "group-digest") {
                 GroupDigestSection(d, captures, core, moves.undoLine,
-                    Modifier.animateItem().padding(bottom = MekaSpace.s).appear(rememberAppearance(2 + triage.size + requests.size, play)))
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + requests.size, play)))
             }
         }
         if (cards.isEmpty() && requests.isEmpty() && triage.isEmpty()) {

@@ -47,6 +47,7 @@ import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.SharedMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.core.domain.DayPlanner
 import os.meka.core.domain.PlanCalendarSetting
@@ -84,9 +85,9 @@ fun PlanPane(
         toCalendar = core.planCalendarSetting()
     }
 
-    Column(Modifier.fillMaxSize().padding(MekaSpace.gutter).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    Column(Modifier.fillMaxSize().padding(MekaSpace.gutter).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Text("Your day", style = MekaType.greeting, color = Meka.colors.textPrimary)
         val p = plan
         if (p == null) {
@@ -98,7 +99,7 @@ fun PlanPane(
             return@Column
         }
         Text("A suggestion. Nothing changes until you apply it.", style = MekaType.itemMeta, color = Meka.colors.textSecondary)
-        Spacer(Modifier.height(MekaSpace.s))
+        Spacer(Modifier.height(MekaSpace.xs))
 
         // One timeline: fixed events and suggested tasks, in time order.
         val rows = p.busy.map { PlanRow(it.startAtMs, "${t(it.startAtMs)}–${t(it.endAtMs)}", it.title, null) } +
@@ -111,7 +112,7 @@ fun PlanPane(
             Row(
                 Modifier.appear(rememberAppearance(i)).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
                     .background(if (suggested) Meka.colors.surfaceRaised else Meka.colors.background)
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             ) {
                 Text(row.time, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.width(104.dp))
                 // Once applied, this title is the one that travels into Today.
@@ -123,7 +124,7 @@ fun PlanPane(
             }
         }
         if (p.unplaced.isNotEmpty()) {
-            Spacer(Modifier.height(MekaSpace.s))
+            Spacer(Modifier.height(MekaSpace.xs))
             Text("Won't fit today: " + p.unplaced.joinToString(", ") { it.title }, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
         if (p.habits.isNotEmpty()) {
@@ -172,7 +173,7 @@ fun PlanPane(
 private fun PlanCalendarSwitch(s: PlanCalendarSetting, onChange: (Boolean) -> Unit) {
     val reduced = Meka.reducedMotion
     val bg by animateColorAsState(if (s.on) Meka.colors.accent else Meka.colors.background, MekaMotion.themeBlend(reduced), label = "plan-calendar")
-    Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.s)) {
+    Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs)) {
         Row(
             Modifier.fillMaxWidth().toggleable(value = s.on, role = Role.Switch) { onChange(it) },
             horizontalArrangement = Arrangement.SpaceBetween,

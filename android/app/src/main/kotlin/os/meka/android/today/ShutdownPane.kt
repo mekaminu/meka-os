@@ -46,6 +46,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -86,7 +87,7 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
     ) {
         item(key = "close") {
             Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+                modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         }
         item(key = "title") {
             Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0))) {
@@ -167,7 +168,7 @@ private fun LeftRow(
     modifier: Modifier,
 ) {
     val t = item.task
-    Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.s), verticalAlignment = Alignment.Top) {
+    Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
         CompleteButton(t, tick)
         Spacer(Modifier.width(MekaSpace.m))
         Column(Modifier.weight(1f)) {
@@ -226,7 +227,7 @@ private fun ShutDownCheck(visible: Boolean, line: String) {
         exit = fadeOut(MekaMotion.appear(reduced)),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent).padding(horizontal = MekaSpace.l, vertical = MekaSpace.s)) {
+            Box(Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent).padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs)) {
                 Text("✓", style = MekaType.upNextTitle, color = Meka.colors.onAccent)
             }
             Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs))

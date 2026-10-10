@@ -57,6 +57,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -123,7 +124,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
     ) {
         item(key = "close") {
             Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+                modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         }
         item(key = "title") {
             Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0))) {
@@ -134,7 +135,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
                     color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
                 // Today's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
                 v.weatherLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
-                ListenPill(speaking = speaker.speaking, modifier = Modifier.padding(top = MekaSpace.s)) {
+                ListenPill(speaking = speaker.speaking, modifier = Modifier.padding(top = MekaSpace.m)) {
                     if (speaker.speaking) { haptics.tick(); speaker.stop() } else { haptics.light(); listen() }
                 }
             }
@@ -198,7 +199,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
                     enter = if (Meka.reducedMotion) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
                     exit = if (Meka.reducedMotion) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
                 ) {
-                    Box(Modifier.padding(bottom = MekaSpace.s)) {
+                    Box(Modifier.padding(bottom = MekaSpace.xs)) {
                         Chips(null, v.newsTopics.map { it.label to it.chosen }) { i ->
                             val t = v.newsTopics[i]
                             haptics.tick()
@@ -335,7 +336,7 @@ private fun GotItCheck(visible: Boolean) {
             fadeIn(MekaMotion.appear(false)),
         exit = fadeOut(MekaMotion.appear(reduced)),
     ) {
-        Box(Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent).padding(horizontal = MekaSpace.l, vertical = MekaSpace.s)) {
+        Box(Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent).padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs)) {
             Text("✓", style = MekaType.upNextTitle, color = Meka.colors.onAccent)
         }
     }

@@ -51,6 +51,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.TextAutosave
@@ -72,7 +73,7 @@ internal fun RepeatSection(task: Task, actions: TodayActions) {
     }
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
-            .clickable(role = Role.Button) { open = !open }.padding(vertical = MekaSpace.s),
+            .clickable(role = Role.Button) { open = !open }.minTouch().padding(vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("Repeat", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
@@ -91,7 +92,7 @@ internal fun RepeatSection(task: Task, actions: TodayActions) {
             choices.forEach { c ->
                 Row(
                     Modifier.fillMaxWidth().clickable(role = Role.RadioButton) { actions.setRepeat(task.id, c.rule); open = false }
-                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(c.label, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
@@ -117,7 +118,7 @@ internal fun StepsSection(task: Task, actions: TodayActions) {
     // pressed ([TextAutosave]: typing is never lost). Reads this task's own field, not the next task's.
     val add by rememberUpdatedState(actions.addStep)
     DisposableEffect(task.id) { onDispose { TextAutosave.pendingAdd(textState.value)?.let { add(task.id, it) } } }
-    Box(Modifier.fillMaxWidth().padding(vertical = MekaSpace.s)) {
+    Box(Modifier.fillMaxWidth().minTouch().padding(vertical = MekaSpace.xs)) {
         if (text.isEmpty()) Text("Add a step…", style = MekaType.body, color = Meka.colors.textTertiary)
         BasicTextField(
             value = text,

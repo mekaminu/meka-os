@@ -135,7 +135,7 @@ internal fun GroupDigestSection(
         }
         // Opening it (or the digest coming due) unfolds the group cards in place (expand spring; reduced motion: cross-fade).
         AnimatedVisibility(open, enter = unfold(), exit = fold()) {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
                 view.cards.forEach { card ->
                     androidx.compose.runtime.key(card.groupKey) {
                         GroupDigestCardView(card, gistOf[card.groupKey], store, onCaughtUp = { catchUp(listOf(card)) }, onMode = { mode ->
@@ -197,7 +197,7 @@ private fun GroupDigestCardView(card: GroupDigestCard, gist: String?, store: Cap
                 Text(GroupDigestRules.modeHint(mode), style = MekaType.itemMeta, color = Meka.colors.textTertiary)
             }
         }
-        Row(Modifier.padding(top = MekaSpace.s), horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+        Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             val label = if (expanded) GroupDigestRules.HIDE else GroupDigestRules.SHOW
             DigestPill(label, spoken = "$label ${card.title}'s messages") { haptics.tick(); expanded = !expanded }
             DigestPill(GroupDigestRules.CAUGHT_UP, quiet = true, spoken = "${GroupDigestRules.CAUGHT_UP} with ${card.title}") { onCaughtUp() }

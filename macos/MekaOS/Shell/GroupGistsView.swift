@@ -15,7 +15,7 @@ struct GroupGistsView: View {
 
     var body: some View {
         let gists = model.groupGists
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
             if let head = GroupGistRules.shared.headLine(gists: gists) {
                 HStack {
                     Text(head).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
@@ -54,7 +54,7 @@ private struct GroupGistRow: View {
                 Text(gist.people).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
             }
             GistPill(label: GroupDigestRules.shared.CAUGHT_UP, palette: palette, quiet: true, spoken: "Caught up with \(gist.title)", action: caughtUp)
-                .padding(.top, MekaSpace.s)
+                .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -19,7 +19,7 @@ struct WakeSection: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             SectionLabel("Wake alarm", palette)
             Text(wake.dayLabel).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-            HStack(spacing: MekaSpace.s) {
+            HStack(spacing: MekaSpace.xs) {
                 Button { step(-1) } label: { Image(systemName: "chevron.left") }
                     .buttonStyle(MekaPressStyle()).foregroundStyle(palette.textSecondary)
                     .accessibilityLabel("Five minutes earlier")

@@ -75,7 +75,7 @@ internal fun TriageCardView(
         card.draft?.let { draft ->
             Column(
                 Modifier.padding(top = MekaSpace.xs).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s))
-                    .background(Meka.colors.surface).padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+                    .background(Meka.colors.surface).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             ) {
                 if (!editing) {
                     Text(reply.ifBlank { draft }, style = MekaType.body, color = Meka.colors.textSecondary)
@@ -97,7 +97,7 @@ internal fun TriageCardView(
                 }
             }
         }
-        Row(Modifier.padding(top = MekaSpace.s), horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+        Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             val sendable = rules.cleanReply(reply)
             val label = rules.label(primary)
             TriagePill(label, filled = true, spoken = when (primary) {

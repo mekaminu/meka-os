@@ -13,7 +13,7 @@ struct ShutdownSheet: View {
     @State private var closing = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Shut down the day").font(MekaType.upNextTitle).staggeredAppear(0)
             if let v = model.shutdown {
                 doneCount(v).staggeredAppear(0)
@@ -68,7 +68,7 @@ struct ShutdownSheet: View {
                 .frame(maxHeight: 440)
 
                 if closing || v.doneToday {
-                    HStack(spacing: MekaSpace.s) {
+                    HStack(spacing: MekaSpace.xs) {
                         Image(systemName: "checkmark.circle.fill").font(.system(size: 22)).foregroundStyle(palette.accent)
                         Text(v.doneLine ?? "Day shut down").font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     }
@@ -123,7 +123,7 @@ private struct LeftRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: MekaSpace.m) {
             CompleteButton(task: item.task, palette: palette)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(item.task.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                 if let line = item.line {
                     Text(line).font(MekaType.itemMeta).foregroundStyle(item.overdue ? palette.critical : palette.textSecondary)
@@ -134,11 +134,11 @@ private struct LeftRow: View {
                     if item.canSomeday { Button("Someday") { model.moveToSomeday(item.task.id) } }
                 }
                 .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
-                .padding(.top, 2)
+                .padding(.top, MekaSpace.xxs)
             }
             Spacer()
         }
-        .padding(.vertical, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs)
         .padding(.horizontal, MekaSpace.xs)
     }
 }
@@ -153,7 +153,7 @@ struct TomorrowLine: View {
             Text(row.time ?? "").font(MekaType.itemMeta).monospacedDigit()
                 .foregroundStyle(palette.textSecondary)
                 .frame(width: 96, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.itemTitle).foregroundStyle(row.isEvent ? palette.textPrimary : palette.textSecondary)
                 if let d = row.detail {
                     Text(d).font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -174,7 +174,7 @@ struct ShutdownCard: View {
 
     var body: some View {
         Button { model.showShutdown = true } label: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text("Shut down the day").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                 Text(shutdown.cardLine).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
             }
@@ -200,7 +200,7 @@ struct TomorrowGlanceView: View {
 
     var body: some View {
         Button { model.showShutdown = true } label: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 if let doneLine {
                     Text(doneLine).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
