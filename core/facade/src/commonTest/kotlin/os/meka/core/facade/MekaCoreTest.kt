@@ -23,6 +23,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -573,6 +574,42 @@ class MekaCoreTest {
         m.complete(id)
         m.syncNow(); a.syncNow()
         assertEquals(os.meka.core.domain.NowKind.CLEAR, a.coverNow().kind)
+    }
+
+    @Test
+    fun theWatchShowsUpNextTakesDoneAndTomorrowAndStartsAndEndsAFastForTheFold() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 10, 16, 30).toInstant(london).toEpochMilliseconds() // Sat, BST
+        val fold = core("android"); val watch = core("watch-0123456789abcdef")
+        val letter = fold.addTask("Post the letter")
+        fold.schedule(letter, kotlinx.datetime.LocalDateTime(2026, 10, 10, 17, 0).toInstant(london).toEpochMilliseconds())
+        val bins = fold.addTask("Put the bins out")
+        fold.syncNow(); watch.syncNow()
+
+        val v = watch.watchHome()
+        assertEquals("UP NEXT", v.label)
+        assertEquals("Post the letter", v.title)
+        assertEquals("At 17:00", v.line)
+        assertEquals(listOf("Done", "Tomorrow"), v.buttons.map { it.label })
+        watch.watchPress(v.buttons.first())
+        watch.syncNow(); fold.syncNow()
+        assertEquals(listOf(letter), fold.today.value.doneToday.map { it.id })
+
+        val next = watch.watchHome()
+        assertEquals("Put the bins out", next.title)
+        watch.watchPress(next.buttons.single { it.label == "Tomorrow" })
+        assertNotEquals("Put the bins out", watch.watchHome().title)
+        watch.syncNow(); fold.syncNow()
+        assertTrue(fold.today.value.let { listOfNotNull(it.upNext) + it.yourDay }.none { it.id == bins })
+
+        assertEquals(os.meka.core.domain.WatchHomeRules.START_FAST, watch.watchHome().fast.button)
+        watch.watchFastButton()
+        assertEquals(os.meka.core.domain.WatchHomeRules.END_FAST, watch.watchHome().fast.button)
+        watch.syncNow(); fold.syncNow()
+        assertTrue(fold.fastingView.value.isFasting)
+        watch.watchFastButton()
+        watch.syncNow(); fold.syncNow()
+        assertFalse(fold.fastingView.value.isFasting)
     }
 
     @Test

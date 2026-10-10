@@ -2,7 +2,8 @@
 """MEKA's app icon: the gold watch face on black (build plan, call assistant polish item 9).
 
 One geometry, two outputs, so the Fold and the Mac wear the same face:
-  * the Fold's adaptive icon (vector drawables: foreground, monochrome, background) in android/app/src/main/res
+  * the Fold's adaptive icon (vector drawables: foreground, monochrome, background) in android/app/src/main/res,
+    and the same for the Galaxy Watch in wear/app/src/main/res
   * the Mac's AppIcon.appiconset (PNGs at every size macOS asks for) in macos/MekaOS/Assets.xcassets
 
 The face is the watch face Today's header draws (WatchFace.kt): a brass rim, twelve markers with no numerals
@@ -180,8 +181,6 @@ MAC_SIZES = [(16, 1), (16, 2), (32, 1), (32, 2), (128, 1), (128, 2), (256, 1), (
 
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    res = os.path.join(root, "android/app/src/main/res")
-    os.makedirs(os.path.join(res, "mipmap-anydpi"), exist_ok=True)
     files = {
         "drawable/ic_launcher_foreground.xml": android_foreground(BRASS),
         # Themed icons: the launcher tints this one shape, so it's the same face in a single colour.
@@ -190,9 +189,14 @@ def main():
         "mipmap-anydpi/ic_launcher.xml": ANDROID_ADAPTIVE,
         "mipmap-anydpi/ic_launcher_round.xml": ANDROID_ADAPTIVE,
     }
-    for rel, text in files.items():
-        with open(os.path.join(res, rel), "w") as fh:
-            fh.write(text)
+    # The phone and the Galaxy Watch (Galaxy Watch, slice 2) carry the same face.
+    for app in ("android/app", "wear/app"):
+        res = os.path.join(root, app, "src/main/res")
+        for sub in ("drawable", "mipmap-anydpi"):
+            os.makedirs(os.path.join(res, sub), exist_ok=True)
+        for rel, text in files.items():
+            with open(os.path.join(res, rel), "w") as fh:
+                fh.write(text)
 
     iconset = os.path.join(root, "macos/MekaOS/Assets.xcassets/AppIcon.appiconset")
     os.makedirs(iconset, exist_ok=True)

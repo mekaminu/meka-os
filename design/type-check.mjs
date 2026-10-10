@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const A = 'android/app/src/main/kotlin/os/meka/android/';
 const M = 'macos/MekaOS/';
+const W = 'wear/app/src/main/kotlin/os/meka/wear/'; // the Galaxy Watch (Galaxy Watch, slice 2)
 
 const KOTLIN = [
   [/\bfontWeight\s*=|\bFontWeight[.(]/g, 'an ad-hoc weight: use a MekaType token (captionStrong, metaStrong, …)'],
@@ -105,7 +106,7 @@ if (process.argv.includes('--self-test')) {
   process.exit(0);
 }
 
-const files = [...walk(join(root, A)), ...walk(join(root, M))];
+const files = [...walk(join(root, A)), ...walk(join(root, M)), ...walk(join(root, W))];
 const found = files.flatMap((f) => offences(f, readFileSync(join(root, f), 'utf8')));
 if (found.length) {
   console.error(`Type off the MekaType tokens (${found.length}):\n` + found.join('\n'));

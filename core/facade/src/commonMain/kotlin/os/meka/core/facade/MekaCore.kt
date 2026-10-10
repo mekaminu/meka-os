@@ -1646,6 +1646,29 @@ class MekaCore(
         os.meka.core.domain.CoverNowRules.upNext(_today.value, nowMs(), ZoneCalendar(timeZone))
 
     /**
+     * The Galaxy Watch's one screen (Galaxy Watch, slice 2): the cover screen's "now" card with only the taps a wrist can
+     * make (Done · Tomorrow, Went · Didn't go) and the fast with Start or End. Pure and cheap. Nothing is stored.
+     */
+    fun watchHome(): os.meka.core.domain.WatchHomeView =
+        os.meka.core.domain.WatchHomeRules.view(coverNow(), _fasting.value, nowMs())
+
+    /** A watch button: the same change as the Fold's cover screen makes for that tap. */
+    suspend fun watchPress(button: os.meka.core.domain.WatchButton) {
+        when (button.action) {
+            os.meka.core.domain.NowAction.DONE -> complete(button.targetId)
+            os.meka.core.domain.NowAction.TOMORROW -> snooze(button.targetId)
+            os.meka.core.domain.NowAction.WENT -> sessionWent(button.targetId, null)
+            os.meka.core.domain.NowAction.DIDNT_GO -> sessionMissed(button.targetId)
+            else -> Unit
+        }
+    }
+
+    /** The watch's fast button: ends the running fast, or starts the plan's daily fast now. */
+    suspend fun watchFastButton() {
+        if (_fasting.value.isFasting) endFast() else startFast(0)
+    }
+
+    /**
      * What "3 held for later" unfolds to in Needs you during work (Fold review 2026-10-09, item 5): sender · first line ·
      * time, newest first, at most five. [summary] is the one the device shows (the Fold passes its lists-applied copy;
      * the Mac passes [afterWork]'s). A preview only: nothing is marked read or cleared. Pure.

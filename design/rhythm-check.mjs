@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const A = 'android/app/src/main/kotlin/os/meka/android/';
 const M = 'macos/MekaOS/';
+const W = 'wear/app/src/main/kotlin/os/meka/wear/'; // the Galaxy Watch (Galaxy Watch, slice 2)
 
 /** Every screen is on the rhythm since slice 4b-5 (2026-10-10): the check covers every app source file, so a new
  * screen is held to it from its first commit (slices 4a–4b-4 moved them a group at a time). */
@@ -79,7 +80,7 @@ if (process.argv.includes('--self-test')) {
 }
 
 const all = process.argv.includes('--all');
-const files = [...walk(join(root, A)), ...walk(join(root, M))];
+const files = [...walk(join(root, A)), ...walk(join(root, M)), ...walk(join(root, W))];
 const found = files.flatMap((f) => offences(f, readFileSync(join(root, f), 'utf8')));
 if (all) {
   const per = {};

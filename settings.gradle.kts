@@ -29,4 +29,6 @@ include(":core:wire")
 include(":core:data", ":core:facade")
 
 include(":android:app")
+// MEKA on the Galaxy Watch (build plan "Galaxy Watch", slice 2): its own device, its own replica.
+include(":wear:app")
 include(":backend")
