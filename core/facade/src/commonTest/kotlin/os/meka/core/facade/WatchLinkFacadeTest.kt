@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
 /** Settings → Watch through the facade (Galaxy Watch, slice 1): type the watch's code, see it linked, unlink it. */
 class WatchLinkFacadeTest {
     private var now = 1_791_622_800_000L // Sat 10 Oct 2026, 10:00 in London
-    private val watchId = "watch-0123456789abcdef"
+    private val watchId = "watch0123456789abcdef"
 
     private inner class Server(service: SyncService) : SyncTransport, DeviceLinkApi {
         private val sync = os.meka.core.testing.FaultyTransport(service)

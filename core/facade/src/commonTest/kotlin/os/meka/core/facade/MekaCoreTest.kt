@@ -580,7 +580,7 @@ class MekaCoreTest {
     fun theWatchShowsUpNextTakesDoneAndTomorrowAndStartsAndEndsAFastForTheFold() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 10, 10, 16, 30).toInstant(london).toEpochMilliseconds() // Sat, BST
-        val fold = core("android"); val watch = core("watch-0123456789abcdef")
+        val fold = core("android"); val watch = core("watch0123456789abcdef")
         val letter = fold.addTask("Post the letter")
         fold.schedule(letter, kotlinx.datetime.LocalDateTime(2026, 10, 10, 17, 0).toInstant(london).toEpochMilliseconds())
         val bins = fold.addTask("Put the bins out")

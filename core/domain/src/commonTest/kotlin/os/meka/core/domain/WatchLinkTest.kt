@@ -31,9 +31,9 @@ class WatchLinkTest {
     @Test
     fun aNewWatchIdIsTheShapeTheServerTakes() {
         val id = WatchLinkRules.newDeviceId(Random(7))
-        assertTrue(id.startsWith("watch-"))
-        assertEquals(22, id.length)
-        assertTrue(id.drop(6).all { it in '0'..'9' || it in 'a'..'f' })
+        assertTrue(id.startsWith("watch") && !id.contains('-'))
+        assertEquals(21, id.length)
+        assertTrue(id.drop(5).all { it in '0'..'9' || it in 'a'..'f' })
         assertTrue(WatchLinkRules.isWatchId(id))
         assertFalse(WatchLinkRules.isWatchId("android"))
         assertTrue(WatchLinkRules.newDeviceId(Random(1)) != WatchLinkRules.newDeviceId(Random(2)))

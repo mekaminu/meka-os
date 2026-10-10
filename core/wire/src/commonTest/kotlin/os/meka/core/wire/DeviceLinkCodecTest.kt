@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 
 /** Linking a watch on the wire (Galaxy Watch, slice 1): every body round-trips and is read strictly. */
 class DeviceLinkCodecTest {
-    private val watch = "watch-0123456789abcdef"
+    private val watch = "watch0123456789abcdef"
     private val link = "lnk" + "0123456789abcdef01234567"
     private val secret = "ab".repeat(32)
     private val key = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE" + "A".repeat(52)
@@ -18,6 +18,7 @@ class DeviceLinkCodecTest {
     fun idsCodesAndNamesAreWhatTheServerMakes() {
         assertTrue(DeviceLinkCodec.isWatchId(watch))
         assertFalse(DeviceLinkCodec.isWatchId("watch-short"))
+        assertFalse(DeviceLinkCodec.isWatchId("watch-0123456789abcdef")) // a device id is an HLC node id: no "-"
         assertFalse(DeviceLinkCodec.isWatchId("fold-0123456789"))
         assertFalse(DeviceLinkCodec.isWatchId("watch-ABCDEF0123"))
         assertTrue(DeviceLinkCodec.isLinkId(link))

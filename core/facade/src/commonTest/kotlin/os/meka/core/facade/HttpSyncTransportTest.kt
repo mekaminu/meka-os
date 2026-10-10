@@ -51,7 +51,7 @@ class HttpSyncTransportTest {
     )
     private var familyStatus = HttpStatusCode.OK
     private var linkStatus = HttpStatusCode.OK
-    private val watchId = "watch-0123456789abcdef"
+    private val watchId = "watch0123456789abcdef"
     private val familyId = "fam" + "0123456789abcdef0123"
     private val familyToken = "cd".repeat(32)
     private fun client() = HttpClient(MockEngine { req ->

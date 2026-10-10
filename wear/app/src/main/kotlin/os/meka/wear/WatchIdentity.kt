@@ -7,7 +7,7 @@ import kotlin.random.asKotlinRandom
 
 /**
  * The watch's identity (Galaxy Watch, slice 2; ADR-005 amendment 2026-10-10), in app-private storage that is never
- * backed up (data_extraction_rules.xml). Before linking it holds only its device id ("watch-" and 16 hex digits) and
+ * backed up (data_extraction_rules.xml). Before linking it holds only its device id ("watch" and 16 hex digits) and
  * the code it is showing; once Meka types the code on the Fold or the Mac, the server's answer (household, device id
  * and device secret, given once) makes it a device like the others.
  */

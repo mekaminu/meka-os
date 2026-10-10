@@ -53,10 +53,14 @@ object DeviceLinkCodec {
 
     // ---- what each id and value may be ----
 
-    /** A watch's own device id: "watch-" and 8–32 lower-case letters or digits (it makes it on first open). */
+    /**
+     * A watch's own device id: "watch" and 8–32 lower-case letters or digits (it makes it on first open). No "-": a
+     * device id is the HLC's node id, which can't contain one (Galaxy Watch slice 2 found the first form, "watch-…",
+     * refused by every replica; no watch had linked yet).
+     */
     fun isWatchId(id: String): Boolean {
-        val rest = id.removePrefix("watch-")
-        return id.startsWith("watch-") && rest.length in 8..32 && rest.all { it in 'a'..'z' || it in '0'..'9' }
+        val rest = id.removePrefix("watch")
+        return id.startsWith("watch") && rest.length in 8..32 && rest.all { it in 'a'..'z' || it in '0'..'9' }
     }
 
     /** A link the server made: "lnk" and 24 lower-case hex digits. */

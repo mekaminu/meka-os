@@ -26,7 +26,7 @@ class PostgresDeviceLinkTest {
             val reg = PostgresDeviceRegistry(ds)
             reg.enrol("hh-w", "android", "Fold")
             val key = TestDeviceKey().publicB64
-            val watch = "watch-0123456789abcdef"
+            val watch = "watch0123456789abcdef"
             val r = reg.enrolLinked("hh-w", watch, "Galaxy Watch", key)
             assertIs<EnrolOutcome.Enrolled>(r)
             assertEquals(DeviceIdentity("hh-w", watch), reg.authenticate(r.secret))

@@ -21,7 +21,7 @@ class DeviceLinkTest {
     private val verifier = RequestVerifier { nowMs }
     private val link = DeviceLink(devices, verifier) { nowMs }
     private val fold = DeviceIdentity("home", "android")
-    private val watchId = "watch-0123456789abcdef"
+    private val watchId = "watch0123456789abcdef"
 
     init {
         devices.enrol("home", "android")
@@ -108,7 +108,7 @@ class DeviceLinkTest {
 
         // A code nobody types runs out after ten minutes.
         val second = TestDeviceKey { nowMs }
-        val late = DeviceLinkCodec.decodeStarted(start(second, "watch-aaaaaaaabbbbbbbb").body)
+        val late = DeviceLinkCodec.decodeStarted(start(second, "watchaaaaaaaabbbbbbbb").body)
         nowMs += DeviceLink.CODE_MS
         assertEquals(404, link.approve(fold, DeviceLinkCodec.encodeApprove(late.code)).status)
         assertEquals(DeviceLinkCodec.EXPIRED, status(second, late.linkId).state)
@@ -131,12 +131,12 @@ class DeviceLinkTest {
         // Asking again replaces the watch's last code; at most MAX_PENDING watches wait at once.
         nowMs += 2
         val fresh = TestDeviceKey { nowMs }
-        val a = DeviceLinkCodec.decodeStarted(start(fresh, "watch-aaaaaaaa00000000").body)
-        val b = DeviceLinkCodec.decodeStarted(start(fresh, "watch-aaaaaaaa00000000").body)
+        val a = DeviceLinkCodec.decodeStarted(start(fresh, "watchaaaaaaaa00000000").body)
+        val b = DeviceLinkCodec.decodeStarted(start(fresh, "watchaaaaaaaa00000000").body)
         assertTrue(a.linkId != b.linkId)
         assertEquals(1, link.waiting())
-        repeat(DeviceLink.MAX_PENDING - 1) { i -> assertEquals(200, start(TestDeviceKey { nowMs }, "watch-bbbbbbbb0000000$i").status) }
-        val busy = start(TestDeviceKey { nowMs }, "watch-cccccccc00000000")
+        repeat(DeviceLink.MAX_PENDING - 1) { i -> assertEquals(200, start(TestDeviceKey { nowMs }, "watchbbbbbbbb0000000$i").status) }
+        val busy = start(TestDeviceKey { nowMs }, "watchcccccccc00000000")
         assertEquals(429, busy.status)
         assertEquals(DeviceLinkCodec.ERR_BUSY, DeviceLinkCodec.decodeError(busy.body))
         // A Fold or Mac id can't join this way.

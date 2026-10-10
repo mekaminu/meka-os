@@ -32,7 +32,8 @@ data class WatchCodeScreen(val title: String, val code: String, val line: String
 object WatchLinkRules {
     const val CODE_DIGITS = 8
     const val DEFAULT_NAME = "Galaxy Watch"
-    const val ID_PREFIX = "watch-"
+    /** No "-": the device id is the HLC node id (`HlcClock`), which refuses one. */
+    const val ID_PREFIX = "watch"
     /** How long a code lasts on the server. */
     const val CODE_MINUTES = 10
     const val CODE_MS = CODE_MINUTES * 60_000L
@@ -57,7 +58,7 @@ object WatchLinkRules {
     fun showCode(code: String): String =
         if (code.length == CODE_DIGITS) code.take(4) + " " + code.drop(4) else code
 
-    /** A new watch's device id: "watch-" and 16 lower-case hex digits ([DeviceLinkCodec.isWatchId] on the server). */
+    /** A new watch's device id: "watch" and 16 lower-case hex digits ([DeviceLinkCodec.isWatchId] on the server). */
     fun newDeviceId(random: Random = Random.Default): String =
         ID_PREFIX + (1..16).joinToString("") { "0123456789abcdef"[random.nextInt(16)].toString() }
 
