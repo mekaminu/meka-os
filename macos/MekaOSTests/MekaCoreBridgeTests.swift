@@ -1352,6 +1352,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "marked Why trains run late done in the train queue")
     }
 
+    func testAddFactFromAskReachesSwift() {
+        // "Remember that my shoe size is 10" in Ask and Talk (What MEKA knows, slice 2): the card's words reach the Mac.
+        let card = AskRules.shared.cardOf(p: AskProposalAddFact(label: "Shoe size", value: "10", factId: nil), today: 0)
+        XCTAssertEqual(card.line, "Keep on What MEKA knows · Shoe size: 10")
+        XCTAssertEqual(card.button, "Keep")
+        XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "remembered Shoe size as 10")
+        let update = AskRules.shared.cardOf(p: AskProposalAddFact(label: "GP", value: "Dr Shah", factId: "f1"), today: 0)
+        XCTAssertEqual(update.button, "Update")
+    }
+
     func testBookLeaveFromAskReachesSwift() {
         // "Book the 2nd of November off" in Ask and Talk (annual leave, slice 2b): the card's words reach the Mac.
         let card = AskRules.shared.cardOf(p: AskProposalBookLeave(title: "Annual leave", startDay: 20759, endDay: 20759, days: 1), today: 0)

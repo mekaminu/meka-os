@@ -266,6 +266,30 @@ object FactAskRules {
         }
         return listOf(head) + chosen.map { "Fact · ${it.group.label} · ${it.label}: ${it.value.replace(Regex("\\s+"), " ")}" }
     }
+    /** Where a card puts the fact, in its words. */
+    const val PAGE = "What MEKA knows"
+
+    /**
+     * The fact a model's `add_fact` would keep (slice 2: "remember that my shoe size is 10" → `{"title":"Shoe size: 10"}`),
+     * read as a line typed on the page: null when it can't be read, would be turned away ([FactRules.refusal]: a
+     * password, a card, bank or ID number), is already on the page with that value, or the page is full. A name already
+     * on the page (even one kept from the AI) makes a card that updates it; the card never shows the old value.
+     */
+    fun proposal(facts: List<LifeFact>, title: String?): AskProposal.AddFact? {
+        val line = FactRules.read(title ?: return null) ?: return null
+        if (FactRules.refusal("${line.label}: ${line.value}") != null) return null
+        val same = facts.firstOrNull { FactRules.key(it.label) == FactRules.key(line.label) }
+        if (same != null) return if (same.value == line.value) null else AskProposal.AddFact(same.label, line.value, same.id)
+        if (facts.size >= FactRules.MAX_FACTS) return null
+        return AskProposal.AddFact(line.label, line.value, null)
+    }
+
+    /** The card's words: "Keep on What MEKA knows · Shoe size: 10" (button Keep), or "Update on … · GP: Dr Patel" (Update). */
+    fun cardLine(p: AskProposal.AddFact): String = (if (p.factId == null) "Keep on $PAGE · " else "Update on $PAGE · ") + "${p.label}: ${p.value}"
+
+    /** The undo bar's line: "Kept Shoe size: 10 on What MEKA knows" / "Updated GP on What MEKA knows". */
+    fun doneLine(p: AskProposal.AddFact): String =
+        if (p.factId == null) "Kept ${p.label}: ${p.value} on $PAGE" else "Updated ${p.label} on $PAGE"
 }
 
 /** The facts page on a replica (Meka's apps). */
@@ -279,6 +303,33 @@ class LifeFacts(private val replica: Replica, private val newId: () -> String, p
         val (added, writes) = FactRules.addPlan(text, all(), nowMs(), newId)
         writes.forEach { (id, fields) -> replica.commitLocal(EntityTypes.LIFE_FACT, id, fields) }
         return added
+    }
+
+    /**
+     * What an Ask/Talk fact card does on Meka's tap, checked again now: a new fact is added (its id returned with a null
+     * old value), or the fact [factId] gets [value] (its id and the value it had). Throws [ValidationException] when it
+     * would be turned away, the page is full, or the same fact is already there.
+     */
+    fun keep(label: String, value: String, factId: String?): Pair<String, String?> {
+        val facts = all()
+        FactRules.refusal("$label: $value")?.let { throw ValidationException(it) }
+        val same = facts.firstOrNull { it.id == factId } ?: facts.firstOrNull { FactRules.key(it.label) == FactRules.key(label) }
+        if (same != null) {
+            if (same.value == value) throw ValidationException("${same.label} is already on the page")
+            replica.commitLocal(EntityTypes.LIFE_FACT, same.id, mapOf(FactFields.VALUE to value.fv()))
+            return same.id to same.value
+        }
+        val (added, writes) = FactRules.addPlan("$label: $value", facts, nowMs(), newId)
+        val (id, fields) = writes.singleOrNull()?.takeIf { !added.refused } ?: throw ValidationException(added.line)
+        replica.commitLocal(EntityTypes.LIFE_FACT, id, fields)
+        return id to null
+    }
+
+    /** The fact card's Undo: [before] comes back while the fact still reads [after]. False when it changed since or went. */
+    fun putBack(id: String, before: String, after: String): Boolean {
+        val f = all().firstOrNull { it.id == id }?.takeIf { it.value == after } ?: return false
+        replica.commitLocal(EntityTypes.LIFE_FACT, f.id, mapOf(FactFields.VALUE to before.fv()))
+        return true
     }
 
     /** Lets MEKA's AI use a fact ([use] true) or keeps it from the AI. False when there's no such fact. */

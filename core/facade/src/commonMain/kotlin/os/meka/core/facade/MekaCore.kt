@@ -2573,7 +2573,7 @@ class MekaCore(
             is AskReply.Answered -> onCore {
                 val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
                 val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),
-                    os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()))
+                    os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all())
                 val allowed = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }
                 // Earned trust: a kind Meka said "just do it" to runs now, recorded in Activity with Undo, when the
                 // policy engine permits Level 4 under his rule (never for a question that carried untrusted lines).
@@ -2692,6 +2692,11 @@ class MekaCore(
                 val (plan, id) = leave.bookEntry(os.meka.core.domain.LeaveEntry(p.title, p.startDay, p.endDay), leaveWork())
                 os.meka.core.domain.AskUndo.RemoveLeave(id ?: throw os.meka.core.domain.ValidationException(plan.line))
             }
+            // Checked again now (a secret or number is still turned away; the same fact already there is refused).
+            is os.meka.core.domain.AskProposal.AddFact -> {
+                val (id, before) = lifeFacts.keep(p.label, p.value, p.factId)
+                if (before == null) os.meka.core.domain.AskUndo.RemoveFact(id) else os.meka.core.domain.AskUndo.PutBackFact(id, before, p.value)
+            }
         }
         return os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
@@ -2733,6 +2738,9 @@ class MekaCore(
             is os.meka.core.domain.AskUndo.PutBackQueue -> trainQueue.setDone(undo.itemId, false)
             // The stretch the card booked comes off (false when it was already removed, here or on the other device).
             is os.meka.core.domain.AskUndo.RemoveLeave -> leave.remove(undo.leaveId)
+            // The fact the card added comes off; a changed one gets its old value back while it still reads the new one.
+            is os.meka.core.domain.AskUndo.RemoveFact -> lifeFacts.remove(undo.factId)
+            is os.meka.core.domain.AskUndo.PutBackFact -> lifeFacts.putBack(undo.factId, undo.before, undo.after)
         }
     }
 
@@ -3273,6 +3281,8 @@ class MekaCore(
             is os.meka.core.domain.AskProposal.QueueDone -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
             // Marks days off in Meka's own planner, like the Leave pane (nothing is sent to his employer or anyone).
             is os.meka.core.domain.AskProposal.BookLeave -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+            // Keeps a fact on Meka's own page (nothing is sent to anyone).
+            is os.meka.core.domain.AskProposal.AddFact -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         }
     }
 

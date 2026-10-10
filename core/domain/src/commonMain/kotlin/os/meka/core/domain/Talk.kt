@@ -235,6 +235,9 @@ object TalkRules {
             (if (p.title == LeaveRules.TITLE) "annual leave" else clean(p.title) + " as leave") +
             (if (p.startDay == p.endDay) " for " + spokenWhen(p.startDay, null, today)
             else " from " + spokenWhen(p.startDay, null, today) + " to " + spokenWhen(p.endDay, null, today))
+        // "remember Shoe size as 10" / "remembered …"; "change GP to Dr Patel" / "changed …".
+        is AskProposal.AddFact -> if (p.factId == null) (if (past) "remembered " else "remember ") + clean(p.label) + " as " + clean(p.value)
+        else (if (past) "changed " else "change ") + clean(p.label) + " to " + clean(p.value)
     }
 
     /** "today at 14:30", "tomorrow", "Friday 9 October at 09:00". */

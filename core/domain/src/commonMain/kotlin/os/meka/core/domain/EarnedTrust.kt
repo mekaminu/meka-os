@@ -62,9 +62,11 @@ object TrustRules {
         // it could never run on its own, so it isn't offered.
         is AskProposal.QueueDone -> null
         // A move can carry a planned block in Google; an alarm or timer rings the phone; a fast is health; leave is
-        // work days; dinner and date night are Jeanette's evening too; a renewal's next date hides a real one if wrong.
+        // work days; dinner and date night are Jeanette's evening too; a renewal's next date hides a real one if wrong;
+        // a fact is what MEKA answers from later, so a misheard one should always be seen first.
         is AskProposal.MoveTask, is AskProposal.StartFast, is AskProposal.Timer, is AskProposal.Alarm,
-        is AskProposal.PlanDinner, is AskProposal.SkipDateNight, is AskProposal.RenewalDone, is AskProposal.BookLeave -> null
+        is AskProposal.PlanDinner, is AskProposal.SkipDateNight, is AskProposal.RenewalDone, is AskProposal.BookLeave,
+        is AskProposal.AddFact -> null
     }
 
     fun read(fields: Map<String, FieldValue>?): Map<TrustKind, TrustState> = TrustKind.entries.associateWith { k ->

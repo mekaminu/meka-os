@@ -535,6 +535,38 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun rememberThatKeepsAFactOnTheTapWithUndo() = runTest {
+        val c = core()
+        c.addFact("GP: Dr Patel")
+        server.reply = AskReply.Answered("I'll keep that.", listOf(
+            AskRawAction("add_fact", title = "Shoe size: 10"),
+            AskRawAction("add_fact", title = "GP: Dr Shah"),
+            AskRawAction("add_fact", title = "Wifi password: hunter22"), // refused by the page: no card
+        ))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("Remember that my shoe size is 10 and my GP is Dr Shah now"))
+        assertEquals(
+            listOf("Keep on What MEKA knows · Shoe size: 10", "Update on What MEKA knows · GP: Dr Shah"),
+            out.answer.cards.map { it.line },
+        )
+        assertEquals(1, c.factsView.value.count) // nothing until tapped
+
+        val kept = c.doAsk(out.answer.cards[0])
+        assertEquals("Kept Shoe size: 10 on What MEKA knows", kept.line)
+        val updated = c.doAsk(out.answer.cards[1])
+        assertEquals("Updated GP on What MEKA knows", updated.line)
+        assertEquals(setOf("Shoe size: 10", "GP: Dr Shah"), c.factsView.value.groups.flatMap { g -> g.rows.map { "${it.label}: ${it.value}" } }.toSet())
+        // Twice: already there.
+        assertFailsWith<ValidationException> { c.doAsk(out.answer.cards[0]) }
+
+        // Undo: the new fact comes off, the changed one gets its old value back; once each.
+        assertTrue(c.undoAsk(assertIs<AskUndo.RemoveFact>(kept.undo)))
+        assertTrue(c.undoAsk(assertIs<AskUndo.PutBackFact>(updated.undo)))
+        assertEquals(listOf("GP: Dr Patel"), c.factsView.value.groups.flatMap { g -> g.rows.map { "${it.label}: ${it.value}" } })
+        assertFalse(c.undoAsk(kept.undo!!))
+        assertFalse(c.undoAsk(updated.undo!!))
+    }
+
+    @Test
     fun everyCardCanBeTakenBack() = runTest {
         val c = core()
         c.addTask("Book dentist")

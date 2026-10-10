@@ -4,6 +4,8 @@ import os.meka.core.testing.Device
 import os.meka.core.testing.SyncWorld
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -16,6 +18,7 @@ class LifeFactsTest {
     private fun facts(dev: Device) = LifeFacts(dev.replica, { "f${n++}" }, { world.clock.nowMs })
     private val fFold = facts(fold)
     private val fMac = facts(mac)
+    private val cal = LocalCalendar.fixedOffset(3_600_000L)
 
     private fun sync() { fold.sync(); mac.sync(); fold.sync() }
 
@@ -102,5 +105,58 @@ class LifeFactsTest {
         assertEquals(listOf("Facts · 3 kept · none bear on this question"), FactAskRules.askLines(all, "will it rain?"))
         assertEquals(4, FactAskRules.askLines(all, "What do you know about me?").size)
         assertEquals(emptyList(), FactAskRules.askLines(emptyList(), "what's the car's reg?"))
+    }
+
+    @Test
+    fun rememberThatIsACardForANewOrChangedFactOnlyAndTheTapChecksAgain() {
+        fFold.add("Shoe size: 10")
+        world.clock.nowMs += 1_000
+        fFold.add("GP: Dr Patel")
+        val all = fFold.all()
+        val gp = all.first { it.label == "GP" }
+        fFold.setAi(gp.id, use = false)
+
+        // A new fact: Keep. The card reads as the page would.
+        val ctx = AskContext.EMPTY
+        fun card(title: String?) = AskRules.card(AskRawAction("add_fact", title = title), ctx, emptyMap(), world.clock.nowMs, cal, facts = fFold.all())
+        val car = card("my car reg is AB12 CDE")!!
+        assertEquals(AskProposal.AddFact("Car reg", "AB12 CDE", null), car.proposal)
+        assertEquals("Keep on What MEKA knows · Car reg: AB12 CDE", car.line)
+        assertEquals("Keep", car.button)
+        assertEquals("Kept Car reg: AB12 CDE on What MEKA knows", AskRules.doneLine(car.proposal, 0))
+        assertEquals("remember Car reg as AB12 CDE", TalkRules.phrase(car.proposal, 0, past = false))
+        // The same name again changes it (even one kept from the AI); the card never shows the old value.
+        val newGp = card("gp: Dr Shah")!!
+        assertEquals(AskProposal.AddFact("GP", "Dr Shah", gp.id), newGp.proposal)
+        assertEquals("Update on What MEKA knows · GP: Dr Shah", newGp.line)
+        assertEquals("Update", newGp.button)
+        assertEquals("Updated GP on What MEKA knows", AskRules.doneLine(newGp.proposal, 0))
+        assertEquals("changed GP to Dr Shah", TalkRules.phrase(newGp.proposal, 0, past = true))
+        // Already there, unreadable, or a secret or number the page turns away: no card.
+        assertNull(card("Shoe size: 10"))
+        assertNull(card("shoe size 10"))
+        assertNull(card("Wifi password: hunter22"))
+        assertNull(card("Bank card: 4111 1111 1111 1111"))
+        assertNull(card("Passport number: 123456789"))
+        assertNull(card(null))
+        // Never runs on its own under earned trust.
+        assertNull(TrustRules.kindOf(car.proposal))
+
+        // The tap: added, then taken off; changed, then put back only while it still reads the new value.
+        val (carId, before) = fFold.keep("Car reg", "AB12 CDE", null)
+        assertNull(before)
+        assertEquals(FactGroup.CAR, fFold.all().first { it.id == carId }.group)
+        assertFailsWith<ValidationException> { fFold.keep("Car reg", "AB12 CDE", null) }
+        assertFailsWith<ValidationException> { fFold.keep("Wifi password", "hunter22", null) }
+        val (gpId, old) = fFold.keep("GP", "Dr Shah", gp.id)
+        assertEquals(gp.id to "Dr Patel", gpId to old)
+        assertTrue(fFold.all().first { it.id == gp.id }.aiOff) // its AI choice stays
+        sync()
+        assertEquals("Dr Shah", fMac.all().first { it.id == gp.id }.value)
+        assertTrue(fMac.putBack(gp.id, "Dr Patel", "Dr Shah"))
+        assertFalse(fMac.putBack(gp.id, "Dr Patel", "Dr Shah"))
+        assertTrue(fMac.remove(carId))
+        sync()
+        assertEquals(listOf("Shoe size: 10", "GP: Dr Patel"), fFold.all().map { "${it.label}: ${it.value}" })
     }
 }

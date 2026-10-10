@@ -73,6 +73,11 @@ sealed interface AskProposal {
     data class QueueDone(val id: String, val title: String) : AskProposal
     /** Books [startDay]..[endDay] as annual leave under [title] ([days] work days new; annual leave slice 2b: "book the 2nd of November off"). */
     data class BookLeave(val title: String, val startDay: Long, val endDay: Long, val days: Int) : AskProposal
+    /**
+     * Keeps a fact on What MEKA knows (slice 2: "remember that my shoe size is 10"): [label] · [value], a new fact when
+     * [factId] is null, else the newly said value for the fact already on the page under that name.
+     */
+    data class AddFact(val label: String, val value: String, val factId: String?) : AskProposal
 }
 
 /** A proposal as Ask shows it: "Add “Call the dentist” · Tomorrow · 09:00" with its button ("Add"). */
@@ -117,6 +122,10 @@ sealed interface AskUndo {
     data class PutBackQueue(val itemId: String) : AskUndo
     /** The leave card: the stretch it booked comes off again. */
     data class RemoveLeave(val leaveId: String) : AskUndo
+    /** The fact card that added a fact: it comes off the page again. */
+    data class RemoveFact(val factId: String) : AskUndo
+    /** The fact card that changed a fact: [before] comes back while it still reads [after]. */
+    data class PutBackFact(val factId: String, val before: String, val after: String) : AskUndo
 }
 
 /**
@@ -150,7 +159,7 @@ object AskRules {
     const val MAX_SHOPPING = 10
 
     /** The kinds of proposal MEKA understands; anything else is dropped. Wire names, never renamed. */
-    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave")
+    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact")
 
     /** The question as sent: one line, trimmed, at most [MAX_QUESTION] characters; null when there's nothing to ask. */
     fun question(text: String?): String? =
@@ -255,10 +264,11 @@ object AskRules {
     /** The answer as shown: its words and the proposals that check out, at most [MAX_CARDS], no two alike. */
     fun answer(text: String?, actions: List<AskRawAction>, context: AskContext, titles: Map<String, String>, nowMs: Long, cal: LocalCalendar,
                meals: List<Meal> = emptyList(), dateNight: DateNightSetting? = null, renewals: List<RenewalItem> = emptyList(),
-               wins: List<Win> = emptyList(), queue: List<QueueItem> = emptyList(), leave: LeaveAskData? = null): AskAnswer =
+               wins: List<Win> = emptyList(), queue: List<QueueItem> = emptyList(), leave: LeaveAskData? = null,
+               facts: List<LifeFact> = emptyList()): AskAnswer =
         AskAnswer(
             answerText(text),
-            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals, dateNight, renewals, wins, queue, leave) }.distinctBy { it.proposal }.take(MAX_CARDS),
+            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals, dateNight, renewals, wins, queue, leave, facts) }.distinctBy { it.proposal }.take(MAX_CARDS),
         )
 
     /**
@@ -268,7 +278,8 @@ object AskRules {
      */
     fun card(a: AskRawAction, context: AskContext, titles: Map<String, String>, nowMs: Long, cal: LocalCalendar,
              meals: List<Meal> = emptyList(), dateNight: DateNightSetting? = null, renewals: List<RenewalItem> = emptyList(),
-             wins: List<Win> = emptyList(), queue: List<QueueItem> = emptyList(), leave: LeaveAskData? = null): AskCard? {
+             wins: List<Win> = emptyList(), queue: List<QueueItem> = emptyList(), leave: LeaveAskData? = null,
+             facts: List<LifeFact> = emptyList()): AskCard? {
         val today = cal.epochDayOf(nowMs)
         fun task(): Pair<String, String>? {
             val id = context.taskIds[a.ref?.trim()] ?: return null
@@ -319,6 +330,7 @@ object AskRules {
             "add_win" -> AskProposal.AddWin(WinAskRules.text(wins, a.title, today) ?: return null)
             "queue_done" -> QueueAskRules.find(queue, a.title)?.let { AskProposal.QueueDone(it.id, it.title) } ?: return null
             "book_leave" -> LeaveAskRules.proposal(a.title, day(), leave ?: return null, today) ?: return null
+            "add_fact" -> FactAskRules.proposal(facts, a.title) ?: return null
             else -> return null
         }
         return cardOf(proposal, today)
@@ -399,6 +411,7 @@ object AskRules {
         is AskProposal.AddWin -> WinAskRules.doneLine(p.text)
         is AskProposal.QueueDone -> QueueAskRules.doneLine(p.title)
         is AskProposal.BookLeave -> LeaveAskRules.doneLine(p)
+        is AskProposal.AddFact -> FactAskRules.doneLine(p)
     }
 
     /** The card's words for [p]. */
@@ -418,6 +431,7 @@ object AskRules {
         is AskProposal.AddWin -> AskCard(p, WinAskRules.cardLine(p.text), "Keep")
         is AskProposal.QueueDone -> AskCard(p, QueueAskRules.cardLine(p.title), "Done")
         is AskProposal.BookLeave -> AskCard(p, LeaveAskRules.cardLine(p), "Book")
+        is AskProposal.AddFact -> AskCard(p, FactAskRules.cardLine(p), if (p.factId == null) "Keep" else "Update")
     }
 
     /** "milk", "milk and eggs", "milk, eggs and bread", as typed. */
