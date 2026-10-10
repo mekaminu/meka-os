@@ -73,11 +73,11 @@ struct AskMekaSection: View {
                 .padding(.leading, MekaSpace.xxs)
             if talk.active || talk.problem != nil {
                 TalkPanel(talk: talk, palette: palette) { MekaHaptics.tick(); talk.tapOrb() }
-                    .padding(.top, MekaSpace.s)
+                    .padding(.top, MekaSpace.xs)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
             conversation
-                .padding(.top, MekaSpace.s)
+                .padding(.top, MekaSpace.xs)
                 .padding(.bottom, MekaSpace.l)
                 .accessibilityElement(children: .contain)
         }
@@ -324,11 +324,11 @@ private struct AskMatchList: View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             ForEach(Array(matches.rows.enumerated()), id: \.element.hit.id) { i, row in
                 Button { onOpen(row) } label: {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Text(row.hit.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
                         Text(row.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
                     }
-                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.s)
+                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
                     .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
@@ -373,7 +373,7 @@ private struct AskCardRow: View {
                 .accessibilityLabel("\(card.button): \(card.line)")
         }
         .padding(.horizontal, MekaSpace.m)
-        .padding(.vertical, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .mekaHoverLift()
     }

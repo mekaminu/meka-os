@@ -28,7 +28,7 @@ struct TalkSheet: View {
     var body: some View {
         let setup = TalkStartRules.shared.setup(mac: true, assistantHeld: false, samsung: false)
         let view = (title: setup.title, intro: setup.intro, sections: sections)
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(view.title).font(MekaType.upNextTitle).staggeredAppear(0)
             Text(view.intro).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -57,14 +57,14 @@ struct TalkSheet: View {
                             .accessibilityLabel("\(action): listen when I open MEKA")
                     }
                 }
-                .padding(.top, MekaSpace.s)
+                .padding(.top, MekaSpace.m)
                 .staggeredAppear(i + 1)
             }
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.l)
         .frame(width: 460)

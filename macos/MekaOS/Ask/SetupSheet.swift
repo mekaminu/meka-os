@@ -16,7 +16,7 @@ struct SetupSheet: View {
     let palette: MekaPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Setup").font(MekaType.upNextTitle).staggeredAppear(0)
             if let view = model.setup {
                 Text(view.summary).font(MekaType.body)
@@ -30,7 +30,7 @@ struct SetupSheet: View {
                             Text(section.title.uppercased())
                                 .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                                 .foregroundStyle(palette.textTertiary)
-                                .padding(.top, s == 0 ? 0 : MekaSpace.s)
+                                .padding(.top, s == 0 ? 0 : MekaSpace.m)
                                 .accessibilityAddTraits(.isHeader)
                                 .staggeredAppear(s + 1)
                             ForEach(section.steps, id: \.key) { step in
@@ -52,7 +52,7 @@ struct SetupSheet: View {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.l)
         .frame(width: 520)
@@ -123,10 +123,10 @@ private struct SetupStepView: View {
     }
 
     var body: some View {
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             Circle().fill(dot).frame(width: 9, height: 9)
                 .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: spoken)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(step.title).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
                 Text(step.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -144,7 +144,7 @@ private struct SetupStepView: View {
             }
         }
         .padding(.horizontal, MekaSpace.m)
-        .padding(.vertical, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(step.title), \(spoken). \(step.line)")
@@ -193,7 +193,7 @@ struct SetupTodayCard: View {
                     .font(MekaType.itemMeta)
                 }
                 .padding(.horizontal, MekaSpace.m)
-                .padding(.vertical, MekaSpace.s)
+                .padding(.vertical, MekaSpace.xs)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))

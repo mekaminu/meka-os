@@ -51,6 +51,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -224,7 +225,7 @@ private fun MoreRow(item: MoreItem, line: String, lit: Boolean, paneOpen: Boolea
             .clip(RoundedCornerShape(MekaRadius.m))
             .background(Meka.colors.surface)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -237,7 +238,7 @@ private fun MoreRow(item: MoreItem, line: String, lit: Boolean, paneOpen: Boolea
             Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = travel)
             Text(line, style = MekaType.caption, color = lineColor, maxLines = 2)
         }
-        Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.padding(start = MekaSpace.s))
+        Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.padding(start = MekaSpace.xs))
     }
 }
 
@@ -264,7 +265,7 @@ private fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> U
             Modifier.fillMaxWidth()
                 .clickable(role = Role.Button, onClick = toggle)
                 .semantics { stateDescription = "${theme.choice.label}, ${if (open) "expanded" else "collapsed"}" }
-                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+                .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -273,11 +274,11 @@ private fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> U
             }
             val turn by animateFloatAsState(if (open) 90f else 0f, MekaMotion.appear(Meka.reducedMotion), label = "appearance-chevron")
             Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary,
-                modifier = Modifier.padding(start = MekaSpace.s).rotate(turn))
+                modifier = Modifier.padding(start = MekaSpace.xs).rotate(turn))
         }
         if (open) {
             Row(
-                Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.s),
+                Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.xs),
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 ThemeChoice.entries.forEach { c ->
@@ -316,7 +317,7 @@ private fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> U
                 }
             }
             Row(
-                Modifier.fillMaxWidth().padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs, bottom = MekaSpace.s),
+                Modifier.fillMaxWidth().padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs, bottom = MekaSpace.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AnimatedContent(
@@ -336,7 +337,7 @@ private fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> U
                 AnimatedContent(
                     targetState = AppUpdateRules.versionLine(app.updater.installedName, app.updater.installedCode, latest),
                     transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
-                    label = "build-line", modifier = Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.s),
+                    label = "build-line", modifier = Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.xs),
                 ) { line -> Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) }
             }
         }
@@ -360,7 +361,7 @@ private fun MotionCheckSection(motion: MotionControl, playOpening: () -> Unit) {
     Text("Motion check", style = MekaType.caption, color = Meka.colors.textSecondary,
         modifier = Modifier.padding(start = MekaSpace.m, top = MekaSpace.xs))
     check.rows.forEach { row ->
-        Row(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.m, vertical = 1.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.m)) {
             Text(row.label, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
             Text(row.value, style = MekaType.caption, color = Meka.colors.textSecondary)
         }
@@ -384,7 +385,7 @@ private fun MotionCheckSection(motion: MotionControl, playOpening: () -> Unit) {
     ) {
         Text(MotionCheckRules.PLAY_OPENING_LINE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
         Text(MotionCheckRules.PLAY_OPENING, style = MekaType.caption, color = Meka.colors.onAccent,
-            modifier = Modifier.padding(start = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+            modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
                 .clickable(role = Role.Button) { haptics.light(); playOpening() }
                 .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
     }

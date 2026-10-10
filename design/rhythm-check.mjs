@@ -80,6 +80,25 @@ export const ON_RHYTHM = [
   M + 'Goals/GoalsScreen.swift',
   M + 'Goals/FastingSection.swift',
   M + 'Goals/SessionCards.swift',
+  // Slice 4b-4: Ask and More's panes (Ask, MEKA's AI, Talk, MEKA's voice, Family, Setup, Health, Activity).
+  A + 'ask/AskRoute.kt',
+  A + 'ask/AskMekaSection.kt',
+  A + 'ask/TalkPane.kt',
+  A + 'ask/VoicePane.kt',
+  A + 'ask/VoiceOrb.kt',
+  A + 'ask/FamilyPane.kt',
+  A + 'ask/SetupPane.kt',
+  A + 'ask/HealthPane.kt',
+  A + 'activity/ActivityPane.kt',
+  M + 'Ask/AskScreen.swift',
+  M + 'Ask/AskMekaSection.swift',
+  M + 'Ask/TalkSheet.swift',
+  M + 'Ask/VoiceSheet.swift',
+  M + 'Ask/VoiceOrbView.swift',
+  M + 'Ask/FamilySheet.swift',
+  M + 'Ask/SetupSheet.swift',
+  M + 'Ask/HealthSheet.swift',
+  M + 'Activity/ActivitySheet.swift',
 ];
 
 const NUM = String.raw`\b(?!0(?:\.0+)?\b)\d+(?:\.\d+)?`;

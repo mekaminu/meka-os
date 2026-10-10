@@ -58,6 +58,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.SkeletonRows
 import os.meka.android.designsystem.appear
@@ -171,10 +172,10 @@ fun SetupPane(core: MekaCore, onClose: () -> Unit, openPane: (SetupFix) -> Unit)
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Text("Setup", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.SETUP)).appear(rememberAppearance(0)))
         Crossfade(v?.summary ?: (if (checking) "Checking…" else ""), animationSpec = MekaMotion.appear(reduced), label = "setup-summary-text") { s ->
@@ -184,13 +185,13 @@ fun SetupPane(core: MekaCore, onClose: () -> Unit, openPane: (SetupFix) -> Unit)
             var step = 1
             v.sections.forEach { section ->
                 Text(section.title.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
-                    modifier = Modifier.padding(top = MekaSpace.s).semantics { heading() }.appear(rememberAppearance(step++)))
+                    modifier = Modifier.padding(top = MekaSpace.m).semantics { heading() }.appear(rememberAppearance(step++)))
                 section.steps.forEach { s ->
                     SetupStepView(s, Modifier.appear(rememberAppearance(step++))) { fix(s) }
                 }
             }
         } else {
-            SkeletonRows(8, Modifier.padding(top = MekaSpace.s))
+            SkeletonRows(8, Modifier.padding(top = MekaSpace.xs))
         }
     }
 }
@@ -216,10 +217,10 @@ private fun SetupStepView(step: SetupStep, modifier: Modifier, onFix: () -> Unit
     val dot by animateColorAsState(setupColor(step.state), MekaMotion.appear(reduced), label = "setup-dot")
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s)
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
             .semantics(mergeDescendants = true) { contentDescription = "${step.title}, ${spoken(step.state)}. ${step.line}" },
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
         Column(Modifier.weight(1f)) {
@@ -266,7 +267,7 @@ fun SetupTodayCard(core: MekaCore, modifier: Modifier = Modifier) {
     ) {
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+                .padding(MekaSpace.m),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
             Text("SET UP MEKA", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)

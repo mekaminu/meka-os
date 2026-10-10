@@ -15,7 +15,7 @@ struct HealthSheet: View {
     let palette: MekaPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Health").font(MekaType.upNextTitle).staggeredAppear(0)
             if let view = model.health {
                 Text(view.summary).font(MekaType.body)
@@ -46,7 +46,7 @@ struct HealthSheet: View {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.l)
         .frame(width: 500)
@@ -111,10 +111,10 @@ private struct HealthRowView: View {
     }
 
     var body: some View {
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             Circle().fill(dot).frame(width: 9, height: 9)
                 .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: spoken)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
                 Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -132,7 +132,7 @@ private struct HealthRowView: View {
             }
         }
         .padding(.horizontal, MekaSpace.m)
-        .padding(.vertical, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(row.title), \(spoken). \(row.line)")

@@ -57,7 +57,7 @@ struct ActivitySheet: View {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.l)
         .frame(width: 500)
@@ -69,7 +69,7 @@ struct ActivitySheet: View {
     }
 
     private func rowView(_ row: ActivityRow) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+        HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
             Text(row.time).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).monospacedDigit()
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 // Context, not something to act on: the regular body weight.
@@ -92,7 +92,7 @@ struct ActivitySheet: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, MekaSpace.m)
-        .padding(.vertical, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: row.undoneLine)
     }

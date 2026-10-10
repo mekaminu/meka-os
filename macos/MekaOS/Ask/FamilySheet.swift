@@ -20,7 +20,7 @@ struct FamilySheet: View {
     @State private var copied = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Family").font(MekaType.upNextTitle).staggeredAppear(0)
             if let view = model.family {
                 Text(view.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
@@ -73,7 +73,7 @@ struct FamilySheet: View {
                     Text("Link made for \(made.name)").font(MekaType.body).foregroundStyle(palette.textPrimary)
                     Text(made.note).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    HStack(spacing: MekaSpace.s) {
+                    HStack(spacing: MekaSpace.xs) {
                         ShareLink(item: made.shareText) { Text("Share…") }
                             .buttonStyle(MekaPressStyle())
                             .simultaneousGesture(TapGesture().onEnded { MekaHaptics.light() })
@@ -92,7 +92,7 @@ struct FamilySheet: View {
                     .foregroundStyle(palette.accent)
                 }
                 .padding(.horizontal, MekaSpace.m)
-                .padding(.vertical, MekaSpace.s)
+                .padding(.vertical, MekaSpace.xs)
                 .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
@@ -100,7 +100,7 @@ struct FamilySheet: View {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.m)
         }
         .padding(MekaSpace.l)
         .frame(width: 460)
@@ -126,10 +126,10 @@ private struct FamilyRowView: View {
     }
 
     var body: some View {
-        HStack(spacing: MekaSpace.s) {
+        HStack(spacing: MekaSpace.xs) {
             Circle().fill(dot).frame(width: 9, height: 9)
                 .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: row.line)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
                 Text(row.line).font(MekaType.caption).foregroundStyle(row.lit ? palette.accent : palette.textSecondary)
                     .contentTransition(.opacity)
@@ -147,7 +147,7 @@ private struct FamilyRowView: View {
             }
         }
         .padding(.horizontal, MekaSpace.m)
-        .padding(.vertical, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(row.title). \(row.line)")

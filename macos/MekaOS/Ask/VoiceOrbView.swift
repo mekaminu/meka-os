@@ -18,7 +18,7 @@ struct VoiceOrbView: View {
     private var moving: Bool { !reduceMotion && phase != .ended }
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: MekaSpace.xs) {
             TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !moving)) { context in
                 let elapsed = context.date.timeIntervalSince(began)
                 let breath = MotionMath.breath(elapsed: elapsed, reduced: reduceMotion)
@@ -38,7 +38,7 @@ struct VoiceOrbView: View {
                     }
                     Group {
                         Circle().fill(palette.accent.opacity(0.18 * glow))
-                        if lit { Circle().fill(palette.accent.opacity(0.9)).padding(2) }
+                        if lit { Circle().fill(palette.accent.opacity(0.9)).padding(2) } // rhythm: ok (the lit fill's inset inside the ring)
                         Circle().strokeBorder(palette.accent.opacity(0.6 + 0.4 * glow), lineWidth: 2)
                         Image(systemName: "mic.fill")
                             .font(.system(size: base * 0.34, weight: .medium))

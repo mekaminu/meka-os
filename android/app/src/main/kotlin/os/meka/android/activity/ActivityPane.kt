@@ -37,6 +37,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -75,10 +76,10 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit) {
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Text("Activity", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.ACTIVITY)).appear(rememberAppearance(0)))
         Text(
@@ -102,7 +103,7 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit) {
         note?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
         view.days.forEachIndexed { i, day ->
             Column(Modifier.fillMaxWidth().appear(rememberAppearance(i + 1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Spacer(Modifier.height(MekaSpace.s))
+                Spacer(Modifier.height(MekaSpace.m))
                 Text(day.label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
                 day.rows.forEach { row ->
                     ActivityRowView(row) {
@@ -123,11 +124,11 @@ private fun ActivityRowView(row: ActivityRow, undo: () -> Unit) {
     val reduced = Meka.reducedMotion
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.Top,
     ) {
         Text(row.time, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
-        Spacer(Modifier.width(MekaSpace.s))
+        Spacer(Modifier.width(MekaSpace.xs))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             // Context, not something to act on: the regular body weight (Meka, 2026-10-06).
             Text(row.summary, style = MekaType.body, color = Meka.colors.textPrimary)

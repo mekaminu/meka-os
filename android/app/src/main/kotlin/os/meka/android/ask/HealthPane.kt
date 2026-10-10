@@ -51,6 +51,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.SkeletonRows
 import os.meka.android.designsystem.appear
@@ -182,10 +183,10 @@ fun HealthPane(core: MekaCore, onClose: () -> Unit, openPane: (HealthFix) -> Uni
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { onClose() }.padding(vertical = MekaSpace.s))
+            modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Text("Health", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.HEALTH)).appear(rememberAppearance(0)))
         Crossfade(v?.summary ?: "Checking…", animationSpec = MekaMotion.appear(reduced), label = "health-summary-text") { s ->
@@ -201,7 +202,7 @@ fun HealthPane(core: MekaCore, onClose: () -> Unit, openPane: (HealthFix) -> Uni
                 HealthRowView(row, row.fixHere(panes = true), Modifier.appear(rememberAppearance(i + 1))) { fix(row) }
             }
         } else {
-            SkeletonRows(6, Modifier.padding(top = MekaSpace.s))
+            SkeletonRows(6, Modifier.padding(top = MekaSpace.xs))
         }
     }
 }
@@ -227,10 +228,10 @@ private fun HealthRowView(row: HealthRow, showFix: Boolean, modifier: Modifier, 
     val dot by animateColorAsState(healthColor(row.state), MekaMotion.appear(reduced), label = "health-dot")
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s)
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
             .semantics(mergeDescendants = true) { contentDescription = "${row.title}, ${spokenState(row.state)}. ${row.line}" },
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
         Column(Modifier.weight(1f)) {

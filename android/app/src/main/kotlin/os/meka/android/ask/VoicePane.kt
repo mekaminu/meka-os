@@ -49,6 +49,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.SkeletonRows
 import os.meka.android.designsystem.appear
@@ -150,10 +151,10 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { speaker.stop(); onClose() }.padding(vertical = MekaSpace.s))
+            modifier = Modifier.clickable(role = Role.Button) { speaker.stop(); onClose() }.minTouch())
         Text(VoicePickerRules.TITLE, style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.VOICE)).appear(rememberAppearance(0)))
         Text(VoicePickerRules.INTRO, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
@@ -184,7 +185,7 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
                 SkeletonRows(count = 2, rowHeight = 48.dp)
             } else {
                 val d = DeviceVoiceRules.view(voices, deviceSettings, mac = false, expanded = showAll)
-                Spacer(Modifier.height(MekaSpace.s))
+                Spacer(Modifier.height(MekaSpace.m))
                 Text(d.title, style = MekaType.sectionLabel, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(after + 1)))
                 d.rows.forEachIndexed { i, r ->
                     DeviceRow(r, playing = playing == "device:" + r.id && speaker.speaking,
@@ -204,7 +205,7 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
                     Modifier.appear(rememberAppearance(base + 1)), onStep = { haptics.tick() }) { saveDevice(deviceSettings.copy(pitch = DeviceVoiceRules.pitch(it))) }
                 Text(d.note, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(base + 2)))
             }
-            Spacer(Modifier.height(MekaSpace.s))
+            Spacer(Modifier.height(MekaSpace.m))
             Text(v.help, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(after + 4)))
         }
     }
@@ -223,11 +224,11 @@ private fun VoiceRow(c: VoiceChoice, playing: Boolean, modifier: Modifier, choos
             .border(1.dp, edge, RoundedCornerShape(MekaRadius.m))
             .semantics { selected = c.selected }
             .clickable(role = Role.RadioButton, onClickLabel = "Use ${c.label}") { choose() }
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(18.dp).border(1.5.dp, ring, CircleShape).padding(4.dp).clip(CircleShape).background(fill))
-        Spacer(Modifier.width(MekaSpace.s))
+        Box(Modifier.size(18.dp).border(1.5.dp, ring, CircleShape).padding(4.dp).clip(CircleShape).background(fill)) // rhythm: ok (the radio dot's own inset)
+        Spacer(Modifier.width(MekaSpace.xs))
         Column(Modifier.weight(1f)) {
             // A setting you choose, not something to act on: the regular weight (type weight, 2026-10-06).
             Text(c.label, style = MekaType.body, color = Meka.colors.textPrimary)
@@ -235,7 +236,7 @@ private fun VoiceRow(c: VoiceChoice, playing: Boolean, modifier: Modifier, choos
         }
         if (c.sample) {
             Box(
-                Modifier.padding(start = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
                     .clickable(role = Role.Button, onClickLabel = if (playing) "Stop the sample" else "Hear ${c.label}") { sample() }
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             ) {

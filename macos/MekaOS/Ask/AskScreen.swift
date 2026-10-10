@@ -84,7 +84,7 @@ private struct MoreRow: View {
     var body: some View {
         Button(action: action) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     // Places and settings you open, not things you act on: the regular weight (type weight, 2026-10-06).
                     Text(item.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
                     Text(line)
@@ -96,7 +96,7 @@ private struct MoreRow: View {
                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(palette.textTertiary)
             }
             .padding(.horizontal, MekaSpace.m)
-            .padding(.vertical, MekaSpace.s)
+            .padding(.vertical, MekaSpace.xs)
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
             .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
         }
@@ -123,9 +123,9 @@ private struct AppearanceRow: View {
     @Environment(\.accessibilityReduceMotion) private var systemReduce
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(MoreItem.appearance.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
                     Text(MoreItem.appearance.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 }
@@ -138,7 +138,7 @@ private struct AppearanceRow: View {
                 .fixedSize()
             }
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text("Motion").font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     Text(MotionRules.shared.line(stored: MotionSetting.stored(motion), systemOff: systemReduce, mac: true))
                         .font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -158,7 +158,7 @@ private struct AppearanceRow: View {
             }
             MotionCheckView(motion: $motion, palette: palette)
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text("News ticker").font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     Text(NewsTickerChoice.mode(ticker).line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         .contentTransition(.opacity)
@@ -175,7 +175,7 @@ private struct AppearanceRow: View {
                 .fixedSize()
             }
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text("Floating ticker").font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     Text(floating ? "Over every app · drag its grip to the top or bottom" : "Off · a thin strip over every app")
                         .font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -196,7 +196,7 @@ private struct AppearanceRow: View {
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
         }
         .padding(.horizontal, MekaSpace.m)
-        .padding(.vertical, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .offset(y: hovering && !reduceMotion ? -2 : 0)
         .onHover { h in withAnimation(MekaMotion.appear(reduced: reduceMotion)) { hovering = h } }
@@ -224,7 +224,7 @@ private struct MotionCheckView: View {
             stored: MotionSetting.stored(motion), reduceMotion: systemReduce,
             lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled
         )
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             Text("Motion check").font(MekaType.caption).foregroundStyle(palette.textSecondary)
             ForEach(check.rows, id: \.label) { row in
                 HStack {

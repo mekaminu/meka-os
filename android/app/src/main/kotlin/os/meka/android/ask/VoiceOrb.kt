@@ -79,7 +79,7 @@ fun VoiceOrb(phase: TalkPhase, level: Float, modifier: Modifier = Modifier, size
         }
         if (reduced && phase == TalkPhase.LISTENING) {
             // Reduced motion: the voice level as a still bar instead of the swell.
-            Box(Modifier.padding(top = 6.dp).width(size).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Meka.colors.surfaceRaised)) {
+            Box(Modifier.padding(top = MekaSpace.xs).width(size).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Meka.colors.surfaceRaised)) {
                 Box(Modifier.fillMaxHeight().fillMaxWidth(level.coerceIn(0f, 1f)).background(accent))
             }
         }

@@ -44,7 +44,7 @@ struct VoiceSheet: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(VoicePickerRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
             Text(VoicePickerRules.shared.INTRO).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -68,7 +68,7 @@ struct VoiceSheet: View {
                 }
                 Text(v.help).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, MekaSpace.s)
+                    .padding(.top, MekaSpace.m)
                     .staggeredAppear(v.choices.count + 4)
             } else {
                 SkeletonRows(count: 4, rowHeight: 48, palette: palette)
@@ -77,7 +77,7 @@ struct VoiceSheet: View {
                 Spacer()
                 Button("Done") { speaker.stop(); dismiss() }.keyboardShortcut(.defaultAction)
             }
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.m)
         }
     }
 
@@ -87,7 +87,7 @@ struct VoiceSheet: View {
         let d = DeviceVoiceRules.shared.view(voices: voices, settings: deviceSettings, mac: true, expanded: showAll)
         Text(d.title.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
             .foregroundStyle(palette.textSecondary)
-            .padding(.top, MekaSpace.s)
+            .padding(.top, MekaSpace.m)
             .staggeredAppear(after)
         ForEach(Array(d.rows.enumerated()), id: \.element.id) { i, r in
             row(VoiceChoice(id: "device:" + r.id, label: r.label, detail: r.detail, selected: r.selected, sample: true),
@@ -158,13 +158,13 @@ struct VoiceSheet: View {
 
     private func row(_ c: VoiceChoice, choose: @escaping () -> Void, sample: @escaping () -> Void) -> some View {
         let isPlaying = playing == c.id && speaker.speaking
-        return HStack(spacing: MekaSpace.s) {
+        return HStack(spacing: MekaSpace.xs) {
             Button { choose() } label: {
-                HStack(spacing: MekaSpace.s) {
+                HStack(spacing: MekaSpace.xs) {
                     Circle().strokeBorder(c.selected ? palette.accent : palette.textTertiary, lineWidth: 1.5)
-                        .background(Circle().fill(c.selected ? palette.accent : Color.clear).padding(4))
+                        .background(Circle().fill(c.selected ? palette.accent : Color.clear).padding(4)) // rhythm: ok (the radio dot's own inset)
                         .frame(width: 18, height: 18)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         // A setting you choose, not something to act on: the regular weight.
                         Text(c.label).font(MekaType.body).foregroundStyle(palette.textPrimary)
                         Text(c.detail).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
@@ -185,7 +185,7 @@ struct VoiceSheet: View {
                 .help(isPlaying ? "Stop the sample" : "Hear \(c.label)")
             }
         }
-        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.s)
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
         .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(c.selected ? palette.accent : Color.clear, lineWidth: 1))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: c.selected)

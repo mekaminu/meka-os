@@ -69,6 +69,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.SkeletonRows
 import os.meka.android.designsystem.appear
@@ -361,7 +362,7 @@ const val ASK_MATCH_TAG = "ask-match"
 internal fun AskMatchList(m: AskMatches, onOpen: (AskMatch) -> Unit, onSeeAll: () -> Unit) {
     val reduced = Meka.reducedMotion
     Column(
-        Modifier.fillMaxWidth().padding(top = MekaSpace.s).animateContentSize(MekaMotion.replan(reduced)),
+        Modifier.fillMaxWidth().padding(top = MekaSpace.xs).animateContentSize(MekaMotion.replan(reduced)),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         m.rows.forEachIndexed { i, row ->
@@ -371,7 +372,7 @@ internal fun AskMatchList(m: AskMatches, onOpen: (AskMatch) -> Unit, onSeeAll: (
                         .then(if (row.opens) Modifier.clickable(role = Role.Button) { onOpen(row) } else Modifier)
                         .testTag(ASK_MATCH_TAG)
                         .semantics(mergeDescendants = true) { contentDescription = row.spoken }
-                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s)
+                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
                         .appear(rememberAppearance(i)),
                 ) {
                     Text(row.hit.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1)
@@ -382,7 +383,7 @@ internal fun AskMatchList(m: AskMatches, onOpen: (AskMatch) -> Unit, onSeeAll: (
         m.seeAll?.let { line ->
             Text(line, style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onSeeAll)
-                    .padding(horizontal = MekaSpace.xxs, vertical = MekaSpace.s))
+                    .minTouch().padding(horizontal = MekaSpace.xxs))
         }
         m.empty?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.padding(horizontal = MekaSpace.xxs, vertical = MekaSpace.xs)) }
@@ -433,12 +434,12 @@ private fun AskCardRow(card: AskCard, modifier: Modifier, onTap: () -> Unit) {
         modifier.fillMaxWidth().padding(top = MekaSpace.xxs)
             .clip(RoundedCornerShape(MekaRadius.m))
             .background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(card.line, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f), maxLines = 3)
         Text(card.button, style = MekaType.itemMeta, color = Meka.colors.onAccent,
-            modifier = Modifier.padding(start = MekaSpace.s).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+            modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
                 .clickable(role = Role.Button, onClick = onTap)
                 .semantics { contentDescription = "${card.button}: ${card.line}" }
                 .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
