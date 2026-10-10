@@ -195,6 +195,7 @@ class TalkController(
                 said = effect.text
                 say(effect.text)
             }
+            TalkEffect.PlayMessages -> playMessages()
             TalkEffect.StopSpeaking -> stopSaying()
             TalkEffect.End -> {
                 recognizer?.cancel()
@@ -284,6 +285,20 @@ class TalkController(
     private fun say(text: String) {
         val id = ++utterance
         speaker.say(text) { finishedSaying(id) }
+    }
+
+    /**
+     * "Play my messages" (call assistant polish 8c): the voice messages in the summary this phone shows (its family
+     * list and contacts name the callers, as in Needs you), each introduced in MEKA's voice, then the caller's own
+     * recording from MEKA's server (played from memory) or their words; then MEKA listens again.
+     */
+    private fun playMessages() {
+        val app = context.applicationContext as os.meka.android.MekaApplication
+        val summary = core.afterWork.value.withLists(app.captures.lists.value, os.meka.android.work.CallerLookup.names(context))
+        val playlist = core.voicePlaylistOf(summary)
+        said = playlist.steps.filterIsInstance<os.meka.core.domain.PlayStep.Say>().firstOrNull()?.text.orEmpty()
+        val id = ++utterance
+        speaker.playlist(playlist.steps, { core.voiceMessageAudio(it) }) { finishedSaying(id) }
     }
 
     /** Stops whatever is being said, in either voice. */

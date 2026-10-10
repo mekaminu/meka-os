@@ -1071,6 +1071,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(rules.PRIVACY.contains("30 days"))
     }
 
+    func testPlayMyMessagesReachesSwift() {
+        // Call assistant polish 8c: "play my messages" in Talk is played on the Mac, step by step, with no AI call.
+        XCTAssertTrue(VoicePlaylistRules.shared.isPlayRequest(utterance: "Play my messages"))
+        XCTAssertFalse(VoicePlaylistRules.shared.isPlayRequest(utterance: "read my messages"))
+        let step = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "who called?")
+        XCTAssertTrue(step.effects.first is TalkEffectPlayMessages)
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "playlist-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let playlist = core.voicePlaylist()
+        XCTAssertEqual(playlist.count, 0)
+        XCTAssertEqual((playlist.steps.first as? PlayStepSay)?.text, "No voice messages waiting. Anything else?")
+    }
+
     func testKeepCallersRecordingsReachesSwift() {
         // Call assistant polish 8c: the "Keep callers' recordings" choice, its line and the summary's note.
         let rules = VoiceRecordingRules.shared

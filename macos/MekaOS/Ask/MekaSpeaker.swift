@@ -52,9 +52,51 @@ final class MekaSpeaker {
         let id = line
         speaking = true
         loadDeviceVoice()
-        let pieces = SpeechRules.shared.pieces(text: text)
         task = Task { [weak self] in
             guard let self else { return }
+            await self.speakNow(text, reading: reading)
+            guard !Task.isCancelled, id == self.line else { return }
+            self.speaking = false
+            done?()
+        }
+    }
+
+    /// "Play my messages" in Talk (call assistant polish 8c): says and plays the playlist's steps in order — MEKA's
+    /// lines as `say` would, each caller's recording (MEKA's server through `CoreModel.voiceMessageAudio`, played from
+    /// memory), or the step's words when it can't be had or played. `done` runs once all of it is over, never when
+    /// `stop()` cut it short. Only Strings and Data cross to the core.
+    func playlist(_ steps: [PlaylistStep], done: (@MainActor @Sendable () -> Void)? = nil) {
+        stop()
+        line += 1
+        let id = line
+        speaking = true
+        loadDeviceVoice()
+        task = Task { [weak self] in
+            guard let self else { return }
+            for step in steps {
+                guard !Task.isCancelled else { return }
+                switch step {
+                case .say(let text):
+                    await self.speakNow(text, reading: false)
+                case .recording(let heldId, let otherwise):
+                    var played = false
+                    if let data = await self.model?.voiceMessageAudio(heldId), !Task.isCancelled {
+                        played = await self.play(data)
+                    }
+                    guard !Task.isCancelled else { return }
+                    if !played { await self.speakNow(otherwise, reading: false) }
+                }
+            }
+            guard !Task.isCancelled, id == self.line else { return }
+            self.speaking = false
+            done?()
+        }
+    }
+
+    /// Says `text` piece by piece in MEKA's voice, the Mac's own for what's left; returns once said (or cancelled).
+    private func speakNow(_ text: String, reading: Bool) async {
+        let pieces = SpeechRules.shared.pieces(text: text)
+        do {
             var held = false
             var i = 0
             var next = await self.fetch(pieces, 0, reading: reading)
@@ -89,9 +131,6 @@ final class MekaSpeaker {
             next?.clip.cancel()
             guard !Task.isCancelled else { return }
             if i < pieces.count { await self.sayOnDevice(pieces[i...].joined(separator: " ")) }
-            guard !Task.isCancelled, id == self.line else { return }
-            self.speaking = false
-            done?()
         }
     }
 
@@ -265,6 +304,20 @@ enum DeviceVoiceStore {
     static func style(_ u: AVSpeechUtterance, _ s: DeviceVoiceSettings) {
         u.rate = DeviceVoiceRules.shared.macRate(r: s.rate)
         u.pitchMultiplier = DeviceVoiceRules.shared.pitch(p: s.pitch)
+    }
+}
+
+/// One step of "play my messages" as plain Swift values (the core's `PlayStep`, read once on the main actor).
+enum PlaylistStep: Sendable {
+    case say(String)
+    case recording(heldId: String, otherwise: String)
+
+    static func of(_ steps: [PlayStep]) -> [PlaylistStep] {
+        steps.compactMap { step in
+            if let say = step as? PlayStepSay { return .say(say.text) }
+            if let rec = step as? PlayStepRecording { return .recording(heldId: rec.heldId, otherwise: rec.otherwise) }
+            return nil
+        }
     }
 }
 

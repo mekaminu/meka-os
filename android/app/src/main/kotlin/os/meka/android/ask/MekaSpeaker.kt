@@ -14,11 +14,13 @@ import android.util.Base64
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -26,6 +28,7 @@ import os.meka.core.domain.DeviceVoice
 import os.meka.core.domain.DeviceVoiceRules
 import os.meka.core.domain.DeviceVoiceSettings
 import os.meka.core.domain.MekaVoiceRules
+import os.meka.core.domain.PlayStep
 import os.meka.core.domain.SpeechRules
 import os.meka.core.domain.VoicePickerRules
 import os.meka.core.facade.MekaCore
@@ -86,51 +89,84 @@ class MekaSpeaker(
         val id = ++line
         speaking = true
         job = scope.launch {
-            val pieces = SpeechRules.pieces(text)
-            var held = false
-
-            suspend fun fetch(k: Int): Pending? {
-                val p = pieces.getOrNull(k) ?: return null
-                val hold = SpeechRules.holds(reading, core.speechResting(), lastMekaVoiceMs, System.currentTimeMillis())
-                val first = k == 0
-                return Pending(async { core.speechClip(p, first, reading, hold) }, SystemClock.elapsedRealtime(), first, hold)
-            }
-
-            // A piece that may hold: its usual wait, then "One moment…" (once a line) and the rest of its budget.
-            suspend fun clipOf(p: Pending): String? {
-                if (!p.hold) return p.clip.await()
-                val left = SpeechRules.waitMs(p.first, reading) - (SystemClock.elapsedRealtime() - p.startedAt)
-                val inTime = if (left > 0) withTimeoutOrNull(left) { p.clip.await() } else null
-                if (inTime != null || p.clip.isCompleted) return inTime ?: p.clip.await()
-                if (!held) {
-                    held = true
-                    core.speechHoldClip()?.let { play(it) }
-                }
-                return p.clip.await()
-            }
-
-            var i = 0
-            var next = fetch(0)
-            while (i < pieces.size) {
-                val clip = next?.let { clipOf(it) }
-                if (clip != null) lastMekaVoiceMs = System.currentTimeMillis() // heard in this conversation
-                next = fetch(i + 1)
-                if (clip != null && play(clip)) {
-                    lastMekaVoiceMs = System.currentTimeMillis()
-                    i++
-                    continue
-                }
-                if (SpeechRules.onMiss(reading, core.speechResting()) == SpeechRules.Miss.REST_ON_DEVICE) break
-                sayOnDevice(pieces[i])
-                i++
-            }
-            next?.clip?.cancel()
-            if (i < pieces.size) sayOnDevice(pieces.drop(i).joinToString(" "))
+            speakNow(text, reading)
             if (id == line) {
                 speaking = false
                 onDone()
             }
         }
+    }
+
+    /**
+     * "Play my messages" in Talk (call assistant polish 8c): says and plays the playlist's steps in order — MEKA's
+     * lines as [say] would, each caller's recording fetched with [fetch] (from MEKA's server, played from memory and
+     * let go), or the step's words when it can't be had or played. [onDone] runs once all of it is over, never when
+     * stopped ([stop] cuts the playlist short too).
+     */
+    fun playlist(steps: List<PlayStep>, fetch: suspend (String) -> ByteArray?, onDone: () -> Unit = {}) {
+        stop()
+        DeviceVoiceStore.load(context).let { if (it != settings) useDeviceVoice(it) }
+        val id = ++line
+        speaking = true
+        job = scope.launch {
+            for (step in steps) {
+                when (step) {
+                    is PlayStep.Say -> speakNow(step.text, reading = false)
+                    is PlayStep.Recording -> {
+                        val bytes = try { fetch(step.heldId) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+                        if (bytes == null || !playBytes(bytes, recording = true)) speakNow(step.otherwise, reading = false)
+                    }
+                }
+            }
+            if (id == line) {
+                speaking = false
+                onDone()
+            }
+        }
+    }
+
+    /** Says [text] piece by piece in MEKA's voice, the phone's own for what's left; returns once it has been said. */
+    private suspend fun speakNow(text: String, reading: Boolean): Unit = coroutineScope {
+        val pieces = SpeechRules.pieces(text)
+        var held = false
+
+        suspend fun fetch(k: Int): Pending? {
+            val p = pieces.getOrNull(k) ?: return null
+            val hold = SpeechRules.holds(reading, core.speechResting(), lastMekaVoiceMs, System.currentTimeMillis())
+            val first = k == 0
+            return Pending(async { core.speechClip(p, first, reading, hold) }, SystemClock.elapsedRealtime(), first, hold)
+        }
+
+        // A piece that may hold: its usual wait, then "One moment…" (once a line) and the rest of its budget.
+        suspend fun clipOf(p: Pending): String? {
+            if (!p.hold) return p.clip.await()
+            val left = SpeechRules.waitMs(p.first, reading) - (SystemClock.elapsedRealtime() - p.startedAt)
+            val inTime = if (left > 0) withTimeoutOrNull(left) { p.clip.await() } else null
+            if (inTime != null || p.clip.isCompleted) return inTime ?: p.clip.await()
+            if (!held) {
+                held = true
+                core.speechHoldClip()?.let { play(it) }
+            }
+            return p.clip.await()
+        }
+
+        var i = 0
+        var next = fetch(0)
+        while (i < pieces.size) {
+            val clip = next?.let { clipOf(it) }
+            if (clip != null) lastMekaVoiceMs = System.currentTimeMillis() // heard in this conversation
+            next = fetch(i + 1)
+            if (clip != null && play(clip)) {
+                lastMekaVoiceMs = System.currentTimeMillis()
+                i++
+                continue
+            }
+            if (SpeechRules.onMiss(reading, core.speechResting()) == SpeechRules.Miss.REST_ON_DEVICE) break
+            sayOnDevice(pieces[i])
+            i++
+        }
+        next?.clip?.cancel()
+        if (i < pieces.size) sayOnDevice(pieces.drop(i).joinToString(" "))
     }
 
     /** One piece's clip on its way: when it was asked for, whether it is the line's first, and whether it may hold. */
@@ -210,14 +246,20 @@ class MekaSpeaker(
     }
 
     /** Plays one MP3 clip (base64) to the end. False when it can't be played (the phone's voice takes over). */
-    private suspend fun play(base64: String): Boolean = suspendCancellableCoroutine { cont ->
-        fun done(ok: Boolean) { if (cont.isActive) cont.resume(ok) }
+    private suspend fun play(base64: String): Boolean {
         val bytes = try { Base64.decode(base64, Base64.DEFAULT) } catch (e: IllegalArgumentException) { null }
-        if (bytes == null || bytes.isEmpty()) return@suspendCancellableCoroutine done(false)
+        if (bytes == null || bytes.isEmpty()) return false
+        return playBytes(bytes, recording = false)
+    }
+
+    /** Plays MP3 [bytes] from memory to the end (a caller's [recording] as speech on the media stream). */
+    private suspend fun playBytes(bytes: ByteArray, recording: Boolean): Boolean = suspendCancellableCoroutine { cont ->
+        fun done(ok: Boolean) { if (cont.isActive) cont.resume(ok) }
+        if (bytes.isEmpty()) return@suspendCancellableCoroutine done(false)
         val mp = MediaPlayer()
         player = mp
         try {
-            mp.setAudioAttributes(speechAttributes())
+            mp.setAudioAttributes(if (recording) recordingAttributes() else speechAttributes())
             mp.setDataSource(ClipSource(bytes))
             mp.setOnPreparedListener { it.start() }
             mp.setOnCompletionListener { releasePlayer(mp); done(true) }
@@ -248,6 +290,9 @@ class MekaSpeaker(
             deviceLines.remove(id)
         }
     }
+
+    private fun recordingAttributes(): AudioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
 
     private fun speechAttributes(): AudioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT)
         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()

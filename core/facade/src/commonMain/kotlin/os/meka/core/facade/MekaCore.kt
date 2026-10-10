@@ -1920,6 +1920,17 @@ class MekaCore(
     suspend fun voiceMessageAudioBase64(id: String): String? =
         voiceMessageAudio(id)?.let { kotlin.io.encoding.Base64.encode(it) }
 
+    /**
+     * What Talk plays for "play my messages" (polish 8c): the voice messages in [summary] (the one the device shows;
+     * the Fold passes its contacts-named copy), urgent first then oldest first, each introduced in MEKA's words and
+     * then its recording ([voiceMessageAudio]) or its words. Pure; nothing is marked or cleared.
+     */
+    fun voicePlaylistOf(summary: os.meka.core.domain.AfterWorkSummary): os.meka.core.domain.VoicePlaylist =
+        os.meka.core.domain.VoicePlaylistRules.build(summary, nowMs(), ZoneCalendar(timeZone))
+
+    /** [voicePlaylistOf] the synced summary as it stands (the Mac's). */
+    fun voicePlaylist(): os.meka.core.domain.VoicePlaylist = voicePlaylistOf(_afterWork.value)
+
     // ---- Ask MEKA (build plan V1, AI layer slice 3; ADR-006) ----
 
     /**

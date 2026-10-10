@@ -41,6 +41,8 @@ sealed interface TalkReply {
     data object Which : TalkReply
     /** "No", "leave it": the cards stay on screen untouched and MEKA stops offering them aloud. */
     data object Decline : TalkReply
+    /** "Play my messages", "any voice messages?", "who called?" ([VoicePlaylistRules.isPlayRequest]): played on the device, no AI. */
+    data class PlayMessages(val question: String) : TalkReply
     /** Anything else is a new question. */
     data class Ask(val question: String) : TalkReply
 }
@@ -136,6 +138,7 @@ object TalkRules {
             selection(ws, pendingCards)?.let { return it }
             if (cover(ws, NO) != null) return TalkReply.Decline
         }
+        if (VoicePlaylistRules.isPlayRequest(question)) return TalkReply.PlayMessages(question)
         if (isEnding(question)) return TalkReply.End
         return TalkReply.Ask(question)
     }
@@ -230,7 +233,10 @@ object TalkRules {
      * emoji dropped, whitespace collapsed; cut to [MAX_SPOKEN_SENTENCES] sentences and [MAX_SPOKEN_CHARS] characters
      * (at a sentence or word end). Also used for read-outs, which are plain text and never acted on.
      */
-    fun speakable(text: String): String {
+    fun speakable(text: String): String = speakable(text, MAX_SPOKEN_SENTENCES, MAX_SPOKEN_CHARS)
+
+    /** [speakable] with its own limits: a caller's words read out ("play my messages") are longer than an answer. */
+    fun speakable(text: String, maxSentences: Int, maxChars: Int): String {
         val lines = text.split('\n').map { it.trim() }.filter { it.isNotEmpty() }.map { l ->
             val bare = l.removePrefix("- ").removePrefix("• ").removePrefix("* ").let { Regex("""^\d+[.)]\s+""").replace(it, "") }
             if (bare.isNotEmpty() && bare.last() !in ".!?:") "$bare." else bare
@@ -245,10 +251,10 @@ object TalkRules {
         s = s.replace(Regex("""\s+"""), " ").replace(Regex(""" ([,.!?])"""), "$1").replace(",,", ",").trim()
         // Sentences end at . ! ? followed by a space ("$1.20" stays whole).
         val sentences = s.split(Regex("""(?<=[.!?])\s+""")).map { it.trim() }.filter { it.isNotEmpty() }
-        var out = sentences.take(MAX_SPOKEN_SENTENCES).joinToString(" ")
-        if (out.length > MAX_SPOKEN_CHARS) {
-            val cut = out.take(MAX_SPOKEN_CHARS)
-            out = cut.substring(0, cut.lastIndexOf(' ').takeIf { it > MAX_SPOKEN_CHARS / 2 } ?: cut.length).trimEnd(',', ' ') + "."
+        var out = sentences.take(maxSentences).joinToString(" ")
+        if (out.length > maxChars) {
+            val cut = out.take(maxChars)
+            out = cut.substring(0, cut.lastIndexOf(' ').takeIf { it > maxChars / 2 } ?: cut.length).trimEnd(',', ' ') + "."
         }
         return out
     }
@@ -276,6 +282,12 @@ sealed interface TalkEffect {
     data class Ask(val question: String, val history: List<TalkTurn>) : TalkEffect
     /** Do these cards exactly as tapping them would (`MekaCore.doAsk`), then report with [TalkFlow.did]. */
     data class Do(val cards: List<AskCard>) : TalkEffect
+    /**
+     * Play the voice messages callers left ("play my messages"): the app builds the playlist from the summary it shows
+     * (`MekaCore.voicePlaylist`), says and plays its steps in order, then reports with [TalkFlow.spoke]; stopping
+     * speech ([StopSpeaking], [End]) stops the playlist too.
+     */
+    data object PlayMessages : TalkEffect
     /** Say [text] on the device, then report with [TalkFlow.spoke]. */
     data class Speak(val text: String) : TalkEffect
     /** Stop speaking at once (Meka talked over MEKA). */
@@ -315,6 +327,10 @@ object TalkFlow {
             is TalkReply.Confirm -> TalkStep(s.copy(phase = TalkPhase.DOING), listOf(TalkEffect.Do(r.indices.map { s.pending[it] })))
             TalkReply.Which -> say(s, TalkRules.spokenWhich(s.pending.size))
             TalkReply.Decline -> say(s.copy(pending = emptyList()), TalkRules.LEFT_IT)
+            is TalkReply.PlayMessages -> TalkStep(
+                s.copy(phase = TalkPhase.SPEAKING, pending = emptyList(), conversation = s.conversation.answered(r.question, VoicePlaylistRules.PLAYED)),
+                listOf(TalkEffect.PlayMessages),
+            )
             is TalkReply.Ask -> {
                 if (s.questions >= TalkRules.MAX_QUESTIONS) return say(s.copy(endAfterSpeaking = true), TalkRules.TOO_MANY)
                 TalkStep(

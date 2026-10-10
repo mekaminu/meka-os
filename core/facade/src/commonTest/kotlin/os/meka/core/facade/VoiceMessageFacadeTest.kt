@@ -89,6 +89,31 @@ class VoiceMessageFacadeTest {
     }
 
     @Test
+    fun talksPlayMyMessagesPlaysTheKeptRecordingAndReadsTheRestThenCanFetchIt() = runTest {
+        val kept = serverWrites("CA1", audio = true)
+        now += 60_000
+        val words = serverWrites("CA2", audio = false)
+        ops.append(Op("s${seq++}", "hh", EntityTypes.HELD_MESSAGE, words, HeldMessageFields.TEXT, "Call me back about Tuesday".fv(), Hlc(now, seq, "server"), emptyList(), "server"))
+        server.audio[kept] = byteArrayOf(0x49, 0x44, 0x33)
+        val c = core()
+        c.syncNow()
+
+        // Asked aloud: no AI call, MEKA plays them.
+        var step = os.meka.core.domain.TalkFlow.heard(os.meka.core.domain.TalkFlow.start().session, "Play my messages")
+        assertEquals(listOf<os.meka.core.domain.TalkEffect>(os.meka.core.domain.TalkEffect.PlayMessages), step.effects)
+        val list = c.voicePlaylist()
+        assertEquals(2, list.count)
+        val rec = list.steps.filterIsInstance<os.meka.core.domain.PlayStep.Recording>().single()
+        assertEquals(kept, rec.heldId)
+        assertTrue(list.steps.any { it == os.meka.core.domain.PlayStep.Say("They said: Call me back about Tuesday.") })
+        assertContentEquals(byteArrayOf(0x49, 0x44, 0x33), c.voiceMessageAudio(rec.heldId))
+        // Played, then listening again; nothing was cleared.
+        step = os.meka.core.domain.TalkFlow.spoke(step.session)
+        assertEquals(listOf<os.meka.core.domain.TalkEffect>(os.meka.core.domain.TalkEffect.Listen), step.effects)
+        assertEquals(2, c.afterWork.value.voiceMessages)
+    }
+
+    @Test
     fun dontKeepSyncsAndStopsOfferingPlay() = runTest {
         val kept = serverWrites("CA1", audio = true)
         server.audio[kept] = byteArrayOf(1, 2, 3)

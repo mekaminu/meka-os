@@ -1191,6 +1191,13 @@ final class CoreModel {
         return data
     }
 
+    /// "Play my messages" in Talk (call assistant polish 8c): the synced summary's voice messages as plain steps (MEKA's
+    /// lines, then each recording or its words). Empty when not connected.
+    func voicePlaylist() -> [PlaylistStep] {
+        guard let core else { return [] }
+        return PlaylistStep.of(core.voicePlaylist().steps)
+    }
+
     func blockHeldCaller(_ person: PersonSummary) {
         guard let core else { return }
         Task {

@@ -186,6 +186,8 @@ final class TalkController {
         } else if let speak = effect as? TalkEffectSpeak {
             said = speak.text
             say(speak.text)
+        } else if effect is TalkEffectPlayMessages {
+            playMessages()
         } else if effect is TalkEffectStopSpeaking {
             stopSaying()
         } else if effect is TalkEffectEnd {
@@ -415,6 +417,16 @@ final class TalkController {
         utterance += 1
         let id = utterance
         speaker.say(text) { [weak self] in self?.finishedSaying(id) }
+    }
+
+    /// "Play my messages" (call assistant polish 8c): each voice message introduced in MEKA's voice, then the caller's
+    /// recording from MEKA's server (played from memory) or their words; then MEKA listens again.
+    private func playMessages() {
+        let steps = model?.voicePlaylist() ?? []
+        if case .say(let first) = steps.first { said = first }
+        utterance += 1
+        let id = utterance
+        speaker.playlist(steps) { [weak self] in self?.finishedSaying(id) }
     }
 
     /// Stops whatever is being said, in either voice.
