@@ -1684,6 +1684,22 @@ class MekaCore(
         return true
     }
 
+    /**
+     * Quick capture by voice on the watch (Galaxy Watch, slice 4a): what the watch's on-device recogniser heard goes in
+     * as if typed into Today's capture bar ([captureTyped]: a task, or a quick alarm or timer). Null when nothing was
+     * said. The watch shows the result's line with Undo ([watchCaptureUndo]).
+     */
+    suspend fun watchCapture(heard: String?): os.meka.core.domain.WatchCaptured? {
+        val text = os.meka.core.domain.WatchCaptureRules.clean(heard) ?: return null
+        return os.meka.core.domain.WatchCaptureRules.captured(captureTyped(text), text)
+    }
+
+    /** Undo on the watch after a capture: the task is deleted, or the alarm or timer cancelled, on every device. */
+    suspend fun watchCaptureUndo(c: os.meka.core.domain.WatchCaptured) {
+        c.taskId?.let { delete(it) }
+        c.alarmId?.let { cancelAlarm(it) }
+    }
+
     /** The watch's complication (Galaxy Watch, slice 3): a running fast's ring, else how much of today's list is done. */
     fun watchComplication(): os.meka.core.domain.WatchComplicationView {
         val t = _today.value

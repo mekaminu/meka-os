@@ -645,6 +645,31 @@ class MekaCoreTest {
     }
 
     @Test
+    fun aWatchCaptureByVoiceReachesTheFoldAndUndoTakesItBack() = runTest {
+        val fold = core("android"); val watch = core("watch0123456789abcdef")
+        assertNull(watch.watchCapture("  "))
+        val c = watch.watchCapture(" buy milk and eggs. ")!!
+        assertEquals("Added “Buy milk and eggs”", c.line)
+        watch.syncNow(); fold.syncNow()
+        val titles = { fold.today.value.let { listOfNotNull(it.upNext) + it.yourDay }.map { it.title } }
+        assertEquals(listOf("Buy milk and eggs"), titles())
+
+        watch.watchCaptureUndo(c)
+        watch.syncNow(); fold.syncNow()
+        assertTrue(titles().isEmpty())
+
+        // "timer 20 min" said to the watch is a timer, as typed in Today's capture bar; Undo cancels it everywhere.
+        val t = watch.watchCapture("timer 20 min")!!
+        assertTrue(t.line.startsWith("Timer set · 20 min"), t.line)
+        watch.syncNow(); fold.syncNow()
+        assertEquals(1, fold.quickAlarms.value.size)
+        watch.watchCaptureUndo(t)
+        watch.syncNow(); fold.syncNow()
+        assertTrue(fold.quickAlarms.value.isEmpty())
+        assertTrue(titles().isEmpty())
+    }
+
+    @Test
     fun homeWidgetsFollowUpNextAndAFastStartedOnTheOtherDevice() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 10, 7, 16, 30).toInstant(london).toEpochMilliseconds() // Wed, BST

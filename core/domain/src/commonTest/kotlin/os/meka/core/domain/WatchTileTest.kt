@@ -43,6 +43,8 @@ class WatchTileTest {
         assertEquals(t.button, WatchTileRules.pressed(t.buttonId, h))
         assertTrue(t.spoken.startsWith("Up next. Send the invoice."))
         assertTrue(t.spoken.endsWith("Double tap Done to done."))
+        assertTrue(t.capture) // slice 4a: Capture opens MEKA listening
+        assertFalse(WatchTileRules.pressed(WatchTileRules.CAPTURE_ID, h) != null)
     }
 
     @Test
@@ -85,6 +87,7 @@ class WatchTileTest {
     fun anUnlinkedWatchsTileSaysToOpenMeka() {
         val t = WatchTileRules.tile(null)
         assertEquals(WatchTileRules.UNLINKED_LABEL, t.label)
+        assertFalse(t.capture)
         assertEquals(WatchTileRules.UNLINKED_TITLE, t.title)
         assertNull(t.button)
         val c = WatchTileRules.complication(null, 3, 2)

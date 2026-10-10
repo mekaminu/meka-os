@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import os.meka.core.domain.WatchCaptureRules
 import os.meka.core.domain.WatchTileRules
 import os.meka.core.domain.WatchTileView
 import os.meka.wear.WatchActivity
@@ -85,13 +86,23 @@ class WatchTileService : TileService() {
             .addContent(gap(MekaSpace.xxs.value))
             .addContent(text(v.title, MekaType.metaStrong, C.textPrimary, 2))
         v.line?.let { column.addContent(gap(MekaSpace.xxs.value)).addContent(text(it, MekaType.caption, C.textSecondary, 2)) }
-        if (v.button != null && v.buttonId != null) {
-            column.addContent(gap(MekaSpace.xs.value)).addContent(button(v.button!!.label, v.buttonId!!))
+        // The primary button and Capture (slice 4a) share one row, so Capture costs the tile no height.
+        val hasButton = v.button != null && v.buttonId != null
+        if (hasButton || v.capture) {
+            val row = LayoutElementBuilders.Row.Builder()
+                .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
+            if (hasButton) row.addContent(button(v.button!!.label, v.buttonId!!, wide = !v.capture))
+            if (hasButton && v.capture) {
+                row.addContent(LayoutElementBuilders.Spacer.Builder().setWidth(DimensionBuilders.dp(MekaSpace.xs.value)).build())
+            }
+            if (v.capture) row.addContent(captureChip(wide = !hasButton))
+            column.addContent(gap(MekaSpace.xs.value)).addContent(row.build())
         }
         v.fastLine?.let {
             column.addContent(gap(MekaSpace.xs.value))
                 .addContent(text(it, MekaType.caption, if (v.fastReached) C.success else C.accent, 1))
         }
+        if (v.capture) column.addContent(gap(MekaSpace.xs.value)).addContent(captureChip())
         // The whole tile opens MEKA; the button sits on top with its own click.
         return LayoutElementBuilders.Box.Builder()
             .setWidth(DimensionBuilders.expand())
@@ -119,21 +130,62 @@ class WatchTileService : TileService() {
             .build()
     }
 
-    private fun openMeka(): ActionBuilders.Action =
-        ActionBuilders.LaunchAction.Builder()
-            .setAndroidActivity(
-                ActionBuilders.AndroidActivity.Builder()
-                    .setPackageName(packageName)
-                    .setClassName(WatchActivity::class.java.name)
+    private fun openMeka(listen: Boolean = false): ActionBuilders.Action {
+        val activity = ActionBuilders.AndroidActivity.Builder()
+            .setPackageName(packageName)
+            .setClassName(WatchActivity::class.java.name)
+        if (listen) {
+            activity.addKeyToExtraMapping(
+                WatchCaptureRules.LISTEN_EXTRA,
+                ActionBuilders.AndroidBooleanExtra.Builder().setValue(true).build(),
+            )
+        }
+        return ActionBuilders.LaunchAction.Builder().setAndroidActivity(activity.build()).build()
+    }
+
+    /**
+     * Capture (slice 4a): a quiet outlined pill that opens MEKA already listening (the activity's launch extra), so a
+     * thought is two taps from the watch face. Its own click and screen-reader line sit on top of the tile's.
+     */
+    private fun captureChip(wide: Boolean): LayoutElementBuilders.LayoutElement =
+        LayoutElementBuilders.Box.Builder()
+            .setHeight(DimensionBuilders.dp(MekaSpace.touch.value))
+            .setWidth(pillWidth(wide))
+            .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
+            .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
+            .setModifiers(
+                ModifiersBuilders.Modifiers.Builder()
+                    .setClickable(
+                        ModifiersBuilders.Clickable.Builder()
+                            .setId(WatchTileRules.CAPTURE_ID)
+                            .setOnClick(openMeka(listen = true))
+                            .build(),
+                    )
+                    .setBorder(
+                        ModifiersBuilders.Border.Builder()
+                            .setWidth(DimensionBuilders.dp(1f))
+                            .setColor(argb(C.hairline))
+                            .build(),
+                    )
+                    .setBackground(
+                        ModifiersBuilders.Background.Builder()
+                            .setColor(argb(C.surfaceRaised))
+                            .setCorner(ModifiersBuilders.Corner.Builder().setRadius(DimensionBuilders.dp(MekaRadius.l.value)).build())
+                            .build(),
+                    )
+                    .setSemantics(
+                        ModifiersBuilders.Semantics.Builder().setContentDescription(WatchCaptureRules.TILE_SPOKEN).build(),
+                    )
                     .build(),
             )
+            .addContent(text(WatchCaptureRules.BUTTON, MekaType.metaStrong, C.textPrimary, 1))
             .build()
 
     /** The primary button, filled with the accent like the watch's own; its tap reloads the tile with [id]. */
-    private fun button(label: String, id: String): LayoutElementBuilders.LayoutElement =
+    private fun button(label: String, id: String, wide: Boolean): LayoutElementBuilders.LayoutElement =
         LayoutElementBuilders.Box.Builder()
             .setHeight(DimensionBuilders.dp(MekaSpace.touch.value))
-            .setWidth(DimensionBuilders.expand())
+            .setWidth(pillWidth(wide))
             .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
             .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
             .setModifiers(
@@ -171,6 +223,10 @@ class WatchTileService : TileService() {
             )
             .build()
 
+    /** A pill alone fills the row; two side by side are each [PAIR_PILL_DP] wide. */
+    private fun pillWidth(wide: Boolean): DimensionBuilders.ContainerDimension =
+        if (wide) DimensionBuilders.expand() else DimensionBuilders.dp(PAIR_PILL_DP)
+
     private fun gap(dp: Float): LayoutElementBuilders.LayoutElement =
         LayoutElementBuilders.Spacer.Builder().setHeight(DimensionBuilders.dp(dp)).build()
 
@@ -180,6 +236,8 @@ class WatchTileService : TileService() {
         const val RESOURCES = "1"
         /** Never asked to redraw sooner than this (Wear OS rate-limits tiles anyway). */
         const val MIN_REFRESH_MS = 30_000L
+        /** Each of two pills sharing the row (Done and Capture): fits "Capture" in metaStrong with room either side. */
+        const val PAIR_PILL_DP = 72f
 
         fun argb(c: Color): ColorBuilders.ColorProp = ColorBuilders.argb(c.toArgb())
 

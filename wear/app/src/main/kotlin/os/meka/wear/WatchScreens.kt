@@ -8,6 +8,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,7 +35,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -46,14 +52,23 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.rotary.onRotaryScrollEvent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import os.meka.core.domain.WatchCaptureRules
+import os.meka.core.domain.WatchCaptured
 import os.meka.core.domain.WatchHomeRules
+import os.meka.core.domain.WatchListenFailure
 import os.meka.core.domain.WatchLinkRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.SyncStatus
@@ -72,14 +87,14 @@ private val RING = 64.dp
 private val RING_STROKE = 4.dp
 
 @Composable
-fun WatchRoot(app: WatchApplication, core: MekaCore?, reduced: Boolean) {
+fun WatchRoot(app: WatchApplication, core: MekaCore?, reduced: Boolean, listen: Int = 0, onListen: () -> Unit = {}) {
     Box(Modifier.fillMaxSize().background(C.background)) {
         AnimatedContent(
             targetState = core,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "watchRoot",
         ) { c ->
-            if (c == null) LinkScreen(app, reduced) else DayScreen(app, c, reduced)
+            if (c == null) LinkScreen(app, reduced) else DayScreen(app, c, reduced, listen, onListen)
         }
     }
 }
@@ -214,7 +229,7 @@ private fun LinkScreen(app: WatchApplication, reduced: Boolean) {
 // ---- the day ----
 
 @Composable
-private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean) {
+private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, listen: Int, onListen: () -> Unit) {
     LifecycleStartEffect(core) {
         core.startSync()
         onStopOrDispose { core.stopSync() }
@@ -280,6 +295,9 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean) {
             }
         }
 
+        Spacer(Modifier.height(MekaSpace.xs))
+        CaptureBlock(core, reduced, listen, onListen)
+
         Spacer(Modifier.height(MekaSpace.m))
         FastRow(home.fast, reduced) { scope.launch { runCatching { core.watchFastButton() } } }
 
@@ -322,4 +340,111 @@ private fun FastRow(f: os.meka.core.domain.WatchFast, reduced: Boolean, onButton
         haptic = if (f.running) HapticFeedbackConstants.CLOCK_TICK else HapticFeedbackConstants.CONFIRM,
         onClick = onButton,
     )
+}
+
+
+// ---- quick capture by voice (Galaxy Watch, slice 4a) ----
+
+private sealed class Capture {
+    data object Idle : Capture()
+    data class Listening(val heard: String?) : Capture()
+    data class Done(val captured: WatchCaptured) : Capture()
+    data class Said(val line: String) : Capture()
+}
+
+/**
+ * Capture: tap, say it, and it goes in as if typed into Today's capture bar (a task, or "timer 20 min"). The watch's
+ * on-device recogniser only ([WatchListener]); the microphone is asked the first time. What it did shows for five
+ * seconds with Undo; the block cross-fades between its states. [listen] is set when the tile's Capture opened MEKA:
+ * it starts listening as if Capture was tapped here, and [onListen] clears it.
+ */
+@Composable
+private fun CaptureBlock(core: MekaCore, reduced: Boolean, listen: Int, onListen: () -> Unit) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val scope = rememberCoroutineScope()
+    var state by remember { mutableStateOf<Capture>(Capture.Idle) }
+
+    val listener = remember(core) {
+        WatchListener(
+            context,
+            onPartial = { heard -> if (state is Capture.Listening) state = Capture.Listening(heard) },
+            onHeard = { heard ->
+                scope.launch {
+                    val c = runCatching { core.watchCapture(heard) }.getOrNull()
+                    state = if (c == null) {
+                        Capture.Said(WatchCaptureRules.failLine(WatchListenFailure.NOT_HEARD))
+                    } else {
+                        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        Capture.Done(c)
+                    }
+                }
+            },
+            onFail = { f -> state = Capture.Said(WatchCaptureRules.failLine(f)) },
+        )
+    }
+    DisposableEffect(listener) { onDispose { listener.stop() } }
+    LifecycleStartEffect(listener) { onStopOrDispose { listener.stop(); if (state is Capture.Listening) state = Capture.Idle } }
+
+    fun begin() {
+        state = Capture.Listening(null)
+        listener.start()
+    }
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) begin() else state = Capture.Said(WatchCaptureRules.failLine(WatchListenFailure.NO_MIC))
+    }
+    fun tapCapture() {
+        val allowed = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (allowed) begin() else askMic.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    LaunchedEffect(listen) { if (listen > 0) { onListen(); tapCapture() } }
+    // What it did stays for five seconds with Undo; a failure's line for four; then the button comes back.
+    LaunchedEffect(state) {
+        when (state) {
+            is Capture.Done -> { delay(WatchCaptureRules.UNDO_MS); state = Capture.Idle }
+            is Capture.Said -> { delay(WatchCaptureRules.FAIL_MS); state = Capture.Idle }
+            else -> Unit
+        }
+    }
+
+    AnimatedContent(
+        targetState = state,
+        contentKey = { it::class },
+        transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+        label = "capture",
+    ) { s ->
+        Column(
+            Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            when (s) {
+                Capture.Idle -> WatchButton(
+                    WatchCaptureRules.BUTTON, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK,
+                ) { tapCapture() }
+                is Capture.Listening -> {
+                    Line(WatchCaptureRules.LISTENING, MekaType.captionStrong.copy(color = C.accent), maxLines = 1)
+                    Line(s.heard ?: WatchCaptureRules.HINT, MekaType.caption.copy(color = if (s.heard == null) C.textTertiary else C.textPrimary), maxLines = 3)
+                }
+                is Capture.Done -> {
+                    Box(Modifier.fillMaxWidth().semantics { contentDescription = WatchCaptureRules.spoken(s.captured) }) {
+                        Line(s.captured.line, MekaType.caption.copy(color = C.textPrimary), maxLines = 3)
+                    }
+                    WatchButton(WatchCaptureRules.UNDO, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK) {
+                        scope.launch {
+                            runCatching { core.watchCaptureUndo(s.captured) }
+                            state = Capture.Said(WatchCaptureRules.UNDONE)
+                        }
+                    }
+                }
+                is Capture.Said -> {
+                    Line(s.line, MekaType.caption.copy(color = C.textSecondary), maxLines = 4)
+                    WatchButton(
+                        WatchCaptureRules.BUTTON, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK,
+                    ) { tapCapture() }
+                }
+            }
+        }
+    }
 }

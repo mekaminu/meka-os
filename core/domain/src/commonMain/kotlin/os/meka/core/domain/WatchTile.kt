@@ -30,6 +30,8 @@ data class WatchTileView(
     val fastReached: Boolean,
     /** What a screen reader says for the whole tile. */
     val spoken: String,
+    /** The tile offers Capture (slice 4a: opens MEKA listening); only once the watch is linked. */
+    val capture: Boolean = false,
 )
 
 /** The complication's ring: [value] of 0…1 with a short [text] and [title] beside it. */
@@ -51,6 +53,8 @@ object WatchTileRules {
     const val PRESS_PREFIX = "press:"
     /** The tile's id for "open MEKA" (any tap that isn't the button). */
     const val OPEN_ID = "open"
+    /** The tile's id for Capture (slice 4a), which opens MEKA already listening ([WatchCaptureRules.LISTEN_EXTRA]). */
+    const val CAPTURE_ID = "capture"
 
     /** How often the tile and complication look again when nothing is counting: a quarter hour, like the sync. */
     const val CALM_REFRESH_MS = 15 * 60_000L
@@ -99,7 +103,7 @@ object WatchTileRules {
         return WatchTileView(
             label = home.label, lit = home.lit, title = title, line = home.line,
             button = button, buttonId = button?.let(::pressId), fastLine = fastLine, fastReached = f.running && f.reached,
-            spoken = spoken,
+            spoken = spoken, capture = true,
         )
     }
 
