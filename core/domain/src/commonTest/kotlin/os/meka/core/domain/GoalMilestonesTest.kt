@@ -28,7 +28,9 @@ class GoalMilestonesTest {
     fun milestonesCountTowardsProgressAndTheFirstOpenOneIsTheNextStep() {
         val run = g.addGoal("Run a half marathon", target = "Under 2 hours", horizon = GoalHorizon.QUARTER)
         val a = g.addMilestone(run, "  Run   5k ")
+        world.clock.nowMs += 1_000 // milestones keep the order they were added in
         val b = g.addMilestone(run, "Run 10k")
+        world.clock.nowMs += 1_000
         g.addMilestone(run, "Run 15k")
         assertEquals(a, g.addMilestone(run, "run 5k")) // the same title isn't added twice
         assertEquals(listOf("Run 5k", "Run 10k", "Run 15k"), goal(run).milestones.map { it.title })

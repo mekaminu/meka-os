@@ -651,7 +651,8 @@ class Goals(
                 GoalMilestoneFields.GOAL_ID to goalId.fv(),
                 GoalMilestoneFields.TITLE to t.fv(),
                 GoalMilestoneFields.DONE to false.fv(),
-                GoalMilestoneFields.CREATED_AT to nowMs().fv(),
+                // After the goal's last milestone even when added within the same millisecond, so they keep their order.
+                GoalMilestoneFields.CREATED_AT to maxOf(nowMs(), lastCreated(goalId) + 1).fv(),
             ),
         )
         return id
@@ -672,6 +673,10 @@ class Goals(
         replica.commitLocal(EntityTypes.GOAL_MILESTONE, id, mapOf(GoalMilestoneFields.DELETED to true.fv()))
         return s[GoalMilestoneFields.TITLE].textOrNull
     }
+
+    private fun lastCreated(goalId: String): Long =
+        replica.entities(EntityTypes.GOAL_MILESTONE).filter { it[GoalMilestoneFields.GOAL_ID].textOrNull == goalId }
+            .maxOfOrNull { it[GoalMilestoneFields.CREATED_AT].longOrNull ?: 0L } ?: Long.MIN_VALUE + 1
 
     /** The goal's milestones, oldest first. */
     fun milestones(goalId: String): List<GoalMilestone> = allMilestones()[goalId].orEmpty()

@@ -347,6 +347,7 @@ class MekaCoreTest {
         val a = core("android"); val m = core("mac")
         val goal = a.addGoal("Run a half marathon", "Under 2 hours", os.meka.core.domain.GoalHorizon.QUARTER)
         val five = a.addGoalMilestone(goal, "Run 5k")
+        now += 1_000 // milestones keep the order they were added in
         val ten = a.addGoalMilestone(goal, "Run 10k")
         a.setGoalMilestoneDone(five, true)
         assertEquals("Next milestone · Run 10k", a.goalsView.value.goals.single().nextLine)
@@ -357,6 +358,7 @@ class MekaCoreTest {
         // Removed on the Mac, Undo adds it back as a new milestone.
         assertEquals("Run 10k", m.removeGoalMilestone(ten))
         assertEquals(100, m.goalsView.value.goals.single().progressPct)
+        now += 1_000
         m.addGoalMilestone(goal, "Run 10k")
         m.syncNow(); a.syncNow()
         assertEquals(listOf("Run 5k", "Run 10k"), a.goalsView.value.goals.single().milestones.map { it.title })
