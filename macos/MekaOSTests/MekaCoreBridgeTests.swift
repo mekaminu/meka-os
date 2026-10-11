@@ -1475,6 +1475,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(update.button, "Update")
     }
 
+    func testAddGoalFromAskReachesSwift() {
+        // "Add a goal to run 5k by December" in Ask and Talk (Goals, properly, slice 8): the card's words reach the Mac.
+        let today: Int64 = 20740 // Wed 14 Oct 2026
+        let card = AskRules.shared.cardOf(p: AskProposalAddGoal(title: "Run 5k", horizon: .quarter, dueDay: KotlinLong(longLong: 20818)), today: today)
+        XCTAssertEqual(card.line, "Add goal “Run 5k” · This quarter · by Thu 31 Dec")
+        XCTAssertEqual(card.button, "Add")
+        XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: today, past: true), "added the goal Run 5k, done by Thursday 31 December")
+    }
+
     func testAddChecklistFromAskReachesSwift() {
         // "Add eggs to the party checklist" in Ask and Talk (Checklists slice 3b): the card's words reach the Mac.
         let card = AskRules.shared.cardOf(p: AskProposalAddChecklist(taskId: "t", title: "Party", items: ["eggs", "cake"]), today: 0)

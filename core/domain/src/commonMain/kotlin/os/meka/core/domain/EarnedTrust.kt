@@ -71,6 +71,8 @@ object TrustRules {
         is AskProposal.AddErrand -> null
         // Checklist cards (Checklists slice 3b) aren't an earned-trust kind yet: a misheard task name would add to the wrong list.
         is AskProposal.AddChecklist -> null
+        // A goal (Goals slice 8) is something Meka works towards for weeks, so he always sees it before it's added.
+        is AskProposal.AddGoal -> null
     }
 
     fun read(fields: Map<String, FieldValue>?): Map<TrustKind, TrustState> = TrustKind.entries.associateWith { k ->

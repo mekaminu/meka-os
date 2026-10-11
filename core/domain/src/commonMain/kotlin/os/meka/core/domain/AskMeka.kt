@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -82,6 +82,8 @@ sealed interface AskProposal {
     data class AddErrand(val place: String, val things: List<String>) : AskProposal
     /** Adds [items] to the checklist of the task [taskId] called [title] (Checklists slice 3b: "add eggs to the party checklist"). */
     data class AddChecklist(val taskId: String, val title: String, val items: List<String>) : AskProposal
+    /** Adds the goal [title] with its [horizon] and done-by [dueDay] (Goals, properly, slice 8: "add a goal to run 5k by December"). */
+    data class AddGoal(val title: String, val horizon: GoalHorizon, val dueDay: Long?) : AskProposal
 }
 
 /** A proposal as Ask shows it: "Add “Call the dentist” · Tomorrow · 09:00" with its button ("Add"). */
@@ -134,6 +136,8 @@ sealed interface AskUndo {
     data class TakeBackErrands(val added: List<String>, val revived: List<String>) : AskUndo
     /** The checklist card's items: [added] ones still unticked come off, [revived] ones still unticked are ticked again. */
     data class TakeBackChecklist(val taskId: String, val added: List<String>, val revived: List<String>) : AskUndo
+    /** The goal card's goal comes off while nothing has been added to it since. */
+    data class RemoveGoal(val goalId: String) : AskUndo
 }
 
 /**
@@ -167,7 +171,7 @@ object AskRules {
     const val MAX_SHOPPING = 10
 
     /** The kinds of proposal MEKA understands; anything else is dropped. Wire names, never renamed. */
-    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist")
+    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal")
 
     /** The question as sent: one line, trimmed, at most [MAX_QUESTION] characters; null when there's nothing to ask. */
     fun question(text: String?): String? =
@@ -182,7 +186,8 @@ object AskRules {
                 dateNight: String? = null, renewals: List<String> = emptyList(), wins: List<String> = emptyList(),
                 queue: List<String> = emptyList(), leave: List<String> = emptyList(), facts: List<String> = emptyList(),
                 protected: List<String> = emptyList(), errands: List<String> = emptyList(),
-                appointments: List<String> = emptyList(), checklists: List<String> = emptyList()): AskContext {
+                appointments: List<String> = emptyList(), checklists: List<String> = emptyList(),
+                goals: List<String> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -253,7 +258,9 @@ object AskRules {
         val visits = appointments.take(AppointmentAskRules.ASK_ITEMS + 1).map { AskItem("", AskItemKind.APPOINTMENTS, line(it)) }
         // Checklists in tasks (slice 3b, [ChecklistAskRules.askLines]): Meka's own tasks and items, never untrusted.
         val listLines = checklists.take(ChecklistAskRules.ASK_LISTS + 1).map { AskItem("", AskItemKind.CHECKLISTS, line(it)) }
-        val tail = listOfNotNull(shop, dinners, evening) + shield + errandLines + listLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
+        // Goals, properly (slice 8, [GoalAskRules.askLines]): Meka's own goals, never untrusted.
+        val goalLines = goals.take(GoalAskRules.ASK_GOALS + 1).map { AskItem("", AskItemKind.GOALS, line(it)) }
+        val tail = listOfNotNull(shop, dinners, evening) + shield + errandLines + listLines + goalLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
         // Today's own lines keep room for at least [TODAY_ROOM] (the tail's last lines, the forecast's, go first), so a
         // full tail never pushes the context past [MAX_ITEMS].
         val tailKept = tail.take(MAX_ITEMS - minOf(items.size, TODAY_ROOM))
@@ -285,10 +292,10 @@ object AskRules {
                meals: List<Meal> = emptyList(), dateNight: DateNightSetting? = null, renewals: List<RenewalItem> = emptyList(),
                wins: List<Win> = emptyList(), queue: List<QueueItem> = emptyList(), leave: LeaveAskData? = null,
                facts: List<LifeFact> = emptyList(), errands: List<ErrandItem> = emptyList(),
-               tasks: List<Task> = emptyList()): AskAnswer =
+               tasks: List<Task> = emptyList(), goals: List<GoalItem> = emptyList()): AskAnswer =
         AskAnswer(
             answerText(text),
-            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals, dateNight, renewals, wins, queue, leave, facts, errands, tasks) }.distinctBy { it.proposal }.take(MAX_CARDS),
+            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals, dateNight, renewals, wins, queue, leave, facts, errands, tasks, goals) }.distinctBy { it.proposal }.take(MAX_CARDS),
         )
 
     /**
@@ -299,7 +306,8 @@ object AskRules {
     fun card(a: AskRawAction, context: AskContext, titles: Map<String, String>, nowMs: Long, cal: LocalCalendar,
              meals: List<Meal> = emptyList(), dateNight: DateNightSetting? = null, renewals: List<RenewalItem> = emptyList(),
              wins: List<Win> = emptyList(), queue: List<QueueItem> = emptyList(), leave: LeaveAskData? = null,
-             facts: List<LifeFact> = emptyList(), errands: List<ErrandItem> = emptyList(), tasks: List<Task> = emptyList()): AskCard? {
+             facts: List<LifeFact> = emptyList(), errands: List<ErrandItem> = emptyList(), tasks: List<Task> = emptyList(),
+             goals: List<GoalItem> = emptyList()): AskCard? {
         val today = cal.epochDayOf(nowMs)
         fun task(): Pair<String, String>? {
             val id = context.taskIds[a.ref?.trim()] ?: return null
@@ -308,7 +316,7 @@ object AskRules {
         fun day(): Long? = a.date?.let { parseDay(it) }?.takeIf { it in today..today + MAX_DAYS_AHEAD }
         val minute = a.time?.let { parseTime(it) }
         // Where a kind uses a day or time, one that is there must read right (a bad one isn't guessed at).
-        if (a.kind == "add_task" || a.kind == "move_task" || a.kind == "plan_dinner" || a.kind == "skip_date_night") {
+        if (a.kind == "add_task" || a.kind == "move_task" || a.kind == "plan_dinner" || a.kind == "skip_date_night" || a.kind == "add_goal") {
             if (a.time != null && minute == null) return null
             if (a.date != null && day() == null) return null
         }
@@ -353,6 +361,7 @@ object AskRules {
             "add_fact" -> FactAskRules.proposal(facts, a.title) ?: return null
             "add_errand" -> ErrandAskRules.proposal(errands, a.title) ?: return null
             "add_checklist" -> ChecklistAskRules.proposal(tasks, a.title, today) ?: return null
+            "add_goal" -> GoalAskRules.proposal(goals, a.title, day(), today) ?: return null
             else -> return null
         }
         return cardOf(proposal, today)
@@ -436,6 +445,7 @@ object AskRules {
         is AskProposal.AddFact -> FactAskRules.doneLine(p)
         is AskProposal.AddErrand -> ErrandAskRules.doneLine(p)
         is AskProposal.AddChecklist -> ChecklistAskRules.doneLine(p)
+        is AskProposal.AddGoal -> GoalAskRules.doneLine(p)
     }
 
     /** The card's words for [p]. */
@@ -458,6 +468,7 @@ object AskRules {
         is AskProposal.AddFact -> AskCard(p, FactAskRules.cardLine(p), if (p.factId == null) "Keep" else "Update")
         is AskProposal.AddErrand -> AskCard(p, ErrandAskRules.cardLine(p), "Add")
         is AskProposal.AddChecklist -> AskCard(p, ChecklistAskRules.cardLine(p), "Add")
+        is AskProposal.AddGoal -> AskCard(p, GoalAskRules.cardLine(p, today), "Add")
     }
 
     /** "milk", "milk and eggs", "milk, eggs and bread", as typed. */

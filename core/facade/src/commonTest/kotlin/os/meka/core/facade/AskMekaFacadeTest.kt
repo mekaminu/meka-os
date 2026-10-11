@@ -614,6 +614,47 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheGoalsAndAddGoalAddsOnTheTapWithUndo() = runTest {
+        val c = core()
+        val g = c.addGoal("Save £2,000", null, os.meka.core.domain.GoalHorizon.YEAR)
+        c.addGoalMilestone(g, "First £500")
+
+        server.reply = AskReply.Answered("Saving is at 0%.", listOf(
+            AskRawAction("add_goal", title = "Run 5k", date = "2026-12-31"),
+            AskRawAction("add_goal", title = "save £2,000"), // already a goal: no card
+        ))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("How are my goals? Add a goal to run 5k by December"))
+        val ctx = server.asked.last().second
+        assertEquals(
+            listOf("Goals · 1 open", "Goal “Save £2,000” · 0% · This year · 0 of 1 milestone · Next milestone · First £500"),
+            ctx.items.filter { it.kind == AskItemKind.GOALS }.map { it.line },
+        )
+        assertFalse(ctx.untrusted)
+        assertEquals(listOf("Add goal “Run 5k” · This quarter · by Thu 31 Dec"), out.answer.cards.map { it.line })
+        // Nothing until tapped.
+        assertEquals(1, c.goalsView.value.goals.size)
+
+        val done = c.doAsk(out.answer.cards.single())
+        assertEquals("Added goal “Run 5k”", done.line)
+        val added = c.goalsView.value.goals.single { it.title == "Run 5k" }
+        assertEquals(os.meka.core.domain.GoalHorizon.QUARTER, added.horizon)
+        assertEquals(os.meka.core.domain.CivilDate.toEpochDay(2026, 12, 31), added.dueDay)
+        // Tapping again finds it already there.
+        assertFailsWith<ValidationException> { c.doAsk(out.answer.cards.single()) }
+
+        assertTrue(c.undoAsk(assertIs<AskUndo.RemoveGoal>(done.undo)))
+        assertEquals(listOf("Save £2,000"), c.goalsView.value.goals.map { it.title })
+        assertFalse(c.undoAsk(done.undo!!))
+
+        // A goal Meka has started on (a milestone added) isn't lost to a late Undo.
+        val again = c.doAsk(out.answer.cards.single())
+        val id = c.goalsView.value.goals.single { it.title == "Run 5k" }.id
+        c.addGoalMilestone(id, "Run 2k")
+        assertFalse(c.undoAsk(again.undo!!))
+        assertEquals(2, c.goalsView.value.goals.size)
+    }
+
+    @Test
     fun askHearsTheErrandsAndAddErrandAddsOnTheTapWithUndoAndSearchFindsIt() = runTest {
         val c = core()
         c.askMeka("What do I need at Tesco?")

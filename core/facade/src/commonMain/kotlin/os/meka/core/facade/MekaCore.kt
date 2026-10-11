@@ -3005,7 +3005,9 @@ class MekaCore(
                 // Appointment nudges, slice 2a: each appointment with its last visit, booking and when it's due.
                 os.meka.core.domain.AppointmentAskRules.askLines(appointments.view()),
                 // Checklists in tasks, slice 3b: each open task's checklist, so "what's left on the party checklist?" has an answer.
-                os.meka.core.domain.ChecklistAskRules.askLines(tasks.all(), cal.epochDayOf(nowMs())))
+                os.meka.core.domain.ChecklistAskRules.askLines(tasks.all(), cal.epochDayOf(nowMs())),
+                // Goals, properly, slice 8: each open goal with its progress and next step, so "how are my goals?" has an answer.
+                os.meka.core.domain.GoalAskRules.askLines(goals.view(tasks.all())))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -3015,7 +3017,7 @@ class MekaCore(
             is AskReply.Answered -> onCore {
                 val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
                 val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),
-                    os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all(), errands.items(), tasks.all())
+                    os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all(), errands.items(), tasks.all(), goals.goals(tasks.all()).first)
                 val allowed = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }
                 // Earned trust: a kind Meka said "just do it" to runs now, recorded in Activity with Undo, when the
                 // policy engine permits Level 4 under his rule (never for a question that carried untrusted lines).
@@ -3155,6 +3157,13 @@ class MekaCore(
                 val added = tasks.addChecklistTexts(task.id, plan.add)
                 os.meka.core.domain.AskUndo.TakeBackChecklist(task.id, added, plan.revive)
             }
+            // Checked again now: an open goal with the same name (added here or on the other device meanwhile) is refused.
+            is os.meka.core.domain.AskProposal.AddGoal -> {
+                if (os.meka.core.domain.GoalAskRules.exists(goals.goals(tasks.all()).first, p.title)) {
+                    throw os.meka.core.domain.ValidationException(os.meka.core.domain.GoalAskRules.ALREADY)
+                }
+                os.meka.core.domain.AskUndo.RemoveGoal(goals.addGoal(p.title, horizon = p.horizon, dueDay = p.dueDay))
+            }
         }
         return os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
@@ -3208,6 +3217,11 @@ class MekaCore(
                 undo.added.forEach { if (it in waiting) { tasks.deleteChecklistItem(it); any = true } }
                 undo.revived.forEach { if (it in waiting) { tasks.setChecklistItemChecked(it, true); any = true } }
                 any
+            }
+            // The goal comes off only while nothing has been added to it since (a step, a milestone, a number…).
+            is os.meka.core.domain.AskUndo.RemoveGoal -> {
+                val g = goals.goals(tasks.all()).first.firstOrNull { it.id == undo.goalId }
+                if (g != null && os.meka.core.domain.GoalAskRules.untouched(g)) { goals.deleteGoal(g.id); true } else false
             }
         }
     }
@@ -3759,6 +3773,8 @@ class MekaCore(
             is os.meka.core.domain.AskProposal.AddErrand -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             // Adds to one of Meka's own task checklists (nothing is sent to anyone).
             is os.meka.core.domain.AskProposal.AddChecklist -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+            // Adds one of Meka's own goals (nothing is sent to anyone).
+            is os.meka.core.domain.AskProposal.AddGoal -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         }
     }
 
