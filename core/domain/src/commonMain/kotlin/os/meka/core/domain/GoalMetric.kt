@@ -58,7 +58,50 @@ object GoalMetricRules {
     private const val MAX_X100 = 100_000_000_000L // a billion
 
     private val CURRENCIES = setOf("£", "$", "€")
-    private val NUMBER = Regex("""^([£$€])?\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?\s*([kK])?(?![\w.])""")
+
+    /**
+     * A number at the start of [t] — an optional currency, digits ("2,000" with proper thousands or plain "2000"), up
+     * to two decimals, an optional "k" — not followed by a letter, digit or dot. Written by hand, not as a regex, so it
+     * reads the same on every platform (Kotlin/Native's regex engine didn't, 2026-10-11 nightly).
+     */
+    private class Num(val currency: String, val x100: Long, val end: Int)
+
+    private fun wordOrDot(c: Char?): Boolean = c != null && (c.isLetterOrDigit() || c == '_' || c == '.')
+
+    private fun number(t: String): Num? {
+        var i = 0
+        val cur = if (t.isNotEmpty() && t[0].toString() in CURRENCIES) { i = 1; t[0].toString() } else ""
+        while (i < t.length && t[i].isWhitespace()) i++
+        val start = i
+        while (i < t.length && (t[i].isDigit() || t[i] == ',')) i++
+        var run = t.substring(start, i)
+        if (run.isEmpty() || !run[0].isDigit()) return null
+        if (',' in run) {
+            val groups = run.split(',')
+            val proper = groups[0].length in 1..3 && groups.drop(1).all { it.length == 3 && it.all(Char::isDigit) } && groups.all { it.isNotEmpty() }
+            if (!proper) { run = run.substringBefore(','); i = start + run.length }
+        }
+        val whole = run.replace(",", "").toLongOrNull() ?: return null
+        var frac = 0L
+        if (i < t.length && t[i] == '.') {
+            var j = i + 1
+            while (j < t.length && t[j].isDigit()) j++
+            val d = t.substring(i + 1, j)
+            if (d.length !in 1..2) return null
+            frac = d.padEnd(2, '0').toLong()
+            i = j
+        }
+        var v = whole * 100 + frac
+        val afterNumber = i
+        var q = i
+        while (q < t.length && t[q].isWhitespace()) q++
+        val end = when {
+            q < t.length && (t[q] == 'k' || t[q] == 'K') && !wordOrDot(t.getOrNull(q + 1)) -> { v *= 1000; q + 1 }
+            !wordOrDot(t.getOrNull(afterNumber)) -> afterNumber
+            else -> return null
+        }
+        return if (v <= MAX_X100) Num(cur, v, end) else null
+    }
 
     /**
      * The number to reach as typed: "£2,000", "£2k", "12 books", "100 km", "5000" (no unit). Null when it isn't a
@@ -66,11 +109,11 @@ object GoalMetricRules {
      */
     fun parseTarget(text: String?): Pair<Long, String>? {
         val t = text?.trim().orEmpty()
-        val m = NUMBER.find(t) ?: return null
-        val v = amount(m) ?: return null
+        val m = number(t) ?: return null
+        val v = m.x100
         if (v <= 0) return null
-        val cur = m.groupValues[1]
-        val rest = t.substring(m.range.last + 1).trim().replace(Regex("\\s+"), " ")
+        val cur = m.currency
+        val rest = t.substring(m.end).trim().split(' ', '\t', '\n').filter { it.isNotEmpty() }.joinToString(" ")
         val unit = when {
             cur.isNotEmpty() -> cur
             rest.length in 1..MAX_UNIT && rest.none { it.isDigit() } -> rest
@@ -82,9 +125,31 @@ object GoalMetricRules {
 
     /** A number to reach suggested by the title ("Save £2,000" → "£2,000", "Read 12 books" → "12 books"), else null. */
     fun suggestFromTitle(title: String): String? {
-        Regex("""[£$€]\s*\d[\d,]*(?:\.\d{1,2})?[kK]?""").find(title)?.let { return it.value.replace(" ", "") }
-        val m = Regex("""\b(\d[\d,]*)\s+([A-Za-z]{2,${MAX_UNIT}})\b""").find(title) ?: return null
-        return "${m.groupValues[1]} ${m.groupValues[2].lowercase()}"
+        // A currency amount anywhere: "£2,000", "£ 2k", "€12.50".
+        for (i in title.indices) {
+            if (title[i].toString() !in CURRENCIES) continue
+            var j = i + 1
+            while (j < title.length && title[j].isWhitespace()) j++
+            if (j >= title.length || !title[j].isDigit()) continue
+            while (j < title.length && (title[j].isDigit() || title[j] == ',')) j++
+            if (j + 1 < title.length && title[j] == '.' && title[j + 1].isDigit()) {
+                j += 2
+                if (j < title.length && title[j].isDigit()) j++
+            }
+            if (j < title.length && (title[j] == 'k' || title[j] == 'K')) j++
+            return title.substring(i, j).replace(" ", "")
+        }
+        // A count and its word: "12 books", "100 km" (the number starts a word; the word is 2–20 plain letters).
+        val words = title.split(' ', '\t', '\n').filter { it.isNotEmpty() }
+        for (k in 0 until words.size - 1) {
+            val n = words[k]
+            if (!n[0].isDigit() || !n.all { it.isDigit() || it == ',' }) continue
+            val w = words[k + 1].takeWhile { it in 'A'..'Z' || it in 'a'..'z' }
+            val tail = words[k + 1].drop(w.length)
+            if (w.length !in 2..MAX_UNIT || (tail.isNotEmpty() && (tail[0].isLetterOrDigit() || tail[0] == '_'))) continue
+            return "$n ${w.lowercase()}"
+        }
+        return null
     }
 
     /** An update: "200", "+200", "+£200", "-1", "−50", "=1200", "2 books". Null when it isn't a number. */
@@ -97,18 +162,9 @@ object GoalMetricRules {
             t.startsWith("+") -> t = t.drop(1).trim()
             t.startsWith("-") -> { sign = -1; t = t.drop(1).trim() }
         }
-        val m = NUMBER.find(t) ?: return null
-        val v = amount(m) ?: return null
+        val v = number(t)?.x100 ?: return null
         if (set && sign < 0) return null
         return MetricInput(sign * v, set)
-    }
-
-    private fun amount(m: MatchResult): Long? {
-        val whole = m.groupValues[2].replace(",", "").toLongOrNull() ?: return null
-        val frac = m.groupValues[3].padEnd(2, '0').takeIf { m.groupValues[3].isNotEmpty() }?.toLong() ?: 0L
-        var v = whole * 100 + frac
-        if (m.groupValues[4].isNotEmpty()) v *= 1000
-        return v.takeIf { it <= MAX_X100 }
     }
 
     /** "£2,000", "£12.50", "12 books", "1 book", "5,000". */

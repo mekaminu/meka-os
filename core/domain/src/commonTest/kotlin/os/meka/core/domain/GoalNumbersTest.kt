@@ -36,10 +36,20 @@ class GoalNumbersTest {
         assertNull(GoalMetricRules.parseTarget("lots"))
         assertNull(GoalMetricRules.parseTarget("0 books"))
         assertNull(GoalMetricRules.parseTarget("12 books 3"))
+        // Read by hand (no regex), the same on every platform.
+        assertNull(GoalMetricRules.parseTarget("2kg"))
+        assertNull(GoalMetricRules.parseTarget("12.345"))
+        assertNull(GoalMetricRules.parseTarget("12books"))
+        assertEquals(200_000L to "", GoalMetricRules.parseTarget("2 k"))
+        assertEquals(1_000L to "km", GoalMetricRules.parseTarget("10 km"))
+        assertEquals(150_000L to "€", GoalMetricRules.parseTarget("€ 1,500"))
 
         assertEquals("£2,000", GoalMetricRules.suggestFromTitle("Save £2,000 for the car"))
         assertEquals("12 books", GoalMetricRules.suggestFromTitle("Read 12 Books this year"))
         assertNull(GoalMetricRules.suggestFromTitle("Run a marathon"))
+        assertEquals("£2k", GoalMetricRules.suggestFromTitle("Put £ 2k aside"))
+        assertEquals("100 km", GoalMetricRules.suggestFromTitle("Cycle 100 KM, slowly"))
+        assertNull(GoalMetricRules.suggestFromTitle("Run 5k"))
 
         assertEquals(MetricInput(20_000, false), GoalMetricRules.parseInput("+£200"))
         assertEquals(MetricInput(20_000, false), GoalMetricRules.parseInput("200"))
