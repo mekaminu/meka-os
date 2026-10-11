@@ -2897,7 +2897,9 @@ class MekaCore(
                 // Errands by location, slice 2b: what waits at each place, so "what do I need at Tesco?" has an answer.
                 os.meka.core.domain.ErrandAskRules.askLines(errands.view()),
                 // Appointment nudges, slice 2a: each appointment with its last visit, booking and when it's due.
-                os.meka.core.domain.AppointmentAskRules.askLines(appointments.view()))
+                os.meka.core.domain.AppointmentAskRules.askLines(appointments.view()),
+                // Checklists in tasks, slice 3b: each open task's checklist, so "what's left on the party checklist?" has an answer.
+                os.meka.core.domain.ChecklistAskRules.askLines(tasks.all(), cal.epochDayOf(nowMs())))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -2907,7 +2909,7 @@ class MekaCore(
             is AskReply.Answered -> onCore {
                 val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
                 val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),
-                    os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all(), errands.items())
+                    os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all(), errands.items(), tasks.all())
                 val allowed = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }
                 // Earned trust: a kind Meka said "just do it" to runs now, recorded in Activity with Undo, when the
                 // policy engine permits Level 4 under his rule (never for a question that carried untrusted lines).
@@ -3037,6 +3039,16 @@ class MekaCore(
                 if (a.created.isEmpty() && a.revived.isEmpty()) throw os.meka.core.domain.ValidationException(os.meka.core.domain.ErrandAskRules.ALREADY)
                 os.meka.core.domain.AskUndo.TakeBackErrands(a.created, a.revived)
             }
+            // The task's own checklist add, against the list as it is now: ticked ones come back, waiting ones stay one row.
+            is os.meka.core.domain.AskProposal.AddChecklist -> {
+                val task = tasks.get(p.taskId)?.takeIf { !it.lifecycle.isTerminal }
+                    ?: throw os.meka.core.domain.ValidationException(os.meka.core.domain.ChecklistAskRules.GONE)
+                val plan = os.meka.core.domain.ChecklistAskRules.plan(task.checklist, p.items)
+                if (plan.isEmpty) throw os.meka.core.domain.ValidationException(os.meka.core.domain.ChecklistAskRules.ALREADY)
+                plan.revive.forEach { tasks.setChecklistItemChecked(it, false) }
+                val added = tasks.addChecklistTexts(task.id, plan.add)
+                os.meka.core.domain.AskUndo.TakeBackChecklist(task.id, added, plan.revive)
+            }
         }
         return os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
@@ -3083,6 +3095,14 @@ class MekaCore(
             is os.meka.core.domain.AskUndo.PutBackFact -> lifeFacts.putBack(undo.factId, undo.before, undo.after)
             // New errands leave the list, ones back from Done go back (anything ticked or removed since is left).
             is os.meka.core.domain.AskUndo.TakeBackErrands -> errands.takeBack(undo.added, undo.revived)
+            // Added items still unticked come off, unticked ones are ticked again (anything ticked or removed since is left).
+            is os.meka.core.domain.AskUndo.TakeBackChecklist -> {
+                val waiting = tasks.get(undo.taskId)?.checklist.orEmpty().filter { !it.checked }.map { it.id }.toSet()
+                var any = false
+                undo.added.forEach { if (it in waiting) { tasks.deleteChecklistItem(it); any = true } }
+                undo.revived.forEach { if (it in waiting) { tasks.setChecklistItemChecked(it, true); any = true } }
+                any
+            }
         }
     }
 
@@ -3631,6 +3651,8 @@ class MekaCore(
             is os.meka.core.domain.AskProposal.AddFact -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             // Adds to Meka's own errands list (nothing is sent; where a place is stays on the Fold).
             is os.meka.core.domain.AskProposal.AddErrand -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+            // Adds to one of Meka's own task checklists (nothing is sent to anyone).
+            is os.meka.core.domain.AskProposal.AddChecklist -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         }
     }
 

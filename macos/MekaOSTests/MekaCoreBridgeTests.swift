@@ -1378,6 +1378,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(update.button, "Update")
     }
 
+    func testAddChecklistFromAskReachesSwift() {
+        // "Add eggs to the party checklist" in Ask and Talk (Checklists slice 3b): the card's words reach the Mac.
+        let card = AskRules.shared.cardOf(p: AskProposalAddChecklist(taskId: "t", title: "Party", items: ["eggs", "cake"]), today: 0)
+        XCTAssertEqual(card.line, "Add to “Party” · eggs and cake")
+        XCTAssertEqual(card.button, "Add")
+        XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "added eggs and cake to the Party checklist")
+    }
+
     func testAddErrandFromAskReachesSwift() {
         // "Add batteries to Tesco" in Ask and Talk (errands by location, slice 2b): the card's words reach the Mac.
         let card = AskRules.shared.cardOf(p: AskProposalAddErrand(place: "Tesco", things: ["milk", "batteries"]), today: 0)

@@ -577,6 +577,43 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheChecklistsAndAddChecklistAddsOnTheTapWithUndo() = runTest {
+        val c = core()
+        fun steps(id: String) = (listOfNotNull(c.today.value.upNext) + c.today.value.yourDay + c.today.value.needsYou.map { it.task })
+            .single { it.id == id }.checklist
+        val id = c.addTask("Party")
+        val ids = c.addSteps(id, "balloons, cake")
+        c.tickSteps(listOf(ids[1]))
+
+        server.reply = AskReply.Answered("Balloons are left.", listOf(
+            AskRawAction("add_checklist", title = "party: eggs, cake"),
+            AskRawAction("add_checklist", title = "Party: balloons"), // already waiting: no card
+            AskRawAction("add_checklist", title = "Barbecue: eggs"), // no such task: no card
+        ))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("What's left on the party checklist? Add eggs and cake"))
+        val ctx = server.asked.last().second
+        assertEquals(
+            listOf("Checklists · 1 task with checklists", "Checklist “Party” · 1 of 2 ticked · to tick: balloons"),
+            ctx.items.filter { it.kind == AskItemKind.CHECKLISTS }.map { it.line },
+        )
+        assertFalse(ctx.untrusted)
+        assertEquals(listOf("Add to “Party” · eggs and cake"), out.answer.cards.map { it.line })
+        // Nothing until tapped.
+        assertEquals(2, steps(id).size)
+
+        val done = c.doAsk(out.answer.cards.single())
+        assertEquals("Added eggs and cake to “Party”", done.line)
+        // Cake was ticked: it comes back unticked; eggs is new.
+        assertEquals(listOf("balloons" to false, "cake" to false, "eggs" to false), steps(id).map { it.text to it.checked })
+        // Tapping again finds nothing new.
+        assertFailsWith<ValidationException> { c.doAsk(out.answer.cards.single()) }
+
+        assertTrue(c.undoAsk(assertIs<AskUndo.TakeBackChecklist>(done.undo)))
+        assertEquals(listOf("balloons" to false, "cake" to true), steps(id).map { it.text to it.checked })
+        assertFalse(c.undoAsk(done.undo!!))
+    }
+
+    @Test
     fun askHearsTheErrandsAndAddErrandAddsOnTheTapWithUndoAndSearchFindsIt() = runTest {
         val c = core()
         c.askMeka("What do I need at Tesco?")

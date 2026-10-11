@@ -69,6 +69,8 @@ object TrustRules {
         is AskProposal.AddFact -> null
         // Errands (slice 2b) aren't an earned-trust kind yet: a misheard place would wait somewhere Meka never goes.
         is AskProposal.AddErrand -> null
+        // Checklist cards (Checklists slice 3b) aren't an earned-trust kind yet: a misheard task name would add to the wrong list.
+        is AskProposal.AddChecklist -> null
     }
 
     fun read(fields: Map<String, FieldValue>?): Map<TrustKind, TrustState> = TrustKind.entries.associateWith { k ->

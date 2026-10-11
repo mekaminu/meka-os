@@ -240,6 +240,8 @@ object TalkRules {
         else (if (past) "changed " else "change ") + clean(p.label) + " to " + clean(p.value)
         // "add batteries to your errands at Tesco" / "added …".
         is AskProposal.AddErrand -> (if (past) "added " else "add ") + clean(ErrandRules.joined(p.things)) + " to your errands at " + clean(p.place)
+        // "add eggs and milk to the Party checklist" / "added …".
+        is AskProposal.AddChecklist -> (if (past) "added " else "add ") + clean(AskRules.shoppingNames(p.items)) + " to the " + clean(p.title) + " checklist"
     }
 
     /** "today at 14:30", "tomorrow", "Friday 9 October at 09:00". */

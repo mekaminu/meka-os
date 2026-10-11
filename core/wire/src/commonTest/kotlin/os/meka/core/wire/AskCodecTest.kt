@@ -48,6 +48,9 @@ class AskCodecTest {
         // Errands by location (slice 2b): a kind of its own.
         val errands = req.copy(items = listOf(AskCodec.Item("", "errands", "At Tesco · milk, batteries")))
         assertEquals(errands, AskCodec.decodeRequest(AskCodec.encodeRequest(errands)))
+        // Checklists in tasks (slice 3b): a kind of its own.
+        val lists = req.copy(items = listOf(AskCodec.Item("", "checklists", "Checklist “Party” · 1 of 3 ticked · to tick: balloons")))
+        assertEquals(lists, AskCodec.decodeRequest(AskCodec.encodeRequest(lists)))
         fun bad(r: AskCodec.Request) = assertFailsWith<WireFormatException> { AskCodec.decodeRequest(AskCodec.encodeRequest(r)) }
         bad(req.copy(question = "  "))
         bad(req.copy(question = "q".repeat(501)))
