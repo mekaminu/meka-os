@@ -15,6 +15,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +33,8 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.TickRing
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.today.SectionLabel
+import os.meka.android.today.ShopModeScreen
+import os.meka.core.domain.ShopModeRules
 import os.meka.core.domain.ShoppingItem
 import os.meka.core.domain.ShoppingRules
 import os.meka.core.domain.ShoppingView
@@ -43,7 +49,26 @@ import os.meka.core.facade.MekaCore
  */
 internal fun LazyListScope.shopping(v: ShoppingView, core: MekaCore, act: (suspend () -> Unit) -> Unit) {
     item(key = "sh-line") {
-        Text(v.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.animateItem().padding(bottom = MekaSpace.xs))
+        val haptics = rememberMekaHaptics()
+        // Shop mode (Checklists in tasks, slice 2): the list full screen, big rows, the screen kept awake.
+        var shopping by remember { mutableStateOf(false) }
+        Row(Modifier.animateItem().fillMaxWidth().padding(bottom = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            Text(v.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+            if (ShopModeRules.offer(v.toBuy.size + v.got.size)) {
+                Text(
+                    ShopModeRules.OPEN, style = MekaType.caption, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { haptics.light(); shopping = true }
+                        .padding(MekaSpace.xs),
+                )
+            }
+        }
+        if (shopping) {
+            ShopModeScreen(
+                view = ShopModeRules.ofShopping(v),
+                onTick = { r -> act { if (r.done) core.putBackShopping(r.id) else core.gotShopping(r.id) } },
+                onClose = { shopping = false },
+            )
+        }
     }
     if (v.toBuy.isEmpty() && v.got.isEmpty()) empty("shopping", ShoppingRules.EMPTY_LINE)
     items(v.toBuy, key = { "sh-${it.id}" }) { s -> ShoppingRow(s, core, act, Modifier.animateItem()) }

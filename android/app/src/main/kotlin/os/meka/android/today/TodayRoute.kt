@@ -516,6 +516,7 @@ internal fun todayActions(
             undo?.show(os.meka.core.domain.ChecklistRules.removedLine(item.text)) { core.restoreStep(item.id) }
         }
     },
+    moveStep = { id, stepId, to -> scope.launch { runCatching { core.moveStepInGroup(id, stepId, to) } } },
     untickAll = { id ->
         scope.launch {
             val ids = runCatching { core.untickAllSteps(id) }.getOrDefault(emptyList())
@@ -547,6 +548,8 @@ data class TodayActions(
     val setStepDone: (String, Boolean) -> Unit,
     /** Swipe or Remove on a checklist item: it goes, with Undo on the screen's bar. */
     val removeStep: (os.meka.core.domain.ChecklistItem) -> Unit,
+    /** Drag to reorder: (task, item, index among the rows of the item's own group). */
+    val moveStep: (String, String, Int) -> Unit,
     /** Untick all on a checklist, to reuse it (Undo ticks them again). */
     val untickAll: (String) -> Unit,
     /** Out of Today and the planner, into Lists → Someday. */

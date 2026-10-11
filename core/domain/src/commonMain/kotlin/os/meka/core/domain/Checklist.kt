@@ -88,6 +88,29 @@ object ChecklistRules {
     fun untickedLine(count: Int): String = if (count == 1) "Unticked 1 item" else "Unticked $count items"
 
     /**
+     * Drag to reorder (slice 2): rows are dragged within their own group (still to tick, or Ticked), so [toGroupIndex]
+     * counts only that group's rows. Returns the index in the whole list's order (by position) for [reorder]: right
+     * after the group's row it lands below, or right before the first one; null when the item isn't there or is alone
+     * in its group.
+     */
+    fun listIndexForGroupMove(items: List<ChecklistItem>, itemId: String, toGroupIndex: Int): Int? {
+        val sorted = items.sortedBy { it.position }
+        val moved = sorted.firstOrNull { it.id == itemId } ?: return null
+        val rest = sorted.filter { it.id != itemId }
+        val group = rest.filter { it.checked == moved.checked }
+        if (group.isEmpty()) return null
+        val to = toGroupIndex.coerceIn(0, group.size)
+        return if (to > 0) rest.indexOfFirst { it.id == group[to - 1].id } + 1 else rest.indexOfFirst { it.id == group[0].id }
+    }
+
+    /** The row a drag of [dragPx] from [fromIndex] lands on, rows [rowPx] tall, within [0, count). */
+    fun dropIndex(fromIndex: Int, dragPx: Float, rowPx: Float, count: Int): Int {
+        if (count <= 0 || rowPx <= 0f) return fromIndex
+        val steps = kotlin.math.round(dragPx / rowPx).toInt()
+        return (fromIndex + steps).coerceIn(0, count - 1)
+    }
+
+    /**
      * Moving [itemId] to [toIndex] in [items] (the list's order): the positions to write. Only the moved item changes
      * when there is room between its new neighbours; otherwise the whole list is renumbered [GAP] apart (keeping its
      * first position), so the order is the same on every device once synced. Empty when nothing moves.

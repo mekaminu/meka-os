@@ -854,6 +854,16 @@ class MekaCore(
     /** Drag to reorder: the item takes [toIndex] in the list's order. */
     suspend fun moveStep(taskId: String, stepId: String, toIndex: Int) = onCore { tasks.moveChecklistItem(taskId, stepId, toIndex) }
 
+    /** Drag to reorder in the task detail (slice 2): [toGroupIndex] counts the rows of the item's own group (still to tick, or Ticked). */
+    suspend fun moveStepInGroup(taskId: String, stepId: String, toGroupIndex: Int) =
+        onCore { tasks.moveChecklistItemInGroup(taskId, stepId, toGroupIndex) }
+
+    /** Shop mode for a task's checklist (slice 2): big rows, still to get first. Pure. */
+    fun shopMode(task: os.meka.core.domain.Task): os.meka.core.domain.ShopModeView = os.meka.core.domain.ShopModeRules.ofChecklist(task)
+
+    /** Shop mode for the shared shopping list. Pure. */
+    fun shopMode(view: os.meka.core.domain.ShoppingView): os.meka.core.domain.ShopModeView = os.meka.core.domain.ShopModeRules.ofShopping(view)
+
     /** The local day today as an epoch day, for [os.meka.core.domain.Task.repeatMeta]. */
     fun todayEpochDay(): Long = ZoneCalendar(timeZone).epochDayOf(nowMs())
 

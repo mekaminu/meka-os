@@ -579,6 +579,13 @@ class Tasks(
         }
     }
 
+    /** Drag to reorder (Checklists, slice 2): moves the item to [toGroupIndex] among the rows of its own group. */
+    fun moveChecklistItemInGroup(taskId: String, itemId: String, toGroupIndex: Int) {
+        val items = checklistFor(taskId)
+        val to = ChecklistRules.listIndexForGroupMove(items, itemId, toGroupIndex) ?: return
+        moveChecklistItem(taskId, itemId, to)
+    }
+
     /** Resolves a conflicting field by choosing a value; the resulting op dominates all concurrent heads. */
     fun resolveConflict(conflict: Conflict, chosen: FieldValue) {
         replica.commitLocal(conflict.key.entityType, conflict.key.entityId, mapOf(conflict.key.field to chosen))

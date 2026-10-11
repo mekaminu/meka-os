@@ -8,9 +8,11 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +33,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +51,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -72,6 +80,7 @@ import os.meka.android.designsystem.TickRing
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.ChecklistItem
 import os.meka.core.domain.ChecklistRules
+import os.meka.core.domain.ShopModeRules
 import os.meka.core.domain.Task
 import os.meka.core.domain.TextAutosave
 import kotlin.math.abs
@@ -82,7 +91,10 @@ import kotlin.math.roundToInt
  * unticked). Still to tick first, then "Ticked". Typing or pasting several lines (or commas) adds each as an item.
  * Motion (catalogue "Checklist"): a tick draws its check and pops ([TickRing]) with a light haptic, then the row moves
  * under Ticked a beat later and fades into its new place while the list's height follows on the expand spring; swipe
- * left to remove (the backdrop washes in, a tick haptic arms it), the undo bar rises. Reduced motion: at once.
+ * left to remove (the backdrop washes in, a tick haptic arms it), the undo bar rises. Slice 2: drag a row by its handle
+ * to reorder it within its group (it lifts onto the raised surface, the rows it passes slide out of its way on the
+ * replan spring with a tick haptic each, and it settles where it's let go); "Shop mode" opens the list full screen
+ * ([ShopModeScreen]). Reduced motion: at once.
  */
 @Composable
 internal fun ChecklistSection(task: Task, actions: TodayActions) {
@@ -93,9 +105,16 @@ internal fun ChecklistSection(task: Task, actions: TodayActions) {
     val target = view.toTick + view.ticked
     var shown by remember(task.id) { mutableStateOf(target) }
     LaunchedEffect(target) {
-        if (shown.map { it.id } != target.map { it.id } && !reduced && shown.size == target.size) delay(MekaChoreography.checkDrawMs.toLong())
+        // Only a tick waits (so its check draws in place); a reorder or an add shows at once.
+        val ticks = shown.map { it.id to it.checked }.toSet() != target.map { it.id to it.checked }.toSet()
+        if (ticks && shown.map { it.id } != target.map { it.id } && !reduced && shown.size == target.size) delay(MekaChoreography.checkDrawMs.toLong())
         shown = target
     }
+    var shopping by remember(task.id) { mutableStateOf(false) }
+    // Drag to reorder (slice 2): the row being dragged and how far it has moved.
+    var dragId by remember(task.id) { mutableStateOf<String?>(null) }
+    var dragDy by remember(task.id) { mutableFloatStateOf(0f) }
+    var rowPx by remember { mutableFloatStateOf(0f) }
     // Ticks follow the live data even while the order waits.
     val live = target.associateBy { it.id }
     val rows = shown.mapNotNull { live[it.id] }
@@ -103,11 +122,33 @@ internal fun ChecklistSection(task: Task, actions: TodayActions) {
     var tail = rows.size
     while (tail > 0 && rows[tail - 1].checked) tail--
     val firstTicked = tail.takeIf { it < rows.size }
+    // Each group (still to tick, then Ticked) reorders on its own.
+    val parts = listOf(rows.subList(0, tail), rows.subList(tail, rows.size))
+    val dragPart = parts.firstOrNull { p -> p.any { it.id == dragId } }
+    val dragFrom = dragPart?.indexOfFirst { it.id == dragId } ?: -1
+    val dragTo = if (dragPart == null) -1 else ChecklistRules.dropIndex(dragFrom, dragDy, rowPx, dragPart.size)
+    var lastTo by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(dragTo) { if (dragTo >= 0 && lastTo >= 0 && dragTo != lastTo) haptics.tick(); lastTo = dragTo }
 
     Row(Modifier.fillMaxWidth().padding(top = MekaSpace.l), verticalAlignment = Alignment.CenterVertically) {
         SectionLabel(view.label)
         Spacer(Modifier.weight(1f))
         view.line?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        if (ShopModeRules.offer(view.size)) {
+            Text(
+                ShopModeRules.OPEN, style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button) { haptics.light(); shopping = true }
+                    .padding(MekaSpace.xs),
+            )
+        }
+    }
+    if (shopping) {
+        ShopModeScreen(
+            view = ShopModeRules.ofChecklist(task),
+            onTick = { row -> actions.setStepDone(row.id, !row.done) },
+            onClose = { shopping = false },
+        )
     }
     Column(Modifier.fillMaxWidth().animateContentSize(MekaMotion.expand(reduced))) {
         rows.forEachIndexed { i, item ->
@@ -126,7 +167,38 @@ internal fun ChecklistSection(task: Task, actions: TodayActions) {
                         }
                     }
                 }
-                ChecklistRow(item, actions)
+                val part = if (i < tail) parts[0] else parts[1]
+                val at = if (i < tail) i else i - tail
+                val dragging = item.id == dragId
+                val shift = when {
+                    dragPart !== part || dragging || dragFrom < 0 -> 0f
+                    dragFrom < dragTo && at in (dragFrom + 1)..dragTo -> -rowPx
+                    dragTo < dragFrom && at in dragTo until dragFrom -> rowPx
+                    else -> 0f
+                }
+                // Rows make room on the replan spring while a drag is on; once it's let go they sit at once in the
+                // new order (no glide back from the room they made).
+                val slide = remember { Animatable(0f) }
+                LaunchedEffect(shift, dragId == null) { if (dragId == null) slide.snapTo(0f) else slide.animateTo(shift, MekaMotion.replan(reduced)) }
+                ChecklistRow(
+                    item, actions,
+                    dy = when { dragging -> dragDy; dragId == null -> 0f; else -> slide.value },
+                    lifted = dragging,
+                    canDrag = part.size > 1,
+                    onMeasured = { if (it > 0f) rowPx = it },
+                    onDragStart = { haptics.light(); dragId = item.id; dragDy = 0f; lastTo = at },
+                    onDrag = { dragDy += it },
+                    onDragEnd = {
+                        val to = ChecklistRules.dropIndex(at, dragDy, rowPx, part.size)
+                        if (to != at) {
+                            // Shown in its new place at once; the synced order follows.
+                            val moved = part.toMutableList().apply { add(to, removeAt(at)) }
+                            shown = if (i < tail) moved + parts[1] else parts[0] + moved
+                            actions.moveStep(task.id, item.id, to)
+                        }
+                        dragId = null; dragDy = 0f
+                    },
+                )
             }
         }
     }
@@ -179,7 +251,11 @@ private fun AddItemField(task: Task, actions: TodayActions) {
 }
 
 @Composable
-private fun ChecklistRow(item: ChecklistItem, actions: TodayActions) {
+private fun ChecklistRow(
+    item: ChecklistItem, actions: TodayActions,
+    dy: Float = 0f, lifted: Boolean = false, canDrag: Boolean = false,
+    onMeasured: (Float) -> Unit = {}, onDragStart: () -> Unit = {}, onDrag: (Float) -> Unit = {}, onDragEnd: () -> Unit = {},
+) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -198,10 +274,19 @@ private fun ChecklistRow(item: ChecklistItem, actions: TodayActions) {
             fade.animateTo(1f, MekaMotion.appear(false))
         }
     }
+    // The handle's gesture lives across recompositions: always call the latest callbacks.
+    val dragStart by rememberUpdatedState(onDragStart)
+    val dragBy by rememberUpdatedState(onDrag)
+    val dragEnd by rememberUpdatedState(onDragEnd)
+    val lift by animateFloatAsState(if (lifted && !reduced) 1f else 0f, MekaMotion.approve(reduced), label = "checklist-lift")
     BoxWithConstraints(
-        Modifier.fillMaxWidth().semantics {
-            customActions = listOf(CustomAccessibilityAction("Remove") { actions.removeStep(item); true })
-        },
+        Modifier.fillMaxWidth()
+            .zIndex(if (lifted) 1f else 0f)
+            .onSizeChanged { onMeasured(it.height.toFloat()) }
+            .graphicsLayer { translationY = dy; scaleX = 1f + 0.02f * lift; scaleY = 1f + 0.02f * lift }
+            .semantics {
+                customActions = listOf(CustomAccessibilityAction("Remove") { actions.removeStep(item); true })
+            },
     ) {
         val max = constraints.maxWidth.toFloat().coerceAtLeast(threshold * 1.5f)
         val progress = MotionMath.swipeProgress(with(LocalDensity.current) { dx.toDp().value })
@@ -213,7 +298,8 @@ private fun ChecklistRow(item: ChecklistItem, actions: TodayActions) {
             Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 .offset { IntOffset(dx.roundToInt(), 0) }
                 .graphicsLayer { alpha = fade.value }
-                .background(Meka.colors.background)
+                .clip(RoundedCornerShape(MekaRadius.m))
+                .background(if (lifted) Meka.colors.surfaceRaised else Meka.colors.background)
                 .draggable(
                     orientation = Orientation.Horizontal,
                     state = rememberDraggableState { delta ->
@@ -239,6 +325,28 @@ private fun ChecklistRow(item: ChecklistItem, actions: TodayActions) {
                 color = if (item.checked) Meka.colors.textTertiary else Meka.colors.textPrimary,
                 modifier = Modifier.weight(1f),
             )
+            if (canDrag) {
+                // The handle: drag up or down to reorder within the group.
+                val muted = Meka.colors.textTertiary
+                Canvas(
+                    Modifier.size(48.dp)
+                        .semantics { contentDescription = "Reorder ${item.text}" }
+                        .pointerInput(item.id) {
+                            detectVerticalDragGestures(
+                                onDragStart = { dragStart() },
+                                onDragEnd = { dragEnd() },
+                                onDragCancel = { dragEnd() },
+                                onVerticalDrag = { change, d -> change.consume(); dragBy(d) },
+                            )
+                        },
+                ) {
+                    val w = 16.dp.toPx(); val x0 = (size.width - w) / 2; val gap = 5.dp.toPx()
+                    for (k in -1..1) {
+                        val y = size.height / 2 + k * gap
+                        drawLine(muted, Offset(x0, y), Offset(x0 + w, y), strokeWidth = 1.5.dp.toPx(), cap = StrokeCap.Round)
+                    }
+                }
+            }
         }
     }
 }

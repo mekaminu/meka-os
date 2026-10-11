@@ -1763,6 +1763,17 @@ final class CoreModel {
     /// The detail's Checklist: to tick first, then Ticked, its line and the complete offer.
     func checklistView(_ task: MekaTask) -> ChecklistView? { core?.checklistView(task: task) }
 
+    /// Drag to reorder (Checklists, slice 2): the item takes [toGroupIndex] among the rows of its own group.
+    func moveStep(_ taskID: String, _ stepID: String, toGroupIndex: Int) {
+        guard toGroupIndex >= 0 else { return }
+        MekaHaptics.tick()
+        run { try await $0.moveStepInGroup(taskId: taskID, stepId: stepID, toGroupIndex: Int32(toGroupIndex)) }
+    }
+
+    /// Shop mode (slice 2): a task's checklist, or the shared shopping list, as big rows.
+    func shopMode(_ task: MekaTask) -> ShopModeView? { core?.shopMode(task: task) }
+    func shopMode(shopping: ShoppingView) -> ShopModeView? { core?.shopMode(view: shopping) }
+
     /// "↻ Every weekday", with "· since Mon 5 Oct" when an earlier day's occurrence is still open.
     func repeatLine(_ task: MekaTask) -> String? {
         guard let core, let meta = task.repeatMeta(todayEpochDay: core.todayEpochDay()) else { return nil }

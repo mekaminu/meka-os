@@ -1534,6 +1534,27 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(ChecklistRules.shared.untickedLine(count: 1), "Unticked 1 item")
     }
 
+    func testChecklistReorderAndShopModeReachSwift() async throws {
+        // Checklists in tasks, slice 2: a row dragged within its group, and Shop mode's view (only Strings cross).
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "shopmode-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let id = try await core.addTask(title: "Weekly shop")
+        let ids = try await core.addSteps(taskId: id, text: "eggs, milk, bread")
+        try await core.moveStepInGroup(taskId: id, stepId: ids[2], toGroupIndex: 0)
+        try await core.setStepDone(stepId: ids[0], done: true)
+        let task = try XCTUnwrap(core.today.value.upNext)
+        let shop = core.shopMode(task: task)
+        XCTAssertEqual(shop.toGet.map(\.text), ["bread", "milk"])
+        XCTAssertEqual(shop.done.map(\.text), ["eggs"])
+        XCTAssertEqual(shop.line, "2 left · 1 ticked")
+        XCTAssertEqual(shop.doneLabel, "Ticked")
+        XCTAssertEqual(ShopModeRules.shared.line(left: 0, done: 2, doneWord: "got"), "All 2 got")
+        XCTAssertTrue(ShopModeRules.shared.offer(itemCount: 1))
+    }
+
     func testErrandsReachSwift() {
         // Errands by location, slice 1: a typed line is read by the core's rules into a place and its things, and the
         // empty view reaches the Mac (only Strings cross from the sheet).

@@ -8,16 +8,28 @@ import SwiftUI
 struct ShoppingSection: View {
     @Environment(CoreModel.self) private var model
     let palette: MekaPalette
+    @State private var shopping = false
 
     var body: some View {
         let v = model.lists?.shopping
         let toBuy = v?.toBuy ?? []
         let got = v?.got ?? []
-        Text(v?.line ?? "Nothing to buy")
-            .font(MekaType.itemMeta)
-            .foregroundStyle(palette.textSecondary)
-            .contentTransition(.opacity)
-            .padding(.bottom, MekaSpace.xs)
+        HStack {
+            Text(v?.line ?? "Nothing to buy")
+                .font(MekaType.itemMeta)
+                .foregroundStyle(palette.textSecondary)
+                .contentTransition(.opacity)
+            Spacer()
+            // Shop mode (Checklists in tasks, slice 2): the list big, the display kept awake.
+            if ShopModeRules.shared.offer(itemCount: Int32(toBuy.count + got.count)) {
+                Button(ShopModeRules.shared.OPEN) { MekaHaptics.light(); shopping = true }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.accent)
+            }
+        }
+        .padding(.bottom, MekaSpace.xs)
+        .sheet(isPresented: $shopping) { ShopModeSheet(source: .shopping, palette: palette) }
         if toBuy.isEmpty && got.isEmpty {
             EmptyLine(text: ShoppingRules.shared.EMPTY_LINE, palette: palette)
         }

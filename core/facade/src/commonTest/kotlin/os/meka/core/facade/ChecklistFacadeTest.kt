@@ -55,4 +55,25 @@ class ChecklistFacadeTest {
         fold.syncNow(); mac.syncNow()
         assertEquals(listOf("bread", "eggs", "milk"), mac.checklistView(mac.task(id)).ticked.map { it.text })
     }
+
+    @Test
+    fun aDraggedRowSyncsAndShopModeFollowsTheTicks() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        val id = fold.addTask("Weekly shop")
+        val ids = fold.addSteps(id, "eggs, milk, bread")
+        fold.moveStepInGroup(id, ids[2], 0)
+        fold.syncNow(); mac.syncNow()
+        assertEquals(listOf("bread", "eggs", "milk"), mac.checklistView(mac.task(id)).toTick.map { it.text })
+
+        assertEquals("3 left", fold.shopMode(fold.task(id)).line)
+        mac.setStepDone(ids[0], true)
+        mac.syncNow(); fold.syncNow()
+        val shop = fold.shopMode(fold.task(id))
+        assertEquals(listOf("bread", "milk"), shop.toGet.map { it.text })
+        assertEquals("2 left · 1 ticked", shop.line)
+
+        fold.addShopping("milk, eggs")
+        assertEquals("2 left", fold.shopMode(fold.listsView.value.shopping).line)
+    }
 }
