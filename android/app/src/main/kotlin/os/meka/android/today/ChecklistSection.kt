@@ -113,7 +113,7 @@ internal fun ChecklistSection(task: Task, actions: TodayActions) {
         rows.forEachIndexed { i, item ->
             key(item.id) {
                 if (i == firstTicked) {
-                    Row(Modifier.fillMaxWidth().padding(top = MekaSpace.s), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
                         Text(ChecklistRules.TICKED_LABEL, style = MekaType.caption, color = Meka.colors.textTertiary)
                         Spacer(Modifier.weight(1f))
                         if (view.canUntickAll) {
@@ -137,7 +137,7 @@ internal fun ChecklistSection(task: Task, actions: TodayActions) {
     ) {
         Row(
             Modifier.fillMaxWidth().padding(vertical = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
-                .background(Meka.colors.surfaceRaised).padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+                .background(Meka.colors.surfaceRaised).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(ChecklistRules.COMPLETE_OFFER, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))

@@ -97,7 +97,7 @@ struct StepsList: View {
                         .padding(.vertical, MekaSpace.xs)
                         .background(Capsule().fill(palette.accent))
                 }
-                .padding(MekaSpace.s)
+                .padding(MekaSpace.xs)
                 .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }

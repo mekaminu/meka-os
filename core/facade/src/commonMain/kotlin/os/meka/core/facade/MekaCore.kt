@@ -837,7 +837,7 @@ class MekaCore(
      * Checklists in tasks (2026-10-11): the detail's Checklist section, to tick first then "Ticked", with its line and
      * the complete offer. Pure.
      */
-    fun checklistView(task: Task): os.meka.core.domain.ChecklistView = os.meka.core.domain.ChecklistRules.view(task)
+    fun checklistView(task: os.meka.core.domain.Task): os.meka.core.domain.ChecklistView = os.meka.core.domain.ChecklistRules.view(task)
 
     /** One typed or pasted line: each of its items (new lines, commas) goes at the end, unticked. Returns their ids. */
     suspend fun addSteps(taskId: String, text: String): List<String> = onCore { tasks.addChecklistItems(taskId, text) }
