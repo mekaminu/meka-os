@@ -228,7 +228,7 @@ struct ShopModeSheet: View {
                     .font(MekaType.metaStrong)
                     .foregroundStyle(palette.onAccent)
                     .padding(.horizontal, MekaSpace.l)
-                    .padding(.vertical, MekaSpace.s)
+                    .padding(.vertical, MekaSpace.xs)
                     .background(Capsule().fill(palette.accent))
             }
             ScrollView {
