@@ -18,6 +18,7 @@ struct WorkSheet: View {
     @State private var openDay: Int?
     @State private var blockNumber = ""
     @State private var blockRefused = false
+    @State private var leavingTo = ""
 
     private static let dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     private static let step = 15
@@ -67,6 +68,8 @@ struct WorkSheet: View {
             Toggle("Use these hours (off: the switch only)", isOn: Binding(get: { enabled }, set: { enabled = $0; save() }))
                 .staggeredAppear(2)
 
+            leavingNow.staggeredAppear(3)
+
             Text("CALL ASSISTANT").font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                 .foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.m)
                 .staggeredAppear(3)
@@ -109,6 +112,49 @@ struct WorkSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.switchedManually)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.callAssistant)
         .onAppear(perform: load)
+    }
+
+    /// "Leaving now" (V1): on or off, who the draft goes to and the journey home, synced with the Fold (where the
+    /// Family list lives, so the name is typed here). The line cross-fades; the choices fold away when off.
+    private var leavingNow: some View {
+        let rules = LeavingRules.shared
+        let view = model.leaving
+        let on = view?.on ?? true
+        let to = view?.to ?? rules.DEFAULT_TO
+        let journey = Int(view?.journeyMin ?? Int32(rules.DEFAULT_JOURNEY))
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text("LEAVING NOW").font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.m)
+            Toggle(isOn: Binding(get: { on }, set: { model.setLeavingNow(on: $0, to: to, journeyMin: journey) })) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text("Draft \"Leaving now\" when work ends").font(MekaType.itemMeta)
+                    Text(view?.summary ?? rules.summary(s: LeavingSetting.companion.DEFAULT))
+                        .font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .contentTransition(.opacity)
+                }
+            }
+            .toggleStyle(.switch)
+            if on {
+                HStack(spacing: MekaSpace.s) {
+                    TextField("To", text: $leavingTo)
+                        .textFieldStyle(.roundedBorder).frame(width: 160)
+                        .onSubmit { model.setLeavingNow(on: true, to: leavingTo, journeyMin: journey) }
+                    Picker("Journey home", selection: Binding(get: { journey }, set: { model.setLeavingNow(on: true, to: to, journeyMin: $0) })) {
+                        ForEach(rules.JOURNEY_CHOICES.map { Int($0.int32Value) }, id: \.self) { m in
+                            Text(rules.journeyLabel(min: Int32(m))).tag(m)
+                        }
+                    }
+                    .labelsHidden().frame(width: 110)
+                }
+                .transition(.opacity)
+            }
+            Text("On the Fold the draft comes with Send and Edit; here, Copy. Nothing is sent until you tap.")
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .onAppear { leavingTo = to }
+        .onChange(of: to) { _, new in leavingTo = new }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
     }
 
     /// "Keep callers' recordings" (call assistant polish 8c): 7 days · 30 days · Don't keep, synced with the Fold. A

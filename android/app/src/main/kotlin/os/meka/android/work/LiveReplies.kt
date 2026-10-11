@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import os.meka.core.domain.CaptureApp
+import os.meka.core.domain.LeavingRules
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -34,6 +35,10 @@ object LiveReplies {
         val reply: PendingIntent?,
         val inputs: Array<RemoteInput>?,
         val open: PendingIntent?,
+        /** The 1:1 chat's person as the notification named them, when every message it carried came from one person outside a group. */
+        val person: String?,
+        /** When it was remembered, so [sendTo] answers the newest. */
+        val atMs: Long,
     )
 
     private val byMessage = ConcurrentHashMap<String, Live>()
@@ -43,11 +48,14 @@ object LiveReplies {
     val live: StateFlow<Set<String>> = _live.asStateFlow()
 
     /** Remembers [sbn]'s Reply action and tap target for each of the [messageIds] it carried. */
-    fun remember(sbn: StatusBarNotification, messageIds: List<String>) {
+    fun remember(sbn: StatusBarNotification, messageIds: List<String>, person: String? = null) {
         if (messageIds.isEmpty()) return
         val n = sbn.notification ?: return
         val reply = replyAction(n)
-        val entry = Live(sbn.key, sbn.packageName, reply?.actionIntent, reply?.remoteInputs, n.contentIntent)
+        val entry = Live(
+            sbn.key, sbn.packageName, reply?.actionIntent, reply?.remoteInputs, n.contentIntent,
+            person, System.currentTimeMillis(),
+        )
         messageIds.forEach { byMessage[it] = entry }
         publish()
     }
@@ -73,6 +81,17 @@ object LiveReplies {
             // A reply action is good for one answer: WhatsApp reposts (or clears) the notification after it.
             if (ok) { byMessage.values.removeIf { it.sbnKey == live.sbnKey }; publish() }
         }
+    }
+
+    /**
+     * "Leaving now": sends [text] to [person]'s 1:1 chat through its live notification's own Reply action (the newest
+     * one showing). Only ever called from Meka's tap of Send on that notification, with its words. False when no
+     * notification from them is showing; the caller then opens the chat with the words filled in instead.
+     */
+    fun sendTo(context: Context, person: String, text: String): Boolean {
+        val id = byMessage.entries.filter { e -> e.value.person?.let { LeavingRules.samePerson(person, it) } == true && e.value.reply != null }
+            .maxByOrNull { it.value.atMs }?.key ?: return false
+        return send(context, id, text)
     }
 
     /**

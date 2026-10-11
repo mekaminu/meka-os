@@ -114,8 +114,17 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
             .setContentIntent(openIntent(n.target, NotifyRouting.notificationId(n.postId)))
             .setAutoCancel(true)
         if (n.text.isNotBlank()) b.setContentText(n.text)
+        // "Leaving now": the whole draft shows, and Send / Edit open MessageSendActivity with these exact words.
+        if (NotifyRules.isLeaving(n.key)) b.setStyle(NotificationCompat.BigTextStyle().bigText(n.text))
         // Buttons answered from the shade ("Did you go?": Went · Didn't go); the core checks each still applies.
-        n.actions.forEach { a ->
+        NotifyRules.actionsOn(n, send = true).forEach { a ->
+            if (a == NoticeAction.SEND_MESSAGE || a == NoticeAction.EDIT_MESSAGE) {
+                b.addAction(0, NotifyRules.actionLabel(a), PendingIntent.getActivity(
+                    context, NotifyRouting.actionRequestCode(n.key, a), MessageSendActivity.intent(context, n, a),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                ))
+                return@forEach
+            }
             val i = Intent(context, NoticeActionReceiver::class.java)
                 .setAction(NoticeActionReceiver.ACTION_ANSWER)
                 .putExtra(NoticeActionReceiver.EXTRA_KEY, n.key)
@@ -161,6 +170,29 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
     }
 
     fun cancel(key: String) = NotificationManagerCompat.from(context).cancel(NotifyRouting.notificationId(key))
+
+    /** "Leaving now": the draft moved on before Send, so the same notification shows the new words (nothing sent). */
+    fun repost(n: Notice) { if (WorkAlerts.canPost(context)) post(n) }
+
+    /** After Send: the same notification becomes a quiet "Sent to Jeanette" · the words, gone after ten minutes. */
+    fun postSent(postId: String, title: String, text: String) {
+        if (!WorkAlerts.canPost(context)) return
+        val channel = ensureChannel(NoticeTier.HEADS_UP)
+        val id = NotifyRouting.notificationId(postId)
+        val n = NotificationCompat.Builder(context, channel)
+            .setSmallIcon(android.R.drawable.stat_notify_more)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(NotificationCompat.Builder(context, channel).setSmallIcon(android.R.drawable.stat_notify_more)
+                .setContentTitle(NotifyRouting.publicTitle(NoticeTier.HEADS_UP)).build())
+            .setTimeoutAfter(NotifyRouting.ANSWERED_NOTE_MS)
+            .setContentIntent(openIntent(NoticeTarget.TODAY, id))
+            .build()
+        notify(id, n)
+    }
 
     /** Posts the digest; false when its channel is turned off in the phone's settings or the post was refused. */
     private fun postDigest(d: Digest): Boolean {

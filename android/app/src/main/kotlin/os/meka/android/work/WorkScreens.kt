@@ -85,6 +85,7 @@ import os.meka.core.domain.LocalClock
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.PersonSummary
 import os.meka.core.domain.WorkSchedule
+import os.meka.core.domain.LeavingRules
 import os.meka.core.facade.MekaCore
 import java.time.Instant
 import java.time.ZoneId
@@ -107,6 +108,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
     val lists by store.lists.collectAsState()
     val watch by store.watch.collectAsState()
     val notify by core.notificationSettings.collectAsState()
+    val leaving by core.leavingView.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -185,6 +187,12 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
             style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { save(schedule.copy(enabled = !schedule.enabled)) }.padding(vertical = MekaSpace.xxs),
         )
+
+        Spacer(Modifier.height(MekaSpace.m))
+        Label(LeavingRules.TITLE, 3)
+        LeavingNowSection(leaving, lists, Modifier.appear(rememberAppearance(3))) { on, to, journey ->
+            scope.launch { core.setLeavingNow(on, to, journey) }
+        }
 
         Spacer(Modifier.height(MekaSpace.m))
         Label("While you're at work", 3)

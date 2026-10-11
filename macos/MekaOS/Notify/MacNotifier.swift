@@ -37,8 +37,9 @@ enum MacNotifier {
             content.threadIdentifier = "meka"
             content.interruptionLevel = .active
             content.userInfo = ["target": NotifyRules.shared.targetName(t: notice.target)]
-            // Buttons answered from Notification Center ("Did you go?": Went · Didn't go), Gym slice 2b.
-            let buttons = notice.actions.map { (NotifyRules.shared.actionName(a: $0), NotifyRules.shared.actionLabel(a: $0)) }
+            // Buttons answered from Notification Center ("Did you go?": Went · Didn't go), Gym slice 2b. The Mac can't
+            // send a WhatsApp message, so "Leaving now" offers Copy here (Send and Edit are the Fold's).
+            let buttons = NotifyRules.shared.actionsOn(n: notice, send: false).map { (NotifyRules.shared.actionName(a: $0), NotifyRules.shared.actionLabel(a: $0)) }
             if !buttons.isEmpty {
                 let category = categoryID(names: buttons.map(\.0))
                 await ensureCategory(category, buttons: buttons)
@@ -71,6 +72,8 @@ enum MacNotifier {
     /// The category of the quiet note that replaces "Did you go?" once answered, and its one button.
     static let answeredCategory = "meka.answered"
     static let undoAction = "meka.undo"
+    /// Copy on a "Leaving now" notification: the core's `NoticeAction.COPY_MESSAGE` name.
+    static let copyMessageAction = "COPY_MESSAGE"
 
     /// One macOS category per set of buttons: "meka.actions.WENT.DIDNT_GO".
     nonisolated static func categoryID(names: [String]) -> String { "meka.actions." + names.joined(separator: ".") }
@@ -111,6 +114,8 @@ struct NotificationAnswer: Equatable, Sendable {
     let key: String
     let action: String
     let habit: String?
+    /// The notification's words ("Leaving now": what Copy copies).
+    var body: String? = nil
 }
 
 /// Buttons can be pressed before the core has started (macOS launches MEKA to deliver them), so they wait here until
@@ -146,7 +151,8 @@ final class MacNotificationActions: NSObject, UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         let request = response.notification.request
         let answer = NotificationAnswer(
-            key: request.identifier, action: response.actionIdentifier, habit: request.content.userInfo["habit"] as? String
+            key: request.identifier, action: response.actionIdentifier, habit: request.content.userInfo["habit"] as? String,
+            body: request.content.body
         )
         await NotificationActionInbox.shared.receive(answer)
     }

@@ -53,6 +53,8 @@
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <!-- Opening WhatsApp for Meka to send a reply himself (messages assistant, "Leaving now"). -->
+        <package android:name="com.whatsapp" />
     </queries>
 
     <application
@@ -100,6 +102,16 @@
 
         <!-- Capture from anywhere (build plan M1): share sheet, "Capture in MEKA" on selected text, widget and tile.
              The sheet shows what arrived; nothing is saved until Meka taps Add. Own task so it never drags the app up. -->
+        <!-- "Leaving now": Send / Edit on the notification. Shows nothing; sends the shown words through her chat's own
+             notification Reply, or opens WhatsApp's click-to-chat with them filled in. Only from Meka's tap (Level 3). -->
+        <activity
+            android:name=".notify.MessageSendActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <activity
             android:name=".capture.CaptureActivity"
             android:exported="true"

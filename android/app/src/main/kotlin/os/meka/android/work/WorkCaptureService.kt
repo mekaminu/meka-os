@@ -62,7 +62,10 @@ class WorkCaptureService : NotificationListenerService() {
             val items = runCatching { read(app, sbn, n) }.getOrDefault(emptyList())
             if (items.isEmpty()) return@launch
             // The notification's own Reply, held in memory while it shows, for Send on a Needs you card (slice 3).
-            if (app != CaptureApp.PHONE) LiveReplies.remember(sbn, items.map { it.id })
+            if (app != CaptureApp.PHONE) {
+                val person = items.map { it.personName }.distinct().singleOrNull()?.takeIf { items.all { i -> i.conversation == null } }
+                LiveReplies.remember(sbn, items.map { it.id }, person)
+            }
             if (meka.core.currentWorkMode().atWork) {
                 val fresh = meka.captures.add(items)
                 val lists = meka.captures.lists.value

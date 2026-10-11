@@ -277,6 +277,24 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NoticeSource.goals.label, "Goals: quiet goals and the month's review")
     }
 
+    func testLeavingNowReachesSwift() async throws {
+        // "Leaving now": the synced setting, its line, and the Mac's buttons (Copy only; Send and Edit are the Fold's).
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "leaving-\(UUID().uuidString).db", deviceKey: nil
+        )
+        XCTAssertEqual(core.leavingView.value.to, "Jeanette")
+        let line = try await core.setLeavingNow(on: true, to: "Wife", journeyMin: 80)
+        XCTAssertEqual(line, "On · a draft to Wife when work ends on office days · about 80 min home")
+        XCTAssertEqual(core.leavingView.value.journeyMin, 80)
+        XCTAssertEqual(NoticeSource.leaving.defaultTier, NoticeTier.headsUp)
+        XCTAssertEqual(NotifyRules.shared.actionName(a: NoticeAction.copyMessage), "COPY_MESSAGE") // MacNotifier.copyMessageAction
+        XCTAssertTrue(NoticeAction.copyMessage.shownOn(send: false))
+        XCTAssertFalse(NoticeAction.sendMessage.shownOn(send: false))
+        XCTAssertEqual(LeavingRules.shared.journeyLabel(min: 90), "1 h 30")
+    }
+
     func testGoalBreakdownReachesSwift() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

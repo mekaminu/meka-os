@@ -146,6 +146,7 @@ class MekaCore(
     private val wins = os.meka.core.domain.WorkWins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
     private val protectedTime = os.meka.core.domain.ProtectedTime(replica)
+    private val leavingNow = os.meka.core.domain.LeavingNow(replica)
     private val autonomy = os.meka.core.domain.Autonomy(replica, nowMs)
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -451,6 +452,10 @@ class MekaCore(
      * Protected time). Synced.
      */
     val protectedView: StateFlow<os.meka.core.domain.ProtectedView> = _protected.asStateFlow()
+
+    private val _leaving = MutableStateFlow(os.meka.core.domain.LeavingView.EMPTY)
+    /** "Leaving now" (V1): the draft to Jeanette when an office day's work ends (Work mode → Leaving now). Synced. */
+    val leavingView: StateFlow<os.meka.core.domain.LeavingView> = _leaving.asStateFlow()
 
     private val _autonomy = MutableStateFlow(os.meka.core.domain.AutonomyView.EMPTY)
     /**
@@ -1807,6 +1812,29 @@ class MekaCore(
         os.meka.core.domain.ProtectedRules.summary(protectedTime.setting())
     }
 
+    // ---- "Leaving now" (V1, slice 1; Work mode → Leaving now) ----
+
+    /**
+     * Sets "Leaving now": on or off, who the draft goes to (a Family entry's name, e.g. "Jeanette") and the usual
+     * journey home in minutes. Returns the summary line, or null when nothing changed or the values don't make sense.
+     */
+    suspend fun setLeavingNow(on: Boolean, to: String, journeyMin: Int): String? = onCore {
+        if (!leavingNow.set(on, to, journeyMin)) return@onCore null
+        refresh()
+        os.meka.core.domain.LeavingRules.summary(leavingNow.setting())
+    }
+
+    /**
+     * Send or Edit tapped on a "Leaving now" notification [key] that showed [shown] (Level 3: only from Meka's tap).
+     * [os.meka.core.domain.LeavingTap.Send] carries exactly the shown words; Changed carries the updated notice to show
+     * instead (nothing is sent); null when it no longer applies.
+     */
+    suspend fun leavingTap(key: String, shown: String, edit: Boolean): os.meka.core.domain.LeavingTap? = onCore {
+        os.meka.core.domain.LeavingRules.tap(
+            key, shown, leavingNow.setting(), officeToday(), lineStatus.snapshot(), nowMs(), ZoneCalendar(timeZone), edit,
+        )
+    }
+
     // ---- Date night (V1, slice 1; Ask → More → Date night) ----
 
     /**
@@ -1953,6 +1981,7 @@ class MekaCore(
      * nothing (null). Returns the card after answering, for the quiet "Went · 2 of 3 this week" note and its Undo.
      */
     suspend fun answerSessionNotice(key: String, action: os.meka.core.domain.NoticeAction): os.meka.core.domain.SessionCard? = onCore {
+        if (action != os.meka.core.domain.NoticeAction.WENT && action != os.meka.core.domain.NoticeAction.DIDNT_GO) return@onCore null
         val card = os.meka.core.domain.SessionRules.askedCard(_sessions.value, key, todayEpochDay()) ?: return@onCore null
         val went = action == os.meka.core.domain.NoticeAction.WENT
         goals.answerSession(card.habitId, went = went, label = if (went) card.label else null, note = null)
@@ -3931,6 +3960,7 @@ class MekaCore(
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
+        _leaving.value = os.meka.core.domain.LeavingRules.view(leavingNow.setting())
         _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs())
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
@@ -4036,6 +4066,7 @@ class MekaCore(
             approvals = os.meka.core.domain.ApprovalRules.pending(approvalStore.all(), nowMs()),
             appointments = appointments.items(),
             goals = _goals.value,
+            leaving = leavingNow.setting(),
         )
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */

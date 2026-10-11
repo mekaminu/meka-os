@@ -41,6 +41,21 @@ enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW, LEAVE }
 enum class NoticeAction(val label: String) {
     WENT("Went"),
     DIDNT_GO("Didn't go"),
+    /**
+     * "Leaving now" ([LeavingRules]): sends the notification's own words to Jeanette, on Meka's tap (Level 3). Fold only.
+     */
+    SEND_MESSAGE("Send"),
+    /** Opens the chat with the words filled in, for Meka to change and send himself. Fold only. */
+    EDIT_MESSAGE("Edit"),
+    /** Copies the words (the Mac, which can't send a WhatsApp message). Mac only. */
+    COPY_MESSAGE("Copy");
+
+    /** Whether a device that can [send] messages (the Fold) shows it: Send and Edit there, Copy elsewhere. */
+    fun shownOn(send: Boolean): Boolean = when (this) {
+        SEND_MESSAGE, EDIT_MESSAGE -> send
+        COPY_MESSAGE -> !send
+        else -> true
+    }
 }
 
 /** What a notice is about. Each source has a default tier, which the owner can lower (never raise). */
@@ -101,6 +116,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * until live departures land): "Thameslink severe delays" · "Great Northern to King's Cross is running".
      */
     TRAINS("Trains on your route", NoticeTier.HEADS_UP),
+    /**
+     * "Leaving now" ([LeavingRules.notices]): when an office day's work ends, the drafted "Leaving now, home about 18:40"
+     * for Jeanette, with Send (Meka's tap) and Edit; once more if the trains change on the way.
+     */
+    LEAVING("Leaving now (a draft to send home)", NoticeTier.HEADS_UP),
     /**
      * A request card from someone Meka watches (V1, requests): summed in the next digest, or a heads-up straight away
      * for the people he marked "Notify straight away" ([NotificationSettings.requestNow]).
@@ -493,6 +513,7 @@ object Governor {
         NoticeSource.OVERDUE -> plural(n, "overdue task")
         NoticeSource.WEATHER -> "rain on " + plural(n, "plan")
         NoticeSource.TRAINS -> if (n == 1) "a line on your route" else "$n lines on your route"
+        NoticeSource.LEAVING -> "a leaving-now draft"
         NoticeSource.REQUEST -> plural(n, "request")
         NoticeSource.APPROVAL -> plural(n, "approval")
     }
@@ -546,6 +567,8 @@ object NoticeSources {
         appointments: List<AppointmentItem> = emptyList(),
         /** Goals' rhythm: the open goals and last month's review ([GoalRhythmRules.notices]). */
         goals: GoalsView = GoalsView.EMPTY,
+        /** "Leaving now": the setting, for the draft when an office day's work ends ([LeavingRules.notices]). */
+        leaving: LeavingSetting? = null,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -658,6 +681,7 @@ object NoticeSources {
         out += LeaveRules.notices(school, leave, leaveWork, nowMs, cal)
         out += AppointmentRules.notices(appointments, nowMs, cal)
         out += GoalRhythmRules.notices(goals.goals, goals.month, nowMs, cal)
+        if (leaving != null) out += LeavingRules.notices(leaving, office, lines, nowMs, cal)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.
@@ -778,4 +802,8 @@ object NotifyRules {
     fun actionLabel(a: NoticeAction): String = a.label
     fun actionName(a: NoticeAction): String = a.name
     fun actionFromName(name: String?): NoticeAction? = NoticeAction.entries.firstOrNull { it.name == name }
+    /** [n]'s buttons on a device that can (the Fold) or can't (the Mac) send messages ([NoticeAction.shownOn]). */
+    fun actionsOn(n: Notice, send: Boolean): List<NoticeAction> = n.actions.filter { it.shownOn(send) }
+    /** "Leaving now" ([LeavingRules]): a notice whose buttons send, edit or copy its words. */
+    fun isLeaving(key: String): Boolean = LeavingRules.isKey(key)
 }

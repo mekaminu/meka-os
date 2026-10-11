@@ -51,6 +51,8 @@ final class CoreModel {
     /// Protected time (V1, slice 1): the evenings and weekends Plan my day and Move to later keep tasks out of
     /// (Ask → More → Protected time). Synced with the Fold.
     private(set) var protectedTime: ProtectedView?
+    /// "Leaving now" (V1): the draft to Jeanette when an office day's work ends; set here or on the Fold.
+    private(set) var leaving: LeavingView?
     /// Ask → More → Protected time.
     var showProtected = false
     /// What MEKA may do (policy engine UI, slice 1): the pause switch, earned trust per kind and the locked rows
@@ -315,6 +317,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await p in core.protectedView { self?.protectedTime = p }
+        })
+        observers.append(Task { [weak self] in
+            for await l in core.leavingView { self?.leaving = l }
         })
         observers.append(Task { [weak self] in
             for await a in core.autonomyView { self?.autonomy = a }
@@ -890,6 +895,13 @@ final class CoreModel {
         MekaHaptics.tick()
         let d = Int32(days)
         run { try await $0.setRecordingDays(days: d) }
+    }
+
+    /// "Leaving now": on or off, who it goes to and the usual journey home. Only a Bool, a String and an Int32 cross.
+    func setLeavingNow(on: Bool, to: String, journeyMin: Int) {
+        MekaHaptics.tick()
+        let j = Int32(journeyMin)
+        run { _ = try await $0.setLeavingNow(on: on, to: to, journeyMin: j) }
     }
 
     /// Saves work hours. Days are ISO (1 = Monday); minutes are local minutes of the day.
@@ -1557,6 +1569,17 @@ final class CoreModel {
     /// Went / Didn't go pressed on a "Did you go?" notification, or Undo on the note that replaces it. The core answers
     /// only that day's session while it still asks; otherwise the notification just goes.
     func answerFromNotification(_ a: NotificationAnswer) {
+        // "Leaving now": Copy puts the drafted words on the clipboard for Meka to paste into WhatsApp himself.
+        if a.action == MacNotifier.copyMessageAction {
+            if let words = a.body, !words.isEmpty {
+                let board = NSPasteboard.general
+                board.clearContents()
+                board.setString(words, forType: .string)
+                MekaHaptics.light()
+            }
+            MacNotifier.remove(key: a.key)
+            return
+        }
         // The wake alarm's Snooze / Dismiss (Alarms, slice 1); Dismiss brings up the morning brief.
         if let alarm = MacAlarm.alarmID(fromKey: a.key) {
             if a.action == MacAlarm.snoozeAction {
