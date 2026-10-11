@@ -214,6 +214,32 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(removed, "Run 5k")
     }
 
+    func testGoalNumbersReachSwift() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "goals4-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let goal = try await core.addGoal(title: "Save £2,000", target: nil, horizon: GoalRules.shared.horizonAt(index: 3))
+        let bad = try await core.setGoalNumber(goalId: goal, text: "lots")
+        XCTAssertFalse(bad.boolValue)
+        let ok = try await core.setGoalNumber(goalId: goal, text: "£2,000")
+        XCTAssertTrue(ok.boolValue)
+        let first = try await core.addGoalUpdate(goalId: goal, text: "+500")
+        XCTAssertNotNil(first)
+        _ = try await core.addGoalUpdate(goalId: goal, text: "+300")
+        let g = core.goalsView.value.goals[0]
+        XCTAssertEqual(g.metric?.line, "£800 of £2,000")
+        XCTAssertEqual(g.progressPct, 40)
+        XCTAssertEqual(g.metric?.recent.count, 2)
+        let plot = GoalMetricRules.shared.plot(m: g.metric!, today: core.todayEpochDay())
+        XCTAssertEqual(plot.line.last?.y, 0.4)
+        XCTAssertEqual(GoalMetricRules.shared.suggestFromTitle(title: "Read 12 books"), "12 books")
+        let removed = try await core.removeGoalUpdate(id: first!)
+        XCTAssertTrue(removed.boolValue)
+        XCTAssertEqual(core.goalsView.value.goals[0].metric?.line, "£300 of £2,000")
+    }
+
     func testFastingThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

@@ -366,6 +366,28 @@ class MekaCoreTest {
     }
 
     @Test
+    fun goalNumbersUpdateUndoAndSyncToTheMac() = runTest {
+        val a = core("android"); val m = core("mac")
+        val goal = a.addGoal("Save £2,000", null, os.meka.core.domain.GoalHorizon.YEAR)
+        assertEquals(false, a.setGoalNumber(goal, "lots"))
+        assertEquals(true, a.setGoalNumber(goal, "£2,000"))
+        val first = a.addGoalUpdate(goal, "+500")!!
+        a.addGoalUpdate(goal, "+300")
+        assertEquals("£800 of £2,000", a.goalsView.value.goals.single().metric!!.line)
+        assertEquals(40, a.goalsView.value.goals.single().progressPct)
+        a.syncNow(); m.syncNow()
+        assertEquals("£800 of £2,000", m.goalsView.value.goals.single().metric!!.line)
+        // Undo on the Mac takes the first update away on both.
+        assertEquals(true, m.removeGoalUpdate(first))
+        m.syncNow(); a.syncNow()
+        assertEquals("£300 of £2,000", a.goalsView.value.goals.single().metric!!.line)
+        val read = a.addHabit("Read", 7, os.meka.core.domain.HabitTiming.EVENING, 15, null)
+        a.setGoalNumberHabit(goal, read)
+        a.setHabitDone(read, true)
+        assertEquals("£301 of £2,000", a.goalsView.value.goals.single().metric!!.line)
+    }
+
+    @Test
     fun habitsTickSyncAndThePlanMakesRoomForOnesThatAreDue() = runTest {
         val a = core("android"); val m = core("mac")
         val goal = a.addGoal("Fitter by spring", null, os.meka.core.domain.GoalHorizon.QUARTER)

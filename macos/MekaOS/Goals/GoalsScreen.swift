@@ -304,6 +304,11 @@ private struct GoalRowView: View {
                             Text(target).font(MekaType.body).foregroundStyle(palette.textSecondary)
                         }
                         Text(goal.meta).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                        // A numeric goal with a due date: where it stands against the pace (slice 3).
+                        if let pace = goal.metric?.paceLine {
+                            Text(pace).font(MekaType.caption)
+                                .foregroundStyle(pace.hasPrefix("Behind") ? palette.accent : palette.textSecondary)
+                        }
                         // The next step, always shown: the first open linked task, else the next milestone, or a prompt.
                         Text(goal.nextLine)
                             .font(MekaType.caption)
@@ -340,6 +345,7 @@ private struct GoalRowView: View {
                             .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
                     GoalDetailsView(goal: goal, all: all, palette: palette)
+                    GoalNumberView(goal: goal, palette: palette)
                     MilestonesView(goal: goal, palette: palette)
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
@@ -469,6 +475,146 @@ private struct MilestonesView: View {
 
     private func remove(_ id: String) {
         Task { removed = await model.removeGoalMilestone(id) }
+    }
+}
+
+/// Goals, properly, slice 3: a numeric goal. The number to reach ("£2,000", "12 books"; the title's number offered as
+/// one click), then the chart (it draws on from the left; Reduce Motion: at once), "Add to it" (+200, -1, =1200) with
+/// Undo, the latest updates with Remove, and a habit whose ticks add 1. Lines under the fields cross-fade.
+private struct GoalNumberView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let goal: GoalItem
+    let palette: MekaPalette
+    @State private var target = ""
+    @State private var badTarget = false
+    @State private var update = ""
+    @State private var updateLine: String?
+    @State private var undoID: String?
+
+    var body: some View {
+        let metric = goal.metric
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text("Number to reach").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            TextField("A number · £2,000 or 12 books (optional)", text: $target)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { setNumber(target) }
+                .onChange(of: target) { badTarget = false }
+            if badTarget {
+                Text("That isn't a number · try £2,000 or 12 books").font(MekaType.caption).foregroundStyle(palette.critical)
+                    .transition(.opacity)
+            } else if let m = metric {
+                Text(m.line + (m.paceLine.map { " · \($0)" } ?? "")).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .contentTransition(.opacity)
+            } else if let s = GoalMetricRules.shared.suggestFromTitle(title: goal.title) {
+                Button("Count “\(s)”") { target = s; setNumber(s) }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+            }
+            if let m = metric {
+                MetricChartView(metric: m, today: model.todayEpochDay, palette: palette)
+                    .frame(height: 48)
+                TextField("Add to it · +200, -1 or =1200", text: $update)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(addUpdate)
+                if let line = updateLine {
+                    HStack(spacing: MekaSpace.m) {
+                        Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        if let id = undoID {
+                            Button("Undo") { model.removeGoalUpdate(id); updateLine = nil; undoID = nil }
+                                .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                        }
+                    }
+                    .transition(.opacity)
+                }
+                ForEach(m.recent, id: \.id) { e in
+                    HStack(spacing: MekaSpace.m) {
+                        Text(e.label).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Spacer()
+                        Button("Remove") { model.removeGoalUpdate(e.id) }
+                            .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                    }
+                    .transition(.opacity)
+                }
+                let habits = model.goals?.habits ?? []
+                if !habits.isEmpty {
+                    Menu(m.habitTitle.map { "Each tick of “\($0)” adds 1" } ?? "Count a habit's ticks…") {
+                        Button("No habit") { model.setGoalNumberHabit(goal.id, nil) }
+                        ForEach(habits, id: \.id) { h in
+                            Button(h.title) { model.setGoalNumberHabit(goal.id, h.id) }
+                        }
+                    }
+                    .menuStyle(.button).fixedSize()
+                    .font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                }
+                Button("Stop counting a number") { target = ""; setNumber("") }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+            }
+        }
+        .onAppear { target = metric?.targetText ?? "" }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: updateLine)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: badTarget)
+        .animation(MekaMotion.replan(reduced: reduceMotion), value: metric?.recent.map(\.id) ?? [])
+    }
+
+    private func setNumber(_ text: String) {
+        let gid = goal.id
+        Task { badTarget = !(await model.setGoalNumber(gid, text)) }
+    }
+
+    private func addUpdate() {
+        let gid = goal.id
+        let typed = update.trimmingCharacters(in: .whitespaces)
+        guard !typed.isEmpty else { return }
+        Task {
+            switch await model.addGoalUpdate(gid, typed) {
+            case .added(let id): updateLine = "Added \(typed)"; undoID = id; update = ""
+            case .noChange: updateLine = "No change"; undoID = nil; update = ""
+            case .notANumber: updateLine = "Type a number, like +200 or =1200"; undoID = nil
+            }
+        }
+    }
+}
+
+/// The number's chart, the Mac twin of the Fold's `MetricChart`: its line in the accent, the pace line and the target
+/// faint and dashed; the line draws on from the left on appear (Reduce Motion: at once).
+private struct MetricChartView: View {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let metric: GoalMetric
+    let today: Int64
+    let palette: MekaPalette
+    @State private var reveal: CGFloat = 0
+
+    var body: some View {
+        let plot = GoalMetricRules.shared.plot(m: metric, today: today)
+        GeometryReader { geo in
+            let w = geo.size.width, h = geo.size.height
+            let at: (PlotPoint) -> CGPoint = { p in CGPoint(x: CGFloat(p.x) * w, y: h - CGFloat(p.y) * h) }
+            ZStack {
+                Path { p in
+                    let y = h - CGFloat(plot.targetY) * h
+                    p.move(to: CGPoint(x: 0, y: y)); p.addLine(to: CGPoint(x: w, y: y))
+                }
+                .stroke(palette.surfaceRaised, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                if plot.pace.count == 2 {
+                    Path { p in p.move(to: at(plot.pace[0])); p.addLine(to: at(plot.pace[1])) }
+                        .stroke(palette.textTertiary, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                }
+                if let first = plot.line.first, let last = plot.line.last {
+                    Path { p in
+                        p.move(to: at(first))
+                        for pt in plot.line.dropFirst() { p.addLine(to: at(pt)) }
+                    }
+                    .trim(from: 0, to: reveal)
+                    .stroke(palette.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    Circle().fill(palette.accent).frame(width: 6, height: 6).position(at(last)).opacity(reveal >= 1 ? 1 : 0)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Chart: \(metric.line)" + (metric.paceLine.map { ", \($0)" } ?? ""))
+        .onAppear {
+            if reduceMotion { reveal = 1 } else { withAnimation(MekaMotion.replan(reduced: false)) { reveal = 1 } }
+        }
     }
 }
 

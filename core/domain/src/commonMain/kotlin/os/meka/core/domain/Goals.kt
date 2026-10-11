@@ -18,7 +18,8 @@ import os.meka.core.sync.fv
  *   left ("1 left — 2 days to go"); Behind only once the week can no longer be met.
  * - Streaks: a daily habit counts days in a row; any other target counts weeks in a row that met it.
  * - A Goal's progress is counted from what's linked to it (tasks done, habits' share of this week, goals under it, its
- *   milestones ticked), or set by hand when nothing is linked.
+ *   milestones ticked), or set by hand when nothing is linked. A numeric goal ("Save £2,000") takes its progress from
+ *   its number instead ([GoalMetricRules]).
  * - The planner makes room for habits that are behind or due today ([plannerHabits]).
  */
 
@@ -104,6 +105,8 @@ data class GoalItem(
     val nextStep: String? = null,
     /** Its milestones, oldest first (Goals, properly, slice 2). */
     val milestones: List<GoalMilestone> = emptyList(),
+    /** A numeric goal's number ("£800 of £2,000"), its chart and updates (slice 3); null for an ordinary goal. */
+    val metric: GoalMetric? = null,
 ) {
     val milestonesDone: Int get() = milestones.count { it.done }
     /** The next step is a milestone (no open task is linked), not a task. */
@@ -625,6 +628,9 @@ class Goals(
             replica.commitLocal(EntityTypes.TASK, it.ref.entityId, mapOf(ActionableFields.GOAL_ID to FieldValue.Null))
         }
         milestones(id).forEach { replica.commitLocal(EntityTypes.GOAL_MILESTONE, it.id, mapOf(GoalMilestoneFields.DELETED to true.fv())) }
+        replica.entities(EntityTypes.GOAL_ENTRY).filter { !it.deleted && it[GoalEntryFields.GOAL_ID].textOrNull == id }.forEach {
+            replica.commitLocal(EntityTypes.GOAL_ENTRY, it.ref.entityId, mapOf(GoalEntryFields.DELETED to true.fv()))
+        }
         // Goals under it move up to its own parent (or the top).
         val up = live(EntityTypes.GOAL, id)?.get(GoalFields.PARENT_ID)?.textOrNull
         replica.entities(EntityTypes.GOAL).filter { !it.deleted && it[GoalFields.PARENT_ID].textOrNull == id }.forEach {
@@ -690,6 +696,106 @@ class Goals(
             }
             .sortedWith(compareBy<Triple<Long, String, GoalMilestone>> { it.first }.thenBy { it.second })
             .map { it.third }.groupBy { it.goalId }
+
+    // ---- Numeric goals (Goals, properly, slice 3) ----
+
+    /**
+     * The number to reach as typed ("£2,000", "12 books"; [GoalMetricRules.parseTarget]); blank makes it an ordinary
+     * goal again (its updates are kept, so setting a number again brings them back). Returns false, writing nothing,
+     * when it isn't a number.
+     */
+    fun setMetric(goalId: String, text: String?): Boolean {
+        val s = live(EntityTypes.GOAL, goalId) ?: throw ValidationException("Goal not found")
+        if (text.isNullOrBlank()) {
+            replica.commitLocal(EntityTypes.GOAL, goalId, mapOf(GoalFields.METRIC_TARGET to FieldValue.Null))
+            return true
+        }
+        val (v, unit) = GoalMetricRules.parseTarget(text) ?: return false
+        val changes = linkedMapOf<String, FieldValue>(GoalFields.METRIC_TARGET to v.fv(), GoalFields.METRIC_UNIT to unit.fv())
+        if (s[GoalFields.METRIC_SINCE_DAY].longOrNull == null) changes[GoalFields.METRIC_SINCE_DAY] = today().fv()
+        replica.commitLocal(EntityTypes.GOAL, goalId, changes)
+        return true
+    }
+
+    /**
+     * An update to a numeric goal, counted today: "+200", "-1", or "=1200" (sets the number: the difference is written).
+     * Returns the update's id (Undo removes it), or null when it changes nothing.
+     */
+    fun addMetricEntry(goalId: String, text: String): String? {
+        val s = live(EntityTypes.GOAL, goalId) ?: throw ValidationException("Goal not found")
+        if (s[GoalFields.METRIC_TARGET].longOrNull == null) throw ValidationException("Give the goal a number first")
+        val input = GoalMetricRules.parseInput(text) ?: throw ValidationException("Type a number, like +200 or =1200")
+        val amount = if (input.set) input.x100 - metricCurrent(goalId) else input.x100
+        if (amount == 0L) return null
+        val id = ids()
+        replica.commitLocal(
+            EntityTypes.GOAL_ENTRY, id,
+            linkedMapOf(
+                GoalEntryFields.GOAL_ID to goalId.fv(),
+                GoalEntryFields.DAY to today().fv(),
+                GoalEntryFields.AMOUNT to amount.fv(),
+                GoalEntryFields.AT to nowMs().fv(),
+            ),
+        )
+        return id
+    }
+
+    /** Removes an update (Undo of [addMetricEntry], or Remove in the list); false if it was already gone. */
+    fun removeMetricEntry(id: String): Boolean {
+        live(EntityTypes.GOAL_ENTRY, id) ?: return false
+        replica.commitLocal(EntityTypes.GOAL_ENTRY, id, mapOf(GoalEntryFields.DELETED to true.fv()))
+        return true
+    }
+
+    /** Each tick of [habitId] adds 1 to the goal's number from today on (null stops it; ticks already counted go too). */
+    fun setMetricHabit(goalId: String, habitId: String?) {
+        requireGoal(goalId)
+        habitId?.let(::requireHabit)
+        replica.commitLocal(EntityTypes.GOAL, goalId, mapOf(GoalFields.METRIC_HABIT_ID to (habitId?.fv() ?: FieldValue.Null)))
+    }
+
+    private fun metricCurrent(goalId: String): Long {
+        val s = live(EntityTypes.GOAL, goalId) ?: return 0L
+        return metricOf(goalId, s, completedDays(), emptyMap(), today(), null)?.currentX100 ?: 0L
+    }
+
+    /** Each goal's updates (id, day, amount), oldest first. */
+    private fun entriesByGoal(): Map<String, List<Triple<String, Long, Long>>> {
+        data class Row(val goalId: String, val id: String, val day: Long, val x: Long, val at: Long)
+        return replica.entities(EntityTypes.GOAL_ENTRY).filter { !it.deleted }.mapNotNull { e ->
+            Row(
+                e[GoalEntryFields.GOAL_ID].textOrNull ?: return@mapNotNull null, e.ref.entityId,
+                e[GoalEntryFields.DAY].longOrNull ?: return@mapNotNull null,
+                e[GoalEntryFields.AMOUNT].longOrNull ?: 0L, e[GoalEntryFields.AT].longOrNull ?: 0L,
+            )
+        }.sortedWith(compareBy<Row> { it.at }.thenBy { it.id })
+            .groupBy({ it.goalId }, { Triple(it.id, it.day, it.x) })
+    }
+
+    /** A goal's number, or null when it has none. [entries] null reads them. */
+    private fun metricOf(
+        goalId: String, s: EntitySnapshot, ticks: Map<String, Set<Long>>, habitTitles: Map<String, String>, today: Long,
+        entries: Map<String, List<Triple<String, Long, Long>>>?,
+    ): GoalMetric? {
+        val target = s[GoalFields.METRIC_TARGET].longOrNull?.takeIf { it > 0 } ?: return null
+        val unit = s[GoalFields.METRIC_UNIT].textOrNull ?: ""
+        val since = s[GoalFields.METRIC_SINCE_DAY].longOrNull ?: today
+        val mine = (entries ?: entriesByGoal())[goalId].orEmpty()
+        val habitId = s[GoalFields.METRIC_HABIT_ID].textOrNull?.takeIf { live(EntityTypes.HABIT, it) != null }
+        val habitDays = habitId?.let { h -> ticks[h].orEmpty().filter { it in since..today } }.orEmpty()
+        val changes = mine.map { it.second to it.third } + habitDays.map { it to 100L }
+        val current = changes.sumOf { it.second }
+        val due = s[GoalFields.DUE_DAY].longOrNull
+        return GoalMetric(
+            targetX100 = target, unit = unit, currentX100 = current, sinceDay = since, dueDay = due,
+            points = GoalMetricRules.points(since, today, changes),
+            habitId = habitId, habitTitle = habitId?.let { habitTitles[it] },
+            recent = mine.asReversed().take(GoalMetricRules.RECENT).map { (id, day, x) ->
+                GoalEntryItem(id, x, day, GoalMetricRules.entryLabel(x, unit, day, today))
+            },
+            paceLine = GoalMetricRules.paceLine(current, target, unit, since, due, today),
+        )
+    }
 
     /** Links a task to a goal (null unlinks); it then counts towards the goal's progress. */
     fun setTaskGoal(taskId: String, goalId: String?) {
@@ -772,6 +878,10 @@ class Goals(
         val linkedTasks = snaps.keys.associateWith { id -> tasks.filter { it.goalId == id && it.lifecycle != Lifecycle.CANCELLED && it.lifecycle != Lifecycle.SOMEDAY } }
         val linkedHabits = snaps.keys.associateWith { id -> habits.filter { it.goalId == id } }
         val milestonesOf = allMilestones()
+        val ticks = completedDays()
+        val habitTitles = habits.associate { it.id to it.title }
+        val entries = entriesByGoal()
+        val metrics = snaps.mapValues { (id, s) -> metricOf(id, s, ticks, habitTitles, today, entries) }
         val pctMemo = HashMap<String, Int>()
         fun pct(id: String, depth: Int = 0): Int = pctMemo[id] ?: run {
             val s = snaps.getValue(id)
@@ -782,6 +892,8 @@ class Goals(
                 milestonesOf[id].orEmpty().map { if (it.done) 1.0 else 0.0 }
             val v = when {
                 isDone(id) -> 100
+                // A numeric goal's number is what done looks like: it decides the progress.
+                metrics[id] != null -> metrics.getValue(id)!!.pct
                 scores.isNotEmpty() -> (scores.sum() * 100 / scores.size).toInt()
                 else -> (s[GoalFields.PROGRESS_PCT].longOrNull?.toInt() ?: 0).coerceIn(0, 100)
             }
@@ -796,7 +908,8 @@ class Goals(
             val allKids = children[id].orEmpty()
             val tasksDone = lt.count { it.isDone }
             val ms = milestonesOf[id].orEmpty()
-            val counted = lt.isNotEmpty() || lh.isNotEmpty() || allKids.isNotEmpty() || ms.isNotEmpty()
+            val metric = metrics[id]
+            val counted = lt.isNotEmpty() || lh.isNotEmpty() || allKids.isNotEmpty() || ms.isNotEmpty() || metric != null
             val done = isDone(id)
             val horizon = GoalRules.parseHorizon(s[GoalFields.HORIZON].textOrNull)
             val due = s[GoalFields.DUE_DAY].longOrNull
@@ -804,6 +917,7 @@ class Goals(
             val meta = listOfNotNull(
                 GoalRules.horizonLabel(horizon),
                 due?.let { GoalRules.dueLabel(it, today) },
+                metric?.line,
                 ms.takeIf { it.isNotEmpty() }?.let { m -> "${m.count { it.done }} of ${m.size} ${if (m.size == 1) "milestone" else "milestones"}" },
                 lt.takeIf { it.isNotEmpty() }?.let { "$tasksDone of ${it.size} ${if (it.size == 1) "task" else "tasks"}" },
                 lh.takeIf { it.isNotEmpty() }?.let { "${it.size} ${if (it.size == 1) "habit" else "habits"}" },
@@ -837,6 +951,7 @@ class Goals(
                 // With no open task, the first milestone not yet reached is the next step.
                 nextStep = next?.title ?: ms.firstOrNull { !it.done }?.title,
                 milestones = ms,
+                metric = metric,
             )
         }
         val order = compareBy<String> { GoalRules.parseHorizon(snaps[it]?.get(GoalFields.HORIZON)?.textOrNull).ordinal }

@@ -1647,6 +1647,41 @@ final class CoreModel {
         MekaHaptics.tick()
         return try? await core.removeGoalMilestone(id: id)
     }
+    /// Goals, properly, slice 3: the number to reach ("£2,000", "12 books"); blank stops counting. False when it
+    /// isn't a number (nothing written).
+    func setGoalNumber(_ goalID: String, _ text: String) async -> Bool {
+        guard let core else { return false }
+        do {
+            let ok = try await core.setGoalNumber(goalId: goalID, text: text).boolValue
+            if ok { MekaHaptics.light() } else { MekaHaptics.tick() }
+            return ok
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+    /// An update ("+200", "-1", "=1200"). `.added(id)` for Undo, `.noChange`, or `.notANumber`.
+    enum GoalUpdateResult: Equatable { case added(String), noChange, notANumber }
+    func addGoalUpdate(_ goalID: String, _ text: String) async -> GoalUpdateResult {
+        guard let core else { return .notANumber }
+        do {
+            let id = try await core.addGoalUpdate(goalId: goalID, text: text)
+            MekaHaptics.light()
+            return id.map { .added($0) } ?? .noChange
+        } catch {
+            MekaHaptics.tick()
+            return .notANumber
+        }
+    }
+    func removeGoalUpdate(_ id: String) {
+        MekaHaptics.tick()
+        run { _ = try await $0.removeGoalUpdate(id: id) }
+    }
+    /// Each tick of the habit adds 1 to the goal's number (nil stops it).
+    func setGoalNumberHabit(_ goalID: String, _ habitID: String?) {
+        MekaHaptics.tick()
+        run { try await $0.setGoalNumberHabit(goalId: goalID, habitId: habitID) }
+    }
     /// "Link a task": open tasks matching the words, not already on the goal.
     func goalLinkCandidates(_ goalID: String, _ query: String) async -> [MekaTask] {
         guard let core else { return [] }

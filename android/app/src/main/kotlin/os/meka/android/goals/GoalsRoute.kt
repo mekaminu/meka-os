@@ -79,6 +79,9 @@ import os.meka.android.today.TypingSaves
 import os.meka.core.domain.TextAutosave
 import os.meka.core.domain.GoalHorizon
 import os.meka.core.domain.GoalItem
+import os.meka.core.domain.GoalMetricRules
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.drawscope.clipRect
 import os.meka.core.domain.GoalRules
 import os.meka.core.domain.Goals
 import os.meka.core.domain.HabitItem
@@ -201,6 +204,17 @@ fun GoalsRoute(core: MekaCore) {
                     addMilestone = { t -> haptics.light(); act { core.addGoalMilestone(g.id, t) } },
                     tickMilestone = { id, done -> haptics.light(); act { core.setGoalMilestoneDone(id, done) } },
                     removeMilestone = { id, then -> haptics.tick(); scope.launch { runCatching { core.removeGoalMilestone(id) }.getOrNull()?.let(then) } },
+                    habits = view.habits,
+                    number = { t, then -> scope.launch { val ok = runCatching { core.setGoalNumber(g.id, t) }.getOrDefault(false); if (ok) haptics.light() else haptics.tick(); then(ok) } },
+                    addUpdate = { t, then ->
+                        scope.launch {
+                            val r = runCatching { core.addGoalUpdate(g.id, t) }
+                            if (r.isSuccess) haptics.light() else haptics.tick()
+                            then(r.isSuccess, r.getOrNull())
+                        }
+                    },
+                    removeUpdate = { id -> haptics.tick(); act { core.removeGoalUpdate(id) } },
+                    numberHabit = { h -> haptics.tick(); act { core.setGoalNumberHabit(g.id, h) } },
                 ),
             )
         }
@@ -413,6 +427,13 @@ internal class GoalDetails(
     val tickMilestone: (String, Boolean) -> Unit,
     /** Removes one, then hands its title back for Undo. */
     val removeMilestone: (String, (String) -> Unit) -> Unit,
+    /** Slice 3, numeric goals: the habits a number can count, the number to reach (then: understood), an update
+     *  (then: understood, and its id for Undo, null when it changed nothing), Remove/Undo, and the habit feed. */
+    val habits: List<HabitItem>,
+    val number: (String, (Boolean) -> Unit) -> Unit,
+    val addUpdate: (String, (Boolean, String?) -> Unit) -> Unit,
+    val removeUpdate: (String) -> Unit,
+    val numberHabit: (String?) -> Unit,
 )
 
 @Composable
@@ -438,6 +459,8 @@ private fun GoalRowBody(
                     Text(g.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
                     g.target?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
                     Text(g.meta, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                    // A numeric goal with a due date: where it stands against the pace (slice 3).
+                    g.metric?.paceLine?.let { p -> Text(p, style = MekaType.caption, color = if (p.startsWith("Behind")) Meka.colors.accent else Meka.colors.textSecondary) }
                     // The next step, always shown: the first open task linked to it, else the next milestone, or a prompt.
                     AnimatedContent(g.nextLine, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) }, label = "next-step") { line ->
                         Text(line, style = MekaType.caption, color = if (g.nextStep != null) Meka.colors.accent else Meka.colors.textTertiary)
@@ -468,6 +491,7 @@ private fun GoalRowBody(
                     }
                 }
                 GoalTarget(g, details.target)
+                GoalNumber(g, details)
                 GoalWhy(g, details.why)
                 Milestones(g, details)
                 AddStep(details.addStep)
@@ -544,6 +568,92 @@ private fun Milestones(g: GoalItem, details: GoalDetails) {
         }
         if (g.milestones.size < GoalRules.MAX_MILESTONES) {
             Field("Add a milestone…", title, { title = it.take(GoalRules.MAX_MILESTONE_TITLE) }) { details.addMilestone(title.trim()); title = ""; removed = null }
+        }
+    }
+}
+
+/**
+ * A numeric goal (slice 3): the number to reach ("£2,000", "12 books"; the title's number is offered as one tap), then
+ * the chart, "Add to it" (+200, -1, =1200) with Undo, the latest updates with Remove, and a habit whose ticks add 1.
+ * The chart draws itself left to right on appear (reduced motion: at once); lines under the fields cross-fade.
+ */
+@Composable
+private fun GoalNumber(g: GoalItem, details: GoalDetails) {
+    val reduced = Meka.reducedMotion
+    val m = g.metric
+    var target by rememberSaveable(g.id, m?.targetText) { mutableStateOf(m?.targetText ?: "") }
+    var badTarget by remember(g.id) { mutableStateOf(false) }
+    var update by rememberSaveable(g.id) { mutableStateOf("") }
+    var updateLine by remember(g.id) { mutableStateOf<Pair<String, String?>?>(null) } // text, id to undo
+    val suggestion = remember(g.title) { GoalMetricRules.suggestFromTitle(g.title) }
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text("Number to reach", style = MekaType.caption, color = Meka.colors.textTertiary)
+        Field("A number · £2,000 or 12 books (optional)", target, { target = it.take(40); badTarget = false }) {
+            details.number(target) { ok -> badTarget = !ok }
+        }
+        AnimatedContent(
+            when { badTarget -> "That isn't a number · try £2,000 or 12 books"; m != null -> "${m.line}${m.paceLine?.let { " · $it" } ?: ""}"; else -> null },
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) }, label = "number-line",
+        ) { l -> if (l != null) Text(l, style = MekaType.caption, color = if (badTarget) Meka.colors.critical else Meka.colors.textSecondary) }
+        if (m == null && suggestion != null && !badTarget) Action("Count “$suggestion”") { target = suggestion; details.number(suggestion) { ok -> badTarget = !ok } }
+        if (m != null) {
+            MetricChart(m, details.today)
+            Field("Add to it · +200, -1 or =1200", update, { update = it.take(40) }) {
+                val typed = update
+                details.addUpdate(typed) { ok, id ->
+                    updateLine = if (!ok) "Type a number, like +200 or =1200" to null else if (id == null) "No change" to null else "Added ${typed.trim()}" to id
+                    if (ok) update = ""
+                }
+            }
+            AnimatedContent(updateLine, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) }, label = "update-line") { u ->
+                if (u != null) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(u.first, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                    u.second?.let { id -> Action("Undo") { details.removeUpdate(id); updateLine = null } }
+                }
+            }
+            m.recent.forEach { e ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(e.label, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                    Action("Remove") { details.removeUpdate(e.id) }
+                }
+            }
+            if (details.habits.isNotEmpty()) {
+                val options = listOf<HabitItem?>(null) + details.habits
+                Chips("Each tick of a habit adds 1", options.map { (it?.title ?: "No habit") to (it?.id == m.habitId) }) { i -> details.numberHabit(options[i]?.id) }
+            }
+            Action("Stop counting a number") { target = ""; details.number("") { } }
+        }
+    }
+}
+
+/** The number's chart: its line in the accent, the pace line and the target faint; it draws on from the left. */
+@Composable
+private fun MetricChart(m: os.meka.core.domain.GoalMetric, today: Long) {
+    val reduced = Meka.reducedMotion
+    val plot = remember(m, today) { GoalMetricRules.plot(m, today) }
+    val reveal = remember { Animatable(if (reduced) 1f else 0f) }
+    LaunchedEffect(Unit) { reveal.animateTo(1f, MekaMotion.replan(reduced)) }
+    val accent = Meka.colors.accent
+    val faint = Meka.colors.textTertiary
+    val track = Meka.colors.surfaceRaised
+    Canvas(
+        Modifier.fillMaxWidth().height(56.dp)
+            .semantics { contentDescription = "Chart: ${m.line}${m.paceLine?.let { ", $it" } ?: ""}" },
+    ) {
+        val w = size.width; val h = size.height
+        fun at(p: os.meka.core.domain.PlotPoint) = androidx.compose.ui.geometry.Offset(p.x * w, h - p.y * h)
+        val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))
+        drawLine(track, androidx.compose.ui.geometry.Offset(0f, h - plot.targetY * h), androidx.compose.ui.geometry.Offset(w, h - plot.targetY * h), 1.dp.toPx(), pathEffect = dash)
+        if (plot.pace.size == 2) drawLine(faint, at(plot.pace[0]), at(plot.pace[1]), 1.dp.toPx(), pathEffect = dash)
+        if (plot.line.isNotEmpty()) {
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(at(plot.line[0]).x, at(plot.line[0]).y)
+                plot.line.drop(1).forEach { lineTo(at(it).x, at(it).y) }
+            }
+            clipRect(right = w * reveal.value) {
+                drawPath(path, accent, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+                drawCircle(accent, 3.dp.toPx(), at(plot.line.last()))
+            }
         }
     }
 }

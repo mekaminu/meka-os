@@ -1988,6 +1988,17 @@ class MekaCore(
     suspend fun setGoalMilestoneDone(id: String, done: Boolean) = onCore { goals.setMilestoneDone(id, done) }
     /** Removes a milestone; returns its title for Undo ([addGoalMilestone] adds it back), null if it was already gone. */
     suspend fun removeGoalMilestone(id: String): String? = onCore { goals.removeMilestone(id) }
+    /**
+     * Goals, properly, slice 3: the number to reach ("£2,000", "12 books"); blank makes it an ordinary goal again.
+     * False (nothing written) when it isn't a number.
+     */
+    suspend fun setGoalNumber(goalId: String, text: String?): Boolean = onCore { goals.setMetric(goalId, text) }
+    /** An update to a numeric goal ("+200", "-1", "=1200"); its id for Undo, or null when it changes nothing. */
+    suspend fun addGoalUpdate(goalId: String, text: String): String? = onCore { goals.addMetricEntry(goalId, text) }
+    /** Removes an update (Undo, or Remove in the list). */
+    suspend fun removeGoalUpdate(id: String): Boolean = onCore { goals.removeMetricEntry(id) }
+    /** Each tick of [habitId] adds 1 to the goal's number (null stops it). */
+    suspend fun setGoalNumberHabit(goalId: String, habitId: String?) = onCore { goals.setMetricHabit(goalId, habitId) }
     /** Open tasks to offer under "Link a task" ([os.meka.core.domain.GoalRules.linkCandidates]). */
     suspend fun goalLinkCandidates(goalId: String, query: String): List<os.meka.core.domain.Task> =
         onCore { os.meka.core.domain.GoalRules.linkCandidates(tasks.all(), goalId, query) }

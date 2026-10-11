@@ -80,6 +80,8 @@ object EntityTypes {
     const val CHECKLIST_TEMPLATE = "checklist_template"
     /** A milestone on the way to a goal, "Run 10k" (see [Goals]; Goals, properly, slice 2). */
     const val GOAL_MILESTONE = "goal_milestone"
+    /** Goals, properly, slice 3 (2026-10-11): one update to a numeric goal ("+£200"). */
+    const val GOAL_ENTRY = "goal_entry"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -87,7 +89,7 @@ object EntityTypes {
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
-        CHECKLIST_TEMPLATE, GOAL_MILESTONE,
+        CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY,
     )
 }
 
@@ -210,6 +212,25 @@ object GoalFields {
     const val DUE_DAY = "dueDay"
     /** The bigger goal this one sits under (year → month → week); null at the top. */
     const val PARENT_ID = "parentId"
+    /** Slice 3 (2026-10-11, additive, LWW): a numeric goal's number to reach, in hundredths ("£2,000" = 200000). */
+    const val METRIC_TARGET = "metricTarget"
+    /** Its unit as typed: "£" (a currency, written before the number) or a word written after it ("books", "km"). */
+    const val METRIC_UNIT = "metricUnit"
+    /** A habit whose ticks each add 1 to the number (habit-fed); null for none. */
+    const val METRIC_HABIT_ID = "metricHabitId"
+    /** The local epoch day the number started counting (the chart starts here; habit ticks count from it). */
+    const val METRIC_SINCE_DAY = "metricSinceDay"
+}
+
+/** Goals, properly, slice 3 (2026-10-11, additive): one update to a numeric goal, one entity each. */
+object GoalEntryFields {
+    const val GOAL_ID = "goalId"
+    /** Local epoch day it counts on. */
+    const val DAY = "day"
+    /** Signed, in hundredths ("+£200" = 20000, "-1 book" = -100). */
+    const val AMOUNT = "amountX100"
+    const val AT = "atMs"
+    const val DELETED = ActionableFields.DELETED
 }
 
 /** Goals, properly, slice 2 (2026-10-11, additive): a goal's milestones, one entity each. */
@@ -373,6 +394,9 @@ object MekaSchema : SchemaRegistry {
         // Goal milestones: one removed on any device is gone for good; ticks and titles, the latest edit wins.
         entityType == EntityTypes.GOAL_MILESTONE && field == GoalMilestoneFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.GOAL_MILESTONE -> MergePolicy.Lww
+        // Numeric goal updates: one removed on any device is gone for good; the rest is written once.
+        entityType == EntityTypes.GOAL_ENTRY && field == GoalEntryFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.GOAL_ENTRY -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins
