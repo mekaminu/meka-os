@@ -175,12 +175,12 @@ class GoalsTest {
 
     @Test
     fun goalProgressIsSetByHandUntilSomethingIsLinked() {
-        val goal = g.addGoal("Half marathon", target = "Under 2 hours", horizon = GoalHorizon.MEDIUM)
+        val goal = g.addGoal("Half marathon", target = "Under 2 hours", horizon = GoalHorizon.QUARTER)
         g.setGoalProgress(goal, 40)
         var item = g.view(d.tasks.all()).goals.single()
         assertEquals(40, item.progressPct)
         assertFalse(item.counted)
-        assertEquals("Months · set by hand", item.meta)
+        assertEquals("This quarter · set by hand", item.meta)
 
         val run = g.addHabit("Run", perWeek = 2, goalId = goal)
         val t1 = d.tasks.create(NewTask("Buy shoes"))
@@ -192,13 +192,13 @@ class GoalsTest {
         assertTrue(item.counted)
         // Tasks 1/2 done (1.0 + 0.0), habit 1 of 2 this week (0.5): (1 + 0 + 0.5) / 3 = 50 %.
         assertEquals(50, item.progressPct)
-        assertEquals("Months · 1 of 2 tasks · 1 habit", item.meta)
+        assertEquals("This quarter · 1 of 2 tasks · 1 habit", item.meta)
     }
 
     @Test
     fun finishedGoalsLeaveTheListAndDeletingAGoalUnlinksItsHabits() {
-        val a = g.addGoal("Learn Spanish", horizon = GoalHorizon.LONG)
-        val b = g.addGoal("Clear the loft", horizon = GoalHorizon.SHORT)
+        val a = g.addGoal("Learn Spanish", horizon = GoalHorizon.YEAR)
+        val b = g.addGoal("Clear the loft", horizon = GoalHorizon.WEEK)
         assertEquals(listOf(b, a), g.view(d.tasks.all()).goals.map { it.id })
         g.finishGoal(b)
         val v = g.view(d.tasks.all())

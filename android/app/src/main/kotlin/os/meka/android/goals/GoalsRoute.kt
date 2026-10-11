@@ -185,6 +185,16 @@ fun GoalsRoute(core: MekaCore) {
                 horizon = { hz -> act { core.setGoalHorizon(g.id, hz) } },
                 finish = { haptics.light(); open = null; act { core.finishGoal(g.id) } },
                 delete = { open = null; act { core.deleteGoal(g.id) } },
+                details = GoalDetails(
+                    today = core.todayEpochDay(),
+                    parents = GoalRules.parentChoices(view.goals, g.id),
+                    why = { w -> act { core.setGoalWhy(g.id, w) } },
+                    due = { day -> haptics.tick(); act { core.setGoalDue(g.id, day) } },
+                    parent = { p -> haptics.tick(); act { core.setGoalParent(g.id, p) } },
+                    addStep = { t -> haptics.light(); act { core.addGoalStep(g.id, t) } },
+                    candidates = { q -> core.goalLinkCandidates(g.id, q) },
+                    link = { taskId -> haptics.light(); act { core.setTaskGoal(taskId, g.id) } },
+                ),
             )
         }
         if (view.finishedGoals > 0) item(key = "finished") {
@@ -372,10 +382,33 @@ private fun RollingNumber(n: Int) {
 @Composable
 private fun GoalRow(
     g: GoalItem, expanded: Boolean, onToggle: () -> Unit, modifier: Modifier,
-    step: (Int) -> Unit, horizon: (GoalHorizon) -> Unit, finish: () -> Unit, delete: () -> Unit,
+    step: (Int) -> Unit, horizon: (GoalHorizon) -> Unit, finish: () -> Unit, delete: () -> Unit, details: GoalDetails,
 ) {
     val reduced = Meka.reducedMotion
     val bg by animateColorAsState(if (expanded) Meka.colors.surface else Color.Transparent, MekaMotion.appear(reduced), label = "goal-bg")
+    // A goal under a bigger one sits indented beneath it (year → month → week).
+    Box(modifier.fillMaxWidth().padding(start = MekaSpace.l * g.depth.coerceAtMost(3))) { GoalRowBody(g, expanded, onToggle, bg, step, horizon, finish, delete, details) }
+}
+
+/** What a goal's unfolded settings need beyond the basics (Goals, properly, slice 1). */
+internal class GoalDetails(
+    val today: Long,
+    val parents: List<GoalItem>,
+    val why: (String?) -> Unit,
+    val due: (Long?) -> Unit,
+    val parent: (String?) -> Unit,
+    val addStep: (String) -> Unit,
+    val candidates: suspend (String) -> List<os.meka.core.domain.Task>,
+    val link: (String) -> Unit,
+)
+
+@Composable
+private fun GoalRowBody(
+    g: GoalItem, expanded: Boolean, onToggle: () -> Unit, bg: Color,
+    step: (Int) -> Unit, horizon: (GoalHorizon) -> Unit, finish: () -> Unit, delete: () -> Unit, details: GoalDetails,
+) {
+    val reduced = Meka.reducedMotion
+    val modifier = Modifier
     val fill = remember(g.id) { Animatable(if (reduced) g.progressPct / 100f else 0f) }
     LaunchedEffect(g.progressPct) { fill.animateTo(g.progressPct / 100f, MekaMotion.replan(reduced)) }
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(bg)) {
@@ -393,6 +426,13 @@ private fun GoalRow(
                 Box(Modifier.fillMaxWidth(fill.value.coerceIn(0f, 1f)).height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
             }
             Text(g.meta, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+            // The next step, always shown: the first open task linked to it, or a prompt to add one.
+            AnimatedContent(g.nextStep, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) }, label = "next-step") { next ->
+                Text(
+                    next?.let { "Next · $it" } ?: "No next step yet · add one",
+                    style = MekaType.caption, color = if (next != null) Meka.colors.accent else Meka.colors.textTertiary,
+                )
+            }
         }
         AnimatedVisibility(expanded, enter = unfold(), exit = fold()) {
             Column(
@@ -407,8 +447,57 @@ private fun GoalRow(
                     Action("Finished") { finish() }
                     Action("Delete", critical = true) { delete() }
                 }
-                if (g.counted) Text("Progress counts itself from the habits and tasks linked to this goal.", style = MekaType.caption, color = Meka.colors.textTertiary)
+                if (g.counted) Text("Progress counts itself from the habits, tasks and goals linked to this goal.", style = MekaType.caption, color = Meka.colors.textTertiary)
                 Chips("Horizon", GoalRules.HORIZONS.map { GoalRules.horizonLabel(it) to (it == g.horizon) }) { i -> horizon(GoalRules.HORIZONS[i]) }
+                val dues = remember(details.today) { GoalRules.dueChoices(details.today) }
+                Chips("Done by", dues.map { it.label to (it.day == g.dueDay) }) { i -> details.due(dues[i].day) }
+                if (details.parents.isNotEmpty() || g.parentId != null) {
+                    Chips("Under", listOf("Nothing" to (g.parentId == null)) + details.parents.map { it.title to (it.id == g.parentId) }) { i ->
+                        details.parent(if (i == 0) null else details.parents[i - 1].id)
+                    }
+                }
+                GoalWhy(g, details.why)
+                AddStep(details.addStep)
+                LinkTask(g, details)
+            }
+        }
+    }
+}
+
+/** "Why it matters": Done saves it, and so does closing the settings (typing is never lost, TextAutosave). */
+@Composable
+private fun GoalWhy(g: GoalItem, save: (String?) -> Unit) {
+    var why by rememberSaveable(g.id) { mutableStateOf(g.why ?: "") }
+    val typed by rememberUpdatedState(why)
+    val saved by rememberUpdatedState(g.why ?: "")
+    val saveWhy by rememberUpdatedState(save)
+    DisposableEffect(Unit) {
+        onDispose { if (typed.trim() != saved) saveWhy(typed.trim().ifBlank { null }) }
+    }
+    Column {
+        Text("Why it matters", style = MekaType.caption, color = Meka.colors.textTertiary)
+        Field("Say why, in a line (optional)", why, { why = it.take(GoalRules.MAX_WHY) }) { save(why.trim().ifBlank { null }) }
+    }
+}
+
+/** "Add a step": a new task linked to the goal; it shows as the next step when nothing is planned sooner. */
+@Composable
+private fun AddStep(add: (String) -> Unit) {
+    var title by rememberSaveable { mutableStateOf("") }
+    Field("Add a step…", title, { title = it }) { add(title.trim()); title = "" }
+}
+
+/** "Link a task": type a few words, tap one of your open tasks to count it towards the goal. */
+@Composable
+private fun LinkTask(g: GoalItem, details: GoalDetails) {
+    var query by rememberSaveable(g.id) { mutableStateOf("") }
+    var found by remember(g.id) { mutableStateOf<List<os.meka.core.domain.Task>>(emptyList()) }
+    LaunchedEffect(g.id, query, g.tasksTotal) { found = if (query.isBlank()) emptyList() else runCatching { details.candidates(query) }.getOrDefault(emptyList()) }
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Field("Link a task…", query, { query = it }) {}
+        AnimatedVisibility(found.isNotEmpty(), enter = unfold(), exit = fold()) {
+            Column {
+                found.forEach { t -> Action("+ ${t.title}") { details.link(t.id); query = "" } }
             }
         }
     }
@@ -495,8 +584,8 @@ private fun AddHabit(add: (String, Int, HabitTiming) -> Unit) {
 private fun AddGoal(add: (String, String?, GoalHorizon) -> Unit) {
     var title by rememberSaveable { mutableStateOf("") }
     var target by rememberSaveable { mutableStateOf("") }
-    var horizon by rememberSaveable { mutableStateOf(GoalHorizon.MEDIUM) }
-    val submit = { if (title.isNotBlank()) { add(title, target.ifBlank { null }, horizon); title = ""; target = ""; horizon = GoalHorizon.MEDIUM } }
+    var horizon by rememberSaveable { mutableStateOf(GoalHorizon.MONTH) }
+    val submit = { if (title.isNotBlank()) { add(title, target.ifBlank { null }, horizon); title = ""; target = ""; horizon = GoalHorizon.MONTH } }
     Column(Modifier.padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Field("New goal…", title, { title = it }) { submit() }
         AnimatedVisibility(title.isNotBlank(), enter = unfold(), exit = fold()) {

@@ -99,7 +99,11 @@ enum class SomedayKind { IDEA, PURCHASE, PROJECT, TRIP, BOOK, RESEARCH, APPLICAT
 enum class CommitmentDirection { OWED_BY_ME, OWED_TO_ME }
 /** [HOME]: a home upkeep job (smoke alarm test, gutters, filters; Home upkeep, V1), nothing to pay or renew. */
 enum class ObligationKind { MOT, CAR_TAX, INSURANCE, BOILER, SUBSCRIPTION, BILL, LICENCE, WARRANTY, HOME, OTHER }
-enum class GoalHorizon { SHORT, MEDIUM, LONG }
+/**
+ * A goal's horizon (Goals, properly, slice 1, 2026-10-11). Goals written before then carry SHORT, MEDIUM or LONG; they
+ * are read as MONTH, QUARTER and YEAR ([GoalRules.parseHorizon]) and never rewritten.
+ */
+enum class GoalHorizon { WEEK, MONTH, QUARTER, YEAR, SOMEDAY }
 enum class DecisionStatus { ACTIVE, REVISITING, SUPERSEDED }
 enum class Visibility { HOUSEHOLD, PRIVATE }
 enum class MembershipRole { OWNER, ADULT, CHILD_PROFILE }
@@ -198,6 +202,12 @@ object GoalFields {
     const val TARGET = "target"
     const val HORIZON = "horizon"
     const val PROGRESS_PCT = "progressPct"
+    /** Goals, properly, slice 1 (2026-10-11, additive, LWW): why it matters, in Meka's words. */
+    const val WHY = "why"
+    /** Local epoch day it should be done by; null for none. */
+    const val DUE_DAY = "dueDay"
+    /** The bigger goal this one sits under (year → month → week); null at the top. */
+    const val PARENT_ID = "parentId"
 }
 
 object HabitFields {

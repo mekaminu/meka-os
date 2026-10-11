@@ -1605,6 +1605,31 @@ final class CoreModel {
     func deleteGoal(_ id: String) { run { try await $0.deleteGoal(id: id) } }
     /// Links a task to a goal (nil unlinks); finishing it then counts towards the goal.
     func setTaskGoal(_ taskID: String, _ goalID: String?) { run { try await $0.setTaskGoal(taskId: taskID, goalId: goalID) } }
+    /// Goals, properly, slice 1: why it matters (blank clears it).
+    func setGoalWhy(_ id: String, _ why: String) {
+        let w = why.trimmingCharacters(in: .whitespacesAndNewlines)
+        run { try await $0.setGoalWhy(id: id, why: w.isEmpty ? nil : w) }
+    }
+    /// The day it should be done by (a `GoalRules.dueChoices` day; nil clears it). The Kotlin box is made inside the
+    /// closure so nothing non-Sendable crosses isolation.
+    func setGoalDue(_ id: String, day: Int64?) {
+        MekaHaptics.tick()
+        run { try await $0.setGoalDue(id: id, dueDay: day.map { KotlinLong(longLong: $0) }) }
+    }
+    /// Puts the goal under a bigger one (nil: at the top).
+    func setGoalParent(_ id: String, _ parentID: String?) { MekaHaptics.tick(); run { try await $0.setGoalParent(id: id, parentId: parentID) } }
+    /// "Add a step": a new task linked to the goal.
+    func addGoalStep(_ goalID: String, _ title: String) {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        MekaHaptics.light()
+        run { _ = try await $0.addGoalStep(goalId: goalID, title: t) }
+    }
+    /// "Link a task": open tasks matching the words, not already on the goal.
+    func goalLinkCandidates(_ goalID: String, _ query: String) async -> [MekaTask] {
+        guard let core else { return [] }
+        return (try? await core.goalLinkCandidates(goalId: goalID, query: query)) ?? []
+    }
 
     // MARK: Commands
 

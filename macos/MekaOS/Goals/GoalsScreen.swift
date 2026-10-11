@@ -68,7 +68,9 @@ struct GoalsScreen: View {
                         .font(MekaType.body).foregroundStyle(palette.textSecondary).padding(.vertical, MekaSpace.xs)
                 }
                 ForEach(goals, id: \.id) { g in
-                    GoalRowView(goal: g, expanded: open == g.id, palette: palette) { toggle(g.id) }
+                    GoalRowView(goal: g, all: goals, expanded: open == g.id, palette: palette) { toggle(g.id) }
+                        // A goal under a bigger one sits indented beneath it (year → month → week).
+                        .padding(.leading, MekaSpace.l * CGFloat(min(Int(g.depth), 3)))
                 }
                 if let finished = model.goals?.finishedGoals, finished > 0 {
                     Text("\(finished) finished").font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -276,6 +278,7 @@ private struct GoalRowView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let goal: GoalItem
+    let all: [GoalItem]
     let expanded: Bool
     let palette: MekaPalette
     let toggle: () -> Void
@@ -302,6 +305,11 @@ private struct GoalRowView: View {
                     .frame(height: 6)
                     .padding(.vertical, MekaSpace.xxs)
                     Text(goal.meta).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                    // The next step, always shown: the first open task linked to it, or a prompt to add one.
+                    Text(goal.nextStep.map { "Next · \($0)" } ?? "No next step yet · add one")
+                        .font(MekaType.caption)
+                        .foregroundStyle(goal.nextStep != nil ? palette.accent : palette.textTertiary)
+                        .contentTransition(.opacity)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -318,7 +326,7 @@ private struct GoalRowView: View {
                             Button("+10%") { model.stepGoal(goal.id, from: goal.progressPct, by: 10) }
                         }
                         Menu(GoalRules.shared.horizonLabel(h: goal.horizon)) {
-                            ForEach(0..<3, id: \.self) { i in
+                            ForEach(0..<GoalRules.shared.HORIZONS.count, id: \.self) { i in
                                 Button(GoalRules.shared.horizonLabel(h: GoalRules.shared.horizonAt(index: Int32(i)))) { model.setGoalHorizon(goal.id, index: i) }
                             }
                         }
@@ -328,9 +336,10 @@ private struct GoalRowView: View {
                     }
                     .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
                     if goal.counted {
-                        Text("Progress counts itself from the habits and tasks linked to this goal.")
+                        Text("Progress counts itself from the habits, tasks and goals linked to this goal.")
                             .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
+                    GoalDetailsView(goal: goal, all: all, palette: palette)
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -346,6 +355,62 @@ private struct GoalRowView: View {
     }
 
     private var fraction: Double { min(1, max(0, Double(goal.progressPct) / 100)) }
+}
+
+/// Goals, properly, slice 1: done-by date, the goal it sits under, why it matters, Add a step and Link a task.
+private struct GoalDetailsView: View {
+    @Environment(CoreModel.self) private var model
+    let goal: GoalItem
+    let all: [GoalItem]
+    let palette: MekaPalette
+    @State private var why = ""
+    @State private var step = ""
+    @State private var query = ""
+    @State private var found: [MekaTask] = []
+
+    var body: some View {
+        let dues = GoalRules.shared.dueChoices(today: model.todayEpochDay)
+        let parents = GoalRules.shared.parentChoices(goals: all, goalId: goal.id)
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            HStack(spacing: MekaSpace.l) {
+                Menu(goal.dueDay.map { GoalRules.shared.dueLabel(day: $0.int64Value, today: model.todayEpochDay) } ?? "Done by…") {
+                    ForEach(0..<dues.count, id: \.self) { i in
+                        Button(dues[i].label) { model.setGoalDue(goal.id, day: dues[i].day?.int64Value) }
+                    }
+                }
+                .menuStyle(.button).fixedSize()
+                if !parents.isEmpty || goal.parentId != nil {
+                    Menu(goal.parentTitle.map { "Under “\($0)”" } ?? "Under…") {
+                        Button("Nothing (top level)") { model.setGoalParent(goal.id, nil) }
+                        ForEach(parents, id: \.id) { p in
+                            Button(p.title) { model.setGoalParent(goal.id, p.id) }
+                        }
+                    }
+                    .menuStyle(.button).fixedSize()
+                }
+            }
+            .font(MekaType.itemTitle).foregroundStyle(palette.accent)
+            TextField("Why it matters (optional)", text: $why)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { model.setGoalWhy(goal.id, why) }
+            TextField("Add a step…", text: $step)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { model.addGoalStep(goal.id, step); step = "" }
+            TextField("Link a task…", text: $query).textFieldStyle(.roundedBorder)
+            ForEach(found, id: \.id) { t in
+                Button("+ \(t.title)") { model.setTaskGoal(t.id, goal.id); query = "" }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                    .transition(.opacity)
+            }
+        }
+        .onAppear { why = goal.why ?? "" }
+        // Typing is never lost: a changed "why" saves when the settings close.
+        .onDisappear { if why.trimmingCharacters(in: .whitespacesAndNewlines) != (goal.why ?? "") { model.setGoalWhy(goal.id, why) } }
+        .task(id: "\(query)|\(goal.tasksTotal)") {
+            let q = query
+            found = q.trimmingCharacters(in: .whitespaces).isEmpty ? [] : await model.goalLinkCandidates(goal.id, q)
+        }
+    }
 }
 
 private struct AddHabitRow: View {
@@ -395,7 +460,7 @@ private struct AddGoalRow: View {
                 HStack(spacing: MekaSpace.m) {
                     TextField("What does done look like? (optional)", text: $target).textFieldStyle(.roundedBorder).onSubmit(add)
                     Picker("Horizon", selection: $horizon) {
-                        ForEach(0..<3, id: \.self) { i in
+                        ForEach(0..<GoalRules.shared.HORIZONS.count, id: \.self) { i in
                             Text(GoalRules.shared.horizonLabel(h: GoalRules.shared.horizonAt(index: Int32(i)))).tag(i)
                         }
                     }

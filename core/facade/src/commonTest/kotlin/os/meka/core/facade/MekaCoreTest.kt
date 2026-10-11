@@ -324,9 +324,28 @@ class MekaCoreTest {
     }
 
     @Test
+    fun goalsNestTakeStepsAndSyncToTheMac() = runTest {
+        val a = core("android"); val m = core("mac")
+        val year = a.addGoal("Run a marathon", null, os.meka.core.domain.GoalHorizon.YEAR)
+        val month = a.addGoalUnder(year, "Run 5k", os.meka.core.domain.GoalHorizon.MONTH)
+        val step = a.addGoalStep(month, "Buy running shoes")
+        a.setGoalWhy(year, "Feel fit at 40")
+        assertEquals("Buy running shoes", a.goalsView.value.goals.single { it.id == month }.nextStep)
+        assertEquals(listOf(step), a.goalLinkCandidates(year, "shoes").map { it.id })
+        a.complete(step)
+        a.syncNow(); m.syncNow()
+        val mine = m.goalsView.value.goals
+        assertEquals(listOf(year, month), mine.map { it.id })
+        assertEquals(100, mine[1].progressPct)
+        assertEquals(100, mine[0].progressPct)
+        assertEquals("Feel fit at 40", mine[0].why)
+        assertEquals(null, mine[1].nextStep)
+    }
+
+    @Test
     fun habitsTickSyncAndThePlanMakesRoomForOnesThatAreDue() = runTest {
         val a = core("android"); val m = core("mac")
-        val goal = a.addGoal("Fitter by spring", null, os.meka.core.domain.GoalHorizon.MEDIUM)
+        val goal = a.addGoal("Fitter by spring", null, os.meka.core.domain.GoalHorizon.QUARTER)
         val h = a.addHabit("Stretch", 7, os.meka.core.domain.HabitTiming.ANYTIME, 15, goal)
         assertEquals(os.meka.core.domain.HabitPace.DUE, a.goalsView.value.habits.single().pace)
         val plan = a.planDay()

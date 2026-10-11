@@ -167,6 +167,33 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(plan.habits.isEmpty)
     }
 
+    /// Goals, properly, slice 1: a month goal under a year one, a step that becomes the next step, a due day.
+    func testGoalsNestAndStepsReachSwift() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "goals2-\(UUID().uuidString).db", deviceKey: nil
+        )
+        XCTAssertEqual(GoalRules.shared.HORIZONS.count, 5)
+        XCTAssertEqual(GoalRules.shared.horizonLabel(h: GoalRules.shared.horizonAt(index: 3)), "This year")
+        let year = try await core.addGoal(title: "Run a marathon", target: nil, horizon: GoalRules.shared.horizonAt(index: 3))
+        let month = try await core.addGoalUnder(parentId: year, title: "Run 5k", horizon: GoalRules.shared.horizonAt(index: 1))
+        _ = try await core.addGoalStep(goalId: month, title: "Buy running shoes")
+        let day = GoalRules.shared.dueChoices(today: core.todayEpochDay())[2].day
+        try await core.setGoalDue(id: month, dueDay: day)
+        try await core.setGoalWhy(id: year, why: "Feel fit at 40")
+        let goals = core.goalsView.value.goals
+        XCTAssertEqual(goals.map(\.id), [year, month])
+        XCTAssertEqual(goals[1].depth, 1)
+        XCTAssertEqual(goals[1].parentTitle, "Run a marathon")
+        XCTAssertEqual(goals[1].nextStep, "Buy running shoes")
+        XCTAssertEqual(goals[1].dueDay, day)
+        XCTAssertEqual(goals[0].why, "Feel fit at 40")
+        XCTAssertEqual(goals[0].childCount, 1)
+        let found = try await core.goalLinkCandidates(goalId: year, query: "shoes")
+        XCTAssertEqual(found.map(\.title), ["Buy running shoes"])
+    }
+
     func testFastingThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

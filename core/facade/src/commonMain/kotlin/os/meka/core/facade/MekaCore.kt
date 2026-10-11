@@ -1968,6 +1968,23 @@ class MekaCore(
     suspend fun deleteGoal(id: String) = onCore { goals.deleteGoal(id) }
     /** Links a task to a goal (null unlinks); done tasks then count towards the goal. */
     suspend fun setTaskGoal(taskId: String, goalId: String?) = onCore { goals.setTaskGoal(taskId, goalId) }
+    /** Why the goal matters (blank clears it). */
+    suspend fun setGoalWhy(id: String, why: String?) = onCore { goals.setGoalWhy(id, why) }
+    /** The day it should be done by, from [os.meka.core.domain.GoalRules.dueChoices] (null clears it). */
+    suspend fun setGoalDue(id: String, dueDay: Long?) = onCore { goals.setGoalDue(id, dueDay) }
+    /** Puts the goal under a bigger one ([os.meka.core.domain.GoalRules.parentChoices]); null moves it to the top. */
+    suspend fun setGoalParent(id: String, parentId: String?) = onCore { goals.setGoalParent(id, parentId) }
+    /** A new goal under [parentId] (a month goal under a year one…), its horizon one step shorter by default. */
+    suspend fun addGoalUnder(parentId: String, title: String, horizon: GoalHorizon): String =
+        onCore { goals.addGoal(title, null, horizon, parentId = parentId) }
+    /** "Add a step": a new task linked to the goal; it becomes the next step if nothing else is planned sooner. */
+    suspend fun addGoalStep(goalId: String, title: String): String = onCore {
+        if (!goals.goalExists(goalId)) throw os.meka.core.domain.ValidationException("Goal not found")
+        tasks.create(NewTask(title, goalId = goalId))
+    }
+    /** Open tasks to offer under "Link a task" ([os.meka.core.domain.GoalRules.linkCandidates]). */
+    suspend fun goalLinkCandidates(goalId: String, query: String): List<os.meka.core.domain.Task> =
+        onCore { os.meka.core.domain.GoalRules.linkCandidates(tasks.all(), goalId, query) }
 
     // ---- Fasting ----
 

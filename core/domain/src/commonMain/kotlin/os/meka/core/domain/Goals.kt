@@ -17,7 +17,7 @@ import os.meka.core.sync.fv
  *   can still be met with a spare day; Due once the days left (today included) are no more than one more than the goes
  *   left ("1 left — 2 days to go"); Behind only once the week can no longer be met.
  * - Streaks: a daily habit counts days in a row; any other target counts weeks in a row that met it.
- * - A Goal's progress is counted from what's linked to it (tasks done, habits' share of this week), or set by hand when
+ * - A Goal's progress is counted from what's linked to it (tasks done, habits' share of this week, goals under it), or set by hand when
  *   nothing is linked.
  * - The planner makes room for habits that are behind or due today ([plannerHabits]).
  */
@@ -85,9 +85,23 @@ data class GoalItem(
     val tasksTotal: Int,
     val habitCount: Int,
     val done: Boolean,
-    /** "Months · 3 of 5 tasks · 2 habits", "Years · set by hand". */
+    /** "This month · by Sat 31 Oct · 3 of 5 tasks · 2 habits", "This year · set by hand". */
     val meta: String,
     val hasConflict: Boolean,
+    /** Why it matters, in Meka's words. */
+    val why: String? = null,
+    /** Local epoch day it should be done by. */
+    val dueDay: Long? = null,
+    /** The bigger goal it sits under (only while that goal is open), and its title. */
+    val parentId: String? = null,
+    val parentTitle: String? = null,
+    /** 0 at the top; 1 under a goal; 2 under one of those… The list shows each goal right after its parent. */
+    val depth: Int = 0,
+    /** Open goals under this one. */
+    val childCount: Int = 0,
+    /** The next step: the first open task linked to it (planned or due first, then oldest). */
+    val nextStepTaskId: String? = null,
+    val nextStep: String? = null,
 )
 
 data class GoalsView(
@@ -136,6 +150,8 @@ object GoalRules {
     val HORIZONS: List<GoalHorizon> = enumValues<GoalHorizon>().toList()
     val MINUTE_CHOICES = listOf(5, 10, 15, 30, 45, 60, 90)
     const val DEFAULT_MINUTES = 15
+    /** The longest "why it matters" kept. */
+    const val MAX_WHY = 1_000
 
     /** Index-based access for Swift, which then never needs to name the cases. */
     fun horizonAt(index: Int): GoalHorizon = HORIZONS[index.coerceIn(0, HORIZONS.size - 1)]
@@ -151,10 +167,88 @@ object GoalRules {
     }
 
     fun horizonLabel(h: GoalHorizon): String = when (h) {
-        GoalHorizon.SHORT -> "Weeks"
-        GoalHorizon.MEDIUM -> "Months"
-        GoalHorizon.LONG -> "Years"
+        GoalHorizon.WEEK -> "This week"
+        GoalHorizon.MONTH -> "This month"
+        GoalHorizon.QUARTER -> "This quarter"
+        GoalHorizon.YEAR -> "This year"
+        GoalHorizon.SOMEDAY -> "Someday"
     }
+
+    /** A stored horizon; SHORT, MEDIUM and LONG (before 2026-10-11) read as month, quarter and year. */
+    fun parseHorizon(stored: String?): GoalHorizon = when (stored) {
+        null -> GoalHorizon.MONTH
+        "SHORT" -> GoalHorizon.MONTH
+        "MEDIUM" -> GoalHorizon.QUARTER
+        "LONG" -> GoalHorizon.YEAR
+        else -> enumValues<GoalHorizon>().firstOrNull { it.name == stored } ?: GoalHorizon.MONTH
+    }
+
+    /** The last day of [h]'s period containing [today] (Sunday, month end, quarter end, 31 Dec); null for someday. */
+    fun horizonEnd(h: GoalHorizon, today: Long): Long? {
+        val d = CivilDate.fromEpochDay(today)
+        return when (h) {
+            GoalHorizon.WEEK -> today + (7 - CivilDate.isoDayOfWeek(today))
+            GoalHorizon.MONTH -> CivilDate.toEpochDay(d.year, d.month, CivilDate.lengthOfMonth(d.year, d.month))
+            GoalHorizon.QUARTER -> {
+                val m = ((d.month - 1) / 3) * 3 + 3
+                CivilDate.toEpochDay(d.year, m, CivilDate.lengthOfMonth(d.year, m))
+            }
+            GoalHorizon.YEAR -> CivilDate.toEpochDay(d.year, 12, 31)
+            GoalHorizon.SOMEDAY -> null
+        }
+    }
+
+    /** A due-date choice: "End of this week · Sun 18 Oct" and its day (null: "No date"). */
+    data class DueChoice(val label: String, val day: Long?)
+
+    /** The due-date chips: no date, then the end of this week, month, quarter and year. */
+    fun dueChoices(today: Long): List<DueChoice> =
+        listOf(DueChoice("No date", null)) + listOf(
+            GoalHorizon.WEEK to "End of week", GoalHorizon.MONTH to "End of month",
+            GoalHorizon.QUARTER to "End of quarter", GoalHorizon.YEAR to "End of year",
+        ).map { (h, label) -> horizonEnd(h, today)!!.let { DueChoice("$label · ${CivilDate.shortLabel(it)}", it) } }
+
+    /** "by Sat 31 Oct"; "overdue · was Sat 31 Oct" once the day has passed. */
+    fun dueLabel(day: Long, today: Long): String =
+        if (day < today) "overdue · was ${CivilDate.shortLabel(day)}" else "by ${CivilDate.shortLabel(day)}"
+
+    /**
+     * Goals [goalId] may sit under: open goals that aren't it or anything under it, longest horizon first. A goal sits
+     * under a bigger one (year → month → week), so a goal with a shorter horizon than this one isn't offered.
+     */
+    fun parentChoices(goals: List<GoalItem>, goalId: String): List<GoalItem> {
+        val me = goals.firstOrNull { it.id == goalId } ?: return emptyList()
+        val below = descendants(goals, goalId) + goalId
+        return goals.filter { it.id !in below && it.horizon.ordinal >= me.horizon.ordinal }
+            .sortedWith(compareByDescending<GoalItem> { it.horizon.ordinal }.thenBy { it.title.lowercase() })
+    }
+
+    private fun descendants(goals: List<GoalItem>, id: String): Set<String> {
+        val out = mutableSetOf<String>()
+        var frontier = setOf(id)
+        while (frontier.isNotEmpty()) {
+            frontier = goals.filter { it.parentId in frontier && it.id !in out }.map { it.id }.toSet()
+            out += frontier
+        }
+        return out
+    }
+
+    /**
+     * "Link existing task": open tasks not already linked to [goalId] whose title holds [query] (all when blank),
+     * planned or due first, at most [limit]. A task linked to another goal is offered too (linking moves it).
+     */
+    fun linkCandidates(tasks: List<Task>, goalId: String, query: String, limit: Int = 6): List<Task> {
+        val q = query.trim().lowercase()
+        return tasks.asSequence()
+            .filter { it.lifecycle == Lifecycle.ACTIVE && it.goalId != goalId }
+            .filter { q.isEmpty() || it.title.lowercase().contains(q) }
+            .sortedWith(stepOrder)
+            .take(limit).toList()
+    }
+
+    /** Planned or due first (soonest first), then the oldest. */
+    internal val stepOrder: Comparator<Task> = compareBy<Task> { it.scheduledAtMs ?: it.dueAtMs ?: Long.MAX_VALUE }
+        .thenBy { it.createdAtMs }.thenBy { it.id }
 
     /** Local minutes of the day a timing prefers, as [start, end). */
     fun timingWindow(t: HabitTiming): IntRange = when (t) {
@@ -416,7 +510,15 @@ class Goals(
 
     // ---- Goals ----
 
-    fun addGoal(title: String, target: String? = null, horizon: GoalHorizon = GoalHorizon.MEDIUM): String {
+    fun addGoal(
+        title: String,
+        target: String? = null,
+        horizon: GoalHorizon = GoalHorizon.MONTH,
+        parentId: String? = null,
+        dueDay: Long? = null,
+        why: String? = null,
+    ): String {
+        parentId?.let(::requireGoal)
         val t = cleanTitle(title, "Name the goal")
         val id = ids()
         val fields = linkedMapOf<String, FieldValue>(
@@ -430,6 +532,9 @@ class Goals(
             ActionableFields.PROVENANCE_TRUST to Trust.TRUSTED_USER.name.fv(),
         )
         target?.trim()?.takeIf { it.isNotEmpty() }?.let { fields[GoalFields.TARGET] = it.take(MAX_TITLE).fv() }
+        parentId?.let { fields[GoalFields.PARENT_ID] = it.fv() }
+        dueDay?.let { fields[GoalFields.DUE_DAY] = it.fv() }
+        why?.trim()?.takeIf { it.isNotEmpty() }?.let { fields[GoalFields.WHY] = it.take(GoalRules.MAX_WHY).fv() }
         replica.commitLocal(EntityTypes.GOAL, id, fields)
         return id
     }
@@ -441,6 +546,37 @@ class Goals(
         target?.let { v -> changes[GoalFields.TARGET] = v.trim().takeIf { it.isNotEmpty() }?.take(MAX_TITLE)?.fv() ?: FieldValue.Null }
         horizon?.let { changes[GoalFields.HORIZON] = it.name.fv() }
         if (changes.isNotEmpty()) replica.commitLocal(EntityTypes.GOAL, id, changes)
+    }
+
+    /** Why the goal matters (blank clears it). */
+    fun setGoalWhy(id: String, why: String?) {
+        requireGoal(id)
+        val v = why?.trim()?.takeIf { it.isNotEmpty() }?.take(GoalRules.MAX_WHY)
+        replica.commitLocal(EntityTypes.GOAL, id, mapOf(GoalFields.WHY to (v?.fv() ?: FieldValue.Null)))
+    }
+
+    /** The day it should be done by (null clears it). */
+    fun setGoalDue(id: String, dueDay: Long?) {
+        requireGoal(id)
+        replica.commitLocal(EntityTypes.GOAL, id, mapOf(GoalFields.DUE_DAY to (dueDay?.fv() ?: FieldValue.Null)))
+    }
+
+    /**
+     * Puts the goal under a bigger one (null: at the top). Refuses itself and anything already under it, so the goals
+     * never form a loop on this device; a loop made by two offline devices at once is cut when read ([goals]).
+     */
+    fun setGoalParent(id: String, parentId: String?) {
+        requireGoal(id)
+        if (parentId != null) {
+            requireGoal(parentId)
+            var at: String? = parentId
+            val seen = mutableSetOf<String>()
+            while (at != null && seen.add(at)) {
+                if (at == id) throw ValidationException("A goal can't sit under itself")
+                at = replica.entity(EntityTypes.GOAL, at)?.takeIf { !it.deleted }?.get(GoalFields.PARENT_ID)?.textOrNull
+            }
+        }
+        replica.commitLocal(EntityTypes.GOAL, id, mapOf(GoalFields.PARENT_ID to (parentId?.fv() ?: FieldValue.Null)))
     }
 
     /** Hand-set progress, used while nothing is linked to the goal. */
@@ -466,6 +602,11 @@ class Goals(
         }
         replica.entities(EntityTypes.TASK).filter { it[ActionableFields.GOAL_ID].textOrNull == id }.forEach {
             replica.commitLocal(EntityTypes.TASK, it.ref.entityId, mapOf(ActionableFields.GOAL_ID to FieldValue.Null))
+        }
+        // Goals under it move up to its own parent (or the top).
+        val up = live(EntityTypes.GOAL, id)?.get(GoalFields.PARENT_ID)?.textOrNull
+        replica.entities(EntityTypes.GOAL).filter { !it.deleted && it[GoalFields.PARENT_ID].textOrNull == id }.forEach {
+            replica.commitLocal(EntityTypes.GOAL, it.ref.entityId, mapOf(GoalFields.PARENT_ID to (up?.fv() ?: FieldValue.Null)))
         }
         replica.commitLocal(EntityTypes.GOAL, id, mapOf(ActionableFields.DELETED to true.fv()))
     }
@@ -524,49 +665,104 @@ class Goals(
         )
     }
 
+    /**
+     * Open goals, each right after the goal it sits under (top-level goals by horizon, then oldest), and how many are
+     * finished. Progress counts what's linked — tasks done, habits' share of this week — and each goal under it (a
+     * finished one as 100 %); with nothing linked it is set by hand.
+     */
     fun goals(tasks: List<Task>, habits: List<HabitItem> = habits()): Pair<List<GoalItem>, Int> {
-        val items = replica.entities(EntityTypes.GOAL).map { s ->
-            val id = s.ref.entityId
-            val linkedTasks = tasks.filter { it.goalId == id && it.lifecycle != Lifecycle.CANCELLED && it.lifecycle != Lifecycle.SOMEDAY }
-            val linkedHabits = habits.filter { it.goalId == id }
-            val tasksDone = linkedTasks.count { it.isDone }
-            val counted = linkedTasks.isNotEmpty() || linkedHabits.isNotEmpty()
-            val done = s[ActionableFields.LIFECYCLE].textOrNull == Lifecycle.DONE.name
-            val pct = when {
-                done -> 100
-                counted -> {
-                    val scores = linkedTasks.map { if (it.isDone) 1.0 else 0.0 } +
-                        linkedHabits.map { minOf(1.0, it.doneThisWeek.toDouble() / it.weekTarget.coerceAtLeast(1)) }
-                    (scores.sum() * 100 / scores.size).toInt()
+        val today = today()
+        val snaps = replica.entities(EntityTypes.GOAL).associateBy { it.ref.entityId }
+        fun isDone(id: String) = snaps[id]?.get(ActionableFields.LIFECYCLE)?.textOrNull == Lifecycle.DONE.name
+        // The parent as stored, if it is still there; a loop (two offline devices) is cut at the goal that closes it.
+        val parentOf = HashMap<String, String?>()
+        for (id in snaps.keys.sorted()) {
+            var p = snaps[id]?.get(GoalFields.PARENT_ID)?.textOrNull?.takeIf { it in snaps && it != id }
+            if (p != null) {
+                val seen = mutableSetOf(id)
+                var at: String? = p
+                while (at != null) {
+                    if (!seen.add(at)) { p = null; break }
+                    at = snaps[at]?.get(GoalFields.PARENT_ID)?.textOrNull?.takeIf { it in snaps }
                 }
+            }
+            parentOf[id] = p
+        }
+        val children = parentOf.entries.filter { it.value != null }.groupBy({ it.value!! }, { it.key })
+        val linkedTasks = snaps.keys.associateWith { id -> tasks.filter { it.goalId == id && it.lifecycle != Lifecycle.CANCELLED && it.lifecycle != Lifecycle.SOMEDAY } }
+        val linkedHabits = snaps.keys.associateWith { id -> habits.filter { it.goalId == id } }
+        val pctMemo = HashMap<String, Int>()
+        fun pct(id: String, depth: Int = 0): Int = pctMemo[id] ?: run {
+            val s = snaps.getValue(id)
+            val kids = children[id].orEmpty()
+            val scores = linkedTasks.getValue(id).map { if (it.isDone) 1.0 else 0.0 } +
+                linkedHabits.getValue(id).map { minOf(1.0, it.doneThisWeek.toDouble() / it.weekTarget.coerceAtLeast(1)) } +
+                kids.map { k -> if (depth > 32) 0.0 else pct(k, depth + 1) / 100.0 }
+            val v = when {
+                isDone(id) -> 100
+                scores.isNotEmpty() -> (scores.sum() * 100 / scores.size).toInt()
                 else -> (s[GoalFields.PROGRESS_PCT].longOrNull?.toInt() ?: 0).coerceIn(0, 100)
             }
-            val horizon = s[GoalFields.HORIZON].textOrNull?.let { enumOrNull<GoalHorizon>(it) } ?: GoalHorizon.MEDIUM
+            pctMemo[id] = v
+            v
+        }
+        fun item(id: String, depth: Int): GoalItem {
+            val s = snaps.getValue(id)
+            val lt = linkedTasks.getValue(id)
+            val lh = linkedHabits.getValue(id)
+            val openKids = children[id].orEmpty().filter { !isDone(it) }
+            val allKids = children[id].orEmpty()
+            val tasksDone = lt.count { it.isDone }
+            val counted = lt.isNotEmpty() || lh.isNotEmpty() || allKids.isNotEmpty()
+            val done = isDone(id)
+            val horizon = GoalRules.parseHorizon(s[GoalFields.HORIZON].textOrNull)
+            val due = s[GoalFields.DUE_DAY].longOrNull
+            val kidsDone = allKids.count { isDone(it) }
             val meta = listOfNotNull(
                 GoalRules.horizonLabel(horizon),
-                linkedTasks.takeIf { it.isNotEmpty() }?.let { "$tasksDone of ${it.size} ${if (it.size == 1) "task" else "tasks"}" },
-                linkedHabits.takeIf { it.isNotEmpty() }?.let { "${it.size} ${if (it.size == 1) "habit" else "habits"}" },
+                due?.let { GoalRules.dueLabel(it, today) },
+                lt.takeIf { it.isNotEmpty() }?.let { "$tasksDone of ${it.size} ${if (it.size == 1) "task" else "tasks"}" },
+                lh.takeIf { it.isNotEmpty() }?.let { "${it.size} ${if (it.size == 1) "habit" else "habits"}" },
+                allKids.takeIf { it.isNotEmpty() }?.let {
+                    if (kidsDone > 0) "$kidsDone of ${it.size} goals done" else "${it.size} ${if (it.size == 1) "goal" else "goals"} under it"
+                },
                 if (!counted && !done) "set by hand" else null,
             ).joinToString(" · ")
-            GoalItem(
+            val next = lt.filter { it.lifecycle == Lifecycle.ACTIVE }.minWithOrNull(GoalRules.stepOrder)
+            val parent = parentOf[id]?.takeIf { !isDone(it) }
+            return GoalItem(
                 id = id,
                 title = s[ActionableFields.TITLE].textOrNull ?: "",
                 target = s[GoalFields.TARGET].textOrNull,
                 horizon = horizon,
-                progressPct = pct,
+                progressPct = pct(id),
                 counted = counted,
                 tasksDone = tasksDone,
-                tasksTotal = linkedTasks.size,
-                habitCount = linkedHabits.size,
+                tasksTotal = lt.size,
+                habitCount = lh.size,
                 done = done,
                 meta = meta,
                 hasConflict = replica.conflictsFor(EntityTypes.GOAL, id).isNotEmpty(),
-            ) to (s[ActionableFields.CREATED_AT].longOrNull ?: 0L)
+                why = s[GoalFields.WHY].textOrNull,
+                dueDay = due,
+                parentId = parent,
+                parentTitle = parent?.let { snaps[it]?.get(ActionableFields.TITLE)?.textOrNull },
+                depth = depth,
+                childCount = openKids.size,
+                nextStepTaskId = next?.id,
+                nextStep = next?.title,
+            )
         }
-        val open = items.filter { !it.first.done }
-            .sortedWith(compareBy<Pair<GoalItem, Long>> { it.first.horizon.ordinal }.thenBy { it.second }.thenBy { it.first.id })
-            .map { it.first }
-        return open to (items.size - open.size)
+        val order = compareBy<String> { GoalRules.parseHorizon(snaps[it]?.get(GoalFields.HORIZON)?.textOrNull).ordinal }
+            .thenBy { snaps[it]?.get(ActionableFields.CREATED_AT)?.longOrNull ?: 0L }.thenBy { it }
+        val open = mutableListOf<GoalItem>()
+        fun walk(id: String, depth: Int) {
+            open += item(id, depth)
+            children[id].orEmpty().filter { !isDone(it) }.sortedWith(order).forEach { walk(it, depth + 1) }
+        }
+        // Top level: no parent, or a parent that is finished (the goal then shows on its own).
+        snaps.keys.filter { !isDone(it) && (parentOf[it] == null || isDone(parentOf[it]!!)) }.sortedWith(order).forEach { walk(it, 0) }
+        return open to snaps.keys.count { isDone(it) }
     }
 
     fun view(tasks: List<Task>): GoalsView {
@@ -646,6 +842,8 @@ class Goals(
     private fun live(type: String, id: String): EntitySnapshot? = replica.entity(type, id)?.takeIf { !it.deleted }
 
     private fun requireHabit(id: String) { live(EntityTypes.HABIT, id) ?: throw ValidationException("Habit not found") }
+
+    fun goalExists(id: String): Boolean = live(EntityTypes.GOAL, id) != null
 
     private fun requireGoal(id: String) { live(EntityTypes.GOAL, id) ?: throw ValidationException("Goal not found") }
 
