@@ -85,6 +85,10 @@ final class CoreModel {
     /// and Today's "Your week ahead · …" line on Sunday from 18:00). Read-only.
     private(set) var weekAhead: WeekAheadView?
     var showWeekAhead = false
+    /// Slice 2: Sunday's heads-up on or off and its time (synced with the Fold).
+    private(set) var weekAheadSetting: WeekAheadSettingView?
+    /// Listen on Sunday's heads-up: the week ahead sheet reads itself aloud once open; the sheet clears it.
+    var readWeekAheadOnOpen = false
     /// Errands by location (V1, slice 1): what waits at each place, and what was ticked off lately (Ask → More →
     /// Errands). Synced with the Fold, which (slice 2) reminds Meka when he's near a place.
     private(set) var errands: ErrandView?
@@ -327,6 +331,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await w in core.weekAheadView { self?.weekAhead = w }
+        })
+        observers.append(Task { [weak self] in
+            for await s in core.weekAheadSettingView { self?.weekAheadSetting = s }
         })
         observers.append(Task { [weak self] in
             for await a in core.autonomyView { self?.autonomy = a }
@@ -909,6 +916,13 @@ final class CoreModel {
         MekaHaptics.tick()
         let j = Int32(journeyMin)
         run { _ = try await $0.setLeavingNow(on: on, to: to, journeyMin: j) }
+    }
+
+    /// The week ahead's Sunday heads-up: on or off and its time. Only a Bool and an Int32 cross.
+    func setWeekAhead(on: Bool, minute: Int) {
+        MekaHaptics.tick()
+        let m = Int32(minute)
+        run { _ = try await $0.setWeekAhead(on: on, minute: m) }
     }
 
     /// Saves work hours. Days are ISO (1 = Monday); minutes are local minutes of the day.
@@ -1585,6 +1599,14 @@ final class CoreModel {
                 MekaHaptics.light()
             }
             MacNotifier.remove(key: a.key)
+            return
+        }
+        // Listen on Sunday's week ahead (slice 2): MEKA comes forward with the week ahead reading itself aloud.
+        if a.action == MacNotifier.listenAction {
+            MacNotifier.remove(key: a.key)
+            NSApp.activate()
+            readWeekAheadOnOpen = true
+            showWeekAhead = true
             return
         }
         // The wake alarm's Snooze / Dismiss (Alarms, slice 1); Dismiss brings up the morning brief.

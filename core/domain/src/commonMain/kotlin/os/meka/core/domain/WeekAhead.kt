@@ -1,5 +1,9 @@
 package os.meka.core.domain
 
+import os.meka.core.sync.FieldValue
+import os.meka.core.sync.Replica
+import os.meka.core.sync.fv
+
 /** What a line in the week ahead is about (it picks the lead mark the pane draws). */
 enum class WeekAheadKind { EVENT, FIXTURE, SCHOOL, DATE_NIGHT, DUE, APPOINTMENT }
 
@@ -59,6 +63,29 @@ data class WeekAheadView(
     }
 }
 
+/**
+ * Sunday week ahead, slice 2: whether Sunday's heads-up comes and when (local minute of the day, default 18:00). Synced
+ * as `context_mode/week_ahead` (ADR-008 addendum). Off, the week ahead is still in Ask → More; only the heads-up and
+ * Today's Sunday line stop.
+ */
+data class WeekAheadSetting(val on: Boolean, val minute: Int) {
+    companion object {
+        val DEFAULT = WeekAheadSetting(true, WeekAheadRules.NOTICE_MIN)
+    }
+}
+
+/** What the week ahead's settings row shows: the switch, the time and "On · Sundays at 18:00 · Listen reads it out". */
+data class WeekAheadSettingView(val on: Boolean, val minute: Int, val timeLabel: String, val summary: String, val choices: List<Int>) {
+    companion object {
+        val EMPTY = WeekAheadRules.settingView(null)
+    }
+}
+
+object WeekAheadFields {
+    const val ON = "on"
+    const val MINUTE = "minute"
+}
+
 /** Everything the week ahead reads, as the facade has it. */
 data class WeekAheadInputs(
     /** The events shown on my day (hidden ones stay hidden), Meka's own edits laid over. */
@@ -91,10 +118,16 @@ data class WeekAheadInputs(
  *   from 18:00 until midnight.
  */
 object WeekAheadRules {
-    /** Today's line from Sunday 18:00. */
+    /** Today's line from Sunday 18:00 (the default time; slice 2 makes it a setting). */
     const val NOTICE_MIN = 18 * 60
     /** The heads-up five minutes later, so it doesn't ride in the 18:00 evening digest but arrives on its own. */
     const val HEADS_UP_MIN = NOTICE_MIN + 5
+    /** Minutes after a digest the heads-up waits when its time is a digest's ([headsUpMinute]). */
+    const val AFTER_DIGEST_MIN = 5
+    const val ENTITY_ID = "week_ahead"
+    /** The times offered on both apps (any quarter hour from 06:00 to 22:00 is accepted). */
+    val TIME_CHOICES: List<Int> = listOf(16 * 60, 17 * 60, 18 * 60, 19 * 60, 20 * 60)
+    private val TIME_RANGE = 6 * 60..22 * 60
     const val MAX_LINES = 6
     const val MAX_SYNC = 6
     const val QUIET = "A quiet week so far"
@@ -294,24 +327,74 @@ object WeekAheadRules {
         return WeekAheadView(ws, title(today), ReviewRules.rangeLabel(ws), summary, days, sync, spoken)
     }
 
-    /** Sunday from [NOTICE_MIN] until midnight: Today's header line for the coming week; null otherwise. */
-    fun todayLine(view: WeekAheadView, nowMs: Long, cal: LocalCalendar): WeekAheadToday? {
+    // ---- Slice 2: the time setting ----
+
+    fun validMinute(minute: Int): Boolean = minute in TIME_RANGE && minute % 15 == 0
+
+    fun read(fields: Map<String, FieldValue>?): WeekAheadSetting {
+        if (fields == null) return WeekAheadSetting.DEFAULT
+        val minute = fields[WeekAheadFields.MINUTE]?.longOrNull?.toInt()?.takeIf { validMinute(it) } ?: NOTICE_MIN
+        return WeekAheadSetting(fields[WeekAheadFields.ON]?.boolOrNull ?: true, minute)
+    }
+
+    /** "On · Sundays at 18:00 · Listen reads it out" / "Off · no Sunday heads-up · the week ahead is still here". */
+    fun summary(s: WeekAheadSetting): String =
+        if (s.on) "On · Sundays at ${LocalClock.formatMinute(s.minute)} · Listen reads it out"
+        else "Off · no Sunday heads-up · the week ahead is still here"
+
+    fun settingView(s: WeekAheadSetting?): WeekAheadSettingView {
+        val set = s ?: WeekAheadSetting.DEFAULT
+        val choices = (TIME_CHOICES + set.minute).distinct().sorted()
+        return WeekAheadSettingView(set.on, set.minute, LocalClock.formatMinute(set.minute), summary(set), choices)
+    }
+
+    /** The heads-up's minute: [minute], or [AFTER_DIGEST_MIN] later when a digest goes then, so it arrives on its own. */
+    fun headsUpMinute(minute: Int, digests: List<Int>): Int = if (minute in digests) minute + AFTER_DIGEST_MIN else minute
+
+    /** Sunday from the set time until midnight: Today's header line for the coming week; null otherwise or when off. */
+    fun todayLine(view: WeekAheadView, nowMs: Long, cal: LocalCalendar, setting: WeekAheadSetting = WeekAheadSetting.DEFAULT): WeekAheadToday? {
+        if (!setting.on) return null
         val today = cal.epochDayOf(nowMs)
-        if (CivilDate.isoDayOfWeek(today) != 7 || cal.minuteOfDay(nowMs) < NOTICE_MIN || view.weekStart != today + 1) return null
+        if (CivilDate.isoDayOfWeek(today) != 7 || cal.minuteOfDay(nowMs) < setting.minute || view.weekStart != today + 1) return null
         return WeekAheadToday("Your week ahead · ${view.summary}", "Your week ahead: ${view.summary.replace(" · ", ", ")}. Opens the week ahead.")
     }
 
-    /** Sunday's heads-up at [HEADS_UP_MIN] for the week starting tomorrow; gone by Monday noon. */
-    fun notices(view: WeekAheadView, nowMs: Long, cal: LocalCalendar): List<Notice> {
+    /**
+     * Sunday's heads-up at the set time (18:05 by default: [headsUpMinute] after the 18:00 evening digest) for the week
+     * starting tomorrow, with **Listen** (opens the week ahead reading itself aloud); gone by Monday noon; none when off.
+     */
+    fun notices(
+        view: WeekAheadView, nowMs: Long, cal: LocalCalendar,
+        setting: WeekAheadSetting = WeekAheadSetting.DEFAULT, digests: List<Int> = NotificationSettings.DEFAULT_DIGESTS,
+    ): List<Notice> {
+        if (!setting.on) return emptyList()
         val today = cal.epochDayOf(nowMs)
         if (CivilDate.isoDayOfWeek(today) != 7 || view.weekStart != today + 1) return emptyList()
         val text = if (view.sync.isEmpty()) view.summary else "${view.summary}. ${ShutdownRules.count(view.sync.size, "thing")} to sort out with Jeanette."
         return listOf(
             Notice(
                 key = "weekahead:${view.weekStart}", source = NoticeSource.WEEK_AHEAD, tier = NoticeTier.HEADS_UP,
-                title = "Your week ahead", text = text, atMs = cal.toEpochMs(today, HEADS_UP_MIN), target = NoticeTarget.WEEK_AHEAD,
-                expiresAtMs = cal.toEpochMs(today + 1, 12 * 60),
+                title = "Your week ahead", text = text, atMs = cal.toEpochMs(today, headsUpMinute(setting.minute, digests)),
+                target = NoticeTarget.WEEK_AHEAD, expiresAtMs = cal.toEpochMs(today + 1, 12 * 60),
+                actions = listOf(NoticeAction.LISTEN),
             ),
         )
+    }
+}
+
+/** The setting, synced (Sunday week ahead, slice 2). */
+class WeekAheadSettings(private val replica: Replica) {
+    fun setting(): WeekAheadSetting = WeekAheadRules.read(replica.entity(EntityTypes.CONTEXT_MODE, WeekAheadRules.ENTITY_ID)?.fields)
+
+    /** False (nothing written) when the minute isn't a quarter hour from 06:00 to 22:00, or nothing changes. */
+    fun set(on: Boolean, minute: Int): Boolean {
+        if (!WeekAheadRules.validMinute(minute)) return false
+        val next = WeekAheadSetting(on, minute)
+        if (replica.entity(EntityTypes.CONTEXT_MODE, WeekAheadRules.ENTITY_ID) != null && setting() == next) return false
+        replica.commitLocal(
+            EntityTypes.CONTEXT_MODE, WeekAheadRules.ENTITY_ID,
+            mapOf(WeekAheadFields.ON to on.fv(), WeekAheadFields.MINUTE to minute.toLong().fv()),
+        )
+        return true
     }
 }

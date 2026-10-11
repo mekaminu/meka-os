@@ -46,4 +46,27 @@ class WeekAheadFacadeTest {
         assertEquals(NoticeTarget.WEEK_AHEAD, n.target)
         assertEquals("Your week ahead · ${fold.weekAheadView.value.summary}", fold.today.value.weekAhead?.text)
     }
+
+    @Test
+    fun theSundayTimeSettingSyncsAndMovesTheHeadsUp() = runTest {
+        val fold = core()
+        assertEquals("18:00", fold.weekAheadSettingView.value.timeLabel)
+        assertEquals("On · Sundays at 19:00 · Listen reads it out", fold.setWeekAhead(true, 19 * 60))
+        assertNull(fold.setWeekAhead(true, 19 * 60)) // nothing changed
+        assertNull(fold.setWeekAhead(true, 23 * 60 + 30)) // out of range
+        assertEquals(19 * 60, fold.weekAheadSettingView.value.minute)
+
+        now += 3_600_000L + 5 * 60_000L // 18:05: not yet
+        val early = fold.governNotifications(null, DeviceAlerts.ALL)
+        assertTrue(early.post.none { it.source == NoticeSource.WEEK_AHEAD })
+        assertNull(fold.today.value.weekAhead)
+        now += 55 * 60_000L // 19:00, on the hour (no digest then), with Listen
+        val r = fold.governNotifications(early.stateEncoded, DeviceAlerts.ALL)
+        assertEquals(listOf(os.meka.core.domain.NoticeAction.LISTEN), r.post.single { it.source == NoticeSource.WEEK_AHEAD }.actions)
+
+        // Off: no heads-up next Sunday either, and no Today line; the pane still has the week.
+        assertEquals("Off · no Sunday heads-up · the week ahead is still here", fold.setWeekAhead(false, 19 * 60))
+        assertNull(fold.today.value.weekAhead)
+        assertEquals("Next week", fold.weekAheadView.value.title)
+    }
 }

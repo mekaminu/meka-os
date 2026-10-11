@@ -147,6 +147,7 @@ class MekaCore(
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
     private val protectedTime = os.meka.core.domain.ProtectedTime(replica)
     private val leavingNow = os.meka.core.domain.LeavingNow(replica)
+    private val weekAheadSettings = os.meka.core.domain.WeekAheadSettings(replica)
     private val autonomy = os.meka.core.domain.Autonomy(replica, nowMs)
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -463,6 +464,10 @@ class MekaCore(
      * night, appointments, renewals, weather) and the family sync (Ask → More → Week ahead; Sunday's 18:00 heads-up).
      */
     val weekAheadView: StateFlow<os.meka.core.domain.WeekAheadView> = _weekAhead.asStateFlow()
+
+    private val _weekAheadSetting = MutableStateFlow(os.meka.core.domain.WeekAheadSettingView.EMPTY)
+    /** The week ahead's Sunday heads-up (slice 2): on or off and its time (default 18:00). Synced. */
+    val weekAheadSettingView: StateFlow<os.meka.core.domain.WeekAheadSettingView> = _weekAheadSetting.asStateFlow()
 
     private val _autonomy = MutableStateFlow(os.meka.core.domain.AutonomyView.EMPTY)
     /**
@@ -1840,6 +1845,18 @@ class MekaCore(
         os.meka.core.domain.LeavingRules.tap(
             key, shown, leavingNow.setting(), officeToday(), lineStatus.snapshot(), nowMs(), ZoneCalendar(timeZone), edit,
         )
+    }
+
+    // ---- Sunday week ahead (V1, slice 2; Ask → More → Week ahead → Sunday heads-up) ----
+
+    /**
+     * Sets Sunday's week-ahead heads-up: on or off and its time ([minute], a quarter hour from 06:00 to 22:00). Returns
+     * the summary line, or null when nothing changed or the time doesn't make sense.
+     */
+    suspend fun setWeekAhead(on: Boolean, minute: Int): String? = onCore {
+        if (!weekAheadSettings.set(on, minute)) return@onCore null
+        refresh()
+        os.meka.core.domain.WeekAheadRules.summary(weekAheadSettings.setting())
     }
 
     // ---- Date night (V1, slice 1; Ask → More → Date night) ----
@@ -3979,11 +3996,12 @@ class MekaCore(
             dateNight = os.meka.core.domain.DateNightRules.todayLine(dateNightNow, todayDay, cal.minuteOfDay(nowMs())),
             // Train-time queue, slice 1: on an office day's commute, what's saved for the train.
             trainQueue = os.meka.core.domain.QueueRules.trainLine(trainQueue.items(), office, nowMs(), cal),
-            weekAhead = os.meka.core.domain.WeekAheadRules.todayLine(weekAheadNow, nowMs(), cal),
+            weekAhead = os.meka.core.domain.WeekAheadRules.todayLine(weekAheadNow, nowMs(), cal, weekAheadSettings.setting()),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
         _leaving.value = os.meka.core.domain.LeavingRules.view(leavingNow.setting())
+        _weekAheadSetting.value = os.meka.core.domain.WeekAheadRules.settingView(weekAheadSettings.setting())
         _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs())
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
@@ -4091,6 +4109,7 @@ class MekaCore(
             goals = _goals.value,
             leaving = leavingNow.setting(),
             weekAhead = _weekAhead.value,
+            weekAheadSetting = weekAheadSettings.setting(),
         )
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */

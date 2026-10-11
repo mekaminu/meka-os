@@ -125,6 +125,18 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
                 ))
                 return@forEach
             }
+            // Listen (Sunday week ahead, slice 2): opens MEKA on the week ahead, reading it aloud.
+            if (a == NoticeAction.LISTEN) {
+                b.addAction(0, NotifyRules.actionLabel(a), PendingIntent.getActivity(
+                    context, NotifyRouting.actionRequestCode(n.key, a),
+                    Intent(context, MainActivity::class.java)
+                        .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_WEEK_AHEAD_LISTEN)
+                        .putExtra(MainActivity.EXTRA_CANCEL, NotifyRouting.notificationId(n.postId))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                ))
+                return@forEach
+            }
             val i = Intent(context, NoticeActionReceiver::class.java)
                 .setAction(NoticeActionReceiver.ACTION_ANSWER)
                 .putExtra(NoticeActionReceiver.EXTRA_KEY, n.key)

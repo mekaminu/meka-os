@@ -313,6 +313,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(WeekAheadRules.shared.weekStart(today: 20737), 20738)
     }
 
+    func testWeekAheadSettingReachesSwift() async throws {
+        // Sunday week ahead, slice 2: the heads-up's time setting and the Listen button's name.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "weekahead2-\(UUID().uuidString).db", deviceKey: nil
+        )
+        XCTAssertEqual(core.weekAheadSettingView.value.timeLabel, "18:00")
+        let line = try await core.setWeekAhead(on: true, minute: 1140)
+        XCTAssertEqual(line, "On · Sundays at 19:00 · Listen reads it out")
+        XCTAssertEqual(core.weekAheadSettingView.value.minute, 1140)
+        XCTAssertTrue(core.weekAheadSettingView.value.choices.map { $0.int32Value }.contains(1140))
+        XCTAssertEqual(NotifyRules.shared.actionName(a: NoticeAction.listen), "LISTEN")
+        XCTAssertEqual(NotifyRules.shared.actionLabel(a: NoticeAction.listen), "Listen")
+    }
+
     func testGoalBreakdownReachesSwift() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

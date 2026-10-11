@@ -204,7 +204,11 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.BRIEF) { BriefPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.NEWS) { NewsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.SHUTDOWN) { ShutdownPane(core, onClose = { pane = null }) }
-        MekaPane(visible = pane == MoreItem.WEEK_AHEAD) { WeekAheadPane(core, onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.WEEK_AHEAD) {
+            // Listen on Sunday's heads-up (slice 2): the pane reads the week aloud as it opens.
+            val listenWeek by remember(healthApp) { healthApp?.listenWeekAhead ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
+            WeekAheadPane(core, onClose = { pane = null }, listenNow = listenWeek, onListened = { healthApp?.listenWeekAhead?.value = false })
+        }
         MekaPane(visible = pane == MoreItem.SCHOOL) { SchoolPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.DINNERS) { MealsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.DATE_NIGHT) { DateNightPane(core, onClose = { pane = null }) }

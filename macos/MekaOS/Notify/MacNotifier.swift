@@ -74,6 +74,8 @@ enum MacNotifier {
     static let undoAction = "meka.undo"
     /// Copy on a "Leaving now" notification: the core's `NoticeAction.COPY_MESSAGE` name.
     static let copyMessageAction = "COPY_MESSAGE"
+    /// Listen on Sunday's week ahead: the core's `NoticeAction.LISTEN` name. It opens MEKA, so it brings it forward.
+    static let listenAction = "LISTEN"
 
     /// One macOS category per set of buttons: "meka.actions.WENT.DIDNT_GO".
     nonisolated static func categoryID(names: [String]) -> String { "meka.actions." + names.joined(separator: ".") }
@@ -83,7 +85,9 @@ enum MacNotifier {
         let center = UNUserNotificationCenter.current()
         let existing = await center.notificationCategories()
         guard !existing.contains(where: { $0.identifier == id }) else { return }
-        let actions = buttons.map { UNNotificationAction(identifier: $0.0, title: $0.1, options: []) }
+        let actions = buttons.map {
+            UNNotificationAction(identifier: $0.0, title: $0.1, options: $0.0 == listenAction ? UNNotificationActionOptions.foreground : UNNotificationActionOptions())
+        }
         center.setNotificationCategories(existing.union([
             UNNotificationCategory(identifier: id, actions: actions, intentIdentifiers: [], options: []),
         ]))

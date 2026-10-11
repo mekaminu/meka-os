@@ -51,7 +51,12 @@ enum class NoticeAction(val label: String) {
     /** Opens the chat with the words filled in, for Meka to change and send himself. Fold only. */
     EDIT_MESSAGE("Edit"),
     /** Copies the words (the Mac, which can't send a WhatsApp message). Mac only. */
-    COPY_MESSAGE("Copy");
+    COPY_MESSAGE("Copy"),
+    /**
+     * Sunday's week ahead ([WeekAheadRules.notices], slice 2): opens the week ahead reading itself aloud in MEKA's
+     * voice. Both apps; it changes nothing.
+     */
+    LISTEN("Listen");
 
     /** Whether a device that can [send] messages (the Fold) shows it: Send and Edit there, Copy elsewhere. */
     fun shownOn(send: Boolean): Boolean = when (this) {
@@ -575,8 +580,9 @@ object NoticeSources {
         goals: GoalsView = GoalsView.EMPTY,
         /** "Leaving now": the setting, for the draft when an office day's work ends ([LeavingRules.notices]). */
         leaving: LeavingSetting? = null,
-        /** The Sunday week ahead, for Sunday evening's heads-up ([WeekAheadRules.notices]). */
+        /** The Sunday week ahead, for Sunday evening's heads-up ([WeekAheadRules.notices]), and its time setting. */
         weekAhead: WeekAheadView? = null,
+        weekAheadSetting: WeekAheadSetting = WeekAheadSetting.DEFAULT,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -690,7 +696,7 @@ object NoticeSources {
         out += AppointmentRules.notices(appointments, nowMs, cal)
         out += GoalRhythmRules.notices(goals.goals, goals.month, nowMs, cal)
         if (leaving != null) out += LeavingRules.notices(leaving, office, lines, nowMs, cal)
-        if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal)
+        if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.

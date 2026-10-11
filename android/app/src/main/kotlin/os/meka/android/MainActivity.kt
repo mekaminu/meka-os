@@ -101,6 +101,14 @@ class MainActivity : ComponentActivity() {
                 app.openWeekAhead.value = true
                 app.openDestination.value = ShellDestination.ASK
             }
+            // Listen on that heads-up (slice 2): the same pane, reading the week aloud; the notification has done its job.
+            open == OPEN_WEEK_AHEAD_LISTEN -> {
+                val id = intent.getIntExtra(EXTRA_CANCEL, 0)
+                if (id != 0) androidx.core.app.NotificationManagerCompat.from(this).cancel(id)
+                app.listenWeekAhead.value = true
+                app.openWeekAhead.value = true
+                app.openDestination.value = ShellDestination.ASK
+            }
             // The News widget: Today with News on the story ("" = News itself, which leads with the match).
             open.startsWith(OPEN_NEWS_PREFIX) -> app.openNewsStory.value = open.removePrefix(OPEN_NEWS_PREFIX)
             // The side button or the headphones' button (TalkStartActivity), or the Talk widget: Ask, already listening.
@@ -138,6 +146,9 @@ class MainActivity : ComponentActivity() {
         const val OPEN_LEAVE = "leave"
         /** Ask → More → Week ahead, its pane up (Sunday's week-ahead heads-up). */
         const val OPEN_WEEK_AHEAD = "week_ahead"
+        /** The same, reading itself aloud (Listen on the heads-up); [EXTRA_CANCEL] is the notification to take away. */
+        const val OPEN_WEEK_AHEAD_LISTEN = "week_ahead_listen"
+        const val EXTRA_CANCEL = "os.meka.cancel"
         /** Ask → More → Errands, its pane up (the near-a-place reminder). */
         const val OPEN_ERRANDS = "errands"
         /** "dest:LISTS" opens Lists. */

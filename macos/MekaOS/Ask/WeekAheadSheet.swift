@@ -5,15 +5,21 @@ import SwiftUI
 /// by day — what kind of day (office or from home with the hours, annual leave, a bank holiday), the weather while the
 /// forecast reaches it, then events, fixtures, school, date night, appointments and renewals in time order — and
 /// FAMILY SYNC, what needs both Meka and Jeanette. Read-only; Today's "Your week ahead · …" line opens it on Sunday
-/// evening. Nothing crosses to the core from here.
+/// evening.
+///
+/// Slice 2: **▶ Listen** reads the week aloud in MEKA's voice (else the Mac's own); Listen on Sunday's heads-up opens
+/// the sheet already reading (`readWeekAheadOnOpen`). **Sunday heads-up**: on or off and its time (default 18:00),
+/// synced with the Fold; only a Bool and an Int32 cross to the core.
 ///
 /// Motion: the sheet scale-fades (system); the summary cross-fades as it changes; the days and the family sync stagger
-/// in 40 ms apart. Reduce Motion: cross-fades.
+/// in 40 ms apart; Listen's label cross-fades to "■ Stop"; the time picker fades away when the heads-up is off. Reduce
+/// Motion: cross-fades.
 struct WeekAheadSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
+    @State private var speaker = MekaSpeaker()
 
     var body: some View {
         let v = model.weekAhead ?? WeekAheadView.companion.EMPTY
@@ -21,6 +27,18 @@ struct WeekAheadSheet: View {
             Text("Week ahead").font(MekaType.upNextTitle).staggeredAppear(0)
             Text("\(v.title) · \(v.rangeLabel)").font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .staggeredAppear(0)
+            if !v.spoken.isEmpty {
+                Button { toggleListen() } label: {
+                    Text(speaker.speaking ? "■  Stop" : "▶  Listen")
+                        .font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                        .contentTransition(.opacity)
+                }
+                .buttonStyle(.borderless)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: speaker.speaking)
+                .help(speaker.speaking ? "Stop reading" : "Read the week aloud")
+                .accessibilityLabel(speaker.speaking ? "Stop reading the week" : "Read the week aloud")
+                .staggeredAppear(0)
+            }
             Text(v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
@@ -49,6 +67,7 @@ struct WeekAheadSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxHeight: 480)
+            headsUp
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
@@ -58,6 +77,60 @@ struct WeekAheadSheet: View {
         .padding(MekaSpace.l)
         .frame(width: 480)
         .background(palette.surface)
+        .onAppear { speaker.attach(model); readIfAsked() }
+        .onChange(of: model.weekAhead?.spoken) { readIfAsked() }
+        .onChange(of: model.readWeekAheadOnOpen) { readIfAsked() }
+        .onDisappear {
+            speaker.stop()
+            model.readWeekAheadOnOpen = false
+        }
+    }
+
+    /// Listen on Sunday's heads-up: reads once the week is in, once.
+    private func readIfAsked() {
+        guard model.readWeekAheadOnOpen, let v = model.weekAhead, !v.spoken.isEmpty else { return }
+        model.readWeekAheadOnOpen = false
+        if !speaker.speaking { speaker.say(v.spoken, reading: true) }
+    }
+
+    /// Listen reads the week aloud (light haptic); Stop ends it (tick haptic).
+    private func toggleListen() {
+        if speaker.speaking {
+            MekaHaptics.tick()
+            speaker.stop()
+        } else if let v = model.weekAhead, !v.spoken.isEmpty {
+            MekaHaptics.light()
+            speaker.say(v.spoken, reading: true)
+        }
+    }
+
+    /// Sunday heads-up: a switch and the time, synced with the Fold. The line under it cross-fades.
+    private var headsUp: some View {
+        let s = model.weekAheadSetting ?? WeekAheadSettingView.companion.EMPTY
+        let on = s.on
+        let minute = Int(s.minute)
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            label("Sunday heads-up")
+            HStack(spacing: MekaSpace.m) {
+                Toggle(isOn: Binding(get: { on }, set: { model.setWeekAhead(on: $0, minute: minute) })) {
+                    Text(s.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: s.summary)
+                }
+                .toggleStyle(.switch)
+                if on {
+                    Picker("Time", selection: Binding(get: { minute }, set: { model.setWeekAhead(on: true, minute: $0) })) {
+                        ForEach(s.choices.map { Int($0.int32Value) }, id: \.self) { m in
+                            Text(LocalClock.companion.formatMinute(m: Int32(m))).tag(m)
+                        }
+                    }
+                    .labelsHidden().frame(width: 90)
+                    .transition(.opacity)
+                }
+            }
+        }
+        .padding(.top, MekaSpace.m)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
     }
 
     private func label(_ text: String) -> some View {

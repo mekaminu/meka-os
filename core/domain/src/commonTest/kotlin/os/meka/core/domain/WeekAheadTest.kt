@@ -139,4 +139,33 @@ class WeekAheadTest {
         val hol = HolidayCalendar(mapOf(mon to "Bank holiday"))
         assertEquals("Bank holiday · no work", WeekAheadRules.dayLine(WorkHours(WorkSchedule.DEFAULT, hol), hol, mon))
     }
+
+    @Test
+    fun theTimeSettingMovesTheHeadsUpAndOffStopsIt() {
+        val v = view(nowMs = at(sun, 9))
+        // The default heads-up carries Listen.
+        assertEquals(listOf(NoticeAction.LISTEN), WeekAheadRules.notices(v, at(sun, 9), cal).single().actions)
+        // 19:00: no digest then, so it comes on the hour; Today's line from 19:00.
+        val seven = WeekAheadSetting(true, 19 * 60)
+        assertEquals(at(sun, 19), WeekAheadRules.notices(v, at(sun, 9), cal, seven).single().atMs)
+        assertNull(WeekAheadRules.todayLine(v, at(sun, 18, 30), cal, seven))
+        assertEquals("Your week ahead · ${v.summary}", WeekAheadRules.todayLine(v, at(sun, 19), cal, seven)!!.text)
+        // A time that is a digest's waits five minutes; with digests moved, 18:00 comes on the hour.
+        assertEquals(18 * 60 + 5, WeekAheadRules.headsUpMinute(18 * 60, NotificationSettings.DEFAULT_DIGESTS))
+        assertEquals(at(sun, 18), WeekAheadRules.notices(v, at(sun, 9), cal, WeekAheadSetting.DEFAULT, listOf(12 * 60)).single().atMs)
+        // Off: no heads-up, no Today line; the week itself is unchanged.
+        val off = WeekAheadSetting(false, 18 * 60)
+        assertTrue(WeekAheadRules.notices(v, at(sun, 9), cal, off).isEmpty())
+        assertNull(WeekAheadRules.todayLine(v, at(sun, 20), cal, off))
+        // Reading what's stored: a bad minute falls back to 18:00; the view offers the choices plus an odd stored time.
+        assertEquals(WeekAheadSetting.DEFAULT, WeekAheadRules.read(null))
+        assertEquals(WeekAheadSetting(false, 18 * 60), WeekAheadRules.read(mapOf(WeekAheadFields.ON to os.meka.core.sync.FieldValue.Bool(false), WeekAheadFields.MINUTE to os.meka.core.sync.FieldValue.Int64(18L * 60 + 7))))
+        assertTrue(WeekAheadRules.validMinute(17 * 60 + 45))
+        assertTrue(!WeekAheadRules.validMinute(23 * 60))
+        val sv = WeekAheadRules.settingView(WeekAheadSetting(true, 18 * 60 + 30))
+        assertEquals("18:30", sv.timeLabel)
+        assertEquals("On · Sundays at 18:30 · Listen reads it out", sv.summary)
+        assertEquals(listOf(16 * 60, 17 * 60, 18 * 60, 18 * 60 + 30, 19 * 60, 20 * 60), sv.choices)
+        assertEquals("Off · no Sunday heads-up · the week ahead is still here", WeekAheadRules.summary(off))
+    }
 }

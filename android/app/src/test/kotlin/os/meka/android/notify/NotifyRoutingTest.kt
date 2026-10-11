@@ -74,4 +74,16 @@ class NotifyRoutingTest {
         assertTrue(os.meka.core.domain.NotifyRules.isLeaving(n.key))
         assertTrue(NotifyRouting.actionRequestCode(n.key, NoticeAction.SEND_MESSAGE) != NotifyRouting.actionRequestCode(n.key, NoticeAction.EDIT_MESSAGE))
     }
+
+    @Test
+    fun weekAheadListenShowsOnBothApps() {
+        val n = os.meka.core.domain.Notice(
+            key = "weekahead:20738", source = os.meka.core.domain.NoticeSource.WEEK_AHEAD, tier = os.meka.core.domain.NoticeTier.HEADS_UP,
+            title = "Your week ahead", text = "5 office days", atMs = 0L,
+            target = os.meka.core.domain.NoticeTarget.WEEK_AHEAD, actions = listOf(NoticeAction.LISTEN),
+        )
+        assertEquals(listOf(NoticeAction.LISTEN), os.meka.core.domain.NotifyRules.actionsOn(n, send = true))
+        assertEquals(listOf(NoticeAction.LISTEN), os.meka.core.domain.NotifyRules.actionsOn(n, send = false))
+        assertEquals("Listen", os.meka.core.domain.NotifyRules.actionLabel(NoticeAction.LISTEN))
+    }
 }
