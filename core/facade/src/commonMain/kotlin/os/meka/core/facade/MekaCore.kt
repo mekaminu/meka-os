@@ -140,6 +140,7 @@ class MekaCore(
     private val emergency = os.meka.core.domain.EmergencyCard(replica, ids::next, nowMs)
     private val lifeFacts = os.meka.core.domain.LifeFacts(replica, ids::next, nowMs)
     private val trainQueue = os.meka.core.domain.TrainQueue(replica, ids::next, nowMs)
+    private val errands = os.meka.core.domain.Errands(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val wins = os.meka.core.domain.WorkWins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
     private val protectedTime = os.meka.core.domain.ProtectedTime(replica)
@@ -423,6 +424,10 @@ class MekaCore(
      * newest first, and the ones marked done lately (Ask → More → Train queue). Synced; nothing is fetched.
      */
     val queueView: StateFlow<os.meka.core.domain.QueueView> = _queue.asStateFlow()
+
+    private val _errands = MutableStateFlow(os.meka.core.domain.ErrandView.EMPTY)
+    /** Errands by location (V1, slice 1): what waits at each place, and what was ticked off lately. */
+    val errandsView: StateFlow<os.meka.core.domain.ErrandView> = _errands.asStateFlow()
 
     private val _dateNight = MutableStateFlow(os.meka.core.domain.DateNightView.EMPTY)
     /**
@@ -1539,6 +1544,20 @@ class MekaCore(
         if (removed) dropQueuePages(setOf(id))
         removed
     }
+
+    // ---- Errands by location (V1, slice 1; Ask → More → Errands on both apps) ----
+
+    /**
+     * Adds what [text] says: "Tesco: milk, batteries", "when I'm near the post office: parcel". Refused (nothing
+     * written, [os.meka.core.domain.ErrandAdded.refused]) when it names no place.
+     */
+    suspend fun addErrand(text: String): os.meka.core.domain.ErrandAdded = onCore { errands.add(text) }
+
+    /** Ticks an errand off ([done] true), or puts it back (false). */
+    suspend fun errandDone(id: String, done: Boolean): Boolean = onCore { errands.setDone(id, done) }
+
+    /** Takes an errand off the list for good (both apps). */
+    suspend fun removeErrand(id: String): Boolean = onCore { errands.remove(id) }
 
     // ---- Train queue, slice 2: an article's words kept on this device for reading offline ----
 
@@ -3630,6 +3649,7 @@ class MekaCore(
         _emergency.value = emergency.view()
         _facts.value = lifeFacts.view()
         _queue.value = trainQueue.view()
+        _errands.value = errands.view()
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(
             _today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone),
             credit = os.meka.core.domain.CallCreditRules.card(credit, workState.callAssistant),

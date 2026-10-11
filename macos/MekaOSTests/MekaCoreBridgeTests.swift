@@ -1463,6 +1463,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(empty.waiting.isEmpty)
     }
 
+    func testErrandsReachSwift() {
+        // Errands by location, slice 1: a typed line is read by the core's rules into a place and its things, and the
+        // empty view reaches the Mac (only Strings cross from the sheet).
+        let rules = ErrandRules.shared
+        let p = rules.parse(text: "when I'm near Tesco: milk, batteries")
+        XCTAssertEqual(p?.place, "Tesco")
+        XCTAssertEqual(p?.things, ["milk", "batteries"])
+        XCTAssertNil(rules.parse(text: "milk, batteries"))
+        XCTAssertEqual(rules.joined(things: ["milk", "batteries"]), "milk and batteries")
+        XCTAssertEqual(ErrandView.companion.EMPTY.summary, rules.EMPTY_SUMMARY)
+        XCTAssertTrue(ErrandView.companion.EMPTY.places.isEmpty)
+    }
+
     func testFactsPageReachesSwift() {
         // What MEKA knows (facts page, slice 1): a typed fact is read by the core's rules and grouped, secrets and card,
         // bank or ID numbers are turned away, and only the facts that bear on a question go with it.

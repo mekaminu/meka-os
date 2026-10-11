@@ -77,6 +77,11 @@ final class CoreModel {
     private(set) var queue: QueueView?
     /// Ask → More → Train queue (also Today's "For the train" line).
     var showTrainQueue = false
+    /// Errands by location (V1, slice 1): what waits at each place, and what was ticked off lately (Ask → More →
+    /// Errands). Synced with the Fold, which (slice 2) reminds Meka when he's near a place.
+    private(set) var errands: ErrandView?
+    /// Ask → More → Errands.
+    var showErrands = false
     /// Annual leave (V1, slice 1): the allowance, the days booked and the school holidays (Ask → More → Annual leave).
     /// Synced with the Fold; booked days are days off for work mode on both apps.
     private(set) var leave: LeaveView?
@@ -313,6 +318,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await q in core.queueView { self?.queue = q }
+        })
+        observers.append(Task { [weak self] in
+            for await e in core.errandsView { self?.errands = e }
         })
         observers.append(Task { [weak self] in
             for await l in core.leaveView { self?.leave = l }
@@ -2030,6 +2038,36 @@ final class CoreModel {
     }
 
     func removeFromQueue(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeFromQueue(id: id) } }
+
+    // MARK: Errands (errands by location, slice 1)
+
+    /// What adding a typed errand said: the line under the field, and whether nothing was written (no place in it).
+    struct ErrandSaid: Equatable {
+        let line: String
+        let refused: Bool
+    }
+
+    /// Adds "Tesco: milk, batteries" (or "when I'm near …: …"); only Strings cross. No place: nothing is written.
+    func addErrand(_ text: String) async -> ErrandSaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            let r = try await core.addErrand(text: t)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return ErrandSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Done ticks an errand off (`done` true); Back puts it back at its place.
+    func errandDone(_ id: String, done: Bool) {
+        if done { MekaHaptics.light() } else { MekaHaptics.tick() }
+        run { _ = try await $0.errandDone(id: id, done: done) }
+    }
+
+    func removeErrand(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeErrand(id: id) } }
 
     // MARK: Annual leave (annual leave planner, slice 1)
 

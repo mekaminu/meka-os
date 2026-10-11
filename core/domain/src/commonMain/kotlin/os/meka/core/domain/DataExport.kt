@@ -84,6 +84,7 @@ object DataExport {
         EntityTypes.WIN to ("work win" to "work wins"),
         EntityTypes.LEAVE to ("stretch of annual leave" to "stretches of annual leave"),
         EntityTypes.LIFE_FACT to ("fact" to "facts"),
+        EntityTypes.ERRAND to ("errand" to "errands"),
         EntityTypes.AGENT_ACTION to ("activity entry" to "activity entries"),
     )
 
@@ -91,7 +92,7 @@ object DataExport {
     private val SUMMARY_ORDER = listOf(
         EntityTypes.TASK, EntityTypes.CHECKLIST_ITEM, EntityTypes.EVENT, EntityTypes.COMMITMENT, EntityTypes.DECISION,
         EntityTypes.OBLIGATION, EntityTypes.GOAL, EntityTypes.HABIT, EntityTypes.HABIT_COMPLETION, EntityTypes.FAST,
-        EntityTypes.SHOPPING_ITEM, EntityTypes.SCHOOL_ITEM, EntityTypes.MEAL, EntityTypes.MEAL_DAY, EntityTypes.EMERGENCY_ENTRY, EntityTypes.WIN, EntityTypes.QUEUE_ITEM, EntityTypes.LEAVE, EntityTypes.LIFE_FACT, EntityTypes.AGENT_ACTION,
+        EntityTypes.SHOPPING_ITEM, EntityTypes.SCHOOL_ITEM, EntityTypes.MEAL, EntityTypes.MEAL_DAY, EntityTypes.EMERGENCY_ENTRY, EntityTypes.WIN, EntityTypes.QUEUE_ITEM, EntityTypes.LEAVE, EntityTypes.LIFE_FACT, EntityTypes.ERRAND, EntityTypes.AGENT_ACTION,
     )
 
     fun summary(data: ExportData): ExportSummary {
