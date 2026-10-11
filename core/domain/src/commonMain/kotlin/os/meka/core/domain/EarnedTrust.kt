@@ -67,6 +67,8 @@ object TrustRules {
         is AskProposal.MoveTask, is AskProposal.StartFast, is AskProposal.Timer, is AskProposal.Alarm,
         is AskProposal.PlanDinner, is AskProposal.SkipDateNight, is AskProposal.RenewalDone, is AskProposal.BookLeave,
         is AskProposal.AddFact -> null
+        // Errands (slice 2b) aren't an earned-trust kind yet: a misheard place would wait somewhere Meka never goes.
+        is AskProposal.AddErrand -> null
     }
 
     fun read(fields: Map<String, FieldValue>?): Map<TrustKind, TrustState> = TrustKind.entries.associateWith { k ->

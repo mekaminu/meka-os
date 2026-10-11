@@ -623,6 +623,15 @@ final class CoreModel {
         guard let d = SearchNav.destination(hit.target) else { return }
         showSearch = false
         search("")
+        if hit.target == .errands {
+            // Errands is a sheet: it rises once the search sheet has gone.
+            go(to: d, reduced: reduced)
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(reduced ? 50 : 350))
+                self?.showErrands = true
+            }
+            return
+        }
         openItem = OpenItem(target: hit.target, id: hit.id)
         go(to: d, reduced: reduced)
     }

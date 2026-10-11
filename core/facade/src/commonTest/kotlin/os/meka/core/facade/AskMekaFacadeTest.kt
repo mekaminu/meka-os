@@ -559,6 +559,39 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheErrandsAndAddErrandAddsOnTheTapWithUndoAndSearchFindsIt() = runTest {
+        val c = core()
+        c.askMeka("What do I need at Tesco?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.ERRANDS })
+        c.addErrand("Tesco: milk")
+
+        server.reply = AskReply.Answered("Milk so far.", listOf(
+            AskRawAction("add_errand", title = "tesco: batteries"),
+            AskRawAction("add_errand", title = "Tesco: milk"), // already waiting: no card
+            AskRawAction("add_errand", title = "batteries"), // no place: no card
+        ))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("What do I need at Tesco? Add batteries"))
+        val ctx = server.asked.last().second
+        assertEquals(listOf("Errands · 1 errand at Tesco", "At Tesco · milk"), ctx.items.filter { it.kind == AskItemKind.ERRANDS }.map { it.line })
+        assertFalse(ctx.untrusted)
+        assertEquals(listOf("Errand at Tesco · batteries"), out.answer.cards.map { it.line })
+        // Nothing until tapped.
+        assertEquals(1, c.errandsView.value.count)
+
+        val done = c.doAsk(out.answer.cards.single())
+        assertEquals("At Tesco: batteries", done.line)
+        assertEquals(listOf("milk", "batteries"), c.errandsView.value.places.single().rows.map { it.title })
+        c.search("batt")
+        val hit = c.searchView.value.groups.single().hits.single()
+        assertEquals(os.meka.core.domain.SearchTarget.ERRANDS, hit.target)
+        assertEquals("At Tesco", hit.detail)
+
+        assertTrue(c.undoAsk(assertIs<AskUndo.TakeBackErrands>(done.undo)))
+        assertEquals(listOf("milk"), c.errandsView.value.places.single().rows.map { it.title })
+        assertFalse(c.undoAsk(done.undo!!))
+    }
+
+    @Test
     fun rememberThatKeepsAFactOnTheTapWithUndo() = runTest {
         val c = core()
         c.addFact("GP: Dr Patel")

@@ -51,8 +51,18 @@ data class ErrandView(
 /** What one typed line read as: the place and the things to do there. */
 data class ErrandParse(val place: String, val things: List<String>)
 
-/** What adding a typed line did: the errands now waiting for it, the line to show, and whether nothing was written. */
-data class ErrandAdded(val ids: List<String>, val place: String?, val line: String, val refused: Boolean)
+/**
+ * What adding a typed line did: the errands now waiting for it, the line to show, and whether nothing was written.
+ * [created] are new errands and [revived] ones brought back from Done (what an Ask card's Undo takes back).
+ */
+data class ErrandAdded(
+    val ids: List<String>,
+    val place: String?,
+    val line: String,
+    val refused: Boolean,
+    val created: List<String> = emptyList(),
+    val revived: List<String> = emptyList(),
+)
 
 /** Non-AI, pure. */
 object ErrandRules {
@@ -186,10 +196,22 @@ object ErrandRules {
         newId: () -> String,
     ): Pair<ErrandAdded, List<Pair<String, Map<String, FieldValue>>>> {
         val p = parse(text) ?: return ErrandAdded(emptyList(), null, REFUSED, refused = true) to emptyList()
+        return addParsed(p, items, nowMs, newId)
+    }
+
+    /** [add] for a place and things already read (an Ask card's, [ErrandAskRules.proposal]). */
+    fun addParsed(
+        p: ErrandParse,
+        items: List<ErrandItem>,
+        nowMs: Long,
+        newId: () -> String,
+    ): Pair<ErrandAdded, List<Pair<String, Map<String, FieldValue>>>> {
         val key = placeKey(p.place)
         val here = items.filter { placeKey(it.place) == key }.groupBy { it.title.lowercase() }
         val writes = mutableListOf<Pair<String, Map<String, FieldValue>>>()
         val fresh = mutableListOf<String>()
+        val created = mutableListOf<String>()
+        val revived = mutableListOf<String>()
         val ids = p.things.mapIndexed { i, thing ->
             val same = here[thing.lowercase()].orEmpty()
             same.firstOrNull { !it.done }?.let { return@mapIndexed it.id }
@@ -197,6 +219,7 @@ object ErrandRules {
             val back = same.maxByOrNull { it.doneAtMs }
             if (back != null) {
                 writes += back.id to mapOf(ErrandFields.DONE_AT to 0L.fv(), ErrandFields.ADDED_AT to (nowMs + i).fv())
+                revived += back.id
                 return@mapIndexed back.id
             }
             val id = newId()
@@ -206,11 +229,59 @@ object ErrandRules {
                 ErrandFields.ADDED_AT to (nowMs + i).fv(),
                 ErrandFields.DONE_AT to 0L.fv(),
             )
+            created += id
             id
         }
         val line = if (fresh.isEmpty()) "Already waiting at ${p.place}: ${joined(p.things)}" else "At ${p.place}: ${joined(fresh)}"
-        return ErrandAdded(ids, p.place, line, refused = false) to writes
+        return ErrandAdded(ids, p.place, line, refused = false, created = created, revived = revived) to writes
     }
+}
+
+/**
+ * Errands in Ask and Talk (errands by location, slice 2b): "what do I need at Tesco?" is answered from the list, and
+ * "add batteries to Tesco" is a card that adds on Meka's tap. Non-AI, pure. Only the list goes with a question (places
+ * and things, as Meka typed them); where a place is never leaves the Fold.
+ */
+object ErrandAskRules {
+    /** At most this many places go with a question (the place waiting longest first). */
+    const val ASK_PLACES = 8
+    /** Things one card adds at most. */
+    const val MAX_THINGS = 10
+    const val ALREADY = "Those are already waiting there"
+
+    private fun tidy(s: String): String = s.replace(Regex("""\s+"""), " ").trim()
+
+    /**
+     * The list as MEKA describes it to the model (Ask's `errands` lines): "Errands · 3 errands at 2 places", then each
+     * place "At Tesco · milk, batteries". Nothing at all while nothing waits.
+     */
+    fun askLines(view: ErrandView): List<String> {
+        if (view.places.isEmpty()) return emptyList()
+        val more = if (view.places.size > ASK_PLACES) " · the first $ASK_PLACES places below" else ""
+        return listOf("Errands · ${view.summary}$more") +
+            view.places.take(ASK_PLACES).map { g -> "At ${tidy(g.place)} · ${g.rows.joinToString(", ") { tidy(it.title) }}" }
+    }
+
+    /**
+     * A model's `add_errand` ("Tesco: batteries", read like a line typed in Errands) as a card: the place as the list
+     * already spells it, at most [MAX_THINGS] things, only those not already waiting there. Null when it names no place
+     * or nothing new.
+     */
+    fun proposal(items: List<ErrandItem>, title: String?): AskProposal.AddErrand? {
+        val p = ErrandRules.parse(title ?: return null) ?: return null
+        val key = ErrandRules.placeKey(p.place)
+        val here = items.filter { ErrandRules.placeKey(it.place) == key }
+        val place = here.minByOrNull { it.addedAtMs }?.let { ErrandRules.tidyPlace(it.place) } ?: p.place
+        val waiting = here.filter { !it.done }.map { it.title.lowercase() }.toSet()
+        val things = p.things.filter { it.lowercase() !in waiting }.take(MAX_THINGS)
+        return if (things.isEmpty()) null else AskProposal.AddErrand(place, things)
+    }
+
+    /** The card's words: "Errand at Tesco · milk and batteries". */
+    fun cardLine(p: AskProposal.AddErrand): String = "Errand at ${p.place} · ${ErrandRules.joined(p.things)}"
+
+    /** The undo bar's line: "At Tesco: milk and batteries" (as the Errands pane says it). */
+    fun doneLine(p: AskProposal.AddErrand): String = "At ${p.place}: ${ErrandRules.joined(p.things)}"
 }
 
 /** The errands on a replica. */
@@ -230,6 +301,25 @@ class Errands(
         val (added, writes) = ErrandRules.add(text, items(), nowMs(), newId)
         writes.forEach { (id, fields) -> replica.commitLocal(EntityTypes.ERRAND, id, fields) }
         return added
+    }
+
+    /** Adds [things] at [place] (an Ask card's); refused when nothing new would be written. */
+    fun addThings(place: String, things: List<String>): ErrandAdded {
+        val (added, writes) = ErrandRules.addParsed(ErrandParse(place, things), items(), nowMs(), newId)
+        writes.forEach { (id, fields) -> replica.commitLocal(EntityTypes.ERRAND, id, fields) }
+        return added
+    }
+
+    /**
+     * Takes back an Ask card's add: [added] errands still waiting leave the list, [revived] ones still waiting go back
+     * under Done. One ticked off or removed since is left as it is. True when anything changed.
+     */
+    fun takeBack(added: List<String>, revived: List<String>): Boolean {
+        val waiting = items().filter { !it.done }.map { it.id }.toSet()
+        var any = false
+        added.forEach { if (it in waiting && remove(it)) any = true }
+        revived.forEach { if (it in waiting && setDone(it, true)) any = true }
+        return any
     }
 
     /** Ticks an errand off ([done] true) or puts it back; false when it isn't on the list or already so. */

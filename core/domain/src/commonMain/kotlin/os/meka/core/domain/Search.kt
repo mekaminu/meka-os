@@ -2,7 +2,7 @@ package os.meka.core.domain
 
 /**
  * Search everything (build plan M1): tasks (open, Someday and done), calendar events, Waiting for, decisions (replaced
- * ones too), renewals and bills, the shopping list, habits and goals, searched on the device over what is already synced. Documents join
+ * ones too), renewals and bills, the shopping list, errands, habits and goals, searched on the device over what is already synced. Documents join
  * when the Vault lands.
  *
  * Non-AI and local: nothing is sent anywhere, nothing is stored, no index is kept (the data is small enough to scan on
@@ -18,6 +18,7 @@ enum class SearchKind(val label: String) {
     DECISION("Decisions"),
     RENEWAL("Renewals and bills"),
     SHOPPING("Shopping"),
+    ERRAND("Errands"),
     SOMEDAY("Someday"),
     GOAL("Goals"),
     HABIT("Habits"),
@@ -33,6 +34,8 @@ enum class SearchTarget {
     LISTS_DECISIONS,
     LISTS_RENEWALS,
     LISTS_SHOPPING,
+    /** Ask → More → Errands (errands by location, slice 2b). */
+    ERRANDS,
     GOALS,
     /** Shown for information only (calendar events are read-only). */
     INFO,
@@ -99,6 +102,8 @@ data class SearchSources(
     val goals: List<GoalItem>,
     /** The shopping list: still to buy and Got (the last week's). */
     val shopping: List<ShoppingItem> = emptyList(),
+    /** Errands by location: waiting ones, and ones done in the last week. */
+    val errands: List<ErrandItem> = emptyList(),
 )
 
 object SearchRules {
@@ -291,6 +296,18 @@ object Search {
             val detail = if (s.got) s.meta else listOfNotNull("To buy", s.meta).joinToString(" · ")
             add(s.id, SearchKind.SHOPPING, s.title, detail, SearchTarget.LISTS_SHOPPING, null,
                 if (s.got) Long.MAX_VALUE / 2 - s.atMs else s.atMs - Long.MAX_VALUE / 2, listOf(SearchRules.Field(s.title, 3)))
+        }
+        // Errands: waiting first (oldest first, as the pane lists them), then done in the last week (newest first).
+        sources.errands.forEach { e ->
+            if (e.done && today - calendar.epochDayOf(e.doneAtMs) >= ErrandRules.DONE_DAYS) return@forEach
+            val place = ErrandRules.tidyPlace(e.place) ?: e.place
+            val detail = if (e.done) {
+                val d = SearchRules.dayLabel(calendar.epochDayOf(e.doneAtMs), today)
+                "$place · done ${if (d == "Today" || d == "Yesterday") d.lowercase() else d}"
+            } else "At $place"
+            add(e.id, SearchKind.ERRAND, e.title, detail, SearchTarget.ERRANDS, null,
+                if (e.done) Long.MAX_VALUE / 2 - e.doneAtMs else e.addedAtMs - Long.MAX_VALUE / 2,
+                listOf(SearchRules.Field(e.title, 3), SearchRules.Field(place, 2)))
         }
         sources.goals.forEach { g ->
             add(g.id, SearchKind.GOAL, g.title, g.meta, SearchTarget.GOALS, null, 0,

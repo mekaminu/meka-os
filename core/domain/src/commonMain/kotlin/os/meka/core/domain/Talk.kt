@@ -238,6 +238,8 @@ object TalkRules {
         // "remember Shoe size as 10" / "remembered …"; "change GP to Dr Patel" / "changed …".
         is AskProposal.AddFact -> if (p.factId == null) (if (past) "remembered " else "remember ") + clean(p.label) + " as " + clean(p.value)
         else (if (past) "changed " else "change ") + clean(p.label) + " to " + clean(p.value)
+        // "add batteries to your errands at Tesco" / "added …".
+        is AskProposal.AddErrand -> (if (past) "added " else "add ") + clean(ErrandRules.joined(p.things)) + " to your errands at " + clean(p.place)
     }
 
     /** "today at 14:30", "tomorrow", "Friday 9 October at 09:00". */

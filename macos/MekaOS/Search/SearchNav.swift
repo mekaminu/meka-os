@@ -15,6 +15,8 @@ enum SearchNav {
         switch target {
         case .listsWaiting, .listsSomeday, .listsDecisions, .listsRenewals, .listsShopping: .lists
         case .goals: .goals
+        // Ask → More → Errands springs up (errands by location, slice 2b).
+        case .errands: .ask
         default: nil
         }
     }
@@ -40,6 +42,7 @@ enum SearchNav {
         case .listsDecisions: "Opens Decisions"
         case .listsRenewals: "Opens Renewals"
         case .listsShopping: "Opens Shopping"
+        case .errands: "Opens Errands"
         case .goals: "Opens Goals"
         default: nil
         }

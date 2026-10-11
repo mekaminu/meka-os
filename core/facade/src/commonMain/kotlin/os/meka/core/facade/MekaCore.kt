@@ -2763,7 +2763,9 @@ class MekaCore(
                 // What MEKA knows, slice 1: only the facts that bear on the question, so "what's the car's reg?" has an answer.
                 os.meka.core.domain.FactAskRules.askLines(lifeFacts.all(), q),
                 // Protected time, slice 4: the rules, today and the next two weeks, so "is Saturday protected?" has an answer.
-                os.meka.core.domain.ProtectedRules.askLines(protectedTime.setting(), cal.epochDayOf(nowMs()), work.schedule(), bankHolidays.calendar()))
+                os.meka.core.domain.ProtectedRules.askLines(protectedTime.setting(), cal.epochDayOf(nowMs()), work.schedule(), bankHolidays.calendar()),
+                // Errands by location, slice 2b: what waits at each place, so "what do I need at Tesco?" has an answer.
+                os.meka.core.domain.ErrandAskRules.askLines(errands.view()))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -2773,7 +2775,7 @@ class MekaCore(
             is AskReply.Answered -> onCore {
                 val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
                 val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),
-                    os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all())
+                    os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all(), errands.items())
                 val allowed = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }
                 // Earned trust: a kind Meka said "just do it" to runs now, recorded in Activity with Undo, when the
                 // policy engine permits Level 4 under his rule (never for a question that carried untrusted lines).
@@ -2897,6 +2899,12 @@ class MekaCore(
                 val (id, before) = lifeFacts.keep(p.label, p.value, p.factId)
                 if (before == null) os.meka.core.domain.AskUndo.RemoveFact(id) else os.meka.core.domain.AskUndo.PutBackFact(id, before, p.value)
             }
+            // The list's own add (a thing already waiting there stays one errand, a done one comes back).
+            is os.meka.core.domain.AskProposal.AddErrand -> {
+                val a = errands.addThings(p.place, p.things)
+                if (a.created.isEmpty() && a.revived.isEmpty()) throw os.meka.core.domain.ValidationException(os.meka.core.domain.ErrandAskRules.ALREADY)
+                os.meka.core.domain.AskUndo.TakeBackErrands(a.created, a.revived)
+            }
         }
         return os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
@@ -2941,6 +2949,8 @@ class MekaCore(
             // The fact the card added comes off; a changed one gets its old value back while it still reads the new one.
             is os.meka.core.domain.AskUndo.RemoveFact -> lifeFacts.remove(undo.factId)
             is os.meka.core.domain.AskUndo.PutBackFact -> lifeFacts.putBack(undo.factId, undo.before, undo.after)
+            // New errands leave the list, ones back from Done go back (anything ticked or removed since is left).
+            is os.meka.core.domain.AskUndo.TakeBackErrands -> errands.takeBack(undo.added, undo.revived)
         }
     }
 
@@ -3487,6 +3497,8 @@ class MekaCore(
             is os.meka.core.domain.AskProposal.BookLeave -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             // Keeps a fact on Meka's own page (nothing is sent to anyone).
             is os.meka.core.domain.AskProposal.AddFact -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+            // Adds to Meka's own errands list (nothing is sent; where a place is stays on the Fold).
+            is os.meka.core.domain.AskProposal.AddErrand -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         }
     }
 
@@ -3726,6 +3738,7 @@ class MekaCore(
             habits = _goals.value.habits,
             goals = _goals.value.goals,
             shopping = _lists.value.shopping.let { it.toBuy + it.got },
+            errands = errands.items(),
         )
         return Search.run(searchQuery, sources, nowMs(), ZoneCalendar(timeZone))
     }
