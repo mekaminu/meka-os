@@ -176,6 +176,16 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/talk_widget_info" />
         </receiver>
+        <!-- Brief widget (Spoken morning brief): a tap opens Today with the brief reading itself. No data, no refresh. -->
+        <receiver
+            android:name=".widgets.BriefWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_brief_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/brief_widget_info" />
+        </receiver>
         <receiver
             android:name=".widgets.HomeWidgetAlarmReceiver"
             android:exported="false" />

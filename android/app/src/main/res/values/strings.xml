@@ -16,6 +16,8 @@
     <!-- Talk widget (Talk without tapping the mic, slice 2); the label is the core's TalkStartRules.WIDGET_LABEL. -->
     <string name="widget_talk_label">Talk to MEKA</string>
     <string name="widget_talk_description">One tap opens MEKA listening</string>
+    <string name="widget_brief_label">Hear the brief</string>
+    <string name="widget_brief_description">One tap opens the morning brief and reads it aloud</string>
     <string name="widget_fast_description">A running fast\'s timer and progress, or your eating window</string>
     <!-- News widget (news ticker slice 3a). -->
     <string name="widget_news_strip_label">News strip</string>

@@ -151,12 +151,23 @@ struct BriefSheet: View {
         }
         .padding(MekaSpace.l)
         .frame(width: 480)
-        .onAppear { speaker.attach(model); openedAt = Date() }
+        .onAppear { speaker.attach(model); openedAt = Date(); readIfAsked() }
+        // Listen to the Brief or the wake alarm: read once the day is in (and again when asked with the sheet open).
+        .onChange(of: model.brief?.dateLabel) { readIfAsked() }
+        .onChange(of: model.readBriefOnOpen) { readIfAsked() }
         .onDisappear {
             speaker.stop()
+            model.readBriefOnOpen = false // closed before the day came in: the next open stays quiet
             // Calm Today: open long enough to read counts as read, so Today's card folds away (a glance leaves it).
             model.briefClosed(openFor: Date().timeIntervalSince(openedAt))
         }
+    }
+
+    /// Asked to read on open (Listen to the Brief, the wake alarm): starts once the brief has its day, once.
+    private func readIfAsked() {
+        guard model.readBriefOnOpen, let v = model.brief, !v.dateLabel.isEmpty else { return }
+        model.readBriefOnOpen = false
+        if !speaker.speaking { speaker.say(BriefSpeech.shared.script(v: v, name: "Meka"), reading: true) }
     }
 
     /// Listen reads the brief aloud (light haptic); Stop ends it (tick haptic).

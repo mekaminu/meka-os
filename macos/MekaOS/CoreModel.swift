@@ -123,6 +123,9 @@ final class CoreModel {
     /// Calendar sign-ins about to end or expired (Reliability first, item 2): Today's line with Reconnect; empty when fine.
     private(set) var signInLines: [SignInLine] = []
     var showBrief = false
+    /// Spoken morning brief: the brief sheet reads itself aloud once it has the day (the Listen to the Brief command,
+    /// and the wake alarm's Dismiss, as on the Fold); the sheet clears it when it starts reading.
+    var readBriefOnOpen = false
     /// Appearance → Play the opening: Today replays its opening (Day ring, tiles, greeting, stagger), then clears it.
     var openingRequested = false
     /// News (Ask → More → News): the chosen topics as lanes, Barça first, then AI. Topics sync with the Fold.
@@ -565,6 +568,14 @@ final class CoreModel {
             connected: isConnected,
             appearance: appearance
         )
+    }
+
+    /// Today → Listen to the Brief (⇧⌘B; the Mac's counterpart of the Fold's brief widget): Today comes forward and
+    /// the brief sheet opens reading itself aloud. With the sheet already open, it starts reading there.
+    func listenToBrief(reduced: Bool) {
+        go(to: .today, reduced: reduced)
+        readBriefOnOpen = true
+        showBrief = true
     }
 
     /// Runs a command-bar row by doing what the same button elsewhere on the Mac does (appearance is the view's).
@@ -1523,7 +1534,7 @@ final class CoreModel {
             } else if a.action == MacAlarm.dismissAction {
                 run { _ = try await $0.dismissAlarm(id: alarm) }
                 // Only the wake alarm brings up the brief; a quick alarm or a timer just stops (Alarms, slice 2).
-                if MacAlarm.opensBrief(alarmID: alarm) { showBrief = true }
+                if MacAlarm.opensBrief(alarmID: alarm) { readBriefOnOpen = true; showBrief = true }
             }
             return
         }

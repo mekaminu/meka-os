@@ -84,6 +84,10 @@ struct MekaOSApp: App {
                     .keyboardShortcut(.delete, modifiers: .command)
                     .disabled(model.selectedID == nil)
                 Divider()
+                // Spoken morning brief: the brief opens and reads itself aloud (the Fold's brief widget).
+                Button("Listen to the Brief") { model.listenToBrief(reduced: MotionSetting.reduced) }
+                    .keyboardShortcut("b", modifiers: [.command, .shift])
+                Divider()
                 Button("Sync Now") { Task { await model.syncNow() } }
                     .keyboardShortcut("r", modifiers: .command)
             }

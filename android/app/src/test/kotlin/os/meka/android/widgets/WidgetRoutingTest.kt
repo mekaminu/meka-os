@@ -29,6 +29,15 @@ class WidgetRoutingTest {
     }
 
     @Test
+    fun theBriefWidgetOpensTheBriefReadingAsAfterTheWakeAlarm() {
+        // Spoken morning brief: the widget asks for exactly what the wake alarm's Dismiss asks for.
+        assertEquals(os.meka.android.MainActivity.OPEN_BRIEF, BriefWidget.OPEN)
+        val taken = HomeWidget.entries.map { WidgetRouting.requestCode(it) } +
+            listOf(1, 2, 400, 401, 410, 411, os.meka.android.ask.TalkAutoListen.WIDGET_REQUEST_CODE)
+        assertTrue(BriefWidget.REQUEST_CODE !in taken)
+    }
+
+    @Test
     fun theChronometerBaseMovesTheWallClockTargetOntoElapsedTime() {
         // 12 minutes ahead on the wall clock is 12 minutes ahead on the elapsed clock.
         assertEquals(50_000L + 12 * 60_000L, WidgetRouting.chronometerBase(1_000_000L + 12 * 60_000L, 1_000_000L, 50_000L))

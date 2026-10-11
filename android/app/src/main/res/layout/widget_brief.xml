@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Brief widget (Spoken morning brief): a brass play mark and "Hear the brief"; a tap opens Today with the brief
+     springing up and reading itself aloud, as after the wake alarm. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_card"
+    android:clipToOutline="true"
+    android:contentDescription="@string/widget_brief_description"
+    android:gravity="center"
+    android:orientation="horizontal"
+    android:padding="8dp">
+
+    <ImageView
+        android:id="@+id/brief_play"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/widget_mic_circle"
+        android:importantForAccessibility="no"
+        android:padding="12dp"
+        android:src="@drawable/ic_play" />
+
+    <TextView
+        android:id="@+id/brief_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:maxLines="1"
+        android:text="@string/widget_brief_label"
+        android:textColor="@color/widget_text"
+        android:textSize="16sp" />
+</LinearLayout>

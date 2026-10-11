@@ -499,6 +499,11 @@ Finished items, and the slice-by-slice history of open items, moved out of docs/
   - *Check on the Fold:* after 20:00 (or work's end) Today shows "MEKA handled N things today" under the shutdown card with what it was; tap it: Activity opens over Today with those entries; "‹ Today" goes back.
 - [x] ~~Calendar write (V1)~~ moved to M1 as "Edit your calendars from MEKA" (Meka, 2026-10-07).
 - [x] ~~Notarised Mac release~~ skipped by Meka 2026-10-07 (dev builds continue).
+- [x] Spoken morning brief: the brief read aloud (on-device voice), started after the wake alarm or from a widget.
+  - *2026-10-09:* landed with "Weather and a voice" slice 8 — Listen in the brief (Fold and Mac) in MEKA's voice, and the Fold's brief reads itself after the wake alarm. **Remaining:** start it from a home-screen widget.
+  - *Widget, 2026-10-11 (Fold + Mac; Android and macos only, no core; Mac checked nightly):* **Fold:** a home-screen widget "Hear the brief" (`widgets/BriefWidget.kt`, `BriefWidgetProvider`, 2×1 like Talk's: a brass play mark `ic_play` and the label; plain RemoteViews, no data, never refreshed). A tap sends `MainActivity.OPEN_BRIEF`, the same as the wake alarm's Dismiss: Today comes forward, the brief springs up and reads itself in MEKA's voice once its day is in (request code 451, clear of the others). **Mac** (no home-screen widget; desktop widgets wait on #15): Today → **Listen to the Brief** (⇧⌘B) brings Today forward and opens the brief sheet reading itself (`CoreModel.listenToBrief`, `readBriefOnOpen`, read in `BriefSheet.readIfAsked` once the day is in; also asked with the sheet already open); the Mac's wake alarm Dismiss now reads it too, as on the Fold. Closing the sheet before the day arrives clears the ask. Test: WidgetRoutingTest `theBriefWidgetOpensTheBriefReadingAsAfterTheWakeAlarm`. Motion catalogue row "Brief widget".
+  - *Check on the Fold:* long-press the home screen → Widgets → MEKA → "Hear the brief" and place it; tap it: MEKA opens on Today, the brief springs up and MEKA starts reading it. On the Mac: Today menu → Listen to the Brief (⇧⌘B).
+
 ### V2 · Home and family
 
 ## Slice histories of open items (moved 2026-10-11)
