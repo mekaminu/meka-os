@@ -272,6 +272,7 @@ internal fun NeedsYouColumn(
     val appointments by core.appointmentsView.collectAsState()
     val due = appointments.nudges
     var bookRefused by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val appContext = LocalContext.current.applicationContext
     val asks = covers.size + (if (nudge != null) 1 else 0) + due.size
     val live by LiveReplies.live.collectAsState()
     val sendAll = remember(triage, live) { TriageReplyRules.sendAll(triage, live) }
@@ -373,6 +374,19 @@ internal fun NeedsYouColumn(
                     scope.launch {
                         runCatching { core.appointmentNotYet(card.id) }.getOrNull()
                             ?.let { r -> moves.undoLine(r.line) { core.undoAppointment(r) } }
+                    }
+                }, onCall = {
+                    scope.launch {
+                        runCatching { core.appointmentCallToBook(card.id) }.getOrNull()
+                            ?.let { c -> moves.undoLine(c.line) { core.undoAppointmentCall(c) } }
+                    }
+                }, onEmail = {
+                    scope.launch {
+                        // Slice 2b: the email goes on the clipboard; nothing was sent or changed, so no Undo.
+                        runCatching { core.appointmentBookingEmail(card.id) }.getOrNull()?.let { text ->
+                            os.meka.android.work.LiveReplies.copyText(appContext, text)
+                            moves.undoLine(os.meka.core.domain.AppointmentRules.EMAIL_COPIED, null)
+                        }
                     }
                 }, modifier = Modifier.animateItem().padding(bottom = MekaSpace.m)
                     .appear(rememberAppearance(2 + triage.size + covers.size + (if (nudge != null) 1 else 0) + i, play)))

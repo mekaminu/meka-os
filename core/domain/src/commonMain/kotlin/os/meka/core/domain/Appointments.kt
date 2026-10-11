@@ -90,7 +90,20 @@ data class AppointmentNudge(
     val wentLabel: String get() = AppointmentRules.WENT_LABEL
     val laterLabel: String get() = AppointmentRules.LATER_LABEL
     val whenHint: String get() = AppointmentRules.WHEN_HINT
+    /** Slice 2b: a "Call to book" task on Today. */
+    val callLabel: String get() = AppointmentRules.CALL_LABEL
+    /** Slice 2b: a booking email for the clipboard; MEKA sends nothing. */
+    val emailLabel: String get() = AppointmentRules.EMAIL_LABEL
 }
+
+/**
+ * Call to book (slice 2b): the task to put on Today ("Call to book: Dentist", planned for [day] at [minute]) and the
+ * day the card asks again if nothing was booked by then ([laterDay]).
+ */
+data class AppointmentCallPlan(val title: String, val day: Long, val minute: Int, val laterDay: Long, val line: String)
+
+/** What Call to book did: the task made ([taskId]) and the card's set-aside day before ([done]), for Undo. */
+data class AppointmentCall(val taskId: String, val line: String, val done: AppointmentDone)
 
 data class AppointmentView(
     /** Overdue and due first, then not noted, booked, and the rest by when they're due. */
@@ -156,7 +169,18 @@ object AppointmentRules {
     const val WENT_LABEL = "Went"
     const val LATER_LABEL = "Not yet"
     const val WHEN_HINT = "When? “Tue 20 Oct 9:30”"
-    const val CARD_DETAIL = "Booked… takes the day and time, Went notes a visit today, Not yet asks again in two weeks. MEKA books nothing and calls no one."
+    const val CARD_DETAIL = "Booked… takes the day and time, Went notes a visit today, Not yet asks again in two weeks. Call to book puts the call on Today, Copy email gives you an email to send yourself. MEKA books nothing and calls no one."
+    const val CALL_LABEL = "Call to book"
+    const val EMAIL_LABEL = "Copy email"
+    const val EMAIL_COPIED = "Booking email copied · paste it into an email to them"
+    /** Call to book lands at lunchtime on a weekday, when a practice is open and Meka can step out. */
+    const val CALL_MINUTE = 12 * 60 + 30
+    /** After this on a weekday the call goes to the next weekday. */
+    const val CALL_LAST_MINUTE = 17 * 60
+    /** If nothing is booked by this many days after the call, the card asks again. */
+    const val CALL_LATER_DAYS = 2
+    /** The heads-up the day an appointment starts asking (or a Not yet runs out), at 09:00. */
+    const val NOTICE_MIN = 9 * 60
 
     val PRESETS: List<AppointmentPreset> = listOf(
         AppointmentPreset("dentist", "Dentist", 0, 6, listOf("dentist", "dental")),
@@ -516,6 +540,91 @@ object AppointmentRules {
         val due = dueDay(after, today)!!
         return "${item.title} · went today · next due ${if (due - today > 60) monthWord(due) else dayWord(due, today)}"
     }
+
+    private fun weekday(day: Long): Boolean = CivilDate.isoDayOfWeek(day) <= 5
+
+    /**
+     * When Call to book plans the call: today at 12:30 on a weekday morning, later today (the next quarter hour) on a
+     * weekday afternoon before 17:00, else the next weekday at 12:30.
+     */
+    fun callWhen(today: Long, nowMinute: Int): Pair<Long, Int> {
+        if (weekday(today) && nowMinute < CALL_MINUTE) return today to CALL_MINUTE
+        if (weekday(today) && nowMinute < CALL_LAST_MINUTE - 15) return today to ((nowMinute / 15) + 1) * 15
+        var d = today + 1
+        while (!weekday(d)) d++
+        return d to CALL_MINUTE
+    }
+
+    /** Call to book on [item]'s card: "Call to book: Dentist" on Today, asking again two days after the call. */
+    fun callPlan(item: AppointmentItem, today: Long, nowMinute: Int): AppointmentCallPlan {
+        val (day, minute) = callWhen(today, nowMinute)
+        val title = "Call to book: ${item.title}"
+        val line = "$title · planned ${dayWord(day, today)} at ${LocalClock.formatMinute(minute)}"
+        return AppointmentCallPlan(title, day, minute, day + CALL_LATER_DAYS, line)
+    }
+
+    /** What the email asks for: "a check-up" for the dentist, "an eye test" for the optician, else the title. */
+    fun bookingWhat(title: String): String = when (presetFor(title)?.id) {
+        "dentist" -> "a dental check-up"
+        "hygienist" -> "a hygienist appointment"
+        "optician" -> "an eye test"
+        "haircut" -> "a haircut"
+        "car-service" -> "a service for my car"
+        "gp" -> "a health check"
+        else -> "an appointment (${title.trim()})"
+    }
+
+    /**
+     * Copy email on the card (slice 2b): a short booking email Meka pastes into his own mail and sends himself; MEKA
+     * sends nothing. Says the last visit when it's known; no times, so Meka adds what suits him.
+     */
+    fun bookingEmail(item: AppointmentItem, today: Long): String {
+        val last = lastVisit(item, today)?.let { d ->
+            val y = CivilDate.fromEpochDay(d).year
+            " My last visit was on ${CivilDate.longLabel(d)} $y."
+        } ?: ""
+        return "Subject: Booking ${bookingWhat(item.title)}\n\n" +
+            "Hello,\n\n" +
+            "I'd like to book ${bookingWhat(item.title)}.$last Could you let me know your next available times?\n\n" +
+            "Thank you,\nMeka"
+    }
+
+    /**
+     * The day [item] starts asking: its lead time before the due day, or the end of a Not yet; null while it can't be
+     * due (booked, or no visit noted).
+     */
+    fun askFrom(item: AppointmentItem, today: Long): Long? {
+        if (item.bookedDay != null && item.bookedDay >= today) return null
+        val due = dueDay(item, today) ?: return null
+        return maxOf(due - leadDays(item), item.laterDay ?: Long.MIN_VALUE)
+    }
+
+    /**
+     * The heads-up the day an appointment starts asking ([NoticeSource.APPOINTMENTS]), at 09:00, through the governor
+     * like every notice (quiet hours and the digests apply): "Dentist · due Mon 2 Nov" · "Last went Wed 1 Apr. Booked
+     * the next one?", opening Needs you. One per asking day (a Not yet that runs out asks once more); gone by the next
+     * morning, since the Needs you card stays. Nothing once it's booked or went.
+     */
+    fun notices(items: List<AppointmentItem>, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        val today = cal.epochDayOf(nowMs)
+        return items.mapNotNull { item ->
+            val from = askFrom(item, today) ?: return@mapNotNull null
+            if (from < today) return@mapNotNull null
+            val due = dueDay(item, today) ?: return@mapNotNull null
+            val title = when {
+                due < from -> "${item.title} · overdue"
+                due == from -> "${item.title} · due today"
+                else -> "${item.title} · due ${dayWord(due, from)}"
+            }
+            val last = lastVisit(item, today)?.let { "Last went ${dayWord(it, from)}. " } ?: ""
+            Notice(
+                key = "appointment:${item.id}:ask:$from", source = NoticeSource.APPOINTMENTS, tier = NoticeTier.HEADS_UP,
+                title = title, text = "${last}Booked the next one?",
+                atMs = cal.toEpochMs(from, NOTICE_MIN), target = NoticeTarget.NEEDS_YOU,
+                expiresAtMs = cal.toEpochMs(from + 1, 0),
+            )
+        }
+    }
 }
 
 /** The appointments on a replica. */
@@ -590,6 +699,23 @@ class Appointments(
         replica.commitLocal(EntityTypes.APPOINTMENT, id, mapOf(AppointmentFields.LATER_DAY to until.fv()))
         return done
     }
+
+    /**
+     * Call to book (slice 2b): the plan for the task ([AppointmentRules.callPlan]) and the card set aside until two days
+     * after the call. The caller makes the task. Null when it isn't on the list.
+     */
+    fun callToBook(id: String): Pair<AppointmentCallPlan, AppointmentDone>? {
+        val item = items().firstOrNull { it.id == id } ?: return null
+        val now = nowMs()
+        val plan = AppointmentRules.callPlan(item, today(), calendar.minuteOfDay(now))
+        val done = before(item, plan.line)
+        replica.commitLocal(EntityTypes.APPOINTMENT, id, mapOf(AppointmentFields.LATER_DAY to plan.laterDay.fv()))
+        return plan to done
+    }
+
+    /** Copy email (slice 2b): the booking email for the clipboard; null when it isn't on the list. */
+    fun bookingEmail(id: String): String? =
+        items().firstOrNull { it.id == id }?.let { AppointmentRules.bookingEmail(it, today()) }
 
     /** Undo for Went, Booked… and Not yet: the visit, booking and set-aside day go back to what they were. */
     fun undo(done: AppointmentDone): Boolean {

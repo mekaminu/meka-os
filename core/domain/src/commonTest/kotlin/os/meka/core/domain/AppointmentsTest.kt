@@ -128,4 +128,51 @@ class AppointmentsTest {
         assertTrue(aMac.items().isEmpty())
         assertFalse(aMac.remove(id))
     }
+
+    /** Slice 2b: when Call to book plans the call, the booking email, and the heads-up the day one starts asking. */
+    @Test
+    fun callToBookTheEmailAndTheHeadsUp() {
+        val mon = day(10, 12)
+        assertEquals(mon to 12 * 60 + 30, AppointmentRules.callWhen(today, 600)) // Sunday → Monday lunchtime
+        assertEquals(mon to 12 * 60 + 30, AppointmentRules.callWhen(mon, 600))
+        assertEquals(mon to 14 * 60 + 15, AppointmentRules.callWhen(mon, 14 * 60 + 7)) // afternoon: the next quarter hour
+        assertEquals(mon + 1 to 12 * 60 + 30, AppointmentRules.callWhen(mon, 16 * 60 + 50))
+        assertEquals(day(10, 19) to 12 * 60 + 30, AppointmentRules.callWhen(day(10, 16), 17 * 60)) // Friday evening → Monday
+
+        val dentist = AppointmentItem("d", "Dentist", 0, 6, day(5, 1), null, null, null, 0) // due Sun 1 Nov
+        val plan = AppointmentRules.callPlan(dentist, today, 600)
+        assertEquals("Call to book: Dentist", plan.title)
+        assertEquals("Call to book: Dentist · planned tomorrow at 12:30", plan.line)
+        assertEquals(mon + AppointmentRules.CALL_LATER_DAYS, plan.laterDay)
+
+        val email = AppointmentRules.bookingEmail(dentist, today)
+        assertTrue(email.startsWith("Subject: Booking a dental check-up\n\nHello,"))
+        assertTrue(email.contains("My last visit was on Friday 1 May 2026. Could you let me know your next available times?"))
+        assertTrue(email.endsWith("Meka"))
+        assertEquals("an eye test", AppointmentRules.bookingWhat("Optician"))
+        assertEquals("an appointment (Physio)", AppointmentRules.bookingWhat("Physio"))
+        assertTrue(!AppointmentRules.bookingEmail(dentist.copy(lastDay = null), today).contains("last visit"))
+
+        // The heads-up: 09:00 on the day it starts asking (two weeks before), once per asking day, into Needs you.
+        val cal = LocalCalendar.UTC
+        val from = day(10, 18)
+        val n = AppointmentRules.notices(listOf(dentist), cal.toEpochMs(today, 600), cal).single()
+        assertEquals(NoticeSource.APPOINTMENTS, n.source)
+        assertEquals("Dentist · due Sun 1 Nov", n.title)
+        assertEquals("Last went Fri 1 May. Booked the next one?", n.text)
+        assertEquals(cal.toEpochMs(from, AppointmentRules.NOTICE_MIN), n.atMs)
+        assertEquals(NoticeTarget.NEEDS_YOU, n.target)
+        // Booked, or already asking since before today (the card is there): no heads-up.
+        assertTrue(AppointmentRules.notices(listOf(dentist.copy(bookedDay = day(10, 30), bookedMinute = 600)), cal.toEpochMs(today, 600), cal).isEmpty())
+        assertTrue(AppointmentRules.notices(listOf(dentist), cal.toEpochMs(from + 1, 600), cal).isEmpty())
+        // Not yet on an overdue one: it asks again when the two weeks are up.
+        val overdue = dentist.copy(lastDay = day(3, 1), laterDay = today + 14)
+        val again = AppointmentRules.notices(listOf(overdue), cal.toEpochMs(today, 600), cal).single()
+        assertEquals("Dentist · overdue", again.title)
+        assertEquals(cal.toEpochMs(today + 14, AppointmentRules.NOTICE_MIN), again.atMs)
+        // Through the governor: posted once.
+        val first = Governor.evaluate(listOf(n), NotificationSettings.DEFAULT, DeviceAlerts.ALL, GovernorState(), cal.toEpochMs(from, 9 * 60 + 5), cal)
+        assertEquals(listOf("Dentist · due Sun 1 Nov"), first.post.map { it.title })
+        assertTrue(Governor.evaluate(listOf(n), NotificationSettings.DEFAULT, DeviceAlerts.ALL, first.state, cal.toEpochMs(from, 9 * 60 + 30), cal).post.isEmpty())
+    }
 }

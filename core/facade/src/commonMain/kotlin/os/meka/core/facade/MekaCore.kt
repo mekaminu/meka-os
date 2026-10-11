@@ -1593,6 +1593,31 @@ class MekaCore(
     /** Takes an appointment off the list for good (both apps). */
     suspend fun removeAppointment(id: String): Boolean = onCore { appointments.remove(id) }
 
+    /**
+     * Call to book on an appointment's card (slice 2b): a task "Call to book: Dentist" planned on Today (12:30 on a
+     * weekday, or the next one), and the card set aside until two days after the call. MEKA calls no one. Undo with
+     * [undoAppointmentCall]. Null when it isn't on the list.
+     */
+    suspend fun appointmentCallToBook(id: String): os.meka.core.domain.AppointmentCall? = onCore {
+        val (plan, done) = appointments.callToBook(id) ?: return@onCore null
+        val taskId = tasks.create(NewTask(plan.title))
+        tasks.setWhen(taskId, plan.day, plan.minute)
+        followBlocks(listOf(taskId))
+        os.meka.core.domain.AppointmentCall(taskId, plan.line, done)
+    }
+
+    /** Undo for Call to book: the task goes and the card asks again as before. */
+    suspend fun undoAppointmentCall(call: os.meka.core.domain.AppointmentCall): Boolean = onCore {
+        tasks.get(call.taskId)?.let { tasks.delete(call.taskId); followBlocks(listOf(call.taskId)) }
+        appointments.undo(call.done)
+    }
+
+    /**
+     * Copy email on an appointment's card (slice 2b): the booking email for the app to put on the clipboard; MEKA sends
+     * nothing. Null when it isn't on the list.
+     */
+    suspend fun appointmentBookingEmail(id: String): String? = onCore { appointments.bookingEmail(id) }
+
     // ---- Train queue, slice 2: an article's words kept on this device for reading offline ----
 
     private val _queuePages = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -3794,6 +3819,7 @@ class MekaCore(
             wins = wins.all(),
             leave = leave.items(), leaveWork = hoursOf(_workMode.value, todayEpochDay()),
             approvals = os.meka.core.domain.ApprovalRules.pending(approvalStore.all(), nowMs()),
+            appointments = appointments.items(),
         )
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */

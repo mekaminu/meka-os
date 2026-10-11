@@ -175,6 +175,12 @@ struct AppointmentNudgeRow: View {
                 pill(card.laterLabel, filled: false) { model.appointmentNotYet(card.id) }
             }
             .padding(.top, MekaSpace.m)
+            // Slice 2b: Call to book (a task on Today) and Copy email (the pasteboard); MEKA calls and sends nothing.
+            HStack(spacing: MekaSpace.xs) {
+                pill(card.callLabel, filled: false) { model.appointmentCallToBook(card.id) }
+                pill(card.emailLabel, filled: false) { model.appointmentCopyEmail(card.id) }
+            }
+            .padding(.top, MekaSpace.xs)
         }
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)

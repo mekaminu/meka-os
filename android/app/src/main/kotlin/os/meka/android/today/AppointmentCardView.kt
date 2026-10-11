@@ -39,6 +39,9 @@ import os.meka.core.domain.AppointmentNudge
  * can't be read leaves the card open with [refusal] under the field, lit in the accent. Booked… and Went press in with a light haptic,
  * Not yet with a tick; the card folds away with the list's item motion and the undo bar rises. Reduced motion:
  * cross-fades. MEKA books nothing and calls no one.
+ *
+ * Slice 2b: a second row, Call to book (a task on Today; the card asks again two days after the call) and Copy email
+ * (a booking email on the clipboard for Meka to send himself), each pressing in with a tick.
  */
 @Composable
 internal fun AppointmentCardView(
@@ -47,6 +50,8 @@ internal fun AppointmentCardView(
     onBooked: (String) -> Unit,
     onWent: () -> Unit,
     onNotYet: () -> Unit,
+    onCall: () -> Unit,
+    onEmail: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val haptics = rememberMekaHaptics()
@@ -80,6 +85,10 @@ internal fun AppointmentCardView(
             CoverPill(card.bookedLabel, filled = true) { haptics.light(); asking = !asking }
             CoverPill(card.wentLabel, filled = false) { haptics.light(); onWent() }
             CoverPill(card.laterLabel, filled = false) { haptics.tick(); onNotYet() }
+        }
+        Row(Modifier.padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            CoverPill(card.callLabel, filled = false) { haptics.tick(); onCall() }
+            CoverPill(card.emailLabel, filled = false) { haptics.tick(); onEmail() }
         }
     }
 }

@@ -80,6 +80,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * weeks before its first work day — "Half term · nothing booked" · "book before the good weeks go".
      */
     LEAVE("Book leave for school holidays", NoticeTier.HEADS_UP),
+    /**
+     * Appointment nudges, slice 2b ([AppointmentRules.notices]): the day one starts asking, at 09:00 — "Dentist · due
+     * Mon 2 Nov" · "Last went Wed 1 Apr. Booked the next one?".
+     */
+    APPOINTMENTS("Appointments due", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -475,6 +480,7 @@ object Governor {
         NoticeSource.DATE_NIGHT -> "date night to book"
         NoticeSource.WINS -> "this week's wins"
         NoticeSource.LEAVE -> if (n == 1) "leave to book" else "leave to book for $n holidays"
+        NoticeSource.APPOINTMENTS -> plural(n, "appointment") + " to book"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -530,6 +536,8 @@ object NoticeSources {
         leaveWork: WorkHours? = null,
         /** The approvals waiting for Meka ([ApprovalRules.pending]), for their notices. */
         approvals: List<Approval> = emptyList(),
+        /** Appointment nudges: the list, for the heads-up the day one starts asking ([AppointmentRules.notices]). */
+        appointments: List<AppointmentItem> = emptyList(),
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -640,6 +648,7 @@ object NoticeSources {
         out += DateNightRules.notices(dateNight, nowMs, cal)
         out += WinRules.notices(wins, nowMs, cal)
         out += LeaveRules.notices(school, leave, leaveWork, nowMs, cal)
+        out += AppointmentRules.notices(appointments, nowMs, cal)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.

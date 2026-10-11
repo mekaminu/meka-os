@@ -1965,6 +1965,7 @@ final class CoreModel {
         case .dateNightSkipped(let day): run { _ = try await $0.skipDateNight(day: day, skip: false) }
         case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
         case .appointment(let done): run { _ = try await $0.undoAppointment(done: done) }
+        case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
         case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
@@ -2369,6 +2370,34 @@ final class CoreModel {
 
     func removeAppointment(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeAppointment(id: id) } }
 
+    /// Call to book on a Needs you card (slice 2b): "Call to book: Dentist" planned on Today, the card asking again two
+    /// days after the call; the undo bar takes both back. MEKA calls no one. Only the id String crosses.
+    func appointmentCallToBook(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do {
+                if let call = try await core.appointmentCallToBook(id: id) { offerEventUndo(call.line, .appointmentCall(call)) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Copy email on a Needs you card (slice 2b): the booking email on the pasteboard for Meka to send himself; nothing
+    /// was sent or changed, so the bar has no Undo.
+    func appointmentCopyEmail(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do {
+                guard let text = try await core.appointmentBookingEmail(id: id) else { return }
+                let board = NSPasteboard.general
+                board.clearContents()
+                board.setString(text, forType: .string)
+                offerEventUndo(AppointmentRules.shared.EMAIL_COPIED, nil)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     // MARK: School rhythm (slice 1)
 
     /// Adds one typed line ("INSET 27 Oct", "Rex PE Tue"); only a String crosses. Returns the line to show under the
@@ -2729,6 +2758,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case groupDigest(GroupDigestUndo)
         /// Went, Booked… or Not yet on an appointment: its visit, booking and set-aside day go back.
         case appointment(AppointmentDone)
+        /// Call to book on an appointment (slice 2b): the task goes and the card asks again as before.
+        case appointmentCall(AppointmentCall)
     }
 
     let id = UUID()

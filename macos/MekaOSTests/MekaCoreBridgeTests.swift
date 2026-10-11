@@ -1494,6 +1494,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(AppointmentAskRules.shared.askLines(view: AppointmentView.companion.EMPTY).isEmpty)
     }
 
+    func testAppointmentCallAndEmailReachSwift() {
+        // Appointment nudges, slice 2b: Call to book's plan, the booking email and the heads-up's source reach the Mac.
+        let rules = AppointmentRules.shared
+        let today = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 11)
+        let dentist = AppointmentItem(
+            id: "d", title: "Dentist", everyWeeks: 0, everyMonths: 6,
+            lastDay: KotlinLong(value: CivilDate.shared.toEpochDay(year: 2026, month: 5, day: 1)),
+            bookedDay: nil, bookedMinute: nil, laterDay: nil, addedAtMs: 0
+        )
+        XCTAssertEqual(rules.callPlan(item: dentist, today: today, nowMinute: 600).line, "Call to book: Dentist · planned tomorrow at 12:30")
+        XCTAssertTrue(rules.bookingEmail(item: dentist, today: today).hasPrefix("Subject: Booking a dental check-up"))
+        XCTAssertEqual(rules.CALL_LABEL, "Call to book")
+        XCTAssertEqual(rules.EMAIL_LABEL, "Copy email")
+        XCTAssertEqual(NoticeSource.appointments.label, "Appointments due")
+    }
+
     func testErrandsReachSwift() {
         // Errands by location, slice 1: a typed line is read by the core's rules into a place and its things, and the
         // empty view reaches the Mac (only Strings cross from the sheet).
