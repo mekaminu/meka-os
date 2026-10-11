@@ -1487,6 +1487,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(AppointmentView.companion.EMPTY.nudges.isEmpty)
     }
 
+    func testAppointmentsInAskAndSearchReachSwift() {
+        // Appointment nudges, slice 2a: Search has an Appointments group that opens the sheet; an empty list sends Ask nothing.
+        XCTAssertEqual(SearchKind.appointment.label, "Appointments")
+        XCTAssertEqual(SearchNav.destination(.appointments), .ask)
+        XCTAssertTrue(AppointmentAskRules.shared.askLines(view: AppointmentView.companion.EMPTY).isEmpty)
+    }
+
     func testErrandsReachSwift() {
         // Errands by location, slice 1: a typed line is read by the core's rules into a place and its things, and the
         // empty view reaches the Mac (only Strings cross from the sheet).

@@ -60,6 +60,7 @@ object AskFieldRules {
         SearchKind.RENEWAL -> "Renewal"
         SearchKind.SHOPPING -> "Shopping"
         SearchKind.ERRAND -> "Errand"
+        SearchKind.APPOINTMENT -> "Appointment"
         SearchKind.SOMEDAY -> "Someday"
         SearchKind.GOAL -> "Goal"
         SearchKind.HABIT -> "Habit"

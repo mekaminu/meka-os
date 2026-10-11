@@ -21,6 +21,10 @@ final class SearchNavTests: XCTestCase {
         XCTAssertEqual(SearchNav.destination(.errands), .ask)
         XCTAssertNil(SearchNav.listTab(.errands))
         XCTAssertEqual(SearchNav.hint(.errands), "Opens Errands")
+        // Appointment nudges, slice 2a: an appointment opens Ask → More → Appointments.
+        XCTAssertEqual(SearchNav.destination(.appointments), .ask)
+        XCTAssertNil(SearchNav.listTab(.appointments))
+        XCTAssertEqual(SearchNav.hint(.appointments), "Opens Appointments")
     }
 
     @MainActor

@@ -2,7 +2,7 @@ package os.meka.core.domain
 
 /**
  * Search everything (build plan M1): tasks (open, Someday and done), calendar events, Waiting for, decisions (replaced
- * ones too), renewals and bills, the shopping list, errands, habits and goals, searched on the device over what is already synced. Documents join
+ * ones too), renewals and bills, the shopping list, errands, appointments, habits and goals, searched on the device over what is already synced. Documents join
  * when the Vault lands.
  *
  * Non-AI and local: nothing is sent anywhere, nothing is stored, no index is kept (the data is small enough to scan on
@@ -19,6 +19,7 @@ enum class SearchKind(val label: String) {
     RENEWAL("Renewals and bills"),
     SHOPPING("Shopping"),
     ERRAND("Errands"),
+    APPOINTMENT("Appointments"),
     SOMEDAY("Someday"),
     GOAL("Goals"),
     HABIT("Habits"),
@@ -36,6 +37,8 @@ enum class SearchTarget {
     LISTS_SHOPPING,
     /** Ask → More → Errands (errands by location, slice 2b). */
     ERRANDS,
+    /** Ask → More → Appointments (appointment nudges, slice 2a). */
+    APPOINTMENTS,
     GOALS,
     /** Shown for information only (calendar events are read-only). */
     INFO,
@@ -104,6 +107,8 @@ data class SearchSources(
     val shopping: List<ShoppingItem> = emptyList(),
     /** Errands by location: waiting ones, and ones done in the last week. */
     val errands: List<ErrandItem> = emptyList(),
+    /** Appointment nudges: the dentist, the optician, a haircut… */
+    val appointments: List<AppointmentItem> = emptyList(),
 )
 
 object SearchRules {
@@ -308,6 +313,11 @@ object Search {
             add(e.id, SearchKind.ERRAND, e.title, detail, SearchTarget.ERRANDS, null,
                 if (e.done) Long.MAX_VALUE / 2 - e.doneAtMs else e.addedAtMs - Long.MAX_VALUE / 2,
                 listOf(SearchRules.Field(e.title, 3), SearchRules.Field(place, 2)))
+        }
+        // Appointments: in the pane's order (overdue and due first, then booked and the rest by when they're due).
+        AppointmentRules.view(sources.appointments, today).rows.forEachIndexed { i, r ->
+            add(r.id, SearchKind.APPOINTMENT, r.title, r.status, SearchTarget.APPOINTMENTS, null, i.toLong(),
+                listOf(SearchRules.Field(r.title, 3)))
         }
         sources.goals.forEach { g ->
             add(g.id, SearchKind.GOAL, g.title, g.meta, SearchTarget.GOALS, null, 0,

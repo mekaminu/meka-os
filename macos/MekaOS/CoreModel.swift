@@ -635,12 +635,13 @@ final class CoreModel {
         guard let d = SearchNav.destination(hit.target) else { return }
         showSearch = false
         search("")
-        if hit.target == .errands {
-            // Errands is a sheet: it rises once the search sheet has gone.
+        if hit.target == .errands || hit.target == .appointments {
+            // Errands and Appointments are sheets: they rise once the search sheet has gone (appointments: slice 2a).
+            let errands = hit.target == .errands
             go(to: d, reduced: reduced)
             Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(reduced ? 50 : 350))
-                self?.showErrands = true
+                if errands { self?.showErrands = true } else { self?.showAppointments = true }
             }
             return
         }

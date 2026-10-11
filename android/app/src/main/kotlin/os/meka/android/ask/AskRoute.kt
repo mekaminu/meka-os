@@ -140,7 +140,12 @@ fun AskRoute(
     // An errand found by Search (errands by location, slice 2b) → the Errands pane.
     val foundItem by remember(healthApp) { healthApp?.openItem ?: kotlinx.coroutines.flow.MutableStateFlow<OpenItem?>(null) }.collectAsState()
     LaunchedEffect(foundItem) {
-        if (foundItem?.target == os.meka.core.domain.SearchTarget.ERRANDS) { pane = MoreItem.ERRANDS; healthApp?.openItem?.value = null }
+        when (foundItem?.target) {
+            os.meka.core.domain.SearchTarget.ERRANDS -> { pane = MoreItem.ERRANDS; healthApp?.openItem?.value = null }
+            // An appointment found by Search (appointment nudges, slice 2a) → the Appointments pane.
+            os.meka.core.domain.SearchTarget.APPOINTMENTS -> { pane = MoreItem.APPOINTMENTS; healthApp?.openItem?.value = null }
+            else -> {}
+        }
     }
     // Back closes whatever sprang up over Ask before it leaves the app.
     BackHandler(enabled = pane != null || showSearch) { if (showSearch) closeSearch() else pane = null }

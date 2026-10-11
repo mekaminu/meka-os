@@ -17,6 +17,8 @@ enum SearchNav {
         case .goals: .goals
         // Ask → More → Errands springs up (errands by location, slice 2b).
         case .errands: .ask
+        // Ask → More → Appointments springs up (appointment nudges, slice 2a).
+        case .appointments: .ask
         default: nil
         }
     }
@@ -43,6 +45,7 @@ enum SearchNav {
         case .listsRenewals: "Opens Renewals"
         case .listsShopping: "Opens Shopping"
         case .errands: "Opens Errands"
+        case .appointments: "Opens Appointments"
         case .goals: "Opens Goals"
         default: nil
         }

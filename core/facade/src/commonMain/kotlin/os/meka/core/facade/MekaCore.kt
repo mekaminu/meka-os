@@ -2799,7 +2799,9 @@ class MekaCore(
                 // Protected time, slice 4: the rules, today and the next two weeks, so "is Saturday protected?" has an answer.
                 os.meka.core.domain.ProtectedRules.askLines(protectedTime.setting(), cal.epochDayOf(nowMs()), work.schedule(), bankHolidays.calendar()),
                 // Errands by location, slice 2b: what waits at each place, so "what do I need at Tesco?" has an answer.
-                os.meka.core.domain.ErrandAskRules.askLines(errands.view()))
+                os.meka.core.domain.ErrandAskRules.askLines(errands.view()),
+                // Appointment nudges, slice 2a: each appointment with its last visit, booking and when it's due.
+                os.meka.core.domain.AppointmentAskRules.askLines(appointments.view()))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -3774,6 +3776,7 @@ class MekaCore(
             goals = _goals.value.goals,
             shopping = _lists.value.shopping.let { it.toBuy + it.got },
             errands = errands.items(),
+            appointments = appointments.items(),
         )
         return Search.run(searchQuery, sources, nowMs(), ZoneCalendar(timeZone))
     }

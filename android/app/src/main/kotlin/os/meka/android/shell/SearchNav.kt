@@ -16,8 +16,8 @@ object SearchNav {
         SearchTarget.LISTS_WAITING, SearchTarget.LISTS_SOMEDAY, SearchTarget.LISTS_DECISIONS, SearchTarget.LISTS_RENEWALS,
         SearchTarget.LISTS_SHOPPING -> ShellDestination.LISTS
         SearchTarget.GOALS -> ShellDestination.GOALS
-        // Ask picks it up and springs Errands up over More.
-        SearchTarget.ERRANDS -> ShellDestination.ASK
+        // Ask picks it up and springs Errands (or Appointments) up over More.
+        SearchTarget.ERRANDS, SearchTarget.APPOINTMENTS -> ShellDestination.ASK
         SearchTarget.TASK, SearchTarget.INFO -> null
     }
 
@@ -40,6 +40,7 @@ object SearchNav {
         SearchTarget.LISTS_RENEWALS -> "Opens Renewals"
         SearchTarget.LISTS_SHOPPING -> "Opens Shopping"
         SearchTarget.ERRANDS -> "Opens Errands"
+        SearchTarget.APPOINTMENTS -> "Opens Appointments"
         SearchTarget.GOALS -> "Opens Goals"
         SearchTarget.INFO -> null
     }

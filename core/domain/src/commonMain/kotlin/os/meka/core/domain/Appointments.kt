@@ -610,3 +610,27 @@ class Appointments(
         return true
     }
 }
+
+/**
+ * Appointments in Ask and Talk (appointment nudges, slice 2a): "when's my dentist?" and "am I due a haircut?" are
+ * answered from the list. Non-AI, pure. Only Meka's own typed appointments go with a question (what it is, how often,
+ * the last visit, a booking and when it's due), so never untrusted.
+ */
+object AppointmentAskRules {
+    /** At most this many appointments go with a question (in the pane's order: due ones first). */
+    const val ASK_ITEMS = 12
+
+    private fun tidy(s: String): String = s.replace(Regex("""\s+"""), " ").trim()
+
+    /**
+     * The list as MEKA describes it to the model (Ask's `appointments` lines): "Appointments · 2 appointments · 1 due",
+     * then each "Dentist · every 6 months · last went Wed 1 Apr · Overdue · was due Thu 1 Oct". Nothing while the list
+     * is empty.
+     */
+    fun askLines(view: AppointmentView): List<String> {
+        if (view.rows.isEmpty()) return emptyList()
+        val more = if (view.rows.size > ASK_ITEMS) " · the first $ASK_ITEMS below" else ""
+        return listOf("Appointments · ${view.summary}$more") +
+            view.rows.take(ASK_ITEMS).map { r -> "${tidy(r.title)} · ${r.line.replaceFirstChar { it.lowercase() }} · ${r.status}" }
+    }
+}

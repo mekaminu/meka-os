@@ -559,6 +559,24 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheAppointmentsAndSearchFindsThem() = runTest {
+        val c = core()
+        c.askMeka("When's my dentist?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.APPOINTMENTS })
+        assertFalse(c.typeAppointment("Dentist every 6 months, booked Tue 20 Oct 9:30").refused)
+        c.askMeka("When's my dentist?")
+        val ctx = server.asked.last().second
+        val lines = ctx.items.filter { it.kind == AskItemKind.APPOINTMENTS }.map { it.line }
+        assertEquals("Appointments · 1 appointment · all in hand", lines.first())
+        assertTrue(lines[1].startsWith("Dentist · every 6 months · Booked · Tue 20 Oct 09:30"), lines[1])
+        assertFalse(ctx.untrusted)
+        c.search("dent")
+        val hit = c.searchView.value.groups.single().hits.single()
+        assertEquals(os.meka.core.domain.SearchTarget.APPOINTMENTS, hit.target)
+        assertEquals("Booked · Tue 20 Oct 09:30", hit.detail)
+    }
+
+    @Test
     fun askHearsTheErrandsAndAddErrandAddsOnTheTapWithUndoAndSearchFindsIt() = runTest {
         val c = core()
         c.askMeka("What do I need at Tesco?")
