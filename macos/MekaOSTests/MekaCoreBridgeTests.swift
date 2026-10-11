@@ -1623,6 +1623,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.cleanReply(s: "Yes, Rex will be there."), "Yes, Rex will be there.")
         XCTAssertNil(rules.cleanReply(s: "Pay at www.example.com"))
         XCTAssertEqual(rules.COPY_REPLY, "Copy reply")
+        // What MEKA knows, slice 4: a shared form answered from the facts page in the core, with no connection at all.
+        _ = try await core.addFact(text: "Car reg: AB12 CDE")
+        let answers = try await core.formAnswers(text: "Vehicle registration: ____\nSignature: ____", subject: nil)
+        XCTAssertEqual(answers.answers.map(\.field), ["Vehicle registration"])
+        XCTAssertEqual(answers.answers.first?.copyText, "AB12 CDE")
+        XCTAssertEqual(answers.copyAllText, "Vehicle registration: AB12 CDE")
+        if let a = answers.answers.first { XCTAssertEqual(FormFillRules.shared.copiedLine(answer: a), "Copied Car reg · AB12 CDE") }
+        XCTAssertTrue(FormFillRules.shared.EMPTY.answers.isEmpty)
     }
 
     func testProtectedTimeReachesSwift() {

@@ -75,6 +75,8 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.today.RequestChoice
+import os.meka.core.domain.FormAnswersView
+import os.meka.core.domain.FormFillRules
 import os.meka.core.domain.HandleThisRules
 import os.meka.core.domain.QueueRules
 import os.meka.core.domain.RequestCard
@@ -111,6 +113,9 @@ class CaptureActivity : ComponentActivity() {
                     saveForTrain = { text, subject -> !core.addToQueue(text, subject).refused },
                     // "Handle this" (V1): the shared text goes to MEKA's AI on Meka's tap only; cards come back.
                     handle = { text, subject -> core.handleThis(text, subject) },
+                    // What MEKA knows, slice 4: a shared form's fields answered from the facts page, on the phone only.
+                    formAnswers = { text, subject -> core.formAnswers(text, subject) },
+                    copy = { text -> os.meka.android.work.LiveReplies.copyText(this@CaptureActivity, text, "MEKA fact") },
                     answer = { card, add ->
                         // A reply card's Copy reply: the draft goes on the clipboard; Meka sends it himself.
                         if (add) core.acceptRequest(card.id)?.let { done ->
@@ -139,6 +144,8 @@ private fun CaptureSheet(
     save: suspend (String) -> Boolean,
     saveForTrain: suspend (String, String?) -> Boolean,
     handle: suspend (String, String?) -> HandleOutcome,
+    formAnswers: suspend (String, String?) -> FormAnswersView,
+    copy: (String) -> Unit,
     answer: suspend (RequestCard, Boolean) -> String?,
     done: (Boolean) -> Unit,
 ) {
@@ -157,6 +164,8 @@ private fun CaptureSheet(
     var handleLine by remember { mutableStateOf<String?>(null) }
     var handleCards by remember { mutableStateOf<List<RequestCard>>(emptyList()) }
     var answered by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var answers by remember { mutableStateOf(FormFillRules.EMPTY) }
+    var copiedLine by remember { mutableStateOf<String?>(null) }
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -219,6 +228,8 @@ private fun CaptureSheet(
         handling = true
         reading = true
         scope.launch {
+            // Worked out on the phone before MEKA's AI answers (and even when it can't).
+            answers = formAnswers(request.text, request.subject)
             val out = handle(request.text, request.subject)
             when (out) {
                 is HandleOutcome.Cards -> { handleCards = out.cards; handleLine = out.line }
@@ -235,7 +246,8 @@ private fun CaptureSheet(
             val line = answer(card, choice == RequestChoice.ADD) ?: return@launch
             answered = answered + card.id
             handleLine = line
-            if (handleCards.all { it.id in answered }) {
+            // The form's answers keep the sheet open: Meka is still copying from it.
+            if (handleCards.all { it.id in answered } && answers.answers.isEmpty()) {
                 doneLabel = HandleThisRules.DONE_LINE
                 delay(if (reduced) 400 else 900) // the last line stays long enough to read
                 captured = true
@@ -300,7 +312,12 @@ private fun CaptureSheet(
                         Text(doneLabel, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
                     }
                 } else if (step == 1) {
-                    HandleThisSection(reading, handleLine, handleCards, answered, onChoice = ::answerCard)
+                    HandleThisSection(
+                        reading, handleLine, handleCards, answered, onChoice = ::answerCard,
+                        answers = answers, copiedLine = copiedLine,
+                        onCopy = { a -> copy(a.copyText); haptics.light(); copiedLine = FormFillRules.copiedLine(a) },
+                        onCopyAll = { copy(answers.copyAllText); haptics.light(); copiedLine = FormFillRules.copiedAllLine(answers) },
+                    )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Text("CAPTURE", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)

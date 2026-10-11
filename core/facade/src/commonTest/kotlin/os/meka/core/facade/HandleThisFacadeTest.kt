@@ -182,4 +182,18 @@ class HandleThisFacadeTest {
         assertTrue(os.meka.core.domain.MessageRequestRules.check(raw, 20_736L, 600).isEmpty())
         assertEquals(1, os.meka.core.domain.MessageRequestRules.check(raw, 20_736L, 600, allowRenewal = true).size)
     }
+
+    @Test
+    fun aSharedFormIsAnsweredFromTheFactsPageOnTheDeviceAlone() = runTest {
+        val c = core(transport = null) // no server, no AI: the answers are worked out here
+        c.addFact("Car reg: AB12 CDE")
+        c.addFact("GP surgery: Ivel Medical Centre")
+        val kept = c.factsView.value.groups.flatMap { it.rows }.first { it.label == "GP surgery" }
+        c.setFactAi(kept.id, use = false)
+        val v = c.formAnswers("Vehicle registration: ____\nName of doctor's surgery: ____\nSignature: ____", "Parking permit")
+        assertEquals(listOf("AB12 CDE", "Ivel Medical Centre"), v.answers.map { it.copyText })
+        assertEquals("Vehicle registration: AB12 CDE\nName of doctor's surgery: Ivel Medical Centre", v.copyAllText)
+        assertTrue(server.sent.isEmpty())
+        assertTrue(c.formAnswers("Are you free on Thursday?").answers.isEmpty())
+    }
 }

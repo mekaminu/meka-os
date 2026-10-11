@@ -68,6 +68,10 @@ final class CoreModel {
     private(set) var facts: FactsView?
     /// Ask → More → What MEKA knows.
     var showFacts = false
+    /// What MEKA knows, slice 4: a form shared with "Handle this with MEKA" answered from the facts page (worked out
+    /// in the core on this Mac; nothing sent). Shown in the Form answers sheet.
+    private(set) var formAnswers: FormAnswersView?
+    var showFormAnswers = false
     /// The train queue (V1, train-time queue slice 1): links and podcasts saved for the commute, waiting and done
     /// lately (Ask → More → Train queue). Synced with the Fold, where the share sheet saves them.
     private(set) var queue: QueueView?
@@ -1596,6 +1600,12 @@ final class CoreModel {
         offerEventUndo(HandleThisRules.shared.READING_LINE, nil)
         Task {
             do {
+                // A form's fields answered from the facts page, on this Mac before the AI answers (and without it).
+                let answers = try await core.formAnswers(text: text, subject: subject)
+                if !answers.answers.isEmpty {
+                    formAnswers = answers
+                    showFormAnswers = true
+                }
                 let outcome = try await core.handleThis(text: text, subject: subject)
                 switch onEnum(of: outcome) {
                 case .cards(let c):

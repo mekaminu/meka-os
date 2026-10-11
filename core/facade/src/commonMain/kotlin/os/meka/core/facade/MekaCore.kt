@@ -1639,6 +1639,14 @@ class MekaCore(
     /** Takes a fact off the page for good (on both apps). */
     suspend fun removeFact(id: String): Boolean = onCore { lifeFacts.remove(id) }
 
+    /**
+     * A shared form's fields answered from the facts page (slice 4, shown with "Handle this"): each field beside the
+     * fact that answers it, for Copy. Worked out here on the device; nothing is sent anywhere and nothing is stored,
+     * so it works with MEKA's AI off and answers from facts kept from the AI too.
+     */
+    suspend fun formAnswers(text: String, subject: String? = null): os.meka.core.domain.FormAnswersView =
+        onCore { os.meka.core.domain.FormFillRules.answers(text, subject, lifeFacts.all()) }
+
     // ---- Protected time (V1, slice 1; Ask → More → Protected time) ----
 
     /**
