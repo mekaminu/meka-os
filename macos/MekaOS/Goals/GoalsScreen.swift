@@ -62,6 +62,15 @@ struct GoalsScreen: View {
                 }
 
                 SectionLabel("Goals", palette).padding(.top, MekaSpace.xl).staggeredAppear(3)
+                // Goals, properly, item 6: last month looked back on, for the first week of a month.
+                if let month = model.goals?.month {
+                    Text(month.line)
+                        .font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .contentTransition(.opacity)
+                        .padding(.bottom, MekaSpace.xs)
+                        .accessibilityLabel("Last month, \(month.line)")
+                        .staggeredAppear(3)
+                }
                 let goals = model.goals?.goals ?? []
                 if goals.isEmpty {
                     Text("Say what you're working towards. Link habits and tasks to a goal and its progress counts itself.")

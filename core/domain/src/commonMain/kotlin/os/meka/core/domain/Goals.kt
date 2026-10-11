@@ -113,6 +113,9 @@ data class GoalItem(
      * or the goal finished. Null when nothing has yet.
      */
     val lastMovedDay: Long? = null,
+    /** The day (local epoch day) it was added, and the day it was finished (Goals, properly, item 6: the rhythm). */
+    val createdDay: Long? = null,
+    val doneDay: Long? = null,
 ) {
     val milestonesDone: Int get() = milestones.count { it.done }
     /** The next step is a milestone (no open task is linked), not a task. */
@@ -136,6 +139,8 @@ data class GoalsView(
     val finishedGoals: Int,
     /** This week's goals: Today's "This week: 2 of 3 goals moving" and the watch face's goal ring (slice 7). */
     val week: WeekGoals = WeekGoals.EMPTY,
+    /** Last month looked back on, for the first week of a month ([GoalRhythmRules.month]); null otherwise. */
+    val month: GoalMonth? = null,
 ) {
     val behind: Int get() = habits.count { it.pace == HabitPace.BEHIND }
     val dueToday: Int get() = habits.count { it.pace == HabitPace.DUE }
@@ -865,10 +870,15 @@ class Goals(
      * finished one as 100 %); with nothing linked it is set by hand.
      */
     fun goals(tasks: List<Task>, habits: List<HabitItem> = habits()): Pair<List<GoalItem>, Int> =
-        collect(tasks, habits).let { (open, finished, _) -> open to finished }
+        collect(tasks, habits).let { it.open to it.finished }
 
-    /** [goals], plus this week's finished week goals (they still count as moving this week). */
-    private fun collect(tasks: List<Task>, habits: List<HabitItem>): Triple<List<GoalItem>, Int, List<GoalItem>> {
+    private class GoalSets(val open: List<GoalItem>, val finished: Int, val finishedThisWeek: List<GoalItem>, val finishedRecently: List<GoalItem>)
+
+    /**
+     * [goals], plus this week's finished week goals (they still count as moving this week) and the goals finished since
+     * last month began (the month's review).
+     */
+    private fun collect(tasks: List<Task>, habits: List<HabitItem>): GoalSets {
         val today = today()
         val snaps = replica.entities(EntityTypes.GOAL).associateBy { it.ref.entityId }
         fun isDone(id: String) = snaps[id]?.get(ActionableFields.LIFECYCLE)?.textOrNull == Lifecycle.DONE.name
@@ -945,6 +955,8 @@ class Goals(
             val done = isDone(id)
             val horizon = GoalRules.parseHorizon(s[GoalFields.HORIZON].textOrNull)
             val due = s[GoalFields.DUE_DAY].longOrNull
+            val createdDay = s[ActionableFields.CREATED_AT].longOrNull?.let { calendar.epochDayOf(it) }
+            val quiet = GoalRhythmRules.quietLabel(GoalRhythmRules.quietDays(horizon, done, moved(id), createdDay, today))
             val kidsDone = allKids.count { isDone(it) }
             val meta = listOfNotNull(
                 GoalRules.horizonLabel(horizon),
@@ -957,6 +969,7 @@ class Goals(
                     if (kidsDone > 0) "$kidsDone of ${it.size} goals done" else "${it.size} ${if (it.size == 1) "goal" else "goals"} under it"
                 },
                 if (!counted && !done) "set by hand" else null,
+                quiet,
             ).joinToString(" · ")
             val next = lt.filter { it.lifecycle == Lifecycle.ACTIVE }.minWithOrNull(GoalRules.stepOrder)
             val parent = parentOf[id]?.takeIf { !isDone(it) }
@@ -985,6 +998,8 @@ class Goals(
                 milestones = ms,
                 metric = metric,
                 lastMovedDay = moved(id),
+                createdDay = createdDay,
+                doneDay = if (done) s[ActionableFields.COMPLETED_AT].longOrNull?.let { calendar.epochDayOf(it) } else null,
             )
         }
         val order = compareBy<String> { GoalRules.parseHorizon(snaps[it]?.get(GoalFields.HORIZON)?.textOrNull).ordinal }
@@ -1001,13 +1016,21 @@ class Goals(
                 (snaps[id]?.get(ActionableFields.COMPLETED_AT)?.longOrNull?.let { calendar.epochDayOf(it) } ?: Long.MIN_VALUE) >= GoalRules.weekStart(today)
         }.sortedWith(compareBy<String> { snaps[it]?.get(ActionableFields.COMPLETED_AT)?.longOrNull ?: 0L }.thenBy { it })
             .map { item(it, 0) }
-        return Triple(open, snaps.keys.count { isDone(it) }, finishedThisWeek)
+        val since = GoalRhythmRules.previousMonthStart(today)
+        val finishedRecently = snaps.keys.filter { id ->
+            isDone(id) && (snaps[id]?.get(ActionableFields.COMPLETED_AT)?.longOrNull?.let { calendar.epochDayOf(it) } ?: Long.MIN_VALUE) >= since
+        }.sorted().map { item(it, 0) }
+        return GoalSets(open, snaps.keys.count { isDone(it) }, finishedThisWeek, finishedRecently)
     }
 
     fun view(tasks: List<Task>): GoalsView {
         val h = habits()
-        val (g, finished, week) = collect(tasks, h)
-        return GoalsView(h, g, finished, GoalWeekRules.build(g, week, today()))
+        val sets = collect(tasks, h)
+        val today = today()
+        return GoalsView(
+            h, sets.open, sets.finished, GoalWeekRules.build(sets.open, sets.finishedThisWeek, today),
+            GoalRhythmRules.month(sets.open, sets.finishedRecently, today),
+        )
     }
 
     /** Each goal's latest milestone tick (local epoch day). */

@@ -178,6 +178,16 @@ fun GoalsRoute(core: MekaCore) {
         }
 
         item(key = "goals-label") { SectionLabel("Goals", Modifier.padding(top = MekaSpace.xl).appear(rememberAppearance(3))) }
+        // Goals, properly, item 6: last month looked back on, for the first week of a month.
+        view.month?.let { m ->
+            item(key = "goals-month") {
+                Text(
+                    m.line, style = MekaType.caption, color = Meka.colors.textSecondary,
+                    modifier = Modifier.animateItem().padding(bottom = MekaSpace.xs).appear(rememberAppearance(3))
+                        .semantics { contentDescription = "Last month, ${m.line}" },
+                )
+            }
+        }
         if (view.goals.isEmpty()) item(key = "goals-empty") {
             Text(
                 "Say what you're working towards. Link habits and tasks to a goal and its progress counts itself.",

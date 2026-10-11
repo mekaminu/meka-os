@@ -258,6 +258,25 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(GoalWeekRules.shared.fillAlpha(arc: week.arcs[0]), GoalWeekRules.shared.MOVING_ALPHA)
     }
 
+    func testGoalRhythmReachesSwift() async throws {
+        // Goals, properly, item 6: the quiet label, the month's review (none for a fresh core) and the notices' source.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "goals6-\(UUID().uuidString).db", deviceKey: nil
+        )
+        _ = try await core.addGoal(title: "Run 5k", target: nil, horizon: GoalRules.shared.horizonAt(index: 1))
+        XCTAssertNil(core.goalsView.value.month)
+        let rules = GoalRhythmRules.shared
+        XCTAssertNil(rules.quietLabel(days: KotlinLong(value: 13)))
+        XCTAssertEqual(rules.quietLabel(days: KotlinLong(value: 14)), "quiet for 2 weeks")
+        XCTAssertEqual(
+            rules.previousMonthStart(day: CivilDate.shared.toEpochDay(year: 2026, month: 11, day: 1)),
+            CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 1)
+        )
+        XCTAssertEqual(NoticeSource.goals.label, "Goals: quiet goals and the month's review")
+    }
+
     func testGoalBreakdownReachesSwift() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

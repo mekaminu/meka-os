@@ -85,6 +85,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * Mon 2 Nov" · "Last went Wed 1 Apr. Booked the next one?".
      */
     APPOINTMENTS("Appointments due", NoticeTier.HEADS_UP),
+    /**
+     * Goals, properly, item 6 ([GoalRhythmRules.notices]): one gentle nudge the day a goal has gone 14 days without
+     * moving, and the 1st of the month's look back at last month's goals, both at 09:00.
+     */
+    GOALS("Goals: quiet goals and the month's review", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -481,6 +486,7 @@ object Governor {
         NoticeSource.WINS -> "this week's wins"
         NoticeSource.LEAVE -> if (n == 1) "leave to book" else "leave to book for $n holidays"
         NoticeSource.APPOINTMENTS -> plural(n, "appointment") + " to book"
+        NoticeSource.GOALS -> if (n == 1) "a word on your goals" else "$n words on your goals"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -538,6 +544,8 @@ object NoticeSources {
         approvals: List<Approval> = emptyList(),
         /** Appointment nudges: the list, for the heads-up the day one starts asking ([AppointmentRules.notices]). */
         appointments: List<AppointmentItem> = emptyList(),
+        /** Goals' rhythm: the open goals and last month's review ([GoalRhythmRules.notices]). */
+        goals: GoalsView = GoalsView.EMPTY,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -649,6 +657,7 @@ object NoticeSources {
         out += WinRules.notices(wins, nowMs, cal)
         out += LeaveRules.notices(school, leave, leaveWork, nowMs, cal)
         out += AppointmentRules.notices(appointments, nowMs, cal)
+        out += GoalRhythmRules.notices(goals.goals, goals.month, nowMs, cal)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.
