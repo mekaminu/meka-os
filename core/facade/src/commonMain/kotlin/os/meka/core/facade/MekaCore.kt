@@ -986,9 +986,9 @@ class MekaCore(
             return HandleOutcome.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
         }
         val cards = onCore {
-            val raw = rules.allowed(reply.proposals.map { os.meka.core.domain.RawRequestProposal(it.kind, it.title, it.date, it.time, it.words) })
+            val raw = rules.allowed(reply.proposals.map { os.meka.core.domain.RawRequestProposal(it.kind, it.title, it.date, it.time, it.words, it.type, it.repeat, it.cost) })
             val message = os.meka.core.domain.RequestMessage(messageId, rules.PERSON, rules.quoteText(text, subject), atMs)
-            requestCards.save(message, os.meka.core.domain.MessageRequestRules.check(raw, today, cal.minuteOfDay(atMs)))
+            requestCards.save(message, os.meka.core.domain.MessageRequestRules.check(raw, today, cal.minuteOfDay(atMs), allowRenewal = true))
         }
         return if (cards.isEmpty()) HandleOutcome.NothingToDo(rules.NOTHING_LINE) else HandleOutcome.Cards(cards, rules.readyLine(cards.size))
     }
@@ -1257,8 +1257,9 @@ class MekaCore(
 
     /**
      * Add on a request card (V1, requests slice 4): a task on its day (planned at its time; a reminder rings at its time
-     * while that is still ahead), an event in the calendar MEKA may edit (a planned task when none allows editing), or
-     * a work-from-home day. The card leaves Needs you on every device. Null when the card is already answered.
+     * while that is still ahead), an event in the calendar MEKA may edit (a planned task when none allows editing), a
+     * work-from-home day, or (a share's renewal card, "Handle this" slice 2) a renewal on the radar. The card leaves
+     * Needs you on every device. Null when the card is already answered.
      */
     suspend fun acceptRequest(cardId: String): RequestDone? = onCore { doRequest(cardId, change = false) }
 
@@ -1270,14 +1271,15 @@ class MekaCore(
     suspend fun changeRequest(cardId: String): RequestDone? = onCore { doRequest(cardId, change = true) }
 
     /**
-     * Undo on the bar after Add or Change: deletes the task, cancels the calendar edit (inside its five seconds) or
-     * takes the work-from-home day back. The card stays answered.
+     * Undo on the bar after Add or Change: deletes the task, cancels the calendar edit (inside its five seconds),
+     * takes the work-from-home day back or takes the renewal off the radar. The card stays answered.
      */
     suspend fun undoRequest(done: RequestDone): Boolean = onCore {
         var undone = false
         done.taskId?.let { id -> tasks.get(id)?.let { tasks.delete(id); followBlocks(listOf(id)); undone = true } }
         done.editId?.let { if (calendarEdits.undo(it)) undone = true }
         if (done.homeDay >= 0 && work.setHomeDay(done.homeDay, false, todayEpochDay())) undone = true
+        done.renewalId?.let { id -> if (renewals.items().any { it.id == id }) { renewals.delete(id); undone = true } }
         undone
     }
 
@@ -1317,6 +1319,14 @@ class MekaCore(
                 work.setHomeDay(plan.day, true, today)
                 val workDay = os.meka.core.domain.WorkModeRules.isWorkDay(work.schedule(), bankHolidays.calendar(), plan.day) && plan.day !in leave.days()
                 RequestDone(rules.doneLine(plan, card.proposal.kind, today, isWorkDay = workDay), null, null, plan.day)
+            }
+            is os.meka.core.domain.RequestPlan.AddRenewal -> {
+                val d = plan.details
+                val id = renewals.add(
+                    plan.title, d.kind, plan.day, d.repeat,
+                    cost = d.costPence?.let { os.meka.core.domain.RenewalRules.formatPence(it) },
+                )
+                RequestDone(rules.doneLine(plan, card.proposal.kind, today), null, null, renewalId = id)
             }
         }
         requestCards.resolve(cardId, if (change) os.meka.core.domain.RequestResolution.CHANGED else os.meka.core.domain.RequestResolution.ADDED)

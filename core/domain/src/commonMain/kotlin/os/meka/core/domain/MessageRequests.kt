@@ -13,6 +13,8 @@ enum class RequestKind(val wire: String, val verb: String, val decline: String) 
     WORK_FROM_HOME("work_from_home", "Work from home", "Not needed"),
     EVENT("event", "Add event", "Not an event"),
     REMINDER("reminder", "Remind me", "Not needed"),
+    /** Onto the renewals radar ("Handle this", slice 2): only ever proposed for something Meka shared. */
+    RENEWAL("renewal", "Add to renewals", "Not needed"),
     ;
 
     companion object {
@@ -27,10 +29,20 @@ data class RawRequestProposal(
     val date: String? = null,
     val time: String? = null,
     val words: String? = null,
+    /** A renewal's type, repeat and cost as the model wrote them (the wire already kept only known values). */
+    val type: String? = null,
+    val repeat: String? = null,
+    val cost: String? = null,
 )
 
-/** A checked proposal: a known kind, a clean title, a day within reach (when it has one) and a valid time. */
-data class RequestProposal(val kind: RequestKind, val title: String, val day: Long?, val minute: Int?)
+/** What a renewal card adds to the radar besides its title and day: its kind, how it repeats and its cost. */
+data class RenewalDetails(val kind: ObligationKind, val repeat: RenewalRepeat, val costPence: Long?)
+
+/**
+ * A checked proposal: a known kind, a clean title, a day within reach (when it has one) and a valid time; a renewal
+ * also has its [renewal] details (and no time).
+ */
+data class RequestProposal(val kind: RequestKind, val title: String, val day: Long?, val minute: Int?, val renewal: RenewalDetails? = null)
 
 /** One message from a watched person, as the listener read it. */
 data class RequestMessage(
@@ -107,12 +119,14 @@ object MessageRequestRules {
      * The model's proposals checked: known kinds only; the day resolved again from the message's own when-words when
      * they read (the model's date is used only when they don't), never in the past or more than [MAX_DAYS_AHEAD]
      * ahead; work from home and events need a day; a task or reminder needs a title; duplicates within the answer
-     * merged. [today] and [nowMinute] are the time the message came.
+     * merged. [today] and [nowMinute] are the time the message came. A renewal is read only when [allowRenewal]
+     * ("Handle this"; never a watched person's message or a group) and needs a day.
      */
-    fun check(raw: List<RawRequestProposal>, today: Long, nowMinute: Int): List<RequestProposal> {
+    fun check(raw: List<RawRequestProposal>, today: Long, nowMinute: Int, allowRenewal: Boolean = false): List<RequestProposal> {
         val out = mutableListOf<RequestProposal>()
         raw.forEach { r ->
             val kind = RequestKind.of(r.kind) ?: return@forEach
+            if (kind == RequestKind.RENEWAL && !allowRenewal) return@forEach
             val fromWords = r.words?.let { RequestDates.resolve(it, today, nowMinute) }
             val day = (fromWords?.day ?: r.date?.let(::isoDay))?.takeIf { it in today..today + MAX_DAYS_AHEAD }
             val minute = r.time?.let(::minuteOf) ?: fromWords?.minute
@@ -120,11 +134,43 @@ object MessageRequestRules {
                 RequestKind.WORK_FROM_HOME -> "Work from home"
                 else -> cleanTitle(r.title) ?: return@forEach
             }
-            if ((kind == RequestKind.WORK_FROM_HOME || kind == RequestKind.EVENT) && day == null) return@forEach
-            val p = RequestProposal(kind, title, day, if (kind == RequestKind.WORK_FROM_HOME) null else minute)
+            if ((kind == RequestKind.WORK_FROM_HOME || kind == RequestKind.EVENT || kind == RequestKind.RENEWAL) && day == null) return@forEach
+            val p = when (kind) {
+                RequestKind.RENEWAL -> RequestProposal(kind, title, day, null, renewalDetails(r))
+                RequestKind.WORK_FROM_HOME -> RequestProposal(kind, title, day, null)
+                else -> RequestProposal(kind, title, day, minute)
+            }
             if (out.none { sameRequest(it, p) }) out += p
         }
         return out
+    }
+
+    /**
+     * A renewal's details from the model's words: its type (else "other"), its repeat (else the type's usual one,
+     * [RenewalRules.defaultRepeat]) and its cost in pence (unknown when it doesn't read).
+     */
+    fun renewalDetails(r: RawRequestProposal): RenewalDetails {
+        val kind = when (r.type) {
+            "mot" -> ObligationKind.MOT
+            "car_tax" -> ObligationKind.CAR_TAX
+            "insurance" -> ObligationKind.INSURANCE
+            "boiler" -> ObligationKind.BOILER
+            "subscription" -> ObligationKind.SUBSCRIPTION
+            "bill" -> ObligationKind.BILL
+            "licence" -> ObligationKind.LICENCE
+            "warranty" -> ObligationKind.WARRANTY
+            else -> ObligationKind.OTHER
+        }
+        val repeat = when (r.repeat) {
+            "none" -> RenewalRepeat.NONE
+            "month" -> RenewalRepeat.MONTHLY
+            "quarter" -> RenewalRepeat.QUARTERLY
+            "half_year" -> RenewalRepeat.HALF_YEARLY
+            "year" -> RenewalRepeat.YEARLY
+            else -> RenewalRules.defaultRepeat(kind)
+        }
+        val pence = try { RenewalRules.parseCost(r.cost) } catch (e: ValidationException) { null }
+        return RenewalDetails(kind, repeat, pence?.takeIf { it > 0 })
     }
 
     /** The same request asked twice: the same kind and day, and titles that match ignoring case and punctuation. */
@@ -169,7 +215,8 @@ object MessageRequestRules {
             quote = quote,
             action = action,
             detail = detailLine(p),
-            changeLabel = if (p.kind == RequestKind.WORK_FROM_HOME) null else "Change",
+            // Nothing to edit as a task: a work-from-home day; a renewal is changed on the radar once added.
+            changeLabel = if (p.kind == RequestKind.WORK_FROM_HOME || p.kind == RequestKind.RENEWAL) null else "Change",
             declineLabel = p.kind.decline,
             spoken = if (shared) "${HandleThisRules.PERSON} $quote. $action?" else "${message.personName.trim()} wrote $quote. $action?",
             atMs = message.atMs,
@@ -182,14 +229,32 @@ object MessageRequestRules {
             ?: p.minute?.let { "Today · ${TaskWhenRules.timeLabel(it)}" }
         return when (p.kind) {
             RequestKind.WORK_FROM_HOME -> "Work from home · ${whenLine ?: "?"}"
+            RequestKind.RENEWAL -> "${p.kind.verb}: ${p.title}" + (p.day?.let { day ->
+                val k = p.renewal?.kind ?: ObligationKind.OTHER
+                " · ${RenewalRules.verb(k)} ${RenewalRules.dayWord(day, today)}"
+            } ?: "")
             else -> "${p.kind.verb}: ${p.title}" + (whenLine?.let { " · $it" } ?: "")
         }
     }
 
-    /** The line under a work-from-home card: what Add will change. */
+    /**
+     * The line under a work-from-home card (what Add will change) or a renewal card ("Insurance · every year · £412 a
+     * year", what goes on the radar).
+     */
     fun detailLine(p: RequestProposal): String? = when (p.kind) {
         RequestKind.WORK_FROM_HOME -> p.day?.let { "${CivilDate.shortLabel(it)} shows as work from home on both apps" }
+        RequestKind.RENEWAL -> p.renewal?.let { r -> renewalDetailLine(r, p.day) }
         else -> null
+    }
+
+    /** "Insurance · every year · £412 a year" · "Subscription · every month" · "Warranty · doesn't repeat · £45". */
+    fun renewalDetailLine(r: RenewalDetails, day: Long?): String {
+        val rule = day?.let { RenewalRules.ruleFor(r.repeat, it) }
+        return listOfNotNull(
+            RenewalRules.kindLabel(r.kind),
+            RenewalRules.repeatLabel(r.repeat).replaceFirstChar { it.lowercaseChar() },
+            r.costPence?.let { RenewalRules.costLabel(it, rule) },
+        ).joinToString(" · ")
     }
 
     /** One line, no control characters, at most [MAX_TITLE] characters (shortened at a word); null when empty. */

@@ -86,4 +86,26 @@ class HandleThisTest {
         assertEquals("1 thing to add", HandleThisRules.readyLine(1))
         assertEquals("3 things to add", HandleThisRules.readyLine(3))
     }
+
+    @Test
+    fun aRenewalNeedsADayAndReadsItsDetailsWithSafeDefaults() {
+        val raw = listOf(
+            RawRequestProposal("renewal", "Netflix", "2026-11-01", "08:00", null, "subscription", null, "10.99"),
+            RawRequestProposal("renewal", "Passport", null, null, "next March", "licence"),
+            RawRequestProposal("renewal", "Car insurance", "2026-10-01", type = "insurance"), // already gone
+            RawRequestProposal("renewal", "Something", "2026-12-01", cost = "free"),
+        )
+        val got = MessageRequestRules.check(HandleThisRules.allowed(raw), sat, 600, allowRenewal = true)
+        assertEquals(listOf("Netflix", "Something"), got.map { it.title })
+        // A subscription repeats monthly when the text didn't say; no time on a renewal.
+        assertEquals(RenewalDetails(ObligationKind.SUBSCRIPTION, RenewalRepeat.MONTHLY, 1_099), got[0].renewal)
+        assertEquals(null, got[0].minute)
+        assertEquals(RenewalDetails(ObligationKind.OTHER, RenewalRepeat.NONE, null), got[1].renewal)
+        val card = MessageRequestRules.card(RequestMessage("share:x:1", HandleThisRules.PERSON, "Your Netflix…", at), 0, got[0], sat, cal)
+        assertEquals("Add to renewals: Netflix · renews Sun 1 Nov", card.action)
+        assertEquals("Subscription · every month · £10.99 a month", card.detail)
+        assertEquals(null, card.changeLabel)
+        assertEquals(RequestPlan.AddRenewal("Netflix", got[0].day!!, got[0].renewal!!), RequestAcceptRules.plan(got[0], canAddEvent = true))
+        assertEquals(null, RequestAcceptRules.plan(got[0], canAddEvent = true, change = true))
+    }
 }

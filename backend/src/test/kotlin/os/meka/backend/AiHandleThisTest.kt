@@ -61,6 +61,16 @@ class AiHandleThisTest {
     }
 
     @Test
+    fun aRenewalComesBackWithItsDetails() {
+        val model = FakeModel(answered(
+            """{"proposals":[{"kind":"renewal","title":"Car insurance","date":"2026-11-12","words":"12 November","type":"insurance","repeat":"year","cost":"412"}]}""",
+        ))
+        val r = HandleThisService(model).read(request)
+        assertEquals(listOf(MessageRequestCodec.Proposal("renewal", "Car insurance", "2026-11-12", null, "12 November", "insurance", "year", "412")), r.proposals)
+        assertTrue("\"kind\":\"renewal\"" in model.asked.single().system)
+    }
+
+    @Test
     fun offOverBudgetAndFailuresSayWhy() {
         assertEquals(AskCodec.Response.OFF, HandleThisService(null).read(request).state)
         assertEquals(AskCodec.Response.OVER, HandleThisService(FakeModel(ModelOutcome.OverBudget)).read(request).state)

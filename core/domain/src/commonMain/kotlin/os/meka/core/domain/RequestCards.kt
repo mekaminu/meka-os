@@ -26,6 +26,12 @@ object RequestCardFields {
     const val DAY = "day"
     /** Local minute of the day; absent when it has no time. */
     const val MINUTE = "minute"
+    /** A renewal card's obligation kind ([ObligationKind] name; "Handle this", slice 2). Absent on other cards. */
+    const val OBLIGATION = "obligation"
+    /** A renewal card's repeat ([RenewalRepeat] name). */
+    const val REPEAT = "repeat"
+    /** A renewal card's cost in pence; absent when not known. */
+    const val COST_PENCE = "costPence"
     /** Add, Not a task (or Change, once its task is saved) on either device: gone from Needs you on both (TrueWins). */
     const val RESOLVED = "resolved"
     /** "added" · "declined" · "changed". */
@@ -62,6 +68,11 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
                     put(RequestCardFields.TITLE, p.title.fv())
                     p.day?.let { put(RequestCardFields.DAY, it.fv()) }
                     p.minute?.let { put(RequestCardFields.MINUTE, it.fv()) }
+                    p.renewal?.let { r ->
+                        put(RequestCardFields.OBLIGATION, r.kind.name.fv())
+                        put(RequestCardFields.REPEAT, r.repeat.name.fv())
+                        r.costPence?.let { put(RequestCardFields.COST_PENCE, it.fv()) }
+                    }
                 },
             )
         }
@@ -112,7 +123,12 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
         val at = e[RequestCardFields.AT].longOrNull ?: return@mapNotNull null
         val kind = e[RequestCardFields.KIND].textOrNull?.let(RequestKind::of) ?: return@mapNotNull null
         val title = e[RequestCardFields.TITLE].textOrNull ?: return@mapNotNull null
-        val proposal = RequestProposal(kind, title, e[RequestCardFields.DAY].longOrNull, e[RequestCardFields.MINUTE].longOrNull?.toInt())
+        val renewal = if (kind != RequestKind.RENEWAL) null else RenewalDetails(
+            e[RequestCardFields.OBLIGATION].textOrNull?.let { n -> ObligationKind.entries.firstOrNull { it.name == n } } ?: ObligationKind.OTHER,
+            e[RequestCardFields.REPEAT].textOrNull?.let { n -> RenewalRepeat.entries.firstOrNull { it.name == n } } ?: RenewalRepeat.NONE,
+            e[RequestCardFields.COST_PENCE].longOrNull,
+        )
+        val proposal = RequestProposal(kind, title, e[RequestCardFields.DAY].longOrNull, e[RequestCardFields.MINUTE].longOrNull?.toInt(), renewal)
         val text = e[RequestCardFields.TEXT].textOrNull.orEmpty()
         e.ref.entityId to Stored(
             RequestMessage(messageId, person, text, at), index, proposal, at,

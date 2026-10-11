@@ -11,6 +11,7 @@ package os.meka.core.domain
  * | Reminder | a task on its day, reminding at its time (when still ahead) | the same, then its detail opens |
  * | Event | the event in the calendar MEKA may edit; a planned task when none allows editing | a planned task, then its detail opens |
  * | Work from home | that day's work band reads "Work from home" | none |
+ * | Renewal ("Handle this" only) | on the renewals radar with its kind, repeat and cost | none (edited on the radar) |
  */
 sealed class RequestPlan {
     /** A task titled [title]; on [day] (null: Anytime today), at [minute]; reminding at [remindMinute] that day. */
@@ -21,6 +22,9 @@ sealed class RequestPlan {
 
     /** [day] becomes a work-from-home day. */
     data class HomeDay(val day: Long) : RequestPlan()
+
+    /** A renewal due on [day] onto the radar ("Handle this", slice 2). */
+    data class AddRenewal(val title: String, val day: Long, val details: RenewalDetails) : RequestPlan()
 }
 
 object RequestAcceptRules {
@@ -38,6 +42,10 @@ object RequestAcceptRules {
             RequestPlan.AddEvent(p.title, p.day, p.minute, EVENT_MINUTES)
         } else RequestPlan.AddTask(p.title, p.day, p.minute, null)
         RequestKind.WORK_FROM_HOME -> if (change) null else p.day?.let { RequestPlan.HomeDay(it) }
+        RequestKind.RENEWAL -> if (change) null else p.day?.let { day ->
+            val r = p.renewal ?: RenewalDetails(ObligationKind.OTHER, RenewalRepeat.NONE, null)
+            RequestPlan.AddRenewal(p.title, day, r)
+        }
     }
 
     /**
@@ -72,6 +80,8 @@ object RequestAcceptRules {
             }
             if (isWorkDay) "$d: work from home" else "$d: work from home (not a work day)"
         }
+        is RequestPlan.AddRenewal ->
+            "On the radar: “${plan.title}” · ${RenewalRules.verb(plan.details.kind)} ${RenewalRules.dayWord(plan.day, today)}"
     }
 
     /** "Tomorrow", "Tue 20 Oct · 18:00", "Today · 18:00"; null with neither a day nor a time. */

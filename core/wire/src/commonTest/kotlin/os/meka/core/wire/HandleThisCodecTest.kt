@@ -43,4 +43,22 @@ class HandleThisCodecTest {
         assertEquals(listOf("event", "task"), HandleThisCodec.parseModelAnswer(answer).map { it.kind })
         assertEquals(emptyList(), HandleThisCodec.parseModelAnswer("Sure! I'll book it for you."))
     }
+
+    @Test
+    fun aRenewalCarriesOnlyKnownTypeRepeatAndCostAndOnlyHandleThisReadsIt() {
+        val answer = """{"proposals":[
+            {"kind":"renewal","title":"Car insurance","date":"2026-11-12","words":"12 November","type":"insurance","repeat":"year","cost":"£1,240.50"},
+            {"kind":"renewal","title":"Gym","date":"2026-11-01","type":"crypto","repeat":"fortnight","cost":"lots"}
+        ]}"""
+        val got = HandleThisCodec.parseModelAnswer(answer)
+        assertEquals(MessageRequestCodec.Proposal("renewal", "Car insurance", "2026-11-12", null, "12 November", "insurance", "year", "1240.50"), got[0])
+        assertEquals(MessageRequestCodec.Proposal("renewal", "Gym", "2026-11-01"), got[1])
+        // A watched person's message never becomes a renewal.
+        assertEquals(emptyList(), MessageRequestCodec.parseModelAnswer(answer))
+        // The device reads it back from the server; a task's extra fields are dropped.
+        val back = MessageRequestCodec.decodeResponse(MessageRequestCodec.encodeResponse(MessageRequestCodec.Response("answered", got)))
+        assertEquals(got, back.proposals)
+        val task = MessageRequestCodec.decodeResponse("""{"w":${WireCodec.VERSION},"state":"answered","proposals":[{"kind":"task","title":"x","type":"bill","cost":"9"}]}""")
+        assertEquals(MessageRequestCodec.Proposal("task", "x"), task.proposals.single())
+    }
 }

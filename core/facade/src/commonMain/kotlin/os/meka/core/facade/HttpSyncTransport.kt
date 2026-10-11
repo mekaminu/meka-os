@@ -195,9 +195,9 @@ sealed class HandleOutcome {
 /**
  * What Add or Change on a request card did ([MekaCore.acceptRequest], [MekaCore.changeRequest]): [line] for the undo
  * bar, and what [MekaCore.undoRequest] takes back — the task made, the calendar edit (inside its five seconds), or the
- * work-from-home day (-1 when none).
+ * work-from-home day (-1 when none), or the renewal put on the radar.
  */
-data class RequestDone(val line: String, val taskId: String?, val editId: String?, val homeDay: Long = -1)
+data class RequestDone(val line: String, val taskId: String?, val editId: String?, val homeDay: Long = -1, val renewalId: String? = null)
 
 /** An answer to an approval card: [done] when it was taken, and the line to show ("Approved · …", or why not). */
 data class ApprovalAnswer(val done: Boolean, val line: String)

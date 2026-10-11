@@ -111,4 +111,39 @@ class HandleThisFacadeTest {
         assertIs<HandleOutcome.Unavailable>(core(transport = null).handleThis(letter))
         assertTrue(c.requests.value.isEmpty())
     }
+
+    @Test
+    fun aRenewalGoesOnTheRadarOnAddAndUndoTakesItOff() = runTest {
+        val c = core()
+        server.reply = MessageRequestCodec.Response(
+            "answered",
+            listOf(MessageRequestCodec.Proposal("renewal", "Car insurance", "2026-11-12", "09:00", "on 12 November", "insurance", "year", "412")),
+        )
+        val renewal = "Your car insurance with Acme renews on 12 November. Your new premium is £412 for the year."
+        val card = assertIs<HandleOutcome.Cards>(c.handleThis(renewal, "Your renewal")).cards.single()
+        assertEquals("Add to renewals: Car insurance · renews Thu 12 Nov", card.action)
+        assertEquals("Insurance · every year · £412 a year", card.detail)
+        assertEquals(null, card.changeLabel)
+        assertEquals(null, c.changeRequest(card.id))
+        assertTrue(c.listsView.value.renewals.all.isEmpty())
+
+        val done = assertNotNull(c.acceptRequest(card.id))
+        assertEquals("On the radar: “Car insurance” · renews Thu 12 Nov", done.line)
+        val item = c.listsView.value.renewals.all.single()
+        assertEquals("Car insurance", item.title)
+        assertEquals(os.meka.core.domain.ObligationKind.INSURANCE, item.kind)
+        assertEquals(os.meka.core.domain.RenewalRepeat.YEARLY, item.repeats)
+        assertEquals(41_200L, item.costPence)
+        assertTrue(c.requests.value.isEmpty())
+
+        assertTrue(c.undoRequest(done))
+        assertTrue(c.listsView.value.renewals.all.isEmpty())
+    }
+
+    @Test
+    fun aRenewalFromAWatchedMessageIsNeverMade() {
+        val raw = listOf(os.meka.core.domain.RawRequestProposal("renewal", "Netflix", "2026-11-01"))
+        assertTrue(os.meka.core.domain.MessageRequestRules.check(raw, 20_736L, 600).isEmpty())
+        assertEquals(1, os.meka.core.domain.MessageRequestRules.check(raw, 20_736L, 600, allowRenewal = true).size)
+    }
 }

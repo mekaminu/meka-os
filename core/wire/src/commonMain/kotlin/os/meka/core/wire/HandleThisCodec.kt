@@ -24,8 +24,11 @@ object HandleThisCodec {
     const val MAX_NOW = 80
     const val MAX_WORK = 120
 
-    /** The kinds "Handle this" may propose (no work-from-home day: that is only ever asked by someone close). */
-    val KINDS = setOf(MessageRequestCodec.TASK, MessageRequestCodec.EVENT, MessageRequestCodec.REMINDER)
+    /**
+     * The kinds "Handle this" may propose (no work-from-home day: that is only ever asked by someone close; a renewal
+     * since slice 2).
+     */
+    val KINDS = setOf(MessageRequestCodec.TASK, MessageRequestCodec.EVENT, MessageRequestCodec.REMINDER, MessageRequestCodec.RENEWAL)
 
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
     private val json = Json { ignoreUnknownKeys = true }
@@ -70,7 +73,7 @@ object HandleThisCodec {
 
     /** A model's answer: [MessageRequestCodec.parseModelAnswer], then only [KINDS]. */
     fun parseModelAnswer(text: String): List<MessageRequestCodec.Proposal> =
-        MessageRequestCodec.parseModelAnswer(text).filter { it.kind in KINDS }
+        MessageRequestCodec.parseModelAnswer(text, KINDS)
 
     private fun JsonObject.str(k: String): String =
         (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: throw IllegalArgumentException(k)

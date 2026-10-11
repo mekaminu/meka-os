@@ -29,8 +29,11 @@ object HandleThisRules {
     /** A share needs at least this many letters outside its links to be worth reading. */
     const val MIN_LETTERS = 12
 
-    /** The model's kinds a share may become: something to do, to be at, or to remember (never a work-from-home day). */
-    val KINDS = setOf(RequestKind.TASK.wire, RequestKind.EVENT.wire, RequestKind.REMINDER.wire)
+    /**
+     * The model's kinds a share may become: something to do, to be at, to remember, or a renewal for the radar (slice
+     * 2); never a work-from-home day.
+     */
+    val KINDS = setOf(RequestKind.TASK.wire, RequestKind.EVENT.wire, RequestKind.REMINDER.wire, RequestKind.RENEWAL.wire)
 
     private val link = Regex("""https?://\S+""", RegexOption.IGNORE_CASE)
 

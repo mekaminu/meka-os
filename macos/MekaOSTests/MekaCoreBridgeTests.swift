@@ -1616,6 +1616,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         let link = try await core.handleThis(text: "https://example.com/article", subject: nil)
         guard case .unavailable(let l) = onEnum(of: link) else { return XCTFail("expected Unavailable") }
         XCTAssertEqual(l.line, rules.NOTHING_LINE)
+        // Slice 2: a renewal card's line under it comes from the core (Swift shows `card.detail` as it is).
+        let details = RenewalDetails(kind: .insurance, repeat: .yearly, costPence: KotlinLong(value: 41_200))
+        XCTAssertEqual(MessageRequestRules.shared.renewalDetailLine(r: details, day: nil), "Insurance · every year · £412")
     }
 
     func testProtectedTimeReachesSwift() {
