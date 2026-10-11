@@ -1770,6 +1770,51 @@ final class CoreModel {
         run { try await $0.moveStepInGroup(taskId: taskID, stepId: stepID, toGroupIndex: Int32(toGroupIndex)) }
     }
 
+    // MARK: Checklist templates (Checklists in tasks, slice 3a)
+
+    /// Start from template's choices: Meka's own templates (latest first), then the starters he hasn't replaced.
+    func checklistTemplates() async -> ChecklistTemplatesView? {
+        guard let core else { return nil }
+        return try? await core.checklistTemplates()
+    }
+
+    /// The name Save as template suggests (the task's title).
+    func templateName(_ task: MekaTask) -> String { core?.templateName(task: task) ?? task.title }
+
+    /// Save as template: the task's checklist under [name]; the bar says so (Undo removes a new one).
+    func saveChecklistTemplate(_ taskID: String, name: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            guard let saved = try? await core.saveChecklistTemplate(taskId: taskID, name: name) else { return }
+            if let id = saved.id, !saved.replaced {
+                offerEventUndo(saved.line, .removeTemplate(id))
+            } else {
+                offerEventUndo(saved.line, nil)
+            }
+        }
+    }
+
+    /// Start from template: its items join the task's checklist, unticked; Undo takes them off again.
+    func startFromTemplate(_ taskID: String, templateID: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            guard let applied = try? await core.startFromTemplate(taskId: taskID, templateId: templateID) else { return }
+            offerEventUndo(applied.line, applied.stepIds.isEmpty ? nil : .removeSteps(applied.stepIds))
+        }
+    }
+
+    /// Remove a saved template; Undo brings it back.
+    func removeChecklistTemplate(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            guard let removed = try? await core.removeChecklistTemplate(id: id) else { return }
+            offerEventUndo(ChecklistTemplateRules.shared.removedLine(name: removed.name), .restoreTemplate(removed))
+        }
+    }
+
     /// Shop mode (slice 2): a task's checklist, or the shared shopping list, as big rows.
     func shopMode(_ task: MekaTask) -> ShopModeView? { core?.shopMode(task: task) }
     func shopMode(shopping: ShoppingView) -> ShopModeView? { core?.shopMode(view: shopping) }
@@ -1999,6 +2044,9 @@ final class CoreModel {
         case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
         case .tickSteps(let ids): run { try await $0.tickSteps(stepIds: ids) }
+        case .removeSteps(let ids): run { core in for id in ids { try await core.removeStep(stepId: id) } }
+        case .removeTemplate(let id): run { _ = try await $0.removeChecklistTemplate(id: id) }
+        case .restoreTemplate(let template): run { _ = try await $0.restoreChecklistTemplate(template: template) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
         case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
@@ -2797,6 +2845,12 @@ struct EventUndoOffer: Identifiable, Equatable {
         case restoreStep(String)
         /// Untick all on a checklist: these are ticked again.
         case tickSteps([String])
+        /// Start from template: the items it added come off again.
+        case removeSteps([String])
+        /// Save as template (a new one): it is removed again.
+        case removeTemplate(String)
+        /// Remove on a saved template: it comes back.
+        case restoreTemplate(ChecklistTemplate)
     }
 
     let id = UUID()

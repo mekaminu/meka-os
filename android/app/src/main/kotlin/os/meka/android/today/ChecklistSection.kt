@@ -80,6 +80,8 @@ import os.meka.android.designsystem.TickRing
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.ChecklistItem
 import os.meka.core.domain.ChecklistRules
+import os.meka.core.domain.ChecklistTemplateRules
+import os.meka.core.domain.ChecklistTemplatesView
 import os.meka.core.domain.ShopModeRules
 import os.meka.core.domain.Task
 import os.meka.core.domain.TextAutosave
@@ -222,6 +224,115 @@ internal fun ChecklistSection(task: Task, actions: TodayActions) {
         }
     }
     AddItemField(task, actions)
+    ChecklistTemplatesRow(task, view.isEmpty, actions)
+}
+
+/**
+ * Checklist templates (slice 3a): "Start from template" unfolds the saved lists (and the starters not yet replaced)
+ * under the checklist; tapping one adds its items (Undo on the bar). "Save as template" unfolds a name field, the
+ * task's title filled in; Save (or Update, when that name exists) keeps the list. Motion (catalogue "Checklist
+ * templates"): each panel unfolds on the expand spring with a fade; the rows it adds arrive like a pasted list.
+ */
+@Composable
+private fun ChecklistTemplatesRow(task: Task, empty: Boolean, actions: TodayActions) {
+    val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    val scope = rememberCoroutineScope()
+    var open by remember(task.id) { mutableStateOf<String?>(null) } // "start", "save" or null
+    var choices by remember(task.id) { mutableStateOf<ChecklistTemplatesView?>(null) }
+    var name by remember(task.id) { mutableStateOf(ChecklistTemplateRules.suggestedName(task)) }
+    var exists by remember(task.id) { mutableStateOf(false) }
+    LaunchedEffect(open, name) { if (open == "save") exists = actions.templateExists(name) }
+    fun toggle(which: String) {
+        haptics.light()
+        open = if (open == which) null else which
+        if (open == "start") scope.launch { choices = runCatching { actions.templates() }.getOrNull() }
+        if (open == "save") name = ChecklistTemplateRules.suggestedName(task)
+    }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        TemplateLink(ChecklistTemplateRules.START, open == "start") { toggle("start") }
+        if (!empty) TemplateLink(ChecklistTemplateRules.SAVE, open == "save") { toggle("save") }
+    }
+    AnimatedVisibility(
+        visible = open == "start",
+        enter = if (reduced) fadeIn(MekaMotion.expand(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.expand(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)) {
+            choices?.all?.forEach { t ->
+                key(t.id) {
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .clickable(role = Role.Button) { haptics.light(); open = null; actions.startTemplate(task.id, t.id) }
+                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
+                            .semantics { contentDescription = "Add the ${t.name} list" },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(t.name, style = MekaType.body, color = Meka.colors.textPrimary)
+                            Text(t.line, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        }
+                        if (t.starter) {
+                            Text(ChecklistTemplateRules.STARTER_TAG, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        } else {
+                            Text(
+                                "Remove", style = MekaType.caption, color = Meka.colors.critical,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                    .clickable(role = Role.Button) {
+                                        haptics.tick()
+                                        actions.removeTemplate(t)
+                                        choices = choices?.let { c -> ChecklistTemplateRules.view(c.saved - t) }
+                                    }
+                                    .padding(MekaSpace.xs),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    AnimatedVisibility(
+        visible = open == "save",
+        enter = if (reduced) fadeIn(MekaMotion.expand(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.expand(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
+                .background(Meka.colors.surfaceRaised).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val save = { if (name.isNotBlank()) { haptics.light(); open = null; actions.saveTemplate(task.id, name) } }
+            Box(Modifier.weight(1f).heightIn(min = 48.dp), contentAlignment = Alignment.CenterStart) {
+                if (name.isEmpty()) Text("Template name", style = MekaType.body, color = Meka.colors.textTertiary)
+                BasicTextField(
+                    value = name,
+                    onValueChange = { name = it.take(ChecklistTemplateRules.MAX_NAME) },
+                    singleLine = true,
+                    textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
+                    cursorBrush = SolidColor(Meka.colors.accent),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { save() }),
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Template name" },
+                )
+            }
+            Text(
+                if (exists) "Update" else "Save", style = MekaType.itemMeta, color = Meka.colors.onAccent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+                    .clickable(role = Role.Button) { save() }
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TemplateLink(label: String, lit: Boolean, onClick: () -> Unit) {
+    Text(
+        label, style = MekaType.caption, color = if (lit) Meka.colors.textPrimary else Meka.colors.accent,
+        modifier = Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(MekaRadius.m))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.m),
+    )
 }
 
 @Composable

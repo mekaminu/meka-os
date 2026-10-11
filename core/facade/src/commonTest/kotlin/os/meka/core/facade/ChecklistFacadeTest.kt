@@ -76,4 +76,34 @@ class ChecklistFacadeTest {
         fold.addShopping("milk, eggs")
         assertEquals("2 left", fold.shopMode(fold.listsView.value.shopping).line)
     }
+
+    @Test
+    fun aTemplateSavedOnTheFoldStartsAChecklistOnTheMacWithUndo() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        val id = fold.addTask("Weekly shop")
+        fold.addSteps(id, "eggs, milk, bread")
+        val name = fold.templateName(fold.task(id))
+        assertEquals("Weekly shop", name)
+        assertEquals(false, fold.templateExists(name))
+        assertEquals("Saved “Weekly shop” as a template", fold.saveChecklistTemplate(id, name).line)
+        assertEquals(true, fold.templateExists("weekly shop"))
+        fold.syncNow(); mac.syncNow()
+
+        val next = mac.addTask("Shop Saturday")
+        mac.addSteps(next, "milk")
+        val tpl = mac.checklistTemplates().saved.single()
+        val applied = mac.startFromTemplate(next, tpl.id)
+        assertEquals("Added 2 items from “Weekly shop”", applied.line)
+        assertEquals(listOf("milk", "eggs", "bread"), mac.checklistView(mac.task(next)).toTick.map { it.text })
+        applied.stepIds.forEach { mac.removeStep(it) } // Undo
+        assertEquals(listOf("milk"), mac.checklistView(mac.task(next)).toTick.map { it.text })
+
+        val removed = mac.removeChecklistTemplate(tpl.id)!!
+        assertTrue(mac.checklistTemplates().saved.isEmpty())
+        mac.restoreChecklistTemplate(removed)
+        mac.syncNow(); fold.syncNow()
+        assertEquals(listOf("Weekly shop"), fold.checklistTemplates().saved.map { it.name })
+        assertTrue(fold.checklistTemplates().starters.none { it.name == "Weekly shop" })
+    }
 }

@@ -141,6 +141,7 @@ class MekaCore(
     private val lifeFacts = os.meka.core.domain.LifeFacts(replica, ids::next, nowMs)
     private val trainQueue = os.meka.core.domain.TrainQueue(replica, ids::next, nowMs)
     private val errands = os.meka.core.domain.Errands(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val templateStore = os.meka.core.domain.ChecklistTemplates(replica, ids::next, nowMs)
     private val appointments = os.meka.core.domain.Appointments(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val wins = os.meka.core.domain.WorkWins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
@@ -863,6 +864,45 @@ class MekaCore(
 
     /** Shop mode for the shared shopping list. Pure. */
     fun shopMode(view: os.meka.core.domain.ShoppingView): os.meka.core.domain.ShopModeView = os.meka.core.domain.ShopModeRules.ofShopping(view)
+
+    // ---- Checklist templates (Checklists in tasks, slice 3a; the checklist's ⋯ on both apps) ----
+
+    /** Start from template's choices: Meka's own templates (latest first), then the starters he hasn't replaced. */
+    suspend fun checklistTemplates(): os.meka.core.domain.ChecklistTemplatesView = onCore { templateStore.view() }
+
+    /** The name Save as template suggests for [task] (its title). Pure. */
+    fun templateName(task: os.meka.core.domain.Task): String = os.meka.core.domain.ChecklistTemplateRules.suggestedName(task)
+
+    /** Whether saving [name] would update an existing template (the sheet says "Update"). */
+    suspend fun templateExists(name: String): Boolean =
+        onCore { os.meka.core.domain.ChecklistTemplateRules.existing(templateStore.saved(), name) != null }
+
+    /** Save as template: the task's checklist (ticked or not, in order) under [name]; a template of that name is saved over. */
+    suspend fun saveChecklistTemplate(taskId: String, name: String): os.meka.core.domain.TemplateSaved = onCore {
+        val task = tasks.all().firstOrNull { it.id == taskId }
+            ?: return@onCore os.meka.core.domain.TemplateSaved(null, false, os.meka.core.domain.ChecklistTemplateRules.NOTHING_TO_SAVE)
+        templateStore.save(name, os.meka.core.domain.ChecklistTemplateRules.itemsOf(task))
+    }
+
+    /**
+     * Start from template: the template's items not already on the task's checklist go at its end, unticked. Undo
+     * removes [os.meka.core.domain.TemplateApplied.stepIds] with [removeStep].
+     */
+    suspend fun startFromTemplate(taskId: String, templateId: String): os.meka.core.domain.TemplateApplied = onCore {
+        val t = templateStore.find(templateId)
+        val task = tasks.all().firstOrNull { it.id == taskId }
+        if (t == null || task == null) return@onCore os.meka.core.domain.TemplateApplied(emptyList(), "That template has gone")
+        val texts = os.meka.core.domain.ChecklistTemplateRules.toAdd(t, task)
+        val ids = tasks.addChecklistTexts(taskId, texts)
+        os.meka.core.domain.TemplateApplied(ids, os.meka.core.domain.ChecklistTemplateRules.appliedLine(t.name, ids.size))
+    }
+
+    /** Removes a saved template; returns it for [restoreChecklistTemplate] (Undo). */
+    suspend fun removeChecklistTemplate(id: String): os.meka.core.domain.ChecklistTemplate? = onCore { templateStore.remove(id) }
+
+    /** Undo for [removeChecklistTemplate]. */
+    suspend fun restoreChecklistTemplate(template: os.meka.core.domain.ChecklistTemplate): os.meka.core.domain.TemplateSaved =
+        onCore { templateStore.restore(template) }
 
     /** The local day today as an epoch day, for [os.meka.core.domain.Task.repeatMeta]. */
     fun todayEpochDay(): Long = ZoneCalendar(timeZone).epochDayOf(nowMs())

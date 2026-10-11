@@ -523,6 +523,30 @@ internal fun todayActions(
             if (ids.isNotEmpty()) undo?.show(os.meka.core.domain.ChecklistRules.untickedLine(ids.size)) { core.tickSteps(ids) }
         }
     },
+    templates = { core.checklistTemplates() },
+    templateExists = { name -> runCatching { core.templateExists(name) }.getOrDefault(false) },
+    saveTemplate = { id, name ->
+        scope.launch {
+            val saved = runCatching { core.saveChecklistTemplate(id, name) }.getOrNull() ?: return@launch
+            val tid = saved.id
+            if (tid != null && !saved.replaced) {
+                undo?.show(saved.line) { core.removeChecklistTemplate(tid) }
+            } else undo?.show(saved.line, null)
+        }
+    },
+    startTemplate = { id, templateId ->
+        scope.launch {
+            val applied = runCatching { core.startFromTemplate(id, templateId) }.getOrNull() ?: return@launch
+            if (applied.stepIds.isNotEmpty()) undo?.show(applied.line) { applied.stepIds.forEach { core.removeStep(it) } }
+            else undo?.show(applied.line, null)
+        }
+    },
+    removeTemplate = { t ->
+        scope.launch {
+            val removed = runCatching { core.removeChecklistTemplate(t.id) }.getOrNull() ?: return@launch
+            undo?.show(os.meka.core.domain.ChecklistTemplateRules.removedLine(removed.name)) { core.restoreChecklistTemplate(removed) }
+        }
+    },
     someday = { id -> scope.launch { runCatching { core.moveToSomeday(id, SomedayKind.IDEA) }; if (selected() == id) setSelected(null) } },
     goals = core.goalsView,
     setGoal = { id, goalId -> scope.launch { runCatching { core.setTaskGoal(id, goalId) } } },
@@ -552,6 +576,16 @@ data class TodayActions(
     val moveStep: (String, String, Int) -> Unit,
     /** Untick all on a checklist, to reuse it (Undo ticks them again). */
     val untickAll: (String) -> Unit,
+    /** Checklist templates (slice 3a): Start from template's choices, loaded when the picker opens. */
+    val templates: suspend () -> os.meka.core.domain.ChecklistTemplatesView = { os.meka.core.domain.ChecklistTemplateRules.view(emptyList()) },
+    /** Whether a template of this name exists already (Save reads "Update"). */
+    val templateExists: suspend (String) -> Boolean = { false },
+    /** Save as template: (task, name); the bar says so (Undo removes a new one). */
+    val saveTemplate: (String, String) -> Unit = { _, _ -> },
+    /** Start from template: (task, template id); its items join the list (Undo takes them off). */
+    val startTemplate: (String, String) -> Unit = { _, _ -> },
+    /** Remove a saved template (Undo brings it back). */
+    val removeTemplate: (os.meka.core.domain.ChecklistTemplate) -> Unit = {},
     /** Out of Today and the planner, into Lists → Someday. */
     val someday: (String) -> Unit,
     /** Open goals, for linking a task to one (its progress then counts the task). */

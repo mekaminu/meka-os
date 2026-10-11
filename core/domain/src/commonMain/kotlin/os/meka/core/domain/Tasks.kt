@@ -540,9 +540,11 @@ class Tasks(
      * Checklists (2026-10-11): one typed or pasted line adds each of its items ([ChecklistRules.split]) at the end of
      * the list, unticked. Returns the new ids in order (empty when the line held nothing).
      */
-    fun addChecklistItems(taskId: String, text: String): List<String> {
+    fun addChecklistItems(taskId: String, text: String): List<String> = addChecklistTexts(taskId, ChecklistRules.split(text))
+
+    /** These items, as they are (a template's, never split again), at the end of the list, unticked. Returns their ids. */
+    fun addChecklistTexts(taskId: String, texts: List<String>): List<String> {
         requireExists(taskId)
-        val texts = ChecklistRules.split(text)
         if (texts.isEmpty()) return emptyList()
         val positions = ChecklistRules.positionsAfter(checklistFor(taskId), texts.size, nowMs())
         return texts.mapIndexed { i, t ->

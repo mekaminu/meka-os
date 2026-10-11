@@ -1555,6 +1555,38 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(ShopModeRules.shared.offer(itemCount: 1))
     }
 
+    func testChecklistTemplatesReachSwift() async throws {
+        // Checklists in tasks, slice 3a: Save as template, Start from template and Remove (only Strings cross in;
+        // the removed template goes back to the core once, for Undo).
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "templates-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let id = try await core.addTask(title: "Weekly shop")
+        _ = try await core.addSteps(taskId: id, text: "eggs, milk, bread")
+        let task = try XCTUnwrap(core.today.value.upNext)
+        XCTAssertEqual(core.templateName(task: task), "Weekly shop")
+        let saved = try await core.saveChecklistTemplate(taskId: id, name: "Weekly shop")
+        XCTAssertEqual(saved.line, "Saved “Weekly shop” as a template")
+        XCTAssertFalse(saved.replaced)
+        let view = try await core.checklistTemplates()
+        XCTAssertEqual(view.saved.map(\.name), ["Weekly shop"])
+        XCTAssertFalse(view.starters.contains { $0.name == "Weekly shop" })
+
+        let next = try await core.addTask(title: "Shop Saturday")
+        let tid = try XCTUnwrap(view.saved.first?.id)
+        let applied = try await core.startFromTemplate(taskId: next, templateId: tid)
+        XCTAssertEqual(applied.line, "Added 3 items from “Weekly shop”")
+        XCTAssertEqual(applied.stepIds.count, 3)
+
+        let removed = try await core.removeChecklistTemplate(id: tid)
+        XCTAssertEqual(removed?.name, "Weekly shop")
+        let empty = try await core.checklistTemplates()
+        XCTAssertTrue(empty.saved.isEmpty)
+        XCTAssertEqual(ChecklistTemplateRules.shared.removedLine(name: "Weekly shop"), "Removed the “Weekly shop” template")
+    }
+
     func testErrandsReachSwift() {
         // Errands by location, slice 1: a typed line is read by the core's rules into a place and its things, and the
         // empty view reaches the Mac (only Strings cross from the sheet).

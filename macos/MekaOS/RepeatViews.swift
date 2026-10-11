@@ -123,10 +123,115 @@ struct StepsList: View {
                 // Return had been pressed (TextAutosave: typing is never lost).
                 .onChange(of: task.id) { oldId, _ in addPending(to: oldId) }
                 .onDisappear { addPending(to: task.id) }
+            ChecklistTemplatesBar(task: task, empty: toTick.isEmpty && ticked.isEmpty, palette: palette)
         }
         .sheet(isPresented: $shopping) { ShopModeSheet(source: .checklist(task.id), palette: palette) }
         .animation(MekaMotion.replan(reduced: reduceMotion), value: toTick.map(\.id) + ["|"] + ticked.map(\.id))
         .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.offerComplete == true)
+    }
+}
+
+/// Checklist templates (slice 3a): "Start from template" pops the saved lists (and the starters not yet replaced) over
+/// the checklist; picking one adds its items (Undo on the bar). "Save as template" pops a name field with the task's
+/// title filled in; Save (or Update, when that name exists) keeps the list. Motion: the system popover's scale-fade;
+/// the rows it adds arrive like a pasted list (replan spring).
+private struct ChecklistTemplatesBar: View {
+    @Environment(CoreModel.self) private var model
+    let task: MekaTask
+    let empty: Bool
+    let palette: MekaPalette
+    @State private var picking = false
+    @State private var saving = false
+    @State private var choices: [ChecklistTemplate] = []
+    @State private var names: Set<String> = []
+    @State private var name = ""
+
+    private var exists: Bool { names.contains(name.trimmingCharacters(in: .whitespaces).lowercased()) }
+
+    private func load() async {
+        let view = await model.checklistTemplates()
+        choices = view?.all ?? []
+        names = Set((view?.saved ?? []).map { $0.name.lowercased() })
+    }
+
+    var body: some View {
+        HStack(spacing: MekaSpace.m) {
+            Button(ChecklistTemplateRules.shared.START) { MekaHaptics.light(); picking = true }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.caption)
+                .foregroundStyle(palette.accent)
+                .popover(isPresented: $picking, arrowEdge: .bottom) { picker }
+            if !empty {
+                Button(ChecklistTemplateRules.shared.SAVE) { MekaHaptics.light(); name = model.templateName(task); saving = true }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.accent)
+                    .popover(isPresented: $saving, arrowEdge: .bottom) { saver }
+            }
+            Spacer()
+        }
+        .task(id: picking || saving) { await load() }
+    }
+
+    private var picker: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(ChecklistTemplateRules.shared.PICKER_TITLE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            ForEach(choices, id: \.id) { t in
+                HStack(spacing: MekaSpace.xs) {
+                    Button {
+                        picking = false
+                        model.startFromTemplate(task.id, templateID: t.id)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(t.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                            Text(t.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .accessibilityLabel("Add the \(t.name) list")
+                    if t.starter {
+                        Text(ChecklistTemplateRules.shared.STARTER_TAG).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    } else {
+                        Button("Remove") {
+                            model.removeChecklistTemplate(t.id)
+                            choices.removeAll { $0.id == t.id }
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.caption)
+                        .foregroundStyle(palette.critical)
+                    }
+                }
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(width: 320)
+    }
+
+    private var saver: some View {
+        HStack(spacing: MekaSpace.xs) {
+            TextField("Template name", text: $name)
+                .textFieldStyle(.plain)
+                .font(MekaType.body)
+                .onSubmit(save)
+            Button(exists ? "Update" : "Save", action: save)
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta)
+                .foregroundStyle(palette.onAccent)
+                .padding(.horizontal, MekaSpace.m)
+                .padding(.vertical, MekaSpace.xs)
+                .background(Capsule().fill(palette.accent))
+                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+        .padding(MekaSpace.m)
+        .frame(width: 320)
+    }
+
+    private func save() {
+        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        saving = false
+        model.saveChecklistTemplate(task.id, name: name)
     }
 }
 
