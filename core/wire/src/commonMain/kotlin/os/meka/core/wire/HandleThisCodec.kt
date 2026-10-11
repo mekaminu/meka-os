@@ -26,9 +26,11 @@ object HandleThisCodec {
 
     /**
      * The kinds "Handle this" may propose (no work-from-home day: that is only ever asked by someone close; a renewal
-     * since slice 2).
+     * since slice 2, a drafted reply since slice 3).
      */
-    val KINDS = setOf(MessageRequestCodec.TASK, MessageRequestCodec.EVENT, MessageRequestCodec.REMINDER, MessageRequestCodec.RENEWAL)
+    val KINDS = setOf(
+        MessageRequestCodec.TASK, MessageRequestCodec.EVENT, MessageRequestCodec.REMINDER, MessageRequestCodec.RENEWAL, MessageRequestCodec.REPLY,
+    )
 
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
     private val json = Json { ignoreUnknownKeys = true }

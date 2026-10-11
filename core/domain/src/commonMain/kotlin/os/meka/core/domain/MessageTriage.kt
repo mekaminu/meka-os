@@ -202,10 +202,17 @@ object MessageTriageRules {
     fun cleanDraft(s: String?): String? {
         val t = s?.replace(Regex("""[\u0000-\u001F\u007F]"""), " ")?.replace(Regex("""\s+"""), " ")?.trim()?.trim('"', '“', '”')?.trim()
         if (t.isNullOrEmpty() || t.length > MAX_DRAFT) return null
-        if (url.containsMatchIn(t) || email.containsMatchIn(t)) return null
-        if (phone.findAll(t).any { m -> m.value.count(Char::isDigit) >= 9 }) return null
+        if (carriesAddress(t)) return null
         return t
     }
+
+    /**
+     * Whether a model's draft carries a link, an email address or a phone number of nine digits or more: such a draft
+     * is dropped whole (a message or a share can't get MEKA to put an address in Meka's mouth). Also "Handle this"'s
+     * reply drafts ([HandleThisRules.cleanReply]).
+     */
+    fun carriesAddress(t: String): Boolean =
+        url.containsMatchIn(t) || email.containsMatchIn(t) || phone.findAll(t).any { m -> m.value.count(Char::isDigit) >= 9 }
 
     /**
      * The digest's cards from [items] (captured messages) that [route] sends to the digest and that came after

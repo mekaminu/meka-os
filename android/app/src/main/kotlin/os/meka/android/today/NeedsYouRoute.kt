@@ -180,9 +180,13 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
         }, aside, { latestOpenLists() }, onRequest = { card, choice ->
             scope.launch {
                 when (choice) {
-                    // The card leaves on both devices; Undo takes back what Add made (the card stays answered).
-                    RequestChoice.ADD -> runCatching { core.acceptRequest(card.id) }.getOrNull()
-                        ?.let { done -> undo.show(done.line) { core.undoRequest(done) } }
+                    // The card leaves on both devices; Undo takes back what Add made (the card stays answered). A reply
+                    // card's Copy reply puts the draft on the clipboard: nothing was sent or added, so no Undo.
+                    RequestChoice.ADD -> runCatching { core.acceptRequest(card.id) }.getOrNull()?.let { done ->
+                        done.copyText?.let { os.meka.android.work.LiveReplies.copyText(context, it) }
+                        val undoIt: (suspend () -> Unit)? = if (done.undoable) suspend { core.undoRequest(done); Unit } else null
+                        undo.show(done.line, undoIt)
+                    }
                     RequestChoice.CHANGE -> runCatching { core.changeRequest(card.id) }.getOrNull()?.let { done ->
                         undo.show(done.line) { core.undoRequest(done); changed.value = null }
                         done.taskId?.let { changed.value = RequestChange(card.proposal.title, it) }

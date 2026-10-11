@@ -30,10 +30,23 @@ object HandleThisRules {
     const val MIN_LETTERS = 12
 
     /**
-     * The model's kinds a share may become: something to do, to be at, to remember, or a renewal for the radar (slice
-     * 2); never a work-from-home day.
+     * The model's kinds a share may become: something to do, to be at, to remember, a renewal for the radar (slice
+     * 2) or a drafted reply Meka sends himself (slice 3); never a work-from-home day.
      */
-    val KINDS = setOf(RequestKind.TASK.wire, RequestKind.EVENT.wire, RequestKind.REMINDER.wire, RequestKind.RENEWAL.wire)
+    val KINDS = setOf(
+        RequestKind.TASK.wire, RequestKind.EVENT.wire, RequestKind.REMINDER.wire, RequestKind.RENEWAL.wire, RequestKind.REPLY.wire,
+    )
+
+    /** A reply card's button: the draft goes on the clipboard and the card is answered; nothing is sent. */
+    const val COPY_REPLY = "Copy reply"
+    /** A reply card's title when the model gave none. */
+    const val REPLY_TITLE = "Reply"
+    /** The undo bar's line once a reply is copied (there is nothing to undo: nothing was sent or added). */
+    const val COPIED_LINE = "Reply copied · paste it into the email or chat and send it yourself"
+    /** A drafted reply is kept whole up to this length (an email's few short paragraphs); a longer one is dropped. */
+    const val MAX_REPLY = 1_200
+    /** At most this many paragraphs. */
+    const val MAX_REPLY_PARAGRAPHS = 6
 
     private val link = Regex("""https?://\S+""", RegexOption.IGNORE_CASE)
 
@@ -76,6 +89,27 @@ object HandleThisRules {
         val body = outgoingText(text).replace(Regex("""\s+"""), " ").trim()
         return listOf(s, body).filter { it.isNotEmpty() }.joinToString(" · ")
     }
+
+    /**
+     * A model's drafted reply as the card shows and copies it: control characters gone, spaces collapsed within each
+     * line, line breaks and paragraphs kept (at most [MAX_REPLY_PARAGRAPHS], blank lines between), the model's own quote marks
+     * trimmed; null when empty, longer than [MAX_REPLY], or carrying a link, an email address or a phone number
+     * ([MessageTriageRules.carriesAddress]): what was shared can't get MEKA to put an address or a link in Meka's mouth.
+     * Placeholders the model was told not to write ("[Name]") also drop it: Meka would send them unread.
+     */
+    fun cleanReply(s: String?): String? {
+        val paragraphs = s.orEmpty().replace("\r\n", "\n").replace(Regex("""[\u0000-\u0009\u000B-\u001F\u007F]"""), " ")
+            .split(Regex("""\n\s*\n"""))
+            .map { para -> para.split('\n').map { it.replace(Regex("""\s+"""), " ").trim() }.filter { it.isNotEmpty() }.joinToString("\n") }
+            .filter { it.isNotEmpty() }
+        if (paragraphs.isEmpty() || paragraphs.size > MAX_REPLY_PARAGRAPHS) return null
+        val t = paragraphs.joinToString("\n\n").trim().trim('"', '“', '”').trim()
+        if (t.isEmpty() || t.length > MAX_REPLY) return null
+        if (MessageTriageRules.carriesAddress(t) || placeholder.containsMatchIn(t)) return null
+        return t
+    }
+
+    private val placeholder = Regex("""\[[^\]]{1,40}\]|<[^>]{1,40}>|\{[^}]{1,40}\}""")
 
     /** The model's proposals that a share may become, before [MessageRequestRules.check] reads them. */
     fun allowed(raw: List<RawRequestProposal>): List<RawRequestProposal> = raw.filter { it.kind in KINDS }

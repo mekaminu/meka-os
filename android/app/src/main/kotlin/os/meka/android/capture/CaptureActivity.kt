@@ -112,7 +112,11 @@ class CaptureActivity : ComponentActivity() {
                     // "Handle this" (V1): the shared text goes to MEKA's AI on Meka's tap only; cards come back.
                     handle = { text, subject -> core.handleThis(text, subject) },
                     answer = { card, add ->
-                        if (add) core.acceptRequest(card.id)?.line
+                        // A reply card's Copy reply: the draft goes on the clipboard; Meka sends it himself.
+                        if (add) core.acceptRequest(card.id)?.let { done ->
+                            done.copyText?.let { os.meka.android.work.LiveReplies.copyText(this@CaptureActivity, it) }
+                            done.line
+                        }
                         else if (core.declineRequest(card.id)) "${card.declineLabel} · ${card.proposal.title}" else null
                     },
                     done = { saved -> setResult(if (saved) Activity.RESULT_OK else Activity.RESULT_CANCELED); finish() },

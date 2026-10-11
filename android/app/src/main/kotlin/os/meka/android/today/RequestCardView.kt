@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,7 +39,8 @@ enum class RequestChoice { ADD, CHANGE, DECLINE }
 /**
  * A request from someone Meka watches (V1, requests slice 4), in Needs you above the stack: "From Wife · 14:02", the
  * quote, what Add would do ("Add task: Pick up dry cleaning · Tomorrow"), what more it changes (work from home), then
- * Add · Change · Not a task. Each press gives a light haptic (Not a task a tick); the card folds away with the list's
+ * Add · Change · Not a task. A shared email's reply card ("Handle this", slice 3) shows its draft whole with Copy reply ·
+ * Not needed (the draft goes on the clipboard; Meka sends it himself, MEKA never does). Each press gives a light haptic (Not a task a tick); the card folds away with the list's
  * item motion and the undo bar rises. Nothing is sent to anyone.
  */
 @Composable
@@ -54,6 +56,16 @@ internal fun RequestCardView(card: RequestCard, onChoice: (RequestChoice) -> Uni
         Text(card.quote, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
         Text(card.action, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.xxs))
         card.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        // "Handle this", slice 3: a reply card shows its whole draft (selectable) before Copy reply.
+        card.draft?.let { draft ->
+            SelectionContainer {
+                Text(
+                    draft, style = MekaType.body, color = Meka.colors.textPrimary,
+                    modifier = Modifier.padding(top = MekaSpace.xxs).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s))
+                        .background(Meka.colors.surface).padding(MekaSpace.s).testTag("request-draft-${card.id}"),
+                )
+            }
+        }
         Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             RequestPill(card.addLabel, filled = true, spoken = "${card.addLabel}: ${card.action}") { haptics.light(); onChoice(RequestChoice.ADD) }
             card.changeLabel?.let { label ->

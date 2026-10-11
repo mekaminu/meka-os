@@ -1619,6 +1619,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Slice 2: a renewal card's line under it comes from the core (Swift shows `card.detail` as it is).
         let details = RenewalDetails(kind: .insurance, repeat: .yearly, costPence: KotlinLong(value: 41_200))
         XCTAssertEqual(MessageRequestRules.shared.renewalDetailLine(r: details, day: nil), "Insurance · every year · £412")
+        // Slice 3: a reply's draft is checked in the core; Swift only shows `card.draft` and copies `done.copyText`.
+        XCTAssertEqual(rules.cleanReply(s: "Yes, Rex will be there."), "Yes, Rex will be there.")
+        XCTAssertNil(rules.cleanReply(s: "Pay at www.example.com"))
+        XCTAssertEqual(rules.COPY_REPLY, "Copy reply")
     }
 
     func testProtectedTimeReachesSwift() {

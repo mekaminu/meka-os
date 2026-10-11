@@ -5,7 +5,8 @@ import SwiftUI
 /// quote, what Add would do, what more it changes (work from home), then Add · Change · Not a task. The Fold read the
 /// message; the cards sync, so answering here clears them there. Buttons press in (light haptic; Not a task a tick);
 /// a card folds away with the expand spring and the undo bar rises. Cards stagger in after the after-work card.
-/// Reduced motion: cross-fades. Nothing is sent to anyone.
+/// Reduced motion: cross-fades. Nothing is sent to anyone: a shared email's reply card ("Handle this", slice 3) shows its
+/// draft whole with Copy reply · Not needed, and Copy reply only puts it on the pasteboard.
 struct RequestCardsView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -37,6 +38,15 @@ private struct RequestCardRow: View {
             Text(card.action).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).padding(.top, MekaSpace.xxs)
             if let detail = card.detail {
                 Text(detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+            // "Handle this", slice 3: a reply card shows its whole draft (selectable) before Copy reply.
+            if let draft = card.draft {
+                Text(draft).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(MekaSpace.s)
+                    .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+                    .padding(.top, MekaSpace.xxs)
             }
             HStack(spacing: MekaSpace.xs) {
                 pill(card.addLabel, filled: true, spoken: "\(card.addLabel): \(card.action)") { answer(.add) }

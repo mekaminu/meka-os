@@ -141,6 +141,42 @@ class HandleThisFacadeTest {
     }
 
     @Test
+    fun aReplyIsCopiedNeverSentAndSyncsToTheMac() = runTest {
+        // Slice 3: a drafted reply card; Copy reply hands the draft back for the clipboard and answers the card on both
+        // devices; nothing is added, and there is nothing to undo.
+        val c = core()
+        val mac = core(device = "mac")
+        server.reply = MessageRequestCodec.Response(
+            "answered",
+            listOf(
+                MessageRequestCodec.Proposal("reply", "Reply to Mrs Patel", body = "Hi Mrs Patel,\n\nYes, Rex will be on the trip. Thank you!"),
+                MessageRequestCodec.Proposal("task", "Pack Rex a lunch", words = "by Friday"),
+            ),
+        )
+        val ask = "Dear parent, can you confirm whether Rex will join the museum trip? Please send a packed lunch by Friday."
+        val cards = assertIs<HandleOutcome.Cards>(c.handleThis(ask, "Museum trip")).cards
+        val reply = cards.first { it.proposal.kind == os.meka.core.domain.RequestKind.REPLY }
+        assertEquals("Draft reply: Reply to Mrs Patel", reply.action)
+        assertEquals("Hi Mrs Patel,\n\nYes, Rex will be on the trip. Thank you!", reply.draft)
+        assertEquals("Copy reply", reply.addLabel)
+        assertEquals(null, c.changeRequest(reply.id))
+
+        c.syncNow(); mac.syncNow()
+        val onMac = mac.requests.value.first { it.id == reply.id }
+        assertEquals(reply.draft, onMac.draft)
+
+        val done = assertNotNull(c.acceptRequest(reply.id))
+        assertEquals(reply.draft, done.copyText)
+        assertEquals(false, done.undoable)
+        assertEquals(os.meka.core.domain.HandleThisRules.COPIED_LINE, done.line)
+        assertTrue(c.today.value.yourDay.isEmpty() && c.today.value.upNext == null)
+        assertEquals(false, c.undoRequest(done))
+        assertEquals(listOf("Pack Rex a lunch"), c.requests.value.map { it.proposal.title })
+        c.syncNow(); mac.syncNow()
+        assertTrue(mac.requests.value.none { it.id == reply.id })
+    }
+
+    @Test
     fun aRenewalFromAWatchedMessageIsNeverMade() {
         val raw = listOf(os.meka.core.domain.RawRequestProposal("renewal", "Netflix", "2026-11-01"))
         assertTrue(os.meka.core.domain.MessageRequestRules.check(raw, 20_736L, 600).isEmpty())

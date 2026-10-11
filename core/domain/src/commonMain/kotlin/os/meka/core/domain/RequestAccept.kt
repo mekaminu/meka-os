@@ -12,6 +12,7 @@ package os.meka.core.domain
  * | Event | the event in the calendar MEKA may edit; a planned task when none allows editing | a planned task, then its detail opens |
  * | Work from home | that day's work band reads "Work from home" | none |
  * | Renewal ("Handle this" only) | on the renewals radar with its kind, repeat and cost | none (edited on the radar) |
+ * | Reply ("Handle this" only) | Copy reply: the draft goes on the clipboard; Meka sends it himself | none (edited where he pastes it) |
  */
 sealed class RequestPlan {
     /** A task titled [title]; on [day] (null: Anytime today), at [minute]; reminding at [remindMinute] that day. */
@@ -25,6 +26,12 @@ sealed class RequestPlan {
 
     /** A renewal due on [day] onto the radar ("Handle this", slice 2). */
     data class AddRenewal(val title: String, val day: Long, val details: RenewalDetails) : RequestPlan()
+
+    /**
+     * A drafted reply onto the clipboard ("Handle this", slice 3): the app copies [text]; nothing is sent, added or
+     * changed, so there is nothing to undo.
+     */
+    data class CopyReply(val title: String, val text: String) : RequestPlan()
 }
 
 object RequestAcceptRules {
@@ -46,6 +53,7 @@ object RequestAcceptRules {
             val r = p.renewal ?: RenewalDetails(ObligationKind.OTHER, RenewalRepeat.NONE, null)
             RequestPlan.AddRenewal(p.title, day, r)
         }
+        RequestKind.REPLY -> if (change) null else p.reply?.let { RequestPlan.CopyReply(p.title, it) }
     }
 
     /**
@@ -82,6 +90,7 @@ object RequestAcceptRules {
         }
         is RequestPlan.AddRenewal ->
             "On the radar: “${plan.title}” · ${RenewalRules.verb(plan.details.kind)} ${RenewalRules.dayWord(plan.day, today)}"
+        is RequestPlan.CopyReply -> HandleThisRules.COPIED_LINE
     }
 
     /** "Tomorrow", "Tue 20 Oct · 18:00", "Today · 18:00"; null with neither a day nor a time. */

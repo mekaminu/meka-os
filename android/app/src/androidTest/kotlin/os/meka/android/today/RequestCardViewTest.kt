@@ -57,4 +57,18 @@ class RequestCardViewTest {
         compose.onNodeWithText("Thu 15 Oct shows as work from home on both apps").assertIsDisplayed()
         compose.onNodeWithText("Change").assertDoesNotExist()
     }
+
+    @Test
+    fun aReplyCardShowsItsDraftWithCopyReplyAndNoChange() {
+        // "Handle this", slice 3.
+        show(
+            RequestProposal(RequestKind.REPLY, "Reply to Mrs Patel", null, null, reply = "Hi Mrs Patel,\n\nYes, Rex will be on the trip."),
+            "Can you confirm whether Rex will join the museum trip?",
+        )
+        compose.onNodeWithText("Draft reply: Reply to Mrs Patel").assertIsDisplayed()
+        compose.onNodeWithText("Hi Mrs Patel,\n\nYes, Rex will be on the trip.").assertIsDisplayed()
+        compose.onNodeWithText("Change").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Copy reply: Draft reply: Reply to Mrs Patel").performClick()
+        assertEquals(listOf(RequestChoice.ADD), answers)
+    }
 }

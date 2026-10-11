@@ -39,7 +39,13 @@ object MessageRequestCodec {
      * carry it ([decodeResponse] reads [ALL_KINDS]); an older device's decoder drops it as an unknown kind.
      */
     const val RENEWAL = "renewal"
-    val ALL_KINDS = KINDS + RENEWAL
+    /**
+     * A drafted reply Meka copies and sends himself ("Handle this", slice 3): like [RENEWAL], only "Handle this" asks
+     * for it; its words are [Proposal.body] (at most [MAX_BODY] characters, else the proposal is dropped).
+     */
+    const val REPLY = "reply"
+    val ALL_KINDS = KINDS + RENEWAL + REPLY
+    const val MAX_BODY = 1_500
 
     /** A renewal's repeat on the wire ([Proposal.repeat]). */
     val REPEATS = setOf("none", "month", "quarter", "half_year", "year")
@@ -62,7 +68,7 @@ object MessageRequestCodec {
      * A proposal as the model wrote it, every field optional: [kind] (one of [KINDS]), [title], [date] (YYYY-MM-DD),
      * [time] (HH:MM), [words] the message's own when-words ("Thursday", "on the 15th") that the device resolves again.
      * A [RENEWAL] may also carry [type] (one of [RENEWAL_TYPES]), [repeat] (one of [REPEATS]) and [cost] in pounds
-     * ("412" or "9.99"); anything else in them is dropped.
+     * ("412" or "9.99"); anything else in them is dropped. A [REPLY] carries its drafted words in [body].
      */
     data class Proposal(
         val kind: String,
@@ -73,6 +79,7 @@ object MessageRequestCodec {
         val type: String? = null,
         val repeat: String? = null,
         val cost: String? = null,
+        val body: String? = null,
     )
 
     /** [state]: the same states as Ask's ([AskCodec.Response.ANSWERED] …). */
@@ -137,11 +144,17 @@ object MessageRequestCodec {
             val p = e as? JsonObject ?: return@mapNotNull null
             val kind = p.optStr("kind")?.takeIf { it in kinds } ?: return@mapNotNull null
             val renewal = kind == RENEWAL
+            // A reply without its words, or with more than MAX_BODY of them, is nothing to offer.
+            val body = if (kind == REPLY) {
+                (p["body"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+                    ?.takeIf { it.isNotBlank() && it.length <= MAX_BODY } ?: return@mapNotNull null
+            } else null
             Proposal(
                 kind, p.optStr("title"), p.optStr("date")?.takeIf(DATE::matches), p.optStr("time")?.takeIf(TIME::matches), p.optStr("words"),
                 type = p.optStr("type")?.takeIf { renewal && it in RENEWAL_TYPES },
                 repeat = p.optStr("repeat")?.takeIf { renewal && it in REPEATS },
                 cost = p.optStr("cost")?.removePrefix("£")?.replace(",", "")?.trim()?.takeIf { renewal && COST.matches(it) },
+                body = body,
             )
         }.take(MAX_PROPOSALS)
 
@@ -154,6 +167,7 @@ object MessageRequestCodec {
         p.type?.let { put("type", it) }
         p.repeat?.let { put("repeat", it) }
         p.cost?.let { put("cost", it) }
+        p.body?.let { put("body", it) }
     }
 
     private fun JsonObject.str(k: String): String =

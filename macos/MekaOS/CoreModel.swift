@@ -2295,7 +2295,15 @@ final class CoreModel {
             MekaHaptics.light()
             Task {
                 do {
-                    if let done = try await core.acceptRequest(cardId: id) { offerEventUndo(done.line, .request(done)) }
+                    guard let done = try await core.acceptRequest(cardId: id) else { return }
+                    // "Handle this", slice 3: a reply's draft goes on the pasteboard (Meka sends it himself); nothing
+                    // was sent or added, so the bar has no Undo.
+                    if let text = done.copyText {
+                        let board = NSPasteboard.general
+                        board.clearContents()
+                        board.setString(text, forType: .string)
+                    }
+                    offerEventUndo(done.line, done.undoable ? .request(done) : nil)
                 } catch { lastError = error.localizedDescription }
             }
         case .change:

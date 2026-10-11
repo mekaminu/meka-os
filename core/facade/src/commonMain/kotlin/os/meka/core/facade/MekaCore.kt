@@ -953,7 +953,7 @@ class MekaCore(
      * "Handle this" (V1, slice 1): Meka shared [text] (and its [subject]) with MEKA and asked it to handle it. A share
      * with nothing but a link isn't sent (MEKA never opens links); otherwise the text alone (cut to size), its subject,
      * today's date and his work days go to `POST /v1/ai/handle-this`; never who sent it, an address or anything else.
-     * The proposals (task · event · reminder) are checked again here and saved as synced request cards that say "You
+     * The proposals (task · event · reminder · renewal · a drafted reply) are checked again here and saved as synced request cards that say "You
      * shared · 21:40": shown in the sheet that asked, waiting in Needs you on both apps, never a notification. Nothing
      * is added until Meka taps Add ([acceptRequest]). The same text shared again today makes no second card.
      */
@@ -986,9 +986,9 @@ class MekaCore(
             return HandleOutcome.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
         }
         val cards = onCore {
-            val raw = rules.allowed(reply.proposals.map { os.meka.core.domain.RawRequestProposal(it.kind, it.title, it.date, it.time, it.words, it.type, it.repeat, it.cost) })
+            val raw = rules.allowed(reply.proposals.map { os.meka.core.domain.RawRequestProposal(it.kind, it.title, it.date, it.time, it.words, it.type, it.repeat, it.cost, it.body) })
             val message = os.meka.core.domain.RequestMessage(messageId, rules.PERSON, rules.quoteText(text, subject), atMs)
-            requestCards.save(message, os.meka.core.domain.MessageRequestRules.check(raw, today, cal.minuteOfDay(atMs), allowRenewal = true))
+            requestCards.save(message, os.meka.core.domain.MessageRequestRules.check(raw, today, cal.minuteOfDay(atMs), allowRenewal = true, allowReply = true))
         }
         return if (cards.isEmpty()) HandleOutcome.NothingToDo(rules.NOTHING_LINE) else HandleOutcome.Cards(cards, rules.readyLine(cards.size))
     }
@@ -1258,7 +1258,8 @@ class MekaCore(
     /**
      * Add on a request card (V1, requests slice 4): a task on its day (planned at its time; a reminder rings at its time
      * while that is still ahead), an event in the calendar MEKA may edit (a planned task when none allows editing), a
-     * work-from-home day, or (a share's renewal card, "Handle this" slice 2) a renewal on the radar. The card leaves
+     * work-from-home day, (a share's renewal card, "Handle this" slice 2) a renewal on the radar, or (a share's reply
+     * card, slice 3) the draft handed back as [RequestDone.copyText] for the app's clipboard, never sent. The card leaves
      * Needs you on every device. Null when the card is already answered.
      */
     suspend fun acceptRequest(cardId: String): RequestDone? = onCore { doRequest(cardId, change = false) }
@@ -1320,6 +1321,8 @@ class MekaCore(
                 val workDay = os.meka.core.domain.WorkModeRules.isWorkDay(work.schedule(), bankHolidays.calendar(), plan.day) && plan.day !in leave.days()
                 RequestDone(rules.doneLine(plan, card.proposal.kind, today, isWorkDay = workDay), null, null, plan.day)
             }
+            // "Handle this", slice 3: the app puts the draft on the clipboard; MEKA sends nothing and adds nothing.
+            is os.meka.core.domain.RequestPlan.CopyReply -> RequestDone(rules.doneLine(plan, card.proposal.kind, today), null, null, copyText = plan.text)
             is os.meka.core.domain.RequestPlan.AddRenewal -> {
                 val d = plan.details
                 val id = renewals.add(

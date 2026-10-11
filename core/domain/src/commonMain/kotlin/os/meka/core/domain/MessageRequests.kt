@@ -15,6 +15,11 @@ enum class RequestKind(val wire: String, val verb: String, val decline: String) 
     REMINDER("reminder", "Remind me", "Not needed"),
     /** Onto the renewals radar ("Handle this", slice 2): only ever proposed for something Meka shared. */
     RENEWAL("renewal", "Add to renewals", "Not needed"),
+    /**
+     * A drafted reply Meka copies and sends himself from his mail or chat app ("Handle this", slice 3): only ever
+     * proposed for something Meka shared, and MEKA never sends it.
+     */
+    REPLY("reply", "Draft reply", "Not needed"),
     ;
 
     companion object {
@@ -33,6 +38,8 @@ data class RawRequestProposal(
     val type: String? = null,
     val repeat: String? = null,
     val cost: String? = null,
+    /** A reply's drafted words as the model wrote them ("Handle this", slice 3); checked by [HandleThisRules.cleanReply]. */
+    val body: String? = null,
 )
 
 /** What a renewal card adds to the radar besides its title and day: its kind, how it repeats and its cost. */
@@ -42,7 +49,15 @@ data class RenewalDetails(val kind: ObligationKind, val repeat: RenewalRepeat, v
  * A checked proposal: a known kind, a clean title, a day within reach (when it has one) and a valid time; a renewal
  * also has its [renewal] details (and no time).
  */
-data class RequestProposal(val kind: RequestKind, val title: String, val day: Long?, val minute: Int?, val renewal: RenewalDetails? = null)
+data class RequestProposal(
+    val kind: RequestKind,
+    val title: String,
+    val day: Long?,
+    val minute: Int?,
+    val renewal: RenewalDetails? = null,
+    /** A reply card's drafted words (checked: no links, addresses or numbers); null on every other kind. */
+    val reply: String? = null,
+)
 
 /** One message from a watched person, as the listener read it. */
 data class RequestMessage(
@@ -76,6 +91,8 @@ data class RequestCard(
     val spoken: String,
     /** When the message came (its notification's time): when the card's heads-up is due. */
     val atMs: Long = 0L,
+    /** A reply card's drafted words, shown whole under the action and copied by its button ("Handle this", slice 3). */
+    val draft: String? = null,
 )
 
 object MessageRequestRules {
@@ -120,13 +137,27 @@ object MessageRequestRules {
      * they read (the model's date is used only when they don't), never in the past or more than [MAX_DAYS_AHEAD]
      * ahead; work from home and events need a day; a task or reminder needs a title; duplicates within the answer
      * merged. [today] and [nowMinute] are the time the message came. A renewal is read only when [allowRenewal]
-     * ("Handle this"; never a watched person's message or a group) and needs a day.
+     * ("Handle this"; never a watched person's message or a group) and needs a day. A reply likewise only when
+     * [allowReply] ("Handle this", slice 3): its draft checked by [HandleThisRules.cleanReply] (no day, no time; at most
+     * one).
      */
-    fun check(raw: List<RawRequestProposal>, today: Long, nowMinute: Int, allowRenewal: Boolean = false): List<RequestProposal> {
+    fun check(
+        raw: List<RawRequestProposal>,
+        today: Long,
+        nowMinute: Int,
+        allowRenewal: Boolean = false,
+        allowReply: Boolean = false,
+    ): List<RequestProposal> {
         val out = mutableListOf<RequestProposal>()
         raw.forEach { r ->
             val kind = RequestKind.of(r.kind) ?: return@forEach
             if (kind == RequestKind.RENEWAL && !allowRenewal) return@forEach
+            if (kind == RequestKind.REPLY) {
+                if (!allowReply || out.any { it.kind == RequestKind.REPLY }) return@forEach
+                val draft = HandleThisRules.cleanReply(r.body) ?: return@forEach
+                out += RequestProposal(kind, cleanTitle(r.title) ?: HandleThisRules.REPLY_TITLE, null, null, reply = draft)
+                return@forEach
+            }
             val fromWords = r.words?.let { RequestDates.resolve(it, today, nowMinute) }
             val day = (fromWords?.day ?: r.date?.let(::isoDay))?.takeIf { it in today..today + MAX_DAYS_AHEAD }
             val minute = r.time?.let(::minuteOf) ?: fromWords?.minute
@@ -215,11 +246,16 @@ object MessageRequestRules {
             quote = quote,
             action = action,
             detail = detailLine(p),
-            // Nothing to edit as a task: a work-from-home day; a renewal is changed on the radar once added.
-            changeLabel = if (p.kind == RequestKind.WORK_FROM_HOME || p.kind == RequestKind.RENEWAL) null else "Change",
+            // A reply's button copies it (Meka sends it himself; MEKA never does).
+            addLabel = if (p.kind == RequestKind.REPLY) HandleThisRules.COPY_REPLY else "Add",
+            // Nothing to edit as a task: a work-from-home day; a renewal is changed on the radar once added; a reply is
+            // edited where Meka pastes it.
+            changeLabel = if (p.kind == RequestKind.WORK_FROM_HOME || p.kind == RequestKind.RENEWAL || p.kind == RequestKind.REPLY) null else "Change",
             declineLabel = p.kind.decline,
-            spoken = if (shared) "${HandleThisRules.PERSON} $quote. $action?" else "${message.personName.trim()} wrote $quote. $action?",
+            spoken = (if (shared) "${HandleThisRules.PERSON} $quote. $action?" else "${message.personName.trim()} wrote $quote. $action?") +
+                (p.reply?.let { " The draft says: $it" } ?: ""),
             atMs = message.atMs,
+            draft = p.reply,
         )
     }
 

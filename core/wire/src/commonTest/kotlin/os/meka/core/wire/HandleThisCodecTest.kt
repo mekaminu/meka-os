@@ -61,4 +61,25 @@ class HandleThisCodecTest {
         val task = MessageRequestCodec.decodeResponse("""{"w":${WireCodec.VERSION},"state":"answered","proposals":[{"kind":"task","title":"x","type":"bill","cost":"9"}]}""")
         assertEquals(MessageRequestCodec.Proposal("task", "x"), task.proposals.single())
     }
+
+    @Test
+    fun aReplyCarriesItsWordsAndOnlyHandleThisReadsIt() {
+        // Slice 3: a drafted reply's words come in "body" (whole, up to MAX_BODY; none or too many and it's dropped).
+        val words = "Hi Mrs Patel,\n\nYes, Rex will be on the trip. Thank you!"
+        val answer = """{"proposals":[
+            {"kind":"reply","title":"Reply to Mrs Patel","body":${kotlinx.serialization.json.JsonPrimitive(words)}},
+            {"kind":"reply","title":"No words"},
+            {"kind":"reply","title":"Too long","body":"${"x".repeat(MessageRequestCodec.MAX_BODY + 1)}"},
+            {"kind":"task","title":"Pack lunch","body":"ignored"}
+        ]}"""
+        val got = HandleThisCodec.parseModelAnswer(answer)
+        assertEquals(
+            listOf(MessageRequestCodec.Proposal("reply", "Reply to Mrs Patel", body = words), MessageRequestCodec.Proposal("task", "Pack lunch")),
+            got,
+        )
+        // A watched person's message never becomes a reply card.
+        assertEquals(listOf("task"), MessageRequestCodec.parseModelAnswer(answer).map { it.kind })
+        val back = MessageRequestCodec.decodeResponse(MessageRequestCodec.encodeResponse(MessageRequestCodec.Response("answered", got)))
+        assertEquals(got, back.proposals)
+    }
 }

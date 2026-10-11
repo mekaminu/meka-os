@@ -32,6 +32,11 @@ object RequestCardFields {
     const val REPEAT = "repeat"
     /** A renewal card's cost in pence; absent when not known. */
     const val COST_PENCE = "costPence"
+    /**
+     * A reply card's drafted words ("Handle this", slice 3; display and copy only, made from untrusted text, ADR-006);
+     * absent on other cards, blanked once the card is resolved like [TEXT].
+     */
+    const val REPLY = "reply"
     /** Add, Not a task (or Change, once its task is saved) on either device: gone from Needs you on both (TrueWins). */
     const val RESOLVED = "resolved"
     /** "added" · "declined" · "changed". */
@@ -73,6 +78,7 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
                         put(RequestCardFields.REPEAT, r.repeat.name.fv())
                         r.costPence?.let { put(RequestCardFields.COST_PENCE, it.fv()) }
                     }
+                    p.reply?.let { put(RequestCardFields.REPLY, it.take(MAX_REPLY).fv()) }
                 },
             )
         }
@@ -109,6 +115,7 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
                 RequestCardFields.RESOLUTION to how.wire.fv(),
                 RequestCardFields.RESOLVED_AT to nowMs().fv(),
                 RequestCardFields.TEXT to FieldValue.Null,
+                RequestCardFields.REPLY to FieldValue.Null,
             ),
         )
         return true
@@ -128,7 +135,11 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
             e[RequestCardFields.REPEAT].textOrNull?.let { n -> RenewalRepeat.entries.firstOrNull { it.name == n } } ?: RenewalRepeat.NONE,
             e[RequestCardFields.COST_PENCE].longOrNull,
         )
-        val proposal = RequestProposal(kind, title, e[RequestCardFields.DAY].longOrNull, e[RequestCardFields.MINUTE].longOrNull?.toInt(), renewal)
+        // A reply card whose draft is gone (blanked, or never written) has nothing to copy: it isn't shown.
+        val reply = if (kind != RequestKind.REPLY) null else e[RequestCardFields.REPLY].textOrNull ?: return@mapNotNull null
+        val proposal = RequestProposal(
+            kind, title, e[RequestCardFields.DAY].longOrNull, e[RequestCardFields.MINUTE].longOrNull?.toInt(), renewal, reply,
+        )
         val text = e[RequestCardFields.TEXT].textOrNull.orEmpty()
         e.ref.entityId to Stored(
             RequestMessage(messageId, person, text, at), index, proposal, at,
@@ -139,6 +150,7 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
     companion object {
         const val RETENTION_MS = 7 * 24 * 60 * 60_000L
         const val MAX_TEXT = 2_000
+        const val MAX_REPLY = HandleThisRules.MAX_REPLY
 
         /** The `request_card` id for a card's id: the same on every device and install. */
         fun entityId(cardId: String): String = "r" + ActivityRules.fnv64("request:$cardId")
