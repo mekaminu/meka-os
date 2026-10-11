@@ -79,6 +79,8 @@ class MekaApplication : Application() {
     val openSetup = MutableStateFlow(false)
     /** The leave heads-up's tap → Ask → More → Annual leave (annual leave, slice 2). */
     val openLeave = MutableStateFlow(false)
+    /** Sunday's week-ahead heads-up → Ask → More → Week ahead (Sunday week ahead, slice 1). */
+    val openWeekAhead = MutableStateFlow(false)
     /** "Near Tesco" notification's tap → Ask → More → Errands (errands by location, slice 2). */
     val openErrands = MutableStateFlow(false)
     /** Appearance → "Play the opening": Today replays its opening (Day ring, tiles, greeting, stagger), then clears it. */

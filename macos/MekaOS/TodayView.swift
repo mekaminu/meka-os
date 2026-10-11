@@ -149,6 +149,18 @@ struct TodayView: View {
                         .accessibilityLabel(queue.spoken)
                         .staggeredAppear(0, play: play)
                     }
+                    // Sunday week ahead, slice 1: on Sunday from 18:00, "Your week ahead · 4 office days · 2 matches" in the
+                    // accent; clicking it opens the week ahead. Cross-fades as it changes.
+                    if let week = model.today?.weekAhead {
+                        Button { model.showWeekAhead = true } label: {
+                            Text(week.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: week.text)
+                        .accessibilityLabel(week.spoken)
+                        .staggeredAppear(0, play: play)
+                    }
                     // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
                     if let night = model.today?.dateNight {
                         Text(night.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)

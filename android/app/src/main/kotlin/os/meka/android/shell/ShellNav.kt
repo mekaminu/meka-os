@@ -59,6 +59,7 @@ enum class MoreItem(val label: String, val line: String, val destination: ShellD
     BRIEF("Morning brief", "Your day, who you're waiting on and headlines", null, MoreGroup.DAILY),
     NEWS("News", "Barça, AI and the headlines · topics and sources", null, MoreGroup.DAILY),
     SHUTDOWN("Shut down the day", "Tick off, carry over and see tomorrow", null, MoreGroup.DAILY),
+    WEEK_AHEAD("Week ahead", "The coming week day by day · Sunday at 18:00", null, MoreGroup.DAILY),
     SCHOOL("School", "Rex and Logan's days off, PE and trips", null, MoreGroup.DAILY),
     LEAVE("Annual leave", "Days booked, days left and the school holidays", null, MoreGroup.DAILY),
     DINNERS("Dinners", "Favourites, the week's dinners and their shopping", null, MoreGroup.DAILY),

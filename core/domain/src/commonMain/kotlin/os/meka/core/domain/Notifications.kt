@@ -31,8 +31,11 @@ enum class NoticeTier(val label: String) {
 /** ADR-007: CLOCK reminders may use an exact alarm when allowed; everything else is windowed. */
 enum class NoticePrecision { CLOCK, SOFT }
 
-/** Where tapping a notification takes you. [LEAVE] is Ask → More → Annual leave with its pane up (annual leave, slice 2). */
-enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW, LEAVE }
+/**
+ * Where tapping a notification takes you. [LEAVE] is Ask → More → Annual leave with its pane up (annual leave, slice 2);
+ * [WEEK_AHEAD] is Ask → More → Week ahead with its pane up (Sunday week ahead, slice 1).
+ */
+enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW, LEAVE, WEEK_AHEAD }
 
 /**
  * A button on a posted notification, answered without opening the app (Gym slice 2b: "Did you go?" offers Went and
@@ -105,6 +108,8 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * moving, and the 1st of the month's look back at last month's goals, both at 09:00.
      */
     GOALS("Goals: quiet goals and the month's review", NoticeTier.HEADS_UP),
+    /** The Sunday week ahead ([WeekAheadRules.notices]): Sunday at 18:00, "Your week ahead" · the coming week in a line. */
+    WEEK_AHEAD("Sunday week ahead", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -507,6 +512,7 @@ object Governor {
         NoticeSource.LEAVE -> if (n == 1) "leave to book" else "leave to book for $n holidays"
         NoticeSource.APPOINTMENTS -> plural(n, "appointment") + " to book"
         NoticeSource.GOALS -> if (n == 1) "a word on your goals" else "$n words on your goals"
+        NoticeSource.WEEK_AHEAD -> "your week ahead"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -569,6 +575,8 @@ object NoticeSources {
         goals: GoalsView = GoalsView.EMPTY,
         /** "Leaving now": the setting, for the draft when an office day's work ends ([LeavingRules.notices]). */
         leaving: LeavingSetting? = null,
+        /** The Sunday week ahead, for Sunday evening's heads-up ([WeekAheadRules.notices]). */
+        weekAhead: WeekAheadView? = null,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -682,6 +690,7 @@ object NoticeSources {
         out += AppointmentRules.notices(appointments, nowMs, cal)
         out += GoalRhythmRules.notices(goals.goals, goals.month, nowMs, cal)
         if (leaving != null) out += LeavingRules.notices(leaving, office, lines, nowMs, cal)
+        if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.

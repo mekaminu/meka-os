@@ -29,6 +29,9 @@ class NotifyRoutingTest {
         // The leave heads-up opens Ask with the Annual leave pane up; the rest open their place.
         assertEquals(ShellDestination.ASK, NotifyRouting.destination(NoticeTarget.LEAVE))
         assertEquals(os.meka.android.MainActivity.OPEN_LEAVE, NotifyRouting.openExtra(NoticeTarget.LEAVE))
+        // Sunday's week ahead opens Ask with the Week ahead pane up.
+        assertEquals(ShellDestination.ASK, NotifyRouting.destination(NoticeTarget.WEEK_AHEAD))
+        assertEquals(os.meka.android.MainActivity.OPEN_WEEK_AHEAD, NotifyRouting.openExtra(NoticeTarget.WEEK_AHEAD))
         assertEquals(os.meka.android.MainActivity.OPEN_DESTINATION_PREFIX + "LISTS", NotifyRouting.openExtra(NoticeTarget.LISTS))
     }
 

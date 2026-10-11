@@ -457,6 +457,13 @@ class MekaCore(
     /** "Leaving now" (V1): the draft to Jeanette when an office day's work ends (Work mode → Leaving now). Synced. */
     val leavingView: StateFlow<os.meka.core.domain.LeavingView> = _leaving.asStateFlow()
 
+    private val _weekAhead = MutableStateFlow(os.meka.core.domain.WeekAheadView.EMPTY)
+    /**
+     * The Sunday week ahead (V1, slice 1): the coming week day by day (office or home, events, fixtures, school, date
+     * night, appointments, renewals, weather) and the family sync (Ask → More → Week ahead; Sunday's 18:00 heads-up).
+     */
+    val weekAheadView: StateFlow<os.meka.core.domain.WeekAheadView> = _weekAhead.asStateFlow()
+
     private val _autonomy = MutableStateFlow(os.meka.core.domain.AutonomyView.EMPTY)
     /**
      * What MEKA may do (V1, policy engine UI, slice 1): the kill switch, each earned-trust kind and the locked rows
@@ -3927,6 +3934,21 @@ class MekaCore(
         // School rhythm, slice 2: what the school says about today (Today's header, the brief) and tomorrow (the shutdown).
         val schoolItems = school.items()
         val schoolToday = os.meka.core.domain.SchoolRules.todayLine(schoolItems, todayDay, holidays)
+        // The Sunday week ahead, slice 1: the coming week from what MEKA already knows.
+        val weekAheadNow = os.meka.core.domain.WeekAheadRules.view(
+            os.meka.core.domain.WeekAheadInputs(
+                events = dayEvents,
+                work = os.meka.core.domain.WorkHours(workState.schedule, holidays, homeDays = work.homeDays(todayDay), leaveDays = leaveDays),
+                holidays = holidays,
+                school = schoolItems,
+                dateNight = dateNightNow,
+                renewals = listsNow.renewals.all,
+                appointments = appointments.items(),
+                forecast = forecast,
+            ),
+            nowMs(), cal, ::dayWindowOf,
+        )
+        _weekAhead.value = weekAheadNow
         val shutdownRaw = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), workHolidays)
         val shutdownNow = shutdownRaw.copy(
             // Daily receipt: what MEKA handled today, from the activity log (Today's evening line opens Activity).
@@ -3957,6 +3979,7 @@ class MekaCore(
             dateNight = os.meka.core.domain.DateNightRules.todayLine(dateNightNow, todayDay, cal.minuteOfDay(nowMs())),
             // Train-time queue, slice 1: on an office day's commute, what's saved for the train.
             trainQueue = os.meka.core.domain.QueueRules.trainLine(trainQueue.items(), office, nowMs(), cal),
+            weekAhead = os.meka.core.domain.WeekAheadRules.todayLine(weekAheadNow, nowMs(), cal),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
@@ -4067,6 +4090,7 @@ class MekaCore(
             appointments = appointments.items(),
             goals = _goals.value,
             leaving = leavingNow.setting(),
+            weekAhead = _weekAhead.value,
         )
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */
@@ -4126,6 +4150,9 @@ class MekaCore(
         val t = Instant.fromEpochMilliseconds(nowMs()).toLocalDateTime(timeZone())
         return LocalClock(t.dayOfWeek.isoDayNumber, t.hour * 60 + t.minute)
     }
+
+    /** The local day [epochDay]'s window (DST-safe). */
+    private fun dayWindowOf(epochDay: Long): DayWindow = dayWindow(ZoneCalendar(timeZone).toEpochMs(epochDay, 12 * 60))
 
     private fun dayWindow(now: Long): DayWindow {
         val tz = timeZone()

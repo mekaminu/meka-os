@@ -42,6 +42,8 @@ data class Today(
     val dateNight: DateNightLine? = null,
     /** Train-time queue, slice 1: "For the train · 2 articles · 1 podcast" on an office day's commute ([QueueRules.trainLine]); set by the facade. */
     val trainQueue: QueueLine? = null,
+    /** Sunday week ahead, slice 1: "Your week ahead · 4 office days · 2 matches" on Sunday from 18:00 ([WeekAheadRules.todayLine]); set by the facade. */
+    val weekAhead: WeekAheadToday? = null,
 ) {
     /** The Up next task is a planned task whose time has gone by ([LateTaskRules.isLate]). */
     fun upNextLate(nowMs: Long): Boolean = upNext?.let { LateTaskRules.isLate(it, nowMs) } ?: false

@@ -280,11 +280,13 @@ object NotifyRouting {
         NoticeTarget.GOALS -> ShellDestination.GOALS
         NoticeTarget.REVIEW -> ShellDestination.REVIEW
         NoticeTarget.LEAVE -> ShellDestination.ASK
+        NoticeTarget.WEEK_AHEAD -> ShellDestination.ASK
     }
 
     /** What a tap hands MainActivity: a place ("dest:LISTS"), or Ask with the Annual leave pane up ("leave"). */
     fun openExtra(target: NoticeTarget): String = when (target) {
         NoticeTarget.LEAVE -> MainActivity.OPEN_LEAVE
+        NoticeTarget.WEEK_AHEAD -> MainActivity.OPEN_WEEK_AHEAD
         else -> MainActivity.OPEN_DESTINATION_PREFIX + destination(target).name
     }
 

@@ -2,6 +2,7 @@ package os.meka.android.today
 
 import os.meka.android.activity.ActivityPane
 import os.meka.android.ask.TrainQueuePane
+import os.meka.android.ask.WeekAheadPane
 import os.meka.android.designsystem.minTouch
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
@@ -205,6 +206,7 @@ fun TodayRoute(
     var showSearch by rememberSaveable { mutableStateOf(false) }
     /** The train queue over Today, from the "For the train" line on the commute (train-time queue, slice 1). */
     var showQueue by rememberSaveable { mutableStateOf(false) }
+    var showWeekAhead by rememberSaveable { mutableStateOf(false) }
     /** Activity over Today, from the evening's "MEKA handled 12 things today" (daily receipt). */
     var showActivity by rememberSaveable { mutableStateOf(false) }
     // News over Today from the command centre (news ticker, slice 2): "" = the place, an id = that story; null = closed.
@@ -360,6 +362,7 @@ fun TodayRoute(
                         ringPlay = ringPlay, ringPlayed = { ringPlay = DayRingPlay.STILL },
                         openDayRing = { showDayRing = true },
                         openQueue = { showQueue = true },
+                        openWeekAhead = { showWeekAhead = true },
                         openActivity = { showActivity = true },
                         listsNeedsYou = CommandCentreRules.todayListsNeedsYou(layout),
                         shutdown = shutdown, openShutdown = { showShutdown = true }, shutdownOpen = showShutdown,
@@ -427,6 +430,7 @@ fun TodayRoute(
                 }
             }
             MekaPane(visible = showQueue) { TrainQueuePane(core, onClose = { showQueue = false }, closeLabel = "‹ Today") }
+            MekaPane(visible = showWeekAhead) { WeekAheadPane(core, onClose = { showWeekAhead = false }, closeLabel = "‹ Today") }
             MekaPane(visible = showActivity) { ActivityPane(core, onClose = { showActivity = false }, closeLabel = "‹ Today") }
             MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
             MekaPane(visible = showSearch) {
@@ -669,6 +673,8 @@ private fun TodayPane(
     openDayRing: () -> Unit = {},
     /** Tapping "For the train" opens the train queue. */
     openQueue: () -> Unit = {},
+    /** Tapping "Your week ahead · …" (Sunday from 18:00) opens the week ahead. */
+    openWeekAhead: () -> Unit = {},
     openActivity: () -> Unit = {},
     /** The capture bar's mic (Talk): Ask, already listening. Null: no mic. */
     onTalk: (() -> Unit)? = null,
@@ -804,6 +810,17 @@ private fun TodayPane(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.m))
                                     .clickable(role = Role.Button) { openQueue() }
+                                    .semantics { contentDescription = l.spoken })
+                        }
+                    }
+                    // Sunday week ahead, slice 1: on Sunday from 18:00, "Your week ahead · 4 office days · 2 matches" in the
+                    // accent; tapping it springs the week ahead up over Today. Cross-fades as it changes.
+                    today.weekAhead?.let { week ->
+                        Crossfade(week, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "week-ahead-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.m))
+                                    .clickable(role = Role.Button) { openWeekAhead() }
                                     .semantics { contentDescription = l.spoken })
                         }
                     }

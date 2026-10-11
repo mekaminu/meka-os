@@ -295,6 +295,24 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(LeavingRules.shared.journeyLabel(min: 90), "1 h 30")
     }
 
+    func testWeekAheadReachesSwift() async throws {
+        // The Sunday week ahead: the view, its days and lines, and Sunday's heads-up source.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "weekahead-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let v = core.weekAheadView.value
+        XCTAssertFalse(v.summary.isEmpty)
+        XCTAssertTrue(v.title == "This week" || v.title == "Next week")
+        XCTAssertFalse(v.days.isEmpty)
+        for d in v.days { for l in d.lines { XCTAssertFalse(l.text.isEmpty) } }
+        XCTAssertEqual(NoticeSource.weekAhead.defaultTier, NoticeTier.headsUp)
+        XCTAssertEqual(NotifyRules.shared.targetName(t: NoticeTarget.weekAhead), "WEEK_AHEAD")
+        // Sunday 11 Oct 2026 looks at the week from Monday 12 Oct.
+        XCTAssertEqual(WeekAheadRules.shared.weekStart(today: 20737), 20738)
+    }
+
     func testGoalBreakdownReachesSwift() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

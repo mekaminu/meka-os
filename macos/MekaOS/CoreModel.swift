@@ -81,6 +81,10 @@ final class CoreModel {
     private(set) var queue: QueueView?
     /// Ask → More → Train queue (also Today's "For the train" line).
     var showTrainQueue = false
+    /// The Sunday week ahead (V1, slice 1): the coming week day by day and the family sync (Ask → More → Week ahead,
+    /// and Today's "Your week ahead · …" line on Sunday from 18:00). Read-only.
+    private(set) var weekAhead: WeekAheadView?
+    var showWeekAhead = false
     /// Errands by location (V1, slice 1): what waits at each place, and what was ticked off lately (Ask → More →
     /// Errands). Synced with the Fold, which (slice 2) reminds Meka when he's near a place.
     private(set) var errands: ErrandView?
@@ -320,6 +324,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await l in core.leavingView { self?.leaving = l }
+        })
+        observers.append(Task { [weak self] in
+            for await w in core.weekAheadView { self?.weekAhead = w }
         })
         observers.append(Task { [weak self] in
             for await a in core.autonomyView { self?.autonomy = a }

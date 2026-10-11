@@ -132,6 +132,11 @@ fun AskRoute(
     LaunchedEffect(openLeave) {
         if (openLeave) { pane = MoreItem.LEAVE; healthApp?.openLeave?.value = false }
     }
+    // Sunday's week-ahead heads-up (Sunday week ahead, slice 1) → the Week ahead pane.
+    val openWeekAhead by remember(healthApp) { healthApp?.openWeekAhead ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
+    LaunchedEffect(openWeekAhead) {
+        if (openWeekAhead) { pane = MoreItem.WEEK_AHEAD; healthApp?.openWeekAhead?.value = false }
+    }
     // "Near Tesco" (errands by location, slice 2) → the Errands pane.
     val openErrands by remember(healthApp) { healthApp?.openErrands ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
     LaunchedEffect(openErrands) {
@@ -199,6 +204,7 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.BRIEF) { BriefPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.NEWS) { NewsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.SHUTDOWN) { ShutdownPane(core, onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.WEEK_AHEAD) { WeekAheadPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.SCHOOL) { SchoolPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.DINNERS) { MealsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.DATE_NIGHT) { DateNightPane(core, onClose = { pane = null }) }

@@ -96,6 +96,11 @@ class MainActivity : ComponentActivity() {
                 app.openLeave.value = true
                 app.openDestination.value = ShellDestination.ASK
             }
+            // Sunday's "Your week ahead" (Sunday week ahead, slice 1): Ask with the Week ahead pane up.
+            open == OPEN_WEEK_AHEAD -> {
+                app.openWeekAhead.value = true
+                app.openDestination.value = ShellDestination.ASK
+            }
             // The News widget: Today with News on the story ("" = News itself, which leads with the match).
             open.startsWith(OPEN_NEWS_PREFIX) -> app.openNewsStory.value = open.removePrefix(OPEN_NEWS_PREFIX)
             // The side button or the headphones' button (TalkStartActivity), or the Talk widget: Ask, already listening.
@@ -131,6 +136,8 @@ class MainActivity : ComponentActivity() {
         const val OPEN_BRIEF = "brief"
         /** Ask → More → Annual leave, its pane up (the leave heads-up). */
         const val OPEN_LEAVE = "leave"
+        /** Ask → More → Week ahead, its pane up (Sunday's week-ahead heads-up). */
+        const val OPEN_WEEK_AHEAD = "week_ahead"
         /** Ask → More → Errands, its pane up (the near-a-place reminder). */
         const val OPEN_ERRANDS = "errands"
         /** "dest:LISTS" opens Lists. */
