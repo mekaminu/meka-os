@@ -5,7 +5,7 @@ import XCTest
 /// Mac database encryption (slice 2b): a plain database is encrypted once and nothing is lost on the way.
 final class DatabaseEncryptionTests: XCTestCase {
     private var dir: URL!
-    private let name = "meka.db"
+    private let dbName = "meka.db"
     private let key = String(repeating: "0123456789abcdef", count: 4)
 
     override func setUp() {
@@ -22,20 +22,20 @@ final class DatabaseEncryptionTests: XCTestCase {
     }
 
     private func prepare(key: (hex: String, made: Bool)?, ready: Bool = true) -> DatabaseEncryption.Prepared {
-        DatabaseEncryption.prepare(directory: dir, name: name, key: key, sqlcipherReady: ready, opensWithKey: opens)
+        DatabaseEncryption.prepare(directory: dir, name: dbName, key: key, sqlcipherReady: ready, opensWithKey: opens)
     }
 
     /// A plain database the way every Mac had it before this slice, with one task in it.
     private func makePlainDatabase() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
-            databaseKeyHex: nil, encrypted: false, databaseDirectory: dir.path, databaseName: name, deviceKey: nil
+            databaseKeyHex: nil, encrypted: false, databaseDirectory: dir.path, databaseName: dbName, deviceKey: nil
         )
         _ = try await core.addTask(title: "Encrypt me")
         core.close()
     }
 
-    private var url: URL { dir.appendingPathComponent(name) }
+    private var url: URL { dir.appendingPathComponent(dbName) }
 
     func testAPlainDatabaseIsEncryptedOnceWithEveryRowKept() async throws {
         try await makePlainDatabase()
@@ -63,7 +63,7 @@ final class DatabaseEncryptionTests: XCTestCase {
         // And the core reads the task back through its own driver.
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
-            databaseKeyHex: key, encrypted: true, databaseDirectory: dir.path, databaseName: name, deviceKey: nil
+            databaseKeyHex: key, encrypted: true, databaseDirectory: dir.path, databaseName: dbName, deviceKey: nil
         )
         let summary = try await core.exportSummary()
         XCTAssertGreaterThan(summary.total, 0)

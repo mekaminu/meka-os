@@ -231,6 +231,7 @@ final class MotionMathTests: XCTestCase {
     }
 
     /// Calendar colours (Fold review 2026-10-08, item 9): fixtures (tone 0) wear Barça's colour, the rest 1–5.
+    @MainActor
     func testCalendarTonesMapOntoThePalette() {
         XCTAssertEqual(MekaPalette.dark.calendarTone(0), MekaPalette.dark.barca)
         XCTAssertEqual(MekaPalette.light.calendarTone(3), MekaPalette.light.calendar3)

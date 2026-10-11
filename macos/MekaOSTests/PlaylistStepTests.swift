@@ -4,6 +4,7 @@ import XCTest
 
 /// "Play my messages" (call assistant polish 8c): the core's steps become plain Swift values for MekaSpeaker.
 final class PlaylistStepTests: XCTestCase {
+    @MainActor
     func testStepsCrossAsPlainValues() {
         let steps = PlaylistStep.of([
             PlayStepSay(text: "You've got one voice message."),

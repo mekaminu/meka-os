@@ -4,6 +4,7 @@ import XCTest
 /// The undo bar animates on `model.eventUndo` changing, so an offer must compare as itself (Talk's action carries
 /// the core's `AskUndo`, which isn't Equatable in Swift, so the offer is compared by identity).
 final class EventUndoOfferTests: XCTestCase {
+    @MainActor
     func testAnOfferEqualsItselfAndANewOfferWithTheSameWordsDoesNot() {
         let a = EventUndoOffer(message: "Done 2 things · Undo", action: .talk([], [0, 1]))
         let copy = a
