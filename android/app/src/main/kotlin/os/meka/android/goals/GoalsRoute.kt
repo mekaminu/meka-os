@@ -215,6 +215,11 @@ fun GoalsRoute(core: MekaCore) {
                     },
                     removeUpdate = { id -> haptics.tick(); act { core.removeGoalUpdate(id) } },
                     numberHabit = { h -> haptics.tick(); act { core.setGoalNumberHabit(g.id, h) } },
+                    breakdown = BreakdownActions(
+                        ask = { core.breakDownGoal(g.id) },
+                        keep = { ms, ss -> runCatching { core.keepBreakdown(g.id, ms, ss) }.getOrNull() },
+                        undo = { kept -> act { core.undoBreakdown(kept) } },
+                    ),
                 ),
             )
         }
@@ -434,6 +439,8 @@ internal class GoalDetails(
     val addUpdate: (String, (Boolean, String?) -> Unit) -> Unit,
     val removeUpdate: (String) -> Unit,
     val numberHabit: (String?) -> Unit,
+    /** Slice 4: Break it down (approval only). */
+    val breakdown: BreakdownActions,
 )
 
 @Composable
@@ -494,6 +501,7 @@ private fun GoalRowBody(
                 GoalNumber(g, details)
                 GoalWhy(g, details.why)
                 Milestones(g, details)
+                BreakItDown(g, details.breakdown)
                 AddStep(details.addStep)
                 LinkTask(g, details)
             }

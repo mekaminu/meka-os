@@ -121,6 +121,14 @@ interface AiApi {
         os.meka.core.wire.MessageRequestCodec.Response(AskCodec.Response.OFF)
 
     /**
+     * "Break it down" (`POST /v1/ai/goal-breakdown`, Goals, properly, slice 4): one goal in Meka's words; proposed
+     * milestones and first steps come back unchecked ([os.meka.core.domain.GoalBreakdownRules.check] reads them). A
+     * server without the route answers "off".
+     */
+    suspend fun goalBreakdown(request: os.meka.core.wire.GoalBreakdownCodec.Request): os.meka.core.wire.GoalBreakdownCodec.Response =
+        os.meka.core.wire.GoalBreakdownCodec.Response(AskCodec.Response.OFF)
+
+    /**
      * The messages assistant (`POST /v1/ai/message-triage`): one message's text, its sender's label, the group's name when
      * it named Meka, and its time; the lane, gist, draft and proposals come back unchecked
      * ([os.meka.core.domain.MessageTriageRules.check] reads them). A server without the route answers "off".
@@ -180,6 +188,26 @@ sealed class RequestRead {
     data class Read(val cards: List<os.meka.core.domain.RequestCard>) : RequestRead()
     /** Couldn't ask: offline, AI off, the month's budget spent; [line] says which. */
     data class Unavailable(val line: String) : RequestRead()
+}
+
+/** What "Break it down" proposed for a goal ([MekaCore.breakDownGoal], Goals, properly, slice 4). */
+sealed class BreakdownOutcome {
+    /** Milestones and first steps for Meka to tick; [line] "4 milestones and 2 first steps to choose from". */
+    data class Proposals(val breakdown: os.meka.core.domain.GoalBreakdown, val line: String) : BreakdownOutcome()
+    /** MEKA answered, with nothing the goal doesn't already have; [line] says so. */
+    data class NothingNew(val line: String) : BreakdownOutcome()
+    /** Couldn't ask: not connected, offline, AI off, the month's budget spent, or the goal is full; [line] says which. */
+    data class Unavailable(val line: String) : BreakdownOutcome()
+}
+
+/** What Keep added from a breakdown ([MekaCore.keepBreakdown]): [line] for the bar, and what Undo takes back. */
+class BreakdownKept internal constructor(
+    val line: String,
+    internal val milestoneIds: List<String>,
+    internal val taskIds: List<String>,
+) {
+    /** Nothing was added (everything ticked was already there). */
+    val isEmpty: Boolean get() = milestoneIds.isEmpty() && taskIds.isEmpty()
 }
 
 /** What "Handle this" made of a share ([MekaCore.handleThis]). */
@@ -501,6 +529,21 @@ class HttpSyncTransport(
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/handle-this")
         }
         return os.meka.core.wire.MessageRequestCodec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun goalBreakdown(request: os.meka.core.wire.GoalBreakdownCodec.Request): os.meka.core.wire.GoalBreakdownCodec.Response {
+        val codec = os.meka.core.wire.GoalBreakdownCodec
+        val body = codec.encodeRequest(request)
+        prepare() // the AI routes require the device's signing key on the server
+        val resp = send("/v1/ai/goal-breakdown", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/goal-breakdown")
+            // A server without the route (older, or no AI key): nothing is proposed.
+            resp.status.value == 404 -> return os.meka.core.wire.GoalBreakdownCodec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.GoalBreakdownCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/goal-breakdown")
+        }
+        return codec.decodeResponse(resp.bodyAsText())
     }
 
     override suspend fun messageTriage(request: os.meka.core.wire.MessageTriageCodec.Request): os.meka.core.wire.MessageTriageCodec.Response {

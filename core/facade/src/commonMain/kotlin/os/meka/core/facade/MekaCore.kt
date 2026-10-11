@@ -2003,6 +2003,78 @@ class MekaCore(
     suspend fun goalLinkCandidates(goalId: String, query: String): List<os.meka.core.domain.Task> =
         onCore { os.meka.core.domain.GoalRules.linkCandidates(tasks.all(), goalId, query) }
 
+    /**
+     * Goals, properly, slice 4: **Break it down** (approval only). The goal alone goes to `POST /v1/ai/goal-breakdown`
+     * in Meka's own words (title, horizon, done-by, why, what done looks like, its milestones and open steps); never
+     * another goal or task. The proposals are checked again here ([os.meka.core.domain.GoalBreakdownRules.check]) and
+     * handed back for Meka to tick; nothing is written until [keepBreakdown].
+     */
+    suspend fun breakDownGoal(goalId: String): BreakdownOutcome {
+        val rules = os.meka.core.domain.GoalBreakdownRules
+        val atMs = nowMs()
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(atMs)
+        val (g, openSteps) = onCore {
+            val all = tasks.all()
+            val goal = goals.goals(all).first.firstOrNull { it.id == goalId } ?: throw os.meka.core.domain.ValidationException("Goal not found")
+            goal to all.filter { it.goalId == goalId && !it.lifecycle.isTerminal }.sortedBy { it.createdAtMs }.map { it.title.trim() }
+        }
+        if (rules.room(g.milestones.size) == 0 && openSteps.size >= rules.MAX_KNOWN_STEPS) return BreakdownOutcome.Unavailable(rules.FULL_LINE)
+        val api = aiApi ?: return BreakdownOutcome.Unavailable(rules.NOT_CONNECTED_LINE)
+        val c = os.meka.core.wire.GoalBreakdownCodec
+        fun fit(s: String?, max: Int) = s?.replace(Regex("""\s+"""), " ")?.trim()?.take(max).orEmpty()
+        fun items(xs: List<String>) = xs.map { fit(it, c.MAX_ITEM) }.filter { it.isNotEmpty() }.distinct().take(c.MAX_KNOWN)
+        val request = os.meka.core.wire.GoalBreakdownCodec.Request(
+            date = os.meka.core.domain.AskRules.isoDate(today),
+            now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(atMs))}",
+            title = fit(g.title, c.MAX_TITLE),
+            horizon = os.meka.core.domain.GoalRules.horizonLabel(g.horizon),
+            due = g.dueDay?.let { os.meka.core.domain.GoalRules.dueLabel(it, today) }.orEmpty().take(c.MAX_LABEL),
+            why = fit(g.why, c.MAX_TEXT),
+            done = fit(g.target, c.MAX_TEXT),
+            milestones = items(g.milestones.map { it.title }),
+            steps = items(openSteps.take(rules.MAX_KNOWN_STEPS)),
+        )
+        val reply = try { api.goalBreakdown(request) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            return BreakdownOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
+        }
+        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) {
+            return BreakdownOutcome.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
+        }
+        // Checked against what the goal has now (it may have changed while MEKA thought).
+        val checked = onCore {
+            val open = tasks.all().filter { it.goalId == goalId && !it.lifecycle.isTerminal }.map { it.title }
+            rules.check(reply.milestones, reply.steps, goals.milestones(goalId).map { it.title }, open)
+        }
+        return if (checked.isEmpty) BreakdownOutcome.NothingNew(rules.NOTHING_LINE) else BreakdownOutcome.Proposals(checked, rules.readyLine(checked))
+    }
+
+    /**
+     * Keeps what Meka ticked of a breakdown: each milestone added to the goal (one already there isn't added twice; at
+     * most the goal's room), each step an ordinary task linked to it. Returns the bar's line and what [undoBreakdown]
+     * takes back.
+     */
+    suspend fun keepBreakdown(goalId: String, milestones: List<String>, steps: List<String>): BreakdownKept = onCore {
+        if (!goals.goalExists(goalId)) throw os.meka.core.domain.ValidationException("Goal not found")
+        val rules = os.meka.core.domain.GoalBreakdownRules
+        val before = goals.milestones(goalId).map { it.id }.toSet()
+        val room = (os.meka.core.domain.GoalRules.MAX_MILESTONES - before.size).coerceAtLeast(0)
+        val ms = milestones.mapNotNull { rules.clean(it, os.meka.core.domain.GoalRules.MAX_MILESTONE_TITLE) }.take(room)
+            .map { goals.addMilestone(goalId, it) }.filter { it !in before }.distinct()
+        val ts = steps.mapNotNull { rules.clean(it, rules.MAX_STEP_TITLE) }.distinct().take(rules.MAX_STEPS)
+            .map { tasks.create(NewTask(it, goalId = goalId)) }
+        BreakdownKept(rules.keptLine(ms.size, ts.size), ms, ts)
+    }
+
+    /** Undo on a kept breakdown: its milestones come off the goal and its steps are deleted (a step already done stays). */
+    suspend fun undoBreakdown(kept: BreakdownKept) = onCore {
+        kept.milestoneIds.forEach { goals.removeMilestone(it) }
+        val open = tasks.all().filter { it.id in kept.taskIds && !it.lifecycle.isTerminal }.map { it.id }
+        open.forEach { tasks.delete(it) }
+        followBlocks(open)
+        Unit
+    }
+
     // ---- Fasting ----
 
     /** Starts a fast [startedMinutesAgo] minutes ago (0: now) with the plan's goal. */
