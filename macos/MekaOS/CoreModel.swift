@@ -1677,6 +1677,46 @@ final class CoreModel {
         MekaHaptics.tick()
         run { _ = try await $0.removeGoalUpdate(id: id) }
     }
+
+    // MARK: Goals, properly, slice 4: Break it down (approval only)
+
+    /// What MEKA proposed for a goal, as Swift values: the milestones and first steps to tick, or a line to show.
+    enum BreakdownResult: Equatable {
+        case offered(milestones: [String], steps: [String], line: String)
+        case said(String)
+    }
+    /// Asks MEKA to break the goal down. Only the goal's id crosses to the core; nothing is added until Keep.
+    func breakDownGoal(_ goalID: String) async -> BreakdownResult {
+        guard let core else { return .said(GoalBreakdownRules.shared.NOT_CONNECTED_LINE) }
+        do {
+            let out = try await core.breakDownGoal(goalId: goalID)
+            switch onEnum(of: out) {
+            case .proposals(let p): return .offered(milestones: p.breakdown.milestones, steps: p.breakdown.steps, line: p.line)
+            case .nothingNew(let n): return .said(n.line)
+            case .unavailable(let u): return .said(u.line)
+            }
+        } catch {
+            return .said(GoalBreakdownRules.shared.NOT_CONNECTED_LINE)
+        }
+    }
+    /// Keeps what Meka ticked (Strings only cross to the core); the result carries the bar's line and what Undo takes back.
+    func keepBreakdown(_ goalID: String, milestones: [String], steps: [String]) async -> BreakdownKept? {
+        guard let core else { return nil }
+        do {
+            let kept = try await core.keepBreakdown(goalId: goalID, milestones: milestones, steps: steps)
+            MekaHaptics.light()
+            return kept
+        } catch {
+            MekaHaptics.tick()
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+    /// Undo on a kept breakdown: sent to the core once.
+    func undoBreakdown(_ kept: BreakdownKept) {
+        MekaHaptics.tick()
+        run { try await $0.undoBreakdown(kept: kept) }
+    }
     /// Each tick of the habit adds 1 to the goal's number (nil stops it).
     func setGoalNumberHabit(_ goalID: String, _ habitID: String?) {
         MekaHaptics.tick()

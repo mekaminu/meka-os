@@ -240,6 +240,30 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(core.goalsView.value.goals[0].metric?.line, "£300 of £2,000")
     }
 
+    func testGoalBreakdownReachesSwift() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "goals5-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let goal = try await core.addGoal(title: "Run a half marathon", target: nil, horizon: GoalRules.shared.horizonAt(index: 3))
+        // Not connected: nothing goes out, the line says why.
+        let out = try await core.breakDownGoal(goalId: goal)
+        switch onEnum(of: out) {
+        case .unavailable(let u): XCTAssertEqual(u.line, GoalBreakdownRules.shared.NOT_CONNECTED_LINE)
+        default: XCTFail("expected unavailable")
+        }
+        // What Meka ticked is kept; Undo takes it back.
+        let kept = try await core.keepBreakdown(goalId: goal, milestones: ["Run 10k", "Run 15k"], steps: ["Book a gait analysis"])
+        XCTAssertEqual(kept.line, "Added 2 milestones and 1 step")
+        XCTAssertFalse(kept.isEmpty)
+        XCTAssertEqual(core.goalsView.value.goals[0].milestones.map(\.title), ["Run 10k", "Run 15k"])
+        XCTAssertEqual(core.goalsView.value.goals[0].nextStep, "Book a gait analysis")
+        try await core.undoBreakdown(kept: kept)
+        XCTAssertTrue(core.goalsView.value.goals[0].milestones.isEmpty)
+        XCTAssertEqual(GoalBreakdownRules.shared.keepLabel(ticked: 2), "Keep 2")
+    }
+
     func testFastingThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

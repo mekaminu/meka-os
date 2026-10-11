@@ -51,6 +51,7 @@ import os.meka.core.sync.FieldValue
 import os.meka.core.sync.ServerOpStore
 import os.meka.core.sync.SyncService
 import os.meka.core.wire.AskCodec
+import os.meka.core.wire.GoalBreakdownCodec
 import os.meka.core.wire.HandleThisCodec
 import os.meka.core.wire.MessageRequestCodec
 import os.meka.core.wire.GroupDigestCodec
@@ -439,6 +440,16 @@ fun Application.mekaSync(
                 val request = HandleThisCodec.decodeRequest(body)
                 val answer = withContext(Dispatchers.IO) { handleService.read(request) }
                 call.respondText(MessageRequestCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+            // "Break it down": one goal in Meka's own words; proposed milestones and first steps back. Nothing is kept or
+            // logged.
+            val breakdownService = GoalBreakdownService(ai.provider)
+            post("/v1/ai/goal-breakdown") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = GoalBreakdownCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { breakdownService.breakDown(request) }
+                call.respondText(GoalBreakdownCodec.encodeResponse(answer), ContentType.Application.Json)
             }
             // The messages assistant: one message (1:1, or a group message naming Meka); a lane, gist, draft or proposals
             // back. Nothing is kept or logged.

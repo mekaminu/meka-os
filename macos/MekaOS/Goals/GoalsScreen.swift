@@ -347,6 +347,7 @@ private struct GoalRowView: View {
                     GoalDetailsView(goal: goal, all: all, palette: palette)
                     GoalNumberView(goal: goal, palette: palette)
                     MilestonesView(goal: goal, palette: palette)
+                    BreakItDownView(goal: goal, palette: palette)
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -475,6 +476,110 @@ private struct MilestonesView: View {
 
     private func remove(_ id: String) {
         Task { removed = await model.removeGoalMilestone(id) }
+    }
+}
+
+/// Goals, properly, slice 4: **Break it down** (approval only), the Mac twin of the Fold's `BreakItDown`. "✦ Break it
+/// down" asks MEKA once; "Thinking it through…" fades in, then the proposed milestones and first steps, each with an
+/// empty tick ring to tick (light haptic). Nothing is added until Keep; "Added … · Undo" fades in where they were. Not
+/// now fades them away. Reduce Motion: cross-fades only (they're all fades).
+private struct BreakItDownView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let goal: GoalItem
+    let palette: MekaPalette
+
+    private enum Stage: Equatable {
+        case idle, reading
+        case offered(milestones: [String], steps: [String], line: String)
+        case said(String, undo: Bool)
+    }
+    @State private var stage: Stage = .idle
+    @State private var ticked: Set<String> = []
+    @State private var kept: BreakdownKept?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            switch stage {
+            case .idle:
+                Button("✦ " + GoalBreakdownRules.shared.ACTION) { ask() }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                Text(GoalBreakdownRules.shared.HINT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            case .reading:
+                Text(GoalBreakdownRules.shared.READING_LINE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            case .offered(let milestones, let steps, let line):
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                if !milestones.isEmpty {
+                    Text(GoalBreakdownRules.shared.MILESTONES_LABEL).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    ForEach(milestones, id: \.self) { m in proposal(m, key: "m:" + m) }
+                }
+                if !steps.isEmpty {
+                    Text(GoalBreakdownRules.shared.STEPS_LABEL).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    ForEach(steps, id: \.self) { t in proposal(t, key: "s:" + t) }
+                }
+                HStack(spacing: MekaSpace.l) {
+                    Button(GoalBreakdownRules.shared.keepLabel(ticked: Int32(ticked.count))) {
+                        keep(milestones: milestones.filter { ticked.contains("m:" + $0) }, steps: steps.filter { ticked.contains("s:" + $0) })
+                    }
+                    .disabled(ticked.isEmpty)
+                    Button(GoalBreakdownRules.shared.NOT_NOW) { MekaHaptics.tick(); stage = .idle }
+                }
+                .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+            case .said(let line, let undo):
+                HStack(spacing: MekaSpace.m) {
+                    Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Button(undo ? "Undo" : "OK") {
+                        if undo, let k = kept { kept = nil; model.undoBreakdown(k) }
+                        stage = .idle
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                }
+            }
+        }
+        .transition(.opacity)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: stage)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: ticked)
+    }
+
+    private func proposal(_ text: String, key: String) -> some View {
+        let on = ticked.contains(key)
+        return Button {
+            MekaHaptics.light()
+            if on { ticked.remove(key) } else { ticked.insert(key) }
+        } label: {
+            HStack(spacing: MekaSpace.m) {
+                TickRingView(done: on, palette: palette).frame(width: 18, height: 18)
+                Text(text).font(MekaType.body).foregroundStyle(palette.textPrimary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel((on ? "Don't keep " : "Keep ") + text)
+    }
+
+    private func ask() {
+        MekaHaptics.light()
+        stage = .reading
+        ticked = []
+        let gid = goal.id
+        Task {
+            switch await model.breakDownGoal(gid) {
+            case .offered(let m, let s, let line): stage = .offered(milestones: m, steps: s, line: line)
+            case .said(let line): stage = .said(line, undo: false)
+            }
+        }
+    }
+
+    private func keep(milestones: [String], steps: [String]) {
+        let gid = goal.id
+        Task {
+            if let k = await model.keepBreakdown(gid, milestones: milestones, steps: steps) {
+                kept = k.isEmpty ? nil : k
+                stage = .said(k.line, undo: !k.isEmpty)
+            } else {
+                stage = .idle
+            }
+        }
     }
 }
 
