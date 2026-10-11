@@ -564,6 +564,7 @@ class AskMekaFacadeTest {
         c.askMeka("What do I need at Tesco?")
         assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.ERRANDS })
         c.addErrand("Tesco: milk")
+        now += 1_000 // the card's errand comes after milk in the list
 
         server.reply = AskReply.Answered("Milk so far.", listOf(
             AskRawAction("add_errand", title = "tesco: batteries"),
