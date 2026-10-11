@@ -163,6 +163,7 @@ import os.meka.core.domain.GoalsView
 import os.meka.core.domain.HabitChipRules
 import os.meka.core.domain.HabitDot
 import os.meka.core.domain.HabitDotRules
+import os.meka.core.domain.WeekGoals
 import kotlinx.coroutines.flow.StateFlow
 import os.meka.core.sync.SyncStatus
 import java.time.Instant
@@ -620,6 +621,8 @@ internal fun TodayHeaderRow(
      * `nightFall` token as the pane drops away, its second hand and breath at rest. Reduced motion: the short cross-fade.
      */
     night: Boolean = false,
+    /** This week's goals as arcs on the face's outer ring (Goals, properly, slice 7). */
+    week: WeekGoals = WeekGoals.EMPTY,
     left: @Composable () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -632,7 +635,8 @@ internal fun TodayHeaderRow(
         Column(Modifier.weight(1f)) { left() }
         if (face != null) {
             WatchFaceDial(face, play, played, Modifier.padding(start = MekaSpace.m).graphicsLayer { alpha = faceAlpha },
-                size = DayRingHeader.sizeDp(compact).dp, onOpen = onOpenFace, dots = dots, onTick = onTick, night = night)
+                size = DayRingHeader.sizeDp(compact).dp, onOpen = onOpenFace, dots = dots, onTick = onTick, night = night,
+                week = week)
         }
     }
 }
@@ -733,6 +737,7 @@ private fun TodayPane(
                         // Tap the face: the full 24-hour Day ring as a sheet, its arcs opening their events and tasks.
                         onOpenFace = openDayRing,
                         night = shutdown.night,
+                        week = goalsNow.week,
                         dots = if (core != null) habitDots else emptyList(),
                         onTick = { dot ->
                             chipHaptics.light()
@@ -772,6 +777,15 @@ private fun TodayPane(
                             Text(l.text, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
+                    // Goals, properly, slice 7: "This week: 2 of 3 goals moving"; cross-fades as it changes.
+                    goalsNow.week.line?.let { line ->
+                        val spoken = goalsNow.week.spoken
+                        Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "week-goals-line") { l ->
+                            Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = spoken })
                         }
                     }
                     // Meal plan, slice 1: tonight's dinner from 15:00 to 21:00, "Dinner tonight: Chilli"; cross-fades.

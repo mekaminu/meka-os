@@ -107,6 +107,12 @@ data class GoalItem(
     val milestones: List<GoalMilestone> = emptyList(),
     /** A numeric goal's number ("£800 of £2,000"), its chart and updates (slice 3); null for an ordinary goal. */
     val metric: GoalMetric? = null,
+    /**
+     * The last day (local epoch day) anything moved it on (Goals, properly, slice 7): a linked task done, a milestone
+     * ticked, a number update, a tick of a linked habit (or of the habit feeding its number), a goal under it moving,
+     * or the goal finished. Null when nothing has yet.
+     */
+    val lastMovedDay: Long? = null,
 ) {
     val milestonesDone: Int get() = milestones.count { it.done }
     /** The next step is a milestone (no open task is linked), not a task. */
@@ -128,6 +134,8 @@ data class GoalsView(
     /** Open goals, short horizon first; finished goals are kept but not listed. */
     val goals: List<GoalItem>,
     val finishedGoals: Int,
+    /** This week's goals: Today's "This week: 2 of 3 goals moving" and the watch face's goal ring (slice 7). */
+    val week: WeekGoals = WeekGoals.EMPTY,
 ) {
     val behind: Int get() = habits.count { it.pace == HabitPace.BEHIND }
     val dueToday: Int get() = habits.count { it.pace == HabitPace.DUE }
@@ -856,7 +864,11 @@ class Goals(
      * finished. Progress counts what's linked — tasks done, habits' share of this week — and each goal under it (a
      * finished one as 100 %); with nothing linked it is set by hand.
      */
-    fun goals(tasks: List<Task>, habits: List<HabitItem> = habits()): Pair<List<GoalItem>, Int> {
+    fun goals(tasks: List<Task>, habits: List<HabitItem> = habits()): Pair<List<GoalItem>, Int> =
+        collect(tasks, habits).let { (open, finished, _) -> open to finished }
+
+    /** [goals], plus this week's finished week goals (they still count as moving this week). */
+    private fun collect(tasks: List<Task>, habits: List<HabitItem>): Triple<List<GoalItem>, Int, List<GoalItem>> {
         val today = today()
         val snaps = replica.entities(EntityTypes.GOAL).associateBy { it.ref.entityId }
         fun isDone(id: String) = snaps[id]?.get(ActionableFields.LIFECYCLE)?.textOrNull == Lifecycle.DONE.name
@@ -882,6 +894,26 @@ class Goals(
         val habitTitles = habits.associate { it.id to it.title }
         val entries = entriesByGoal()
         val metrics = snaps.mapValues { (id, s) -> metricOf(id, s, ticks, habitTitles, today, entries) }
+        val milestoneMoves = milestoneDoneDays()
+        val movedMemo = HashMap<String, Long?>()
+        fun moved(id: String, depth: Int = 0): Long? {
+            if (movedMemo.containsKey(id)) return movedMemo[id]
+            val s = snaps.getValue(id)
+            val metricHabit = s[GoalFields.METRIC_HABIT_ID].textOrNull
+            val metricSince = s[GoalFields.METRIC_SINCE_DAY].longOrNull ?: Long.MIN_VALUE
+            val days = buildList {
+                linkedTasks.getValue(id).forEach { t -> if (t.isDone) t.completedAtMs?.let { add(calendar.epochDayOf(it)) } }
+                milestoneMoves[id]?.let { add(it) }
+                entries[id].orEmpty().forEach { add(it.second) }
+                linkedHabits.getValue(id).forEach { h -> ticks[h.id]?.maxOrNull()?.let { add(it) } }
+                metricHabit?.let { h -> ticks[h]?.filter { it >= metricSince }?.maxOrNull()?.let { add(it) } }
+                if (isDone(id)) s[ActionableFields.COMPLETED_AT].longOrNull?.let { add(calendar.epochDayOf(it)) }
+                if (depth <= 32) children[id].orEmpty().forEach { k -> moved(k, depth + 1)?.let { add(it) } }
+            }
+            val v = days.filter { it <= today }.maxOrNull()
+            movedMemo[id] = v
+            return v
+        }
         val pctMemo = HashMap<String, Int>()
         fun pct(id: String, depth: Int = 0): Int = pctMemo[id] ?: run {
             val s = snaps.getValue(id)
@@ -952,6 +984,7 @@ class Goals(
                 nextStep = next?.title ?: ms.firstOrNull { !it.done }?.title,
                 milestones = ms,
                 metric = metric,
+                lastMovedDay = moved(id),
             )
         }
         val order = compareBy<String> { GoalRules.parseHorizon(snaps[it]?.get(GoalFields.HORIZON)?.textOrNull).ordinal }
@@ -963,14 +996,30 @@ class Goals(
         }
         // Top level: no parent, or a parent that is finished (the goal then shows on its own).
         snaps.keys.filter { !isDone(it) && (parentOf[it] == null || isDone(parentOf[it]!!)) }.sortedWith(order).forEach { walk(it, 0) }
-        return open to snaps.keys.count { isDone(it) }
+        val finishedThisWeek = snaps.keys.filter { id ->
+            isDone(id) && GoalRules.parseHorizon(snaps[id]?.get(GoalFields.HORIZON)?.textOrNull) == GoalHorizon.WEEK &&
+                (snaps[id]?.get(ActionableFields.COMPLETED_AT)?.longOrNull?.let { calendar.epochDayOf(it) } ?: Long.MIN_VALUE) >= GoalRules.weekStart(today)
+        }.sortedWith(compareBy<String> { snaps[it]?.get(ActionableFields.COMPLETED_AT)?.longOrNull ?: 0L }.thenBy { it })
+            .map { item(it, 0) }
+        return Triple(open, snaps.keys.count { isDone(it) }, finishedThisWeek)
     }
 
     fun view(tasks: List<Task>): GoalsView {
         val h = habits()
-        val (g, finished) = goals(tasks, h)
-        return GoalsView(h, g, finished)
+        val (g, finished, week) = collect(tasks, h)
+        return GoalsView(h, g, finished, GoalWeekRules.build(g, week, today()))
     }
+
+    /** Each goal's latest milestone tick (local epoch day). */
+    private fun milestoneDoneDays(): Map<String, Long> =
+        replica.entities(EntityTypes.GOAL_MILESTONE)
+            .filter { !it.deleted && it[GoalMilestoneFields.DONE].boolOrNull == true }
+            .mapNotNull { s ->
+                val g = s[GoalMilestoneFields.GOAL_ID].textOrNull ?: return@mapNotNull null
+                val at = s[GoalMilestoneFields.DONE_AT].longOrNull ?: return@mapNotNull null
+                g to calendar.epochDayOf(at)
+            }
+            .groupBy({ it.first }, { it.second }).mapValues { it.value.max() }
 
     /** Habits the planner should make room for today: behind first, then due. */
     fun plannerHabits(): List<PlannerHabit> =

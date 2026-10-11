@@ -12,6 +12,10 @@ import SwiftUI
 /// Calm Today, slice 2: today's habits sit on the face as small dots just inside the markers, centred on 6 o'clock
 /// (`HabitDotRules`), hollow until done; a click on a dot ticks it (`onTick`; the fill floods in and the dot pops on
 /// the complete spring, unticking empties it at once), anywhere else opens the day. VoiceOver gets one action per habit.
+///
+/// Goals, properly, slice 7: this week's goals as arcs on the face's outermost ring, just outside the rim
+/// (`GoalWeekRules`): one segment each round from 12, a faint track filled by the goal's progress — the full accent while
+/// it's moving this week, quieter until it does — drawing in behind the rim on the opening.
 struct WatchFaceView: View {
     let face: WatchFace
     let play: DayRingPlayback
@@ -23,6 +27,8 @@ struct WatchFaceView: View {
     var onTick: ((HabitDot) -> Void)? = nil
     /// Done for the day: the day is shut down, so the face rests (no second hand or breath; redrawn each minute).
     var night: Bool = false
+    /// This week's goals for the outer ring; nil or none, no ring.
+    var week: WeekGoals? = nil
     @Environment(\.mekaExpressiveMotion) private var expressive
     @State private var began = Date()
 
@@ -51,7 +57,7 @@ struct WatchFaceView: View {
             onOpen()
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(face.spokenLine + HabitDotRules.shared.spokenLine(dots: dots))
+        .accessibilityLabel(face.spokenLine + HabitDotRules.shared.spokenLine(dots: dots) + ((week?.spoken).map { $0.isEmpty ? "" : " " + $0 } ?? ""))
         .accessibilityAddTraits(onOpen == nil ? [] : .isButton)
         .accessibilityActions {
             if let onTick {
@@ -97,6 +103,14 @@ struct WatchFaceView: View {
         let grows = arcs.indices.map { MotionMath.dayRingArc(elapsed: elapsed, index: $0, play: play, expressive: expressive) }
         let shows = markers.indices.map { MotionMath.dayRingHour(mark: mark, hour: $0 * 2, play: play) }
         let look = DayRingLook.shared
+        let goalRules = GoalWeekRules.shared
+        let goalRadius = CGFloat(goalRules.ringRadiusDp(sizeDp: sizeDp))
+        // (start, track sweep shown, fill shown, fill alpha) for each of the week's goals.
+        let goalArcs: [(Double, Double, Double, Double)] = (week?.arcs ?? []).map { arc in
+            let shown = Double(goalRules.shown(mark: Float(mark), arc: arc))
+            let track = Double(arc.sweepDegrees) * shown
+            return (Double(arc.startDegrees), track, min(Double(arc.fillDegrees), track), Double(goalRules.fillAlpha(arc: arc)))
+        }
         return Canvas { ctx, canvasSize in
             let c = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
             func point(_ degrees: Double, _ r: CGFloat) -> CGPoint {
@@ -134,6 +148,19 @@ struct WatchFaceView: View {
                 let alpha = Double(arc.3 ? rules.TASK_ARC_ALPHA : rules.EVENT_ARC_ALPHA)
                 ctx.stroke(arcPath(from: arc.0, sweep: arc.1 * grows[i]), with: .color(palette.accent.opacity(alpha)),
                            style: StrokeStyle(lineWidth: arc.2 ? rim * CGFloat(rules.HIGHLIGHT_WIDTH) : rim, lineCap: .butt))
+            }
+            // This week's goals: arcs on the outermost ring, a faint track each, filled by progress as the rim passes.
+            let goalStroke = StrokeStyle(lineWidth: CGFloat(goalRules.RING_DP), lineCap: .round)
+            func goalPath(from: Double, sweep: Double) -> Path {
+                var p = Path()
+                p.addArc(center: c, radius: goalRadius, startAngle: .degrees(from - 90), endAngle: .degrees(from - 90 + sweep), clockwise: false)
+                return p
+            }
+            for g in goalArcs where g.1 > 0 {
+                ctx.stroke(goalPath(from: g.0, sweep: g.1), with: .color(palette.accent.opacity(Double(goalRules.TRACK_ALPHA))), style: goalStroke)
+                if g.2 > 0 {
+                    ctx.stroke(goalPath(from: g.0, sweep: g.2), with: .color(palette.accent.opacity(g.3)), style: goalStroke)
+                }
             }
         }
         .frame(width: size, height: size)

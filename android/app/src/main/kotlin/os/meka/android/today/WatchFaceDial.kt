@@ -71,7 +71,9 @@ import os.meka.core.domain.DayRingLiveMode
 import os.meka.core.domain.DayRingLook
 import os.meka.core.domain.DayRingPlay
 import os.meka.core.domain.DayTile
+import os.meka.core.domain.GoalWeekRules
 import os.meka.core.domain.HabitDot
+import os.meka.core.domain.WeekGoals
 import os.meka.core.domain.HabitDotRules
 import os.meka.core.domain.WatchFace
 import os.meka.core.domain.WatchFaceRules
@@ -115,6 +117,12 @@ fun WatchFaceDial(
     onTick: ((HabitDot) -> Unit)? = null,
     /** Done for the day: the day is shut down, so the face rests like the bedside's in quiet hours (no second hand or breath). */
     night: Boolean = false,
+    /**
+     * Goals, properly, slice 7: this week's goals as arcs on the face's outermost ring, just outside the rim
+     * ([GoalWeekRules]): one segment each round from 12, a faint track filled by the goal's progress — the full accent
+     * while it's moving this week, quieter until it does. They draw in behind the rim on the opening.
+     */
+    week: WeekGoals = WeekGoals.EMPTY,
 ) {
     val sizeDp = size.value.toInt()
     val expressive = Meka.expressiveMotion
@@ -168,7 +176,7 @@ fun WatchFaceDial(
             .then(tapping)
             .clearAndSetSemantics {
                 testTag = WATCH_FACE_TAG
-                contentDescription = face.spokenLine + HabitDotRules.spokenLine(dots)
+                contentDescription = face.spokenLine + HabitDotRules.spokenLine(dots) + week.spoken.let { if (it.isEmpty()) it else " $it" }
                 if (dots.isNotEmpty() && onTick != null) {
                     if (onOpen != null) {
                         role = Role.Button
@@ -213,6 +221,22 @@ fun WatchFaceDial(
                 val alpha = WatchFaceRules.arcAlpha(arc.kind)
                 drawArc(colors.accent.copy(alpha = colors.accent.alpha * alpha), arc.startDegrees - 90f, arc.sweepDegrees * grow,
                     false, topLeft, arcSize, style = Stroke(if (arc.highlighted) rim * WatchFaceRules.HIGHLIGHT_WIDTH else rim, cap = StrokeCap.Butt))
+            }
+            // This week's goals: arcs on the outermost ring, a faint track each, filled by progress as the rim passes.
+            if (week.arcs.isNotEmpty()) {
+                val gr = GoalWeekRules.ringRadiusDp(sizeDp).dp.toPx()
+                val gTopLeft = Offset(center.x - gr, center.y - gr)
+                val gSize = Size(gr * 2, gr * 2)
+                val gStroke = Stroke(GoalWeekRules.RING_DP.dp.toPx(), cap = StrokeCap.Round)
+                week.arcs.forEach { arc ->
+                    val shown = GoalWeekRules.shown(mark, arc)
+                    if (shown <= 0f) return@forEach
+                    drawArc(colors.accent.copy(alpha = colors.accent.alpha * GoalWeekRules.TRACK_ALPHA), arc.startDegrees - 90f,
+                        arc.sweepDegrees * shown, false, gTopLeft, gSize, style = gStroke)
+                    val fill = minOf(arc.fillDegrees, arc.sweepDegrees * shown)
+                    if (fill > 0f) drawArc(colors.accent.copy(alpha = colors.accent.alpha * GoalWeekRules.fillAlpha(arc)),
+                        arc.startDegrees - 90f, fill, false, gTopLeft, gSize, style = gStroke)
+                }
             }
             // Today's habits: small dots inside the markers at the foot of the dial, coming up as the rim passes them.
             dots.forEachIndexed { i, d ->

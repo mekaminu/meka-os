@@ -240,6 +240,24 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(core.goalsView.value.goals[0].metric?.line, "£300 of £2,000")
     }
 
+    func testWeekGoalsReachSwift() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "goals7-\(UUID().uuidString).db", deviceKey: nil
+        )
+        XCTAssertNil(core.goalsView.value.week.line)
+        let goal = try await core.addGoal(title: "Put £50 away", target: nil, horizon: GoalRules.shared.horizonAt(index: 0))
+        XCTAssertEqual(core.goalsView.value.week.line, "This week: “Put £50 away” not moving yet")
+        _ = try await core.setGoalNumber(goalId: goal, text: "£50")
+        _ = try await core.addGoalUpdate(goalId: goal, text: "+20")
+        let week = core.goalsView.value.week
+        XCTAssertEqual(week.line, "This week: “Put £50 away” is moving")
+        XCTAssertEqual(week.arcs.count, 1)
+        XCTAssertEqual(week.arcs[0].pct, 40)
+        XCTAssertEqual(GoalWeekRules.shared.fillAlpha(arc: week.arcs[0]), GoalWeekRules.shared.MOVING_ALPHA)
+    }
+
     func testGoalBreakdownReachesSwift() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

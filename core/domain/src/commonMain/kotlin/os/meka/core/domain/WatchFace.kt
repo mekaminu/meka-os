@@ -170,8 +170,12 @@ object WatchFaceRules {
     /** The bedside face's tap opens the whole day over the clock, titled so (the pane's back line returns to it). */
     const val BEDSIDE_SHEET_BACK = "‹ Clock"
 
-    /** The rim's radius on a dial of [sizeDp]: half the dial less half the rim stroke and a 2 dp inset. */
-    fun rimRadiusDp(sizeDp: Int): Float = sizeDp / 2f - rimStrokeDp(sizeDp) / 2f - 2f
+    /**
+     * The rim's radius on a dial of [sizeDp]: half the dial less half the rim stroke and a [RIM_INSET_DP] inset — room
+     * outside the rim for the week's goal ring ([GoalWeekRules.ringRadiusDp], Goals, properly, slice 7).
+     */
+    fun rimRadiusDp(sizeDp: Int): Float = sizeDp / 2f - rimStrokeDp(sizeDp) / 2f - RIM_INSET_DP
+    const val RIM_INSET_DP = 4f
 
     /** "Training", "Training - 3G", "U12 training": something to stand out on the rim. */
     fun isTraining(title: String): Boolean = Regex("\\btraining\\b", RegexOption.IGNORE_CASE).containsMatchIn(title)

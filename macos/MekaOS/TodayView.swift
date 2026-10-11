@@ -121,6 +121,14 @@ struct TodayView: View {
                             .accessibilityLabel(school.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Goals, properly, slice 7: "This week: 2 of 3 goals moving"; cross-fades as it changes.
+                    if let week = model.goals?.week, let line = week.line {
+                        Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+                            .accessibilityLabel(week.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     // Meal plan, slice 1: tonight's dinner from 15:00 to 21:00, "Dinner tonight: Chilli"; cross-fades.
                     if let dinner = model.today?.dinner {
                         Text(dinner.text).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
@@ -194,7 +202,9 @@ struct TodayView: View {
                                       // Today's habits as dots on the face (Calm Today, slice 2); a click on one ticks it.
                                       dots: HabitDotRules.shared.dots(chips: HabitChipRules.shared.build(goals: model.goals)),
                                       onTick: { model.tickHabitDot($0) },
-                                      night: model.shutdown?.night ?? false)
+                                      night: model.shutdown?.night ?? false,
+                                      // This week's goals on the outer ring (Goals, properly, slice 7).
+                                      week: model.goals?.week)
                             // Done for the day: once shut down the face dims to night over `nightFall` as the sheet
                             // goes (Reduce Motion: the short cross-fade).
                             .opacity(Double(WatchFaceRules.shared.nightAlpha(night: model.shutdown?.night ?? false)))

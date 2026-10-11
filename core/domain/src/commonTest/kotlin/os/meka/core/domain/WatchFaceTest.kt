@@ -137,7 +137,7 @@ class WatchFaceTest {
     fun theCompactFaceHasAThinnerRim() {
         assertEquals(4f, WatchFaceRules.rimStrokeDp(DayRingHeader.COMPACT_DP))
         assertEquals(6f, WatchFaceRules.rimStrokeDp(DayRingHeader.WIDE_DP))
-        near(150 / 2f - 3f - 2f, WatchFaceRules.rimRadiusDp(DayRingHeader.WIDE_DP))
+        near(150 / 2f - 3f - 4f, WatchFaceRules.rimRadiusDp(DayRingHeader.WIDE_DP))
     }
 
     @Test
@@ -146,7 +146,7 @@ class WatchFaceTest {
         assertEquals(8f, WatchFaceRules.rimStrokeDp(FoldModeRules.BEDSIDE_RING_MAX_DP.toInt()))
         assertEquals(8f, WatchFaceRules.rimStrokeDp(WatchFaceRules.LARGE_MIN_DP))
         assertEquals(6f, WatchFaceRules.rimStrokeDp(WatchFaceRules.LARGE_MIN_DP - 1))
-        near(260 / 2f - 4f - 2f, WatchFaceRules.rimRadiusDp(260))
+        near(260 / 2f - 4f - 4f, WatchFaceRules.rimRadiusDp(260))
     }
 
     @Test
