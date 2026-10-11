@@ -194,6 +194,26 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(found.map(\.title), ["Buy running shoes"])
     }
 
+    func testGoalMilestonesReachSwift() async throws {
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "goals3-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let goal = try await core.addGoal(title: "Run a half marathon", target: "Under 2 hours", horizon: GoalRules.shared.horizonAt(index: 2))
+        let five = try await core.addGoalMilestone(goalId: goal, title: "Run 5k")
+        _ = try await core.addGoalMilestone(goalId: goal, title: "Run 10k")
+        try await core.setGoalMilestoneDone(id: five, done: true)
+        let g = core.goalsView.value.goals[0]
+        XCTAssertEqual(g.milestones.map(\.title), ["Run 5k", "Run 10k"])
+        XCTAssertEqual(g.milestonesDone, 1)
+        XCTAssertEqual(g.progressPct, 50)
+        XCTAssertEqual(g.nextLine, "Next milestone · Run 10k")
+        XCTAssertEqual(GoalRules.shared.ringSweep(pct: 50), 180)
+        let removed = try await core.removeGoalMilestone(id: five)
+        XCTAssertEqual(removed, "Run 5k")
+    }
+
     func testFastingThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

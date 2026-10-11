@@ -343,6 +343,27 @@ class MekaCoreTest {
     }
 
     @Test
+    fun goalMilestonesTickRemoveAndSyncToTheMac() = runTest {
+        val a = core("android"); val m = core("mac")
+        val goal = a.addGoal("Run a half marathon", "Under 2 hours", os.meka.core.domain.GoalHorizon.QUARTER)
+        val five = a.addGoalMilestone(goal, "Run 5k")
+        val ten = a.addGoalMilestone(goal, "Run 10k")
+        a.setGoalMilestoneDone(five, true)
+        assertEquals("Next milestone · Run 10k", a.goalsView.value.goals.single().nextLine)
+        a.syncNow(); m.syncNow()
+        val g = m.goalsView.value.goals.single()
+        assertEquals(listOf("Run 5k", "Run 10k"), g.milestones.map { it.title })
+        assertEquals(50, g.progressPct)
+        // Removed on the Mac, Undo adds it back as a new milestone.
+        assertEquals("Run 10k", m.removeGoalMilestone(ten))
+        assertEquals(100, m.goalsView.value.goals.single().progressPct)
+        m.addGoalMilestone(goal, "Run 10k")
+        m.syncNow(); a.syncNow()
+        assertEquals(listOf("Run 5k", "Run 10k"), a.goalsView.value.goals.single().milestones.map { it.title })
+        assertEquals(50, a.goalsView.value.goals.single().progressPct)
+    }
+
+    @Test
     fun habitsTickSyncAndThePlanMakesRoomForOnesThatAreDue() = runTest {
         val a = core("android"); val m = core("mac")
         val goal = a.addGoal("Fitter by spring", null, os.meka.core.domain.GoalHorizon.QUARTER)

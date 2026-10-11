@@ -1625,6 +1625,28 @@ final class CoreModel {
         MekaHaptics.light()
         run { _ = try await $0.addGoalStep(goalId: goalID, title: t) }
     }
+    /// Goals, properly, slice 2: what done looks like (blank clears it).
+    func setGoalTarget(_ id: String, _ target: String) {
+        let t = target.trimmingCharacters(in: .whitespacesAndNewlines)
+        run { try await $0.editGoal(id: id, title: nil, target: t, horizon: nil) }
+    }
+    /// A milestone on the way ("Run 10k"); a title already there isn't added twice.
+    func addGoalMilestone(_ goalID: String, _ title: String) {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        MekaHaptics.light()
+        run { _ = try await $0.addGoalMilestone(goalId: goalID, title: t) }
+    }
+    func setGoalMilestoneDone(_ id: String, _ done: Bool) {
+        MekaHaptics.light()
+        run { try await $0.setGoalMilestoneDone(id: id, done: done) }
+    }
+    /// Removes a milestone; its title comes back for Undo (nil if it was already gone).
+    func removeGoalMilestone(_ id: String) async -> String? {
+        guard let core else { return nil }
+        MekaHaptics.tick()
+        return try? await core.removeGoalMilestone(id: id)
+    }
     /// "Link a task": open tasks matching the words, not already on the goal.
     func goalLinkCandidates(_ goalID: String, _ query: String) async -> [MekaTask] {
         guard let core else { return [] }

@@ -1982,6 +1982,12 @@ class MekaCore(
         if (!goals.goalExists(goalId)) throw os.meka.core.domain.ValidationException("Goal not found")
         tasks.create(NewTask(title, goalId = goalId))
     }
+    /** Goals, properly, slice 2: a milestone on the way ("Run 10k"); a title already there isn't added twice. */
+    suspend fun addGoalMilestone(goalId: String, title: String): String = onCore { goals.addMilestone(goalId, title) }
+    /** Ticks (or unticks) a milestone; it counts towards the goal's progress. */
+    suspend fun setGoalMilestoneDone(id: String, done: Boolean) = onCore { goals.setMilestoneDone(id, done) }
+    /** Removes a milestone; returns its title for Undo ([addGoalMilestone] adds it back), null if it was already gone. */
+    suspend fun removeGoalMilestone(id: String): String? = onCore { goals.removeMilestone(id) }
     /** Open tasks to offer under "Link a task" ([os.meka.core.domain.GoalRules.linkCandidates]). */
     suspend fun goalLinkCandidates(goalId: String, query: String): List<os.meka.core.domain.Task> =
         onCore { os.meka.core.domain.GoalRules.linkCandidates(tasks.all(), goalId, query) }

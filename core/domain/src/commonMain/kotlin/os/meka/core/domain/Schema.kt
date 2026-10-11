@@ -78,6 +78,8 @@ object EntityTypes {
     const val APPOINTMENT = "appointment"
     /** A checklist saved under a name, "Weekly shop" (see [ChecklistTemplates]). */
     const val CHECKLIST_TEMPLATE = "checklist_template"
+    /** A milestone on the way to a goal, "Run 10k" (see [Goals]; Goals, properly, slice 2). */
+    const val GOAL_MILESTONE = "goal_milestone"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -85,7 +87,7 @@ object EntityTypes {
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
-        CHECKLIST_TEMPLATE,
+        CHECKLIST_TEMPLATE, GOAL_MILESTONE,
     )
 }
 
@@ -208,6 +210,18 @@ object GoalFields {
     const val DUE_DAY = "dueDay"
     /** The bigger goal this one sits under (year → month → week); null at the top. */
     const val PARENT_ID = "parentId"
+}
+
+/** Goals, properly, slice 2 (2026-10-11, additive): a goal's milestones, one entity each. */
+object GoalMilestoneFields {
+    const val GOAL_ID = "goalId"
+    const val TITLE = "title"
+    /** Ticked; LWW, so a tick and an untick on two devices end on the latest. */
+    const val DONE = "done"
+    const val DONE_AT = "doneAtMs"
+    /** Orders the milestones (oldest first). */
+    const val CREATED_AT = "createdAtMs"
+    const val DELETED = ActionableFields.DELETED
 }
 
 object HabitFields {
@@ -356,6 +370,9 @@ object MekaSchema : SchemaRegistry {
         // Checklist templates: one removed on any device is gone for good; saving over one, the latest save wins.
         entityType == EntityTypes.CHECKLIST_TEMPLATE && field == ChecklistTemplateFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.CHECKLIST_TEMPLATE -> MergePolicy.Lww
+        // Goal milestones: one removed on any device is gone for good; ticks and titles, the latest edit wins.
+        entityType == EntityTypes.GOAL_MILESTONE && field == GoalMilestoneFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.GOAL_MILESTONE -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

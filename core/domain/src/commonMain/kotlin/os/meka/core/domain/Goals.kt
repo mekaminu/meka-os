@@ -17,8 +17,8 @@ import os.meka.core.sync.fv
  *   can still be met with a spare day; Due once the days left (today included) are no more than one more than the goes
  *   left ("1 left — 2 days to go"); Behind only once the week can no longer be met.
  * - Streaks: a daily habit counts days in a row; any other target counts weeks in a row that met it.
- * - A Goal's progress is counted from what's linked to it (tasks done, habits' share of this week, goals under it), or set by hand when
- *   nothing is linked.
+ * - A Goal's progress is counted from what's linked to it (tasks done, habits' share of this week, goals under it, its
+ *   milestones ticked), or set by hand when nothing is linked.
  * - The planner makes room for habits that are behind or due today ([plannerHabits]).
  */
 
@@ -102,7 +102,22 @@ data class GoalItem(
     /** The next step: the first open task linked to it (planned or due first, then oldest). */
     val nextStepTaskId: String? = null,
     val nextStep: String? = null,
-)
+    /** Its milestones, oldest first (Goals, properly, slice 2). */
+    val milestones: List<GoalMilestone> = emptyList(),
+) {
+    val milestonesDone: Int get() = milestones.count { it.done }
+    /** The next step is a milestone (no open task is linked), not a task. */
+    val nextIsMilestone: Boolean get() = nextStep != null && nextStepTaskId == null
+    /** "Next · Buy running shoes", "Next milestone · Run 10k", "No next step yet · add one". */
+    val nextLine: String get() = when {
+        nextStep == null -> "No next step yet · add one"
+        nextIsMilestone -> "Next milestone · $nextStep"
+        else -> "Next · $nextStep"
+    }
+}
+
+/** A milestone on the way to a goal: "Run 10k", ticked when reached. */
+data class GoalMilestone(val id: String, val goalId: String, val title: String, val done: Boolean)
 
 data class GoalsView(
     /** Behind first, then due today, then the rest; done-today and week-met last. */
@@ -152,6 +167,12 @@ object GoalRules {
     const val DEFAULT_MINUTES = 15
     /** The longest "why it matters" kept. */
     const val MAX_WHY = 1_000
+    /** At most this many milestones on one goal; the longest milestone title. */
+    const val MAX_MILESTONES = 12
+    const val MAX_MILESTONE_TITLE = 120
+
+    /** The progress ring's sweep in degrees (0–360) for [pct]. */
+    fun ringSweep(pct: Int): Float = pct.coerceIn(0, 100) * 3.6f
 
     /** Index-based access for Swift, which then never needs to name the cases. */
     fun horizonAt(index: Int): GoalHorizon = HORIZONS[index.coerceIn(0, HORIZONS.size - 1)]
@@ -603,6 +624,7 @@ class Goals(
         replica.entities(EntityTypes.TASK).filter { it[ActionableFields.GOAL_ID].textOrNull == id }.forEach {
             replica.commitLocal(EntityTypes.TASK, it.ref.entityId, mapOf(ActionableFields.GOAL_ID to FieldValue.Null))
         }
+        milestones(id).forEach { replica.commitLocal(EntityTypes.GOAL_MILESTONE, it.id, mapOf(GoalMilestoneFields.DELETED to true.fv())) }
         // Goals under it move up to its own parent (or the top).
         val up = live(EntityTypes.GOAL, id)?.get(GoalFields.PARENT_ID)?.textOrNull
         replica.entities(EntityTypes.GOAL).filter { !it.deleted && it[GoalFields.PARENT_ID].textOrNull == id }.forEach {
@@ -610,6 +632,59 @@ class Goals(
         }
         replica.commitLocal(EntityTypes.GOAL, id, mapOf(ActionableFields.DELETED to true.fv()))
     }
+
+    // ---- Milestones (Goals, properly, slice 2) ----
+
+    /** Adds a milestone to the goal (at most [GoalRules.MAX_MILESTONES]); a title already there isn't added twice. */
+    fun addMilestone(goalId: String, title: String): String {
+        requireGoal(goalId)
+        val t = title.trim().replace(Regex("\\s+"), " ")
+        if (t.isEmpty()) throw ValidationException("Name the milestone")
+        if (t.length > GoalRules.MAX_MILESTONE_TITLE) throw ValidationException("That's too long for a milestone")
+        val mine = milestones(goalId)
+        mine.firstOrNull { it.title.equals(t, ignoreCase = true) }?.let { return it.id }
+        if (mine.size >= GoalRules.MAX_MILESTONES) throw ValidationException("A goal keeps up to ${GoalRules.MAX_MILESTONES} milestones")
+        val id = ids()
+        replica.commitLocal(
+            EntityTypes.GOAL_MILESTONE, id,
+            linkedMapOf(
+                GoalMilestoneFields.GOAL_ID to goalId.fv(),
+                GoalMilestoneFields.TITLE to t.fv(),
+                GoalMilestoneFields.DONE to false.fv(),
+                GoalMilestoneFields.CREATED_AT to nowMs().fv(),
+            ),
+        )
+        return id
+    }
+
+    /** Ticks (or unticks) a milestone; the latest tap on any device wins. */
+    fun setMilestoneDone(id: String, done: Boolean) {
+        live(EntityTypes.GOAL_MILESTONE, id) ?: throw ValidationException("Milestone not found")
+        replica.commitLocal(
+            EntityTypes.GOAL_MILESTONE, id,
+            mapOf(GoalMilestoneFields.DONE to done.fv(), GoalMilestoneFields.DONE_AT to (if (done) nowMs().fv() else FieldValue.Null)),
+        )
+    }
+
+    /** Removes a milestone for good; returns its title (Undo adds it again as a new one), null if it was already gone. */
+    fun removeMilestone(id: String): String? {
+        val s = live(EntityTypes.GOAL_MILESTONE, id) ?: return null
+        replica.commitLocal(EntityTypes.GOAL_MILESTONE, id, mapOf(GoalMilestoneFields.DELETED to true.fv()))
+        return s[GoalMilestoneFields.TITLE].textOrNull
+    }
+
+    /** The goal's milestones, oldest first. */
+    fun milestones(goalId: String): List<GoalMilestone> = allMilestones()[goalId].orEmpty()
+
+    private fun allMilestones(): Map<String, List<GoalMilestone>> =
+        replica.entities(EntityTypes.GOAL_MILESTONE).filter { !it.deleted }
+            .mapNotNull { s ->
+                val g = s[GoalMilestoneFields.GOAL_ID].textOrNull ?: return@mapNotNull null
+                Triple(s[GoalMilestoneFields.CREATED_AT].longOrNull ?: 0L, s.ref.entityId,
+                    GoalMilestone(s.ref.entityId, g, s[GoalMilestoneFields.TITLE].textOrNull ?: "", s[GoalMilestoneFields.DONE].boolOrNull == true))
+            }
+            .sortedWith(compareBy<Triple<Long, String, GoalMilestone>> { it.first }.thenBy { it.second })
+            .map { it.third }.groupBy { it.goalId }
 
     /** Links a task to a goal (null unlinks); it then counts towards the goal's progress. */
     fun setTaskGoal(taskId: String, goalId: String?) {
@@ -691,13 +766,15 @@ class Goals(
         val children = parentOf.entries.filter { it.value != null }.groupBy({ it.value!! }, { it.key })
         val linkedTasks = snaps.keys.associateWith { id -> tasks.filter { it.goalId == id && it.lifecycle != Lifecycle.CANCELLED && it.lifecycle != Lifecycle.SOMEDAY } }
         val linkedHabits = snaps.keys.associateWith { id -> habits.filter { it.goalId == id } }
+        val milestonesOf = allMilestones()
         val pctMemo = HashMap<String, Int>()
         fun pct(id: String, depth: Int = 0): Int = pctMemo[id] ?: run {
             val s = snaps.getValue(id)
             val kids = children[id].orEmpty()
             val scores = linkedTasks.getValue(id).map { if (it.isDone) 1.0 else 0.0 } +
                 linkedHabits.getValue(id).map { minOf(1.0, it.doneThisWeek.toDouble() / it.weekTarget.coerceAtLeast(1)) } +
-                kids.map { k -> if (depth > 32) 0.0 else pct(k, depth + 1) / 100.0 }
+                kids.map { k -> if (depth > 32) 0.0 else pct(k, depth + 1) / 100.0 } +
+                milestonesOf[id].orEmpty().map { if (it.done) 1.0 else 0.0 }
             val v = when {
                 isDone(id) -> 100
                 scores.isNotEmpty() -> (scores.sum() * 100 / scores.size).toInt()
@@ -713,7 +790,8 @@ class Goals(
             val openKids = children[id].orEmpty().filter { !isDone(it) }
             val allKids = children[id].orEmpty()
             val tasksDone = lt.count { it.isDone }
-            val counted = lt.isNotEmpty() || lh.isNotEmpty() || allKids.isNotEmpty()
+            val ms = milestonesOf[id].orEmpty()
+            val counted = lt.isNotEmpty() || lh.isNotEmpty() || allKids.isNotEmpty() || ms.isNotEmpty()
             val done = isDone(id)
             val horizon = GoalRules.parseHorizon(s[GoalFields.HORIZON].textOrNull)
             val due = s[GoalFields.DUE_DAY].longOrNull
@@ -721,6 +799,7 @@ class Goals(
             val meta = listOfNotNull(
                 GoalRules.horizonLabel(horizon),
                 due?.let { GoalRules.dueLabel(it, today) },
+                ms.takeIf { it.isNotEmpty() }?.let { m -> "${m.count { it.done }} of ${m.size} ${if (m.size == 1) "milestone" else "milestones"}" },
                 lt.takeIf { it.isNotEmpty() }?.let { "$tasksDone of ${it.size} ${if (it.size == 1) "task" else "tasks"}" },
                 lh.takeIf { it.isNotEmpty() }?.let { "${it.size} ${if (it.size == 1) "habit" else "habits"}" },
                 allKids.takeIf { it.isNotEmpty() }?.let {
@@ -750,7 +829,9 @@ class Goals(
                 depth = depth,
                 childCount = openKids.size,
                 nextStepTaskId = next?.id,
-                nextStep = next?.title,
+                // With no open task, the first milestone not yet reached is the next step.
+                nextStep = next?.title ?: ms.firstOrNull { !it.done }?.title,
+                milestones = ms,
             )
         }
         val order = compareBy<String> { GoalRules.parseHorizon(snaps[it]?.get(GoalFields.HORIZON)?.textOrNull).ordinal }

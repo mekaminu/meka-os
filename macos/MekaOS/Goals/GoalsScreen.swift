@@ -287,29 +287,29 @@ private struct GoalRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Button(action: toggle) {
-                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    HStack {
+                HStack(alignment: .top, spacing: MekaSpace.m) {
+                    // The progress ring sweeps round on appear and glides to a new value (Goals, properly, slice 2).
+                    ZStack {
+                        Circle().stroke(palette.surfaceRaised, lineWidth: 4)
+                        Circle().trim(from: 0, to: shown)
+                            .stroke(palette.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                        Text("\(goal.progressPct)").font(MekaType.caption).monospacedDigit().foregroundStyle(palette.textSecondary)
+                            .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(goal.progressPct)))
+                    }
+                    .frame(width: 36, height: 36)
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Text(goal.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-                        Spacer()
-                        Text("\(goal.progressPct)%").font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textSecondary)
-                    }
-                    if let target = goal.target {
-                        Text(target).font(MekaType.body).foregroundStyle(palette.textSecondary)
-                    }
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(palette.surfaceRaised)
-                            Capsule().fill(palette.accent).frame(width: geo.size.width * shown)
+                        if let target = goal.target {
+                            Text(target).font(MekaType.body).foregroundStyle(palette.textSecondary)
                         }
+                        Text(goal.meta).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                        // The next step, always shown: the first open linked task, else the next milestone, or a prompt.
+                        Text(goal.nextLine)
+                            .font(MekaType.caption)
+                            .foregroundStyle(goal.nextStep != nil ? palette.accent : palette.textTertiary)
+                            .contentTransition(.opacity)
                     }
-                    .frame(height: 6)
-                    .padding(.vertical, MekaSpace.xxs)
-                    Text(goal.meta).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
-                    // The next step, always shown: the first open task linked to it, or a prompt to add one.
-                    Text(goal.nextStep.map { "Next · \($0)" } ?? "No next step yet · add one")
-                        .font(MekaType.caption)
-                        .foregroundStyle(goal.nextStep != nil ? palette.accent : palette.textTertiary)
-                        .contentTransition(.opacity)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -340,6 +340,7 @@ private struct GoalRowView: View {
                             .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
                     GoalDetailsView(goal: goal, all: all, palette: palette)
+                    MilestonesView(goal: goal, palette: palette)
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -364,6 +365,7 @@ private struct GoalDetailsView: View {
     let all: [GoalItem]
     let palette: MekaPalette
     @State private var why = ""
+    @State private var target = ""
     @State private var step = ""
     @State private var query = ""
     @State private var found: [MekaTask] = []
@@ -390,6 +392,9 @@ private struct GoalDetailsView: View {
                 }
             }
             .font(MekaType.itemTitle).foregroundStyle(palette.accent)
+            TextField("What done looks like (optional)", text: $target)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { model.setGoalTarget(goal.id, target) }
             TextField("Why it matters (optional)", text: $why)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { model.setGoalWhy(goal.id, why) }
@@ -403,13 +408,67 @@ private struct GoalDetailsView: View {
                     .transition(.opacity)
             }
         }
-        .onAppear { why = goal.why ?? "" }
-        // Typing is never lost: a changed "why" saves when the settings close.
-        .onDisappear { if why.trimmingCharacters(in: .whitespacesAndNewlines) != (goal.why ?? "") { model.setGoalWhy(goal.id, why) } }
+        .onAppear { why = goal.why ?? ""; target = goal.target ?? "" }
+        // Typing is never lost: a changed "why" or "what done looks like" saves when the settings close.
+        .onDisappear {
+            if why.trimmingCharacters(in: .whitespacesAndNewlines) != (goal.why ?? "") { model.setGoalWhy(goal.id, why) }
+            if target.trimmingCharacters(in: .whitespacesAndNewlines) != (goal.target ?? "") { model.setGoalTarget(goal.id, target) }
+        }
         .task(id: "\(query)|\(goal.tasksTotal)") {
             let q = query
             found = q.trimmingCharacters(in: .whitespaces).isEmpty ? [] : await model.goalLinkCandidates(goal.id, q)
         }
+    }
+}
+
+/// Goals, properly, slice 2: the goal's milestones with tick rings (a light haptic; they count towards the ring), Remove
+/// with "Removed … · Undo" fading in under the list, and "Add a milestone…".
+private struct MilestonesView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let goal: GoalItem
+    let palette: MekaPalette
+    @State private var title = ""
+    @State private var removed: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(goal.milestones.isEmpty ? "Milestones" : "Milestones · \(goal.milestonesDone) of \(goal.milestones.count)")
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            ForEach(goal.milestones, id: \.id) { m in
+                HStack(spacing: MekaSpace.m) {
+                    Button { model.setGoalMilestoneDone(m.id, !m.done) } label: {
+                        TickRingView(done: m.done, palette: palette).frame(width: 18, height: 18).contentShape(Circle())
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .accessibilityLabel((m.done ? "Untick " : "Tick ") + m.title)
+                    Text(m.title).font(MekaType.body).foregroundStyle(m.done ? palette.textSecondary : palette.textPrimary)
+                    Spacer()
+                    Button("Remove") { remove(m.id) }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                }
+                .transition(.opacity)
+            }
+            if let r = removed {
+                HStack(spacing: MekaSpace.m) {
+                    Text("Removed “\(r)”").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Button("Undo") { model.addGoalMilestone(goal.id, r); removed = nil }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                }
+                .transition(.opacity)
+            }
+            if goal.milestones.count < Int(GoalRules.shared.MAX_MILESTONES) {
+                TextField("Add a milestone…", text: $title)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { model.addGoalMilestone(goal.id, title); title = ""; removed = nil }
+            }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: removed)
+        .animation(MekaMotion.replan(reduced: reduceMotion), value: goal.milestones.map(\.id))
+    }
+
+    private func remove(_ id: String) {
+        Task { removed = await model.removeGoalMilestone(id) }
     }
 }
 

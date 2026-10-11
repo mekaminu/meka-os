@@ -11,6 +11,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,7 +24,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -56,6 +56,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -78,6 +80,7 @@ import os.meka.core.domain.TextAutosave
 import os.meka.core.domain.GoalHorizon
 import os.meka.core.domain.GoalItem
 import os.meka.core.domain.GoalRules
+import os.meka.core.domain.Goals
 import os.meka.core.domain.HabitItem
 import os.meka.core.domain.HabitPace
 import os.meka.core.domain.HabitTiming
@@ -194,6 +197,10 @@ fun GoalsRoute(core: MekaCore) {
                     addStep = { t -> haptics.light(); act { core.addGoalStep(g.id, t) } },
                     candidates = { q -> core.goalLinkCandidates(g.id, q) },
                     link = { taskId -> haptics.light(); act { core.setTaskGoal(taskId, g.id) } },
+                    target = { t -> act { core.editGoal(g.id, null, t ?: "", null) } },
+                    addMilestone = { t -> haptics.light(); act { core.addGoalMilestone(g.id, t) } },
+                    tickMilestone = { id, done -> haptics.light(); act { core.setGoalMilestoneDone(id, done) } },
+                    removeMilestone = { id, then -> haptics.tick(); scope.launch { runCatching { core.removeGoalMilestone(id) }.getOrNull()?.let(then) } },
                 ),
             )
         }
@@ -400,6 +407,12 @@ internal class GoalDetails(
     val addStep: (String) -> Unit,
     val candidates: suspend (String) -> List<os.meka.core.domain.Task>,
     val link: (String) -> Unit,
+    /** Slice 2: what done looks like (null clears it), milestones. */
+    val target: (String?) -> Unit,
+    val addMilestone: (String) -> Unit,
+    val tickMilestone: (String, Boolean) -> Unit,
+    /** Removes one, then hands its title back for Undo. */
+    val removeMilestone: (String, (String) -> Unit) -> Unit,
 )
 
 @Composable
@@ -418,20 +431,18 @@ private fun GoalRowBody(
                 .semantics { contentDescription = "${g.title}, ${g.progressPct} percent, ${g.meta}" },
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(g.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-                Text("${g.progressPct}%", style = MekaType.itemMeta, color = Meka.colors.textSecondary)
-            }
-            g.target?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
-            Box(Modifier.padding(vertical = MekaSpace.xs).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
-                Box(Modifier.fillMaxWidth(fill.value.coerceIn(0f, 1f)).height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
-            }
-            Text(g.meta, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
-            // The next step, always shown: the first open task linked to it, or a prompt to add one.
-            AnimatedContent(g.nextStep, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) }, label = "next-step") { next ->
-                Text(
-                    next?.let { "Next · $it" } ?: "No next step yet · add one",
-                    style = MekaType.caption, color = if (next != null) Meka.colors.accent else Meka.colors.textTertiary,
-                )
+                // The progress ring sweeps round on appear and glides to a new value (Goals, properly, slice 2).
+                ProgressRing(fill.value, g.progressPct)
+                Spacer(Modifier.width(MekaSpace.m))
+                Column(Modifier.weight(1f)) {
+                    Text(g.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+                    g.target?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
+                    Text(g.meta, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                    // The next step, always shown: the first open task linked to it, else the next milestone, or a prompt.
+                    AnimatedContent(g.nextLine, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) }, label = "next-step") { line ->
+                        Text(line, style = MekaType.caption, color = if (g.nextStep != null) Meka.colors.accent else Meka.colors.textTertiary)
+                    }
+                }
             }
         }
         AnimatedVisibility(expanded, enter = unfold(), exit = fold()) {
@@ -456,10 +467,83 @@ private fun GoalRowBody(
                         details.parent(if (i == 0) null else details.parents[i - 1].id)
                     }
                 }
+                GoalTarget(g, details.target)
                 GoalWhy(g, details.why)
+                Milestones(g, details)
                 AddStep(details.addStep)
                 LinkTask(g, details)
             }
+        }
+    }
+}
+
+/** The goal's progress as a ring with its percentage inside; [fill] (0–1) is animated by the caller. */
+@Composable
+private fun ProgressRing(fill: Float, pct: Int) {
+    val track = Meka.colors.surfaceRaised
+    val accent = Meka.colors.accent
+    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(40.dp)) {
+            val stroke = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+            val inset = stroke.width / 2
+            val arcSize = androidx.compose.ui.geometry.Size(size.width - stroke.width, size.height - stroke.width)
+            val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
+            drawArc(track, 0f, 360f, false, topLeft, arcSize, style = stroke)
+            val sweep = GoalRules.ringSweep((fill.coerceIn(0f, 1f) * 100).toInt())
+            if (sweep > 0f) drawArc(accent, -90f, sweep, false, topLeft, arcSize, style = stroke)
+        }
+        Text("$pct", style = MekaType.caption, color = Meka.colors.textSecondary)
+    }
+}
+
+/** "What done looks like": Done saves it, and so does closing the settings (typing is never lost). */
+@Composable
+private fun GoalTarget(g: GoalItem, save: (String?) -> Unit) {
+    var target by rememberSaveable(g.id) { mutableStateOf(g.target ?: "") }
+    val typed by rememberUpdatedState(target)
+    val saved by rememberUpdatedState(g.target ?: "")
+    val saveTarget by rememberUpdatedState(save)
+    DisposableEffect(Unit) {
+        onDispose { if (typed.trim() != saved) saveTarget(typed.trim().ifBlank { null }) }
+    }
+    Column {
+        Text("What done looks like", style = MekaType.caption, color = Meka.colors.textTertiary)
+        Field("Say what done looks like (optional)", target, { target = it.take(Goals.MAX_TITLE) }) { save(target.trim().ifBlank { null }) }
+    }
+}
+
+/**
+ * Milestones: each with its tick ring (it draws its check with a light haptic and counts towards the ring), Remove
+ * (tick haptic; "Removed … · Undo" cross-fades in under the list), and "Add a milestone…".
+ */
+@Composable
+private fun Milestones(g: GoalItem, details: GoalDetails) {
+    val reduced = Meka.reducedMotion
+    var title by rememberSaveable(g.id) { mutableStateOf("") }
+    var removed by remember(g.id) { mutableStateOf<String?>(null) }
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(if (g.milestones.isEmpty()) "Milestones" else "Milestones · ${g.milestonesDone} of ${g.milestones.size}", style = MekaType.caption, color = Meka.colors.textTertiary)
+        g.milestones.forEach { m ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TickRing(
+                    m.done,
+                    Modifier.size(24.dp).clip(CircleShape)
+                        .semantics { contentDescription = (if (m.done) "Untick " else "Tick ") + m.title }
+                        .clickable(role = Role.Checkbox) { details.tickMilestone(m.id, !m.done) },
+                )
+                Spacer(Modifier.width(MekaSpace.m))
+                Text(m.title, style = MekaType.body, color = if (m.done) Meka.colors.textSecondary else Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                Action("Remove") { details.removeMilestone(m.id) { t -> removed = t } }
+            }
+        }
+        AnimatedContent(removed, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) }, label = "milestone-undo") { r ->
+            if (r != null) Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Removed “$r”", style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                Action("Undo") { details.addMilestone(r); removed = null }
+            }
+        }
+        if (g.milestones.size < GoalRules.MAX_MILESTONES) {
+            Field("Add a milestone…", title, { title = it.take(GoalRules.MAX_MILESTONE_TITLE) }) { details.addMilestone(title.trim()); title = ""; removed = null }
         }
     }
 }
