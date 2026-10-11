@@ -104,60 +104,6 @@ internal fun RepeatSection(task: Task, actions: TodayActions) {
 }
 
 /**
- * Steps. A repeating task with steps is a routine: every new occurrence brings its steps back unticked.
- * Motion: a tick draws its check like completing a task and pops with a spring ([TickRing]; Off: at once); light haptic.
- */
-@Composable
-internal fun StepsSection(task: Task, actions: TodayActions) {
-    SectionLabel(if (task.isRepeating) "Routine steps" else "Steps", Modifier.padding(top = MekaSpace.l))
-    task.checklist.forEach { step -> key(step.id) { StepRow(step, actions) } }
-    // Not saveable: leaving (an unfold included) adds what was typed, so it mustn't come back to be added twice.
-    val textState = remember(task.id) { mutableStateOf("") }
-    var text by textState
-    // A step typed but not yet added is added when the detail closes or shows another task, as if Done had been
-    // pressed ([TextAutosave]: typing is never lost). Reads this task's own field, not the next task's.
-    val add by rememberUpdatedState(actions.addStep)
-    DisposableEffect(task.id) { onDispose { TextAutosave.pendingAdd(textState.value)?.let { add(task.id, it) } } }
-    Box(Modifier.fillMaxWidth().minTouch().padding(vertical = MekaSpace.xs)) {
-        if (text.isEmpty()) Text("Add a step…", style = MekaType.body, color = Meka.colors.textTertiary)
-        BasicTextField(
-            value = text,
-            onValueChange = { text = it },
-            singleLine = true,
-            textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
-            cursorBrush = SolidColor(Meka.colors.accent),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { actions.addStep(task.id, text); text = "" } }),
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Add a step" },
-        )
-    }
-}
-
-@Composable
-private fun StepRow(step: ChecklistItem, actions: TodayActions) {
-    val haptics = rememberMekaHaptics()
-    Row(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-        TickRing(
-            step.checked,
-            Modifier.size(22.dp).clip(CircleShape)
-                .semantics { contentDescription = (if (step.checked) "Untick " else "Tick ") + step.text }
-                .clickable(role = Role.Checkbox) { haptics.light(); actions.setStepDone(step.id, !step.checked) },
-        )
-        Spacer(Modifier.width(MekaSpace.m))
-        Text(
-            step.text, style = MekaType.body,
-            color = if (step.checked) Meka.colors.textTertiary else Meka.colors.textPrimary,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { actions.removeStep(step.id) }
-                .padding(MekaSpace.xs),
-        )
-    }
-}
-
-/**
  * Goal: link this task to one of your goals, so finishing it counts towards the goal's progress. Shown only once a
  * goal exists. The lit chip is the current link; "No goal" unlinks.
  */

@@ -833,6 +833,27 @@ class MekaCore(
     suspend fun setStepDone(stepId: String, done: Boolean) = onCore { tasks.setChecklistItemChecked(stepId, done) }
     suspend fun removeStep(stepId: String) = onCore { tasks.deleteChecklistItem(stepId) }
 
+    /**
+     * Checklists in tasks (2026-10-11): the detail's Checklist section, to tick first then "Ticked", with its line and
+     * the complete offer. Pure.
+     */
+    fun checklistView(task: Task): os.meka.core.domain.ChecklistView = os.meka.core.domain.ChecklistRules.view(task)
+
+    /** One typed or pasted line: each of its items (new lines, commas) goes at the end, unticked. Returns their ids. */
+    suspend fun addSteps(taskId: String, text: String): List<String> = onCore { tasks.addChecklistItems(taskId, text) }
+
+    /** Undo for [removeStep]: the item comes back with its tick and place. */
+    suspend fun restoreStep(stepId: String) = onCore { tasks.restoreChecklistItem(stepId) }
+
+    /** Untick all, to reuse the list; returns what it unticked, for [tickSteps] (Undo). */
+    suspend fun untickAllSteps(taskId: String): List<String> = onCore { tasks.untickAllChecklistItems(taskId) }
+
+    /** Ticks these items again (Undo for [untickAllSteps]). */
+    suspend fun tickSteps(stepIds: List<String>) = onCore { stepIds.forEach { tasks.setChecklistItemChecked(it, true) } }
+
+    /** Drag to reorder: the item takes [toIndex] in the list's order. */
+    suspend fun moveStep(taskId: String, stepId: String, toIndex: Int) = onCore { tasks.moveChecklistItem(taskId, stepId, toIndex) }
+
     /** The local day today as an epoch day, for [os.meka.core.domain.Task.repeatMeta]. */
     fun todayEpochDay(): Long = ZoneCalendar(timeZone).epochDayOf(nowMs())
 

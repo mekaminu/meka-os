@@ -36,10 +36,14 @@ struct RepeatMenu: View {
     }
 }
 
-/// Steps. A repeating task with steps is a routine: every new occurrence brings its steps back unticked.
-/// Motion: a tick pops with a spring; Reduce Motion changes colour only.
+/// Checklist (Checklists in tasks, slice 1; "Routine steps" on a repeating task, whose occurrences bring them back
+/// unticked). Still to tick first, then "Ticked" with Untick all; typing or pasting several lines (or commas) adds each
+/// as an item; all ticked offers to complete the task. Motion (catalogue "Checklist"): a tick draws its check and pops
+/// with a light haptic, then the row moves under Ticked on the replan spring; Remove gives a tick haptic, the row
+/// leaves and the undo bar rises. Reduce Motion: colour changes and cross-fades only.
 struct StepsList: View {
     @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let task: MekaTask
     let palette: MekaPalette
     @State private var newStep = ""
@@ -50,28 +54,74 @@ struct StepsList: View {
     }
 
     var body: some View {
+        let view = model.checklistView(task)
+        let toTick = view?.toTick ?? []
+        let ticked = view?.ticked ?? []
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            SectionLabel(task.isRepeating ? "Routine steps" : "Steps", palette)
-                .padding(.top, MekaSpace.m)
-            ForEach(task.checklist, id: \.id) { step in
-                StepRow(step: step, palette: palette)
-                    .transition(.opacity)
+            HStack {
+                SectionLabel(view?.label ?? "Checklist", palette)
+                Spacer()
+                if let line = view?.line {
+                    Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .contentTransition(.opacity)
+                }
             }
-            TextField("Add a step…", text: $newStep)
+            .padding(.top, MekaSpace.m)
+            ForEach(toTick, id: \.id) { step in
+                StepRow(step: step, palette: palette).transition(.opacity)
+            }
+            if !ticked.isEmpty {
+                HStack {
+                    Text(ChecklistRules.shared.TICKED_LABEL).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Spacer()
+                    Button(ChecklistRules.shared.UNTICK_ALL) { model.untickAllSteps(task.id) }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.caption)
+                        .foregroundStyle(palette.accent)
+                }
+                .padding(.top, MekaSpace.xs)
+                .transition(.opacity)
+                ForEach(ticked, id: \.id) { step in
+                    StepRow(step: step, palette: palette).transition(.opacity)
+                }
+            }
+            if view?.offerComplete == true {
+                HStack {
+                    Text(ChecklistRules.shared.COMPLETE_OFFER).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Spacer()
+                    Button("Complete") { MekaHaptics.light(); model.complete(task.id) }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(palette.onAccent)
+                        .padding(.horizontal, MekaSpace.m)
+                        .padding(.vertical, MekaSpace.xs)
+                        .background(Capsule().fill(palette.accent))
+                }
+                .padding(MekaSpace.s)
+                .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+            TextField(ChecklistRules.shared.ADD_HINT, text: $newStep, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(MekaType.body)
+                .lineLimit(1...6)
                 .onSubmit { model.addStep(task.id, newStep); newStep = "" }
-                // A step typed but not yet added is added when the detail closes or shows another task, as if
+                // A paste with several lines (or a new line typed) adds them all at once, each line an item.
+                .onChange(of: newStep) { _, typed in
+                    if typed.contains("\n") { model.addStep(task.id, typed); newStep = "" }
+                }
+                // An item typed but not yet added is added when the detail closes or shows another task, as if
                 // Return had been pressed (TextAutosave: typing is never lost).
                 .onChange(of: task.id) { oldId, _ in addPending(to: oldId) }
                 .onDisappear { addPending(to: task.id) }
         }
+        .animation(MekaMotion.replan(reduced: reduceMotion), value: toTick.map(\.id) + ["|"] + ticked.map(\.id))
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.offerComplete == true)
     }
 }
 
 private struct StepRow: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.mekaReduceMotion) private var reduceMotion
     let step: ChecklistItem
     let palette: MekaPalette
 
@@ -80,17 +130,20 @@ private struct StepRow: View {
             Button {
                 model.setStepDone(step.id, !step.checked)
             } label: {
-                TickRingView(done: step.checked, palette: palette)
-                    .frame(width: 18, height: 18)
-                    .contentShape(Circle())
+                HStack(spacing: MekaSpace.xs) {
+                    TickRingView(done: step.checked, palette: palette)
+                        .frame(width: 18, height: 18)
+                    Text(step.text)
+                        .font(MekaType.body)
+                        .foregroundStyle(step.checked ? palette.textTertiary : palette.textPrimary)
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: 28)
+                .contentShape(Rectangle())
             }
             .buttonStyle(MekaPressStyle())
             .accessibilityLabel((step.checked ? "Untick " : "Tick ") + step.text)
-            Text(step.text)
-                .font(MekaType.body)
-                .foregroundStyle(step.checked ? palette.textTertiary : palette.textPrimary)
-            Spacer()
-            Button("Remove") { model.removeStep(step.id) }
+            Button("Remove") { model.removeStep(step.id, step.text) }
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.caption)
                 .foregroundStyle(palette.textTertiary)

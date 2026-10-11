@@ -1510,6 +1510,30 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NoticeSource.appointments.label, "Appointments due")
     }
 
+    func testChecklistReachesSwift() async throws {
+        // Checklists in tasks, slice 1: a pasted list becomes its items, ticks move them under Ticked, Untick all
+        // returns what it unticked (only Strings cross from the detail).
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "checklist-\(UUID().uuidString).db", deviceKey: nil
+        )
+        XCTAssertEqual(ChecklistRules.shared.split(text: "eggs, milk\nbread"), ["eggs", "milk", "bread"])
+        let id = try await core.addTask(title: "Weekly shop")
+        let ids = try await core.addSteps(taskId: id, text: "eggs, milk\nbread")
+        XCTAssertEqual(ids.count, 3)
+        try await core.setStepDone(stepId: ids[1], done: true)
+        let task = try XCTUnwrap(core.today.value.upNext)
+        let view = core.checklistView(task: task)
+        XCTAssertEqual(view.label, "Checklist")
+        XCTAssertEqual(view.toTick.map(\.text), ["eggs", "bread"])
+        XCTAssertEqual(view.ticked.map(\.text), ["milk"])
+        XCTAssertEqual(view.line, "1 of 3 ticked")
+        let unticked = try await core.untickAllSteps(taskId: id)
+        XCTAssertEqual(unticked, [ids[1]])
+        XCTAssertEqual(ChecklistRules.shared.untickedLine(count: 1), "Unticked 1 item")
+    }
+
     func testErrandsReachSwift() {
         // Errands by location, slice 1: a typed line is read by the core's rules into a place and its things, and the
         // empty view reaches the Mac (only Strings cross from the sheet).

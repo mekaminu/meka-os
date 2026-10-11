@@ -1734,14 +1734,34 @@ final class CoreModel {
         }
     }
 
+    /// Checklists (slice 1): one typed or pasted line adds each of its items (new lines, commas).
     func addStep(_ taskID: String, _ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        run { _ = try await $0.addStep(taskId: taskID, text: trimmed) }
+        run { _ = try await $0.addSteps(taskId: taskID, text: trimmed) }
     }
 
     func setStepDone(_ stepID: String, _ done: Bool) { MekaHaptics.light(); run { try await $0.setStepDone(stepId: stepID, done: done) } }
-    func removeStep(_ stepID: String) { run { try await $0.removeStep(stepId: stepID) } }
+
+    /// Remove (or a swipe): the item goes, with Undo on the bar.
+    func removeStep(_ stepID: String, _ text: String) {
+        MekaHaptics.tick()
+        run { try await $0.removeStep(stepId: stepID) }
+        offerEventUndo(ChecklistRules.shared.removedLine(text: text), .restoreStep(stepID))
+    }
+
+    /// Untick all, to reuse the list; Undo ticks them again.
+    func untickAllSteps(_ taskID: String) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            guard let ids = try? await core.untickAllSteps(taskId: taskID), !ids.isEmpty else { return }
+            offerEventUndo(ChecklistRules.shared.untickedLine(count: Int32(ids.count)), .tickSteps(ids))
+        }
+    }
+
+    /// The detail's Checklist: to tick first, then Ticked, its line and the complete offer.
+    func checklistView(_ task: MekaTask) -> ChecklistView? { core?.checklistView(task: task) }
 
     /// "↻ Every weekday", with "· since Mon 5 Oct" when an earlier day's occurrence is still open.
     func repeatLine(_ task: MekaTask) -> String? {
@@ -1966,6 +1986,8 @@ final class CoreModel {
         case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
         case .appointment(let done): run { _ = try await $0.undoAppointment(done: done) }
         case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
+        case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
+        case .tickSteps(let ids): run { try await $0.tickSteps(stepIds: ids) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
         case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
@@ -2760,6 +2782,10 @@ struct EventUndoOffer: Identifiable, Equatable {
         case appointment(AppointmentDone)
         /// Call to book on an appointment (slice 2b): the task goes and the card asks again as before.
         case appointmentCall(AppointmentCall)
+        /// Remove on a checklist item: it comes back with its tick and place.
+        case restoreStep(String)
+        /// Untick all on a checklist: these are ticked again.
+        case tickSteps([String])
     }
 
     let id = UUID()

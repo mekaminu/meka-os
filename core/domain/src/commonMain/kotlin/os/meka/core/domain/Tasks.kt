@@ -536,6 +536,49 @@ class Tasks(
         replica.commitLocal(EntityTypes.CHECKLIST_ITEM, itemId, mapOf(ChecklistFields.CHECKED to checked.fv()))
     }
 
+    /**
+     * Checklists (2026-10-11): one typed or pasted line adds each of its items ([ChecklistRules.split]) at the end of
+     * the list, unticked. Returns the new ids in order (empty when the line held nothing).
+     */
+    fun addChecklistItems(taskId: String, text: String): List<String> {
+        requireExists(taskId)
+        val texts = ChecklistRules.split(text)
+        if (texts.isEmpty()) return emptyList()
+        val positions = ChecklistRules.positionsAfter(checklistFor(taskId), texts.size, nowMs())
+        return texts.mapIndexed { i, t ->
+            val id = ids()
+            replica.commitLocal(
+                EntityTypes.CHECKLIST_ITEM, id,
+                mapOf(
+                    ChecklistFields.TASK_ID to taskId.fv(),
+                    ChecklistFields.TEXT to t.fv(),
+                    ChecklistFields.CHECKED to false.fv(),
+                    ChecklistFields.POSITION to positions[i].fv(),
+                ),
+            )
+            id
+        }
+    }
+
+    /** Undo for [deleteChecklistItem]: the item comes back as it was (text, tick and place). */
+    fun restoreChecklistItem(itemId: String) {
+        replica.commitLocal(EntityTypes.CHECKLIST_ITEM, itemId, mapOf(ActionableFields.DELETED to false.fv()))
+    }
+
+    /** Untick all, to reuse the list: returns the ids it unticked (for Undo). */
+    fun untickAllChecklistItems(taskId: String): List<String> {
+        val ticked = checklistFor(taskId).filter { it.checked }.map { it.id }
+        ticked.forEach { setChecklistItemChecked(it, false) }
+        return ticked
+    }
+
+    /** Moves an item to [toIndex] in its list's order ([ChecklistRules.reorder]). */
+    fun moveChecklistItem(taskId: String, itemId: String, toIndex: Int) {
+        ChecklistRules.reorder(checklistFor(taskId), itemId, toIndex).forEach { (id, p) ->
+            replica.commitLocal(EntityTypes.CHECKLIST_ITEM, id, mapOf(ChecklistFields.POSITION to p.fv()))
+        }
+    }
+
     /** Resolves a conflicting field by choosing a value; the resulting op dominates all concurrent heads. */
     fun resolveConflict(conflict: Conflict, chosen: FieldValue) {
         replica.commitLocal(conflict.key.entityType, conflict.key.entityId, mapOf(conflict.key.field to chosen))

@@ -507,9 +507,21 @@ internal fun todayActions(
     setRepeat = { id, rule -> scope.launch { runCatching { core.setRepeat(id, rule) } } },
     skip = { id -> scope.launch { runCatching { core.skipOccurrence(id) }; if (selected() == id) setSelected(null) } },
     snooze = { id -> scope.launch { runCatching { core.snooze(id, 1) }; if (selected() == id) setSelected(null) } },
-    addStep = { id, text -> TypingSaves.launch { core.addStep(id, text) } },
+    // Checklists (slice 1): one typed or pasted line adds each of its items.
+    addStep = { id, text -> TypingSaves.launch { core.addSteps(id, text) } },
     setStepDone = { stepId, done -> scope.launch { core.setStepDone(stepId, done) } },
-    removeStep = { stepId -> scope.launch { core.removeStep(stepId) } },
+    removeStep = { item ->
+        scope.launch {
+            runCatching { core.removeStep(item.id) }
+            undo?.show(os.meka.core.domain.ChecklistRules.removedLine(item.text)) { core.restoreStep(item.id) }
+        }
+    },
+    untickAll = { id ->
+        scope.launch {
+            val ids = runCatching { core.untickAllSteps(id) }.getOrDefault(emptyList())
+            if (ids.isNotEmpty()) undo?.show(os.meka.core.domain.ChecklistRules.untickedLine(ids.size)) { core.tickSteps(ids) }
+        }
+    },
     someday = { id -> scope.launch { runCatching { core.moveToSomeday(id, SomedayKind.IDEA) }; if (selected() == id) setSelected(null) } },
     goals = core.goalsView,
     setGoal = { id, goalId -> scope.launch { runCatching { core.setTaskGoal(id, goalId) } } },
@@ -533,7 +545,10 @@ data class TodayActions(
     val snooze: (String) -> Unit,
     val addStep: (String, String) -> Unit,
     val setStepDone: (String, Boolean) -> Unit,
-    val removeStep: (String) -> Unit,
+    /** Swipe or Remove on a checklist item: it goes, with Undo on the screen's bar. */
+    val removeStep: (os.meka.core.domain.ChecklistItem) -> Unit,
+    /** Untick all on a checklist, to reuse it (Undo ticks them again). */
+    val untickAll: (String) -> Unit,
     /** Out of Today and the planner, into Lists → Someday. */
     val someday: (String) -> Unit,
     /** Open goals, for linking a task to one (its progress then counts the task). */
@@ -1221,7 +1236,7 @@ private fun ColumnScope.TaskDetail(task: Task, conflicts: List<ConflictChoice>, 
             Column(Modifier.appear(rememberAppearance(1))) { ReminderSection(task, actions) }
             Column(Modifier.appear(rememberAppearance(2))) { RepeatSection(task, actions) }
             Column(Modifier.appear(rememberAppearance(3))) { NotesSection(task, actions) }
-            Column(Modifier.appear(rememberAppearance(4))) { StepsSection(task, actions) }
+            Column(Modifier.appear(rememberAppearance(4))) { ChecklistSection(task, actions) }
             Column(Modifier.appear(rememberAppearance(5))) { GoalSection(task, actions) }
         }
     }
