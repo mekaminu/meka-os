@@ -135,7 +135,7 @@ struct WorkSheet: View {
             }
             .toggleStyle(.switch)
             if on {
-                HStack(spacing: MekaSpace.s) {
+                HStack(spacing: MekaSpace.xs) {
                     TextField("To", text: $leavingTo)
                         .textFieldStyle(.roundedBorder).frame(width: 160)
                         .onSubmit { model.setLeavingNow(on: true, to: leavingTo, journeyMin: journey) }

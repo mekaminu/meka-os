@@ -1209,11 +1209,13 @@ class MekaCoreTest {
         a.setQuietHours(true, 23 * 60, 6 * 60)
         a.setNoticeTier(os.meka.core.domain.NoticeSource.CHASE, os.meka.core.domain.NoticeTier.SILENT)
         a.setNoticeTier(os.meka.core.domain.NoticeSource.SHUTDOWN, os.meka.core.domain.NoticeTier.SILENT)
+        // Tuesday is an office day: "Leaving now" (due at 17:30) would ride in the 18:00 digest otherwise.
+        a.setNoticeTier(os.meka.core.domain.NoticeSource.LEAVING, os.meka.core.domain.NoticeTier.SILENT)
         a.syncNow(); m.syncNow()
         assertEquals("23:00–06:00", m.notificationSettings.value.quiet.summary)
         assertEquals(os.meka.core.domain.NoticeTier.SILENT, m.notificationSettings.value.tierFor(os.meka.core.domain.NoticeSource.CHASE))
         now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 18, 1).toInstant(london).toEpochMilliseconds()
-        assertEquals(null, m.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL).digest, "chases and the shutdown nudge are app-only now")
+        assertEquals(null, m.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL).digest, "chases, the shutdown nudge and the leaving draft are app-only now")
     }
 
     @Test
