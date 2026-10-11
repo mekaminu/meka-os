@@ -33,6 +33,12 @@
          Calendars → Weather. One fix on demand while MEKA is open (Today opening, a question about "here"); never in
          the background, never fine location. The point is rounded to about 1 km before it leaves the phone. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Errands by location (slice 2): asked for only when Meka turns on near-me reminders in Ask → More → Errands
+         (off by default). Precise location for "I'm here" (one fix that saves where a place is, kept on this phone,
+         never synced or sent) and for Android's own proximity alert near the saved places; "Allow all the time" so
+         Android can watch them with MEKA closed. MEKA itself never tracks or records where Meka goes. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <!-- Spam call protection (call assistant polish 7, 8b): asked for in Work mode → Call assistant → "Recognise
          callers". Read on the phone only, never sent: contacts so a contact's calls are never stopped and a picked
          family member's every number is kept; the call log so anyone Meka called in the last 90 days is never stopped. -->
@@ -274,6 +280,10 @@
         <!-- Gym slice 2b: Went / Didn't go on "Did you go?", and the Undo on the note that replaces it. -->
         <receiver
             android:name=".notify.NoticeActionReceiver"
+            android:exported="false" />
+        <!-- Errands by location, slice 2: Android's proximity alert near a saved place, and Done / Undo on "Near …". -->
+        <receiver
+            android:name=".ask.ErrandNearReceiver"
             android:exported="false" />
         <!-- Fasting v2: End fast and its Undo from the ongoing notification. -->
         <receiver

@@ -1,10 +1,23 @@
 package os.meka.android.ask
 
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,10 +38,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -45,6 +61,8 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.ErrandAdded
+import os.meka.core.domain.ErrandGroup
+import os.meka.core.domain.ErrandPlaceRules
 import os.meka.core.domain.ErrandRow
 import os.meka.core.domain.ErrandRules
 import os.meka.core.facade.MekaCore
@@ -52,12 +70,18 @@ import os.meka.core.facade.MekaCore
 /**
  * Ask → More → Errands (V1, errands by location slice 1): things that wait for a place, not a time. Type
  * "Tesco: milk, batteries" or "when I'm near the post office: parcel"; each place is a section with its errands, oldest
- * first. Done ticks one off (it moves to "Done lately", with Back); Remove takes it off for good. The reminder when the
- * Fold is near a place is slice 2.
+ * first. Done ticks one off (it moves to "Done lately", with Back); Remove takes it off for good.
+ *
+ * Slice 2 (the Fold only): "Near-me reminders" (off by default) asks for precise, then "Allow all the time" location;
+ * once on, each place's section says whether its spot is saved, with "I'm here" (one precise fix, kept on this phone)
+ * or "Forget spot". Android then reminds "Near Tesco · milk, batteries" on arriving ([ErrandProximity]).
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and the field's line
  * cross-fade (the line blends to the accent when refused, with a tick haptic; an add gives a light haptic); each
- * place's label and rows stagger in 40 ms apart and move with the list's item motion. Reduced motion: cross-fades.
+ * place's label and rows stagger in 40 ms apart and move with the list's item motion. The near-me line cross-fades and
+ * blends to the accent when it needs a look; each place's spot line unfolds (expand spring) when the switch turns on and
+ * cross-fades through "Finding where you are…" to "Saved … here" (light haptic; a tick when refused). Reduced motion:
+ * cross-fades.
  */
 @Composable
 fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
@@ -67,6 +91,29 @@ fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
     val v by core.errandsView.collectAsState()
     var text by remember { mutableStateOf("") }
     var said by remember { mutableStateOf<ErrandAdded?>(null) }
+    val context = LocalContext.current
+    var nearOn by remember { mutableStateOf(ErrandProximity.isOn(context)) }
+    var precise by remember { mutableStateOf(ErrandProximity.precise(context)) }
+    var always by remember { mutableStateOf(ErrandProximity.always(context)) }
+    var spots by remember { mutableStateOf(ErrandProximity.saved(context)) }
+    var spotSaid by remember { mutableStateOf<Pair<String, String>?>(null) }
+    fun rearm() {
+        precise = ErrandProximity.precise(context)
+        always = ErrandProximity.always(context)
+        spots = ErrandProximity.saved(context)
+        runCatching { ErrandProximity.arm(context, core.errandsView.value) }
+    }
+    // Coming back from Android's settings (where "Allow all the time" is given): read the permissions again.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { rearm() }
+    val askAlways = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { rearm() }
+    val askPrecise = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        rearm()
+        if (precise && !always) askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    }
+    val near = ErrandPlaceRules.setting(nearOn, precise, always, spots.size)
+    val nearColor by animateColorAsState(
+        if (near.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "errand-near",
+    )
     val saidColor by animateColorAsState(
         if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "errand-said",
     )
@@ -103,11 +150,66 @@ fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
-        var step = 3
+        item(key = "near") {
+            Column(Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text("Near-me reminders", style = MekaType.caption, color = Meka.colors.textSecondary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Crossfade(near.statusLine, animationSpec = MekaMotion.appear(reduced), label = "errand-near-line",
+                        modifier = Modifier.weight(1f).then(
+                            if (near.lit) Modifier.clickable(role = Role.Button) { haptics.tick(); openAppSettings(context) } else Modifier,
+                        )) { l -> Text(l, style = MekaType.caption, color = nearColor) }
+                    Box(
+                        Modifier.padding(start = MekaSpace.m).clip(RoundedCornerShape(MekaRadius.pill))
+                            .background(Meka.colors.surfaceRaised)
+                            .clickable(role = Role.Button) {
+                                haptics.tick()
+                                nearOn = !nearOn
+                                ErrandProximity.setOn(context, nearOn)
+                                rearm()
+                                if (nearOn && !precise) {
+                                    askPrecise.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                                } else if (nearOn && !always) askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                            }
+                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                    ) { Text(near.actionLabel, style = MekaType.itemMeta, color = Meka.colors.accent) }
+                }
+                Text(near.privacy, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
+        }
+        var step = 4
         v.places.forEach { place ->
             val labelStep = step++
             item(key = "place-${place.key}") {
-                SectionLabel(place.place, Modifier.animateItem().padding(top = MekaSpace.l).appear(rememberAppearance(labelStep)))
+                Column(Modifier.animateItem().padding(top = MekaSpace.l).appear(rememberAppearance(labelStep))) {
+                    SectionLabel(place.place)
+                    AnimatedVisibility(
+                        visible = nearOn,
+                        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+                        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+                    ) {
+                        PlaceSpotLine(
+                            place, spots.containsKey(place.key), spotSaid?.takeIf { it.first == place.key }?.second,
+                            onAction = {
+                                haptics.tick()
+                                if (spots.containsKey(place.key)) {
+                                    ErrandProximity.forget(context, place.key, core.errandsView.value)
+                                    spots = ErrandProximity.saved(context)
+                                    spotSaid = null
+                                } else if (!precise) {
+                                    askPrecise.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                                } else {
+                                    spotSaid = place.key to ErrandPlaceRules.SAVING
+                                    scope.launch {
+                                        val r = ErrandProximity.saveHere(context, place.place, core.errandsView.value)
+                                        spots = r.places
+                                        spotSaid = place.key to r.line
+                                        if (r.saved) haptics.light() else haptics.tick()
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
             }
             val base = step
             itemsIndexed(place.rows, key = { _, r -> "e-${r.id}" }) { i, r ->
@@ -139,6 +241,36 @@ fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
             Text(ErrandRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
+    }
+}
+
+/** Under a place's label, with near-me on: "Spot saved · …" or "No spot saved · …", and I'm here / Forget spot. */
+@Composable
+private fun PlaceSpotLine(place: ErrandGroup, saved: Boolean, said: String?, onAction: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val line = said ?: ErrandPlaceRules.placeLine(saved)
+    val action = ErrandPlaceRules.placeAction(saved)
+    Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
+        Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "errand-spot", modifier = Modifier.weight(1f)) { l ->
+            Text(l, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Text(
+            action, style = MekaType.caption, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                .clickable(role = Role.Button, onClick = onAction)
+                .semantics { contentDescription = "$action: ${place.place}" }
+                .minTouch()
+                .padding(MekaSpace.xs),
+        )
+    }
+}
+
+private fun openAppSettings(context: Context) {
+    runCatching {
+        context.startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
     }
 }
 

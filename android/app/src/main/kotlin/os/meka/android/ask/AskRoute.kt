@@ -132,6 +132,11 @@ fun AskRoute(
     LaunchedEffect(openLeave) {
         if (openLeave) { pane = MoreItem.LEAVE; healthApp?.openLeave?.value = false }
     }
+    // "Near Tesco" (errands by location, slice 2) → the Errands pane.
+    val openErrands by remember(healthApp) { healthApp?.openErrands ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
+    LaunchedEffect(openErrands) {
+        if (openErrands) { pane = MoreItem.ERRANDS; healthApp?.openErrands?.value = false }
+    }
     // Back closes whatever sprang up over Ask before it leaves the app.
     BackHandler(enabled = pane != null || showSearch) { if (showSearch) closeSearch() else pane = null }
 

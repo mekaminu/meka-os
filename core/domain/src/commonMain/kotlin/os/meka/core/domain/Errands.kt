@@ -247,3 +247,122 @@ class Errands(
         return true
     }
 }
+
+/**
+ * Where an errand's place is, saved on the Fold only (errands by location, slice 2): one precise fix taken when Meka
+ * taps "I'm here" in a place's section. Never synced and never sent anywhere (the item's "on-device location only");
+ * the phone keeps it in its own storage and hands it to Android's proximity alert.
+ */
+data class SavedPlace(val key: String, val latitude: Double, val longitude: Double, val savedAtMs: Long)
+
+/** A place the Fold asks Android to watch: its saved spot and the name the reminder says. */
+data class ArmedPlace(val key: String, val place: String, val latitude: Double, val longitude: Double)
+
+/** "Near Tesco" · "milk, batteries", with the errands Done ticks off. */
+data class ErrandNearNotice(val key: String, val place: String, val title: String, val text: String, val ids: List<String>)
+
+/** The near-me reminders switch in Errands: its line, its button, and whether the line needs a look. */
+data class ErrandNearSetting(val statusLine: String, val actionLabel: String, val lit: Boolean, val privacy: String)
+
+/** What saving a place did: the places now saved and the line the pane shows. */
+data class PlaceSaved(val places: Map<String, SavedPlace>, val line: String, val saved: Boolean)
+
+/** Non-AI, pure. The phone does the locating; these say what to save, what to watch and what to say. */
+object ErrandPlaceRules {
+    /** How close counts as "near": about a supermarket's car park. */
+    const val RADIUS_M = 150.0
+    /** A fix less certain than this isn't saved (indoors with no GPS, say): try again outside. */
+    const val MAX_ACCURACY_M = 100.0
+    /** At most this many places are watched at once (the ones with errands waiting longest). */
+    const val MAX_ARMED = 20
+    /** The same place reminds again only after this long (walking along its edge doesn't ring twice). */
+    const val REMIND_AGAIN_MS = 3 * 60 * 60_000L
+    /** How long the "Done at Tesco · Undo" note stays in the shade. */
+    const val DONE_NOTE_MS = 10 * 60_000L
+
+    const val CHANNEL_NAME = "Errands nearby"
+    const val CHANNEL_ABOUT = "When you're near a place you saved with errands waiting there."
+    const val PRIVACY = "Each place's spot stays on this phone; nothing about where you are is synced or sent. Android watches the saved spots itself, even with MEKA closed."
+    const val SAVING = "Finding where you are…"
+    const val NO_FIX = "Couldn't find where you are · try again outside"
+    const val NO_PERMISSION = "Needs precise location · turn on near-me reminders first"
+
+    fun encode(places: Collection<SavedPlace>): String =
+        places.sortedBy { it.key }.joinToString("\n") { p ->
+            listOf(p.key.replace('\t', ' ').replace('\n', ' '), p.latitude, p.longitude, p.savedAtMs).joinToString("\t")
+        }
+
+    fun decode(text: String?): Map<String, SavedPlace> =
+        text.orEmpty().lines().mapNotNull { line ->
+            val f = line.split('\t')
+            if (f.size != 4 || f[0].isBlank()) return@mapNotNull null
+            val lat = f[1].toDoubleOrNull() ?: return@mapNotNull null
+            val lon = f[2].toDoubleOrNull() ?: return@mapNotNull null
+            if (!valid(lat, lon)) return@mapNotNull null
+            SavedPlace(f[0], lat, lon, f[3].toLongOrNull() ?: 0L)
+        }.associateBy { it.key }
+
+    fun valid(latitude: Double, longitude: Double): Boolean =
+        latitude in -90.0..90.0 && longitude in -180.0..180.0 && !(latitude == 0.0 && longitude == 0.0)
+
+    /**
+     * Saves where [place] is from one fix (replacing what was saved for it). Refused when there was no fix, or it is
+     * less certain than [MAX_ACCURACY_M].
+     */
+    fun save(
+        saved: Map<String, SavedPlace>,
+        place: String,
+        latitude: Double?,
+        longitude: Double?,
+        accuracyM: Double?,
+        nowMs: Long,
+    ): PlaceSaved {
+        val key = ErrandRules.placeKey(place)
+        val name = ErrandRules.tidyPlace(place) ?: place
+        if (key.isEmpty() || latitude == null || longitude == null || !valid(latitude, longitude)) return PlaceSaved(saved, NO_FIX, false)
+        if (accuracyM == null || accuracyM > MAX_ACCURACY_M) return PlaceSaved(saved, "Not close enough to save · try again outside", false)
+        return PlaceSaved(saved + (key to SavedPlace(key, latitude, longitude, nowMs)), "Saved $name here · reminds you within ${RADIUS_M.toInt()} m", true)
+    }
+
+    /** The places Android should watch: saved, with something waiting there, the place waiting longest first. */
+    fun toArm(view: ErrandView, saved: Map<String, SavedPlace>): List<ArmedPlace> =
+        view.places.mapNotNull { g -> saved[g.key]?.let { ArmedPlace(g.key, g.place, it.latitude, it.longitude) } }.take(MAX_ARMED)
+
+    /** What to say on arriving near [key]; null when nothing waits there any more. */
+    fun near(view: ErrandView, key: String): ErrandNearNotice? {
+        val g = view.places.firstOrNull { it.key == key } ?: return null
+        if (g.rows.isEmpty()) return null
+        return ErrandNearNotice(g.key, g.place, "Near ${g.place}", g.line, g.rows.map { it.id })
+    }
+
+    /** Whether to remind about a place last reminded at [lastMs] (null: never). */
+    fun shouldRemind(lastMs: Long?, nowMs: Long): Boolean = lastMs == null || nowMs - lastMs !in 0 until REMIND_AGAIN_MS
+
+    /** "Done at Tesco · milk and batteries". */
+    fun doneLine(place: String, titles: List<String>): String = "Done at $place · ${ErrandRules.joined(titles)}"
+
+    /** Under a place's label in Errands: whether the Fold knows where it is. */
+    fun placeLine(saved: Boolean): String =
+        if (saved) "Spot saved · reminds you within ${RADIUS_M.toInt()} m" else "No spot saved · tap I'm here when you're there"
+
+    /** The button beside [placeLine]. */
+    fun placeAction(saved: Boolean): String = if (saved) "Forget spot" else "I'm here"
+
+    /** The switch: off by default; on needs precise location, then "Allow all the time" so Android can watch with MEKA closed. */
+    fun setting(on: Boolean, precise: Boolean, always: Boolean, savedCount: Int): ErrandNearSetting = when {
+        !on -> ErrandNearSetting("Off · errands wait in the list", "Turn on", false, PRIVACY)
+        !precise -> ErrandNearSetting("Needs precise location · tap to allow", "Turn off", true, PRIVACY)
+        !always -> ErrandNearSetting("Needs location “Allow all the time” · tap to allow", "Turn off", true, PRIVACY)
+        savedCount == 0 -> ErrandNearSetting("On · save a place's spot with I'm here", "Turn off", false, PRIVACY)
+        else -> ErrandNearSetting("On · watching ${savedCount} ${if (savedCount == 1) "place" else "places"}", "Turn off", false, PRIVACY)
+    }
+
+    /** When each place last reminded, kept on the phone: "tesco\t1700000000000" lines. */
+    fun encodeReminded(map: Map<String, Long>): String = map.entries.sortedBy { it.key }.joinToString("\n") { "${it.key}\t${it.value}" }
+
+    fun decodeReminded(text: String?): Map<String, Long> =
+        text.orEmpty().lines().mapNotNull { l ->
+            val f = l.split('\t')
+            if (f.size != 2 || f[0].isBlank()) null else f[1].toLongOrNull()?.let { f[0] to it }
+        }.toMap()
+}

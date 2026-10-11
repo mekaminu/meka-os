@@ -87,6 +87,11 @@ class MainActivity : ComponentActivity() {
             // The wake alarm was dismissed: Today with the morning brief springing up.
             open == OPEN_BRIEF -> app.openBrief.value = true
             // A school holiday with nothing booked (annual leave, slice 2): Ask with the Annual leave pane up.
+            // "Near Tesco · milk, batteries" (errands by location, slice 2): Ask with Errands up.
+            open == OPEN_ERRANDS -> {
+                app.openErrands.value = true
+                app.openDestination.value = ShellDestination.ASK
+            }
             open == OPEN_LEAVE -> {
                 app.openLeave.value = true
                 app.openDestination.value = ShellDestination.ASK
@@ -126,6 +131,8 @@ class MainActivity : ComponentActivity() {
         const val OPEN_BRIEF = "brief"
         /** Ask → More → Annual leave, its pane up (the leave heads-up). */
         const val OPEN_LEAVE = "leave"
+        /** Ask → More → Errands, its pane up (the near-a-place reminder). */
+        const val OPEN_ERRANDS = "errands"
         /** "dest:LISTS" opens Lists. */
         const val OPEN_DESTINATION_PREFIX = "dest:"
         /** "news:<story id>" opens News over Today on that story; "news:" opens News. */

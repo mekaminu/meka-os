@@ -79,6 +79,8 @@ class MekaApplication : Application() {
     val openSetup = MutableStateFlow(false)
     /** The leave heads-up's tap → Ask → More → Annual leave (annual leave, slice 2). */
     val openLeave = MutableStateFlow(false)
+    /** "Near Tesco" notification's tap → Ask → More → Errands (errands by location, slice 2). */
+    val openErrands = MutableStateFlow(false)
     /** Appearance → "Play the opening": Today replays its opening (Day ring, tiles, greeting, stagger), then clears it. */
     val playOpening = MutableStateFlow(false)
     /** The wake alarm (Alarms, slice 1), registered with Android whenever the core's next alarm changes. */
@@ -158,6 +160,13 @@ class MekaApplication : Application() {
                 .map { WidgetRouting.signature(core.homeWidgets()) }
                 .distinctUntilChanged()
                 .collect { runCatching { widgets.run() } }
+        }
+        // Errands by location, slice 2: Android watches the saved places with errands waiting (only with the near-me
+        // switch on and location allowed), re-armed when that set changes and at every process start (after a reboot).
+        appScope.launch {
+            core.errandsView.map { v -> os.meka.core.domain.ErrandPlaceRules.toArm(v, os.meka.android.ask.ErrandProximity.saved(this@MekaApplication)) }
+                .distinctUntilChanged()
+                .collect { runCatching { os.meka.android.ask.ErrandProximity.arm(this@MekaApplication, core.errandsView.value) } }
         }
         // Train-time queue, slice 2: a link saved here or synced from the Mac has its article's words fetched on Wi-Fi.
         appScope.launch {
