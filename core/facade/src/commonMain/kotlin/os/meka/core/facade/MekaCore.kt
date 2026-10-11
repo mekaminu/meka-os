@@ -949,6 +949,50 @@ class MekaCore(
         })
     }
 
+    /**
+     * "Handle this" (V1, slice 1): Meka shared [text] (and its [subject]) with MEKA and asked it to handle it. A share
+     * with nothing but a link isn't sent (MEKA never opens links); otherwise the text alone (cut to size), its subject,
+     * today's date and his work days go to `POST /v1/ai/handle-this`; never who sent it, an address or anything else.
+     * The proposals (task · event · reminder) are checked again here and saved as synced request cards that say "You
+     * shared · 21:40": shown in the sheet that asked, waiting in Needs you on both apps, never a notification. Nothing
+     * is added until Meka taps Add ([acceptRequest]). The same text shared again today makes no second card.
+     */
+    suspend fun handleThis(text: String, subject: String? = null): HandleOutcome {
+        val rules = os.meka.core.domain.HandleThisRules
+        if (!rules.worthAsking(text, subject)) return HandleOutcome.Unavailable(rules.NOTHING_LINE)
+        val api = aiApi ?: return HandleOutcome.Unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
+        val atMs = nowMs()
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(atMs)
+        val messageId = rules.messageId(text, subject, today)
+        // Shared already today: nothing goes out again.
+        if (onCore { requestCards.known(messageId) }) {
+            val open = onCore { requestCards.open() }.filter { it.messageId == messageId }
+            return if (open.isEmpty()) HandleOutcome.NothingToDo(rules.ALREADY_LINE) else HandleOutcome.Cards(open, rules.readyLine(open.size))
+        }
+        val request = onCore {
+            val max = os.meka.core.wire.HandleThisCodec.MAX_WORK
+            os.meka.core.wire.HandleThisCodec.Request(
+                date = os.meka.core.domain.AskRules.isoDate(today),
+                now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(atMs))}",
+                work = work.schedule().plainLine.let { if (it.length <= max) it else it.take(max).substringBeforeLast(", ") },
+                subject = rules.outgoingSubject(subject), text = rules.outgoingText(text),
+            )
+        }
+        val reply = try { api.handleThis(request) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            return HandleOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
+        }
+        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) {
+            return HandleOutcome.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
+        }
+        val cards = onCore {
+            val raw = rules.allowed(reply.proposals.map { os.meka.core.domain.RawRequestProposal(it.kind, it.title, it.date, it.time, it.words) })
+            val message = os.meka.core.domain.RequestMessage(messageId, rules.PERSON, rules.quoteText(text, subject), atMs)
+            requestCards.save(message, os.meka.core.domain.MessageRequestRules.check(raw, today, cal.minuteOfDay(atMs)))
+        }
+        return if (cards.isEmpty()) HandleOutcome.NothingToDo(rules.NOTHING_LINE) else HandleOutcome.Cards(cards, rules.readyLine(cards.size))
+    }
+
     private class MessageContext(val sender: String, val sentAt: String, val date: String, val now: String, val work: String)
 
     /** What an AI message call says besides the text: the sender's label, its time, today and Meka's work days. */

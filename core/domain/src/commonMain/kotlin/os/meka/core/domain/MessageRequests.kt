@@ -157,18 +157,21 @@ object MessageRequestRules {
     fun card(message: RequestMessage, index: Int, p: RequestProposal, today: Long, calendar: LocalCalendar): RequestCard {
         val quote = "“${shorten(message.text.replace(Regex("""\s+"""), " ").trim(), QUOTE_CHARS)}”"
         val action = actionLine(p, today)
+        // "Handle this": Meka shared it himself, so the card says so rather than "From …".
+        val shared = HandleThisRules.isShared(message.id)
+        val at = TaskWhenRules.timeLabel(calendar.minuteOfDay(message.atMs))
         return RequestCard(
             id = "${message.id}#$index",
             messageId = message.id,
             personKey = People.key(message.personName),
             proposal = p,
-            from = "From ${message.personName.trim().take(40)} · ${TaskWhenRules.timeLabel(calendar.minuteOfDay(message.atMs))}",
+            from = if (shared) "${HandleThisRules.PERSON} · $at" else "From ${message.personName.trim().take(40)} · $at",
             quote = quote,
             action = action,
             detail = detailLine(p),
             changeLabel = if (p.kind == RequestKind.WORK_FROM_HOME) null else "Change",
             declineLabel = p.kind.decline,
-            spoken = "${message.personName.trim()} wrote $quote. $action?",
+            spoken = if (shared) "${HandleThisRules.PERSON} $quote. $action?" else "${message.personName.trim()} wrote $quote. $action?",
             atMs = message.atMs,
         )
     }
@@ -230,10 +233,12 @@ object MessageRequestRules {
 object RequestDates {
     data class Resolved(val day: Long?, val minute: Int?)
 
+    private val deadline = Regex("""^(?:by|before|no later than)\s+""", RegexOption.IGNORE_CASE)
     private val ordinalOnly = Regex("""^(?:on\s+)?(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)$""", RegexOption.IGNORE_CASE)
 
     fun resolve(words: String, today: Long, nowMinute: Int): Resolved? {
-        val w = words.replace(Regex("""\s+"""), " ").trim().trimEnd('.', ',', '?', '!')
+        // A deadline is its day: "by Friday", "before the 15th", "no later than Tue" ("Handle this", slice 1).
+        val w = words.replace(Regex("""\s+"""), " ").trim().trimEnd('.', ',', '?', '!').replace(deadline, "")
         if (w.isEmpty()) return null
         ordinalOnly.matchEntire(w)?.let { m -> return nthOfMonth(m.groupValues[1].toInt(), today)?.let { Resolved(it, null) } }
         val p = EventTypingRules.parse("x $w", today, nowMinute) ?: return null

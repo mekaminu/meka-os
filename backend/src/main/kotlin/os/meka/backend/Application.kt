@@ -51,6 +51,7 @@ import os.meka.core.sync.FieldValue
 import os.meka.core.sync.ServerOpStore
 import os.meka.core.sync.SyncService
 import os.meka.core.wire.AskCodec
+import os.meka.core.wire.HandleThisCodec
 import os.meka.core.wire.MessageRequestCodec
 import os.meka.core.wire.GroupDigestCodec
 import os.meka.core.wire.HealthCodec
@@ -427,6 +428,16 @@ fun Application.mekaSync(
                 call.device(devices, verifier, body, requireKey = true)
                 val request = MessageRequestCodec.decodeRequest(body)
                 val answer = withContext(Dispatchers.IO) { requestService.read(request) }
+                call.respondText(MessageRequestCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+            // "Handle this": one piece of text Meka shared with MEKA (and its subject); proposals back. Nothing is kept or
+            // logged.
+            val handleService = HandleThisService(ai.provider)
+            post("/v1/ai/handle-this") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = HandleThisCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { handleService.read(request) }
                 call.respondText(MessageRequestCodec.encodeResponse(answer), ContentType.Application.Json)
             }
             // The messages assistant: one message (1:1, or a group message naming Meka); a lane, gist, draft or proposals

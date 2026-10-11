@@ -1599,6 +1599,25 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(withdraw.isEmpty)
     }
 
+    func testHandleThisReachesSwift() async throws {
+        // "Handle this", slice 1: Services hands the core a String; without a connection it says so and keeps nothing,
+        // and a bare link never goes anywhere.
+        let rules = HandleThisRules.shared
+        XCTAssertFalse(rules.worthAsking(text: "https://example.com/article", subject: nil))
+        XCTAssertTrue(rules.worthAsking(text: "Please return the reply slip by Friday.", subject: nil))
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "handle-this-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let outcome = try await core.handleThis(text: "Please return the reply slip by Friday.", subject: nil)
+        guard case .unavailable(let u) = onEnum(of: outcome) else { return XCTFail("expected Unavailable") }
+        XCTAssertEqual(u.line, AskRules.shared.NOT_CONNECTED_LINE)
+        let link = try await core.handleThis(text: "https://example.com/article", subject: nil)
+        guard case .unavailable(let l) = onEnum(of: link) else { return XCTFail("expected Unavailable") }
+        XCTAssertEqual(l.line, rules.NOTHING_LINE)
+    }
+
     func testProtectedTimeReachesSwift() {
         // Protected time, slice 1: the sheet's chips and lines come from the core's rules (only two Bools and an Int
         // cross from the sheet).

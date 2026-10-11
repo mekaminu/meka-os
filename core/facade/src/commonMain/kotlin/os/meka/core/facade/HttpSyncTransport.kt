@@ -113,6 +113,14 @@ interface AiApi {
         os.meka.core.wire.MessageRequestCodec.Response(AskCodec.Response.OFF)
 
     /**
+     * "Handle this" (`POST /v1/ai/handle-this`): one piece of text Meka shared with MEKA and its subject; the proposals
+     * come back unchecked ([os.meka.core.domain.MessageRequestRules.check] reads them). A server without the route
+     * answers "off".
+     */
+    suspend fun handleThis(request: os.meka.core.wire.HandleThisCodec.Request): os.meka.core.wire.MessageRequestCodec.Response =
+        os.meka.core.wire.MessageRequestCodec.Response(AskCodec.Response.OFF)
+
+    /**
      * The messages assistant (`POST /v1/ai/message-triage`): one message's text, its sender's label, the group's name when
      * it named Meka, and its time; the lane, gist, draft and proposals come back unchecked
      * ([os.meka.core.domain.MessageTriageRules.check] reads them). A server without the route answers "off".
@@ -172,6 +180,16 @@ sealed class RequestRead {
     data class Read(val cards: List<os.meka.core.domain.RequestCard>) : RequestRead()
     /** Couldn't ask: offline, AI off, the month's budget spent; [line] says which. */
     data class Unavailable(val line: String) : RequestRead()
+}
+
+/** What "Handle this" made of a share ([MekaCore.handleThis]). */
+sealed class HandleOutcome {
+    /** The share's cards, also waiting in Needs you on both apps; [line] "2 things to add". */
+    data class Cards(val cards: List<os.meka.core.domain.RequestCard>, val line: String) : HandleOutcome()
+    /** Read, and nothing in it for Meka to do (or already handled today); [line] says which. */
+    data class NothingToDo(val line: String) : HandleOutcome()
+    /** Couldn't read it: too little to read, offline, AI off, the month's budget spent; [line] says which. */
+    data class Unavailable(val line: String) : HandleOutcome()
 }
 
 /**
@@ -457,6 +475,20 @@ class HttpSyncTransport(
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/message-request")
         }
         return codec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun handleThis(request: os.meka.core.wire.HandleThisCodec.Request): os.meka.core.wire.MessageRequestCodec.Response {
+        val body = os.meka.core.wire.HandleThisCodec.encodeRequest(request)
+        prepare() // the AI routes require the device's signing key on the server
+        val resp = send("/v1/ai/handle-this", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/handle-this")
+            // A server without the route (older, or no AI key): nothing is read.
+            resp.status.value == 404 -> return os.meka.core.wire.MessageRequestCodec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.MessageRequestCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/handle-this")
+        }
+        return os.meka.core.wire.MessageRequestCodec.decodeResponse(resp.bodyAsText())
     }
 
     override suspend fun messageTriage(request: os.meka.core.wire.MessageTriageCodec.Request): os.meka.core.wire.MessageTriageCodec.Response {

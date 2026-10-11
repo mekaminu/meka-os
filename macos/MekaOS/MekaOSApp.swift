@@ -24,7 +24,9 @@ struct MekaOSApp: App {
                     DeskNewsWidgetWriter.shared.attach(model)
                     // Services captures that arrived while the core was starting go in now.
                     let model = model
-                    CaptureInbox.shared.attach { text, subject in model.capture(text, subject: subject) }
+                    CaptureInbox.shared.attach { text, subject, handle in
+                        if handle { model.handleThis(text, subject: subject) } else { model.capture(text, subject: subject) }
+                    }
                     // Notification buttons pressed while the core was starting are answered now.
                     NotificationActionInbox.shared.attach { model.answerFromNotification($0) }
                     // "Listen when I open MEKA": a launch that came before the core was ready listens now.

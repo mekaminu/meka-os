@@ -12,6 +12,7 @@ import os.meka.android.designsystem.mekaRecomposer
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -73,7 +74,11 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.today.RequestChoice
+import os.meka.core.domain.HandleThisRules
 import os.meka.core.domain.QueueRules
+import os.meka.core.domain.RequestCard
+import os.meka.core.facade.HandleOutcome
 import os.meka.core.domain.QuickCapture
 
 /**
@@ -104,6 +109,12 @@ class CaptureActivity : ComponentActivity() {
                     save = { text -> core.capture(text, null) != null },
                     // Train-time queue, slice 1: a shared link can be saved for the train instead of becoming a task.
                     saveForTrain = { text, subject -> !core.addToQueue(text, subject).refused },
+                    // "Handle this" (V1): the shared text goes to MEKA's AI on Meka's tap only; cards come back.
+                    handle = { text, subject -> core.handleThis(text, subject) },
+                    answer = { card, add ->
+                        if (add) core.acceptRequest(card.id)?.line
+                        else if (core.declineRequest(card.id)) "${card.declineLabel} · ${card.proposal.title}" else null
+                    },
                     done = { saved -> setResult(if (saved) Activity.RESULT_OK else Activity.RESULT_CANCELED); finish() },
                 )
             }
@@ -123,6 +134,8 @@ private fun CaptureSheet(
     listenOnOpen: Boolean,
     save: suspend (String) -> Boolean,
     saveForTrain: suspend (String, String?) -> Boolean,
+    handle: suspend (String, String?) -> HandleOutcome,
+    answer: suspend (RequestCard, Boolean) -> String?,
     done: (Boolean) -> Unit,
 ) {
     val initial = remember(request) { QuickCapture.draft(request.text, request.subject) }
@@ -133,6 +146,13 @@ private fun CaptureSheet(
     val notes = initial?.notes
     var captured by rememberSaveable { mutableStateOf(false) }
     var voiceMissing by remember { mutableStateOf(false) }
+    // "Handle this" (V1, slice 1): offered for shared text with words in it (never for the widget or tile).
+    val canHandle = remember(request) { HandleThisRules.worthAsking(request.text, request.subject) }
+    var handling by remember { mutableStateOf(false) }
+    var reading by remember { mutableStateOf(false) }
+    var handleLine by remember { mutableStateOf<String?>(null) }
+    var handleCards by remember { mutableStateOf<List<RequestCard>>(emptyList()) }
+    var answered by remember { mutableStateOf<Set<String>>(emptySet()) }
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -188,6 +208,40 @@ private fun CaptureSheet(
         }
     }
 
+    fun handleIt() {
+        if (captured || handling) return
+        keyboard?.hide()
+        haptics.light()
+        handling = true
+        reading = true
+        scope.launch {
+            val out = handle(request.text, request.subject)
+            when (out) {
+                is HandleOutcome.Cards -> { handleCards = out.cards; handleLine = out.line }
+                is HandleOutcome.NothingToDo -> handleLine = out.line
+                is HandleOutcome.Unavailable -> handleLine = out.line
+            }
+            reading = false
+        }
+    }
+
+    fun answerCard(card: RequestCard, choice: RequestChoice) {
+        if (card.id in answered) return
+        scope.launch {
+            val line = answer(card, choice == RequestChoice.ADD) ?: return@launch
+            answered = answered + card.id
+            handleLine = line
+            if (handleCards.all { it.id in answered }) {
+                doneLabel = HandleThisRules.DONE_LINE
+                delay(if (reduced) 400 else 900) // the last line stays long enough to read
+                captured = true
+                haptics.medium()
+                delay(if (reduced) 250 else 520)
+                leave(true)
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         shown.animateTo(1f, MekaMotion.expand(reduced))
         if (captured) { leave(true); return@LaunchedEffect } // rotated or unfolded mid-goodbye
@@ -218,14 +272,21 @@ private fun CaptureSheet(
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             AnimatedContent(
-                targetState = captured,
+                // 0 the field, 1 Handle this, 2 the goodbye tick: each step cross-fades (the tick also pops in).
+                targetState = when { captured -> 2; handling -> 1; else -> 0 },
                 transitionSpec = {
-                    (fadeIn(MekaMotion.appear(reduced)) + (if (reduced) fadeIn() else scaleIn(MekaMotion.approve(false), 0.6f)))
-                        .togetherWith(fadeOut(MekaMotion.appear(reduced)))
+                    if (targetState == 2) {
+                        (fadeIn(MekaMotion.appear(reduced)) + (if (reduced) fadeIn() else scaleIn(MekaMotion.approve(false), 0.6f)))
+                            .togetherWith(fadeOut(MekaMotion.appear(reduced)))
+                    } else {
+                        // The field gives way to Handle this; the sheet's height follows on the expand spring.
+                        fadeIn(MekaMotion.appear(reduced)).togetherWith(fadeOut(MekaMotion.appear(reduced)))
+                            .using(SizeTransform(clip = false) { _, _ -> MekaMotion.expand(reduced) })
+                    }
                 },
                 label = "captured",
-            ) { isCaptured ->
-                if (isCaptured) {
+            ) { step ->
+                if (step == 2) {
                     Row(Modifier.fillMaxWidth().padding(vertical = MekaSpace.m), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center) {
                         Box(Modifier.size(28.dp).clip(CircleShape).background(Meka.colors.success), contentAlignment = Alignment.Center) {
@@ -234,6 +295,8 @@ private fun CaptureSheet(
                         Spacer(Modifier.width(MekaSpace.xs))
                         Text(doneLabel, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
                     }
+                } else if (step == 1) {
+                    HandleThisSection(reading, handleLine, handleCards, answered, onChoice = ::answerCard)
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Text("CAPTURE", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
@@ -268,6 +331,15 @@ private fun CaptureSheet(
                                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                                     .clickable(role = Role.Button) { forTheTrain() }
                                     .semantics { contentDescription = "Save for the train instead" }
+                                    .padding(vertical = MekaSpace.xs),
+                            )
+                        }
+                        if (canHandle) {
+                            Text(
+                                "✦ " + HandleThisRules.ACTION, style = MekaType.itemMeta, color = Meka.colors.accent,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                                    .clickable(role = Role.Button) { handleIt() }
+                                    .semantics { contentDescription = "Handle this: MEKA reads it and offers what to add" }
                                     .padding(vertical = MekaSpace.xs),
                             )
                         }

@@ -1586,6 +1586,28 @@ final class CoreModel {
         }
     }
 
+    /// "Handle this with MEKA" (Services, V1 slice 1): MEKA comes forward on Needs you while it reads the text, then
+    /// the bar says what it found ("2 things to add", "Nothing in that for you to do · …") and the cards wait there with
+    /// Add · Change · Not needed. Only Strings cross to the core; nothing is added until Meka taps Add.
+    func handleThis(_ text: String, subject: String? = nil) {
+        guard let core, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        NSApp.activate()
+        go(to: .needsYou, reduced: MotionSetting.reduced)
+        offerEventUndo(HandleThisRules.shared.READING_LINE, nil)
+        Task {
+            do {
+                let outcome = try await core.handleThis(text: text, subject: subject)
+                switch onEnum(of: outcome) {
+                case .cards(let c):
+                    MekaHaptics.light()
+                    offerEventUndo(c.line, nil)
+                case .nothingToDo(let n): offerEventUndo(n.line, nil)
+                case .unavailable(let u): offerEventUndo(u.line, nil)
+                }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// The ✕ on a quick alarm or timer: cancelled on every device.
     func cancelAlarm(_ id: String) {
         MekaHaptics.tick()

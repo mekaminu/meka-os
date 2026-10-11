@@ -55,6 +55,14 @@ targets:
             NSPortName: $(PRODUCT_NAME)
             NSRequiredContext: {}
             NSSendTypes: [public.utf8-plain-text]
+          # "Handle this" (V1): select an email or any text → Services → "Handle this with MEKA"; MEKA reads it and
+          # offers what to add in Needs you (nothing is added until Meka taps Add).
+          - NSMenuItem:
+              default: Handle this with MEKA
+            NSMessage: handleText
+            NSPortName: $(PRODUCT_NAME)
+            NSRequiredContext: {}
+            NSSendTypes: [public.utf8-plain-text]
     entitlements:
       path: MekaOS/MekaOS.entitlements
       properties:

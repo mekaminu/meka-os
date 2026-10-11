@@ -658,15 +658,17 @@ object NoticeSources {
      * [REQUEST_HEADS_UP_STALE_MS]) when its sender is in [NotificationSettings.requestNow]. Never the message's text:
      * only the proposal, so the quote stays in the app.
      */
-    fun requestNotices(cards: List<RequestCard>, settings: NotificationSettings): List<Notice> = cards.map { c ->
-        val now = c.personKey.isNotEmpty() && settings.requestNow.any { People.key(it) == c.personKey }
-        Notice(
-            key = "request:${c.id}", source = NoticeSource.REQUEST,
-            tier = if (now) NoticeTier.HEADS_UP else NoticeTier.DIGEST,
-            title = c.from, text = c.action, atMs = c.atMs, target = NoticeTarget.NEEDS_YOU,
-            expiresAtMs = if (now) c.atMs + REQUEST_HEADS_UP_STALE_MS else null,
-        )
-    }
+    fun requestNotices(cards: List<RequestCard>, settings: NotificationSettings): List<Notice> =
+        // A card from "Handle this" is one Meka just made himself, looking at it: no notification ever.
+        cards.filterNot { HandleThisRules.isShared(it.messageId) }.map { c ->
+            val now = c.personKey.isNotEmpty() && settings.requestNow.any { People.key(it) == c.personKey }
+            Notice(
+                key = "request:${c.id}", source = NoticeSource.REQUEST,
+                tier = if (now) NoticeTier.HEADS_UP else NoticeTier.DIGEST,
+                title = c.from, text = c.action, atMs = c.atMs, target = NoticeTarget.NEEDS_YOU,
+                expiresAtMs = if (now) c.atMs + REQUEST_HEADS_UP_STALE_MS else null,
+            )
+        }
 }
 
 /** Synced notification settings on the `context_mode` entity [ENTITY_ID] (ADR-008: Quiet is a context mode). */

@@ -63,6 +63,7 @@ class HttpSyncTransportTest {
             "/v1/push/token" -> respond(pushReply, pushStatus, json)
             "/v1/speech/speak" -> speakRaw?.let { (bytes, h) -> respond(bytes, speakStatus, h) } ?: respond(speakReply, speakStatus, json)
             "/v1/ai/message-request" -> respond(requestReply, requestStatus, json)
+            "/v1/ai/handle-this" -> respond(requestReply, requestStatus, json)
             "/v1/ai/message-triage" -> respond(triageReply, triageStatus, json)
             "/v1/ai/group-digest" -> respond(digestReply, digestStatus, json)
             "/v1/weather/here" -> respond(hereReply, hereStatus, json)
@@ -257,6 +258,20 @@ class HttpSyncTransportTest {
         assertTrue(req.headers[RequestSigning.HEADER_SIGNATURE] != null)
         requestStatus = HttpStatusCode.NotFound
         assertEquals("off", t.messageRequest(sent).state)
+    }
+
+    @Test
+    fun oneShareIsSentSignedForProposalsAndAServerWithoutTheRouteSaysOff() = runTest {
+        val t = HttpSyncTransport(client(), "https://meka.example", RecordingKey()) { "s".repeat(64) }
+        val sent = os.meka.core.wire.HandleThisCodec.Request("2026-10-10", "Saturday 10 October 2026 · 22:40", "", "School", "Reply slip by Friday")
+        val r = t.handleThis(sent)
+        assertEquals("Pick up dry cleaning", r.proposals.single().title)
+        val req = requests.last()
+        assertEquals("/v1/ai/handle-this", req.url.encodedPath)
+        assertEquals(sent, os.meka.core.wire.HandleThisCodec.decodeRequest((req.body as TextContent).text))
+        assertTrue(req.headers[RequestSigning.HEADER_SIGNATURE] != null)
+        requestStatus = HttpStatusCode.NotFound
+        assertEquals("off", t.handleThis(sent).state)
     }
 
     @Test

@@ -77,6 +77,9 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
             .map { (_, s) -> MessageRequestRules.card(s.message, s.index, s.proposal, today, calendar) }
     }
 
+    /** Whether any card (open or answered) was ever made from [messageId] ("Handle this": shared already today). */
+    fun known(messageId: String): Boolean = stored().any { (_, s) -> s.message.id == messageId }
+
     /** The open card with [cardId], or null once it is resolved, gone or never was. */
     fun find(cardId: String): RequestCard? = open().firstOrNull { it.id == cardId }
 
