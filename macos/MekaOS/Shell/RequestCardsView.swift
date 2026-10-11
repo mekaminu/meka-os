@@ -44,7 +44,7 @@ private struct RequestCardRow: View {
                 Text(draft).font(MekaType.body).foregroundStyle(palette.textPrimary)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(MekaSpace.s)
+                    .padding(MekaSpace.xs)
                     .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
                     .padding(.top, MekaSpace.xxs)
             }

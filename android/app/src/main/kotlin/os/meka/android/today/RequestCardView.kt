@@ -62,7 +62,7 @@ internal fun RequestCardView(card: RequestCard, onChoice: (RequestChoice) -> Uni
                 Text(
                     draft, style = MekaType.body, color = Meka.colors.textPrimary,
                     modifier = Modifier.padding(top = MekaSpace.xxs).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s))
-                        .background(Meka.colors.surface).padding(MekaSpace.s).testTag("request-draft-${card.id}"),
+                        .background(Meka.colors.surface).padding(MekaSpace.xs).testTag("request-draft-${card.id}"),
                 )
             }
         }
