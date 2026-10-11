@@ -74,13 +74,15 @@ object EntityTypes {
     const val APPROVAL = "approval"
     /** One thing to do or get at a place, "when I'm near Tesco: milk" (see [Errands]). */
     const val ERRAND = "errand"
+    /** One appointment kept up with on an interval, "Dentist every 6 months" (see [Appointments]). */
+    const val APPOINTMENT = "appointment"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
-        EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND,
+        EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
     )
 }
 
@@ -335,6 +337,9 @@ object MekaSchema : SchemaRegistry {
         // Errands: one removed on any device is gone for good; done/back and the rest, the latest edit wins.
         entityType == EntityTypes.ERRAND && field == ErrandFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.ERRAND -> MergePolicy.Lww
+        // Appointments: one removed on any device is gone for good; the rest, the latest edit wins.
+        entityType == EntityTypes.APPOINTMENT && field == AppointmentFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.APPOINTMENT -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

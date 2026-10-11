@@ -141,6 +141,7 @@ class MekaCore(
     private val lifeFacts = os.meka.core.domain.LifeFacts(replica, ids::next, nowMs)
     private val trainQueue = os.meka.core.domain.TrainQueue(replica, ids::next, nowMs)
     private val errands = os.meka.core.domain.Errands(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val appointments = os.meka.core.domain.Appointments(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val wins = os.meka.core.domain.WorkWins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
     private val protectedTime = os.meka.core.domain.ProtectedTime(replica)
@@ -428,6 +429,13 @@ class MekaCore(
     private val _errands = MutableStateFlow(os.meka.core.domain.ErrandView.EMPTY)
     /** Errands by location (V1, slice 1): what waits at each place, and what was ticked off lately. */
     val errandsView: StateFlow<os.meka.core.domain.ErrandView> = _errands.asStateFlow()
+
+    private val _appointments = MutableStateFlow(os.meka.core.domain.AppointmentView.EMPTY)
+    /**
+     * Appointment nudges (V1, slice 1): the dentist, the optician, a haircut… each due from its last visit, and the
+     * cards Needs you shows for the ones that have come due.
+     */
+    val appointmentsView: StateFlow<os.meka.core.domain.AppointmentView> = _appointments.asStateFlow()
 
     private val _dateNight = MutableStateFlow(os.meka.core.domain.DateNightView.EMPTY)
     /**
@@ -1558,6 +1566,32 @@ class MekaCore(
 
     /** Takes an errand off the list for good (both apps). */
     suspend fun removeErrand(id: String): Boolean = onCore { errands.remove(id) }
+
+    // ---- Appointment nudges (V1, slice 1; Ask → More → Appointments and Needs you on both apps) ----
+
+    /**
+     * One typed line: "Dentist every 6 months, last 12 Apr", "haircut every 6 weeks", "dentist booked Tue 20 Oct
+     * 9:30". Refused (nothing written) when it names nothing, a date can't be read, or a new one says no interval.
+     */
+    suspend fun typeAppointment(text: String): os.meka.core.domain.AppointmentSaid = onCore { appointments.type(text) }
+
+    /** Adds a common appointment (Dentist, Optician, Haircut…) with its usual interval. */
+    suspend fun addAppointmentPreset(presetId: String): os.meka.core.domain.AppointmentSaid = onCore { appointments.addPreset(presetId) }
+
+    /** Went: a visit today (any booking and Not yet go). Null when it isn't on the list. */
+    suspend fun appointmentWent(id: String): os.meka.core.domain.AppointmentDone? = onCore { appointments.went(id) }
+
+    /** Booked…: the day and time typed ("Tue 20 Oct 9:30"); refused when it can't be read. MEKA books nothing. */
+    suspend fun bookAppointment(id: String, whenText: String): os.meka.core.domain.AppointmentDone? = onCore { appointments.book(id, whenText) }
+
+    /** Not yet: no nudge for two weeks. */
+    suspend fun appointmentNotYet(id: String): os.meka.core.domain.AppointmentDone? = onCore { appointments.notYet(id) }
+
+    /** Undo for Went, Booked… and Not yet. */
+    suspend fun undoAppointment(done: os.meka.core.domain.AppointmentDone): Boolean = onCore { appointments.undo(done) }
+
+    /** Takes an appointment off the list for good (both apps). */
+    suspend fun removeAppointment(id: String): Boolean = onCore { appointments.remove(id) }
 
     // ---- Train queue, slice 2: an article's words kept on this device for reading offline ----
 
@@ -3662,6 +3696,7 @@ class MekaCore(
         _facts.value = lifeFacts.view()
         _queue.value = trainQueue.view()
         _errands.value = errands.view()
+        _appointments.value = appointments.view()
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(
             _today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone),
             credit = os.meka.core.domain.CallCreditRules.card(credit, workState.callAssistant),

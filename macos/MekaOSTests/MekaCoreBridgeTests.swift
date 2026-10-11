@@ -1472,6 +1472,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(empty.waiting.isEmpty)
     }
 
+    func testAppointmentsReachSwift() {
+        // Appointment nudges, slice 1: the core reads a typed line into what, how often and the last visit, and the
+        // empty view (with its six common ones) reaches the Mac; only Strings cross from the sheet and the card.
+        let rules = AppointmentRules.shared
+        let today = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 11)
+        let p = rules.parse(text: "Dentist every 6 months, last 12 Apr", today: today, nowMinute: 600)
+        XCTAssertEqual(p?.title, "Dentist")
+        XCTAssertEqual(p?.everyMonths?.intValue, 6)
+        XCTAssertEqual(p?.lastDay?.int64Value, CivilDate.shared.toEpochDay(year: 2026, month: 4, day: 12))
+        XCTAssertEqual(rules.intervalLabel(weeks: 6, months: 0), "Every 6 weeks")
+        XCTAssertEqual(AppointmentView.companion.EMPTY.summary, rules.EMPTY_SUMMARY)
+        XCTAssertEqual(AppointmentView.companion.EMPTY.suggestions.map(\.title), ["Dentist", "Hygienist", "Optician", "Haircut", "Car service", "GP check-up"])
+        XCTAssertTrue(AppointmentView.companion.EMPTY.nudges.isEmpty)
+    }
+
     func testErrandsReachSwift() {
         // Errands by location, slice 1: a typed line is read by the core's rules into a place and its things, and the
         // empty view reaches the Mac (only Strings cross from the sheet).

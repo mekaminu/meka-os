@@ -118,7 +118,8 @@ private struct SchoolRowView: View {
 /// SchoolCoverCardView: "Rex and Logan are off Mon 27 Oct" · "INSET day · in 5 days" · the question · what working from
 /// home changes · I'll work from home · Covered. A card folds away on the expand spring and the undo bar rises.
 /// Reduce Motion: cross-fades. Nothing is sent to anyone. Date night's week-before card (slice 2) follows them, like the
-/// Fold's DateNightCardView: "In 7 days · from 19:00" · "Date night · Fri 23 Oct" · Booked · Skip this one.
+/// Fold's DateNightCardView: "In 7 days · from 19:00" · "Date night · Fri 23 Oct" · Booked · Skip this one. Then one
+/// card per appointment that has come due (AppointmentNudgeRow, appointment nudges slice 1).
 struct SchoolCoversView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -138,9 +139,16 @@ struct SchoolCoversView: View {
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                     .staggeredAppear(firstIndex + model.schoolCovers.count)
             }
+            // Appointments that have come due (appointment nudges, slice 1), after date night's card.
+            ForEach(Array(model.appointmentNudges.enumerated()), id: \.element.id) { i, card in
+                AppointmentNudgeRow(card: card, palette: palette)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                    .staggeredAppear(firstIndex + model.schoolCovers.count + (model.dateNightNudge == nil ? 0 : 1) + i)
+            }
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.schoolCovers.map(\.id))
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.dateNightNudge?.day)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.appointmentNudges.map(\.id))
     }
 }
 

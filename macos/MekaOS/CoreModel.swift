@@ -33,7 +33,9 @@ final class CoreModel {
     /// Date night's week-before card (slice 2), in Needs you beside the school's questions; nil when nothing to book.
     var dateNightNudge: DateNightNudge? { dateNight?.nudge }
     /// The school's questions and date night's card: the plans Needs you asks Meka to make (counts and stagger places).
-    var needsYouAsks: Int { schoolCovers.count + (dateNightNudge == nil ? 0 : 1) }
+    var needsYouAsks: Int { schoolCovers.count + (dateNightNudge == nil ? 0 : 1) + appointmentNudges.count }
+    /// Appointments that have come due (appointment nudges, slice 1): one card each in Needs you, after date night's.
+    var appointmentNudges: [AppointmentNudge] { appointments?.nudges ?? [] }
     /// Ask → More → School.
     var showSchool = false
     /// Meal plan → shopping (V1, slice 1): favourite dinners, the week's dinners and what "Add to shopping" would add
@@ -82,6 +84,13 @@ final class CoreModel {
     private(set) var errands: ErrandView?
     /// Ask → More → Errands.
     var showErrands = false
+    /// Appointment nudges (V1, slice 1): the dentist, the optician, a haircut… due from the last visit, and the cards
+    /// Needs you shows for the ones that have come due (Ask → More → Appointments).
+    private(set) var appointments: AppointmentView?
+    /// Ask → More → Appointments.
+    var showAppointments = false
+    /// Why a Booked… on a Needs you card couldn't be read, by appointment id (shown under its field).
+    private(set) var appointmentRefusal: (id: String, line: String)?
     /// Annual leave (V1, slice 1): the allowance, the days booked and the school holidays (Ask → More → Annual leave).
     /// Synced with the Fold; booked days are days off for work mode on both apps.
     private(set) var leave: LeaveView?
@@ -321,6 +330,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await e in core.errandsView { self?.errands = e }
+        })
+        observers.append(Task { [weak self] in
+            for await a in core.appointmentsView { self?.appointments = a }
         })
         observers.append(Task { [weak self] in
             for await l in core.leaveView { self?.leave = l }
@@ -1951,6 +1963,7 @@ final class CoreModel {
         case .dateNightBooked(let day): run { _ = try await $0.bookDateNight(day: day, booked: false) }
         case .dateNightSkipped(let day): run { _ = try await $0.skipDateNight(day: day, skip: false) }
         case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
+        case .appointment(let done): run { _ = try await $0.undoAppointment(done: done) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
         case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
@@ -2275,6 +2288,85 @@ final class CoreModel {
             } catch { lastError = error.localizedDescription }
         }
     }
+
+    // MARK: Appointment nudges (slice 1)
+
+    /// What a typed line or a Common ones chip said: the line under the field, and whether nothing was written.
+    struct AppointmentLine: Equatable {
+        let line: String
+        let refused: Bool
+    }
+
+    /// One typed line ("Dentist every 6 months, last 12 Apr", "dentist booked Tue 20 Oct 9:30"); only a String crosses.
+    func typeAppointment(_ text: String) async -> AppointmentLine? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            let r = try await core.typeAppointment(text: t)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return AppointmentLine(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// "+ Dentist" under Common ones: added with its usual interval.
+    func addAppointmentPreset(_ id: String) async -> AppointmentLine? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.addAppointmentPreset(presetId: id)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return AppointmentLine(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Went (the sheet's rows and the Needs you card): a visit today; the undo bar takes it back.
+    func appointmentWent(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                if let done = try await core.appointmentWent(id: id) { offerEventUndo(done.line, .appointment(done)) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Booked… on a Needs you card: the typed day and time ("Tue 20 Oct 9:30"), Strings in; a date that can't be read
+    /// stays on the card with the reason under its field. MEKA books nothing.
+    func bookAppointment(_ id: String, when text: String) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                guard let done = try await core.bookAppointment(id: id, whenText: t) else { return }
+                if done.refused {
+                    MekaHaptics.tick()
+                    appointmentRefusal = (id, done.line)
+                } else {
+                    appointmentRefusal = nil
+                    offerEventUndo(done.line, .appointment(done))
+                }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Not yet on a Needs you card: asks again in two weeks.
+    func appointmentNotYet(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do {
+                if let done = try await core.appointmentNotYet(id: id) { offerEventUndo(done.line, .appointment(done)) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    func removeAppointment(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeAppointment(id: id) } }
 
     // MARK: School rhythm (slice 1)
 
@@ -2634,6 +2726,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case dateNightSkipped(Int64)
         /// Caught up on the group digest: its cards come back on both devices.
         case groupDigest(GroupDigestUndo)
+        /// Went, Booked… or Not yet on an appointment: its visit, booking and set-aside day go back.
+        case appointment(AppointmentDone)
     }
 
     let id = UUID()

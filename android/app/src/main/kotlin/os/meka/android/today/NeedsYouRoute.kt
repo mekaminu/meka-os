@@ -268,7 +268,11 @@ internal fun NeedsYouColumn(
     // Date night's week-before card (slice 2) sits with the school's questions: Meka's own plans to make.
     val dateNight by core.dateNightView.collectAsState()
     val nudge = dateNight.nudge
-    val asks = covers.size + (if (nudge != null) 1 else 0)
+    // Appointments that have come due (appointment nudges, slice 1) follow date night: Meka's own bookings to make.
+    val appointments by core.appointmentsView.collectAsState()
+    val due = appointments.nudges
+    var bookRefused by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val asks = covers.size + (if (nudge != null) 1 else 0) + due.size
     val live by LiveReplies.live.collectAsState()
     val sendAll = remember(triage, live) { TriageReplyRules.sendAll(triage, live) }
     // Meka's edits of MEKA's drafts, by message id, so Send and "Send all" send what each card shows.
@@ -350,6 +354,28 @@ internal fun NeedsYouColumn(
                             ?.let { line -> moves.undoLine(line) { core.skipDateNight(card.day, false) } }
                     }
                 }, Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + covers.size, play)))
+            }
+        }
+        due.forEachIndexed { i, card ->
+            item(key = "appointment-${card.id}") {
+                AppointmentCardView(card, bookRefused?.takeIf { it.first == card.id }?.second, onBooked = { typed ->
+                    scope.launch {
+                        val r = runCatching { core.bookAppointment(card.id, typed) }.getOrNull() ?: return@launch
+                        if (r.refused) bookRefused = card.id to r.line
+                        else { bookRefused = null; moves.undoLine(r.line) { core.undoAppointment(r) } }
+                    }
+                }, onWent = {
+                    scope.launch {
+                        runCatching { core.appointmentWent(card.id) }.getOrNull()
+                            ?.let { r -> moves.undoLine(r.line) { core.undoAppointment(r) } }
+                    }
+                }, onNotYet = {
+                    scope.launch {
+                        runCatching { core.appointmentNotYet(card.id) }.getOrNull()
+                            ?.let { r -> moves.undoLine(r.line) { core.undoAppointment(r) } }
+                    }
+                }, modifier = Modifier.animateItem().padding(bottom = MekaSpace.m)
+                    .appear(rememberAppearance(2 + triage.size + covers.size + (if (nudge != null) 1 else 0) + i, play)))
             }
         }
         // Requests from people Meka watches, oldest first, above the stack (V1, requests slice 4): each staggers in
