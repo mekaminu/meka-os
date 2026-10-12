@@ -13,6 +13,7 @@ import os.meka.core.domain.UpdateFailureRules
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.Op
 import os.meka.core.sync.ServerOpStore
+import os.meka.core.wire.FoldPostureCodec
 import os.meka.core.wire.UpdateFailureCodec
 import os.meka.core.wire.WireCodec
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
@@ -47,7 +48,7 @@ object ReleasePublisher {
     const val LABEL = "GitHub build"
     const val AUTH_SCHEME = "Publisher"
     /** The only routes the publisher may call. */
-    val ROUTES = setOf("/v1/releases/latest", "/v1/releases/upload", UpdateFailureCodec.LIST_PATH)
+    val ROUTES = setOf("/v1/releases/latest", "/v1/releases/upload", UpdateFailureCodec.LIST_PATH, FoldPostureCodec.LATEST_PATH)
 
     /** A fresh key pair: (PKCS#8 private key, X.509 public key), both standard base64. */
     fun generateKeyPair(): Pair<String, String> {
@@ -176,6 +177,13 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
         return UpdateFailureCodec.decodeList(body)
     }
 
+    /** The Fold's newest posture report; null when none was sent; throws on a server without the route. */
+    suspend fun postures(): FoldPostureCodec.Report? {
+        val (status, body) = send(FoldPostureCodec.LATEST_PATH, FoldPostureCodec.encodeLatestRequest())
+        if (status != 200) throw IllegalStateException("HTTP $status from ${FoldPostureCodec.LATEST_PATH}")
+        return FoldPostureCodec.decodeLatest(body)
+    }
+
     suspend fun publish(platform: String, bytes: ByteArray, versionCode: Long, versionName: String): Outcome {
         if (bytes.isEmpty() || bytes.size > WireCodec.RELEASE_MAX_BYTES) return Outcome.Failed("the file is empty or too large")
         val size = bytes.size.toLong()
@@ -227,10 +235,12 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  *  - `publisher-failures <url>`: prints the phone's update failures of the last [FAILURE_DAYS] days as GitHub warnings
  *    (build plan: phone updates sometimes fail to install), so a build run reads why from the job's annotations.
  *    Always exits 0: reading them never fails the publish job.
+ *  - `publisher-postures <url>`: prints the Fold's last posture changes (bedside clock, slice 2) as GitHub notices,
+ *    newest first, so a build run reads what the Fold 8 reports. Always exits 0.
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures")
     const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
@@ -250,6 +260,12 @@ object ReleasePublisherCli {
                     val list = runCatching { client.failures() }
                         .getOrElse { println("::notice title=Phone update failures::couldn't read them (${it.message?.take(120)})"); return@runBlocking 0 }
                     failureLines(list, System.currentTimeMillis()).forEach(::println)
+                    0
+                }
+                "publisher-postures" -> {
+                    val r = runCatching { client.postures() }
+                        .getOrElse { println("::notice title=Fold posture::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
+                    postureLines(r).forEach(::println)
                     0
                 }
                 else -> {
@@ -280,6 +296,17 @@ object ReleasePublisherCli {
             "::warning title=Phone update failed::$at · ${UpdateFailureRules.reportLine(f)}".replace("%", "%25")
         }
     }
+
+    /** The job's lines for the Fold's posture report: one notice per change, newest first, else one notice. */
+    fun postureLines(r: FoldPostureCodec.Report?): List<String> {
+        if (r == null || r.changes.isEmpty()) return listOf("::notice title=Fold posture::the Fold hasn't sent its posture changes yet")
+        val sent = utc(r.sentAtMs)
+        return r.changes.map { c ->
+            "::notice title=Fold posture (${r.model ?: "phone"}, sent $sent)::${utc(c.atMs)} · ${c.entry}".replace("%", "%25")
+        }
+    }
+
+    private fun utc(ms: Long) = java.time.Instant.ofEpochMilli(ms).toString().take(16).replace('T', ' ') + " UTC"
 
     private const val PLATFORM = "android"
     private const val APP_ID = "os.meka.android"

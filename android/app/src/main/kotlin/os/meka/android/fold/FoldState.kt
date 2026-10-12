@@ -81,7 +81,11 @@ object FoldDiagnostics {
             _log.value = after
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_LOG, FoldPostureLog.encode(after)).apply()
         }
+        // The changes go to MEKA's server once settled (bedside clock, slice 2); on the first reading too, for any left unsent.
+        if (after !== before || !poked) { poked = true; FoldPostureReporter.poke(context) }
     }
+
+    private var poked = false
 
     /** The line for Appearance and Health; null away from MEKA's window (nothing read yet). */
     fun line(): String? = _reading.value?.let { FoldPostureRules.line(it) }

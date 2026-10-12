@@ -223,6 +223,7 @@ class MekaCore(
     private var hereApi: HereApi? = transport as? HereApi
     private var healthApi: HealthApi? = transport as? HealthApi
     private var updateFailureApi: UpdateFailureApi? = transport as? UpdateFailureApi
+    private var foldPostureApi: FoldPostureApi? = transport as? FoldPostureApi
     private var voiceMessageApi: VoiceMessageApi? = transport as? VoiceMessageApi
     private var familyApi: FamilyApi? = transport as? FamilyApi
     /** Family (sharing slice 4): the links as the server last listed them, in memory only (the server holds them). */
@@ -3174,7 +3175,7 @@ class MekaCore(
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
             speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; healthApi = transport as? HealthApi
-            updateFailureApi = transport as? UpdateFailureApi
+            updateFailureApi = transport as? UpdateFailureApi; foldPostureApi = transport as? FoldPostureApi
             voiceMessageApi = transport as? VoiceMessageApi; familyApi = transport as? FamilyApi; deviceLinkApi = transport as? DeviceLinkApi
             recoveryApi = transport as? RecoveryApi
         }
@@ -4583,6 +4584,19 @@ class MekaCore(
             f.stage, f.status, f.message, f.fromCode, f.toCode, f.atMs, f.storage, f.network, f.attempts,
         )
         return try { api.reportUpdateFailure(report) } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
+    }
+
+    /**
+     * The Fold's last posture changes (bedside clock, slice 2), newest first, sent to the server so a build run can read
+     * what the phone reports. [model] is the phone's model name (e.g. "SM-F966B"). Returns whether the server took them
+     * (false offline, not connected or on an older server; the Fold tries again later).
+     */
+    suspend fun reportFoldPostures(model: String?, changes: List<os.meka.core.domain.FoldPostureLog.Change>): Boolean {
+        val api = foldPostureApi ?: return false
+        if (changes.isEmpty()) return false
+        val codec = os.meka.core.wire.FoldPostureCodec
+        val report = codec.Report(model, nowMs(), changes.take(codec.CHANGES_MAX).map { codec.Change(it.atMs, it.entry) })
+        return try { api.reportFoldPostures(report) } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
     }
 
     /** Publishes a build this device holds (the Mac publishing the phone app it built). */

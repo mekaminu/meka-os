@@ -25,13 +25,14 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
 import os.meka.core.domain.FoldPostureLog
+import os.meka.core.domain.FoldPostureReportRules
 import os.meka.core.domain.FoldPostureRules
 import os.meka.core.domain.LocalCalendar
 
 /**
  * The live fold line (bedside clock slice 1): "Fold: half open, hinge across · hinge 95°", as the phone reports it
  * right now, for Appearance and Health. With [withLog], "Last changes ›" unfolds the last 20 posture changes (newest
- * first). Motion: the line cross-fades as the posture changes; the list unfolds with the row's expand. Reduced motion:
+ * first) and whether MEKA's server has them (slice 2). Motion: the line cross-fades as the posture changes; the list unfolds with the row's expand. Reduced motion:
  * cross-fades only.
  */
 @Composable
@@ -60,6 +61,12 @@ fun FoldPostureLines(modifier: Modifier = Modifier, withLog: Boolean = false) {
                     log.forEach { c ->
                         Text(FoldPostureLog.line(c, cal), style = MekaType.caption, color = Meka.colors.textTertiary,
                             modifier = Modifier.padding(bottom = MekaSpace.xxs))
+                    }
+                    // Whether MEKA's server has them (slice 2): a build run reads them from there.
+                    val sentFlow by FoldPostureReporter.sent.collectAsState()
+                    val sent = remember(sentFlow) { sentFlow ?: FoldPostureReporter.sent(context) }
+                    FoldPostureReportRules.line(log, sent.throughMs, sent.atMs, cal)?.let {
+                        Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                 }
             }

@@ -62,6 +62,7 @@ import os.meka.core.wire.HealthCodec
 import os.meka.core.wire.HereCodec
 import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
+import os.meka.core.wire.FoldPostureCodec
 import os.meka.core.wire.UpdateFailureCodec
 import os.meka.core.wire.VoiceMessageCodec
 import os.meka.core.wire.WireCodec
@@ -110,6 +111,8 @@ fun Application.mekaSync(
     deviceLink: DeviceLink? = DeviceLink(devices, verifier),
     /** Phone update failures reported by the Fold (build plan: phone updates sometimes fail to install); null leaves the routes out. */
     updateFailures: UpdateFailures? = null,
+    /** The Fold's posture changes (bedside clock, slice 2); null leaves the routes out. */
+    foldPostures: FoldPostures? = null,
     /** Approval requests from outside MEKA (Kestrel's trades; build plan V1); null leaves the routes out. */
     approvals: ApprovalRoutes? = null,
     /** The recovery key (build plan V1 "Recovery key"; ADR-005 amendment 2026-10-12); null leaves its routes out. */
@@ -447,6 +450,26 @@ fun Application.mekaSync(
                 UpdateFailureCodec.decodeListRequest(body)
                 val list = withContext(Dispatchers.IO) { updateFailures.recent(who) }
                 call.respondText(UpdateFailureCodec.encodeList(list), ContentType.Application.Json)
+            }
+        }
+
+        if (foldPostures != null) {
+            // What the Fold reports about its hinge: the Fold sends its last changes (keyed devices only; the publisher
+            // is refused), and the publisher (or a keyed device) reads the newest report for a build run.
+            post(FoldPostureCodec.REPORT_PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val report = FoldPostureCodec.decodeReport(body)
+                withContext(Dispatchers.IO) { foldPostures.report(who, report) }
+                call.respondText("{}", ContentType.Application.Json)
+            }
+
+            post(FoldPostureCodec.LATEST_PATH) {
+                val body = call.boundedBody()
+                val who = call.releaseCaller(devices, verifier, body, publisher)
+                FoldPostureCodec.decodeLatestRequest(body)
+                val latest = withContext(Dispatchers.IO) { foldPostures.latest(who) }
+                call.respondText(FoldPostureCodec.encodeLatest(latest), ContentType.Application.Json)
             }
         }
 
@@ -910,6 +933,7 @@ fun main(args: Array<String>) {
                     publisher = System.getenv("MEKA_RELEASE_PUBLISHER_SECRET")?.takeIf { it.isNotBlank() }?.let { SecretsManagerPublisherKey(it) },
                     voice = voice, newsImages = newsImages, calendarWriter = calendarWriter, ai = ai, speech = speech,
                     verifier = verifier, family = family, updateFailures = UpdateFailures(PostgresUpdateFailureStore(ds)),
+                    foldPostures = FoldPostures(PostgresFoldPostureStore(ds)),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
                 )
@@ -1045,6 +1069,7 @@ object Migrations {
         8 to "/db/V8__calendar_editing.sql", 9 to "/db/V9__event_edits.sql", 10 to "/db/V10__ai_usage.sql",
         11 to "/db/V11__speech_usage.sql", 12 to "/db/V12__sign_ins.sql", 13 to "/db/V13__family_invite.sql",
         14 to "/db/V14__ai_usage_day.sql", 15 to "/db/V15__app_update_failure.sql", 16 to "/db/V16__recovery_key.sql",
+        17 to "/db/V17__fold_posture.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

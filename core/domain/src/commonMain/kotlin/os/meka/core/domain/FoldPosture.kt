@@ -188,3 +188,42 @@ object FoldPostureLog {
         Change(at, l.substring(bar + 1))
     }.take(KEEP)
 }
+
+/**
+ * When the Fold sends its posture changes to MEKA's server (bedside clock, slice 2), so a build run can read what the
+ * Fold 8 reports (pure; the device keeps when it last sent). The last [FoldPostureLog.KEEP] go once the posture has
+ * settled for [QUIET_MS] after a change not sent yet; a failed send tries again [RETRY_MS] later.
+ */
+object FoldPostureReportRules {
+    const val QUIET_MS = 20_000L
+    const val RETRY_MS = 15 * 60_000L
+
+    /** True when [log]'s newest change is newer than [sentThroughMs], has settled, and no attempt failed recently. */
+    fun due(log: List<FoldPostureLog.Change>, sentThroughMs: Long, failedAtMs: Long?, nowMs: Long): Boolean {
+        val newest = log.firstOrNull() ?: return false
+        if (newest.atMs <= sentThroughMs) return false
+        if (nowMs - newest.atMs < QUIET_MS) return false
+        return failedAtMs == null || nowMs - failedAtMs >= RETRY_MS
+    }
+
+    /** How long to wait before [due] could turn true; null when nothing is waiting to go. */
+    fun waitMs(log: List<FoldPostureLog.Change>, sentThroughMs: Long, failedAtMs: Long?, nowMs: Long): Long? {
+        val newest = log.firstOrNull() ?: return null
+        if (newest.atMs <= sentThroughMs) return null
+        val settle = newest.atMs + QUIET_MS - nowMs
+        val retry = failedAtMs?.let { it + RETRY_MS - nowMs } ?: 0L
+        return maxOf(settle, retry, 0L)
+    }
+
+    /** Health's line under the last changes: "Sent to MEKA's server · Mon 12 Oct 18:20" or "Not sent yet". */
+    fun line(log: List<FoldPostureLog.Change>, sentThroughMs: Long, sentAtMs: Long?, cal: LocalCalendar): String? {
+        if (log.isEmpty()) return null
+        val waiting = log.first().atMs > sentThroughMs
+        val at = sentAtMs?.let { "${CivilDate.shortLabel(cal.epochDayOf(it))} ${LocalClock.formatMinute(cal.minuteOfDay(it))}" }
+        return when {
+            at == null -> "Not sent to MEKA's server yet"
+            waiting -> "Sent to MEKA's server $at · the newest changes go shortly"
+            else -> "Sent to MEKA's server $at"
+        }
+    }
+}

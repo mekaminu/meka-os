@@ -109,4 +109,29 @@ class FoldPostureTest {
         // The Mac (no places beyond the planner): a question for MEKA.
         assertTrue(TalkFlow.heard(TalkFlow.start().session, "bedside clock").effects.first() is TalkEffect.Ask)
     }
+
+    @Test
+    fun postureChangesGoToTheServerOnceSettledAndRetryAfterAFailure() {
+        val log = listOf(FoldPostureLog.Change(100_000, "b"), FoldPostureLog.Change(50_000, "a"))
+        val r = FoldPostureReportRules
+        assertFalse(r.due(emptyList(), 0, null, 1_000_000))
+        // Settling: not before 20 s after the newest change.
+        assertFalse(r.due(log, 0, null, 110_000))
+        assertEquals(10_000L, r.waitMs(log, 0, null, 110_000))
+        assertTrue(r.due(log, 0, null, 120_000))
+        // Already sent through the newest: nothing to do.
+        assertFalse(r.due(log, 100_000, null, 500_000))
+        assertNull(r.waitMs(log, 100_000, null, 500_000))
+        // A failed send waits 15 minutes.
+        assertFalse(r.due(log, 0, 130_000, 140_000))
+        assertEquals(r.RETRY_MS - 10_000, r.waitMs(log, 0, 130_000, 140_000))
+        assertTrue(r.due(log, 0, 130_000, 130_000 + r.RETRY_MS))
+        // Health's line.
+        val cal = LocalCalendar.UTC
+        val at = CivilDate.toEpochDay(2026, 10, 12) * CivilDate.DAY_MS + (18 * 60 + 20) * 60_000L
+        assertNull(r.line(emptyList(), 0, null, cal))
+        assertEquals("Not sent to MEKA's server yet", r.line(log, 0, null, cal))
+        assertEquals("Sent to MEKA's server Mon 12 Oct 18:20", r.line(log, 100_000, at, cal))
+        assertEquals("Sent to MEKA's server Mon 12 Oct 18:20 · the newest changes go shortly", r.line(log, 50_000, at, cal))
+    }
 }

@@ -306,6 +306,14 @@ interface UpdateFailureApi {
 }
 
 /**
+ * The Fold's posture changes (bedside clock, slice 2): `POST /v1/diagnostics/fold` sends the last few. False from an
+ * older server without the route or before this device's key is registered.
+ */
+interface FoldPostureApi {
+    suspend fun reportFoldPostures(report: os.meka.core.wire.FoldPostureCodec.Report): Boolean
+}
+
+/**
  * A caller's recording (call assistant polish 8c): `POST /v1/voice-message/audio` with the held message's id. The MP3's
  * bytes, or null when the server keeps none (or is older and has no route).
  */
@@ -378,7 +386,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, RecoveryApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, RecoveryApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -704,6 +712,18 @@ class HttpSyncTransport(
 
     override suspend fun reportUpdateFailure(report: os.meka.core.wire.UpdateFailureCodec.Report): Boolean {
         val codec = os.meka.core.wire.UpdateFailureCodec
+        prepare() // the route requires the device's signing key on the server
+        val resp = send(codec.REPORT_PATH, codec.encodeReport(report))
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.REPORT_PATH}")
+            resp.status.value == 404 || resp.status.value == 403 -> false
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.REPORT_PATH}")
+            else -> true
+        }
+    }
+
+    override suspend fun reportFoldPostures(report: os.meka.core.wire.FoldPostureCodec.Report): Boolean {
+        val codec = os.meka.core.wire.FoldPostureCodec
         prepare() // the route requires the device's signing key on the server
         val resp = send(codec.REPORT_PATH, codec.encodeReport(report))
         return when {
