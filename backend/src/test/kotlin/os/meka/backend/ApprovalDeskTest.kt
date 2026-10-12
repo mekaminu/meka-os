@@ -51,7 +51,7 @@ class ApprovalDeskTest {
     private fun answer(id: String, approve: Boolean) {
         val a = ApprovalRules.parse(id, ApprovalDesk.scanning(ops)("hh")[id]!!.mapValues { it.value.value })
         val d = ApprovalRules.decide(a, approve, ApprovalConfirmation.BIOMETRIC, nowMs, "key-$id", "fold") as ApprovalDecision.Write
-        val clock = HlcClock("fold") { nowMs }
+        val clock = HlcClock("fold", { nowMs })
         for ((f, v) in d.fields) ops.append(Op("fold$f$id", "hh", EntityTypes.APPROVAL, id, f, v, clock.now(), emptyList(), "fold"))
     }
 
