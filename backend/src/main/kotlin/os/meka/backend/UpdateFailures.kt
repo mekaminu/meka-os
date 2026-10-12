@@ -48,7 +48,8 @@ class PostgresUpdateFailureStore(private val ds: DataSource) : UpdateFailureStor
                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         ).use {
             it.setString(1, householdId); it.setString(2, deviceId); it.setString(3, report.stage)
-            if (report.status != null) it.setInt(4, report.status) else it.setNull(4, java.sql.Types.INTEGER)
+            val status = report.status
+            if (status != null) it.setInt(4, status) else it.setNull(4, java.sql.Types.INTEGER)
             it.setString(5, report.message); it.setLong(6, report.fromCode); it.setLong(7, report.toCode); it.setLong(8, report.atMs)
             it.setString(9, report.storage); it.setString(10, report.network); it.setInt(11, report.attempts)
             it.executeUpdate()
