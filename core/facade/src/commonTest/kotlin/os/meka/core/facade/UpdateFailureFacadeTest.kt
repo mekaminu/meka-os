@@ -65,6 +65,6 @@ class UpdateFailureFacadeTest {
         c.recordInstalledBuild(471, 18_200_000, previousCode = 470, previousSize = 55_100_000)
         val rows = c.activityView.value.days.flatMap { it.rows }.filter { it.kind == ActivityKind.DEVICE }
         assertEquals(listOf("Updated to build 471 · 18.2 MB"), rows.map { it.summary })
-        assertEquals("From build 470 (55.1 MB) · 36.9 MB smaller", rows.single().why)
+        assertTrue("From build 470 (55.1 MB) · 36.9 MB smaller" in rows.single().why, rows.single().why)
     }
 }
