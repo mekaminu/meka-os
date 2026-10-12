@@ -4250,7 +4250,8 @@ class MekaCore(
         if (os.meka.core.domain.SearchRules.tokens(searchQuery).isEmpty()) return SearchView(searchQuery, emptyList(), 0)
         val sources = SearchSources(
             tasks = all,
-            events = currentEvents(),
+            // A booked visit is found once, as its appointment (slice 2c's stand-in event isn't a second hit).
+            events = currentEvents().filterNot { os.meka.core.domain.AppointmentCalendarRules.isAppointment(it) },
             waiting = _lists.value.waiting,
             decisions = lists.decisionItems(includeSuperseded = true),
             renewals = _lists.value.renewals.all,
