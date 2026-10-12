@@ -1566,6 +1566,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CarCheckRules.shared.ENTITY_ID, "car_check")
     }
 
+    func testMoneyDatesReachSwift() {
+        // UK money deadlines: the five rows and their lines reach the Mac (only Strings and Bools cross).
+        let view = MoneyDateRules.shared.view(items: [], today: 20738) // Mon 12 Oct 2026
+        XCTAssertEqual(view.rows.map { $0.presetId }, ["self_assessment", "isa", "energy", "broadband", "pension"])
+        XCTAssertEqual(view.summary, "Tax, ISA, contracts and pension · dates only")
+        XCTAssertEqual(view.rows[0].line, "Every year · next Sun 31 Jan · reminders 4 weeks and a week before")
+        XCTAssertTrue(view.rows[0].dateKnown)
+        XCTAssertFalse(view.rows[2].dateKnown)
+        XCTAssertFalse(view.rows[2].tracked)
+        XCTAssertEqual(MoneyDateRules.shared.LABEL, "Money dates")
+    }
+
     func testRenewalDoneFromAskReachesSwift() {
         // "I've tested the smoke alarms" in Ask and Talk (home upkeep, slice 2): the radar card's words reach the Mac.
         let p = AskProposalRenewalDone(id: "r1", title: "Test the smoke and CO alarms", doneLabel: "Done", dueDay: 0, nextDay: KotlinLong(value: 31))

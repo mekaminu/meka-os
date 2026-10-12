@@ -13,6 +13,8 @@ import os.meka.core.domain.HomeUpkeepView
 import os.meka.core.domain.UpkeepRow
 import os.meka.core.domain.CarRules
 import os.meka.core.domain.CarView
+import os.meka.core.domain.MoneyDateRules
+import os.meka.core.domain.MoneyDatesView
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -83,6 +85,7 @@ internal fun LazyListScope.renewals(
     }
     homeUpkeep(HomeUpkeepRules.view(r.all, today), open, toggle, core, act, tap)
     car(car, open, toggle, core, act, tap)
+    moneyDates(MoneyDateRules.view(r.all, today), open, toggle, core, act, tap)
     section("Needs doing", r.attention, today, open, toggle, core, act, leave, tap)
     section("Coming up", r.upcoming, today, open, toggle, core, act, leave, tap)
     section("Later", r.later, today, open, toggle, core, act, leave, tap)
@@ -107,6 +110,27 @@ private fun LazyListScope.homeUpkeep(
 
 private const val HOME_UPKEEP = "home-upkeep"
 private const val CAR = "car"
+private const val MONEY = "money-dates"
+
+/**
+ * UK money deadlines (V1): one row like Home upkeep that unfolds in place into Self Assessment, the ISA allowance, the
+ * energy and broadband contracts and a pension check-in. Add (light haptic) puts one on the radar; a date only Meka
+ * knows (a contract's end, the check-in) opens its new row so it can be set. Dates only: nothing touches an account.
+ */
+private fun LazyListScope.moneyDates(
+    v: MoneyDatesView, open: String?, toggle: (String) -> Unit, core: MekaCore,
+    act: (suspend () -> Unit) -> Unit, tap: () -> Unit,
+) {
+    item(key = "r-money") {
+        ListRow(MoneyDateRules.LABEL, v.summary, DueState.NONE, open == MONEY, { toggle(MONEY) }, Modifier.animateItem()) {
+            v.rows.forEach { row ->
+                UpkeepLine(row.title, row.line, row.note, row.tracked) {
+                    tap(); act { core.addMoneyDate(row.presetId)?.let { id -> if (!row.dateKnown) toggle(id) } }
+                }
+            }
+        }
+    }
+}
 
 /**
  * Car on autopilot (V1, slice 1): one row like Home upkeep that unfolds in place into the registration (typed once,

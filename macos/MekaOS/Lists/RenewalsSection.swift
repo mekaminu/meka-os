@@ -32,6 +32,14 @@ struct RenewalsSection: View {
                 CarDetails(car: car, palette: palette, open: $open)
             }
         }
+        if let money = model.moneyDates {
+            ListRowView(title: MoneyDateRules.shared.LABEL, meta: money.summary, due: false, expanded: open == Self.moneyKey, palette: palette,
+                        toggle: { open = open == Self.moneyKey ? nil : Self.moneyKey }) {
+                ForEach(money.rows, id: \.presetId) { row in
+                    MoneyDateRowView(row: row, palette: palette, open: $open)
+                }
+            }
+        }
         section("Needs doing", r?.attention ?? [])
         section("Coming up", r?.upcoming ?? [])
         section("Later", r?.later ?? [])
@@ -39,6 +47,7 @@ struct RenewalsSection: View {
 
     static let homeKey = "home-upkeep"
     static let carKey = "car"
+    static let moneyKey = "money-dates"
 
     @ViewBuilder private func section(_ label: String, _ items: [RenewalItem]) -> some View {
         if !items.isEmpty {
@@ -79,6 +88,35 @@ private struct UpkeepRowView: View {
                 let dateKnown = row.dateKnown
                 Button("Add") {
                     model.addHomeUpkeep(row.presetId) { id in if !dateKnown { open = id } }
+                }
+            }
+        }
+    }
+}
+
+/// UK money deadlines (V1): Self Assessment, the ISA allowance, the energy and broadband contracts and a pension
+/// check-in, each with Add like the home jobs; a date only Meka knows unfolds its new row so it can be set. Dates only.
+private struct MoneyDateRowView: View {
+    @Environment(CoreModel.self) private var model
+    let row: MoneyDateRow
+    let palette: MekaPalette
+    @Binding var open: String?
+
+    var body: some View {
+        HStack(alignment: .center, spacing: MekaSpace.m) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(row.line).font(MekaType.itemMeta)
+                    .foregroundStyle(row.tracked ? palette.textSecondary : palette.textTertiary)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: true), value: row.line)
+                Text(row.note).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+            Spacer(minLength: 0)
+            if !row.tracked {
+                let dateKnown = row.dateKnown
+                Button("Add") {
+                    model.addMoneyDate(row.presetId) { id in if !dateKnown { open = id } }
                 }
             }
         }

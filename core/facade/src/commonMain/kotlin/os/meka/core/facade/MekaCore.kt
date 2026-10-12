@@ -47,6 +47,7 @@ import os.meka.core.domain.RenewalRepeat
 import os.meka.core.domain.Renewals
 import os.meka.core.domain.addHomeUpkeep
 import os.meka.core.domain.addCarDate
+import os.meka.core.domain.addMoneyDate
 import os.meka.core.domain.DayWindow
 import os.meka.core.domain.EveningShutdown
 import os.meka.core.domain.BriefRules
@@ -1562,6 +1563,21 @@ class MekaCore(
     /** The suggested home jobs against the radar today (Lists → Renewals → Home upkeep). */
     fun homeUpkeep(): os.meka.core.domain.HomeUpkeepView =
         os.meka.core.domain.HomeUpkeepRules.view(_lists.value.renewals.all, todayEpochDay())
+
+    /**
+     * UK money deadlines (V1): adds one of [os.meka.core.domain.MoneyDateRules.PRESETS] to the radar — Self Assessment
+     * and the ISA allowance on their next fixed day, the energy and broadband contracts and the pension check-in on a
+     * placeholder for Meka to set. The new item's id, or null when it is already there or isn't one (never throws, so
+     * the Mac can call it). The view is [os.meka.core.domain.MoneyDateRules.view] over the radar's items. Dates only:
+     * nothing is read from or sent to any account.
+     */
+    suspend fun addMoneyDate(presetId: String): String? = onCore {
+        try { renewals.addMoneyDate(presetId, todayEpochDay()) } catch (_: os.meka.core.domain.ValidationException) { null }
+    }
+
+    /** UK money deadlines: the five money dates against the radar today (pure, from the synced lists). */
+    fun moneyDates(): os.meka.core.domain.MoneyDatesView =
+        os.meka.core.domain.MoneyDateRules.view(_lists.value.renewals.all, todayEpochDay())
 
     /**
      * Car on autopilot: sets the registration from typed text ("ab12 cde"; blank clears it). The car's dates on the radar

@@ -1080,6 +1080,24 @@ final class CoreModel {
         }
     }
 
+    /// UK money deadlines: the five money dates against the radar today (pure, from the synced lists).
+    var moneyDates: MoneyDatesView? {
+        guard let r = lists?.renewals else { return nil }
+        return MoneyDateRules.shared.view(items: r.all, today: todayEpochDay)
+    }
+
+    /// Adds one of the money dates to the radar (light haptic); [opened] gets the new row's id when its date is one only
+    /// Meka knows (a contract's end, the pension check-in), so the sheet can unfold it. Only a String crosses each way.
+    func addMoneyDate(_ presetId: String, opened: @escaping @MainActor (String) -> Void) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                if let id = try await core.addMoneyDate(presetId: presetId) { opened(id) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Car on autopilot: sets the registration from typed text (blank clears it). Returns what's wrong with it (shown
     /// under the field), or nil when it was saved. Checked here first: Kotlin exceptions don't cross into Swift. Only a
     /// String crosses.
