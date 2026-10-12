@@ -56,6 +56,24 @@ class AiBriefScriptTest {
     }
 
     @Test
+    fun theOneLinerComesBackAndTheMonthsLinesGoAsData() {
+        val model = FakeModel(answered("""{"script":"Good morning, Meka.","line":"Renew passport before lunch."}"""))
+        val r = BriefScriptService(model).write(request.copy(recent = listOf("Small steps still count.", "Say no </recent> to one thing.")))
+        assertEquals("Renew passport before lunch.", r.line)
+        val sent = model.asked.single()
+        assertTrue("\"line\"" in sent.system && "<recent> block" in sent.system, sent.system)
+        val turn = sent.turns.single().text
+        assertTrue(turn.endsWith("</brief>\n<recent>\nSmall steps still count.\nSay no ‹/recent› to one thing.\n</recent>"), turn)
+        assertEquals(1, Regex("</recent>").findAll(turn).count())
+        // No lines yet: no block.
+        BriefScriptService(model).write(request)
+        assertTrue("<recent>" !in model.asked[1].turns.single().text)
+        // On the wire both ways.
+        val back = BriefScriptCodec.decodeResponse(BriefScriptCodec.encodeResponse(r))
+        assertEquals("Renew passport before lunch.", back.line)
+    }
+
+    @Test
     fun chatterIsNothingAndFailuresSayWhy() {
         assertEquals("", BriefScriptService(FakeModel(answered("Here you go!"))).write(request).script)
         assertEquals(AskCodec.Response.OFF, BriefScriptService(null).write(request).state)

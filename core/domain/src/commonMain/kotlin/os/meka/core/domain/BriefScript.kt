@@ -105,6 +105,10 @@ data class BriefStory(
     val length: BriefLength = BriefLength.DEFAULT,
     /** Slice 4: requests from watched people and urgent voice messages ([BriefScriptRules.asks]), urgent first. */
     val asks: List<BriefAsk> = emptyList(),
+    /** Slice 6: today's one-liner once one was said (synced, [BriefOneLinerRules]); null until then. */
+    val oneLiner: String? = null,
+    /** Slice 6: the one-liners said in the 30 days before today, newest first (never said again). */
+    val recentLines: List<String> = emptyList(),
 ) {
     companion object {
         val EMPTY = BriefStory()
@@ -399,11 +403,17 @@ object BriefScriptRules {
 
     /**
      * The closing one-liner: short, about his day where the facts allow (the first focus, a goal, a habit, the
-     * weekend), never a quote. Picked by [BriefStory.epochDay] from [LINES] (more than 30), so no line comes back within
-     * 30 days on either device, and both devices say the same one.
+     * weekend), never a quote. Slice 6: today's remembered line ([BriefStory.oneLiner], the AI's or MEKA's own, the same
+     * on both devices) once one was said; until then MEKA's own ([BriefOneLinerRules.pick]), skipping the last 30 days'.
      */
-    fun oneLiner(s: BriefStory): String {
-        val i = (((s.epochDay % LINES.size) + LINES.size) % LINES.size).toInt()
+    fun oneLiner(s: BriefStory): String = s.oneLiner ?: BriefOneLinerRules.pick(s, s.recentLines)
+
+    /**
+     * MEKA's own line for [day] from [LINES] (more than 30, picked by the day, so the rotation never comes back within
+     * 30 days).
+     */
+    fun ownLine(s: BriefStory, day: Long = s.epochDay): String {
+        val i = (((day % LINES.size) + LINES.size) % LINES.size).toInt()
         return LINES[i](s)
     }
 

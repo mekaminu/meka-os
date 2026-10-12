@@ -3301,15 +3301,17 @@ class MekaCore(
      * deterministic brief ([os.meka.core.domain.BriefScriptRules.script]). Never throws.
      */
     suspend fun briefScript(name: String = "Meka"): String {
-        val v = _brief.value
-        val fallback = os.meka.core.domain.BriefScriptRules.script(v, name)
-        if (v.dateLabel.isBlank()) return fallback
+        val script = os.meka.core.domain.BriefScriptRules
+        var v = _brief.value
+        if (v.dateLabel.isBlank()) return script.script(v, name)
         val rules = os.meka.core.domain.BriefAiRules
         val facts = rules.facts(v, name)
-        if (facts.isEmpty()) return fallback
+        if (facts.isEmpty()) return script.script(lineSaid(v, null), name)
         val key = facts.joinToString("\n")
-        briefAi?.let { (k, kept) -> if (k == key) return rules.script(kept, v) ?: fallback }
-        val api = aiApi ?: return fallback
+        briefAi?.let { (k, kept) ->
+            if (k == key) { v = lineSaid(v, null); return rules.script(kept, v) ?: script.script(v, name) }
+        }
+        val api = aiApi ?: return script.script(lineSaid(v, null), name)
         val atMs = nowMs()
         val cal = ZoneCalendar(timeZone)
         val today = cal.epochDayOf(atMs)
@@ -3319,17 +3321,33 @@ class MekaCore(
             weekend = v.story.weekend,
             facts = facts,
             length = v.story.length.id,
+            // Slice 6: the month's one-liners, so the AI's new one is unlike them (none once today has one).
+            recent = if (v.story.oneLiner == null) v.story.recentLines.take(os.meka.core.wire.BriefScriptCodec.MAX_RECENT) else emptyList(),
         )
         val reply = (
             try {
                 withTimeoutOrNull(rules.WAIT_MS) { api.briefScript(request) }
             } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
-            ) ?: return fallback
+            ) ?: return script.script(lineSaid(v, null), name)
         // Off, over budget or failed: read MEKA's own and ask again next time.
-        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) return fallback
+        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) return script.script(lineSaid(v, null), name)
         val kept = rules.check(reply.script, facts, v.story.length.maxChars)
         briefAi = key to kept
-        return rules.script(kept, v) ?: fallback
+        v = lineSaid(v, os.meka.core.domain.BriefOneLinerRules.check(reply.line, facts, v.story.recentLines))
+        return rules.script(kept, v) ?: script.script(v, name)
+    }
+
+    /**
+     * Slice 6: the brief [v] with today's one-liner fixed: the one already said today (on either device), else [ai] (the
+     * AI's, checked) or MEKA's own, remembered for 30 days on every device ([os.meka.core.domain.MorningBrief.rememberLine]).
+     */
+    private suspend fun lineSaid(v: os.meka.core.domain.MorningBriefView, ai: String?): os.meka.core.domain.MorningBriefView {
+        if (v.story.oneLiner != null) return v
+        val text = ai ?: os.meka.core.domain.BriefOneLinerRules.pick(v.story, v.story.recentLines)
+        val said = try {
+            onCore { brief.rememberLine(v.story.epochDay, text) }
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { text }
+        return v.copy(story = v.story.copy(oneLiner = said))
     }
 
     /**

@@ -30,9 +30,13 @@ object BriefAiRules {
      * and capitalised word in it (a sentence's first word may also be an ordinary opener: "Then", "Your") is in the
      * facts. Fitted to [maxChars] (the chosen [BriefLength]'s).
      */
-    fun check(answer: String, facts: List<String>, maxChars: Int = BriefScriptRules.MAX_CHARS): List<String> {
+    fun check(answer: String, facts: List<String>, maxChars: Int = BriefScriptRules.MAX_CHARS): List<String> =
+        checked(answer, facts, maxChars, emptySet())
+
+    /** [check], letting a sentence also start with one of [openers] (the one-liner's imperatives, [BriefOneLinerRules]). */
+    internal fun checked(answer: String, facts: List<String>, maxChars: Int, openers: Set<String>): List<String> {
         val vocab = facts.flatMap { tokens(it) }.map { norm(it) }.flatMap { listOf(it, stem(it)) }.toSet()
-        val kept = sentences(answer).filter { it.length <= MAX_SENTENCE && it.any { c -> c.isLetter() } && grounded(it, vocab) }
+        val kept = sentences(answer).filter { it.length <= MAX_SENTENCE && it.any { c -> c.isLetter() } && grounded(it, vocab, openers) }
         return BriefScriptRules.fit(kept, maxChars)
     }
 
@@ -42,7 +46,7 @@ object BriefAiRules {
         return (kept + BriefScriptRules.tail(v)).joinToString(" ")
     }
 
-    private fun grounded(sentence: String, vocab: Set<String>): Boolean {
+    private fun grounded(sentence: String, vocab: Set<String>, openers: Set<String>): Boolean {
         // Markup, JSON or a link is never said.
         if (sentence.any { it in "{}[]<>#*|\\/@" } || "http" in sentence.lowercase()) return false
         val words = tokens(sentence)
@@ -52,7 +56,7 @@ object BriefAiRules {
             when {
                 w.any { it.isDigit() } -> if (!known) return false
                 l in NUMBER_WORDS -> if (!known && NUMBER_WORDS[l] !in vocab) return false
-                w.first().isUpperCase() -> if (!known && !(i == 0 && l in OPENERS) && l !in ALWAYS) return false
+                w.first().isUpperCase() -> if (!known && !(i == 0 && (l in OPENERS || l in openers)) && l !in ALWAYS) return false
             }
         }
         return true

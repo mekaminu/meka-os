@@ -30,15 +30,24 @@ object BriefScriptCodec {
     const val STANDARD = "standard"
     val LENGTHS = setOf("short", STANDARD, "full")
     const val MAX_REASON = 300
+    /** Slice 6: the one-liners said in the last 30 days, sent so the AI's new one is unlike them. */
+    const val MAX_RECENT = 30
+    const val MAX_RECENT_LINE = 160
+    /** The AI's one-liner read at most (the device keeps 140 characters). */
+    const val MAX_LINE = 300
 
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
     private val json = Json { ignoreUnknownKeys = true }
 
     /** [date] the device's local ISO date, [now] its readable "Monday 12 October 2026 · 07:30". */
-    data class Request(val date: String, val now: String, val weekend: Boolean, val facts: List<String>, val length: String = STANDARD)
+    data class Request(
+        val date: String, val now: String, val weekend: Boolean, val facts: List<String>, val length: String = STANDARD,
+        /** Slice 6 (additive): the last 30 days' one-liners, newest first; missing is none. */
+        val recent: List<String> = emptyList(),
+    )
 
-    /** [state]: the same states as Ask's; [script] is empty unless answered. */
-    data class Response(val state: String, val script: String = "", val reason: String? = null)
+    /** [state]: the same states as Ask's; [script] is empty unless answered; [line] (slice 6) the AI's one-liner, or empty. */
+    data class Response(val state: String, val script: String = "", val reason: String? = null, val line: String = "")
 
     fun encodeRequest(r: Request): String = buildJsonObject {
         put("w", WireCodec.VERSION)
@@ -47,6 +56,7 @@ object BriefScriptCodec {
         put("weekend", r.weekend)
         putJsonArray("facts") { r.facts.forEach { add(JsonPrimitive(it)) } }
         put("length", r.length)
+        if (r.recent.isNotEmpty()) putJsonArray("recent") { r.recent.forEach { add(JsonPrimitive(it)) } }
     }.toString()
 
     fun decodeRequest(body: String): Request = wrap("brief script request") {
@@ -67,7 +77,20 @@ object BriefScriptCodec {
         // Slice 3 (additive): an older device sends no length, which is Standard.
         val length = (o["length"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: STANDARD
         require(length in LENGTHS) { "length" }
-        Request(date, now, weekend, facts, length)
+        // Slice 6 (additive): an older device sends no recent lines.
+        val recent = when (val r = o["recent"]) {
+            null -> emptyList()
+            is JsonArray -> {
+                require(r.size <= MAX_RECENT) { "recent" }
+                r.map { e ->
+                    val t = (e as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim() ?: throw IllegalArgumentException("recent")
+                    require(t.isNotEmpty() && t.length <= MAX_RECENT_LINE) { "recent" }
+                    t
+                }
+            }
+            else -> throw IllegalArgumentException("recent")
+        }
+        Request(date, now, weekend, facts, length, recent)
     }
 
     fun encodeResponse(r: Response): String = buildJsonObject {
@@ -75,6 +98,7 @@ object BriefScriptCodec {
         put("state", r.state)
         r.reason?.let { put("reason", it) }
         put("script", r.script)
+        if (r.line.isNotEmpty()) put("line", r.line)
     }.toString()
 
     fun decodeResponse(body: String): Response = wrap("brief script response") {
@@ -82,12 +106,14 @@ object BriefScriptCodec {
         checkVersion(o)
         val script = (o["script"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull.orEmpty().take(MAX_SCRIPT)
         val reason = (o["reason"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.takeIf { it.length <= MAX_REASON }
-        Response(o.str("state"), script, reason)
+        val line = (o["line"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull.orEmpty().trim().take(MAX_LINE)
+        Response(o.str("state"), script, reason, line)
     }
 
     /**
-     * A model's answer, which should be one JSON object `{"script": "…"}` (possibly in a code fence). Anything that isn't
-     * that object is an empty script (the device then reads its own brief); a longer one is cut at [MAX_SCRIPT].
+     * A model's answer, which should be one JSON object `{"script": "…", "line": "…"}` (possibly in a code fence; `line`,
+     * the one-liner, since slice 6). Anything that isn't that object is an empty script (the device then reads its own
+     * brief); a longer one is cut at [MAX_SCRIPT], a longer line at [MAX_LINE].
      */
     fun parseModelAnswer(text: String): Response {
         val start = text.indexOf('{')
@@ -96,7 +122,8 @@ object BriefScriptCodec {
         val o = runCatching { json.parseToJsonElement(text.substring(start, end + 1)).jsonObject }.getOrNull()
             ?: return Response(AskCodec.Response.ANSWERED)
         val script = (o["script"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim().orEmpty().take(MAX_SCRIPT)
-        return Response(AskCodec.Response.ANSWERED, script)
+        val line = (o["line"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim().orEmpty().take(MAX_LINE)
+        return Response(AskCodec.Response.ANSWERED, script, line = line)
     }
 
     private fun JsonObject.str(k: String): String =

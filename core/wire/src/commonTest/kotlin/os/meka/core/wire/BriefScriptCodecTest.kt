@@ -35,4 +35,17 @@ class BriefScriptCodecTest {
         assertEquals("", BriefScriptCodec.parseModelAnswer("{\"script\": 4}").script)
         assertTrue(BriefScriptCodec.parseModelAnswer("{\"script\":\"" + "a".repeat(5_000) + "\"}").script.length == BriefScriptCodec.MAX_SCRIPT)
     }
+
+    @Test
+    fun slice6CarriesTheMonthsLinesAndTheAisLine() {
+        val r = request.copy(recent = listOf("Small steps still count.", "Start before you feel ready."))
+        assertEquals(r, BriefScriptCodec.decodeRequest(BriefScriptCodec.encodeRequest(r)))
+        assertTrue("recent" !in BriefScriptCodec.encodeRequest(request))
+        assertFailsWith<WireFormatException> { BriefScriptCodec.decodeRequest(BriefScriptCodec.encodeRequest(request.copy(recent = List(31) { "Line $it." }))) }
+        assertFailsWith<WireFormatException> { BriefScriptCodec.decodeRequest(BriefScriptCodec.encodeRequest(request.copy(recent = listOf("a".repeat(161))))) }
+        val answer = BriefScriptCodec.parseModelAnswer("{\"script\":\"Hi, Meka.\",\"line\":\" Renew passport first. \"}")
+        assertEquals("Renew passport first.", answer.line)
+        assertEquals(answer, BriefScriptCodec.decodeResponse(BriefScriptCodec.encodeResponse(answer)))
+        assertEquals("", BriefScriptCodec.parseModelAnswer("{\"script\":\"Hi.\"}").line)
+    }
 }

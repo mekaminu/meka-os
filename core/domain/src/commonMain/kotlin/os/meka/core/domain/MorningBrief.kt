@@ -23,6 +23,11 @@ object BriefFields {
     const val SEEN_ON = "briefSeenOn"
     /** "A morning brief worth listening to", slice 3: Short · Standard · Full ([BriefLength.id]); plain last-writer-wins. */
     const val LENGTH = "briefLength"
+    /**
+     * Slice 6: the one-liners said in the last 30 days, "epochDay<TAB>text" per line, oldest first
+     * ([BriefOneLinerRules]); plain last-writer-wins.
+     */
+    const val LINES = "briefLines"
 }
 
 /** Something on the radar or in Lists that needs you today: a renewal, a cancel-by date, a decision to review. */
@@ -269,6 +274,22 @@ class MorningBrief(
         replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(BriefFields.LENGTH to length.id.fv()))
     }
 
+    /** Slice 6: the one-liners said in the last 30 days, oldest first. */
+    fun lines(): List<BriefLineMemory> =
+        BriefOneLinerRules.decode(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(BriefFields.LINES)?.textOrNull)
+
+    /**
+     * Remembers [text] as [day]'s one-liner on every device, unless [day] already has one (the first said stands, so
+     * both devices close with the same line). Returns the day's line.
+     */
+    fun rememberLine(day: Long, text: String): String {
+        val now = lines()
+        BriefOneLinerRules.today(now, day)?.let { return it }
+        val next = BriefOneLinerRules.remember(now, day, text)
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(BriefFields.LINES to BriefOneLinerRules.encode(next).fv()))
+        return BriefOneLinerRules.today(next, day) ?: text
+    }
+
     fun seenDay(): Long? = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(BriefFields.SEEN_DAY)?.longOrNull
 
     /** "Got it": the card is put away on every device until tomorrow morning. [on] names this device ("Mac", "Fold"). */
@@ -415,8 +436,11 @@ class MorningBrief(
         val (focus, smaller) = BriefScriptRules.focus(
             dayTasks, today, now, weekIds, upNextId, length.focusFor(weekend),
         ) { calendar.minuteOfDay(it) }
+        val said = lines()
         return BriefStory(
             epochDay = today.epochDay,
+            oneLiner = BriefOneLinerRules.today(said, today.epochDay),
+            recentLines = BriefOneLinerRules.recent(said, today.epochDay),
             weekend = weekend,
             workEndMin = if (working) schedule.hoursOn(iso).endMinute else null,
             events = events,

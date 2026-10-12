@@ -133,6 +133,46 @@ class BriefScriptFacadeTest {
     }
 
     @Test
+    fun theAisOneLinerIsSaidOnBothDevicesAndNotAgainWithinAMonth() = runTest {
+        val service = SyncService(InMemoryServerOpStore())
+        val foldServer = Server(service)
+        val macServer = Server(service)
+        fun device(id: String, server: Server) = MekaCore(
+            householdId = "hh", deviceId = id, store = InMemoryReplicaStore(), transport = server,
+            secureRandom = Random(1), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        )
+        val fold = device("android", foldServer)
+        val mac = device("mac", macServer)
+        fold.addTask("Renew passport")
+        val line = "Renew passport before lunch, then breathe."
+        foldServer.reply = {
+            BriefScriptCodec.Response("answered", "Good morning, Meka. It's Monday 12 October. " +
+                "Your one thing to focus on is Renew passport, as it's up next.", line = line)
+        }
+        val s = fold.briefScript()
+        assertTrue(s.endsWith("$line ${BriefScriptRules.CLOSE}"), s)
+        assertTrue(foldServer.sent.single().recent.isEmpty())
+        assertEquals(line, fold.briefView.value.oneLiner)
+        // The Mac closes with the same line (synced), and Talk's read-out says it.
+        fold.syncNow(); mac.syncNow()
+        assertEquals(line, mac.briefView.value.oneLiner)
+        assertTrue(mac.talkReadOut(ReadOut(ReadOut.Kind.BRIEF)).endsWith("$line ${BriefScriptRules.CLOSE}"))
+
+        // Tomorrow: the line goes to the AI as one to avoid; the AI saying it again is refused for MEKA's own.
+        now += 24 * 3_600_000L
+        mac.syncNow(); mac.tick()
+        assertEquals(listOf(line), mac.briefView.value.story.recentLines)
+        macServer.reply = { BriefScriptCodec.Response("answered", "Good morning, Meka.", line = "Renew passport before lunch, then breathe!") }
+        val t = mac.briefScript()
+        assertEquals(listOf(line), macServer.sent.single().recent)
+        val own = mac.briefView.value.oneLiner!!
+        assertFalse(own == line || "breathe" in own, own)
+        assertTrue(t.endsWith("$own ${BriefScriptRules.CLOSE}"), t)
+        mac.syncNow(); fold.syncNow(); fold.tick()
+        assertEquals(own, fold.briefView.value.oneLiner)
+    }
+
+    @Test
     fun theLengthIsChosenOnceForBothDevicesAndTheFocusRowsTickTasksOff() = runTest {
         val service = SyncService(InMemoryServerOpStore())
         fun device(id: String) = MekaCore(
