@@ -491,7 +491,12 @@ internal data class RowMotion(val shareTitle: Boolean = false, val titleVisible:
 private const val TODAY_SECTIONS = TodayOrderRules.SECTIONS
 
 /** Present only while the device isn't enrolled for sync. */
-data class ConnectHook(val defaultUrl: String, val connect: suspend (url: String, code: String) -> String?)
+data class ConnectHook(
+    val defaultUrl: String,
+    val connect: suspend (url: String, code: String) -> String?,
+    /** Recovery key, slice 2: connect with the 24 words instead of the code (null: not offered). */
+    val recover: (suspend (url: String, words: String) -> String?)? = null,
+)
 
 /** The commands every task list (Today, Needs you) offers, wired to [core]. Selection is owned by the caller. */
 internal fun todayActions(
@@ -906,7 +911,7 @@ private fun TodayPane(
                         )
                     }
                     }
-                    if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs))
+                    if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs), recover = connect.recover)
                     if (battery.line != null) {
                         BatteryCareLine(battery, onDismiss = {
                             battery.gap?.let { BatteryCare.dismiss(batteryContext, it.endMs) }

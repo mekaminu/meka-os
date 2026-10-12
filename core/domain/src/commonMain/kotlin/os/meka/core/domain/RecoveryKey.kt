@@ -158,6 +158,48 @@ object RecoveryKeyRules {
     fun replaceWarning(status: Status?): String? =
         if (status?.state == Status.READY) "The old key stops working once the new one is saved" else null
 
+    // ---- making a key on this device (slice 2: Settings → Recovery key) ----
+
+    /**
+     * A new key for the screen: its words, shown in [rows], the [CONFIRM_WORDS] positions to type back, and the
+     * [verifier] that is saved. The bits themselves aren't kept; the words leave memory when the screen closes.
+     */
+    fun draft(entropy: ByteArray, random: (Int) -> Int): RecoveryKeyDraft {
+        val words = phrase(entropy)
+        return RecoveryKeyDraft(words, rows(words), confirmPositions(random), verifier(entropy))
+    }
+
+    /** True when [answers] (in [RecoveryKeyDraft.confirmPositions]' order) are the draft's words. */
+    fun confirms(draft: RecoveryKeyDraft, answers: List<String>): Boolean = confirms(draft.words, draft.confirmPositions, answers)
+
+    const val HOW = "Write the 24 words on paper, in order, and keep it at home away from your phone and Mac. " +
+        "If you lose both, the words connect a new one. MEKA never sees them; don't photograph them or keep them in notes."
+    const val WRITE_DOWN = "I've written them down"
+    const val CONFIRM = "Type these words from your paper"
+    const val NOT_MATCHING = "Those words don't match · check the paper and try again"
+    const val SAVED = "Saved · keep the paper somewhere safe"
+    const val NOT_CONNECTED = "Connect this device to your server first."
+    const val NO_ROUTE = "MEKA's server can't keep a recovery key yet · it arrives with the next deploy"
+    const val NO_KEY = "This device's key isn't registered with MEKA's server yet · try again in a minute"
+    const val OFFLINE = "Couldn't reach MEKA's server · try again"
+    const val WHY_YOU = "You did this in Recovery key"
+    /** The first-run screen's way in (a new phone or Mac when both are lost). */
+    const val RECOVER = "Recover with your recovery key"
+    const val RECOVER_HOW = "Type the 24 words from your paper. This device joins your household and your data comes back from MEKA's server; the key is then used up, so make a new one."
+
+    /** The pane's state: the row, a warning before replacing a key, and the last problem (null when none). */
+    fun pane(status: Status?, nowMs: Long, cal: LocalCalendar, problem: String?): RecoveryKeyView {
+        val v = view(status, nowMs, cal)
+        return RecoveryKeyView(v.line, v.action, v.lit, replaceWarning(status), problem)
+    }
+
+    /** Activity's line when a key was made ("Made a new recovery key"), one per save. */
+    fun activityId(atMs: Long): String = "d" + ActivityRules.fnv64("recovery:made:$atMs")
+    const val MADE_SUMMARY = "Made a new recovery key"
+
+    /** Settings' row line under "Recovery key" before the pane has asked the server. */
+    const val ROW_LINE = "24 words that get you back in if both devices are lost"
+
     private fun day(atMs: Long?, nowMs: Long, cal: LocalCalendar): String {
         if (atMs == null) return "earlier"
         val label = SearchRules.dayLabel(cal.epochDayOf(atMs), cal.epochDayOf(nowMs))
@@ -175,3 +217,18 @@ object RecoveryKeyRules {
 
     private fun hex(b: ByteArray) = b.joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
 }
+
+/** A key on screen (Settings → Recovery key); never stored or synced. [confirmPositions] are 0-based. */
+class RecoveryKeyDraft(
+    val words: List<String>,
+    val rows: List<List<String>>,
+    val confirmPositions: List<Int>,
+    /** What is sent to MEKA's server when it's saved; the words never are. */
+    val verifier: String,
+) {
+    /** "Word 3" · "Word 11" · "Word 20": each confirmation field's label. */
+    val confirmLabels: List<String> get() = confirmPositions.map { "Word ${it + 1}" }
+}
+
+/** Settings → Recovery key: the status row, [warning] before replacing a key, and the last [problem]. */
+data class RecoveryKeyView(val line: String, val action: String, val lit: Boolean, val warning: String?, val problem: String?)

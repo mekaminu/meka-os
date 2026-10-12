@@ -123,7 +123,7 @@ fun rememberSetupFixer(openPane: (SetupFix) -> Unit, after: () -> Unit): (SetupS
         { step: SetupStep ->
             haptics.light()
             when (val f = step.fix) {
-                SetupFix.CALENDARS, SetupFix.WORK, SetupFix.VOICE -> f?.let(openPane)
+                SetupFix.CALENDARS, SetupFix.WORK, SetupFix.VOICE, SetupFix.RECOVERY -> f?.let(openPane)
                 SetupFix.NOTIFICATION_ACCESS -> openListenerSettings(context)
                 SetupFix.CALL_ROLE -> MekaCallScreeningService.roleRequest(context)?.let { runCatching { askRole.launch(it) } }
                 SetupFix.BATTERY -> if (BatteryCare.facts(context).exempt) BatteryCare.openSamsung(context) else BatteryCare.allowInAndroid(context)

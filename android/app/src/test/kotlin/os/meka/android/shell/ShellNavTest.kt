@@ -78,10 +78,11 @@ class ShellNavTest {
             ShellNav.daily().map { it.label },
         )
         assertEquals(
-            listOf("Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"),
+            listOf("Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Recovery key", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"),
             ShellNav.settings(connected = true).map { it.label },
         )
         assertFalse(MoreItem.WATCH in ShellNav.settings(connected = false))
+        assertFalse(MoreItem.RECOVERY in ShellNav.settings(connected = false))
         // Only MEKA's AI just says how it is.
         assertEquals(listOf(MoreItem.AI), MoreItem.entries.filterNot { ShellNav.opens(it) })
     }

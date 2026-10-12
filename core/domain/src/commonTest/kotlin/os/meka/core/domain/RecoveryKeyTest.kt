@@ -112,4 +112,22 @@ class RecoveryKeyTest {
         assertTrue(RecoveryKeyRules.refusal("key").startsWith("That recovery key doesn't open MEKA"))
         assertEquals("MEKA's server refused it", RecoveryKeyRules.refusal(null))
     }
+
+    @Test
+    fun aDraftShowsTheWordsAndConfirmsThreeOfThem() {
+        val entropy = ByteArray(32) { (it * 7).toByte() }
+        val d = RecoveryKeyRules.draft(entropy) { 0 }
+        assertEquals(RecoveryKeyRules.phrase(entropy), d.words)
+        assertEquals(listOf(0, 1, 2), d.confirmPositions)
+        assertEquals(listOf("Word 1", "Word 2", "Word 3"), d.confirmLabels)
+        assertEquals("1 ${d.words[0]}", d.rows[0][0])
+        assertEquals(RecoveryKeyRules.verifier(entropy), d.verifier)
+        assertTrue(RecoveryKeyRules.confirms(d, d.words.take(3)))
+        assertFalse(RecoveryKeyRules.confirms(d, d.words.drop(1).take(3)))
+        assertFalse(RecoveryKeyRules.confirms(d, emptyList()))
+        val cal = LocalCalendar.UTC
+        val made = RecoveryKeyRules.pane(RecoveryKeyRules.Status(RecoveryKeyRules.Status.READY, createdAtMs = 0), 0, cal, null)
+        assertEquals("The old key stops working once the new one is saved", made.warning)
+        assertEquals(RecoveryKeyRules.OFFLINE, RecoveryKeyRules.pane(null, 0, cal, RecoveryKeyRules.OFFLINE).problem)
+    }
 }

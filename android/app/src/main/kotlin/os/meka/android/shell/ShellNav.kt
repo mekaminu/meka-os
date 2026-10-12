@@ -84,6 +84,7 @@ enum class MoreItem(
     CALENDARS("Calendars", "Connected accounts and feeds", null, MoreGroup.SETTINGS),
     FAMILY("Family", "Share the shopping list with Jeanette", null, MoreGroup.SETTINGS),
     WATCH("Watch", "Link your Galaxy Watch to MEKA", null, MoreGroup.SETTINGS),
+    RECOVERY("Recovery key", os.meka.core.domain.RecoveryKeyRules.ROW_LINE, null, MoreGroup.SETTINGS),
     AUTONOMY("What MEKA may do", "What it does on its own · the pause switch", null, MoreGroup.SETTINGS),
     AI("MEKA's AI", "Whether it's on and what it costs this month", null, MoreGroup.SETTINGS),
     ACTIVITY("Activity", "What MEKA did and why", null, MoreGroup.SETTINGS),
@@ -120,10 +121,10 @@ object ShellNav {
 
     /**
      * Everything reachable from Ask's More (the tiles, Daily, the Settings row and what's in the Settings pane);
-     * Calendars, Family and Watch only once this device is connected (they live on MEKA's server).
+     * Calendars, Family, Watch and Recovery key only once this device is connected (they live on MEKA's server).
      */
     fun more(connected: Boolean): List<MoreItem> =
-        MoreItem.entries.filter { connected || (it != MoreItem.CALENDARS && it != MoreItem.FAMILY && it != MoreItem.WATCH) }
+        MoreItem.entries.filter { connected || (it != MoreItem.CALENDARS && it != MoreItem.FAMILY && it != MoreItem.WATCH && it != MoreItem.RECOVERY) }
 
     /** The Life grid's tiles, in the core's order (both apps). */
     fun lifeTiles(): List<MoreItem> =

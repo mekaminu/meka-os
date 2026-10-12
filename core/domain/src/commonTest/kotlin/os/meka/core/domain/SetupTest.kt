@@ -141,4 +141,25 @@ class SetupTest {
         // The device's own voice counts as chosen.
         assertEquals("The device's own voice", SetupRules.view(facts(voiceChosen = MekaVoiceRules.DEVICE)).step("voice.picked").line)
     }
+
+    @Test
+    fun theRecoveryKeyStepFollowsTheServer() {
+        fun step(status: RecoveryKeyRules.Status?, connected: Boolean = true) =
+            SetupRules.view(facts(connected = connected), SetupRecovery(status)).step(SetupRules.RECOVERY_KEY)
+        assertEquals(SetupState.TODO, step(RecoveryKeyRules.Status(RecoveryKeyRules.Status.NONE)).state)
+        assertEquals(SetupFix.RECOVERY, step(RecoveryKeyRules.Status(RecoveryKeyRules.Status.NONE)).fix)
+        assertEquals(SetupState.DONE, step(RecoveryKeyRules.Status(RecoveryKeyRules.Status.READY)).state)
+        assertEquals("Used to connect a device · make a new one", step(RecoveryKeyRules.Status(RecoveryKeyRules.Status.USED)).line)
+        assertEquals(SetupState.UNKNOWN, step(null).state)
+        assertEquals(SetupState.LATER, step(null, connected = false).state)
+        // Without the server's answer wrapper the step isn't listed (the old one-argument view).
+        assertTrue(SetupRules.view(facts()).steps.none { it.key == SetupRules.RECOVERY_KEY })
+        // Replacing a step works the counts out again.
+        val v = SetupRules.view(facts(), SetupRecovery(RecoveryKeyRules.Status(RecoveryKeyRules.Status.NONE)))
+        assertEquals(1, v.toDo)
+        val ticked = SetupRules.replaceStep(v, SetupRules.recoveryStep(true, RecoveryKeyRules.Status(RecoveryKeyRules.Status.READY)))
+        assertEquals(0, ticked.toDo)
+        assertEquals(v.done + 1, ticked.done)
+        assertNull(ticked.todayLine)
+    }
 }

@@ -13,7 +13,7 @@ package os.meka.core.domain
 enum class SetupState { DONE, TODO, ELSEWHERE, LATER, UNKNOWN }
 
 /** Where a step's button goes; the apps map each to their own screen or the system's. */
-enum class SetupFix { CALENDARS, WORK, VOICE, NOTIFICATION_ACCESS, CALL_ROLE, BATTERY, NOTIFICATIONS }
+enum class SetupFix { CALENDARS, WORK, VOICE, NOTIFICATION_ACCESS, CALL_ROLE, BATTERY, NOTIFICATIONS, RECOVERY }
 
 data class SetupStep(
     /** Stable: "calendar.google", "calls.role", "mac"… */
@@ -77,6 +77,9 @@ data class SetupFacts(
     val nowMs: Long,
 )
 
+/** The household's recovery key as Setup sees it ([status] null: MEKA's server couldn't be asked). */
+data class SetupRecovery(val status: RecoveryKeyRules.Status?)
+
 object SetupRules {
     const val ON_THE_FOLD = "On the Fold"
     const val TRAVEL_KEY = "travel"
@@ -84,7 +87,13 @@ object SetupRules {
     const val TRAVEL_ADD_KEY = "Add the Google key · save it on MEKA's server as meka-os-dev/maps/google (steps on the build board)"
     private const val COULDNT = "Couldn't check"
 
-    fun view(f: SetupFacts): SetupView {
+    fun view(f: SetupFacts): SetupView = view(f, null)
+
+    /**
+     * With the household's recovery key (Recovery key, slice 2): [recovery] is what MEKA's server said (null when it
+     * couldn't be read); a null [recovery] wrapper leaves the step out.
+     */
+    fun view(f: SetupFacts, recovery: SetupRecovery?): SetupView {
         val sections = listOf(
             SetupSection("Calendars", calendars(f)),
             SetupSection("Call assistant", calls(f)),
@@ -93,8 +102,16 @@ object SetupRules {
             SetupSection("Weather and travel", places(f)),
             SetupSection("Mail", listOf(SetupStep("mail", "Mail", "Comes with email triage: you'll reconnect Google and Outlook with mail access then", SetupState.LATER))),
             SetupSection(if (f.device.mac) "This Mac" else "This phone", device(f)),
-            SetupSection("Your devices", listOf(mac(f))),
+            SetupSection("Your devices", listOfNotNull(mac(f), recovery?.let { recoveryStep(f.connected, it.status) })),
         )
+        return summarise(sections, f.nowMs)
+    }
+
+    /** [v] with [step] in place of the step with its key (counts and lines worked out again). */
+    fun replaceStep(v: SetupView, step: SetupStep): SetupView =
+        summarise(v.sections.map { sec -> sec.copy(steps = sec.steps.map { if (it.key == step.key) step else it }) }, v.checkedAtMs)
+
+    private fun summarise(sections: List<SetupSection>, nowMs: Long): SetupView {
         val all = sections.flatMap { it.steps }
         val done = all.count { it.state == SetupState.DONE }
         val left = all.filter { it.toDo }
@@ -105,7 +122,7 @@ object SetupRules {
             left.isEmpty() -> "All set · $done of $total done"
             else -> "${steps(left.size)} left · $done of $total done"
         }
-        return SetupView(sections, done, total, left.size, summary, todayLine(left), f.nowMs)
+        return SetupView(sections, done, total, left.size, summary, todayLine(left), nowMs)
     }
 
     private fun steps(n: Int) = if (n == 1) "1 step" else "$n steps"
@@ -256,6 +273,20 @@ object SetupRules {
             null -> Unit
             true -> add(SetupStep("device.battery", "Battery", "Allowed to run in the background", SetupState.DONE))
             false -> add(SetupStep("device.battery", "Battery", "Samsung may put MEKA to sleep", SetupState.TODO, SetupFix.BATTERY, "Keep MEKA awake"))
+        }
+    }
+
+    const val RECOVERY_KEY = "recovery"
+
+    /** The recovery key's step: made, used (make a new one), not made, or couldn't be read. */
+    fun recoveryStep(connected: Boolean, status: RecoveryKeyRules.Status?): SetupStep {
+        val title = "Recovery key"
+        if (!connected) return SetupStep(RECOVERY_KEY, title, "After connecting this device", SetupState.LATER)
+        return when (status?.state) {
+            null -> SetupStep(RECOVERY_KEY, title, COULDNT, SetupState.UNKNOWN)
+            RecoveryKeyRules.Status.READY -> SetupStep(RECOVERY_KEY, title, "Made · 24 words on paper get you back in if both devices are lost", SetupState.DONE)
+            RecoveryKeyRules.Status.USED -> SetupStep(RECOVERY_KEY, title, "Used to connect a device · make a new one", SetupState.TODO, SetupFix.RECOVERY, "Make one")
+            else -> SetupStep(RECOVERY_KEY, title, "24 words on paper get you back in if you lose both devices", SetupState.TODO, SetupFix.RECOVERY, "Make one")
         }
     }
 

@@ -228,6 +228,12 @@ class MekaCore(
     private var familyMembers: List<os.meka.core.domain.FamilyMember> = emptyList()
     private val _family = MutableStateFlow<os.meka.core.domain.FamilyView?>(null)
     private var deviceLinkApi: DeviceLinkApi? = transport as? DeviceLinkApi
+    /** Recovery key (slice 2): the household's key as the server last said, when it was read, and the pane's state. */
+    private var recoveryApi: RecoveryApi? = transport as? RecoveryApi
+    private var recoveryStatus: os.meka.core.domain.RecoveryKeyRules.Status? = null
+    private var recoveryReadAtMs: Long? = null
+    private val _recovery = MutableStateFlow<os.meka.core.domain.RecoveryKeyView?>(null)
+    private val keyRandom: Random = secureRandom
     /** Watch (Galaxy Watch slice 1): the linked watches as the server last listed them, in memory only. */
     private var linkedWatches: List<os.meka.core.domain.LinkedWatch> = emptyList()
     private val _watchLink = MutableStateFlow<os.meka.core.domain.WatchLinkView?>(null)
@@ -3151,6 +3157,7 @@ class MekaCore(
             speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; healthApi = transport as? HealthApi
             updateFailureApi = transport as? UpdateFailureApi
             voiceMessageApi = transport as? VoiceMessageApi; familyApi = transport as? FamilyApi; deviceLinkApi = transport as? DeviceLinkApi
+            recoveryApi = transport as? RecoveryApi
         }
         startSync()
     }
@@ -3317,7 +3324,13 @@ class MekaCore(
                 nowMs = nowMs(),
             )
         }
-        val view = os.meka.core.domain.SetupRules.view(facts)
+        // Recovery key (slice 2): asked again with the server's other answers, else the last answer is reused.
+        val recovery = if (!connected) os.meka.core.domain.SetupRecovery(null)
+        else os.meka.core.domain.SetupRecovery(
+            if (!force && onCore { recoveryReadAtMs }?.let { nowMs() - it < os.meka.core.domain.HealthRules.TODAY_REFRESH_MS } == true) onCore { recoveryStatus }
+            else readRecoveryStatus(),
+        )
+        val view = os.meka.core.domain.SetupRules.view(facts, recovery)
         _setup.value = view
         return view
     }
@@ -4224,6 +4237,87 @@ class MekaCore(
     /** On the core thread. */
     private fun watchesNow(problem: String?): os.meka.core.domain.WatchLinkView =
         os.meka.core.domain.WatchLinkRules.view(linkedWatches, nowMs(), ZoneCalendar(timeZone), problem).also { _watchLink.value = it }
+
+    // ---- Recovery key (V1, slice 2: Settings → Recovery key) ----
+
+    /** Settings → Recovery key as last read ([refreshRecoveryKey]); null until asked once. */
+    val recoveryKeyView: StateFlow<os.meka.core.domain.RecoveryKeyView?> = _recovery.asStateFlow()
+
+    /** Asks MEKA's server about the household's key; when it can't, the row says so and the problem why. */
+    suspend fun refreshRecoveryKey(): os.meka.core.domain.RecoveryKeyView {
+        val api = recoveryApi ?: return showRecovery(os.meka.core.domain.RecoveryKeyRules.NOT_CONNECTED)
+        return try {
+            val s = api.recoveryStatus().toDomain()
+            onCore { recoveryStatus = s; recoveryReadAtMs = nowMs(); recoveryNow(null) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            showRecovery(recoveryProblem(e))
+        }
+    }
+
+    /** A new key's words for the screen (made on this device; nothing is sent until [saveRecoveryKey]). */
+    fun newRecoveryKey(): os.meka.core.domain.RecoveryKeyDraft =
+        os.meka.core.domain.RecoveryKeyRules.draft(keyRandom.nextBytes(os.meka.core.domain.RecoveryKeyRules.ENTROPY_BYTES)) { keyRandom.nextInt(it) }
+
+    /**
+     * Saves [draft] once [answers] (the words at its confirm positions, as typed) match: only its verifier is sent, and
+     * the household's old key stops working. False when the words don't match or the server couldn't take it (the
+     * view's problem says why); nothing is sent while the words don't match.
+     */
+    suspend fun saveRecoveryKey(draft: os.meka.core.domain.RecoveryKeyDraft, answers: List<String>): Boolean {
+        if (!os.meka.core.domain.RecoveryKeyRules.confirms(draft, answers)) {
+            showRecovery(os.meka.core.domain.RecoveryKeyRules.NOT_MATCHING); return false
+        }
+        val api = recoveryApi ?: run { showRecovery(os.meka.core.domain.RecoveryKeyRules.NOT_CONNECTED); return false }
+        val saved = try {
+            api.setRecoveryKey(draft.verifier).toDomain()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            showRecovery(recoveryProblem(e)); return false
+        }
+        onCore {
+            recoveryStatus = saved; recoveryReadAtMs = nowMs()
+            val at = nowMs()
+            activity.recordDevice(
+                os.meka.core.domain.RecoveryKeyRules.activityId(at), at,
+                os.meka.core.domain.RecoveryKeyRules.MADE_SUMMARY, os.meka.core.domain.RecoveryKeyRules.WHY_YOU,
+            )
+            refresh()
+            recoveryNow(null)
+        }
+        _setup.value?.let { v ->
+            // Setup's step ticks at once (the rest of the page is as it was).
+            val step = os.meka.core.domain.SetupRules.recoveryStep(true, saved)
+            if (v.steps.any { it.key == step.key }) _setup.value = os.meka.core.domain.SetupRules.replaceStep(v, step)
+        }
+        return true
+    }
+
+    private suspend fun readRecoveryStatus(): os.meka.core.domain.RecoveryKeyRules.Status? {
+        val api = recoveryApi ?: return null
+        val s = runCatchingNotCancel { api.recoveryStatus().toDomain() } ?: return null
+        onCore { recoveryStatus = s; recoveryReadAtMs = nowMs() }
+        return s
+    }
+
+    private fun os.meka.core.wire.RecoveryCodec.Status.toDomain() =
+        os.meka.core.domain.RecoveryKeyRules.Status(state, createdAtMs, createdBy, usedAtMs, usedBy)
+
+    private fun recoveryProblem(e: Exception): String = when {
+        e is FamilyUnavailableException && e.reason == FamilyUnavailableException.NO_KEY -> os.meka.core.domain.RecoveryKeyRules.NO_KEY
+        e is FamilyUnavailableException -> os.meka.core.domain.RecoveryKeyRules.NO_ROUTE
+        e is LinkRefusedException -> os.meka.core.domain.RecoveryKeyRules.refusal(e.reason)
+        e is AuthRejectedException -> SIGNED_OUT_MESSAGE
+        else -> os.meka.core.domain.RecoveryKeyRules.OFFLINE
+    }
+
+    private suspend fun showRecovery(problem: String?): os.meka.core.domain.RecoveryKeyView = onCore { recoveryNow(problem) }
+
+    /** On the core thread. A problem leaves the last known status in place (offline before any answer: "Can't check"). */
+    private fun recoveryNow(problem: String?): os.meka.core.domain.RecoveryKeyView =
+        os.meka.core.domain.RecoveryKeyRules.pane(recoveryStatus, nowMs(), ZoneCalendar(timeZone), problem).also { _recovery.value = it }
 
     /** The settings row (Ask → More → Settings → Where I am now); the switch itself is kept on each device. */
     fun hereSetting(on: Boolean, permitted: Boolean): os.meka.core.domain.HereSettingView =

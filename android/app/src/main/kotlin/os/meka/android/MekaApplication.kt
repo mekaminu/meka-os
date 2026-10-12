@@ -255,4 +255,34 @@ class MekaApplication : Application() {
             is EnrolmentResult.Failed -> r.reason
         }
     }
+
+    /**
+     * Recovery key, slice 2: a new phone (both devices lost) joins the household with the 24 words instead of the
+     * enrolment code. This install's own device id (new to the household) and its own Keystore key; only the words'
+     * secret is sent, never the words. Returns a user-facing error, or null once connected (the data comes back from
+     * MEKA's server with the first sync). The key is spent: the pane then asks for a new one.
+     */
+    suspend fun recover(serverUrl: String, words: String): String? {
+        val url = serverUrl.trim().trimEnd('/')
+        val r = os.meka.core.facade.RecoveryEnrolment.enrol(
+            http, url, deviceKey, words, identity.deviceId(), Build.MODEL ?: "Android", System.currentTimeMillis(),
+        )
+        return when (r) {
+            is os.meka.core.facade.RecoveryEnrolment.Result.Enrolled -> {
+                // Ops carry the household and device id this core was made with, so they must be the ones enrolled.
+                if (r.householdId != identity.householdId() || r.deviceId != identity.deviceId()) {
+                    return "This phone can't join that household · reinstall MEKA and try again"
+                }
+                identity.saveEnrolment(url, r.secret)
+                core.connect(Enrolment.transport(http, url, r.secret, deviceKey))
+                SyncWorker.schedulePeriodic(this)
+                pushPrefs.forget()
+                ensurePush()
+                null
+            }
+            is os.meka.core.facade.RecoveryEnrolment.Result.Unreadable -> r.line
+            is os.meka.core.facade.RecoveryEnrolment.Result.Refused -> r.line
+            is os.meka.core.facade.RecoveryEnrolment.Result.Failed -> r.line
+        }
+    }
 }

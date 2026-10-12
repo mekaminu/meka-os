@@ -77,7 +77,8 @@ struct SetupSheet: View {
                 }
                 await model.refreshSetup()
             }
-        case .notificationAccess, .callRole, .battery: break
+        // Recovery key: the Mac's own screen comes with slice 3; until then make it on the Fold.
+        case .notificationAccess, .callRole, .battery, .recovery: break
         }
     }
 
@@ -86,7 +87,7 @@ struct SetupSheet: View {
         guard step.toDo, let f = step.fix else { return false }
         switch f {
         case .calendars, .work, .voice, .notifications: return true
-        case .notificationAccess, .callRole, .battery: return false
+        case .notificationAccess, .callRole, .battery, .recovery: return false
         }
     }
 

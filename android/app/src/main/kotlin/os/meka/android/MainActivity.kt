@@ -47,9 +47,11 @@ class MainActivity : ComponentActivity() {
                 val sync by app.core.syncStatus.collectAsState()
                 // Offer Connect when not enrolled, or when the server signed this device out (re-enrolling fixes it).
                 val signedOut = (sync as? SyncStatus.Failing)?.reason == MekaCore.SIGNED_OUT_MESSAGE
-                val hook = if (connected && !signedOut) null else ConnectHook(app.defaultServerUrl) { url, code ->
-                    app.connect(url, code).also { if (it == null) connected = true }
-                }
+                val hook = if (connected && !signedOut) null else ConnectHook(
+                    app.defaultServerUrl,
+                    connect = { url, code -> app.connect(url, code).also { if (it == null) connected = true } },
+                    recover = { url, words -> app.recover(url, words).also { if (it == null) connected = true } },
+                )
                 AppShell(app.core, hook)
             }
         }
