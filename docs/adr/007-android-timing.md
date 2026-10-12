@@ -10,7 +10,7 @@ Reminders have different precision needs. Exact alarms cost battery and need a u
 | Need | Example | Tolerance | Mechanism |
 |---|---|---|---|
 | Server-originated, time-sensitive | Fixture time changed; approval request | Seconds, needs network anyway | **FCM high-priority data message**, which wakes the app and posts the notification |
-| User-facing clock precision | Leave-time for Logan's football; calendar "starts in 10 min" | Within about 1 min | **`AlarmManager.setExactAndAllowWhileIdle`** if `canScheduleExactAlarms()`, else **`setWindow`** with a 5-min window, and the UI says "reminders may be up to a few minutes late" with a one-tap grant flow |
+| User-facing clock precision | Leave-time for the older boy's football; calendar "starts in 10 min" | Within about 1 min | **`AlarmManager.setExactAndAllowWhileIdle`** if `canScheduleExactAlarms()`, else **`setWindow`** with a 5-min window, and the UI says "reminders may be up to a few minutes late" with a one-tap grant flow |
 | Wake-up style | Morning plan ready at a chosen time | Exact, user-visible | `setAlarmClock` only if the owner opts in to that feature (it shows an alarm icon) |
 | Soft milestones | Fasting 16h/18h/24h; habit nudges; digest | 5–15 min | **`setWindow` / inexact `set`**, which the system batches |
 | Periodic background | Calendar refresh, listener health heartbeat, op-log push retry | 15 min+ | **WorkManager** periodic work (15-min minimum, **unverified** in current docs; long-standing value), expedited one-off work for pending sync on connectivity |
