@@ -79,6 +79,8 @@ object TrustRules {
         is AskProposal.AddGiftIdea -> null
         // A promise (People slice 3) is Meka's word to someone, so he always sees it before it's kept.
         is AskProposal.AddPromise -> null
+        // A booking (Travel mode slice 2a) goes into Meka's own trip, so he always sees it before it's kept.
+        is AskProposal.AddBooking -> null
     }
 
     fun read(fields: Map<String, FieldValue>?): Map<TrustKind, TrustState> = TrustKind.entries.associateWith { k ->

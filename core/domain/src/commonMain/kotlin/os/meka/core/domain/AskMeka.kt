@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -70,6 +70,8 @@ sealed interface AskProposal {
     data class AddGiftIdea(val occasionId: String, val title: String, val idea: String) : AskProposal
     /** Adds a promise Meka made [to] someone (null: nobody named), by [byDay] or no date (People slice 3). */
     data class AddPromise(val to: String?, val title: String, val byDay: Long?) : AskProposal
+    /** Adds the booking [entry] to the trip called [tripName] (Travel mode slice 2a: "add the flight to Barcelona"). */
+    data class AddBooking(val entry: BookingEntry, val tripName: String) : AskProposal
     /**
      * Marks the radar item [id] done (Home upkeep slice 2: "I've tested the smoke alarms", "the boiler's been
      * serviced"), as its own button would: a repeating one moves on from [dueDay] to [nextDay], a one-off ([nextDay]
@@ -135,6 +137,8 @@ sealed interface AskUndo {
     data class RemoveGiftIdea(val ideaId: String) : AskUndo
     /** The promise card: the promise it added leaves Lists (only while it is still open). */
     data class RemovePromise(val promiseId: String) : AskUndo
+    /** The booking card: the booking it added leaves the trip (only while it is still there). */
+    data class RemoveBooking(val bookingId: String) : AskUndo
     /** The radar card: the item goes back to how it was (only while it is still as Done left it). */
     data class PutBackRenewal(val before: RenewalDoneUndo) : AskUndo
     /** The win card: the win it kept leaves the log. */
@@ -186,7 +190,7 @@ object AskRules {
     const val MAX_SHOPPING = 10
 
     /** The kinds of proposal MEKA understands; anything else is dropped. Wire names, never renamed. */
-    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal", "skip_life_admin", "add_gift_idea", "add_promise")
+    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal", "skip_life_admin", "add_gift_idea", "add_promise", "add_booking")
 
     /** The question as sent: one line, trimmed, at most [MAX_QUESTION] characters; null when there's nothing to ask. */
     fun question(text: String?): String? =
@@ -204,7 +208,7 @@ object AskRules {
                 appointments: List<String> = emptyList(), checklists: List<String> = emptyList(),
                 goals: List<String> = emptyList(), bins: List<String> = emptyList(),
                 car: List<String> = emptyList(), lifeAdmin: String? = null, gifts: List<String> = emptyList(),
-                people: List<String> = emptyList()): AskContext {
+                people: List<String> = emptyList(), trips: List<String> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -289,7 +293,9 @@ object AskRules {
         // People (slice 3, [PeopleAskRules.askLines]): Meka's own promises, waiting-fors and birthdays; a contact only
         // joins a row he made, and carries no message words, so never untrusted.
         val peopleLines = people.take(PeopleAskRules.ASK_LINES).map { AskItem("", AskItemKind.PEOPLE, line(it)) }
-        val tail = listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + binLines + carLines + giftLines + peopleLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
+        // Travel mode (slice 2a, [TripAskRules.askLines]): Meka's own typed trips and bookings, never untrusted.
+        val tripLines = trips.take(TripAskRules.ASK_LINES).map { AskItem("", AskItemKind.TRIPS, line(it)) }
+        val tail = listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + binLines + carLines + giftLines + peopleLines + tripLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
         // Today's own lines keep room for at least [TODAY_ROOM] (the tail's last lines, the forecast's, go first), so a
         // full tail never pushes the context past [MAX_ITEMS].
         val tailKept = tail.take(MAX_ITEMS - minOf(items.size, TODAY_ROOM))
@@ -323,10 +329,10 @@ object AskRules {
                facts: List<LifeFact> = emptyList(), errands: List<ErrandItem> = emptyList(),
                tasks: List<Task> = emptyList(), goals: List<GoalItem> = emptyList(), lifeAdmin: LifeAdminView? = null,
                occasions: List<Occasion> = emptyList(), people: PeopleView = PeopleView.EMPTY,
-               promised: List<PromiseItem> = emptyList()): AskAnswer =
+               promised: List<PromiseItem> = emptyList(), trips: List<TripItem> = emptyList()): AskAnswer =
         AskAnswer(
             answerText(text),
-            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals, dateNight, renewals, wins, queue, leave, facts, errands, tasks, goals, lifeAdmin, occasions, people, promised) }.distinctBy { it.proposal }.take(MAX_CARDS),
+            actions.mapNotNull { card(it, context, titles, nowMs, cal, meals, dateNight, renewals, wins, queue, leave, facts, errands, tasks, goals, lifeAdmin, occasions, people, promised, trips) }.distinctBy { it.proposal }.take(MAX_CARDS),
         )
 
     /**
@@ -339,7 +345,7 @@ object AskRules {
              wins: List<Win> = emptyList(), queue: List<QueueItem> = emptyList(), leave: LeaveAskData? = null,
              facts: List<LifeFact> = emptyList(), errands: List<ErrandItem> = emptyList(), tasks: List<Task> = emptyList(),
              goals: List<GoalItem> = emptyList(), lifeAdmin: LifeAdminView? = null, occasions: List<Occasion> = emptyList(),
-             people: PeopleView = PeopleView.EMPTY, promised: List<PromiseItem> = emptyList()): AskCard? {
+             people: PeopleView = PeopleView.EMPTY, promised: List<PromiseItem> = emptyList(), trips: List<TripItem> = emptyList()): AskCard? {
         val today = cal.epochDayOf(nowMs)
         fun task(): Pair<String, String>? {
             val id = context.taskIds[a.ref?.trim()] ?: return null
@@ -348,7 +354,7 @@ object AskRules {
         fun day(): Long? = a.date?.let { parseDay(it) }?.takeIf { it in today..today + MAX_DAYS_AHEAD }
         val minute = a.time?.let { parseTime(it) }
         // Where a kind uses a day or time, one that is there must read right (a bad one isn't guessed at).
-        if (a.kind == "add_task" || a.kind == "move_task" || a.kind == "plan_dinner" || a.kind == "skip_date_night" || a.kind == "add_goal" || a.kind == "add_promise") {
+        if (a.kind == "add_task" || a.kind == "move_task" || a.kind == "plan_dinner" || a.kind == "skip_date_night" || a.kind == "add_goal" || a.kind == "add_promise" || a.kind == "add_booking") {
             if (a.time != null && minute == null) return null
             if (a.date != null && day() == null) return null
         }
@@ -397,6 +403,7 @@ object AskRules {
             "skip_life_admin" -> LifeAdminRules.skippable(lifeAdmin, nowMs) ?: return null
             "add_gift_idea" -> GiftAskRules.proposal(occasions, a.title) ?: return null
             "add_promise" -> PeopleAskRules.proposal(people.rows, promised, a.title, day()) ?: return null
+            "add_booking" -> TripAskRules.proposal(trips, a.title, day(), minute, today, cal.minuteOfDay(nowMs)) ?: return null
             else -> return null
         }
         return cardOf(proposal, today)
@@ -476,6 +483,7 @@ object AskRules {
         is AskProposal.SkipLifeAdmin -> LifeAdminRules.skipDoneLine(p)
         is AskProposal.AddGiftIdea -> GiftAskRules.doneLine(p)
         is AskProposal.AddPromise -> PeopleAskRules.doneLine(p, today)
+        is AskProposal.AddBooking -> TripAskRules.doneLine(p)
         is AskProposal.RenewalDone -> RenewalAskRules.doneLine(p.doneLabel, p.title, p.nextDay, today)
         is AskProposal.AddWin -> WinAskRules.doneLine(p.text)
         is AskProposal.QueueDone -> QueueAskRules.doneLine(p.title)
@@ -502,6 +510,7 @@ object AskRules {
         is AskProposal.SkipLifeAdmin -> AskCard(p, "Skip this week's life admin hour · " + p.whenLine, "Skip")
         is AskProposal.AddGiftIdea -> AskCard(p, GiftAskRules.cardLine(p), "Note")
         is AskProposal.AddPromise -> AskCard(p, PeopleAskRules.cardLine(p, today), "Add")
+        is AskProposal.AddBooking -> AskCard(p, TripAskRules.cardLine(p), "Add")
         is AskProposal.RenewalDone -> AskCard(p, RenewalAskRules.cardLine(p.doneLabel, p.title, p.nextDay, today), p.doneLabel)
         is AskProposal.AddWin -> AskCard(p, WinAskRules.cardLine(p.text), "Keep")
         is AskProposal.QueueDone -> AskCard(p, QueueAskRules.cardLine(p.title), "Done")

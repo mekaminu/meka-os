@@ -234,6 +234,10 @@ object TalkRules {
         // "add your promise to Rex: fix his bike, by tomorrow" / "added …".
         is AskProposal.AddPromise -> (if (past) "added " else "add ") + "your promise" + (p.to?.let { " to " + clean(it) } ?: "") + ": " +
             clean(p.title) + (p.byDay?.let { ", by " + spokenWhen(it, null, today) } ?: "")
+        // "add Flight BA478 on Saturday 14 November at 07:40 to the Barcelona trip" / "added …".
+        is AskProposal.AddBooking -> (if (past) "added " else "add ") + clean(p.entry.title) + " " +
+            spokenWhen(p.entry.day, p.entry.minute, today).let { if (p.entry.day > today + 1) "on $it" else it } +
+            " to the " + clean(p.tripName) + " trip"
         // "mark Boiler service serviced, next due Monday 1 November" / "marked Car tax paid".
         is AskProposal.RenewalDone -> (if (past) "marked " else "mark ") + clean(p.title) + " " + p.doneLabel.lowercase() +
             (p.nextDay?.let { ", next due " + spokenWhen(it, null, today) } ?: "")

@@ -1611,6 +1611,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(AskItemKind.people.wire, "people")
     }
 
+    func testBookingFromAskReachesSwift() {
+        // "Add our flight to Barcelona" in Ask and Talk (Travel mode, slice 2a): the card's words reach the Mac.
+        let entry = BookingEntry(tripId: "b", kind: .flight, title: "Flight BA478", day: 1, endDay: nil, minute: KotlinInt(value: 460), ref: "ABC123")
+        let card = AskRules.shared.cardOf(p: AskProposalAddBooking(entry: entry, tripName: "Barcelona"), today: 0)
+        XCTAssertEqual(card.line, "Add to Barcelona · Flight BA478 · Fri 2 Jan 07:40 · ref ABC123")
+        XCTAssertEqual(card.button, "Add")
+        XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "added Flight BA478 tomorrow at 07:40 to the Barcelona trip")
+        XCTAssertEqual(AskItemKind.trips.wire, "trips")
+    }
+
     func testHomeUpkeepReachesSwift() {
         // Home upkeep, slice 1: the suggested jobs and their lines reach the Mac (only Strings and an Int64 cross).
         let sat = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 10)

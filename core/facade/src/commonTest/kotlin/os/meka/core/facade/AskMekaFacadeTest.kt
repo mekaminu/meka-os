@@ -400,6 +400,36 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheTripsAndAddsABookingWithUndo() = runTest {
+        val c = core()
+        c.askMeka("When do we fly to Barcelona?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.TRIPS })
+        c.addTrip("Barcelona 14–16 Oct")
+
+        server.reply = AskReply.Answered("Added.", listOf(AskRawAction("add_booking", title = "Flight BA478 Wed 14 Oct 07:40 ref ABC123")))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("Add our flight BA478 on the 14th at 7:40, ref ABC123"))
+        val ctx = server.asked.last().second
+        assertEquals(
+            listOf("Trips · 1 on now or coming", "Trip · Barcelona · Wed 14 – Fri 16 Oct · 3 days · in 6 days · nothing booked yet"),
+            ctx.items.filter { it.kind == AskItemKind.TRIPS }.map { it.line },
+        )
+        assertFalse(ctx.untrusted)
+        assertEquals(listOf("Add to Barcelona · Flight BA478 · Wed 14 Oct 07:40 · ref ABC123"), out.answer.cards.map { it.line })
+        // Nothing until tapped.
+        assertTrue(c.tripsView.value.rows.single().timeline.all { it.lines.isEmpty() })
+
+        val done = c.doAsk(out.answer.cards.single())
+        assertEquals("Added to Barcelona · Flight BA478 · Wed 14 Oct 07:40 · ref ABC123", done.line)
+        assertEquals("Wed 14 – Fri 16 Oct · 3 days · 1 booking", c.tripsView.value.rows.single().line)
+        assertFailsWith<ValidationException> { c.doAsk(out.answer.cards.single()) }
+
+        // Undo takes the booking off, once.
+        assertTrue(c.undoAsk(assertIs<AskUndo.RemoveBooking>(done.undo)))
+        assertEquals("Wed 14 – Fri 16 Oct · 3 days", c.tripsView.value.rows.single().line)
+        assertFalse(c.undoAsk(done.undo!!))
+    }
+
+    @Test
     fun askHearsTheLifeAdminHourAndSkipsThisWeeksWithUndo() = runTest {
         val c = core()
         c.askMeka("When's my admin hour?")

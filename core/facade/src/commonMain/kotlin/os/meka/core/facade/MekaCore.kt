@@ -3356,7 +3356,9 @@ class MekaCore(
                 // Gift planner, slice 2: each birthday and anniversary with its ideas, so "when's Mum's birthday?" has an answer.
                 gifts = os.meka.core.domain.GiftAskRules.askLines(gifts.view()),
                 // People, slice 3: promises both ways, birthdays and last contact, so "what did I promise Jeanette?" has an answer.
-                people = os.meka.core.domain.PeopleAskRules.askLines(_people.value))
+                people = os.meka.core.domain.PeopleAskRules.askLines(_people.value),
+                // Travel mode, slice 2a: each trip on now or coming with its bookings, so "when do we fly?" has an answer.
+                trips = os.meka.core.domain.TripAskRules.askLines(trips.items(), cal.epochDayOf(nowMs())))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -3367,7 +3369,7 @@ class MekaCore(
                 val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
                 val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),
                     os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all(), errands.items(), tasks.all(), goals.goals(tasks.all()).first, _lifeAdmin.value, gifts.items(),
-                    _people.value, lists.promisedItems())
+                    _people.value, lists.promisedItems(), trips.items())
                 val allowed = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }
                 // Earned trust: a kind Meka said "just do it" to runs now, recorded in Activity with Undo, when the
                 // policy engine permits Level 4 under his rule (never for a question that carried untrusted lines).
@@ -3490,6 +3492,12 @@ class MekaCore(
                 val id = lists.addPromise(p.title, p.to, days)
                 os.meka.core.domain.AskUndo.RemovePromise(id)
             }
+            // Checked again now: the trip still there, the same booking not added meanwhile (here or on the other device).
+            is os.meka.core.domain.AskProposal.AddBooking -> {
+                val trip = trips.items().firstOrNull { it.id == p.entry.tripId } ?: throw os.meka.core.domain.ValidationException(os.meka.core.domain.TripAskRules.GONE)
+                if (os.meka.core.domain.TripAskRules.already(trip, p.entry)) throw os.meka.core.domain.ValidationException(os.meka.core.domain.TripAskRules.ALREADY)
+                os.meka.core.domain.AskUndo.RemoveBooking(trips.addBooking(p.entry))
+            }
             // Checked again now: only while it is still due on the card's day (Done here or on the other device moved it on).
             is os.meka.core.domain.AskProposal.RenewalDone -> os.meka.core.domain.AskUndo.PutBackRenewal(renewals.doneFromAsk(p.id, p.dueDay))
             // Kept in today's week (whatever week the review shows); the same line already there is refused.
@@ -3575,6 +3583,8 @@ class MekaCore(
             // The promise the card added leaves Lists while it is still open (kept or deleted since, it stays as it is).
             is os.meka.core.domain.AskUndo.RemovePromise ->
                 if (lists.promisedItems().any { it.id == undo.promiseId }) { lists.deletePromise(undo.promiseId); true } else false
+            // The booking the card added leaves the trip (false when it was already removed, here or on the other device).
+            is os.meka.core.domain.AskUndo.RemoveBooking -> trips.removeBooking(undo.bookingId)
             // Put back only while it is still as Done left it (a change since, here or on the other device, wins).
             is os.meka.core.domain.AskUndo.PutBackRenewal -> renewals.undoDone(undo.before)
             // The win the card kept leaves the log (false when it was already removed, here or on the other device).
@@ -4143,6 +4153,8 @@ class MekaCore(
             is os.meka.core.domain.AskProposal.AddGiftIdea -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             // A promise in Meka's own Lists (nothing is sent to anyone).
             is os.meka.core.domain.AskProposal.AddPromise -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+            // A booking in Meka's own trip (nothing is booked, paid or sent).
+            is os.meka.core.domain.AskProposal.AddBooking -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             // Marks Meka's own radar item done, like its button (nothing is paid, booked or sent).
             is os.meka.core.domain.AskProposal.RenewalDone -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
             // Keeps a line in Meka's own wins log (nothing is sent to anyone).

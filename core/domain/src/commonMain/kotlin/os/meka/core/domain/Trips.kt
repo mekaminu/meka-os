@@ -419,11 +419,87 @@ object TripRules {
     }
 
     /** "Added to Barcelona · Flight BA478 · Sat 14 Nov 07:40 · ref ABC123". */
-    fun addedLine(e: BookingEntry, trip: TripItem): String {
+    fun addedLine(e: BookingEntry, trip: TripItem): String = "Added to " + bookingLine(e, trip.name)
+
+    /** "Barcelona · Flight BA478 · Sat 14 Nov 07:40 · ref ABC123" (a stay "Sat 14 – Wed 18 Nov"). */
+    fun bookingLine(e: BookingEntry, tripName: String): String {
         val whenText = (if (e.endDay != null) CalendarAgenda.spanLabel(e.day, e.endDay) else CivilDate.shortLabel(e.day)) +
             (time(e.minute)?.let { " $it" } ?: "")
-        return listOfNotNull("Added to ${trip.name}", e.title, whenText, e.ref?.let { "ref $it" }).joinToString(" · ")
+        return listOfNotNull(tripName, e.title, whenText, e.ref?.let { "ref $it" }).joinToString(" · ")
     }
+}
+
+/**
+ * Travel mode, slice 2a: Ask and Talk know the trips ("when do we fly to Barcelona?", "what's the hotel's
+ * reference?"), and a model's `add_booking` ("Flight BA478 Sat 14 Nov 07:40 ref ABC123", written as Meka would type it
+ * in Trips) becomes a card that adds the booking to the trip it falls on, on Meka's tap, with Undo. Plain rules.
+ */
+object TripAskRules {
+    /** Trips the Ask lines name (on now first, then soonest). */
+    const val ASK_TRIPS = 4
+    /** Bookings named per trip. */
+    const val ASK_BOOKINGS = 8
+    /** At most this many lines in all, the head included. */
+    const val ASK_LINES = 30
+    const val GONE = "That trip isn't in Trips any more"
+    const val ALREADY = "That booking is already in the trip"
+
+    private fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
+
+    /**
+     * The trips as MEKA describes them to the model (Ask's `trips` lines): "Trips · 1 on now or coming", then per trip
+     * "Trip · Barcelona · Sat 14 – Wed 18 Nov · 5 days · in 33 days" and a line per booking: "Barcelona · Flight ·
+     * Sat 14 Nov 07:40 · Flight BA478 · ref ABC123", "Barcelona · Stay · Sat 14 – Wed 18 Nov · Hotel Arts". Trips
+     * already over are left out; nothing at all while none is on or coming.
+     */
+    fun askLines(trips: List<TripItem>, today: Long): List<String> {
+        val live = trips.filter { it.endDay >= today }.sortedBy { it.startDay }
+        if (live.isEmpty()) return emptyList()
+        val out = mutableListOf("Trips · ${live.size} on now or coming" + if (live.size > ASK_TRIPS) " · the first $ASK_TRIPS below" else "")
+        for (t in live.take(ASK_TRIPS)) {
+            out += listOf(
+                "Trip", t.name, CalendarAgenda.spanLabel(t.startDay, t.endDay), plural(t.days, "day"),
+                TripRules.status(t, today).replaceFirstChar { it.lowercase() },
+                if (t.bookings.isEmpty()) "nothing booked yet" else plural(t.bookings.size, "booking"),
+            ).joinToString(" · ")
+            for (b in t.bookings.take(ASK_BOOKINGS)) {
+                val whenText = (if (b.endDay != null) CalendarAgenda.spanLabel(b.day, b.endDay) else CivilDate.shortLabel(b.day)) +
+                    (b.minute?.let { " " + LocalClock.formatMinute(it) } ?: "")
+                out += listOfNotNull(t.name, b.kind.label, whenText, b.title, b.ref?.let { "ref $it" }).joinToString(" · ")
+            }
+            if (t.bookings.size > ASK_BOOKINGS) out += "${t.name} · ${t.bookings.size - ASK_BOOKINGS} more bookings"
+        }
+        return out.take(ASK_LINES)
+    }
+
+    /**
+     * A model's `add_booking` as a card: [title] read as a line typed in Trips ([TripRules.read]); when it has no day,
+     * the action's [day] (and [minute]) are added to it. Only a booking that falls on a trip makes a card; one with the
+     * same title on the same day of that trip is already there (null).
+     */
+    fun proposal(trips: List<TripItem>, title: String?, day: Long?, minute: Int?, today: Long, nowMinute: Int): AskProposal.AddBooking? {
+        val t = title?.replace('\n', ' ')?.split(' ', '\t')?.filter { it.isNotEmpty() }?.joinToString(" ")?.takeIf { it.isNotEmpty() } ?: return null
+        if (t.length > 200) return null
+        var r = TripRules.read(t, today, nowMinute, trips)
+        if (r !is TripRules.Read.Booking && day != null) {
+            val extra = CivilDate.shortLabel(day) + (minute?.let { " " + LocalClock.formatMinute(it) } ?: "")
+            r = TripRules.read("$t $extra", today, nowMinute, trips)
+        }
+        val read = (r as? TripRules.Read.Booking)?.entry ?: return null
+        val entry = if (read.minute == null && minute != null && (day == null || day == read.day)) read.copy(minute = minute) else read
+        val trip = trips.firstOrNull { it.id == entry.tripId } ?: return null
+        if (already(trip, entry)) return null
+        return AskProposal.AddBooking(entry, trip.name)
+    }
+
+    /** The same title on the same day is already in the trip. */
+    fun already(trip: TripItem, e: BookingEntry): Boolean = trip.bookings.any { it.day == e.day && it.title.equals(e.title, ignoreCase = true) }
+
+    /** The card's words: "Add to Barcelona · Flight BA478 · Sat 14 Nov 07:40 · ref ABC123". */
+    fun cardLine(p: AskProposal.AddBooking): String = "Add to " + TripRules.bookingLine(p.entry, p.tripName)
+
+    /** The undo bar's line: "Added to Barcelona · Flight BA478 · Sat 14 Nov 07:40 · ref ABC123". */
+    fun doneLine(p: AskProposal.AddBooking): String = "Added to " + TripRules.bookingLine(p.entry, p.tripName)
 }
 
 /** The trips and bookings on a replica. */
@@ -439,6 +515,13 @@ class Trips(
     }
 
     fun view(): TripsView = TripRules.view(items(), calendar.epochDayOf(nowMs()))
+
+    /** Adds a booking checked elsewhere (Ask's card); its id. */
+    fun addBooking(e: BookingEntry): String {
+        val id = newId()
+        replica.commitLocal(EntityTypes.TRIP_BOOKING, id, TripRules.fields(e, nowMs()))
+        return id
+    }
 
     /**
      * Adds what [text] says ([TripRules.read]): a trip (one not yet over by the same name has its dates updated) or a

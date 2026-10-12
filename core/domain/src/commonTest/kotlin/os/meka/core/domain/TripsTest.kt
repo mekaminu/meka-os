@@ -135,4 +135,55 @@ class TripsTest {
         assertTrue(tMac.view().isEmpty)
         assertTrue(mac.replica.entities(EntityTypes.TRIP_BOOKING).isEmpty())
     }
+
+    @Test
+    fun askAndTalkKnowTheTripsAndAddABooking() {
+        assertTrue(TripAskRules.askLines(emptyList(), mon).isEmpty())
+        val flight = TripBooking("f", "b", BookingKind.FLIGHT, "Flight BA478", d(11, 14), null, 7 * 60 + 40, "ABC123", 1)
+        val hotel = TripBooking("h", "b", BookingKind.STAY, "Hotel Arts", d(11, 14), d(11, 18), null, null, 2)
+        val trip = bcn.copy(bookings = listOf(hotel, flight))
+        val gone = TripItem("o", "Leeds", d(10, 1), d(10, 2), 0)
+        val trips = listOf(gone, trip)
+        assertEquals(
+            listOf(
+                "Trips · 1 on now or coming",
+                "Trip · Barcelona · Sat 14 – Wed 18 Nov · 5 days · in 33 days · 2 bookings",
+                "Barcelona · Stay · Sat 14 – Wed 18 Nov · Hotel Arts",
+                "Barcelona · Flight · Sat 14 Nov 07:40 · Flight BA478 · ref ABC123",
+            ),
+            TripAskRules.askLines(trips, mon),
+        )
+        assertEquals("Trip · Barcelona · Sat 14 – Wed 18 Nov · 5 days · day 2 of 5 · 2 bookings", TripAskRules.askLines(trips, d(11, 15))[1])
+
+        val ctx = AskRules.context(Today(emptyList(), null, emptyList(), emptyList()), cal.toEpochMs(mon, 600), cal, trips = TripAskRules.askLines(trips, mon))
+        assertEquals(4, ctx.items.count { it.kind == AskItemKind.TRIPS })
+        assertFalse(ctx.untrusted)
+
+        fun card(title: String?, date: String? = null, time: String? = null) =
+            AskRules.card(AskRawAction("add_booking", title = title, date = date, time = time), ctx, emptyMap(), cal.toEpochMs(mon, 600), cal, trips = trips)
+        // Typed as in Trips: the day, time and reference read from the title.
+        val c = card("Flight BA479 Wed 18 Nov 18:20 ref XYZ789")!!
+        assertEquals(AskProposal.AddBooking(BookingEntry("b", BookingKind.FLIGHT, "Flight BA479", d(11, 18), null, 18 * 60 + 20, "XYZ789"), "Barcelona"), c.proposal)
+        assertEquals("Add to Barcelona · Flight BA479 · Wed 18 Nov 18:20 · ref XYZ789", c.line)
+        assertEquals("Add", c.button)
+        assertEquals("Added to Barcelona · Flight BA479 · Wed 18 Nov 18:20 · ref XYZ789", AskRules.doneLine(c.proposal, mon))
+        assertEquals("add Flight BA479 on Wednesday 18 November at 18:20 to the Barcelona trip", TalkRules.phrase(c.proposal, mon, past = false))
+        assertEquals("added Flight BA479 on Wednesday 18 November at 18:20 to the Barcelona trip", TalkRules.phrase(c.proposal, mon, past = true))
+        assertNull(TrustRules.kindOf(c.proposal))
+        // The day and time from the action's fields when the title has none.
+        assertEquals(
+            BookingEntry("b", BookingKind.OTHER, "Dinner at Can Solé", d(11, 15), null, 20 * 60 + 30, null),
+            (card("Dinner at Can Solé", "2026-11-15", "20:30")!!.proposal as AskProposal.AddBooking).entry,
+        )
+        assertEquals(
+            BookingEntry("b", BookingKind.CAR, "Car hire Sixt", d(11, 14), d(11, 18), null, null),
+            (card("Car hire Sixt 14–18 Nov")!!.proposal as AskProposal.AddBooking).entry,
+        )
+        // Already there, no trip on that day, not a booking, a bad date: no card.
+        assertNull(card("flight ba478 Sat 14 Nov 07:40"))
+        assertNull(card("Flight BA478 3 Dec 07:40"))
+        assertNull(card("Rome 3–6 Dec"))
+        assertNull(card("Flight", "soon"))
+        assertNull(card(null))
+    }
 }

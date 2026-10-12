@@ -36,6 +36,9 @@ class AskCodecTest {
         // People (slice 3): a kind of its own.
         val people = req.copy(items = listOf(AskCodec.Item("", "people", "Rex · you promised: Fix his bike · by tomorrow")))
         assertEquals(people, AskCodec.decodeRequest(AskCodec.encodeRequest(people)))
+        // Travel mode (slice 2a): a kind of its own.
+        val trips = req.copy(items = listOf(AskCodec.Item("", "trips", "Barcelona · Flight · Sat 14 Nov 07:40 · Flight BA478 · ref ABC123")))
+        assertEquals(trips, AskCodec.decodeRequest(AskCodec.encodeRequest(trips)))
         // The renewals radar (home upkeep, slice 2): a kind of its own.
         val radar = req.copy(items = listOf(AskCodec.Item("", "renewals", "Radar · Boiler service · due Mon 9 Nov · every year")))
         assertEquals(radar, AskCodec.decodeRequest(AskCodec.encodeRequest(radar)))

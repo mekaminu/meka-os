@@ -74,6 +74,8 @@ class AiAskTest {
         assertTrue("add_gift_idea" in AskService.KINDS && "add_gift_idea" in AskService.SYSTEM)
         assertTrue("people lines" in AskService.SYSTEM)
         assertTrue("add_promise" in AskService.KINDS && "add_promise" in AskService.SYSTEM)
+        assertTrue("trips lines" in AskService.SYSTEM)
+        assertTrue("add_booking" in AskService.KINDS && "add_booking" in AskService.SYSTEM)
         assertTrue("radar lines" in AskService.SYSTEM)
         assertTrue("done_renewal" in AskService.KINDS && "done_renewal" in AskService.SYSTEM)
         assertTrue("wins lines" in AskService.SYSTEM)
