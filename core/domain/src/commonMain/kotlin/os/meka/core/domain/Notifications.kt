@@ -56,7 +56,12 @@ enum class NoticeAction(val label: String) {
      * Sunday's week ahead ([WeekAheadRules.notices], slice 2): opens the week ahead reading itself aloud in MEKA's
      * voice. Both apps; it changes nothing.
      */
-    LISTEN("Listen");
+    LISTEN("Listen"),
+    /**
+     * Bills due ([BillRules.notices]): opens the page Meka saved as where he pays the bill ([Notice.link]). Both apps;
+     * MEKA never pays anything.
+     */
+    PAY("Pay");
 
     /** Whether a device that can [send] messages (the Fold) shows it: Send and Edit there, Copy elsewhere. */
     fun shownOn(send: Boolean): Boolean = when (this) {
@@ -128,6 +133,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * year's allowance doesn't carry over". Dates only, never advice.
      */
     MONEY("Money dates: tax, ISA, contracts and pension", NoticeTier.HEADS_UP),
+    /**
+     * Bills due ([BillRules.notices]): three days before each bill at 09:00, with the amount and Pay when a pay link is
+     * saved — "Council tax due Thu 15 Oct · £180" · "In 3 days · Pay opens centralbedfordshire.gov.uk". Never pays.
+     */
+    BILLS("Bills due: a few days before each payment", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -188,6 +198,8 @@ data class Notice(
      * approval's "expires soon" replaces its first notice). See [postId].
      */
     val postAs: String? = null,
+    /** The web page [NoticeAction.PAY] opens (Bills due: where Meka pays it); http(s) only, null for most. */
+    val link: String? = null,
 ) {
     /** The platform notification's identity: [postAs], else [key]. */
     val postId: String get() = postAs ?: key
@@ -534,6 +546,7 @@ object Governor {
         NoticeSource.BINS -> "bins out tonight"
         NoticeSource.CAR -> plural(n, "car date") + " coming up"
         NoticeSource.MONEY -> plural(n, "money date") + " coming up"
+        NoticeSource.BILLS -> plural(n, "bill") + " due"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -621,9 +634,9 @@ object NoticeSources {
                 )
             }
         }
-        // The car's dates and the money dates get their own reminders (Car on autopilot, UK money deadlines), not the digest line;
-        // once overdue they are summed in the digest like any renewal.
-        for (r in lists.renewals.attention.filter { it.state == RenewalState.OVERDUE || !(CarRules.isCar(it) || MoneyDateRules.isMoney(it)) }) {
+        // The car's dates, the money dates and bills get their own reminders (Car on autopilot, UK money deadlines, Bills
+        // due), not the digest line; once overdue they are summed in the digest like any renewal.
+        for (r in lists.renewals.attention.filter { it.state == RenewalState.OVERDUE || !(CarRules.isCar(it) || MoneyDateRules.isMoney(it) || BillRules.isBill(it)) }) {
             out += Notice(
                 key = "renewal:${r.id}:${r.dueDay}", source = NoticeSource.RENEWAL, tier = NoticeTier.DIGEST,
                 title = r.title, text = r.meta, atMs = todayStart, target = NoticeTarget.LISTS,
@@ -722,6 +735,7 @@ object NoticeSources {
         out += BinRules.notices(bins, nowMs, cal, holidays)
         out += CarRules.notices(lists.renewals.all, carRegistration, nowMs, cal)
         out += MoneyDateRules.notices(lists.renewals.all, nowMs, cal)
+        out += BillRules.notices(lists.renewals.all, nowMs, cal)
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)

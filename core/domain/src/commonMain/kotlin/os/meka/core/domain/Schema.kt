@@ -204,6 +204,11 @@ object ObligationFields {
     const val CANCEL_BY_AT = "cancelByAtMs"
     /** When it was last renewed, paid or done. */
     const val LAST_DONE_AT = "lastDoneAtMs"
+    /**
+     * Bills due (2026-10-12, additive, LWW): where Meka pays it ("https://www.octopus.energy/dashboard"), opened from the
+     * row and the reminder's Pay; http(s) only ([SessionRules.cleanAppLink]). MEKA only opens it, never pays.
+     */
+    const val PAY_LINK = "payLink"
 }
 
 object GoalFields {

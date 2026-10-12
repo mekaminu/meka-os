@@ -1578,6 +1578,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyDateRules.shared.LABEL, "Money dates")
     }
 
+    func testBillsReachSwift() {
+        // Bills due: the pay link's words and the Pay button's name reach the Mac (only Strings and Bools cross).
+        XCTAssertEqual(BillRules.shared.site(link: "https://www.octopus.energy/dashboard"), "octopus.energy")
+        XCTAssertEqual(BillRules.shared.payLabel(link: "https://anglianwater.co.uk/account"), "Pay on anglianwater.co.uk ↗")
+        XCTAssertEqual(NotifyRules.shared.actionName(a: NoticeAction.pay), "PAY") // MacNotifier.payAction
+        XCTAssertTrue(NoticeAction.pay.shownOn(send: false))
+        XCTAssertEqual(Int(BillRules.shared.REMIND_DAYS), 3)
+    }
+
     func testRenewalDoneFromAskReachesSwift() {
         // "I've tested the smoke alarms" in Ask and Talk (home upkeep, slice 2): the radar card's words reach the Mac.
         let p = AskProposalRenewalDone(id: "r1", title: "Test the smoke and CO alarms", doneLabel: "Done", dueDay: 0, nextDay: KotlinLong(value: 31))

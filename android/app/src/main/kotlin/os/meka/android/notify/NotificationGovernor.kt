@@ -137,6 +137,16 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
                 ))
                 return@forEach
             }
+            // Pay (Bills due): opens the page Meka saved as where he pays it, in the browser. MEKA never pays.
+            if (a == NoticeAction.PAY) {
+                val link = n.link ?: return@forEach
+                b.addAction(0, NotifyRules.actionLabel(a), PendingIntent.getActivity(
+                    context, NotifyRouting.actionRequestCode(n.key, a),
+                    Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                ))
+                return@forEach
+            }
             val i = Intent(context, NoticeActionReceiver::class.java)
                 .setAction(NoticeActionReceiver.ACTION_ANSWER)
                 .putExtra(NoticeActionReceiver.EXTRA_KEY, n.key)

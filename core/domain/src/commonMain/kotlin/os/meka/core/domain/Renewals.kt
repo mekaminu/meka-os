@@ -61,6 +61,8 @@ data class RenewalItem(
     val hasConflict: Boolean,
     /** The day "Done" moves it on to (its repeat's next time); null for a one-off, which Done closes. */
     val nextDueDay: Long? = null,
+    /** Bills due: where Meka pays it (http(s)), or null; MEKA only opens it. */
+    val payLink: String? = null,
 ) {
     /** Shown in Needs you and counted in its badge. */
     val needsAttention: Boolean get() = state != RenewalState.LATER
@@ -546,6 +548,19 @@ class Renewals(
         if (changes.isNotEmpty()) replica.commitLocal(EntityTypes.OBLIGATION, id, changes)
     }
 
+    /**
+     * Bills due: where Meka pays it ("octopus.energy", cleaned to "https://octopus.energy"); blank clears it. False (nothing
+     * written) when it isn't an http(s) address. MEKA only ever opens the link: it never pays anything.
+     */
+    fun setPayLink(id: String, link: String?): Boolean {
+        live(id)
+        val blank = link.isNullOrBlank()
+        val clean = SessionRules.cleanAppLink(link)
+        if (!blank && clean == null) return false
+        replica.commitLocal(EntityTypes.OBLIGATION, id, mapOf(ObligationFields.PAY_LINK to (clean?.fv() ?: FieldValue.Null)))
+        return true
+    }
+
     /** "Cancelled it" / "Stop tracking": kept as cancelled, no longer on the radar. */
     fun stop(id: String) {
         live(id)
@@ -593,6 +608,7 @@ class Renewals(
                     stopLabel = RenewalRules.stopLabel(kind),
                     hasConflict = replica.conflictsFor(EntityTypes.OBLIGATION, s.ref.entityId).isNotEmpty(),
                     nextDueDay = rule?.next(due),
+                    payLink = SessionRules.cleanAppLink(s[ObligationFields.PAY_LINK].textOrNull),
                 )
             }
     }

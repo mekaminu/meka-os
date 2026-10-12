@@ -1541,6 +1541,13 @@ class MekaCore(
     suspend fun setRenewalDue(id: String, dueDay: Long) = onCore { renewals.setDue(id, dueDay) }
     suspend fun setRenewalRepeat(id: String, repeats: RenewalRepeat) = onCore { renewals.setRepeat(id, repeats) }
     suspend fun setRenewalCost(id: String, cost: String?) = onCore { renewals.setCost(id, cost) }
+    /**
+     * Bills due: where Meka pays it ("octopus.energy"); blank clears it. False (nothing written) when it isn't a web
+     * address or the item is gone; never throws, so the Mac can call it. MEKA only opens the link, never pays.
+     */
+    suspend fun setRenewalPayLink(id: String, link: String?): Boolean = onCore {
+        try { renewals.setPayLink(id, link) } catch (_: os.meka.core.domain.ValidationException) { false }
+    }
     /** How many days before the due day it starts showing. */
     suspend fun setRenewalLead(id: String, days: Int) = onCore { renewals.setLead(id, days) }
     /** The cancel-by day, [daysBefore] the due day (null: none). */

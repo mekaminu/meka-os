@@ -1,4 +1,5 @@
 @preconcurrency import MekaKit
+import AppKit
 import SwiftUI
 
 /// RENEWALS on the Mac (build plan M1): the renewals and bills radar, entered by hand and synced with the Fold.
@@ -184,6 +185,10 @@ private struct RenewalDetails: View {
         if let subject = item.subject { Text(subject).font(MekaType.body).foregroundStyle(palette.textSecondary) }
         if let notes = item.notes { Text(notes).font(MekaType.body).foregroundStyle(palette.textSecondary) }
         HStack(spacing: MekaSpace.l) {
+            // Bills due: opens the page Meka saved as where he pays it; MEKA never pays.
+            if let link = item.payLink, let url = URL(string: link) {
+                Button(BillRules.shared.payLabel(link: link)) { MekaHaptics.light(); NSWorkspace.shared.open(url) }
+            }
             Button(item.doneLabel) {
                 if item.repeats == RenewalRules.shared.repeatAt(index: 0) { open = nil } // a one-off leaves the list
                 model.renewalDone(item.id)
@@ -229,11 +234,53 @@ private struct RenewalDetails: View {
                 }
         }
         if let costProblem { Text(costProblem).font(MekaType.caption).foregroundStyle(palette.critical) }
+        PayLinkField(item: item, palette: palette)
     }
 
     private var costHint: String {
         if let p = item.costPence { return "Cost (now \(RenewalRules.shared.formatPence(pence: p.int64Value)))" }
         return "Cost, e.g. 9.99"
+    }
+}
+
+/// Bills due: where Meka pays it ("octopus.energy"), so the reminder three days before can offer Pay. Return saves it;
+/// one that isn't a web address says so; Remove clears it. The line under the field cross-fades as it changes.
+private struct PayLinkField: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let item: RenewalItem
+    let palette: MekaPalette
+    @State private var text = ""
+    @State private var bad = false
+
+    var body: some View {
+        let line = BillRules.shared.linkLine(item: item, bad: bad)
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            HStack(spacing: MekaSpace.m) {
+                TextField(item.payLink.map { "Pay link (now \(BillRules.shared.site(link: $0)))" } ?? "Pay link, e.g. octopus.energy", text: $text)
+                    .textFieldStyle(.roundedBorder).font(MekaType.body).frame(maxWidth: 320)
+                    .onSubmit { save(text) }
+                    .onChange(of: text) { bad = false }
+                if item.payLink != nil {
+                    Button("Remove") { save("") }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                }
+            }
+            Text(line).font(MekaType.caption).foregroundStyle(bad ? palette.critical : palette.textTertiary)
+                .id(line).transition(.opacity)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+    }
+
+    private func save(_ link: String) {
+        let id = item.id
+        let value = String(link.trimmingCharacters(in: .whitespaces).prefix(Int(SessionRules.shared.MAX_LINK)))
+        guard !value.isEmpty || item.payLink != nil else { return }
+        Task {
+            let ok = await model.setRenewalPayLink(id, value)
+            bad = !ok
+            if ok { text = "" }
+        }
     }
 }
 

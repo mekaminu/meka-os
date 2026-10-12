@@ -12,6 +12,9 @@ import os.meka.core.domain.HomeUpkeepRules
 import os.meka.core.domain.HomeUpkeepView
 import os.meka.core.domain.UpkeepRow
 import os.meka.core.domain.CarRules
+import os.meka.core.domain.BillRules
+import os.meka.core.domain.SessionRules
+import androidx.compose.ui.platform.LocalUriHandler
 import os.meka.core.domain.CarView
 import os.meka.core.domain.MoneyDateRules
 import os.meka.core.domain.MoneyDatesView
@@ -208,9 +211,14 @@ private fun RenewalDetails(
 ) {
     var picking by rememberSaveable(item.id) { mutableStateOf(false) }
     var costError by rememberSaveable(item.id) { mutableStateOf<String?>(null) }
+    var badLink by rememberSaveable(item.id) { mutableStateOf(false) }
+    val uri = LocalUriHandler.current
+    val reduced = Meka.reducedMotion
     item.subject?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
     item.notes?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
     Actions {
+        // Bills due: opens the page Meka saved as where he pays it; MEKA never pays.
+        item.payLink?.let { link -> Action(BillRules.payLabel(link)) { tap(); runCatching { uri.openUri(link) } } }
         Action(item.doneLabel) {
             if (item.repeats == RenewalRepeat.NONE) leave { core.renewalDone(item.id) } else { tap(); act { core.renewalDone(item.id) } }
         }
@@ -234,6 +242,17 @@ private fun RenewalDetails(
         if (costError == null) act { core.setRenewalCost(item.id, text) }
     }
     costError?.let { Text(it, style = MekaType.caption, color = Meka.colors.critical) }
+    // Bills due: where he pays it (optional); the reminder three days before offers Pay when it's set.
+    Field(item.payLink?.let { "Pay link (now ${BillRules.site(it)})" } ?: "Pay link, e.g. octopus.energy") { text ->
+        val typed = text.take(SessionRules.MAX_LINK)
+        act { val ok = core.setRenewalPayLink(item.id, typed); badLink = !ok; if (ok) tap() }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        AnimatedContent(BillRules.linkLine(item, badLink), transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) }, label = "pay-link-line", modifier = Modifier.weight(1f)) { l ->
+            Text(l, style = MekaType.caption, color = if (badLink) Meka.colors.critical else Meka.colors.textTertiary)
+        }
+        if (item.payLink != null) Action("Remove") { badLink = false; act { core.setRenewalPayLink(item.id, "") } }
+    }
     if (picking) DayPickerDialog(item.dueDay, onPick = { d -> act { core.setRenewalDue(item.id, d) } }, onDismiss = { picking = false })
 }
 

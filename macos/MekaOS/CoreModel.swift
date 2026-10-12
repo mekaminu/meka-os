@@ -1056,6 +1056,18 @@ final class CoreModel {
         run { try await $0.setRenewalCost(id: id, cost: c.isEmpty ? nil : c) }
         return nil
     }
+    /// Bills due: where Meka pays it ("octopus.energy"); blank clears it. False when it isn't a web address.
+    func setRenewalPayLink(_ id: String, _ link: String) async -> Bool {
+        guard let core else { return false }
+        do {
+            let ok = try await core.setRenewalPayLink(id: id, link: link).boolValue
+            if ok { MekaHaptics.light() } else { MekaHaptics.tick() }
+            return ok
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
     func setRenewalLead(_ id: String, days: Int) { run { try await $0.setRenewalLead(id: id, days: Int32(days)) } }
     func setRenewalCancelBy(_ id: String, daysBefore: Int?) { run { try await $0.setRenewalCancelBy(id: id, daysBefore: Self.k(daysBefore)) } }
     func setRenewalKind(_ id: String, _ kind: ObligationKind) { run { try await $0.setRenewalKind(id: id, kind: kind) } }
@@ -1665,6 +1677,12 @@ final class CoreModel {
                 MekaHaptics.light()
             }
             MacNotifier.remove(key: a.key)
+            return
+        }
+        // Pay on a bill's reminder (Bills due): the saved pay link opens in the browser. MEKA never pays.
+        if a.action == MacNotifier.payAction {
+            MacNotifier.remove(key: a.key)
+            if let link = a.link, let url = URL(string: link) { NSWorkspace.shared.open(url) }
             return
         }
         // Listen on Sunday's week ahead (slice 2): MEKA comes forward with the week ahead reading itself aloud.
