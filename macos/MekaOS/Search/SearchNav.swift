@@ -39,7 +39,7 @@ enum SearchNav {
     static func hint(_ target: SearchTarget) -> String? {
         switch target {
         case .task: "Opens the task"
-        case .listsWaiting: "Opens Waiting for"
+        case .listsWaiting: "Opens Promises"
         case .listsSomeday: "Opens Someday"
         case .listsDecisions: "Opens Decisions"
         case .listsRenewals: "Opens Renewals"

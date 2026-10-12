@@ -33,6 +33,7 @@ class SearchTest {
             tasks = dev.tasks.all(),
             events = events,
             waiting = l.waitingItems(),
+            promised = l.promisedItems(),
             decisions = l.decisionItems(includeSuperseded = true),
             renewals = Renewals(dev.replica, ::ids, { world.clock.nowMs }).view().all,
             habits = g.habits,
@@ -222,5 +223,28 @@ class SearchTest {
         val v = search("passport")
         assertEquals(listOf(SearchKind.TASK, SearchKind.WAITING), v.groups.map { it.kind })
         assertEquals(v.hits.map { it.id }, search("passport", dev = mac).hits.map { it.id }, "both devices find the same")
+    }
+
+    @Test
+    fun promisesAreFoundByTitleOrPersonBeforeWaitingFor() {
+        lists.addPromise("Fix the bike", to = "Rex", byInDays = 0)
+        lists.addPromise("Bike lights", to = "Logan")
+        lists.addWaiting("Bike pump", who = "Rex")
+        val v = search("bike")
+        assertEquals(listOf(SearchKind.PROMISED, SearchKind.WAITING), v.groups.map { it.kind })
+        val promised = v.groups.first()
+        assertEquals("You promised", promised.label)
+        assertEquals(listOf("Bike lights", "Fix the bike"), promised.hits.map { it.title }, "a title starting with the word comes first")
+        assertTrue(promised.hits.all { it.target == SearchTarget.LISTS_WAITING })
+
+        val rex = search("rex")
+        assertEquals(listOf("Fix the bike"), rex.groups.first().hits.map { it.title })
+        assertEquals("Rex · due today", rex.groups.first().hits.single().detail)
+        assertEquals(listOf(SearchKind.PROMISED, SearchKind.WAITING), rex.groups.map { it.kind })
+
+        val kept = lists.promisedItems().single { it.title == "Fix the bike" }.id
+        lists.kept(kept)
+        assertEquals(listOf(SearchKind.WAITING), search("rex").groups.map { it.kind }, "a kept promise isn't found")
+        assertEquals("You promised", AskFieldRules.kindWord(SearchKind.PROMISED))
     }
 }

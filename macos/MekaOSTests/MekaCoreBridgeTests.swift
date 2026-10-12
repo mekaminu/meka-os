@@ -487,6 +487,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(task.target, .task)
         XCTAssertEqual(task.task?.id, id)
         XCTAssertEqual(v.groups.last?.hits.first?.target, .listsWaiting)
+        // People, slice 3b: a promise is found by its title or the person, in its own group before Waiting for.
+        _ = try await core.addPromise(title: "Send the passport form", to: "Jeanette", byInDays: KotlinInt(int: 0))
+        try await core.search(query: "passp")
+        XCTAssertEqual(core.searchView.value.groups.map(\.label), ["Tasks", "You promised", "Waiting for"])
+        try await core.search(query: "jean")
+        let promised = try XCTUnwrap(core.searchView.value.groups.first?.hits.first)
+        XCTAssertEqual(promised.kind, .promised)
+        XCTAssertEqual(promised.detail, "Jeanette · due today")
+        XCTAssertEqual(promised.target, .listsWaiting)
         try await core.search(query: "")
         XCTAssertFalse(core.searchView.value.active)
     }

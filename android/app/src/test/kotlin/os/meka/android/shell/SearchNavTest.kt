@@ -20,6 +20,7 @@ class SearchNavTest {
         assertEquals(ShellDestination.LISTS, SearchNav.destination(SearchTarget.LISTS_SHOPPING))
         assertEquals(ListTab.SHOPPING, SearchNav.listTab(SearchTarget.LISTS_SHOPPING))
         assertEquals("Opens Shopping", SearchNav.hint(SearchTarget.LISTS_SHOPPING))
+        assertEquals("Opens Promises", SearchNav.hint(SearchTarget.LISTS_WAITING))
         assertEquals(ShellDestination.ASK, SearchNav.destination(SearchTarget.ERRANDS))
         assertNull(SearchNav.listTab(SearchTarget.ERRANDS))
         assertEquals("Opens Errands", SearchNav.hint(SearchTarget.ERRANDS))

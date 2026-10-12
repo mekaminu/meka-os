@@ -34,7 +34,7 @@ object SearchNav {
     /** Screen-reader hint for a result. */
     fun hint(target: SearchTarget): String? = when (target) {
         SearchTarget.TASK -> "Opens the task"
-        SearchTarget.LISTS_WAITING -> "Opens Waiting for"
+        SearchTarget.LISTS_WAITING -> "Opens Promises"
         SearchTarget.LISTS_SOMEDAY -> "Opens Someday"
         SearchTarget.LISTS_DECISIONS -> "Opens Decisions"
         SearchTarget.LISTS_RENEWALS -> "Opens Renewals"

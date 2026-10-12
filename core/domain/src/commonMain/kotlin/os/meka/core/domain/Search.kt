@@ -1,7 +1,8 @@
 package os.meka.core.domain
 
 /**
- * Search everything (build plan M1): tasks (open, Someday and done), calendar events, Waiting for, decisions (replaced
+ * Search everything (build plan M1): tasks (open, Someday and done), calendar events, promises both ways (what Meka
+ * promised, People slice 3b, and Waiting for), decisions (replaced
  * ones too), renewals and bills, the shopping list, errands, appointments, habits and goals, searched on the device over what is already synced. Documents join
  * when the Vault lands.
  *
@@ -14,6 +15,8 @@ package os.meka.core.domain
 enum class SearchKind(val label: String) {
     TASK("Tasks"),
     EVENT("Calendar"),
+    /** What Meka promised someone (People, slice 3b); opens Lists → Promises like Waiting for. */
+    PROMISED("You promised"),
     WAITING("Waiting for"),
     DECISION("Decisions"),
     RENEWAL("Renewals and bills"),
@@ -109,6 +112,8 @@ data class SearchSources(
     val errands: List<ErrandItem> = emptyList(),
     /** Appointment nudges: the dentist, the optician, a haircut… */
     val appointments: List<AppointmentItem> = emptyList(),
+    /** What Meka promised someone, still open (People, slice 1). */
+    val promised: List<PromiseItem> = emptyList(),
 )
 
 object SearchRules {
@@ -281,6 +286,11 @@ object Search {
                 listOf(SearchRules.Field(e.title, 3), SearchRules.Field(e.location, 2), SearchRules.Field(e.calendarName, 1)))
         }
 
+        // You promised: due first, then by the day promised, then undated (the list's own order).
+        sources.promised.forEachIndexed { i, p ->
+            add(p.id, SearchKind.PROMISED, p.title, p.meta, SearchTarget.LISTS_WAITING, null, i.toLong(),
+                listOf(SearchRules.Field(p.title, 3), SearchRules.Field(p.to, 2), SearchRules.Field(p.notes, 1, snippetSource = true)))
+        }
         sources.waiting.forEach { w ->
             add(w.id, SearchKind.WAITING, w.title, w.meta, SearchTarget.LISTS_WAITING, null, -w.sinceMs,
                 listOf(SearchRules.Field(w.title, 3), SearchRules.Field(w.who, 2), SearchRules.Field(w.notes, 1, snippetSource = true)))

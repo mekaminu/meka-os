@@ -4421,6 +4421,7 @@ class MekaCore(
             shopping = _lists.value.shopping.let { it.toBuy + it.got },
             errands = errands.items(),
             appointments = appointments.items(),
+            promised = _lists.value.promised,
         )
         return Search.run(searchQuery, sources, nowMs(), ZoneCalendar(timeZone))
     }

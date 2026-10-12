@@ -55,6 +55,7 @@ object AskFieldRules {
     fun kindWord(kind: SearchKind): String = when (kind) {
         SearchKind.TASK -> "Task"
         SearchKind.EVENT -> "Event"
+        SearchKind.PROMISED -> "You promised"
         SearchKind.WAITING -> "Waiting for"
         SearchKind.DECISION -> "Decision"
         SearchKind.RENEWAL -> "Renewal"

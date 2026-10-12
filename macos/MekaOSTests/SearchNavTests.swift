@@ -16,6 +16,7 @@ final class SearchNavTests: XCTestCase {
         XCTAssertEqual(SearchNav.destination(.listsShopping), .lists)
         XCTAssertEqual(SearchNav.listTab(.listsShopping), .shopping)
         XCTAssertEqual(SearchNav.hint(.listsShopping), "Opens Shopping")
+        XCTAssertEqual(SearchNav.hint(.listsWaiting), "Opens Promises")
         XCTAssertNil(SearchNav.listTab(.goals))
         // Errands by location, slice 2b: an errand opens Ask → More → Errands.
         XCTAssertEqual(SearchNav.destination(.errands), .ask)
