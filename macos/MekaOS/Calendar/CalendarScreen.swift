@@ -271,14 +271,19 @@ private struct AgendaSectionView: View {
                 }
                 // Work on the heading (Fold review 2026-10-12, polish 5): a thin bar and "Work 09:00–17:30" at its end,
                 // lit "Work until 17:30" while at work, instead of a band under every day; it cross-fades as it changes.
+                // Fold review 17:56, item 4: pinned to the trailing edge on every day (it never gives way to the
+                // subtitle), in the smaller micro type and a step dimmer than the subtitle off work hours.
                 if let work = section.workLabel {
                     Spacer(minLength: MekaSpace.xs)
+                    let tint = section.workRunning ? palette.accent : palette.textTertiary.opacity(0.75)
                     HStack(spacing: MekaSpace.xxs) {
-                        RoundedRectangle(cornerRadius: 1).fill(section.workRunning ? palette.accent : palette.textTertiary)
-                            .frame(width: 2, height: 10)
-                        Text(work).font(MekaType.caption)
-                            .foregroundStyle(section.workRunning ? palette.accent : palette.textTertiary).lineLimit(1)
+                        RoundedRectangle(cornerRadius: 1).fill(tint)
+                            .frame(width: 2, height: 8)
+                        Text(work).font(MekaType.micro).tracking(MekaType.microTracking)
+                            .foregroundStyle(tint).lineLimit(1)
                     }
+                    .fixedSize()
+                    .layoutPriority(1)
                     .accessibilityElement(children: .combine)
                     .id(work)
                     .transition(.opacity)

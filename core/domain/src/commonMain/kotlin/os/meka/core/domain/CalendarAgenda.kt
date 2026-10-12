@@ -177,6 +177,8 @@ object CalendarAgenda {
         days: Int = DAYS,
         hidden: Set<String> = emptySet(),
         work: WorkHours? = null,
+        /** Whom Meka set for each club series ([EventMarks.clubChildren], [ClubChildRules]). */
+        children: Map<String, String> = emptyMap(),
     ): CalendarView {
         val today = calendar.epochDayOf(nowMs)
         val lastDay = today + days - 1
@@ -202,7 +204,7 @@ object CalendarAgenda {
 
             data class Item(val row: TimelineRow, val start: Long, val end: Long, val isEvent: Boolean)
             // An event during that day's work is marked (Fold review 2026-10-12, bug 4).
-            val clashes = work?.let { WorkClashRules.clashes(dayEvents, it.blocks(d, calendar), calendar) }.orEmpty().associateBy { it.eventId }
+            val clashes = work?.let { WorkClashRules.clashes(dayEvents, it.blocks(d, calendar), calendar, children) }.orEmpty().associateBy { it.eventId }
             val items = buildList {
                 dayEvents.filter { !it.allDay }.forEach { e ->
                     val startsBefore = e.startAtMs < w.startMs
@@ -216,7 +218,7 @@ object CalendarAgenda {
                     }
                     val start = maxOf(e.startAtMs, w.startMs)
                     val running = e.startAtMs <= nowMs && e.endAtMs > nowMs
-                    add(Item(TimelineRow("e-" + e.id, TimelineKind.EVENT, time, e.title, eventDetail(e), null, e, running, start, clash = clashes[e.id]?.mark), start, e.endAtMs, true))
+                    add(Item(TimelineRow("e-" + e.id, TimelineKind.EVENT, time, e.title, eventDetail(e, ClubChildRules.line(e, children, calendar)), null, e, running, start, clash = clashes[e.id]?.mark), start, e.endAtMs, true))
                 }
                 planned.filter { it.scheduledAtMs!! in w }.forEach { t ->
                     val start = t.scheduledAtMs!!
@@ -389,7 +391,9 @@ object CalendarAgenda {
 
     private fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
 
-    private fun eventDetail(e: CalendarEvent): String? = listOfNotNull(
+    /** "Rex · Biggleswade Park" · "Rex or Logan? · …" for a club session ([ClubChildRules.line]) first, then the place. */
+    private fun eventDetail(e: CalendarEvent, child: String? = null): String? = listOfNotNull(
+        child,
         e.location,
         when {
             e.alsoOn.isNotEmpty() -> e.calendarLabels.joinToString(" · ") // one row for several calendars

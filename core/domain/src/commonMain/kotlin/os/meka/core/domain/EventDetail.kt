@@ -85,6 +85,14 @@ data class EventDetailView(
     val result: FixtureResult? = null,
     val resultLine: String? = null,
     val resultNote: String? = null,
+    /**
+     * Fold review 17:56, slice 3: a club session whose title and calendar don't say whose it is offers the children
+     * ("Rex", "Logan") to set once for its series; empty otherwise. [clubChild] is who is set (null: nobody yet) and
+     * [clubChildLine] "For Rex · every Wed 16:55".
+     */
+    val clubChildChoices: List<String> = emptyList(),
+    val clubChild: String? = null,
+    val clubChildLine: String? = null,
 )
 
 /**
@@ -232,6 +240,9 @@ object EventDetails {
             result = marks.results[e.id],
             resultLine = FootballRules.resultLine(marks.results[e.id]),
             resultNote = marks.results[e.id]?.note,
+            clubChildChoices = if (ClubChildRules.canSet(e)) ClubChildRules.NAMES else emptyList(),
+            clubChild = if (ClubChildRules.canSet(e)) marks.clubChildren[ClubChildRules.seriesId(e, calendar)] else null,
+            clubChildLine = ClubChildRules.setLine(e, marks.clubChildren, calendar),
         )
     }
 

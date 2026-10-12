@@ -118,7 +118,8 @@ class DuplicateEventsTest {
         val rows = tl.rows.filter { it.kind == TimelineKind.EVENT }
         assertEquals(listOf("e-c"), rows.map { it.id })
         assertEquals("Training - 3G", rows.single().title)
-        assertEquals("SG18 · Club · Personal · Kids", rows.single().detail)
+        // A club session names the child first (Fold review 17:56, slice 3: nobody set yet).
+        assertEquals("Rex or Logan? · SG18 · Club · Personal · Kids", rows.single().detail)
         // A lone event keeps its quiet line.
         assertEquals("Camp Nou · Outlook", TimelineRules.eventDetail(meka.copy(location = "Camp Nou", provider = "microsoft")))
     }
@@ -144,7 +145,7 @@ class DuplicateEventsTest {
         val v = CalendarAgenda.build(emptyList(), listOf(e1, e2), nowMs, cal)
         val rows = v.sections.flatMap { it.rows }.filter { it.kind == TimelineKind.EVENT }
         assertEquals(listOf("e-a"), rows.map { it.id })
-        assertEquals("Personal · Kids", rows.single().detail)
+        assertEquals("Rex or Logan? · Personal · Kids", rows.single().detail)
         val hiddenView = CalendarAgenda.build(emptyList(), listOf(e1, e2), nowMs, cal, hidden = setOf("b"))
         assertTrue(hiddenView.sections.flatMap { it.rows }.none { it.kind == TimelineKind.EVENT })
         assertEquals(listOf("a"), hiddenView.sections.flatMap { it.hidden }.map { it.id })

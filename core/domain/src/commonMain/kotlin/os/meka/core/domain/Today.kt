@@ -113,6 +113,8 @@ object TodayProjection {
         sessions: List<BookedSession> = emptyList(),
         /** Work hours ([WorkHours]): a quiet block on the timeline and not free time on the ring. Null: none shown. */
         work: WorkHours? = null,
+        /** Whom Meka set for each club series ([EventMarks.clubChildren]): a session's row names the child. */
+        children: Map<String, String> = emptyMap(),
     ): Today {
         val workBlocks = work?.blocks(today.epochDay, calendar).orEmpty()
         val open = tasks.filter { (it.lifecycle == Lifecycle.ACTIVE || it.lifecycle == Lifecycle.INBOX) && !it.waitsForItsDay(today.epochDay) }
@@ -154,6 +156,7 @@ object TodayProjection {
             sessions = sessions,
             work = workBlocks,
             anytimeLeft = unscheduled.size,
+            children = children,
         )
         val ring = DayRingRules.build(
             planned = (needs.map { it.task } + listOfNotNull(upNext) + yourDay).filter { it.scheduledAtMs != null },

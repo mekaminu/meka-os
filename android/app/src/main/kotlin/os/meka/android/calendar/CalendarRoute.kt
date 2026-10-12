@@ -384,8 +384,11 @@ private fun AgendaList(
 
 /**
  * "Today" with "Tuesday 6 October" beside it; a free stretch is one quiet line. On a work day the heading carries a
- * quiet label at its end, a thin bar and "Work 09:00–17:30" (Fold review 2026-10-12, polish 5: the Work row under every
- * day read as an event), lit "Work until 17:30" while at work; it cross-fades as it changes.
+ * quiet label pinned to the right edge, a thin bar and "Work 09:00–17:30" (Fold review 2026-10-12, polish 5: the Work
+ * row under every day read as an event), lit "Work until 17:30" while at work; it cross-fades as it changes.
+ * Fold review 17:56, item 4: the label sat at a different x on every day (the heading's subtitle and the spacer
+ * shared the free width), so the heading now takes the width and the label ends on the same column every day,
+ * in the smaller `micro` type and dimmer than the heading's subtitle.
  */
 @Composable
 private fun SectionHeader(s: AgendaSection, modifier: Modifier) {
@@ -394,28 +397,32 @@ private fun SectionHeader(s: AgendaSection, modifier: Modifier) {
         modifier.fillMaxWidth().padding(top = if (free) MekaSpace.xs else MekaSpace.l, bottom = MekaSpace.xs),
         verticalAlignment = Alignment.Bottom,
     ) {
-        Text(
-            s.title, style = if (free) MekaType.body else MekaType.itemTitle,
-            color = if (free) Meka.colors.textTertiary else Meka.colors.textPrimary,
-        )
-        s.subtitle?.let {
-            Spacer(Modifier.width(MekaSpace.xs))
-            Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false))
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.Bottom) {
+            Text(
+                s.title, style = if (free) MekaType.body else MekaType.itemTitle,
+                color = if (free) Meka.colors.textTertiary else Meka.colors.textPrimary,
+            )
+            s.subtitle?.let {
+                Spacer(Modifier.width(MekaSpace.xs))
+                Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         s.workLabel?.let { work ->
-            Spacer(Modifier.weight(1f).widthIn(min = MekaSpace.xs))
+            Spacer(Modifier.width(MekaSpace.xs))
             Crossfade(work to s.workRunning, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "work-label") { (label, on) ->
+                val tint = if (on) Meka.colors.accent else Meka.colors.textTertiary.copy(alpha = WORK_LABEL_DIM)
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) {}) {
-                    Box(Modifier.width(2.dp).height(10.dp).clip(RoundedCornerShape(1.dp))
-                        .background(if (on) Meka.colors.accent else Meka.colors.textTertiary))
+                    Box(Modifier.width(2.dp).height(8.dp).clip(RoundedCornerShape(1.dp)).background(tint))
                     Spacer(Modifier.width(MekaSpace.xxs))
-                    Text(label, style = MekaType.caption, color = if (on) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1)
+                    Text(label, style = MekaType.micro, color = tint, maxLines = 1)
                 }
             }
         }
     }
 }
+
+/** The Work label off work hours sits a step below the subtitle's tertiary text (Fold review 17:56, item 4). */
+private const val WORK_LABEL_DIM = 0.75f
 
 /**
  * An event: context, so the regular body weight, after its calendar's colour dot (dimmed once it has ended). Fixtures

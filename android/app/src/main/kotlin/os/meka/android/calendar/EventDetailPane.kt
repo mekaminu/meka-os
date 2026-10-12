@@ -273,6 +273,19 @@ private fun DetailContent(
                 }
             }
         }
+        // Fold review 17:56, item 4: whose club session this is, set once for the whole series (every Wed 16:55);
+        // tapping the lit name again clears it. The Calendar and Today name the child from then on.
+        if (d.clubChildChoices.isNotEmpty()) {
+            val names = d.clubChildChoices
+            val current = d.clubChild?.let { names.indexOf(it) + 1 } ?: 0
+            ReminderChips("Whose is it? · every session", names.indices.map { it + 1 }, current, { names[it - 1] }, 1) { i ->
+                haptics.tick()
+                scope.launch {
+                    val saved = runCatching { core.setClubChild(event, if (i == 0) null else names[i - 1]) }.getOrNull() ?: return@launch
+                    undo?.show(saved.line) { core.undoClubChild(saved) }
+                }
+            }
+        }
         // Remind me / Leave by: a heads-up through the notification governor (quiet hours apply).
         if (d.remindChoices.isNotEmpty() || d.remindMin != 0) {
             ReminderChips("Remind me", d.remindChoices, d.remindMin, { "$it min" }, 1) { m ->

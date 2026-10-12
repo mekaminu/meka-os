@@ -187,6 +187,8 @@ object TimelineRules {
         work: List<WorkBlock> = emptyList(),
         /** Anytime tasks still to do today, Up next's included (the now line counts them at work: "4 anytime tasks"). */
         anytimeLeft: Int = anytime.size,
+        /** Whom Meka set for each club series ([ClubChildRules]): the clash asks "who's taking Rex?", the row names him. */
+        children: Map<String, String> = emptyMap(),
     ): DayTimeline {
         fun hhmm(ms: Long) = LocalClock.formatMinute(calendar.minuteOfDay(ms))
 
@@ -200,12 +202,12 @@ object TimelineRules {
         data class Item(val row: TimelineRow, val start: Long, val end: Long, val isEvent: Boolean) {
             val isWork: Boolean get() = row.kind == TimelineKind.WORK
         }
-        val clashes = WorkClashRules.clashes(dayEvents, work, calendar).associateBy { it.eventId }
+        val clashes = WorkClashRules.clashes(dayEvents, work, calendar, children).associateBy { it.eventId }
         val items = buildList {
             dayEvents.filter { !it.allDay }.forEach { e ->
                 val start = maxOf(e.startAtMs, today.startMs)
                 val time = if (e.startAtMs < today.startMs) "Until ${hhmm(e.endAtMs)}" else "${hhmm(e.startAtMs)}–${hhmm(e.endAtMs)}"
-                val detail = eventDetail(e)
+                val detail = listOfNotNull(ClubChildRules.line(e, children, calendar), eventDetail(e)).joinToString(" · ").ifEmpty { null }
                 val running = e.startAtMs <= nowMs && e.endAtMs > nowMs
                 val row = TimelineRow("e-" + e.id, TimelineKind.EVENT, time, e.title, detail, null, e, running, start, clash = clashes[e.id]?.mark)
                 add(Item(row, start, e.endAtMs, true))

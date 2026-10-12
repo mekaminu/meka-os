@@ -1066,6 +1066,23 @@ class MekaCore(
         os.meka.core.domain.MatchSaved(event.id, f.savedLine(r), before)
     }
 
+    /**
+     * Fold review 17:56, slice 3: whose club session [event]'s whole series is ([child] "Rex"; null clears it), so the
+     * Calendar and Today name him and a clash with work asks "who's taking Rex?". Returns the undo bar's line and who
+     * it was before ([undoClubChild]), or null when the session names its child itself.
+     */
+    suspend fun setClubChild(event: os.meka.core.domain.CalendarEvent, child: String?): os.meka.core.domain.ClubChildSaved? = onCore {
+        if (!os.meka.core.domain.ClubChildRules.canSet(event)) return@onCore null
+        val before = eventActions.setClubChild(event, child)
+        os.meka.core.domain.ClubChildSaved(event, os.meka.core.domain.ClubChildRules.savedLine(event, child, ZoneCalendar(timeZone)), before)
+    }
+
+    /** Undo for [setClubChild]: whoever was set before comes back (nobody, if nobody was). */
+    suspend fun undoClubChild(saved: os.meka.core.domain.ClubChildSaved) = onCore {
+        eventActions.setClubChild(saved.event, saved.previous)
+        Unit
+    }
+
     /** Undo for [saveMatchResult]: what was kept before comes back (nothing, if nothing was). */
     suspend fun undoMatchResult(saved: os.meka.core.domain.MatchSaved) = onCore {
         eventActions.setResult(saved.eventId, saved.previous)
@@ -4868,7 +4885,7 @@ class MekaCore(
         _activity.value = activity.view()
         _calendar.value = CalendarAgenda.build(
             all, marks.forCalendarTab(allEvents), nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden,
-            work = hoursOf(workState, todayEpochDay()),
+            work = hoursOf(workState, todayEpochDay()), children = marks.clubChildren,
         )
         _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars, marks.shownCalendars)
         val editsNow = calendarEdits.all()
@@ -4988,7 +5005,7 @@ class MekaCore(
         val day = dayWindow(now)
         return TodayProjection.project(
             all, now, day, dayEvents, ZoneCalendar(timeZone), _sessions.value.todayBlocks(day.epochDay, now),
-            work = work.hours(localClock(), day.epochDay),
+            work = work.hours(localClock(), day.epochDay), children = _eventMarks.value.clubChildren,
         )
     }
 

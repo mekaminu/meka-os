@@ -1678,6 +1678,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(EventMarks.companion.NONE.resultOf(eventId: "x"))
     }
 
+    func testClubChildReachesSwift() {
+        // Fold review 17:56, slice 3: the children offered on a club session and the agenda's ask reach the Mac;
+        // nothing is set until Meka picks one.
+        XCTAssertEqual(ClubChildRules.shared.NAMES, ["Rex", "Logan"])
+        XCTAssertEqual(ClubChildRules.shared.ASK, "Rex or Logan?")
+        XCTAssertEqual(EntityTypes.shared.CLUB_SERIES, "club_series")
+        XCTAssertTrue(EventMarks.companion.NONE.clubChildren.isEmpty)
+    }
+
     func testShoppingFromAskReachesSwift() async throws {
         // "Add milk to shopping" in Ask and Talk: the card, its undo and Search's Shopping kind reach the Mac.
         let card = AskRules.shared.cardOf(p: AskProposalAddShopping(items: ["milk", "eggs"]), today: 0)

@@ -60,6 +60,8 @@ data class EventMarks(
      * holds the travel time worked out from it.
      */
     val drives: Map<String, DriveFollow> = emptyMap(),
+    /** Club series id ([ClubChildRules.seriesId]) → whose session it is, as Meka set it (Fold review 17:56, slice 3). */
+    val clubChildren: Map<String, String> = emptyMap(),
 ) {
     /** For Swift: the result kept for [eventId], or null. */
     fun resultOf(eventId: String): FixtureResult? = results[eventId]
@@ -159,7 +161,8 @@ class EventActions(
         val driveKeys = entities.mapNotNull { e -> e[EventMarkFields.TRAVEL_DRIVE_KEY].textOrNull?.let { e.ref.entityId to it } }.toMap()
         val drives = TravelRules.follow(setTravel, driveKeys, routes)
         val travel = setTravel + drives.mapValues { TravelRules.travelMin(it.value.driveMin) }
-        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), travel, calendars, leaveAlarms, shown, kit, venues, results, routes, drives)
+        val clubChildren = ClubChildRules.read(replica.entities(EntityTypes.CLUB_SERIES).map { it.ref.entityId to it[ClubSeriesFields.CHILD].textOrNull })
+        return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), travel, calendars, leaveAlarms, shown, kit, venues, results, routes, drives, clubChildren)
     }
 
     private fun resultIn(e: os.meka.core.sync.EntitySnapshot): FixtureResult? {
@@ -195,6 +198,19 @@ class EventActions(
                 EventMarkFields.RESULT_AT to (r?.atMs ?: nowMs()).fv(),
             ),
         )
+        return before
+    }
+
+    /**
+     * Fold review 17:56, slice 3: [child] ("Rex"; null clears it) is whose club session [e]'s whole series is. Returns
+     * who it was before; nothing is written for a session that names its child itself, for a name that isn't a child's,
+     * or when nothing changed.
+     */
+    fun setClubChild(e: CalendarEvent, child: String?): String? {
+        val id = ClubChildRules.seriesId(e, calendar)
+        val before = replica.entity(EntityTypes.CLUB_SERIES, id)?.get(ClubSeriesFields.CHILD)?.textOrNull?.takeIf { it in ClubChildRules.NAMES }
+        if (!ClubChildRules.canSet(e) || (child != null && child !in ClubChildRules.NAMES) || child == before) return before
+        replica.commitLocal(EntityTypes.CLUB_SERIES, id, mapOf(ClubSeriesFields.CHILD to child.fv(), ClubSeriesFields.SET_AT to nowMs().fv()))
         return before
     }
 

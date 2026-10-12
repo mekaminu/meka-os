@@ -2326,6 +2326,20 @@ final class CoreModel {
         }
     }
 
+    /// Fold review 17:56, slice 3: whose club session the event's whole series is ("Rex"; nil clears it), so the
+    /// Calendar and Today name the child; Undo puts back who was set. The event crosses to the core once; the saved
+    /// value comes back once for its undo.
+    func setClubChild(_ event: CalendarEvent, _ child: String?) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do {
+                guard let saved = try await core.setClubChild(event: event, child: child) else { return }
+                offerEventUndo(saved.line, .clubChild(saved))
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Weekend football, slice 2: "Leave by 09:15 · as last time" on a club fixture sets the travel time (and the alarm)
     /// Meka set at that ground before ("Leave by 09:15 · 40 min away · alarm"); Undo takes them off. The event is
     /// handed to the core once.
@@ -2457,6 +2471,7 @@ final class CoreModel {
         case .lastLeaveBy(let id): run { try await $0.undoLastLeaveBy(eventId: id) }
         case .habit(let id, let done): run { try await $0.setHabitDone(id: id, done: done) }
         case .matchResult(let saved): run { try await $0.undoMatchResult(saved: saved) }
+        case .clubChild(let saved): run { try await $0.undoClubChild(saved: saved) }
         case .decision(let undo): run { _ = try await $0.undoDecision(undo: undo) }
         case .request(let done): run { _ = try await $0.undoRequest(done: done) }
         case .schoolCover(let done): run { _ = try await $0.undoSchoolCover(done: done) }
@@ -3417,6 +3432,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case habit(String, Bool)
         /// "How did it go?" on a club fixture: what was kept before comes back.
         case matchResult(MatchSaved)
+        /// "Whose is it?" on a club session: whoever was set for its series before comes back.
+        case clubChild(ClubChildSaved)
         /// Done / Tomorrow from the Needs you stack.
         case decision(DecisionUndo)
         /// A card set aside with Later comes back to the front.

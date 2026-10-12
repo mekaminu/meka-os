@@ -171,6 +171,22 @@ struct EventDetailSheet: View {
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: d.edit?.clash?.editId)
 
+        // Fold review 17:56, item 4: whose club session this is, set once for every session of the series.
+        if !d.clubChildChoices.isEmpty {
+            Picker("Whose is it?", selection: Binding(
+                get: { d.clubChild ?? "" },
+                set: { model.setClubChild(event, $0.isEmpty ? nil : $0) }
+            )) {
+                Text("Not set").tag("")
+                ForEach(d.clubChildChoices, id: \.self) { name in Text(name).tag(name) }
+            }
+            .pickerStyle(.segmented)
+            .fixedSize()
+            .controlSize(.small)
+            .help("Set once: every session at this time names them, and a clash with work asks who's taking them")
+            .staggeredAppear(1)
+        }
+
         // Remind me / Leave by: a heads-up through the notification governor (quiet hours apply).
         let remindChoices = d.remindChoices.map { $0.int32Value }
         let travelChoices = d.travelChoices.map { $0.int32Value }

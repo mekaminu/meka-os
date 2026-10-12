@@ -64,16 +64,15 @@ object WorkClashRules {
     /** Words that make an event something a child is taken to. */
     private val COVER_WORDS = setOf("TRAINING", "PRACTICE")
 
-    fun clash(e: CalendarEvent, blocks: List<WorkBlock>, calendar: LocalCalendar): WorkClash? {
+    fun clash(e: CalendarEvent, blocks: List<WorkBlock>, calendar: LocalCalendar, children: Map<String, String> = emptyMap()): WorkClash? {
         if (e.allDay || e.isFixture || e.provider == "microsoft") return null
         val end = maxOf(e.endAtMs, e.startAtMs + 1)
         val w = blocks.firstOrNull { it.endMs > it.startMs && e.startAtMs < it.endMs && end > it.startMs } ?: return null
         val words = e.title.split(Regex("[^A-Za-z0-9]+")).map { it.uppercase() }
         val club = FootballRules.isClubFixture(e)
         val cover = club || words.any { it in COVER_WORDS }
-        val child = if (!cover) null else FootballRules.child(e)
-            ?: listOfNotNull(e.title, e.calendarTitle, e.calendarName).firstNotNullOfOrNull { FootballRules.ageGroup(it) }
-                ?.let { FootballRules.CHILDREN[it] }
+        // The age group in the title or calendar, else whom Meka set for the series ([ClubChildRules]).
+        val child = if (!cover) null else ClubChildRules.child(e, children, calendar)
         return WorkClash(
             eventId = e.id, title = e.title.trim(), startMs = e.startAtMs,
             startMinute = calendar.minuteOfDay(e.startAtMs), child = child, needsCover = cover,
@@ -82,7 +81,7 @@ object WorkClashRules {
     }
 
     /** Every clash among [events] with [blocks], in start order. */
-    fun clashes(events: List<CalendarEvent>, blocks: List<WorkBlock>, calendar: LocalCalendar): List<WorkClash> =
+    fun clashes(events: List<CalendarEvent>, blocks: List<WorkBlock>, calendar: LocalCalendar, children: Map<String, String> = emptyMap()): List<WorkClash> =
         if (blocks.isEmpty()) emptyList()
-        else events.mapNotNull { clash(it, blocks, calendar) }.distinctBy { it.eventId }.sortedWith(compareBy({ it.startMs }, { it.title }))
+        else events.mapNotNull { clash(it, blocks, calendar, children) }.distinctBy { it.eventId }.sortedWith(compareBy({ it.startMs }, { it.title }))
 }
