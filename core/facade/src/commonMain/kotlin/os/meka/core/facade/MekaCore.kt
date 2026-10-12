@@ -1737,7 +1737,17 @@ class MekaCore(
      * One typed line: "Dentist every 6 months, last 12 Apr", "haircut every 6 weeks", "dentist booked Tue 20 Oct
      * 9:30". Refused (nothing written) when it names nothing, a date can't be read, or a new one says no interval.
      */
-    suspend fun typeAppointment(text: String): os.meka.core.domain.AppointmentSaid = onCore { appointments.type(text) }
+    suspend fun typeAppointment(text: String): os.meka.core.domain.AppointmentSaid = onCore {
+        val before = appointments.items().associateBy { it.id }
+        val said = appointments.type(text)
+        // Slice 2c: a booking typed here goes in the calendar too, like Booked… (no Undo here: remove it from the event).
+        val id = said.id ?: return@onCore said
+        if (said.refused) return@onCore said
+        val was = before[id]
+        val item = appointments.items().firstOrNull { it.id == id } ?: return@onCore said
+        if (item.bookedDay == null || (was != null && was.bookedDay == item.bookedDay && was.bookedMinute == item.bookedMinute)) return@onCore said
+        appointmentToCalendar(item, was)?.let { (_, finish) -> said.copy(line = finish(said.line)) } ?: said
+    }
 
     /** Adds a common appointment (Dentist, Optician, Haircut…) with its usual interval. */
     suspend fun addAppointmentPreset(presetId: String): os.meka.core.domain.AppointmentSaid = onCore { appointments.addPreset(presetId) }
@@ -1746,13 +1756,53 @@ class MekaCore(
     suspend fun appointmentWent(id: String): os.meka.core.domain.AppointmentDone? = onCore { appointments.went(id) }
 
     /** Booked…: the day and time typed ("Tue 20 Oct 9:30"); refused when it can't be read. MEKA books nothing. */
-    suspend fun bookAppointment(id: String, whenText: String): os.meka.core.domain.AppointmentDone? = onCore { appointments.book(id, whenText) }
+    suspend fun bookAppointment(id: String, whenText: String): os.meka.core.domain.AppointmentDone? = onCore {
+        val was = appointments.items().firstOrNull { it.id == id }
+        val done = appointments.book(id, whenText) ?: return@onCore null
+        if (done.refused) return@onCore done
+        val item = appointments.items().firstOrNull { it.id == id } ?: return@onCore done
+        // Slice 2c: into Google or Outlook when an account allows editing (five seconds' Undo, taken back with the booking).
+        appointmentToCalendar(item, was)?.let { (editId, finish) -> done.copy(line = finish(done.line), eventEditId = editId) } ?: done
+    }
+
+    /**
+     * Appointment nudges, slice 2c: puts [item]'s booked visit in Meka's calendar through calendar editing, when an
+     * account allows editing and the visit isn't there already. [was] is the appointment before this booking: when its
+     * old booking is an event MEKA can edit, that event moves instead of a second one being added. Returns the edit's
+     * id and how to finish the undo bar's line; null when nothing was sent (Today's timeline still shows the visit).
+     */
+    private fun appointmentToCalendar(
+        item: os.meka.core.domain.AppointmentItem, was: os.meka.core.domain.AppointmentItem?,
+    ): Pair<String, (String) -> String>? {
+        val cal = ZoneCalendar(timeZone)
+        val rules = os.meka.core.domain.AppointmentCalendarRules
+        val draft = rules.draft(item, cal) ?: return null
+        val inCalendar = currentEvents()
+        if (inCalendar.any { rules.matches(item, it, cal) }) return null
+        val old = was?.takeIf { it.bookedDay != null }?.let { w -> inCalendar.firstOrNull { rules.matches(w, it, cal) && canEditEvent(it) } }
+        val result = if (old != null) {
+            calendarEdits.change(old, os.meka.core.domain.CalendarEditRules.draftOf(old).copy(
+                startAtMs = draft.startAtMs, endAtMs = draft.endAtMs, allDay = draft.allDay,
+            ))
+        } else {
+            val accounts = _editAccounts.value
+            val last = os.meka.core.domain.AddEventRules.lastUsedKey(calendarEdits.all())
+            val account = accounts.firstOrNull { it.key == last } ?: accounts.firstOrNull() ?: return null
+            calendarEdits.add(account.provider, account.email, draft)
+        }
+        val made = result as? os.meka.core.domain.EventEditResult.Made ?: return null
+        val provider = os.meka.core.domain.CalendarEditRules.providerName(old?.provider ?: calendarEdits.edit(made.id)?.provider ?: "google")
+        return made.id to { line: String -> rules.bookedLine(line, provider, moved = old != null) }
+    }
 
     /** Not yet: no nudge for two weeks. */
     suspend fun appointmentNotYet(id: String): os.meka.core.domain.AppointmentDone? = onCore { appointments.notYet(id) }
 
     /** Undo for Went, Booked… and Not yet. */
-    suspend fun undoAppointment(done: os.meka.core.domain.AppointmentDone): Boolean = onCore { appointments.undo(done) }
+    suspend fun undoAppointment(done: os.meka.core.domain.AppointmentDone): Boolean = onCore {
+        done.eventEditId?.let { calendarEdits.undo(it) }
+        appointments.undo(done)
+    }
 
     /** Takes an appointment off the list for good (both apps). */
     suspend fun removeAppointment(id: String): Boolean = onCore { appointments.remove(id) }
@@ -4069,13 +4119,14 @@ class MekaCore(
         // The Sunday week ahead, slice 1: the coming week from what MEKA already knows.
         val weekAheadNow = os.meka.core.domain.WeekAheadRules.view(
             os.meka.core.domain.WeekAheadInputs(
-                events = dayEvents,
+                // Appointment nudges, slice 2c: a booked visit is said once, as its Google event when it has one.
+                events = dayEvents.filterNot { os.meka.core.domain.AppointmentCalendarRules.isAppointment(it) },
                 work = os.meka.core.domain.WorkHours(workState.schedule, holidays, homeDays = work.homeDays(todayDay), leaveDays = leaveDays),
                 holidays = holidays,
                 school = schoolItems,
                 dateNight = dateNightNow,
                 renewals = listsNow.renewals.all,
-                appointments = appointments.items(),
+                appointments = os.meka.core.domain.AppointmentCalendarRules.notInCalendar(appointments.items(), dayEvents, cal),
                 forecast = forecast,
                 goals = goalsNow.goals,
                 bins = binItems,
@@ -4274,11 +4325,14 @@ class MekaCore(
     private fun currentEvents(): List<os.meka.core.domain.CalendarEvent> {
         val edits = calendarEdits.all()
         // Plan my day's blocks (slice 2e): the task stands for that time, so its block isn't shown twice.
-        val list = os.meka.core.domain.PlanCalendarRules.withoutTaskBlocks(
+        val shown = os.meka.core.domain.PlanCalendarRules.withoutTaskBlocks(
             os.meka.core.domain.PendingEditRules.apply(events.all(), edits, nowMs()), edits,
         )
         // Meka's own calendar names (Fold review 2026-10-09 07:26, item 9) ride on every event, so each place that
         // names a calendar (the Calendar key, rows, details, Calendars) says the same thing.
+        // Appointment nudges, slice 2c: a booked visit that isn't in Google or Outlook stands in as MEKA's own event.
+        val cal = ZoneCalendar(timeZone)
+        val list = shown + os.meka.core.domain.AppointmentCalendarRules.events(appointments.items(), shown, cal.epochDayOf(nowMs()), cal)
         val names = eventActions.calendarNames()
         if (names.isEmpty()) return list
         return list.map { e -> names[os.meka.core.domain.CalendarRules.key(e)]?.let { e.copy(calendarTitle = it) } ?: e }

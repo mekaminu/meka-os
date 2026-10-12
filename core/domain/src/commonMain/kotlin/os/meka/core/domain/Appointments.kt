@@ -146,6 +146,11 @@ data class AppointmentDone(
     val prevBookedDay: Long?,
     val prevBookedMinute: Long?,
     val prevLaterDay: Long?,
+    /**
+     * Slice 2c: the calendar edit Booked… made (the visit added to Google or Outlook, or the old booking's event moved),
+     * taken back with the booking inside its five-second Undo; null when none was made.
+     */
+    val eventEditId: String? = null,
 )
 
 data class AppointmentPreset(val id: String, val title: String, val everyWeeks: Int, val everyMonths: Int, val aliases: List<String>)
@@ -735,6 +740,84 @@ class Appointments(
         replica.commitLocal(EntityTypes.APPOINTMENT, id, mapOf(AppointmentFields.DELETED to true.fv()))
         return true
     }
+}
+
+/**
+ * A booked visit in the calendar (appointment nudges, slice 2c). Non-AI, pure.
+ *
+ * - Every visit booked for today or later stands in the calendar: as MEKA's own event ([events]: "Dentist" on Today's
+ *   timeline, the Calendar tab and the week ahead, on a calendar called [CALENDAR]) until the same visit is in Google or
+ *   Outlook, then only there. A calendar event is the same visit when it is on the booked day and its title names the
+ *   appointment ([matches]: "Dentist", "Dentist · Dr Shah", "Dental check-up").
+ * - Booked… (Meka's tap) also puts it in his calendar when an account allows editing ([draft]: an hour from the booked
+ *   time, or all day when no time was given, notes "Booked in MEKA"), through calendar editing's five-second Undo; a
+ *   new day for a visit already there moves that event instead of adding another.
+ */
+object AppointmentCalendarRules {
+    const val PROVIDER = "meka"
+    const val CALENDAR = "Appointments"
+    const val ID_PREFIX = "appt-"
+    const val LENGTH_MIN = 60
+    const val NOTES = "Booked in MEKA"
+    private const val DAY_MS = 86_400_000L
+    private const val MINUTE_MS = 60_000L
+
+    /** MEKA's own stand-in for a booked visit ([events]), not an event from Google or Outlook. */
+    fun isAppointment(e: CalendarEvent): Boolean = e.provider == PROVIDER
+
+    /** The appointment's id for one of [events]' rows; null for any other event. */
+    fun appointmentId(e: CalendarEvent): String? = if (isAppointment(e)) e.id.removePrefix(ID_PREFIX) else null
+
+    /** When the booked visit runs: an hour from its time, or its whole day (UTC midnights, as the calendars mirror them). */
+    fun span(item: AppointmentItem, calendar: LocalCalendar): Pair<Long, Long>? {
+        val day = item.bookedDay ?: return null
+        val minute = item.bookedMinute ?: return day * DAY_MS to (day + 1) * DAY_MS
+        val start = calendar.toEpochMs(day, minute)
+        return start to start + LENGTH_MIN * MINUTE_MS
+    }
+
+    /** What Booked… writes to Google or Outlook; null when nothing is booked. */
+    fun draft(item: AppointmentItem, calendar: LocalCalendar): EventDraft? = span(item, calendar)?.let { (s, e) ->
+        EventDraft(item.title.trim(), s, e, item.bookedMinute == null, null, NOTES)
+    }
+
+    /** The title names the appointment: one contains the other, or both are the same common one ("Dental check-up"). */
+    fun titleMatches(eventTitle: String, title: String): Boolean {
+        val e = eventTitle.trim().lowercase()
+        val a = title.trim().lowercase()
+        if (e.isEmpty() || a.isEmpty()) return false
+        return e.contains(a) || a.contains(e) ||
+            AppointmentRules.presetFor(e)?.let { it.id == AppointmentRules.presetFor(a)?.id } == true
+    }
+
+    /** [e] (from Google or Outlook) is [item]'s booked visit: on the booked day, and its title names it. */
+    fun matches(item: AppointmentItem, e: CalendarEvent, calendar: LocalCalendar): Boolean {
+        val day = item.bookedDay ?: return false
+        if (isAppointment(e)) return false
+        val eventDay = if (e.allDay) e.startAtMs.floorDiv(DAY_MS) else calendar.epochDayOf(e.startAtMs)
+        return eventDay == day && titleMatches(e.title, item.title)
+    }
+
+    /** MEKA's own events for the visits booked from [today] on that aren't in [existing] (Google's and Outlook's). */
+    fun events(items: List<AppointmentItem>, existing: List<CalendarEvent>, today: Long, calendar: LocalCalendar): List<CalendarEvent> =
+        items.filter { it.bookedDay != null && it.bookedDay >= today }
+            .filter { item -> existing.none { matches(item, it, calendar) } }
+            .mapNotNull { item ->
+                val (s, e) = span(item, calendar) ?: return@mapNotNull null
+                CalendarEvent(
+                    id = ID_PREFIX + item.id, title = item.title.trim(), startAtMs = s, endAtMs = e,
+                    allDay = item.bookedMinute == null, location = null, provider = PROVIDER, account = null,
+                    calendarName = CALENDAR, description = NOTES,
+                )
+            }
+
+    /** The appointments whose booking isn't in Google or Outlook (the week ahead says those itself). */
+    fun notInCalendar(items: List<AppointmentItem>, events: List<CalendarEvent>, calendar: LocalCalendar): List<AppointmentItem> =
+        items.filter { item -> events.none { matches(item, it, calendar) } }
+
+    /** The undo bar's line after Booked… put it in the calendar: "Dentist · Booked · Tue 20 Oct 09:30 · adding to Google". */
+    fun bookedLine(line: String, providerName: String, moved: Boolean): String =
+        if (moved) "$line · moving it in $providerName" else "$line · adding to $providerName"
 }
 
 /**

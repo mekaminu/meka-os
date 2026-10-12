@@ -1486,6 +1486,69 @@ class MekaCoreTest {
         assertTrue(fold.addEventForm(-1).accountKey == null)
     }
 
+    /** Appointment nudges, slice 2c: a booked visit goes in Google when editing is allowed, else on Today as MEKA's own. */
+    @Test
+    fun aBookedVisitLandsInGoogleWhenEditingIsAllowedElseOnTodayAsMekasOwn() = runTest {
+        val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
+        val fold = core("android", server)
+        fold.typeAppointment("Dentist every 6 months, last 12 Mar")
+        val id = fold.appointmentsView.value.rows.single().id
+
+        // Editing not read yet: MEKA's own event on Today, nothing sent.
+        val first = assertNotNull(fold.bookAppointment(id, "today 17:00"))
+        assertNull(first.eventEditId)
+        assertEquals("Dentist · Booked · Today 17:00", first.line)
+        val own = fold.today.value.events.single { it.title == "Dentist" }
+        assertEquals("meka", own.provider)
+        assertEquals("Appointments", os.meka.core.domain.CalendarRules.label(own))
+        assertTrue(fold.calendarEditLines.value.isEmpty())
+        assertTrue(fold.undoAppointment(first))
+        assertTrue(fold.today.value.events.none { it.title == "Dentist" })
+
+        // Editing allowed: Booked… adds it to Google, shown once; Undo inside the five seconds takes both back.
+        fold.refreshCalendarAccounts()
+        val booked = assertNotNull(fold.bookAppointment(id, "today 17:00"))
+        assertEquals("Dentist · Booked · Today 17:00 · adding to Google", booked.line)
+        val editId = assertNotNull(booked.eventEditId)
+        assertEquals(listOf("Adding “Dentist” to Google"), fold.calendarEditLines.value.map { it.text })
+        assertEquals(listOf("google"), fold.today.value.events.filter { it.title == "Dentist" }.map { it.provider })
+        assertTrue(fold.undoAppointment(booked))
+        assertTrue(fold.calendarEditLines.value.isEmpty())
+        assertFalse(fold.undoEventEdit(editId))
+
+        // Booked again and in Google: a new day moves that event rather than adding a second.
+        val again = assertNotNull(fold.bookAppointment(id, "today 17:00"))
+        now += 10_000
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        var k = 0
+        fun serverWrite(type: String, eid: String, fields: Map<String, os.meka.core.sync.FieldValue>) = fields.forEach { (f, v) ->
+            serverOps.append(os.meka.core.sync.Op("srvappt${k++}", "hh", type, eid, f, v, clock.now(), emptyList(), "server"))
+        }
+        serverWrite(os.meka.core.domain.EntityTypes.EVENT_EDIT, assertNotNull(again.eventEditId), mapOf(
+            os.meka.core.domain.EventEditFields.STATUS to os.meka.core.sync.FieldValue.Text("DONE"),
+            os.meka.core.domain.EventEditFields.STATUS_AT to os.meka.core.sync.FieldValue.Int64(now),
+        ))
+        val ownStart = own.startAtMs
+        serverWrite(os.meka.core.domain.EntityTypes.EVENT, "gdent", mapOf(
+            os.meka.core.domain.EventFields.TITLE to os.meka.core.sync.FieldValue.Text("Dentist"),
+            os.meka.core.domain.EventFields.START_AT to os.meka.core.sync.FieldValue.Int64(ownStart),
+            os.meka.core.domain.EventFields.END_AT to os.meka.core.sync.FieldValue.Int64(ownStart + 3_600_000L),
+            os.meka.core.domain.EventFields.ALL_DAY to os.meka.core.sync.FieldValue.Bool(false),
+            os.meka.core.domain.EventFields.PROVIDER to os.meka.core.sync.FieldValue.Text("google"),
+            os.meka.core.domain.EventFields.ACCOUNT to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
+            os.meka.core.domain.EventFields.CALENDAR to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
+            os.meka.core.domain.EventFields.REMOVED to os.meka.core.sync.FieldValue.Bool(false),
+        ))
+        assertTrue(fold.syncNow())
+        now += 3 * 60_000L
+        fold.tick()
+        assertEquals(listOf("google"), fold.today.value.events.filter { it.title == "Dentist" }.map { it.provider })
+        val moved = assertNotNull(fold.bookAppointment(id, "tomorrow 9:30"))
+        assertTrue(moved.line.endsWith(" · moving it in Google"), moved.line)
+        val change = assertNotNull(moved.eventEditId)
+        assertEquals(listOf(change), fold.calendarEditLines.value.map { it.id })
+    }
+
     @Test
     fun planMyDayCanAlsoPutItsBlocksInGoogleOnlyWhenTurnedOnAndShowsEachTaskOnce() = runTest {
         val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))

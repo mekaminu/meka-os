@@ -377,6 +377,7 @@ object TimelineRules {
     private fun providerLabel(p: String): String? = when (p) {
         "microsoft" -> "Outlook"
         "fixtures" -> "Fixtures"
+        AppointmentCalendarRules.PROVIDER -> AppointmentCalendarRules.CALENDAR
         else -> null // Google is the default calendar and needs no label
     }
 }

@@ -175,4 +175,43 @@ class AppointmentsTest {
         assertEquals(listOf("Dentist · due Sun 1 Nov"), first.post.map { it.title })
         assertTrue(Governor.evaluate(listOf(n), NotificationSettings.DEFAULT, DeviceAlerts.ALL, first.state, cal.toEpochMs(from, 9 * 60 + 30), cal).post.isEmpty())
     }
+
+    /** Slice 2c: a booked visit stands in the calendar as MEKA's own event until Google or Outlook has it. */
+    @Test
+    fun aBookedVisitIsMekasOwnEventUntilTheCalendarHasIt() {
+        val cal = LocalCalendar.UTC
+        val item = AppointmentItem("a1", "Dentist", 0, 6, day(4, 12), day(10, 20), 9 * 60 + 30, null, 0L)
+        val r = AppointmentCalendarRules
+        val own = r.events(listOf(item), emptyList(), today, cal).single()
+        assertEquals("appt-a1", own.id)
+        assertEquals("a1", r.appointmentId(own))
+        assertEquals(cal.toEpochMs(day(10, 20), 570), own.startAtMs)
+        assertEquals(own.startAtMs + 60 * 60_000L, own.endAtMs)
+        assertFalse(own.allDay)
+        assertEquals("Appointments", CalendarRules.label(own))
+        assertEquals("Appointments", TimelineRules.eventDetail(own))
+        // Google has it ("Dentist · Dr Shah" that day, or the common name): MEKA's own steps aside.
+        fun google(title: String, d: Long, minute: Int = 600) = CalendarEvent(
+            "g1", title, cal.toEpochMs(d, minute), cal.toEpochMs(d, minute + 60), false, null, "google", "meka@gmail.com", "meka@gmail.com",
+        )
+        assertTrue(r.events(listOf(item), listOf(google("Dentist · Dr Shah", day(10, 20))), today, cal).isEmpty())
+        assertTrue(r.matches(item, google("Dental check-up", day(10, 20)), cal))
+        assertFalse(r.matches(item, google("Dentist", day(10, 21)), cal)) // another day
+        assertFalse(r.matches(item, google("Haircut", day(10, 20)), cal))
+        assertFalse(r.matches(item, own, cal)) // never itself
+        assertEquals(listOf(item), r.notInCalendar(listOf(item), listOf(own), cal))
+        assertTrue(r.notInCalendar(listOf(item), listOf(google("Dentist", day(10, 20))), cal).isEmpty())
+        // No time: all day (UTC midnights, as the calendars mirror them); a visit already gone isn't shown.
+        val allDay = r.events(listOf(item.copy(bookedMinute = null)), emptyList(), today, cal).single()
+        assertTrue(allDay.allDay)
+        assertEquals(day(10, 20) * 86_400_000L, allDay.startAtMs)
+        assertTrue(r.matches(item, google("Dentist", day(10, 20)).copy(allDay = true, startAtMs = day(10, 20) * 86_400_000L), cal))
+        assertTrue(r.events(listOf(item.copy(bookedDay = today - 1)), emptyList(), today, cal).isEmpty())
+        assertTrue(r.events(listOf(item.copy(bookedDay = null)), emptyList(), today, cal).isEmpty())
+        // What Booked… writes to Google.
+        val d = r.draft(item, cal)!!
+        assertEquals(EventDraft("Dentist", own.startAtMs, own.endAtMs, false, null, "Booked in MEKA"), d)
+        assertEquals("Dentist · Booked · Tue 20 Oct 09:30 · adding to Google", r.bookedLine("Dentist · Booked · Tue 20 Oct 09:30", "Google", false))
+        assertEquals("Dentist · Booked · Wed 21 Oct · moving it in Outlook", r.bookedLine("Dentist · Booked · Wed 21 Oct", "Outlook", true))
+    }
 }
