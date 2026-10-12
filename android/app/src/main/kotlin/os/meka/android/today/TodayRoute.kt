@@ -798,6 +798,14 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Fold review 2026-10-12, bug 4: the first event still to come during work, in the accent:
+                    // "Training at 16:55 while you're at work — who's taking Rex?"; cross-fades as it changes.
+                    today.timeline.clashLine?.let { clash ->
+                        Crossfade(clash, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "clash-line") { l ->
+                            Text(l, style = MekaType.caption, color = Meka.colors.accent, maxLines = 2,
+                                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = MekaSpace.xxs))
+                        }
+                    }
                     // Goals, properly, slice 7: "This week: 2 of 3 goals moving"; cross-fades as it changes.
                     goalsNow.week.line?.let { line ->
                         val spoken = goalsNow.week.spoken

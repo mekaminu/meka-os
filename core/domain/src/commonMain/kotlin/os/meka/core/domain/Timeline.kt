@@ -49,6 +49,11 @@ data class TimelineRow(
      * is lit in the accent colour (Fold review 2026-10-09 13:45, item 3).
      */
     val late: Boolean = false,
+    /**
+     * An event during work hours ([WorkClashRules], Fold review 2026-10-12, bug 4): "Clashes with work · who's taking
+     * Rex?", shown under the event in the accent colour on Today and the Calendar; null otherwise.
+     */
+    val clash: String? = null,
 )
 
 /** The next event within the hour, shown in Up next: "Call with Tunde in 25 min". */
@@ -97,7 +102,15 @@ data class DayTimeline(
     val allDayItems: List<AllDayItem> = emptyList(),
     /** The group's label, shown once above its rows: "All day", or "All day · Timestripe" when they share a calendar. */
     val allDayLabel: String = AllDayRules.LABEL,
+    /**
+     * Today's events during work still to come or on ([WorkClashRules], Fold review 2026-10-12, bug 4), first first;
+     * Today's header says the first one's [WorkClash.line] in the accent.
+     */
+    val clashes: List<WorkClash> = emptyList(),
 ) {
+    /** "Training at 16:55 while you're at work — who's taking Rex?"; null when nothing clashes. */
+    val clashLine: String? get() = clashes.firstOrNull()?.line
+
     /** Timed events (or booked sessions) still to come or running today. */
     val hasEventsAhead: Boolean get() = rows.any { it.kind == TimelineKind.EVENT || it.kind == TimelineKind.SESSION }
 
@@ -187,13 +200,15 @@ object TimelineRules {
         data class Item(val row: TimelineRow, val start: Long, val end: Long, val isEvent: Boolean) {
             val isWork: Boolean get() = row.kind == TimelineKind.WORK
         }
+        val clashes = WorkClashRules.clashes(dayEvents, work, calendar).associateBy { it.eventId }
         val items = buildList {
             dayEvents.filter { !it.allDay }.forEach { e ->
                 val start = maxOf(e.startAtMs, today.startMs)
                 val time = if (e.startAtMs < today.startMs) "Until ${hhmm(e.endAtMs)}" else "${hhmm(e.startAtMs)}–${hhmm(e.endAtMs)}"
                 val detail = eventDetail(e)
                 val running = e.startAtMs <= nowMs && e.endAtMs > nowMs
-                add(Item(TimelineRow("e-" + e.id, TimelineKind.EVENT, time, e.title, detail, null, e, running, start), start, e.endAtMs, true))
+                val row = TimelineRow("e-" + e.id, TimelineKind.EVENT, time, e.title, detail, null, e, running, start, clash = clashes[e.id]?.mark)
+                add(Item(row, start, e.endAtMs, true))
             }
             planned.filter { it.scheduledAtMs != null && it.scheduledAtMs in today }.forEach { t ->
                 val start = t.scheduledAtMs!!
@@ -287,6 +302,7 @@ object TimelineRules {
             rows = rows,
             anytime = anytime,
             nextEvent = next,
+            clashes = clashes.values.filter { c -> dayEvents.any { it.id == c.eventId && it.endAtMs > nowMs } }.sortedBy { it.startMs },
         )
     }
 

@@ -153,7 +153,8 @@ object CalendarTones {
  * - Week strips run Monday–Sunday from the week holding today; each day pill has up to 3 busy dots and jumps to its
  *   section. Days before today or past the window are dimmed.
  * - Work days ([WorkHours], bank holidays off) carry "Work 09:00–17:30" and so are never folded away as "Nothing
- *   planned"; work isn't counted in the busy dots or the counts.
+ *   planned"; work isn't counted in the busy dots or the counts. An event during work carries its mark
+ *   ([TimelineRow.clash], [WorkClashRules]): "Clashes with work · who's taking Rex?".
  */
 object CalendarAgenda {
     const val DAYS = 30
@@ -192,6 +193,8 @@ object CalendarAgenda {
             val allDay = dayEvents.filter { it.allDay }.sortedWith(compareBy({ it.startAtMs }, { it.title }))
 
             data class Item(val row: TimelineRow, val start: Long, val end: Long, val isEvent: Boolean)
+            // An event during that day's work is marked (Fold review 2026-10-12, bug 4).
+            val clashes = work?.let { WorkClashRules.clashes(dayEvents, it.blocks(d, calendar), calendar) }.orEmpty().associateBy { it.eventId }
             val items = buildList {
                 dayEvents.filter { !it.allDay }.forEach { e ->
                     val startsBefore = e.startAtMs < w.startMs
@@ -205,7 +208,7 @@ object CalendarAgenda {
                     }
                     val start = maxOf(e.startAtMs, w.startMs)
                     val running = e.startAtMs <= nowMs && e.endAtMs > nowMs
-                    add(Item(TimelineRow("e-" + e.id, TimelineKind.EVENT, time, e.title, eventDetail(e), null, e, running, start), start, e.endAtMs, true))
+                    add(Item(TimelineRow("e-" + e.id, TimelineKind.EVENT, time, e.title, eventDetail(e), null, e, running, start, clash = clashes[e.id]?.mark), start, e.endAtMs, true))
                 }
                 planned.filter { it.scheduledAtMs!! in w }.forEach { t ->
                     val start = t.scheduledAtMs!!

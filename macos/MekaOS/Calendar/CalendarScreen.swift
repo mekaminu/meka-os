@@ -388,6 +388,10 @@ private struct AgendaEventRow: View {
                     Text(line).font(MekaType.caption)
                         .foregroundStyle(!past && (row.running || fixture) ? palette.accent : palette.textTertiary)
                 }
+                // During work (Fold review 2026-10-12, bug 4): "Clashes with work · who's taking Rex?" in the accent.
+                if let clash = row.clash {
+                    Text(clash).font(MekaType.caption).foregroundStyle(past ? palette.textTertiary : palette.accent)
+                }
             }
             Spacer()
         }

@@ -109,6 +109,11 @@ data class BriefStory(
     val oneLiner: String? = null,
     /** Slice 6: the one-liners said in the 30 days before today, newest first (never said again). */
     val recentLines: List<String> = emptyList(),
+    /**
+     * Fold review 2026-10-12, bug 4: today's events during work, each already spoken ([WorkClash.spoken]): "Heads up:
+     * Rex's under-sevens training at 4:55, while you're at work. Who's taking Rex?".
+     */
+    val workClashes: List<String> = emptyList(),
 ) {
     companion object {
         val EMPTY = BriefStory()
@@ -123,6 +128,9 @@ object BriefScriptRules {
     const val MAX_HEADLINES = 3
     /** About 90 seconds before the news, the one-liner and the close (whole sentences only). */
     const val MAX_CHARS = 1_400
+
+    /** Events during work said at most (Standard and Full; Short says one). */
+    const val MAX_WORK_CLASHES = 2
 
     const val CLOSE = "Say “plan my day” or “more news”."
 
@@ -209,7 +217,10 @@ object BriefScriptRules {
         }
     }
 
-    /** The first meeting, the day's shape and the first clash; all-day things and the kids' matches by name. */
+    /**
+     * The first meeting, the day's shape and the first clash; then what falls during work ([BriefStory.workClashes]);
+     * all-day things and the kids' matches by name.
+     */
     fun calendar(v: MorningBriefView, s: BriefStory): List<String> {
         val out = mutableListOf<String>()
         val allDay = v.day.filter { it.isEvent && it.time == "All day" }
@@ -233,6 +244,7 @@ object BriefScriptRules {
         }
         if (len.extras) shape(events, s.workEndMin)?.let { out += sentence(it) }
         clash(events)?.let { out += sentence(it) }
+        out += s.workClashes.take(if (len.extras) MAX_WORK_CLASHES else 1).map { sentence(it) }
         return out
     }
 

@@ -83,6 +83,8 @@ internal fun TimelineEventRow(r: TimelineRow, past: Boolean, modifier: Modifier 
             if (line.isNotEmpty()) {
                 Text(line, style = MekaType.caption, color = if (r.running) Meka.colors.accent else Meka.colors.textTertiary)
             }
+            // During work (Fold review 2026-10-12, bug 4): "Clashes with work · who's taking Rex?" in the accent.
+            r.clash?.let { Text(it, style = MekaType.caption, color = if (past) Meka.colors.textTertiary else Meka.colors.accent) }
         }
     }
 }

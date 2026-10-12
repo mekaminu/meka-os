@@ -121,6 +121,14 @@ struct TodayView: View {
                             .accessibilityLabel(school.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Fold review 2026-10-12, bug 4: the first event still to come during work, in the accent:
+                    // "Training at 16:55 while you're at work — who's taking Rex?"; cross-fades as it changes.
+                    if let clash = model.today?.timeline.clashLine {
+                        Text(clash).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(2)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: clash)
+                            .staggeredAppear(0, play: play)
+                    }
                     // Goals, properly, slice 7: "This week: 2 of 3 goals moving"; cross-fades as it changes.
                     if let week = model.goals?.week, let line = week.line {
                         Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)

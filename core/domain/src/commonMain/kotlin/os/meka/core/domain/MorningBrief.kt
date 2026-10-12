@@ -431,6 +431,11 @@ class MorningBrief(
         val weekIds = goals.week.arcs.filter { !it.done }.associate { it.goalId to it.title }
         val iso = CivilDate.isoDayOfWeek(today.epochDay)
         val working = workLine?.startsWith("Work ") == true
+        // Fold review 2026-10-12, bug 4: what falls during work today, said with the child's name where it's theirs.
+        val workBlocks = if (working) WorkHours(schedule, holidays).blocks(today.epochDay, calendar) else emptyList()
+        val workClashes = WorkClashRules.clashes(dayEvents.filter { it.endAtMs > now }, workBlocks, calendar).map { c ->
+            c.spoken(FootballRules.spokenFixture(c.title) ?: c.title) { BriefScriptRules.clock(it) }
+        }
         val weekend = iso >= 6 && !working
         val length = length()
         val (focus, smaller) = BriefScriptRules.focus(
@@ -448,6 +453,7 @@ class MorningBrief(
             smallerCount = smaller,
             habits = BriefScriptRules.habits(goals.habits),
             weekGoals = goals.week.line,
+            workClashes = workClashes,
             goalTitle = weekIds.values.firstOrNull(),
             length = length,
         )
