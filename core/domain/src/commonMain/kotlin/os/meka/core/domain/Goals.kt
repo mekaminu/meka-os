@@ -116,6 +116,8 @@ data class GoalItem(
     /** The day (local epoch day) it was added, and the day it was finished (Goals, properly, item 6: the rhythm). */
     val createdDay: Long? = null,
     val doneDay: Long? = null,
+    /** The Monday of the week it was picked as one of that week's goals (the week ahead's pick); null when not picked. */
+    val weekOf: Long? = null,
 ) {
     val milestonesDone: Int get() = milestones.count { it.done }
     /** The next step is a milestone (no open task is linked), not a task. */
@@ -652,6 +654,26 @@ class Goals(
         replica.commitLocal(EntityTypes.GOAL, id, mapOf(ActionableFields.DELETED to true.fv()))
     }
 
+    /**
+     * Picks the goal as one of the goals for the week starting [weekStart] (a Monday), or unpicks it (Goals, properly,
+     * item 6: the week ahead's pick). At most [GoalWeekRules.MAX_PICKS] a week: a fourth is refused. False (nothing
+     * written) when refused, when nothing changes, or for a finished goal being picked.
+     */
+    fun pickForWeek(id: String, weekStart: Long, on: Boolean): Boolean {
+        val s = live(EntityTypes.GOAL, id) ?: throw ValidationException("Goal not found")
+        val now = s[GoalFields.WEEK_OF].longOrNull
+        if (on) {
+            if (now == weekStart || s[ActionableFields.LIFECYCLE].textOrNull == Lifecycle.DONE.name) return false
+            val picked = replica.entities(EntityTypes.GOAL).count { !it.deleted && it[GoalFields.WEEK_OF].longOrNull == weekStart }
+            if (picked >= GoalWeekRules.MAX_PICKS) return false
+            replica.commitLocal(EntityTypes.GOAL, id, mapOf(GoalFields.WEEK_OF to weekStart.fv()))
+        } else {
+            if (now != weekStart) return false
+            replica.commitLocal(EntityTypes.GOAL, id, mapOf(GoalFields.WEEK_OF to FieldValue.Null))
+        }
+        return true
+    }
+
     // ---- Milestones (Goals, properly, slice 2) ----
 
     /** Adds a milestone to the goal (at most [GoalRules.MAX_MILESTONES]); a title already there isn't added twice. */
@@ -1000,6 +1022,7 @@ class Goals(
                 lastMovedDay = moved(id),
                 createdDay = createdDay,
                 doneDay = if (done) s[ActionableFields.COMPLETED_AT].longOrNull?.let { calendar.epochDayOf(it) } else null,
+                weekOf = s[GoalFields.WEEK_OF].longOrNull,
             )
         }
         val order = compareBy<String> { GoalRules.parseHorizon(snaps[it]?.get(GoalFields.HORIZON)?.textOrNull).ordinal }
@@ -1012,7 +1035,8 @@ class Goals(
         // Top level: no parent, or a parent that is finished (the goal then shows on its own).
         snaps.keys.filter { !isDone(it) && (parentOf[it] == null || isDone(parentOf[it]!!)) }.sortedWith(order).forEach { walk(it, 0) }
         val finishedThisWeek = snaps.keys.filter { id ->
-            isDone(id) && GoalRules.parseHorizon(snaps[id]?.get(GoalFields.HORIZON)?.textOrNull) == GoalHorizon.WEEK &&
+            isDone(id) && (GoalRules.parseHorizon(snaps[id]?.get(GoalFields.HORIZON)?.textOrNull) == GoalHorizon.WEEK ||
+                snaps[id]?.get(GoalFields.WEEK_OF)?.longOrNull == GoalRules.weekStart(today)) &&
                 (snaps[id]?.get(ActionableFields.COMPLETED_AT)?.longOrNull?.let { calendar.epochDayOf(it) } ?: Long.MIN_VALUE) >= GoalRules.weekStart(today)
         }.sortedWith(compareBy<String> { snaps[it]?.get(ActionableFields.COMPLETED_AT)?.longOrNull ?: 0L }.thenBy { it })
             .map { item(it, 0) }

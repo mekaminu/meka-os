@@ -124,4 +124,50 @@ class GoalWeekTest {
             assertTrue(ring + GoalWeekRules.RING_DP / 2f <= size / 2f, "size $size: the ring leaves the face")
         }
     }
+
+    @Test
+    fun theWeekAheadsPickDecidesThisWeeksGoalsUpToThree() {
+        val ws = GoalRules.weekStart(CivilDate.toEpochDay(2026, 10, 14))
+        val runs = g.addGoal("Three runs", horizon = GoalHorizon.WEEK)
+        val year = g.addGoal("Run a marathon", horizon = GoalHorizon.YEAR)
+        val month = g.addGoal("Read 2 books", horizon = GoalHorizon.MONTH)
+        val save = g.addGoal("Save £2,000", horizon = GoalHorizon.QUARTER)
+        val someday = g.addGoal("Learn Spanish", horizon = GoalHorizon.SOMEDAY)
+        // Nothing picked: the This week goals, as before.
+        assertEquals("This week: “Three runs” not moving yet", week().line)
+
+        // Picked: those are the week's goals, whatever their horizon.
+        assertTrue(g.pickForWeek(year, ws, true))
+        assertTrue(g.pickForWeek(month, ws, true))
+        assertEquals(listOf(month, year), week().arcs.map { it.goalId }) // the Goals order
+        assertEquals("This week: 2 goals, none moving yet", week().line)
+        assertTrue(!g.pickForWeek(month, ws, true)) // already picked
+        assertTrue(g.pickForWeek(save, ws, true))
+        assertTrue(!g.pickForWeek(runs, ws, true)) // a fourth is refused
+        assertEquals(3, week().total)
+
+        // The week ahead offers the picked first, Someday left out.
+        val pick = WeekAheadRules.goalPick(g.view(d.tasks.all()).goals, ws)
+        assertEquals(listOf(month, save, year, runs), pick.goals.map { it.goalId })
+        assertEquals(listOf(true, true, true, false), pick.goals.map { it.picked })
+        assertTrue(pick.full)
+        assertEquals("3 picked · unpick one to swap", pick.line)
+        assertEquals("This month · No next step yet · add one", pick.goals[0].meta)
+        assertEquals("Your goals for the week: Read 2 books, Save £2,000 and Run a marathon.", WeekAheadRules.spokenGoals(pick))
+        assertTrue(someday !in pick.goals.map { it.goalId })
+
+        // Unpick one; finishing a picked goal keeps it in the week, done.
+        assertTrue(g.pickForWeek(save, ws, false))
+        assertTrue(!g.pickForWeek(save, ws, false))
+        g.finishGoal(month)
+        val w = week()
+        assertEquals(listOf(year, month), w.arcs.map { it.goalId })
+        assertTrue(w.arcs[1].done)
+        assertEquals("1 picked · up to 3", WeekAheadRules.goalPick(g.view(d.tasks.all()).goals, ws).line)
+        // Next week's pick doesn't touch this week.
+        assertTrue(g.pickForWeek(runs, ws + 7, true))
+        assertEquals(listOf(year, month), week().arcs.map { it.goalId })
+        assertEquals("Pick up to 3 for the week", WeekAheadRules.goalPick(emptyList<GoalItem>() + g.view(d.tasks.all()).goals.filter { it.id == save }, ws + 7).line)
+        assertEquals(WeekAheadGoals.EMPTY, WeekAheadRules.goalPick(emptyList(), ws))
+    }
 }

@@ -40,8 +40,9 @@ data class WeekGoals(
 /**
  * This week's goals (Goals, properly, item 7; non-AI, pure, unit-tested).
  *
- * - This week's goals are the open goals with the horizon This week (in the Goals order), then those finished this
- *   week. (The Sunday week ahead's pick of up to three, item 6, will choose them when it lands.)
+ * - This week's goals are the ones picked for this week in the week ahead (item 6: up to [MAX_PICKS], open first in the
+ *   Goals order, then those finished this week). With none picked, the open goals with the horizon This week, then
+ *   those finished this week.
  * - Moving: finished, or anything moved it on since Monday ([GoalItem.lastMovedDay]: a linked task done, a milestone
  *   ticked, a number update, a linked habit ticked, a goal under it moving).
  * - The line: "This week: 2 of 3 goals moving", "This week: all 3 goals moving", "This week: 3 goals, none moving yet";
@@ -53,6 +54,8 @@ data class WeekGoals(
  */
 object GoalWeekRules {
     const val MAX_ARCS = 3
+    /** The week ahead's pick: at most this many goals a week (item 6). */
+    const val MAX_PICKS = 3
     const val GAP_DEGREES = 12f
     /** The ring's stroke, and how far its outer edge sits inside the face's edge. */
     const val RING_DP = 1.5f
@@ -66,7 +69,13 @@ object GoalWeekRules {
         goal.done || (goal.lastMovedDay ?: Long.MIN_VALUE) >= GoalRules.weekStart(today)
 
     fun build(open: List<GoalItem>, finishedThisWeek: List<GoalItem>, today: Long): WeekGoals {
-        val goals = open.filter { it.horizon == GoalHorizon.WEEK && !it.done } + finishedThisWeek.filter { it.done }
+        val ws = GoalRules.weekStart(today)
+        val picked = open.filter { it.weekOf == ws && !it.done }.take(MAX_PICKS).let { o ->
+            o + finishedThisWeek.filter { it.done && it.weekOf == ws }.take(MAX_PICKS - o.size)
+        }
+        val goals = picked.ifEmpty {
+            open.filter { it.horizon == GoalHorizon.WEEK && !it.done } + finishedThisWeek.filter { it.done && it.horizon == GoalHorizon.WEEK }
+        }
         if (goals.isEmpty()) return WeekGoals.EMPTY
         val shown = goals.take(MAX_ARCS)
         val span = 360f / shown.size

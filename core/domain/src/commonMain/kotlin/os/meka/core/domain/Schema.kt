@@ -220,6 +220,11 @@ object GoalFields {
     const val METRIC_HABIT_ID = "metricHabitId"
     /** The local epoch day the number started counting (the chart starts here; habit ticks count from it). */
     const val METRIC_SINCE_DAY = "metricSinceDay"
+    /**
+     * Goals, properly, item 6 (2026-10-12, additive, LWW): the Monday (local epoch day) of the week it was picked as one
+     * of that week's goals (the week ahead's pick of up to three); absent when it isn't picked.
+     */
+    const val WEEK_OF = "weekOf"
 }
 
 /** Goals, properly, slice 3 (2026-10-11, additive): one update to a numeric goal, one entity each. */

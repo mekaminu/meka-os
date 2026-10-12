@@ -35,6 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.Role
@@ -57,7 +58,9 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
 import os.meka.android.work.SettingChip
+import os.meka.android.designsystem.TickRing
 import os.meka.core.domain.WeekAheadDay
+import os.meka.core.domain.WeekAheadGoals
 import os.meka.core.domain.WeekAheadKind
 import os.meka.core.domain.WeekAheadLine
 import os.meka.core.domain.WeekAheadSettingView
@@ -71,14 +74,20 @@ import os.meka.core.facade.MekaCore
  *
  * Slice 2: **▶ Listen** reads the week aloud in MEKA's voice ([MekaSpeaker], the phone's own if the voice can't be
  * reached); Listen on Sunday's heads-up opens the pane already reading ([listenNow]). **Sunday heads-up** at the end:
- * on or off and its time (16:00–20:00, default 18:00), synced with the Mac. Nothing else here changes anything.
+ * on or off and its time (16:00–20:00, default 18:00), synced with the Mac.
+ *
+ * Goals, properly, item 6: **Goals for the week** — tap up to three of Meka's open goals to make them the week's goals
+ * (Today's "This week: …" line and the watch face's goal ring); a fourth waits, dimmed, until one is unpicked. Nothing
+ * else here changes anything.
  *
  * Type weight (Meka, 2026-10-06): everything here is context, so the `body` style; a day's label is a section label.
  *
  * Motion: the pane springs up (MekaPane) with the More row's title travelling in; the summary cross-fades as it changes;
  * the days and the family sync stagger in 40 ms apart (the list's item motion as a day's lines change). Reduced motion:
  * cross-fades. Listen's label cross-fades to "■ Stop" while it reads (light haptic to start, tick to stop); the heads-up
- * chips blend with a tick and the times fold away when it's off.
+ * chips blend with a tick and the times fold away when it's off. A goal's tick ring draws its check with a light haptic
+ * as it's picked (unpicked: back to the outline with a tick); the line above cross-fades; the goals not picked dim when
+ * three are (alpha cross-fade). Reduced motion: no draw, cross-fades.
  */
 @Composable
 fun WeekAheadPane(
@@ -146,10 +155,56 @@ fun WeekAheadPane(
                 }
             }
         }
+        if (v.goals.goals.isNotEmpty()) {
+            item(key = "goals") {
+                GoalsPick(v.goals, Modifier.animateItem().padding(top = MekaSpace.l).appear(rememberAppearance(3 + v.days.size))) { id, on ->
+                    if (on) haptics.light() else haptics.tick()
+                    scope.launch { runCatching { core.pickWeekGoal(id, on) } }
+                }
+            }
+        }
         item(key = "heads-up") {
-            HeadsUpSetting(setting, Modifier.animateItem().padding(top = MekaSpace.l).appear(rememberAppearance(3 + v.days.size))) { on, minute ->
+            HeadsUpSetting(setting, Modifier.animateItem().padding(top = MekaSpace.l).appear(rememberAppearance(4 + v.days.size))) { on, minute ->
                 haptics.tick()
                 scope.launch { runCatching { core.setWeekAhead(on, minute) } }
+            }
+        }
+    }
+}
+
+/** Goals for the week: tap a goal to pick it (up to three); the rest dim once three are picked. */
+@Composable
+private fun GoalsPick(g: WeekAheadGoals, modifier: Modifier, onPick: (String, Boolean) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        SectionLabel("Goals for the week", Modifier.semantics { heading() })
+        Crossfade(g.line, animationSpec = MekaMotion.appear(reduced), label = "week-goals-line") { line ->
+            Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
+        g.goals.forEach { goal ->
+            val enabled = goal.picked || !g.full
+            val dim by androidx.compose.animation.core.animateFloatAsState(
+                if (enabled) 1f else 0.45f, MekaMotion.appear(reduced), label = "week-goal-dim",
+            )
+            Row(
+                Modifier.fillMaxWidth()
+                    .graphicsLayer { alpha = dim }
+                    .clickable(enabled = enabled, role = Role.Checkbox, onClickLabel = if (goal.picked) "Unpick" else "Pick for the week") {
+                        onPick(goal.goalId, !goal.picked)
+                    }
+                    .minTouch()
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = goal.spoken
+                        stateDescription = if (goal.picked) "Picked" else "Not picked"
+                    }
+                    .padding(vertical = MekaSpace.xxs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TickRing(goal.picked, Modifier.size(24.dp).clip(CircleShape))
+                Column(Modifier.padding(start = MekaSpace.m).weight(1f)) {
+                    Text(goal.title, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Text(goal.meta, style = MekaType.caption, color = Meka.colors.textTertiary)
+                }
             }
         }
     }

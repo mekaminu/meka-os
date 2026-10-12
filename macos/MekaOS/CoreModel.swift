@@ -925,6 +925,13 @@ final class CoreModel {
         run { _ = try await $0.setWeekAhead(on: on, minute: m) }
     }
 
+    /// Goals, properly, item 6: picks a goal for the week the week ahead shows (up to three) or unpicks it. Only a
+    /// String and a Bool cross to the core.
+    func pickWeekGoal(_ goalId: String, on: Bool) {
+        if on { MekaHaptics.light() } else { MekaHaptics.tick() }
+        run { _ = try await $0.pickWeekGoal(goalId: goalId, on: on) }
+    }
+
     /// Saves work hours. Days are ISO (1 = Monday); minutes are local minutes of the day.
     func setWorkSchedule(days: Set<Int>, startMinute: Int, endMinute: Int, enabled: Bool) {
         let list = days.sorted().map { KotlinInt(int: Int32($0)) }

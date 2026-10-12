@@ -11,9 +11,13 @@ import SwiftUI
 /// the sheet already reading (`readWeekAheadOnOpen`). **Sunday heads-up**: on or off and its time (default 18:00),
 /// synced with the Fold; only a Bool and an Int32 cross to the core.
 ///
+/// Goals, properly, item 6: **Goals for the week** — click up to three open goals to make them the week's goals (Today's
+/// "This week: …" line and the face's goal ring); with three picked the rest dim until one is unpicked.
+///
 /// Motion: the sheet scale-fades (system); the summary cross-fades as it changes; the days and the family sync stagger
-/// in 40 ms apart; Listen's label cross-fades to "■ Stop"; the time picker fades away when the heads-up is off. Reduce
-/// Motion: cross-fades.
+/// in 40 ms apart; Listen's label cross-fades to "■ Stop"; the time picker fades away when the heads-up is off. A goal's
+/// tick ring draws its check as it's picked; the line above cross-fades; the rest dim (opacity) once three are picked.
+/// Reduce Motion: cross-fades.
 struct WeekAheadSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -63,6 +67,9 @@ struct WeekAheadSheet: View {
                         }
                         .staggeredAppear(2 + v.days.count)
                     }
+                    if !v.goals.goals.isEmpty {
+                        goalsPick(v.goals).staggeredAppear(3 + v.days.count)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -101,6 +108,40 @@ struct WeekAheadSheet: View {
         } else if let v = model.weekAhead, !v.spoken.isEmpty {
             MekaHaptics.light()
             speaker.say(v.spoken, reading: true)
+        }
+    }
+
+    /// Goals for the week: click a goal to pick it (up to three); the rest dim once three are picked.
+    private func goalsPick(_ g: WeekAheadGoals) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            label("Goals for the week")
+            Text(g.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: g.line)
+            ForEach(g.goals, id: \.goalId) { goal in
+                let enabled = goal.picked || !g.full
+                let id = goal.goalId
+                let next = !goal.picked
+                Button { model.pickWeekGoal(id, on: next) } label: {
+                    HStack(spacing: MekaSpace.m) {
+                        TickRingView(done: goal.picked, palette: palette).frame(width: 18, height: 18)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(goal.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                            Text(goal.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!enabled)
+                .opacity(enabled ? 1 : 0.45)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: enabled)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(goal.spoken)
+                .accessibilityAddTraits(goal.picked ? .isSelected : [])
+                .help(goal.picked ? "Unpick" : "Pick for the week")
+            }
         }
     }
 

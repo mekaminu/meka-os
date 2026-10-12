@@ -329,6 +329,24 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NotifyRules.shared.actionLabel(a: NoticeAction.listen), "Listen")
     }
 
+    func testWeekGoalsPickReachesSwift() async throws {
+        // Goals, properly, item 6: the week ahead's pick of up to three goals.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "weekgoals-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let goal = try await core.addGoal(title: "Run 5k", target: nil, horizon: GoalRules.shared.horizonAt(index: 1))
+        XCTAssertEqual(core.weekAheadView.value.goals.goals.map(\.goalId), [goal])
+        XCTAssertEqual(core.weekAheadView.value.goals.line, "Pick up to 3 for the week")
+        let line = try await core.pickWeekGoal(goalId: goal, on: true)
+        XCTAssertNotNil(line)
+        XCTAssertTrue(core.weekAheadView.value.goals.goals[0].picked)
+        XCTAssertEqual(core.weekAheadView.value.goals.picked, 1)
+        XCTAssertFalse(core.weekAheadView.value.goals.full)
+        XCTAssertEqual(GoalWeekRules.shared.MAX_PICKS, 3)
+    }
+
     func testGoalBreakdownReachesSwift() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

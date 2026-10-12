@@ -36,6 +36,23 @@ data class WeekAheadDay(
     val spoken: String,
 )
 
+/**
+ * A goal offered in the week ahead's GOALS FOR THE WEEK (Goals, properly, item 6): its title, "This month · Next · Buy
+ * running shoes", and whether it is picked for the week shown.
+ */
+data class WeekAheadGoal(val goalId: String, val title: String, val meta: String, val picked: Boolean, val spoken: String)
+
+/**
+ * The week's goals pick: up to [GoalWeekRules.MAX_PICKS] of Meka's open goals for the week the week ahead shows. [line]
+ * is "Pick up to 3 for the week", "2 picked · up to 3" or "3 picked · unpick one to swap"; [full] dims the rest.
+ * Empty (no section) with no open goals.
+ */
+data class WeekAheadGoals(val goals: List<WeekAheadGoal>, val picked: Int, val line: String, val full: Boolean) {
+    companion object {
+        val EMPTY = WeekAheadGoals(emptyList(), 0, "", false)
+    }
+}
+
 /** Today's header on Sunday evening: "Your week ahead · 4 office days · 2 matches"; tapping it opens the week ahead. */
 data class WeekAheadToday(val text: String, val spoken: String)
 
@@ -55,8 +72,10 @@ data class WeekAheadView(
     val days: List<WeekAheadDay>,
     /** The family sync: things that need both of them ("Fri 16 Oct · Rex and Logan are off and you're in the office — who's covering?"). */
     val sync: List<String>,
-    /** The whole week read out: the summary, then each day with something in it, then the family sync. */
+    /** The whole week read out: the summary, then each day with something in it, then the family sync and the goals. */
     val spoken: String,
+    /** Goals for the week: the pick of up to three (Goals, properly, item 6). */
+    val goals: WeekAheadGoals = WeekAheadGoals.EMPTY,
 ) {
     companion object {
         val EMPTY = WeekAheadView(0, "This week", "", "A quiet week so far", emptyList(), emptyList(), "")
@@ -99,6 +118,8 @@ data class WeekAheadInputs(
     val renewals: List<RenewalItem> = emptyList(),
     val appointments: List<AppointmentItem> = emptyList(),
     val forecast: WeatherForecast = WeatherForecast.EMPTY,
+    /** Meka's open goals in the Goals order (the week's pick offers them). */
+    val goals: List<GoalItem> = emptyList(),
 )
 
 /**
@@ -116,6 +137,10 @@ data class WeekAheadInputs(
  * - **The heads-up:** Sunday at [HEADS_UP_MIN] (18:05, just after the evening digest, so it arrives on its own;
  *   [NoticeSource.WEEK_AHEAD], opening the week ahead): "Your week ahead" · the summary. Today's header carries the same
  *   from 18:00 until midnight.
+ * - **Goals for the week** (Goals, properly, item 6): up to [GoalWeekRules.MAX_PICKS] open goals picked for the week
+ *   shown; they become that week's goals (Today's "This week: …" line and the watch face's goal ring). Offered: the
+ *   picked ones, then the other open goals in the Goals order (This week first), Someday left out, at most
+ *   [MAX_GOAL_CHOICES]. With none picked the heads-up asks for them.
  */
 object WeekAheadRules {
     /** Today's line from Sunday 18:00 (the default time; slice 2 makes it a setting). */
@@ -130,6 +155,7 @@ object WeekAheadRules {
     private val TIME_RANGE = 6 * 60..22 * 60
     const val MAX_LINES = 6
     const val MAX_SYNC = 6
+    const val MAX_GOAL_CHOICES = 8
     const val QUIET = "A quiet week so far"
     /** A family event names one of these (whole words, any case) in its title or calendar. */
     val FAMILY_WORDS = setOf("jeanette", "family", "school", "rex", "logan", "boys", "kids", "parents")
@@ -300,6 +326,42 @@ object WeekAheadRules {
         }
     }
 
+    /** The goals offered for the week starting [weekStart], the picked ones first. */
+    fun goalPick(goals: List<GoalItem>, weekStart: Long): WeekAheadGoals {
+        val open = goals.filter { !it.done && it.horizon != GoalHorizon.SOMEDAY }
+        if (open.isEmpty()) return WeekAheadGoals.EMPTY
+        val picked = open.filter { it.weekOf == weekStart }.take(GoalWeekRules.MAX_PICKS)
+        val pickedIds = picked.map { it.id }.toSet()
+        val rest = open.filter { it.id !in pickedIds }
+        val shown = (picked + rest).take(maxOf(MAX_GOAL_CHOICES, picked.size))
+        val n = picked.size
+        val full = n >= GoalWeekRules.MAX_PICKS
+        val line = when {
+            n == 0 -> "Pick up to ${GoalWeekRules.MAX_PICKS} for the week"
+            full -> "$n picked · unpick one to swap"
+            else -> "$n picked · up to ${GoalWeekRules.MAX_PICKS}"
+        }
+        return WeekAheadGoals(
+            shown.map { g ->
+                val on = g.id in pickedIds
+                val meta = "${GoalRules.horizonLabel(g.horizon)} · ${g.nextLine}"
+                WeekAheadGoal(g.id, g.title, meta, on, "${g.title}, ${if (on) "picked for the week" else "not picked"}. $meta")
+            },
+            n, line, full,
+        )
+    }
+
+    /** "Your goals for the week: Run 5k and Read 12 books."; with none picked, a nudge to pick; empty with no goals. */
+    fun spokenGoals(g: WeekAheadGoals): String {
+        if (g.goals.isEmpty()) return ""
+        val titles = g.goals.filter { it.picked }.map { it.title.trim() }
+        return when (titles.size) {
+            0 -> "No goals picked for the week yet."
+            1 -> "Your goal for the week: ${titles[0]}."
+            else -> "Your goals for the week: ${titles.dropLast(1).joinToString(", ")} and ${titles.last()}."
+        }
+    }
+
     private fun spokenDay(label: String, dayLine: String?, weather: String?, lines: List<WeekAheadLine>): String {
         val name = label.substringBefore(' ').let { short -> CivilDate.DAY_LONG[LocalClock.DAY_SHORT.indexOf(short).coerceAtLeast(0)] }
         val bits = listOfNotNull(dayLine?.replace("–", " to "), weather?.replace("°", " degrees")) + lines.map { it.spoken }
@@ -319,12 +381,14 @@ object WeekAheadRules {
         }
         val summary = summary(inputs, days)
         val sync = sync(inputs, dayList, window, cal)
+        val goals = goalPick(inputs.goals, ws)
         val spoken = buildList {
             add("Your week ahead. ${summary.replace(" · ", ", ")}.")
             days.filter { it.dayLine != null || it.lines.isNotEmpty() }.forEach { add(it.spoken) }
             if (sync.isNotEmpty()) add("To sort out with Jeanette: " + sync.joinToString("; ") { it.replace(" · ", ", ") } + ".")
+            spokenGoals(goals).takeIf { it.isNotEmpty() }?.let { add(it) }
         }.joinToString(" ")
-        return WeekAheadView(ws, title(today), ReviewRules.rangeLabel(ws), summary, days, sync, spoken)
+        return WeekAheadView(ws, title(today), ReviewRules.rangeLabel(ws), summary, days, sync, spoken, goals)
     }
 
     // ---- Slice 2: the time setting ----
@@ -370,7 +434,11 @@ object WeekAheadRules {
         if (!setting.on) return emptyList()
         val today = cal.epochDayOf(nowMs)
         if (CivilDate.isoDayOfWeek(today) != 7 || view.weekStart != today + 1) return emptyList()
-        val text = if (view.sync.isEmpty()) view.summary else "${view.summary}. ${ShutdownRules.count(view.sync.size, "thing")} to sort out with Jeanette."
+        val text = listOfNotNull(
+            view.summary,
+            view.sync.takeIf { it.isNotEmpty() }?.let { "${ShutdownRules.count(it.size, "thing")} to sort out with Jeanette" },
+            if (view.goals.goals.isNotEmpty() && view.goals.picked == 0) "Pick your goals for the week?" else null,
+        ).joinToString(". ").let { if (it.endsWith("?")) it else if (it == view.summary) it else "$it." }
         return listOf(
             Notice(
                 key = "weekahead:${view.weekStart}", source = NoticeSource.WEEK_AHEAD, tier = NoticeTier.HEADS_UP,

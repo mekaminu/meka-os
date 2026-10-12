@@ -1859,6 +1859,21 @@ class MekaCore(
         os.meka.core.domain.WeekAheadRules.summary(weekAheadSettings.setting())
     }
 
+    /**
+     * Picks a goal as one of the goals for the week the week ahead shows (next week from Saturday, else this one), or
+     * unpicks it (Goals, properly, item 6; up to three a week). Returns "“Run 5k” is one of next week's goals" /
+     * "“Run 5k” is off next week's goals", or null when nothing changed (a fourth pick is refused).
+     */
+    suspend fun pickWeekGoal(goalId: String, on: Boolean): String? = onCore {
+        val today = cal.epochDayOf(nowMs())
+        val ws = os.meka.core.domain.WeekAheadRules.weekStart(today)
+        if (!goals.pickForWeek(goalId, ws, on)) return@onCore null
+        refresh()
+        val title = _goals.value.goals.firstOrNull { it.id == goalId }?.title ?: "That goal"
+        val week = if (ws > today) "next week's" else "this week's"
+        if (on) "“$title” is one of $week goals" else "“$title” is off $week goals"
+    }
+
     // ---- Date night (V1, slice 1; Ask → More → Date night) ----
 
     /**
@@ -3962,6 +3977,7 @@ class MekaCore(
                 renewals = listsNow.renewals.all,
                 appointments = appointments.items(),
                 forecast = forecast,
+                goals = goalsNow.goals,
             ),
             nowMs(), cal, ::dayWindowOf,
         )

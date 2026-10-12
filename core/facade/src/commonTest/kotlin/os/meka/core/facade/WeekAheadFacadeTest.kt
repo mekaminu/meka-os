@@ -69,4 +69,32 @@ class WeekAheadFacadeTest {
         assertNull(fold.today.value.weekAhead)
         assertEquals("Next week", fold.weekAheadView.value.title)
     }
+
+    @Test
+    fun sundaysPickBecomesNextWeeksGoalsAndTheHeadsUpAsksForThem() = runTest {
+        val fold = core()
+        val run = fold.addGoal("Run 5k", null, os.meka.core.domain.GoalHorizon.MONTH)
+        val read = fold.addGoal("Read 12 books", null, os.meka.core.domain.GoalHorizon.YEAR)
+        val pick = fold.weekAheadView.value.goals
+        assertEquals(listOf(run, read), pick.goals.map { it.goalId })
+        assertEquals("Pick up to 3 for the week", pick.line)
+        assertTrue(fold.weekAheadView.value.spoken.endsWith("No goals picked for the week yet."))
+        now += 3_600_000L + 5 * 60_000L // 18:05
+        val n = fold.governNotifications(null, DeviceAlerts.ALL).post.single { it.source == NoticeSource.WEEK_AHEAD }
+        assertTrue(n.text.endsWith("Pick your goals for the week?"), n.text)
+
+        // Sunday's pick is for the week starting tomorrow; today's line is untouched.
+        assertEquals("“Run 5k” is one of next week's goals", fold.pickWeekGoal(run, true))
+        assertNull(fold.pickWeekGoal(run, true))
+        assertEquals("1 picked · up to 3", fold.weekAheadView.value.goals.line)
+        assertTrue(fold.weekAheadView.value.spoken.endsWith("Your goal for the week: Run 5k."))
+        assertNull(fold.goalsView.value.week.line)
+
+        // Monday: it is this week's goal.
+        now += 12 * 3_600_000L
+        fold.tick()
+        assertEquals("This week: “Run 5k” not moving yet", fold.goalsView.value.week.line)
+        assertEquals("“Run 5k” is off this week's goals", fold.pickWeekGoal(run, false))
+        assertNull(fold.goalsView.value.week.line)
+    }
 }
