@@ -15,14 +15,79 @@ struct TriageCardsView: View {
     var firstIndex: Int = 2
 
     var body: some View {
+        // One card per conversation (messages grouped per chat, slice 1): a chat with one message shows its card as
+        // before; two or more show the chat's card with every message under Show all.
         VStack(alignment: .leading, spacing: MekaSpace.m) {
-            ForEach(Array(model.triage.enumerated()), id: \.element.id) { i, card in
-                TriageCardRow(card: card, palette: palette) { model.answerTriage(card, lead: $0) }
-                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-                    .staggeredAppear(firstIndex + i)
+            ForEach(Array(model.triageChats.enumerated()), id: \.element.key) { i, chat in
+                Group {
+                    if chat.single, let card = chat.cards.first {
+                        TriageCardRow(card: card, palette: palette) { model.answerTriage(card, lead: $0) }
+                    } else {
+                        TriageChatRow(chat: chat, palette: palette)
+                    }
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                .staggeredAppear(firstIndex + i)
             }
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.triage.map(\.id))
+    }
+}
+
+/// A chat's card: its name, "21 new · 4 people · 1 needs a reply · WhatsApp · 14:20", up to three lines of what matters,
+/// Done (every message seen on both devices; the undo bar says so) and Show all, which unfolds each message's own card
+/// under it on the expand spring. Reduced motion: cross-fades.
+private struct TriageChatRow: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let chat: TriageChat
+    let palette: MekaPalette
+    @State private var open = false
+
+    var body: some View {
+        let rules = TriageChatRules.shared
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text(chat.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
+                Text("\(chat.countLine) · \(chat.meta)").font(MekaType.itemMeta)
+                    .foregroundStyle(chat.replies > 0 ? palette.accent : palette.textSecondary)
+                ForEach(chat.top, id: \.self) { line in
+                    Text(line).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(2).padding(.top, MekaSpace.xxs)
+                }
+                HStack(spacing: MekaSpace.xs) {
+                    pill(rules.DONE, filled: true) { model.doneTriageChat(chat) }
+                    pill(open ? rules.SHOW_LESS : rules.expandLabel(chat: chat), filled: false) {
+                        MekaHaptics.tick()
+                        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open.toggle() }
+                    }
+                }
+                .padding(.top, MekaSpace.m)
+            }
+            .padding(MekaSpace.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(chat.spoken)
+            .mekaHoverLift()
+            if open {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    ForEach(chat.cards, id: \.id) { card in
+                        TriageCardRow(card: card, palette: palette) { model.answerTriage(card, lead: $0) }
+                    }
+                }
+                .padding(.leading, MekaSpace.m)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    private func pill(_ label: String, filled: Bool, action: @escaping () -> Void) -> some View {
+        Button(label, action: action)
+            .buttonStyle(MekaPressStyle())
+            .font(MekaType.itemMeta)
+            .foregroundStyle(filled ? palette.onAccent : palette.accent)
+            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+            .background(filled ? palette.accent : palette.surface, in: Capsule())
     }
 }
 

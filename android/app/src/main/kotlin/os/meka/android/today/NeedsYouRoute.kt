@@ -44,6 +44,8 @@ import os.meka.core.domain.DecisionCard
 import os.meka.core.domain.RequestCard
 import os.meka.core.domain.SchoolCover
 import os.meka.core.domain.TriageCard
+import os.meka.core.domain.TriageChat
+import os.meka.core.domain.TriageChatRules
 import os.meka.core.domain.TriageReplyRules
 import os.meka.android.work.LiveReplies
 import os.meka.core.domain.DecisionEffect
@@ -130,6 +132,8 @@ internal class DecisionMoves(
     val changed: MutableState<RequestChange?> = mutableStateOf(null),
     /** Send · Open chat · Edit · Not now · Seen on a triaged message (V1, messages slice 3). */
     val onTriage: (TriageCard, TriageChoice) -> Unit = { _, _ -> },
+    /** Done on a chat's card (messages grouped per chat, slice 1): every message in it seen, on both devices. */
+    val onTriageChat: (TriageChat) -> Unit = {},
     /** "Send all 3": each easy reply's draft, as its card shows it, on Meka's one tap. */
     val onSendAll: (List<TriageCard>) -> Unit = {},
     /** The undo bar, for the group digest's Caught up and group switches (slice 4). */
@@ -225,6 +229,11 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 }
                 Unit
             }
+        }, onTriageChat = { chat ->
+            scope.launch {
+                if (runCatching { core.seenTriageChat(chat.ids) }.getOrDefault(0) > 0) undo.show(TriageChatRules.doneLine(chat), null)
+                Unit
+            }
         }, onSendAll = { cards ->
             scope.launch {
                 var sent = 0
@@ -276,6 +285,7 @@ internal fun NeedsYouColumn(
     val asks = covers.size + (if (nudge != null) 1 else 0) + due.size
     val live by LiveReplies.live.collectAsState()
     val sendAll = remember(triage, live) { TriageReplyRules.sendAll(triage, live) }
+    val chats = remember(triage) { TriageChatRules.chats(triage) }
     // Meka's edits of MEKA's drafts, by message id, so Send and "Send all" send what each card shows.
     val edits = remember { mutableStateMapOf<String, String>() }
     // Busy groups' chatter, kept on this phone (V1, messages slice 4): open at the top from 12:30 and 18:30, else a line.
@@ -295,7 +305,7 @@ internal fun NeedsYouColumn(
     ) {
         item(key = "title") {
             if (compact) {
-                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + approvals.size + requests.size + triage.size + asks), Modifier.animateItem().appear(rememberAppearance(0, play)))
+                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + approvals.size + requests.size + chats.size + asks), Modifier.animateItem().appear(rememberAppearance(0, play)))
             } else {
                 Text("Needs you", style = MekaType.greeting, color = Meka.colors.textPrimary,
                     modifier = Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play)))
@@ -329,10 +339,16 @@ internal fun NeedsYouColumn(
                     Modifier.animateItem().appear(rememberAppearance(2, play)))
             }
         }
-        triage.forEachIndexed { i, card ->
-            item(key = "triage-${card.id}") {
-                TriageCardView(card, card.id in live, edits[card.id] ?: card.draft.orEmpty(), { edits[card.id] = it }, { moves.onTriage(card, it) },
-                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + i, play)))
+        // One card per conversation (messages grouped per chat, slice 1): a chat with one message shows its card as
+        // before; two or more show the chat's card, with every message's own card under Show all.
+        chats.forEachIndexed { i, chat ->
+            item(key = "triage-chat-${chat.key}") {
+                val cardFor: @Composable (TriageCard, Modifier) -> Unit = { card, m ->
+                    TriageCardView(card, card.id in live, edits[card.id] ?: card.draft.orEmpty(), { edits[card.id] = it }, { moves.onTriage(card, it) }, m)
+                }
+                val m = Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + i, play))
+                if (chat.single) cardFor(chat.cards.single(), m)
+                else TriageChatView(chat, { moves.onTriageChat(chat) }, cardFor, m)
             }
         }
         // School days off on office days, a week ahead (school rhythm, slice 1): soonest first, above the requests.

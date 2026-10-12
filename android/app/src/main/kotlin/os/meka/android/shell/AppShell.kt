@@ -80,7 +80,6 @@ import os.meka.core.domain.FoldModeRules
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.activity.compose.BackHandler
 import os.meka.core.facade.MekaCore
-import os.meka.core.domain.TriageLane
 import kotlinx.coroutines.delay
 import os.meka.android.MekaApplication
 import androidx.compose.ui.platform.LocalContext
@@ -104,7 +103,7 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     val appointments by core.appointmentsView.collectAsState()
     // Due chases and decision reviews wait on you too, so they count in the badge; so do requests from people and
     // messages waiting on a reply (the messages assistant; FYIs don't nag).
-    val needsYou = today.needsYou.size + lists.dueCount + approvals.size + requests.size + triage.count { it.lane == TriageLane.NEEDS_REPLY } + school.covers.size +
+    val needsYou = today.needsYou.size + lists.dueCount + approvals.size + requests.size + os.meka.core.domain.TriageChatRules.replyChats(triage) + school.covers.size +
         (if (dateNight.nudge != null) 1 else 0) + appointments.nudges.size
     val haptics = rememberMekaHaptics()
     // How the current place behind Ask was opened (a More row, a Today card): its title travels from there and back.

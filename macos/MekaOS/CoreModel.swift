@@ -143,6 +143,8 @@ final class CoreModel {
     /// Messages the Fold triaged (V1, messages slice 3): Needs a reply (with MEKA's draft) and FYI, synced. The Mac
     /// never sends: Copy reply puts the draft on the pasteboard; Not now / Seen clear the card on both devices.
     private(set) var triage: [TriageCard] = []
+    /// The same cards, one per conversation (messages grouped per chat, slice 1).
+    var triageChats: [TriageChat] { TriageChatRules.shared.chats(cards: triage) }
     /// The group digest (V1, messages slice 4b): one card per busy group at the latest digest time, made on the Fold
     /// (its name, how many messages, who wrote, MEKA's gist; never the messages). Caught up here clears it there too.
     private(set) var groupGists: [GroupGist] = []
@@ -3057,6 +3059,20 @@ final class CoreModel {
     /// A triaged message's buttons (V1, messages slice 3). [lead]: Copy reply (a draft; it goes on the pasteboard and
     /// the card is answered, Meka sends it himself) or Seen (an FYI, or a reply with no draft); otherwise Not now.
     /// Only the card's id (a String) crosses to the core. Nothing is ever sent from the Mac.
+    /// Done on a chat's card (messages grouped per chat, slice 1): every message in it seen on both devices. Only the
+    /// ids and the undo line (Strings) cross to the core's task. Nothing is sent or marked read anywhere.
+    func doneTriageChat(_ chat: TriageChat) {
+        guard let core else { return }
+        MekaHaptics.light()
+        let ids = chat.ids
+        let line = TriageChatRules.shared.doneLine(chat: chat)
+        Task {
+            do {
+                if try await core.seenTriageChat(messageIds: ids).int32Value > 0 { offerEventUndo(line, nil) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     func answerTriage(_ card: TriageCard, lead: Bool) {
         guard let core else { return }
         let id = card.id

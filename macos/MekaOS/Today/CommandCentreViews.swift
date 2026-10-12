@@ -54,7 +54,7 @@ struct CommandNeedsYouView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                SectionLabel(CommandCentreRules.shared.needsYouHeading(count: Int32(model.needsYouCards.count + model.approvals.count + model.requests.count + model.triage.count + model.needsYouAsks)), palette)
+                SectionLabel(CommandCentreRules.shared.needsYouHeading(count: Int32(model.needsYouCards.count + model.approvals.count + model.requests.count + model.triageChats.count + model.needsYouAsks)), palette)
                     .staggeredAppear(0)
                 // The approvals inbox (V1, slice 1) first.
                 ApprovalCardsView(palette: palette, firstIndex: 1)

@@ -36,6 +36,8 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.TriageCard
 import os.meka.core.domain.TriageCardPrimary
+import os.meka.core.domain.TriageChat
+import os.meka.core.domain.TriageChatRules
 import os.meka.core.domain.TriageReplyRules
 import os.meka.core.domain.TriageSendAll
 
@@ -118,6 +120,49 @@ internal fun TriageCardView(
             }
             rules.secondary(card)?.let { quiet ->
                 TriagePill(quiet, filled = false, quiet = true, spoken = "$quiet: ${rules.who(card)}") { haptics.tick(); onChoice(TriageChoice.NotNow) }
+            }
+        }
+    }
+}
+
+/**
+ * One conversation's messages as one card (messages grouped per chat, slice 1): the chat's name, "21 new · 4 people ·
+ * 1 needs a reply" with the app and the latest time, and up to three lines of what matters (a reply or a question
+ * first). Show all unfolds every message's own card under it, oldest first (expand spring; tick haptic), each with its
+ * Send · Edit · Not now; Done (light haptic) takes the whole chat off both devices and the undo bar says so. Nothing is
+ * sent or marked read in the app by Done.
+ */
+@Composable
+internal fun TriageChatView(
+    chat: TriageChat, onDone: () -> Unit, cardFor: @Composable (TriageCard, Modifier) -> Unit, modifier: Modifier = Modifier,
+) {
+    val haptics = rememberMekaHaptics()
+    var open by rememberSaveable(chat.key) { mutableStateOf(false) }
+    Column(modifier.fillMaxWidth().testTag("triage-chat-${chat.key}")) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+                .padding(MekaSpace.m),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            Text(chat.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { contentDescription = chat.spoken })
+            Text("${chat.countLine} · ${chat.meta}", style = MekaType.itemMeta,
+                color = if (chat.replies > 0) Meka.colors.accent else Meka.colors.textSecondary)
+            chat.top.forEach { line ->
+                Text(line, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = MekaSpace.xxs))
+            }
+            Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                TriagePill(TriageChatRules.DONE, filled = true, spoken = "Done with ${chat.title}, ${chat.cards.size} messages") {
+                    haptics.light(); onDone()
+                }
+                val label = if (open) TriageChatRules.SHOW_LESS else TriageChatRules.expandLabel(chat)
+                TriagePill(label, filled = false, spoken = label) { haptics.tick(); open = !open }
+            }
+        }
+        AnimatedVisibility(open, enter = unfold(), exit = fold()) {
+            Column(Modifier.padding(start = MekaSpace.m, top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                chat.cards.forEach { card -> cardFor(card, Modifier) }
             }
         }
     }

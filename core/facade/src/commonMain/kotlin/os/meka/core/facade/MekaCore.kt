@@ -1386,6 +1386,14 @@ class MekaCore(
         onCore { triageCards.resolve(messageId, os.meka.core.domain.TriageResolution.SEEN) }
 
     /**
+     * Done on a chat's card (V1, messages grouped per chat, slice 1): every message card of that chat
+     * ([os.meka.core.domain.TriageChat.ids]) leaves Needs you on every device as seen, in one go. Nothing is sent or
+     * marked read anywhere. Returns how many were still open.
+     */
+    suspend fun seenTriageChat(messageIds: List<String>): Int =
+        onCore { messageIds.count { triageCards.resolve(it, os.meka.core.domain.TriageResolution.SEEN) } }
+
+    /**
      * Approve on an approval card (approvals inbox, slice 1). [confirmedWithBiometric] is true only when the app's
      * system fingerprint prompt (BiometricPrompt, strong biometrics only; Touch ID on the Mac) has just succeeded for
      * this card: without it the answer is refused ([os.meka.core.domain.ApprovalRefusal.NEEDS_BIOMETRIC]) and nothing is

@@ -65,6 +65,8 @@ data class TriageCard(
     val atMs: Long,
     /** One sentence for TalkBack / VoiceOver. */
     val spoken: String,
+    /** The group's name for a group message that named Meka; null for a 1:1 chat (messages grouped per chat, slice 1). */
+    val group: String? = null,
 ) {
     companion object {
         const val LOCAL_LINE = "Not sent to MEKA's AI"
@@ -208,6 +210,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
         return TriageCard(
             id = s.messageId, lane = s.lane, personKey = People.key(s.person), from = from, gist = gist, draft = draft,
             app = s.app, mentioned = s.group != null, atMs = s.atMs, spoken = spoken,
+            group = s.group?.trim()?.take(40)?.takeIf { it.isNotEmpty() },
         )
     }
 

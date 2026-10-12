@@ -1234,12 +1234,27 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testTriageReplyRulesReachSwift() {
         let rules = TriageReplyRules.shared
         let card = TriageCard(id: "wa-1", lane: .needsReply, personKey: "tunde", from: "Tunde · 14:02", gist: "Asks if you're coming",
-                              draft: "Yes, see you then", app: .whatsapp, mentioned: false, atMs: 1_000, spoken: "Tunde")
+                              draft: "Yes, see you then", app: .whatsapp, mentioned: false, atMs: 1_000, spoken: "Tunde", group: nil)
         XCTAssertEqual(rules.label(primary: rules.primary(card: card, live: false, canSend: false)), "Copy reply")
         XCTAssertEqual(rules.secondary(card: card), "Not now")
         XCTAssertEqual(rules.copiedLine(card: card), "Reply to Tunde copied")
         XCTAssertEqual(rules.notNowLine(card: card), "Not now · Tunde")
         XCTAssertEqual(card.lane.label, "Needs a reply")
+    }
+
+    /// Messages grouped per chat (slice 1): one card per conversation reaches Swift with its count and Done line.
+    func testTriageChatsReachSwift() {
+        let cards = (1...3).map { i in
+            TriageCard(id: "g\(i)", lane: .fyi, personKey: i == 2 ? "obi" : "femi", from: "\(i == 2 ? "Obi" : "Femi") in Barça lads · 14:0\(i)",
+                       gist: "Lineup talk", draft: nil, app: .whatsapp, mentioned: true, atMs: Int64(i), spoken: "x", group: "Barça lads")
+        }
+        let chat = TriageChatRules.shared.chats(cards: cards).first!
+        XCTAssertEqual(chat.title, "Barça lads")
+        XCTAssertEqual(chat.countLine, "3 new · 2 people")
+        XCTAssertFalse(chat.single)
+        XCTAssertEqual(chat.ids, ["g1", "g2", "g3"])
+        XCTAssertEqual(TriageChatRules.shared.doneLine(chat: chat), "Done · Barça lads · 3 messages")
+        XCTAssertEqual(TriageChatRules.shared.replyChats(cards: cards), 0)
     }
 
     /// The group digest's synced cards (V1, messages slice 4b) reach Swift: the head line and Caught up.

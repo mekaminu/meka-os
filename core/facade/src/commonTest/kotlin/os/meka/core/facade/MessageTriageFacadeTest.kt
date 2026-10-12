@@ -105,6 +105,25 @@ class MessageTriageFacadeTest {
     }
 
     @Test
+    fun aChatsCardsGroupIntoOneAndDoneClearsThemAllWithoutSendingAnything() = runTest {
+        val c = core()
+        server.reply = MessageTriageCodec.Response("answered", lane = "fyi", summary = "Lineup talk")
+        repeat(3) { i -> assertIs<TriageRead.Read>(c.triageMessage(msg(listOf("Femi", "Obi", "Femi")[i], "@Meka lineup $i", group = "Barça lads", at = now - 60_000 - i))) }
+        server.reply = MessageTriageCodec.Response("answered", lane = "needs_reply", summary = "Asks if you're coming", draft = "Yes")
+        assertIs<TriageRead.Read>(c.triageMessage(msg("Tunde", "are you coming?")))
+        val chats = os.meka.core.domain.TriageChatRules.chats(c.triage.value)
+        assertEquals(listOf("Tunde", "Barça lads"), chats.map { it.title })
+        val lads = chats[1]
+        assertEquals("3 new · 2 people", lads.countLine)
+        assertEquals("Barça lads", c.triage.value.first { it.mentioned }.group)
+        val calls = server.sent.size
+        assertEquals(3, c.seenTriageChat(lads.ids))
+        assertEquals(listOf("Tunde"), os.meka.core.domain.TriageChatRules.chats(c.triage.value).map { it.title })
+        assertEquals(0, c.seenTriageChat(lads.ids))
+        assertEquals(calls, server.sent.size)
+    }
+
+    @Test
     fun aDraftCarryingALinkIsDroppedAndAGroupMentionSendsTheGroupsName() = runTest {
         val c = core()
         server.reply = MessageTriageCodec.Response("answered", lane = "needs_reply", summary = "Tickets", draft = "Pay here: www.evil.example.com")

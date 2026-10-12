@@ -117,7 +117,7 @@ struct ShellView: View {
     }
 
     /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).
-    private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue + model.approvals.count + model.requests.count + model.triage.filter { TriageReplyRules.shared.secondary(card: $0) != nil }.count + model.needsYouAsks }
+    private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue + model.approvals.count + model.requests.count + Int(TriageChatRules.shared.replyChats(cards: model.triage)) + model.needsYouAsks }
 
     /// Sidebar selection that animates the switch (the List only ever sets a value; nil is ignored).
     private var selection: Binding<ShellDestination?> {
