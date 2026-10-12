@@ -4594,8 +4594,10 @@ class MekaCore(
     suspend fun reportFoldPostures(model: String?, changes: List<os.meka.core.domain.FoldPostureLog.Change>): Boolean {
         val api = foldPostureApi ?: return false
         if (changes.isEmpty()) return false
-        val codec = os.meka.core.wire.FoldPostureCodec
-        val report = codec.Report(model, nowMs(), changes.take(codec.CHANGES_MAX).map { codec.Change(it.atMs, it.entry) })
+        val report = os.meka.core.wire.FoldPostureCodec.Report(
+            model, nowMs(),
+            changes.take(os.meka.core.wire.FoldPostureCodec.CHANGES_MAX).map { os.meka.core.wire.FoldPostureCodec.Change(it.atMs, it.entry) },
+        )
         return try { api.reportFoldPostures(report) } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
     }
 
