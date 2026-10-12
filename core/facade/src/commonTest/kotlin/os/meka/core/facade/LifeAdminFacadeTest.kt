@@ -67,4 +67,20 @@ class LifeAdminFacadeTest {
         assertTrue(mac.lifeAdminOff())
         assertFalse(mac.lifeAdminOff())
     }
+
+    @Test
+    fun theHourClosesOnTodayWithWhatWasTicked() = runTest {
+        val mac = core("mac")
+        mac.setLifeAdmin(6, 10 * 60)
+        val id = mac.capture("Call the GP", null)!!
+        mac.capture("Renew passport", null)
+        mac.tick()
+        val sat = mac.lifeAdminView.value.thisWeek!!
+        assertEquals(2, mac.lifeAdminView.value.heldTaskIds.size)
+        now = sat.startMs + 20 * 60_000L
+        mac.complete(id)
+        now = sat.endMs + 5 * 60_000L
+        mac.tick()
+        assertEquals("✓ Life admin hour done · 1 job ticked · 1 left for next week", mac.today.value.lifeAdmin?.text)
+    }
 }

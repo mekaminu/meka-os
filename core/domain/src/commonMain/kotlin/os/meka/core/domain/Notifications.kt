@@ -662,7 +662,8 @@ object NoticeSources {
                 title = "Review: ${d.statement}", text = "", atMs = todayStart, target = NoticeTarget.LISTS,
             )
         }
-        for (item in today.needsYou.filter { it.reason == NeedsYouReason.OVERDUE }) {
+        // Life admin hour, slice 2: an overdue admin task gathered into the hour waits for it (its heads-up sums them).
+        for (item in today.needsYou.filter { it.reason == NeedsYouReason.OVERDUE && !LifeAdminRules.holdsOverdue(lifeAdmin, it.task.id) }) {
             out += Notice(
                 key = "overdue:${item.task.id}:$day", source = NoticeSource.OVERDUE, tier = NoticeTier.DIGEST,
                 title = item.task.title, text = "overdue", atMs = todayStart, target = NoticeTarget.NEEDS_YOU,

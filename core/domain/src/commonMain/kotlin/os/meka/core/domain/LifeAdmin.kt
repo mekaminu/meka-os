@@ -36,8 +36,14 @@ data class LifeAdminSetting(val weekday: Int, val startMin: Int, val skipped: Se
 
 enum class LifeAdminJobKind { TASK, RENEWAL }
 
-/** One job gathered into the hour: "Renew passport" · "due Thu 12 Nov", or a task with no line. */
-data class LifeAdminJob(val id: String, val kind: LifeAdminJobKind, val title: String, val line: String?, val spoken: String)
+/**
+ * One job gathered into the hour: "Renew passport" · "due Thu 12 Nov", or a task with no line. [overdue]: its day has
+ * gone (slice 2: its overdue digest line waits for the hour, which counts it).
+ */
+data class LifeAdminJob(
+    val id: String, val kind: LifeAdminJobKind, val title: String, val line: String?, val spoken: String,
+    val overdue: Boolean = false,
+)
 
 /** A week's hour as booked. */
 data class LifeAdminSlot(
@@ -70,6 +76,13 @@ data class LifeAdminView(
     val jobs: List<LifeAdminJob>,
     /** All jobs gathered (more than [jobs] when cut). */
     val jobCount: Int,
+    /**
+     * Slice 2: the gathered tasks whose overdue digest lines wait for the hour (all of them, not only [jobs]), while an
+     * hour is still to come (this week's or next week's); empty when off or with none ahead.
+     */
+    val heldTaskIds: Set<String> = emptySet(),
+    /** Of [jobCount], how many are overdue (the heads-up says "2 overdue"). */
+    val overdueCount: Int = 0,
 ) {
     companion object {
         val EMPTY = LifeAdminView(
@@ -96,7 +109,10 @@ object LifeAdminRules {
 
     const val OFF_LINE = "Off · pick a day and MEKA books one hour a week for the small admin jobs"
     const val NOTE = "MEKA gathers tasks like calls, forms, renewals and replies into the hour, and the renewals that need you. " +
+        "Overdue ones wait for the hour instead of coming up in every digest. " +
         "The planner and Gym leave it clear; if a meeting lands on it, it moves. Skip a week and that hour is free again."
+    /** Slice 2: a task ticked this long after the hour still counts as done in it. */
+    const val CLOSE_GRACE_MS = 30 * 60_000L
     const val OFF_LABEL = "Turn off"
     const val SKIP_LABEL = "Skip this week"
     const val KEEP_LABEL = "Keep it"
@@ -159,18 +175,24 @@ object LifeAdminRules {
                 r.state == RenewalState.OVERDUE -> "overdue since ${CivilDate.shortLabel(r.dueDay)}"
                 else -> "due ${dueLabel(r.dueDay, today)}"
             }
-            out += LifeAdminJob("renewal:${r.id}", LifeAdminJobKind.RENEWAL, r.title, line, "${r.title}, $line")
+            out += LifeAdminJob("renewal:${r.id}", LifeAdminJobKind.RENEWAL, r.title, line, "${r.title}, $line", r.state == RenewalState.OVERDUE)
         }
         val open = tasks.filter { t ->
             (t.lifecycle == Lifecycle.INBOX || t.lifecycle == Lifecycle.ACTIVE) && !t.waitsForItsDay(today) && t.eventId == null &&
                 isAdmin(t.title) && (t.scheduledAtMs == null || (slot != null && t.scheduledAtMs >= slot.startMs && t.scheduledAtMs < slot.endMs))
         }.sortedWith(compareByDescending<Task> { it.priority }.thenBy { it.createdAtMs }.thenBy { it.id })
         for (t in open) {
-            val line = t.dueAtMs?.let { "due " + dueLabel(cal.epochDayOf(it), today) }
-            out += LifeAdminJob("task:${t.id}", LifeAdminJobKind.TASK, t.title, line, listOfNotNull(t.title, line).joinToString(", "))
+            val dueDay = t.dueAtMs?.let { cal.epochDayOf(it) }
+            val overdue = dueDay != null && dueDay < today
+            val line = dueDay?.let { if (overdue) "overdue since ${CivilDate.shortLabel(it)}" else "due " + dueLabel(it, today) }
+            out += LifeAdminJob(
+                TASK_PREFIX + t.id, LifeAdminJobKind.TASK, t.title, line, listOfNotNull(t.title, line).joinToString(", "), overdue,
+            )
         }
         return out
     }
+
+    private const val TASK_PREFIX = "task:"
 
     private fun dueLabel(day: Long, today: Long): String = when (day) {
         today -> "today"
@@ -233,7 +255,12 @@ object LifeAdminRules {
             else -> "no free hour this week"
         }
         val summary = "${everyLine(s)} · $nextPart · ${jobsCount(jobs.size)}"
-        return LifeAdminView(true, s.weekday, s.startMin, summary, current, skipped, next, jobs.take(SHOWN), jobs.size)
+        // Slice 2: while an hour is still to come, the gathered tasks' overdue digest lines wait for it.
+        val held = if (next == null) emptySet()
+        else jobs.filter { it.kind == LifeAdminJobKind.TASK }.map { it.id.removePrefix(TASK_PREFIX) }.toSet()
+        return LifeAdminView(
+            true, s.weekday, s.startMin, summary, current, skipped, next, jobs.take(SHOWN), jobs.size, held, jobs.count { it.overdue },
+        )
     }
 
     /** Today's header on the hour's day, from [TODAY_FROM_MIN] (or its start, if earlier) until it ends; null otherwise. */
@@ -260,9 +287,46 @@ object LifeAdminRules {
         val text = if (more > 0) "$named · and $more more" else named
         return listOf(Notice(
             key = "life-admin:${h.day}:start", source = NoticeSource.LIFE_ADMIN, tier = NoticeTier.HEADS_UP,
-            title = "$TITLE · ${jobsCount(v.jobCount)}", text = text, atMs = h.startMs, target = NoticeTarget.TODAY,
+            title = "$TITLE · ${jobsCount(v.jobCount)}" + (if (v.overdueCount > 0) " · ${v.overdueCount} overdue" else ""), text = text, atMs = h.startMs, target = NoticeTarget.TODAY,
             expiresAtMs = h.endMs, precision = NoticePrecision.CLOCK,
         ))
+    }
+
+    /**
+     * Slice 2: whether the overdue digest line for task [taskId] waits for the hour ([LifeAdminView.heldTaskIds]): the
+     * hour's heads-up sums it instead of every digest until then.
+     */
+    fun holdsOverdue(v: LifeAdminView?, taskId: String): Boolean = v != null && v.on && taskId in v.heldTaskIds
+
+    /**
+     * Slice 2: the hour's close on Today's header, from its end until the day is out: "✓ Life admin hour done · 3 jobs
+     * ticked · 2 left for next week" (tasks ticked during it or within [CLOSE_GRACE_MS] after, that read as admin or
+     * were planned into it), or "Life admin hour over · 4 jobs wait for next week" when nothing was ticked; null when
+     * skipped, not today, not over yet, or there was nothing to do. [waiting] is what is still gathered.
+     */
+    fun closeLine(s: LifeAdminSetting?, slot: LifeAdminSlot?, tasks: List<Task>, waiting: Int, today: Long, nowMs: Long): LifeAdminLine? {
+        val h = kept(s, slot) ?: return null
+        if (h.day != today || nowMs < h.endMs) return null
+        val ticked = tasks.count { t ->
+            val at = t.completedAtMs
+            t.isDone && at != null && at >= h.startMs && at < h.endMs + CLOSE_GRACE_MS && t.eventId == null &&
+                (isAdmin(t.title) || (t.scheduledAtMs != null && t.scheduledAtMs >= h.startMs && t.scheduledAtMs < h.endMs))
+        }
+        val left = when (waiting) { 0 -> null; 1 -> "1 left for next week"; else -> "$waiting left for next week" }
+        return when {
+            ticked > 0 -> {
+                val did = if (ticked == 1) "1 job ticked" else "$ticked jobs ticked"
+                LifeAdminLine(
+                    listOfNotNull("✓ $TITLE done", did, left).joinToString(" · "),
+                    "$TITLE done: $did" + (left?.let { ", $it" } ?: "") + ".",
+                )
+            }
+            waiting > 0 -> {
+                val wait = if (waiting == 1) "1 job waits for next week" else "$waiting jobs wait for next week"
+                LifeAdminLine("$TITLE over · $wait", "$TITLE over. $wait.")
+            }
+            else -> null
+        }
     }
 
     /** The line after Skip this week / Keep it: "Skipped this week's life admin hour · Sat 17 Oct is free again". */

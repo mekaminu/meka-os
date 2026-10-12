@@ -4223,7 +4223,9 @@ class MekaCore(
             school = schoolToday,
             dinner = mealPlan.tonight(),
             dateNight = os.meka.core.domain.DateNightRules.todayLine(dateNightNow, todayDay, cal.minuteOfDay(nowMs())),
-            lifeAdmin = os.meka.core.domain.LifeAdminRules.todayLine(lifeAdminViewNow, todayDay, nowMs(), cal),
+            lifeAdmin = os.meka.core.domain.LifeAdminRules.todayLine(lifeAdminViewNow, todayDay, nowMs(), cal)
+                // Slice 2: once it's over, how it went ("✓ Life admin hour done · 3 jobs ticked").
+                ?: os.meka.core.domain.LifeAdminRules.closeLine(lifeAdminNow, adminThis, all, lifeAdminViewNow.jobCount, todayDay, nowMs()),
             // Train-time queue, slice 1: on an office day's commute, what's saved for the train.
             trainQueue = os.meka.core.domain.QueueRules.trainLine(trainQueue.items(), office, nowMs(), cal),
             weekAhead = os.meka.core.domain.WeekAheadRules.todayLine(weekAheadNow, nowMs(), cal, weekAheadSettings.setting()),

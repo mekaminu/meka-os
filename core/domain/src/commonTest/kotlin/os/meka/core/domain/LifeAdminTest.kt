@@ -131,4 +131,52 @@ class LifeAdminTest {
         assertEquals(10 * 60, off.startMin)
         assertEquals(6, off.weekday)
     }
+
+    @Test
+    fun overdueAdminWaitsForTheHourAndTheHourClosesWithWhatWasTicked() {
+        assertTrue(aFold.set(6, 10 * 60))
+        val s = aFold.setting()!!
+        val free = LifeAdminRules.slot(s, mon, cal) { emptyList() }!!
+        val next = LifeAdminRules.slot(s, mon + 7, cal) { emptyList() }!!
+        val late = task("t1", "Call the GP").copy(dueAtMs = at(mon - 2, 9))
+        val jobs = LifeAdminRules.jobs(listOf(late, task("t22", "Renew passport")), emptyList(), mon, free, cal)
+        assertEquals("overdue since Sat 10 Oct", jobs.first().line)
+        assertTrue(jobs.first().overdue)
+
+        // Held while an hour is to come; the heads-up counts them.
+        val v = LifeAdminRules.view(s, free, next, jobs, world.clock.nowMs)
+        assertEquals(setOf("t1", "t22"), v.heldTaskIds)
+        assertTrue(LifeAdminRules.holdsOverdue(v, "t1"))
+        assertFalse(LifeAdminRules.holdsOverdue(v, "other"))
+        assertEquals("Life admin hour · 2 jobs · 1 overdue", LifeAdminRules.notices(v, world.clock.nowMs).single().title)
+        // Through the governor's sources: the overdue digest line isn't there while held, and is once the hour is off.
+        val today = Today(listOf(NeedsYouItem(late, NeedsYouReason.OVERDUE)), null, emptyList(), emptyList())
+        fun overdue(admin: LifeAdminView?) = NoticeSources.collect(
+            ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, today, world.clock.nowMs, cal, lifeAdmin = admin,
+        ).filter { it.source == NoticeSource.OVERDUE }
+        assertTrue(overdue(v).isEmpty())
+        assertEquals(1, overdue(null).size)
+        assertEquals(1, overdue(LifeAdminRules.view(null, null, null, emptyList(), world.clock.nowMs)).size)
+        // No hour ahead (none free this week or next): nothing is held.
+        assertTrue(LifeAdminRules.view(s, null, null, jobs, world.clock.nowMs).heldTaskIds.isEmpty())
+
+        // The close: from the hour's end on its day. Two admin tasks ticked in it (one just after), one long after.
+        fun done(id: String, title: String, atMs: Long) = task(id, title, lifecycle = Lifecycle.DONE).copy(completedAtMs = atMs)
+        val ticked = listOf(
+            done("a", "Call the GP", free.startMs + 10 * 60_000L),
+            done("bb", "Pay the council", free.endMs + 20 * 60_000L),
+            done("ccc", "Renew passport", free.endMs + 3 * hour),
+            done("dddd", "Gym", free.startMs + 5 * 60_000L),
+        )
+        assertNull(LifeAdminRules.closeLine(s, free, ticked, 1, sat, free.endMs - 1))
+        assertNull(LifeAdminRules.closeLine(s, free, ticked, 1, mon, free.endMs))
+        val close = LifeAdminRules.closeLine(s, free, ticked, 1, sat, free.endMs + hour)!!
+        assertEquals("✓ Life admin hour done · 2 jobs ticked · 1 left for next week", close.text)
+        assertEquals("Life admin hour done: 2 jobs ticked, 1 left for next week.", close.spoken)
+        assertEquals("Life admin hour over · 3 jobs wait for next week", LifeAdminRules.closeLine(s, free, emptyList(), 3, sat, free.endMs)?.text)
+        assertNull(LifeAdminRules.closeLine(s, free, emptyList(), 0, sat, free.endMs))
+        // Skipped: no close.
+        assertTrue(aFold.skipThisWeek(true))
+        assertNull(LifeAdminRules.closeLine(aFold.setting(), free, ticked, 1, sat, free.endMs + hour))
+    }
 }
