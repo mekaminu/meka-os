@@ -1865,7 +1865,7 @@ class MekaCore(
      * "“Run 5k” is off next week's goals", or null when nothing changed (a fourth pick is refused).
      */
     suspend fun pickWeekGoal(goalId: String, on: Boolean): String? = onCore {
-        val today = cal.epochDayOf(nowMs())
+        val today = todayEpochDay()
         val ws = os.meka.core.domain.WeekAheadRules.weekStart(today)
         if (!goals.pickForWeek(goalId, ws, on)) return@onCore null
         refresh()
