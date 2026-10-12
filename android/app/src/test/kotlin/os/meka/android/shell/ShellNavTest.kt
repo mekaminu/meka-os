@@ -1,5 +1,8 @@
 package os.meka.android.shell
 
+import os.meka.core.domain.LifeTileLine
+import os.meka.core.domain.LifeTileRules
+
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -49,54 +52,62 @@ class ShellNavTest {
     }
 
     @Test
-    fun moreListsEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
-        assertEquals(
-            listOf(
-                "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Week ahead", "School", "Annual leave", "Dinners", "Date night", "Life admin hour", "Emergency card", "Train queue", "Errands", "Appointments", "Bins", "Gifts", "People", "Trips", "What MEKA knows", "Work mode", "Protected time", "Notifications",
-                "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "What MEKA may do", "Activity", "Your data",
-            ),
-            ShellNav.more(connected = true).map { it.label },
-        )
+    fun moreReachesEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
         assertFalse(MoreItem.CALENDARS in ShellNav.more(connected = false))
         assertFalse(MoreItem.FAMILY in ShellNav.more(connected = false))
         assertFalse(MoreItem.WATCH in ShellNav.more(connected = false))
         // Every place behind Ask is reachable from More.
         val places = ShellNav.more(connected = false).mapNotNull { it.destination }.toSet()
         assertEquals(ShellDestination.entries.filter { ShellNav.parent(it) != null }.toSet(), places)
+        // Every item is a tile, a Daily row, the Settings row or in the Settings pane, exactly once.
+        val all = ShellNav.lifeTiles() + ShellNav.daily() + MoreItem.SETTINGS + ShellNav.settings(connected = true)
+        assertEquals(MoreItem.entries.toSet(), all.toSet())
+        assertEquals(all.size, all.toSet().size)
     }
 
     @Test
-    fun moreIsGroupedIntoPlacesDailyAndSettings() {
-        // Fold review 2026-10-08, item 10.
-        val sections = ShellNav.moreSections(connected = true)
-        assertEquals(listOf("Places", "Daily", "Settings"), sections.map { it.group.label })
-        assertEquals(listOf("Lists", "Goals and habits", "Review", "Vault"), sections[0].items.map { it.label })
-        assertEquals(listOf("Morning brief", "News", "Shut down the day", "Week ahead", "School", "Annual leave", "Dinners", "Date night", "Life admin hour", "Emergency card", "Train queue", "Errands", "Appointments", "Bins", "Gifts", "People", "Trips", "What MEKA knows"), sections[1].items.map { it.label })
+    fun askIsALifeGridDailyAndOneSettingsRow() {
+        // Fold review 2026-10-12, item 7.
         assertEquals(
-            listOf("Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "What MEKA may do", "Activity", "Your data"),
-            sections[2].items.map { it.label },
+            listOf("Lists", "Goals and habits", "People", "Dinners", "Bins", "Date night", "School", "Appointments", "Annual leave", "Gifts", "Trips", "Errands", "Emergency card", "What MEKA knows"),
+            ShellNav.lifeTiles().map { it.label },
         )
-        // The same rows as the flat list, in the same order; the places are exactly the Places section.
-        assertEquals(ShellNav.more(connected = true), sections.flatMap { it.items })
-        assertTrue(sections[0].items.all { it.destination != null })
-        assertTrue(sections.drop(1).flatMap { it.items }.all { it.destination == null })
-        // Not connected: Calendars leaves Settings, the sections stay.
-        val offline = ShellNav.moreSections(connected = false)
-        assertEquals(3, offline.size)
-        assertFalse(MoreItem.CALENDARS in offline[2].items)
-        assertFalse(MoreItem.FAMILY in offline[2].items)
-        assertFalse(MoreItem.WATCH in offline[2].items)
+        assertEquals(LifeTileRules.ORDER, ShellNav.lifeTiles().map { it.tile })
+        assertEquals(
+            listOf("Morning brief", "Week ahead", "News", "Shut down the day", "Train queue", "Life admin hour", "Review"),
+            ShellNav.daily().map { it.label },
+        )
+        assertEquals(
+            listOf("Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"),
+            ShellNav.settings(connected = true).map { it.label },
+        )
+        assertFalse(MoreItem.WATCH in ShellNav.settings(connected = false))
+        // Only MEKA's AI just says how it is.
+        assertEquals(listOf(MoreItem.AI), MoreItem.entries.filterNot { ShellNav.opens(it) })
     }
 
     @Test
-    fun moreSectionsStaggerOneStepApart() {
-        assertEquals(listOf(2, 4, 6), (0..2).map { ShellNav.moreLabelStep(it) })
-        assertEquals(listOf(3, 4, 5, 6), (0..3).map { ShellNav.moreRowStep(0, it) })
-        assertEquals(5, ShellNav.moreRowStep(1, 0))
-        assertEquals(13, ShellNav.moreRowStep(2, 6))
-        assertEquals(14, ShellNav.moreRowStep(2, 7))
+    fun theStatusRowShowsOnlyWhenSomethingNeedsALook() {
+        assertNull(ShellNav.statusItem(0, 0))
+        assertEquals(MoreItem.SETUP, ShellNav.statusItem(0, 3))
+        assertEquals(MoreItem.HEALTH, ShellNav.statusItem(2, 3))
+    }
+
+    @Test
+    fun aTileSaysWhatIsLiveElseItsWords() {
+        assertEquals(LifeTileLine("Chilli tonight", true), ShellNav.tileLine(MoreItem.DINNERS, LifeTileLine("Chilli tonight", true)))
+        assertEquals(LifeTileLine("Which bins go out, the evening before", false), ShellNav.tileLine(MoreItem.BINS, null))
+    }
+
+    @Test
+    fun askStaggersAPartAStepAfterTheOneBefore() {
+        assertEquals(2, ShellNav.STATUS_STEP)
+        assertEquals(listOf(3, 5, 7), (0..2).map { ShellNav.moreLabelStep(it) })
+        assertEquals(listOf(4, 4, 5, 5, 6), (0..4).map { ShellNav.tileStep(it) })
+        assertEquals(6, ShellNav.moreRowStep(1, 0))
+        assertEquals(7, ShellNav.SETTINGS_STEP)
         // Each label comes before its own rows.
-        for (s in 0..2) assertTrue(ShellNav.moreLabelStep(s) < ShellNav.moreRowStep(s, 0))
+        for (s in 0..1) assertTrue(ShellNav.moreLabelStep(s) < ShellNav.moreRowStep(s, 0))
     }
 
     @Test

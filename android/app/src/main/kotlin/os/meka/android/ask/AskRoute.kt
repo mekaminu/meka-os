@@ -62,6 +62,7 @@ import os.meka.android.news.rememberTickerMode
 import os.meka.core.domain.TickerMode
 import os.meka.android.notify.NotificationsPane
 import os.meka.android.search.SearchPane
+import os.meka.android.shell.MoreGroup
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.PlaceVia
 import os.meka.android.shell.SharedMotion
@@ -88,12 +89,14 @@ import os.meka.core.facade.MekaCore
 /**
  * ASK (build plan M1, Four tabs, one front door). The fourth tab and the front door to everything that isn't a tab.
  * One field asks MEKA in your own words (Return; [AskMekaSection], V1 AI layer slice 3b) and searches as you type, the
- * best matches under it and "See all" opening Search everything (Fold review 2026-10-09 07:26, item 8). Below it, More
- * lists, in three sections (Places · Daily · Settings), every place behind Ask (Lists, Goals and habits, Review,
- * Vault: they open with the shell's forward slide and keep Ask lit) and the panes, which spring up over Ask as they
- * do over Today. Motion: the title, field and More's sections stagger in 40 ms apart (each section a step after the
- * one before began, its label leading its rows); a lit Lists line blends its colour; a row's label
- * travels into the title of what it opens (and back). Reduced motion cross-fades.
+ * best matches under it and "See all" opening Search everything (Fold review 2026-10-09 07:26, item 8). Below it
+ * (Fold review 2026-10-12, item 7): one status row when Setup or Health needs a look; LIFE, a 2-column grid of tiles
+ * with an icon and a live line each (Lists and Goals open their places with the shell's forward slide and keep Ask
+ * lit; the rest spring up as panes); DAILY, a few rows; and one Settings row that opens the Settings pane, where every
+ * setting lives (the panes it opens spring up over it and drop back to it). Motion: the title, field, status row and
+ * each part stagger in 40 ms apart (a part a step after the one before began, its label leading; tiles a row at a
+ * time); lines cross-fade and lit ones blend to the accent; a row's or tile's label travels into the title of what it
+ * opens (and back). Reduced motion cross-fades.
  */
 @Composable
 fun AskRoute(
@@ -114,7 +117,17 @@ fun AskRoute(
     var searchTask by rememberSaveable { mutableStateOf<String?>(null) }
     var searchEpoch by rememberSaveable { mutableStateOf(0) }
     val closeSearch = { showSearch = false; searchEpoch += 1 }
-    val sections = ShellNav.moreSections(connected)
+    val lifeLines by core.lifeLines.collectAsState()
+    // The Settings pane (Fold review 2026-10-12, item 7): every setting behind one row on Ask.
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    val open: (MoreItem) -> Unit = { item ->
+        val d = item.destination
+        when {
+            d != null -> { settingsOpen = false; openPlace(d) }
+            item == MoreItem.SETTINGS -> settingsOpen = true
+            ShellNav.opens(item) -> pane = item
+        }
+    }
     val undo = rememberEventUndo()
     // Today's health line → Open Health (Reliability first, item 3).
     val healthApp = LocalContext.current.applicationContext as? os.meka.android.MekaApplication
@@ -153,7 +166,13 @@ fun AskRoute(
         }
     }
     // Back closes whatever sprang up over Ask before it leaves the app.
-    BackHandler(enabled = pane != null || showSearch) { if (showSearch) closeSearch() else pane = null }
+    BackHandler(enabled = pane != null || showSearch || settingsOpen) {
+        when {
+            showSearch -> closeSearch()
+            pane != null -> pane = null
+            else -> settingsOpen = false
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
         LazyColumn(
@@ -176,30 +195,50 @@ fun AskRoute(
                     searchEpoch = searchEpoch,
                 )
             }
-            // More in sections (Fold review 2026-10-08, item 10): Places · Daily · Settings, a small label over each;
-            // each section staggers in one step after the one before began.
-            sections.forEachIndexed { s, section ->
-                item(key = "more-${section.group.name}") {
-                    Text(section.group.label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
-                        modifier = Modifier
-                            .padding(top = if (s == 0) 0.dp else MekaSpace.m, bottom = MekaSpace.xxs)
-                            .semantics { heading() }
-                            .appear(rememberAppearance(ShellNav.moreLabelStep(s))))
-                }
-                itemsIndexed(section.items, key = { _, it -> it.name }) { i, item ->
-                    val step = ShellNav.moreRowStep(s, i)
-                    if (ShellNav.unfoldsInPlace(item)) {
-                        AppearanceRow(appearanceOpen, Modifier.appear(rememberAppearance(step)), openTopics = { pane = MoreItem.NEWS }, playOpening = playOpening) { appearanceOpen = !appearanceOpen }
-                    } else {
-                        MoreRow(item, ShellNav.moreLine(item, lists.dueCount, work.atWork, health?.summary, setup?.summary),
-                            ShellNav.moreLit(item, lists.dueCount, health?.attention ?: 0, setup?.toDo ?: 0),
-                            pane == item, Modifier.appear(rememberAppearance(step))) {
-                            val d = item.destination
-                            if (d != null) openPlace(d) else pane = item
-                        }
+            // Setup or Health, one row, only when something needs a look (Fold review 2026-10-12, item 7).
+            val status = ShellNav.statusItem(health?.attention ?: 0, setup?.toDo ?: 0)
+            if (status != null) {
+                item(key = "status") {
+                    MoreRow(status, ShellNav.moreLine(status, 0, health = health?.summary, setup = setup?.summary), lit = true,
+                        paneOpen = false, travel = false, modifier = Modifier.padding(bottom = MekaSpace.xs).appear(rememberAppearance(ShellNav.STATUS_STEP))) {
+                        pane = status
                     }
                 }
             }
+            // LIFE: the home-and-family places as 2-column tiles, each with its live line; they arrive a row at a time.
+            item(key = "label-life") { SectionLabel(MoreGroup.LIFE.label, first = true, step = ShellNav.moreLabelStep(0)) }
+            ShellNav.lifeTiles().chunked(2).forEachIndexed { r, pair ->
+                item(key = "tiles-$r") {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        pair.forEachIndexed { c, tile ->
+                            LifeTileCard(
+                                tile, ShellNav.tileLine(tile, tile.tile?.let { lifeLines.of(it) }), pane == tile,
+                                Modifier.weight(1f).appear(rememberAppearance(ShellNav.tileStep(r * 2 + c))),
+                            ) { open(tile) }
+                        }
+                        if (pair.size == 1) Box(Modifier.weight(1f))
+                    }
+                }
+            }
+            // DAILY: the things you run through a day or a week.
+            item(key = "label-daily") { SectionLabel(MoreGroup.DAILY.label, first = false, step = ShellNav.moreLabelStep(1)) }
+            itemsIndexed(ShellNav.daily(), key = { _, it -> it.name }) { i, item ->
+                MoreRow(item, ShellNav.moreLine(item, lists.dueCount), false, pane == item,
+                    modifier = Modifier.appear(rememberAppearance(ShellNav.moreRowStep(1, i)))) { open(item) }
+            }
+            // Every setting behind one row.
+            item(key = "settings") {
+                MoreRow(MoreItem.SETTINGS, ShellNav.moreLine(MoreItem.SETTINGS, 0), false, settingsOpen,
+                    modifier = Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(ShellNav.SETTINGS_STEP))) { open(MoreItem.SETTINGS) }
+            }
+        }
+        // The Settings pane sits under the panes it opens, so they spring up over it and drop back to it.
+        MekaPane(visible = settingsOpen) {
+            SettingsPane(
+                core, connected, pane, onClose = { settingsOpen = false }, open = { open(it) },
+                appearanceOpen = appearanceOpen, toggleAppearance = { appearanceOpen = !appearanceOpen },
+                openTopics = { pane = MoreItem.NEWS }, playOpening = playOpening,
+            )
         }
         MekaPane(visible = pane == MoreItem.BRIEF) {
             // Slice 7: the read ran to its end: the pane drops and Ask's orb listens for 8 s.
@@ -265,16 +304,34 @@ fun AskRoute(
     }
 }
 
+/** A small section label over a part of More (and the Settings pane's groups). */
 @Composable
-private fun MoreRow(item: MoreItem, line: String, lit: Boolean, paneOpen: Boolean, modifier: Modifier, onClick: () -> Unit) {
+internal fun SectionLabel(label: String, first: Boolean, step: Int) {
+    Text(label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
+        modifier = Modifier
+            .padding(top = if (first) 0.dp else MekaSpace.m, bottom = MekaSpace.xxs)
+            .semantics { heading() }
+            .appear(rememberAppearance(step)))
+}
+
+/**
+ * A row in More or the Settings pane. Its label travels into what it opens ([travel]; off for the status row, whose
+ * pane's title already travels from the Settings pane's row). MEKA's AI opens nothing, so it has no chevron.
+ */
+@Composable
+internal fun MoreRow(
+    item: MoreItem, line: String, lit: Boolean, paneOpen: Boolean, modifier: Modifier = Modifier, travel: Boolean = true,
+    onClick: () -> Unit,
+) {
     val lineColor by animateColorAsState(
         if (lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(Meka.reducedMotion), label = "more-line",
     )
+    val opens = ShellNav.opens(item)
     Row(
         modifier.fillMaxWidth()
             .clip(RoundedCornerShape(MekaRadius.m))
             .background(Meka.colors.surface)
-            .clickable(role = Role.Button, onClick = onClick)
+            .then(if (opens) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -283,12 +340,54 @@ private fun MoreRow(item: MoreItem, line: String, lit: Boolean, paneOpen: Boolea
             // The label travels into what it opens: a place's title across the shell's slide, a pane's title as it
             // springs up (it steps aside while the pane has it).
             val d = item.destination
-            val travel = if (d != null) Modifier.sharedPlace(SharedMotion.placeKey(d, PlaceVia.MORE))
-            else Modifier.sharedTitle(SharedMotion.paneKey(item), visible = !paneOpen)
-            Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = travel)
-            Text(line, style = MekaType.caption, color = lineColor, maxLines = 2)
+            val move = when {
+                !travel -> Modifier
+                d != null -> Modifier.sharedPlace(SharedMotion.placeKey(d, PlaceVia.MORE))
+                else -> Modifier.sharedTitle(SharedMotion.paneKey(item), visible = !paneOpen)
+            }
+            Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = move)
+            AnimatedContent(
+                targetState = line,
+                transitionSpec = { fadeIn(MekaMotion.appear(Meka.reducedMotion)) togetherWith fadeOut(MekaMotion.appear(Meka.reducedMotion)) },
+                label = "more-row-line",
+            ) { l -> Text(l, style = MekaType.caption, color = lineColor, maxLines = 2) }
         }
-        Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.padding(start = MekaSpace.xs))
+        if (opens) Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.padding(start = MekaSpace.xs))
+    }
+}
+
+/**
+ * A Life tile (Fold review 2026-10-12, item 7): its icon, its name and its live line ("Black bin out tonight", lit in
+ * the accent when it's about today). Half the width; the name travels into the pane it opens. The line cross-fades as
+ * it changes and its colour blends. Reduced motion: cross-fades only.
+ */
+@Composable
+private fun LifeTileCard(item: MoreItem, line: os.meka.core.domain.LifeTileLine, paneOpen: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    val lineColor by animateColorAsState(
+        if (line.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "tile-line",
+    )
+    Column(
+        modifier
+            .clip(RoundedCornerShape(MekaRadius.m))
+            .background(Meka.colors.surface)
+            .clickable(role = Role.Button) { haptics.tick(); onClick() }
+            .semantics { contentDescription = "${item.label}, ${line.text}" }
+            .heightIn(min = 104.dp)
+            .padding(MekaSpace.m),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        item.tile?.let { LifeIcon(it, Meka.colors.accent) }
+        val d = item.destination
+        val move = if (d != null) Modifier.sharedPlace(SharedMotion.placeKey(d, PlaceVia.MORE))
+        else Modifier.sharedTitle(SharedMotion.paneKey(item), visible = !paneOpen)
+        Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1, modifier = Modifier.padding(top = MekaSpace.xxs).then(move))
+        AnimatedContent(
+            targetState = line.text,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "tile-text",
+        ) { t -> Text(t, style = MekaType.caption, color = lineColor, maxLines = 2) }
     }
 }
 
@@ -299,7 +398,7 @@ private fun MoreRow(item: MoreItem, line: String, lit: Boolean, paneOpen: Boolea
  * the chips appear at once and colours cross-fade.
  */
 @Composable
-private fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> Unit, playOpening: () -> Unit, toggle: () -> Unit) {
+internal fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> Unit, playOpening: () -> Unit, toggle: () -> Unit) {
     val theme = Meka.theme
     val context = LocalContext.current.applicationContext
     val tickerMode = rememberTickerMode()

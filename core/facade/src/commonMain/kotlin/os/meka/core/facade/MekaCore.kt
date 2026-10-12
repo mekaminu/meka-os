@@ -496,6 +496,10 @@ class MekaCore(
      */
     val appointmentsView: StateFlow<os.meka.core.domain.AppointmentView> = _appointments.asStateFlow()
 
+    private val _lifeLines = MutableStateFlow(os.meka.core.domain.LifeLines.EMPTY)
+    /** Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line ("Chilli tonight", "Next Fri 23 Oct"). */
+    val lifeLines: StateFlow<os.meka.core.domain.LifeLines> = _lifeLines.asStateFlow()
+
     private val _dateNight = MutableStateFlow(os.meka.core.domain.DateNightView.EMPTY)
     /**
      * Date night (V1, slice 1): the fortnightly evening the planner and Gym bookings keep clear, its next few nights
@@ -4743,6 +4747,12 @@ class MekaCore(
         )
         _car.value = os.meka.core.domain.CarRules.view(car.registration(), listsNow.renewals.all, carCheck(), todayDay, cal)
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
+        // Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line, from the views just made.
+        _lifeLines.value = os.meka.core.domain.LifeTileRules.lines(os.meka.core.domain.LifeTileRules.inputs(
+            _today.value, _lists.value, _goals.value, _meals.value, _bins.value, _dateNight.value, _school.value,
+            _appointments.value, _leave.value, _gifts.value, _trips.value, _errands.value, _emergency.value, _facts.value,
+            _people.value,
+        ))
         _triage.value = triageCards.open()
         _groupGists.value = gistStore.open()
         _chatSummaries.value = chatSummaryStore.all()

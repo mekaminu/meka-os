@@ -1,3 +1,4 @@
+@preconcurrency import MekaKit
 import Foundation
 
 // The app shell's rules (build plan M1, App shell; Four tabs, one front door). Matches
@@ -42,72 +43,69 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
 
 enum ShellLayout { case bottomBar, rail }
 
-/// The sections of Ask's More list (Fold review 2026-10-08, item 10: twelve rows in one flat list were hard to scan).
+/// The parts of Ask's More (Fold review 2026-10-12, item 7: the 30-row list was too long to scan). Life is a grid of
+/// tiles with a live line each; Daily a short list of rows; Settings one row that unfolds every setting in place.
+/// Setup and Health show as one status row at the top only when something needs a look.
 enum MoreGroup: Int, CaseIterable, Identifiable {
-    case places, daily, settings
+    case life, daily, settings
     var id: Int { rawValue }
 
     var label: String {
         switch self {
-        case .places: "Places"
+        case .life: "Life"
         case .daily: "Daily"
         case .settings: "Settings"
         }
     }
 }
 
-/// One section of More: its label and its rows, in order.
-struct MoreSection: Equatable, Identifiable {
-    let group: MoreGroup
-    let items: [MoreItem]
-    var id: Int { group.rawValue }
-}
-
-/// A row in Ask's More list: a place behind Ask (`destination`), a sheet over the current screen (nil), or
-/// Appearance, which shows its choices in the row itself (`ShellNav.unfoldsInPlace`). Today's header keeps only
-/// Search and Plan my day (Today clarity, slice 2): the brief, the shutdown, work mode and the theme moved here.
+/// A row or tile in Ask's More: a place behind Ask (`destination`), a sheet over the current screen (nil), Appearance,
+/// which shows its choices in the row itself (`ShellNav.unfoldsInPlace`), or MEKA's AI, which only says how it is
+/// (`ShellNav.opens`). Life tiles carry their `tile` (the core's live line) and an SF Symbol.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, review, vault, brief, news, shutdown, weekAhead, school, leave, dinners, dateNight, lifeAdmin, emergency, trainQueue, errands, appointments, bins, gifts, people, trips, facts, work, protectedTime, notifications, appearance, voice, talk, calendars, family, watch, setup, health, autonomy, activity, yourData
+    case lists, goals, people, dinners, bins, dateNight, school, appointments, leave, gifts, trips, errands, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, lifeAdmin, review, work, protectedTime, notifications, appearance, voice, talk, calendars, family, watch, autonomy, ai, activity, setup, health, vault, yourData, settings
     var id: Int { rawValue }
 
     var label: String {
         switch self {
         case .lists: "Lists"
         case .goals: "Goals and habits"
-        case .review: "Review"
-        case .vault: "Vault"
+        case .people: "People"
+        case .dinners: "Dinners"
+        case .bins: "Bins"
+        case .dateNight: "Date night"
+        case .school: "School"
+        case .appointments: "Appointments"
+        case .leave: "Annual leave"
+        case .gifts: "Gifts"
+        case .trips: "Trips"
+        case .errands: "Errands"
+        case .emergency: "Emergency card"
+        case .facts: "What MEKA knows"
         case .brief: "Morning brief"
+        case .weekAhead: "Week ahead"
         case .news: "News"
         case .shutdown: "Shut down the day"
-        case .weekAhead: "Week ahead"
-        case .school: "School"
-        case .leave: "Annual leave"
-        case .dinners: "Dinners"
-        case .dateNight: "Date night"
-        case .lifeAdmin: "Life admin hour"
-        case .emergency: "Emergency card"
         case .trainQueue: "Train queue"
-        case .errands: "Errands"
-        case .appointments: "Appointments"
-        case .bins: "Bins"
-        case .gifts: "Gifts"
-        case .people: "People"
-        case .trips: "Trips"
-        case .facts: "What MEKA knows"
+        case .lifeAdmin: "Life admin hour"
+        case .review: "Review"
         case .work: "Work mode"
         case .protectedTime: "Protected time"
         case .notifications: "Notifications"
         case .appearance: "Appearance"
         case .voice: "MEKA's voice"
         case .talk: "Talk"
-        case .autonomy: "What MEKA may do"
-        case .activity: "Activity"
-        case .yourData: "Your data"
         case .calendars: "Calendars"
         case .family: "Family"
         case .watch: "Watch"
+        case .autonomy: "What MEKA may do"
+        case .ai: "MEKA's AI"
+        case .activity: "Activity"
         case .setup: "Setup"
         case .health: "Health"
+        case .vault: "Vault"
+        case .yourData: "Your data"
+        case .settings: "Settings"
         }
     }
 
@@ -115,48 +113,50 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         switch self {
         case .lists: "Waiting for · Someday · Decisions · Renewals"
         case .goals: "Habits, goals and fasting"
-        case .review: "Your week, looked back on"
-        case .vault: "Your data now; documents later"
+        case .people: "Promises both ways, birthdays and last contact"
+        case .dinners: "Favourites, the week's dinners and their shopping"
+        case .bins: "Which bins go out, the evening before"
+        case .dateNight: "An evening every two weeks, kept clear"
+        case .school: "Rex and Logan's days off, PE and trips"
+        case .appointments: "Dentist, optician, haircut · a nudge when one's due"
+        case .leave: "Days booked, days left and the school holidays"
+        case .gifts: "Birthdays, anniversaries and gift ideas"
+        case .trips: "Trips and bookings, day by day"
+        case .errands: "Things to get or do when you're at a place"
+        case .emergency: "Who to call and where things are"
+        case .facts: "Car reg, GP, sizes · the facts MEKA answers from"
         case .brief: "Your day, who you're waiting on and headlines"
+        case .weekAhead: "The coming week day by day · Sunday at 18:00"
         case .news: "Barça, AI and the headlines · topics and sources"
         case .shutdown: "Tick off, carry over and see tomorrow"
-        case .weekAhead: "The coming week day by day · Sunday at 18:00"
-        case .school: "Rex and Logan's days off, PE and trips"
-        case .leave: "Days booked, days left and the school holidays"
-        case .dinners: "Favourites, the week's dinners and their shopping"
-        case .dateNight: "An evening every two weeks, kept clear"
-        case .lifeAdmin: "One hour a week for forms, calls and renewals"
-        case .emergency: "Who to call and where things are · Jeanette can read it"
         case .trainQueue: "Links and podcasts saved for the commute"
-        case .errands: "Things to get or do when you're at a place"
-        case .appointments: "Dentist, optician, haircut · a nudge when one's due"
-        case .bins: "Which bins go out, the evening before"
-        case .gifts: "Birthdays, anniversaries and gift ideas"
-        case .people: "Promises both ways, birthdays and last contact"
-        case .trips: "Trips and bookings, day by day"
-        case .facts: "Car reg, GP, sizes · the facts MEKA answers from"
+        case .lifeAdmin: "One hour a week for forms, calls and renewals"
+        case .review: "Your week, looked back on"
         case .work: "Work hours and the Work switch"
         case .protectedTime: "Evenings and weekends, kept free of tasks"
         case .notifications: "Quiet hours, digests and what reaches you"
         case .appearance: "Dark, Light or Auto"
         case .voice: "How MEKA sounds in Talk, the brief and calls"
         case .talk: "⌥Space and the mic"
-        case .autonomy: "What it does on its own · the pause switch"
-        case .activity: "What MEKA did and why"
-        case .yourData: "Export everything as one file"
         case .calendars: "Connected accounts and feeds"
         case .family: "Share the shopping list with Jeanette"
         case .watch: "Link your Galaxy Watch to MEKA"
+        case .autonomy: "What it does on its own · the pause switch"
+        case .ai: "Whether it's on and what it costs this month"
+        case .activity: "What MEKA did and why"
         case .setup: "Everything MEKA can do, and what's left to set up"
         case .health: "Is everything MEKA needs working?"
+        case .vault: "Your data now; documents later"
+        case .yourData: "Export everything as one file"
+        case .settings: "Work mode, notifications, appearance, voice and MEKA's AI"
         }
     }
 
     var group: MoreGroup {
         switch self {
-        case .lists, .goals, .review, .vault: .places
-        case .brief, .news, .shutdown, .weekAhead, .school, .leave, .dinners, .dateNight, .lifeAdmin, .emergency, .trainQueue, .errands, .appointments, .bins, .gifts, .people, .trips, .facts: .daily
-        case .work, .protectedTime, .notifications, .appearance, .voice, .talk, .calendars, .family, .watch, .setup, .health, .autonomy, .activity, .yourData: .settings
+        case .lists, .goals, .people, .dinners, .bins, .dateNight, .school, .appointments, .leave, .gifts, .trips, .errands, .emergency, .facts: .life
+        case .brief, .weekAhead, .news, .shutdown, .trainQueue, .lifeAdmin, .review: .daily
+        case .work, .protectedTime, .notifications, .appearance, .voice, .talk, .calendars, .family, .watch, .autonomy, .ai, .activity, .setup, .health, .vault, .yourData, .settings: .settings
         }
     }
 
@@ -166,7 +166,49 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .goals: .goals
         case .review: .review
         case .vault: .vault
-        case .brief, .news, .shutdown, .weekAhead, .school, .leave, .dinners, .dateNight, .lifeAdmin, .emergency, .trainQueue, .errands, .appointments, .bins, .gifts, .people, .trips, .facts, .work, .protectedTime, .notifications, .appearance, .voice, .talk, .autonomy, .activity, .yourData, .calendars, .family, .watch, .setup, .health: nil
+        default: nil
+        }
+    }
+
+    /// The Life tile this item is, for its live line; nil for rows.
+    var tile: LifeTile? {
+        switch self {
+        case .lists: .lists
+        case .goals: .goals
+        case .people: .people
+        case .dinners: .dinners
+        case .bins: .bins
+        case .dateNight: .dateNight
+        case .school: .school
+        case .appointments: .appointments
+        case .leave: .leave
+        case .gifts: .gifts
+        case .trips: .trips
+        case .errands: .errands
+        case .emergency: .emergency
+        case .facts: .facts
+        default: nil
+        }
+    }
+
+    /// A Life tile's SF Symbol (the Fold draws matching outlines, LifeIcon.kt).
+    var symbol: String? {
+        switch self {
+        case .lists: "list.bullet"
+        case .goals: "target"
+        case .people: "person.2"
+        case .dinners: "fork.knife"
+        case .bins: "trash"
+        case .dateNight: "moon.stars"
+        case .school: "graduationcap"
+        case .appointments: "clock"
+        case .leave: "sun.horizon"
+        case .gifts: "gift"
+        case .trips: "suitcase"
+        case .errands: "mappin.and.ellipse"
+        case .emergency: "cross.case"
+        case .facts: "book"
+        default: nil
         }
     }
 }
@@ -194,23 +236,55 @@ enum ShellNav {
         max(-1, min(1, to.rawValue - from.rawValue))
     }
 
-    /// Ask's More list; Calendars, Family and Watch only once this device is connected (their links live on the server).
+    /// Everything reachable from Ask's More; Calendars, Family and Watch only once this device is connected (their
+    /// links live on the server).
     static func more(connected: Bool) -> [MoreItem] {
         MoreItem.allCases.filter { connected || ($0 != .calendars && $0 != .family && $0 != .watch) }
     }
 
-    /// More in its sections (Places · Daily · Settings); a section with no rows is left out.
-    static func moreSections(connected: Bool) -> [MoreSection] {
-        let items = more(connected: connected)
-        return MoreGroup.allCases.map { g in MoreSection(group: g, items: items.filter { $0.group == g }) }
-            .filter { !$0.items.isEmpty }
+    /// The Life grid's tiles, in the core's order (both apps).
+    static func lifeTiles() -> [MoreItem] {
+        LifeTileRules.shared.ORDER.compactMap { t in MoreItem.allCases.first { $0.tile == t } }
     }
 
-    /// Stagger steps for More (after the title 0 and field 1): each section starts one step after the one before
-    /// began; a label leads its rows by one step. Places: 2, rows 3–6 · Daily: 4, rows 5–7 · Settings: 6, rows 7–18.
-    static func moreLabelStep(_ section: Int) -> Int { 2 + 2 * section }
+    /// Daily's rows on Ask.
+    static func daily() -> [MoreItem] { MoreItem.allCases.filter { $0.group == .daily } }
+
+    /// What Settings lists, in order.
+    static func settings(connected: Bool) -> [MoreItem] {
+        more(connected: connected).filter { $0.group == .settings && $0 != .settings }
+    }
+
+    /// The status row at the top of More: Health when something needs a look, else Setup while steps are left.
+    static func statusItem(healthAttention: Int, setupLeft: Int) -> MoreItem? {
+        if healthAttention > 0 { return .health }
+        if setupLeft > 0 { return .setup }
+        return nil
+    }
+
+    /// Stagger steps for Ask (the title 0, the field 1, the status row 2): each part a step after the one before
+    /// began, its label leading. Life: label 3, tiles a row at a time from 4 · Daily: label 5, rows 6–12 · Settings 7.
+    static let statusStep = 2
+
+    static func moreLabelStep(_ section: Int) -> Int { 3 + 2 * section }
 
     static func moreRowStep(_ section: Int, _ row: Int) -> Int { moreLabelStep(section) + 1 + row }
+
+    /// Tiles arrive a row (two) at a time.
+    static func tileStep(_ index: Int) -> Int {
+        Int(LifeTileRules.shared.step(first: Int32(moreRowStep(0, 0)), index: Int32(index)))
+    }
+
+    static var settingsStep: Int { moreLabelStep(2) }
+
+    /// Every item opens something except MEKA's AI, which only says how it is.
+    static func opens(_ item: MoreItem) -> Bool { item != .ai }
+
+    /// A tile's line: the core's live one when there is one (lit when it's about today), else the fixed words.
+    static func tileLine(_ item: MoreItem, live: LifeTileLine?) -> (text: String, lit: Bool) {
+        if let live { return (live.text, live.lit) }
+        return (item.line, false)
+    }
 
     /// Lists says what's due when something is ("2 need you · …"), Health and Setup their summaries once checked,
     /// else the fixed words.

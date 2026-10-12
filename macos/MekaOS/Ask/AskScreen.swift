@@ -2,13 +2,20 @@
 import SwiftUI
 
 /// ASK on the Mac (build plan M1, Four tabs, one front door): the front door to everything that isn't a tab. The field
-/// asks MEKA in your own words (`AskMekaSection`, V1 AI layer slice 3b), with Search Everything (⌘F) beside it. More lists the places behind
-/// Ask (they open with the shell's push and keep Ask lit in spirit: the sidebar shows them under More) and the sheets.
-/// Motion: title, field and More's sections (Places · Daily · Settings) stagger in, each a step after the one before; rows lift 2 pt on hover; a lit Lists line blends its colour.
+/// asks MEKA in your own words (`AskMekaSection`, V1 AI layer slice 3b), with Search Everything (⌘F) beside it. Below it
+/// (Fold review 2026-10-12, item 7): one status row when Setup or Health needs a look; LIFE, a grid of tiles (an SF
+/// Symbol, the name and a live line each; Lists and Goals open their places with the shell's push, the rest their
+/// sheets); DAILY, a few rows; and one Settings row that unfolds every setting in place under it (the Mac's simpler
+/// layout: no sheet over a sheet). Motion: title, field, status row and each part stagger in, a part a step after the
+/// one before began, tiles a row at a time; rows and tiles lift 2 pt on hover; lines cross-fade and lit ones blend to
+/// the accent; Settings unfolds on the expand spring with its rows staggering in.
 struct AskScreen: View {
     let palette: MekaPalette
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var settingsOpen = false
+
+    private var connected: Bool { model.isConnected && !model.signedOut }
 
     var body: some View {
         ScrollView {
@@ -21,27 +28,53 @@ struct AskScreen: View {
                 // Ask MEKA (V1 AI layer, slice 3b): the field asks in your own words; Search sits beside it.
                 AskMekaSection(palette: palette)
                     .staggeredAppear(1)
-                // More in sections (Fold review 2026-10-08, item 10): Places · Daily · Settings, a small label over each.
-                ForEach(Array(ShellNav.moreSections(connected: model.isConnected && !model.signedOut).enumerated()), id: \.element.id) { s, section in
-                    Text(section.group.label.uppercased())
-                        .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                        .foregroundStyle(palette.textTertiary)
-                        .padding(.top, s == 0 ? 0 : MekaSpace.m)
-                        .accessibilityAddTraits(.isHeader)
-                        .staggeredAppear(ShellNav.moreLabelStep(s))
-                    ForEach(Array(section.items.enumerated()), id: \.element) { i, item in
-                        Group {
-                            if ShellNav.unfoldsInPlace(item) {
-                                AppearanceRow(palette: palette)
-                            } else {
-                                MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue, atWork: model.work?.atWork == true,
-                                                                            health: model.health?.summary, setup: model.setup?.summary),
-                                        lit: ShellNav.moreLit(item, listsDue: model.listsDue, healthAttention: Int(model.health?.attention ?? 0),
-                                                              setupLeft: Int(model.setup?.toDo ?? 0)), palette: palette) { open(item) }
-                            }
-                        }
-                        .staggeredAppear(ShellNav.moreRowStep(s, i))
+                // Setup or Health, one row, only when something needs a look.
+                if let status = ShellNav.statusItem(healthAttention: Int(model.health?.attention ?? 0), setupLeft: Int(model.setup?.toDo ?? 0)) {
+                    MoreRow(item: status, line: ShellNav.moreLine(status, listsDue: 0, health: model.health?.summary, setup: model.setup?.summary),
+                            lit: true, palette: palette) { open(status) }
+                        .padding(.bottom, MekaSpace.xs)
+                        .staggeredAppear(ShellNav.statusStep)
+                }
+                sectionLabel(MoreGroup.life.label, first: true).staggeredAppear(ShellNav.moreLabelStep(0))
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: MekaSpace.xs), GridItem(.flexible(), spacing: MekaSpace.xs)],
+                          spacing: MekaSpace.xs) {
+                    ForEach(Array(ShellNav.lifeTiles().enumerated()), id: \.element) { i, item in
+                        let line = ShellNav.tileLine(item, live: item.tile.flatMap { model.lifeLines?.of(tile: $0) })
+                        LifeTileView(item: item, text: line.text, lit: line.lit, palette: palette) { open(item) }
+                            .staggeredAppear(ShellNav.tileStep(i))
                     }
+                }
+                sectionLabel(MoreGroup.daily.label, first: false).staggeredAppear(ShellNav.moreLabelStep(1))
+                ForEach(Array(ShellNav.daily().enumerated()), id: \.element) { i, item in
+                    MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue), lit: false, palette: palette) { open(item) }
+                        .staggeredAppear(ShellNav.moreRowStep(1, i))
+                }
+                MoreRow(item: .settings, line: MoreItem.settings.line, lit: false, palette: palette, unfolded: settingsOpen) {
+                    MekaHaptics.tick()
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { settingsOpen.toggle() }
+                }
+                .padding(.top, MekaSpace.m)
+                .staggeredAppear(ShellNav.settingsStep)
+                if settingsOpen {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        ForEach(Array(ShellNav.settings(connected: connected).enumerated()), id: \.element) { i, item in
+                            Group {
+                                if ShellNav.unfoldsInPlace(item) {
+                                    AppearanceRow(palette: palette)
+                                } else if item == .ai {
+                                    MoreRow(item: item, line: model.aiStatus?.line ?? "Checking…", lit: model.aiStatus?.lit == true, palette: palette) {}
+                                } else {
+                                    MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue, atWork: model.work?.atWork == true,
+                                                                                health: model.health?.summary, setup: model.setup?.summary),
+                                            lit: ShellNav.moreLit(item, listsDue: model.listsDue, healthAttention: Int(model.health?.attention ?? 0),
+                                                                  setupLeft: Int(model.setup?.toDo ?? 0)), palette: palette) { open(item) }
+                                }
+                            }
+                            .staggeredAppear(i)
+                        }
+                    }
+                    .padding(.leading, MekaSpace.m)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                 }
             }
             .frame(maxWidth: 560, alignment: .leading)
@@ -50,6 +83,14 @@ struct AskScreen: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(palette.background)
+    }
+
+    private func sectionLabel(_ label: String, first: Bool) -> some View {
+        Text(label.uppercased())
+            .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+            .foregroundStyle(palette.textTertiary)
+            .padding(.top, first ? 0 : MekaSpace.m)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func open(_ item: MoreItem) {
@@ -86,7 +127,7 @@ struct AskScreen: View {
         case .talk: model.showTalk = true
         case .health: model.showHealth = true
         case .setup: model.showSetup = true
-        case .lists, .goals, .review, .vault, .appearance: break
+        case .lists, .goals, .review, .vault, .appearance, .ai, .settings: break
         }
     }
 }
@@ -96,6 +137,8 @@ private struct MoreRow: View {
     let line: String
     let lit: Bool
     let palette: MekaPalette
+    /// The Settings row: its chevron turns down while its rows are unfolded.
+    var unfolded: Bool = false
     let action: () -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
 
@@ -108,10 +151,16 @@ private struct MoreRow: View {
                     Text(line)
                         .font(MekaType.caption)
                         .foregroundStyle(lit ? palette.accent : palette.textSecondary)
+                        .contentTransition(.opacity)
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                if ShellNav.opens(item) {
+                    Image(systemName: "chevron.right").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .rotationEffect(.degrees(unfolded ? 90 : 0))
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: unfolded)
+                }
             }
             .padding(.horizontal, MekaSpace.m)
             .padding(.vertical, MekaSpace.xs)
@@ -120,6 +169,48 @@ private struct MoreRow: View {
         }
         .buttonStyle(MekaPressStyle())
         .mekaHoverLift()
+        .disabled(!ShellNav.opens(item))
+        .accessibilityHint(item == .settings ? (unfolded ? "Folds the settings away" : "Shows every setting")
+                           : item.destination == nil ? "Opens a sheet" : "Opens \(item.label)")
+    }
+}
+
+/// A Life tile (Fold review 2026-10-12, item 7): its SF Symbol in the accent, its name and its live line ("Black bin
+/// out tonight", lit in the accent when it's about today). The line cross-fades as it changes; lifts 2 pt on hover.
+private struct LifeTileView: View {
+    let item: MoreItem
+    let text: String
+    let lit: Bool
+    let palette: MekaPalette
+    let action: () -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button(action: { MekaHaptics.tick(); action() }) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                if let symbol = item.symbol {
+                    Image(systemName: symbol).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                        .accessibilityHidden(true)
+                }
+                Text(item.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).lineLimit(1)
+                    .padding(.top, MekaSpace.xxs)
+                Text(text)
+                    .font(MekaType.caption)
+                    .foregroundStyle(lit ? palette.accent : palette.textSecondary)
+                    .lineLimit(2)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: text)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
+            .padding(MekaSpace.m)
+            .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
+        }
+        .buttonStyle(MekaPressStyle())
+        .mekaHoverLift()
+        .accessibilityLabel("\(item.label), \(text)")
         .accessibilityHint(item.destination == nil ? "Opens a sheet" : "Opens \(item.label)")
     }
 }

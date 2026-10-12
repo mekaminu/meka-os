@@ -1,3 +1,4 @@
+@preconcurrency import MekaKit
 @testable import MekaOS
 import XCTest
 
@@ -42,41 +43,38 @@ final class ShellNavTests: XCTestCase {
     }
 
     @MainActor
-    func testMoreListsEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
-        XCTAssertEqual(
-            ShellNav.more(connected: true).map(\.label),
-            ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Week ahead", "School", "Annual leave", "Dinners", "Date night", "Life admin hour", "Emergency card", "Train queue", "Errands", "Appointments", "Bins", "Gifts", "People", "Trips", "What MEKA knows", "Work mode", "Protected time", "Notifications",
-             "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "What MEKA may do", "Activity", "Your data"]
-        )
+    func testMoreReachesEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
         XCTAssertFalse(ShellNav.more(connected: false).contains(.calendars))
         XCTAssertFalse(ShellNav.more(connected: false).contains(.family))
         XCTAssertFalse(ShellNav.more(connected: false).contains(.watch))
         let places = Set(ShellNav.more(connected: false).compactMap(\.destination))
         XCTAssertEqual(places, Set(ShellDestination.allCases.filter { ShellNav.parent($0) != nil }))
+        // Every item is a tile, a Daily row, the Settings row or in Settings, exactly once.
+        let all = ShellNav.lifeTiles() + ShellNav.daily() + [MoreItem.settings] + ShellNav.settings(connected: true)
+        XCTAssertEqual(Set(all), Set(MoreItem.allCases))
+        XCTAssertEqual(all.count, Set(all).count)
     }
 
     @MainActor
-    func testMoreIsGroupedIntoPlacesDailyAndSettings() {
-        // Fold review 2026-10-08, item 10.
-        let sections = ShellNav.moreSections(connected: true)
-        XCTAssertEqual(sections.map(\.group.label), ["Places", "Daily", "Settings"])
-        XCTAssertEqual(sections[0].items.map(\.label), ["Lists", "Goals and habits", "Review", "Vault"])
-        XCTAssertEqual(sections[1].items.map(\.label), ["Morning brief", "News", "Shut down the day", "Week ahead", "School", "Annual leave", "Dinners", "Date night", "Life admin hour", "Emergency card", "Train queue", "Errands", "Appointments", "Bins", "Gifts", "People", "Trips", "What MEKA knows"])
-        XCTAssertNil(MoreItem.dateNight.destination)
-        XCTAssertNil(MoreItem.weekAhead.destination)
-        XCTAssertEqual(MoreItem.weekAhead.group, .daily)
-        // School (school rhythm, slice 1) is a sheet under Daily, there before this Mac is connected.
-        XCTAssertNil(MoreItem.school.destination)
-        XCTAssertTrue(ShellNav.more(connected: false).contains(.school))
-        XCTAssertEqual(sections[2].items.map(\.label), ["Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "What MEKA may do", "Activity", "Your data"])
-        XCTAssertEqual(sections.flatMap(\.items), ShellNav.more(connected: true))
-        XCTAssertTrue(sections[0].items.allSatisfy { $0.destination != nil })
-        XCTAssertTrue(sections.dropFirst().flatMap(\.items).allSatisfy { $0.destination == nil })
-        let offline = ShellNav.moreSections(connected: false)
-        XCTAssertEqual(offline.count, 3)
-        XCTAssertFalse(offline[2].items.contains(.calendars))
-        XCTAssertFalse(offline[2].items.contains(.family))
-        XCTAssertFalse(offline[2].items.contains(.watch))
+    func testAskIsALifeGridDailyAndOneSettingsRow() {
+        // Fold review 2026-10-12, item 7: the same parts as the Fold's.
+        XCTAssertEqual(ShellNav.lifeTiles().map(\.label),
+                       ["Lists", "Goals and habits", "People", "Dinners", "Bins", "Date night", "School", "Appointments", "Annual leave", "Gifts", "Trips", "Errands", "Emergency card", "What MEKA knows"])
+        XCTAssertEqual(ShellNav.lifeTiles().compactMap(\.tile), LifeTileRules.shared.ORDER)
+        XCTAssertTrue(ShellNav.lifeTiles().allSatisfy { $0.symbol != nil })
+        XCTAssertEqual(ShellNav.daily().map(\.label), ["Morning brief", "Week ahead", "News", "Shut down the day", "Train queue", "Life admin hour", "Review"])
+        XCTAssertEqual(ShellNav.settings(connected: true).map(\.label),
+                       ["Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"])
+        XCTAssertFalse(ShellNav.settings(connected: false).contains(.watch))
+        XCTAssertEqual(MoreItem.allCases.filter { !ShellNav.opens($0) }, [.ai])
+        XCTAssertNil(ShellNav.statusItem(healthAttention: 0, setupLeft: 0))
+        XCTAssertEqual(ShellNav.statusItem(healthAttention: 0, setupLeft: 3), .setup)
+        XCTAssertEqual(ShellNav.statusItem(healthAttention: 2, setupLeft: 3), .health)
+        XCTAssertEqual(ShellNav.tileLine(.bins, live: nil).text, "Which bins go out, the evening before")
+        XCTAssertFalse(ShellNav.tileLine(.bins, live: nil).lit)
+        let live = ShellNav.tileLine(.dinners, live: LifeTileLine(text: "Chilli tonight", lit: true))
+        XCTAssertEqual(live.text, "Chilli tonight")
+        XCTAssertTrue(live.lit)
     }
 
     @MainActor
@@ -100,13 +98,13 @@ final class ShellNavTests: XCTestCase {
     }
 
     @MainActor
-    func testMoreSectionsStaggerOneStepApart() {
-        XCTAssertEqual((0...2).map(ShellNav.moreLabelStep), [2, 4, 6])
-        XCTAssertEqual((0...3).map { ShellNav.moreRowStep(0, $0) }, [3, 4, 5, 6])
-        XCTAssertEqual(ShellNav.moreRowStep(1, 0), 5)
-        XCTAssertEqual(ShellNav.moreRowStep(2, 6), 13)
-        XCTAssertEqual(ShellNav.moreRowStep(2, 7), 14)
-        for s in 0...2 { XCTAssertLessThan(ShellNav.moreLabelStep(s), ShellNav.moreRowStep(s, 0)) }
+    func testAskStaggersAPartAStepAfterTheOneBefore() {
+        XCTAssertEqual(ShellNav.statusStep, 2)
+        XCTAssertEqual((0...2).map(ShellNav.moreLabelStep), [3, 5, 7])
+        XCTAssertEqual((0...4).map(ShellNav.tileStep), [4, 4, 5, 5, 6])
+        XCTAssertEqual(ShellNav.moreRowStep(1, 0), 6)
+        XCTAssertEqual(ShellNav.settingsStep, 7)
+        for s in 0...1 { XCTAssertLessThan(ShellNav.moreLabelStep(s), ShellNav.moreRowStep(s, 0)) }
     }
 
     @MainActor

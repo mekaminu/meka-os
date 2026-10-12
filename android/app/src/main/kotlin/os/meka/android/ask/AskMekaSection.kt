@@ -98,7 +98,8 @@ private sealed interface AskShown {
  * a task opens its detail over Search, a list item, goal or habit opens its place, "See all 12 matches" opens Search);
  * the mic sits inside the field at its right end. While asking can't work (AI off, the month's budget used up, not
  * connected) the field only searches and Return opens Search everything.
- * Under the field, MEKA's AI and the month's spend ("On · $1.20 of $20 this month", lit when it needs a look). Asking
+ * Under the field, MEKA's AI only when it needs a look ("Off", the month's budget used up; the spend itself is in
+ * Settings → MEKA's AI). Asking
  * shows the question, a thinking shimmer, then the answer's lines fading in one after another and up to three cards
  * rising under them; a card does nothing until tapped (light haptic), then leaves and the undo bar rises with what it
  * did and Undo. Motion per the catalogue's Assistant row; reduced motion cross-fades.
@@ -323,15 +324,16 @@ fun AskMekaSection(
                 AskMatchList(m, onOpen = { openMatch(it) }, onSeeAll = { keyboard?.hide(); haptics.tick(); openSearch(text, null) })
             }
         }
-        // MEKA's AI and the month's spend; cross-fades as it changes.
-        AnimatedContent(
-            targetState = status,
-            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
-            label = "ai-status", modifier = Modifier.padding(top = MekaSpace.xs, start = MekaSpace.xxs),
-        ) { s ->
+        // MEKA's AI and the month's spend live in Settings → MEKA's AI (Fold review 2026-10-12, item 7); here only when
+        // it needs a look (off, the budget used up), since it's why Return searches instead of asking. Unfolds in place.
+        AnimatedVisibility(
+            visible = status?.lit == true,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
             Text(
-                "MEKA's AI · " + (s?.line ?: "Checking…"),
-                style = MekaType.caption, color = if (s?.lit == true) Meka.colors.accent else Meka.colors.textTertiary,
+                "MEKA's AI · " + (status?.line ?: ""), style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.padding(top = MekaSpace.xs, start = MekaSpace.xxs),
             )
         }
         // Talking: the orb, what it's doing, the live transcript and what MEKA said; or why it can't listen.

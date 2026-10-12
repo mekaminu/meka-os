@@ -112,6 +112,8 @@ final class CoreModel {
     private(set) var car: CarView?
     /// Ask → More → Bins.
     var showBins = false
+    /// Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line ("Chilli tonight", "Next Fri 23 Oct").
+    private(set) var lifeLines: LifeLines?
     /// Gift planner (V1, slice 1): birthdays and anniversaries, their ideas and order-by days (Ask → More → Gifts).
     private(set) var gifts: GiftsView?
     /// Ask → More → Gifts.
@@ -365,6 +367,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await b in core.binsView { self?.bins = b }
+        })
+        observers.append(Task { [weak self] in
+            for await l in core.lifeLines { self?.lifeLines = l }
         })
         observers.append(Task { [weak self] in
             for await g in core.giftsView { self?.gifts = g }

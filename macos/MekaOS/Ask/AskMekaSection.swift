@@ -6,8 +6,8 @@ import SwiftUI
 /// your own words (Return) and searches as you type: the best matches show under it (`AskFieldRules`; a task opens its
 /// detail in Search, a list item, goal or habit opens where it lives, "See all 12 matches" opens Search, ⌘F as before);
 /// the mic sits inside the field. While asking can't work (AI off, the month's budget used up, not connected) the field
-/// only searches and Return opens Search. Under it, MEKA's AI and the month's spend, in the accent colour when it needs
-/// a look. Asking shows the question, a thinking shimmer, then the answer's lines fading in one after another and up
+/// only searches and Return opens Search. Under it, MEKA's AI in the accent colour only when it needs a look (the month's
+/// spend is in Ask → Settings → MEKA's AI). Asking shows the question, a thinking shimmer, then the answer's lines fading in one after another and up
 /// to three cards rising under them; a card does nothing until clicked (light haptic), then leaves and the shell's
 /// undo bar rises with what it did and Undo (which brings the card back). Reduced motion: cross-fades.
 ///
@@ -67,12 +67,16 @@ struct AskMekaSection: View {
                 AskMatchList(matches: m, palette: palette, onOpen: openMatch, onSeeAll: { openSearch(chosen: nil) })
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
-            Text("MEKA's AI · " + (model.aiStatus?.line ?? "Checking…"))
-                .font(MekaType.caption)
-                .foregroundStyle(model.aiStatus?.lit == true ? palette.accent : palette.textTertiary)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: model.aiStatus?.line)
-                .padding(.leading, MekaSpace.xxs)
+            // The spend lives in Settings → MEKA's AI (Fold review 2026-10-12, item 7); here only when it needs a look,
+            // since it's why Return searches instead of asking.
+            if let ai = model.aiStatus, ai.lit {
+                Text("MEKA's AI · " + ai.line)
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.accent)
+                    .contentTransition(.opacity)
+                    .padding(.leading, MekaSpace.xxs)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
             if talk.active || talk.problem != nil {
                 TalkPanel(talk: talk, palette: palette) { MekaHaptics.tick(); talk.tapOrb() }
                     .padding(.top, MekaSpace.xs)

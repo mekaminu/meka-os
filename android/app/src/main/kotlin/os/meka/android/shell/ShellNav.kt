@@ -35,45 +35,46 @@ enum class ShellLayout {
 }
 
 /**
- * The sections of Ask's More list (Fold review 2026-10-08, item 10: twelve rows in one flat list were hard to scan).
- * Each has a small section label over its rows; the rows are the same.
+ * The parts of Ask's More (Fold review 2026-10-12, item 7: the 30-row list was too long to scan). Life is a 2-column
+ * grid of tiles with a live line each; Daily is a short list of rows; Settings is one row that opens the Settings pane,
+ * where every setting lives. Setup and Health show as one status row at the top only when something needs a look.
  */
 enum class MoreGroup(val label: String) {
-    PLACES("Places"),
+    LIFE("Life"),
     DAILY("Daily"),
     SETTINGS("Settings"),
 }
 
 /**
- * A row in Ask's "More" list: a place behind Ask ([destination]), a pane that springs up over Ask (null), or
- * Appearance, which unfolds its choices in place ([ShellNav.unfoldsInPlace]).
- * Lines are fixed words, not counts, except Lists when something on it is due ([ShellNav.moreLine]).
- * Today's header keeps only Search and Plan my day (Today clarity, slice 2): the brief, the shutdown, work mode and
- * the theme moved here.
+ * A row or tile in Ask's More: a place behind Ask ([destination]), a pane that springs up over Ask (null), Appearance,
+ * which unfolds its choices in place ([ShellNav.unfoldsInPlace]), or MEKA's AI, which only says how it is ([ShellNav.opens]).
+ * Life tiles carry their [tile] (the core's live line). Lines are fixed words, used when there's nothing live to say.
  */
-enum class MoreItem(val label: String, val line: String, val destination: ShellDestination?, val group: MoreGroup) {
-    LISTS("Lists", "Waiting for · Someday · Decisions · Renewals", ShellDestination.LISTS, MoreGroup.PLACES),
-    GOALS("Goals and habits", "Habits, goals and fasting", ShellDestination.GOALS, MoreGroup.PLACES),
-    REVIEW("Review", "Your week, looked back on", ShellDestination.REVIEW, MoreGroup.PLACES),
-    VAULT("Vault", "Your data now; documents later", ShellDestination.VAULT, MoreGroup.PLACES),
+enum class MoreItem(
+    val label: String, val line: String, val destination: ShellDestination?, val group: MoreGroup,
+    val tile: os.meka.core.domain.LifeTile? = null,
+) {
+    LISTS("Lists", "Waiting for · Someday · Decisions · Renewals", ShellDestination.LISTS, MoreGroup.LIFE, os.meka.core.domain.LifeTile.LISTS),
+    GOALS("Goals and habits", "Habits, goals and fasting", ShellDestination.GOALS, MoreGroup.LIFE, os.meka.core.domain.LifeTile.GOALS),
+    PEOPLE("People", "Promises both ways, birthdays and last contact", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.PEOPLE),
+    DINNERS("Dinners", "Favourites, the week's dinners and their shopping", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.DINNERS),
+    BINS("Bins", "Which bins go out, the evening before", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.BINS),
+    DATE_NIGHT("Date night", "An evening every two weeks, kept clear", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.DATE_NIGHT),
+    SCHOOL("School", "Rex and Logan's days off, PE and trips", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.SCHOOL),
+    APPOINTMENTS("Appointments", "Dentist, optician, haircut · a nudge when one's due", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.APPOINTMENTS),
+    LEAVE("Annual leave", "Days booked, days left and the school holidays", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.LEAVE),
+    GIFTS("Gifts", "Birthdays, anniversaries and gift ideas", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.GIFTS),
+    TRIPS("Trips", "Trips and bookings, day by day", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.TRIPS),
+    ERRANDS("Errands", "Things to get or do when you're at a place", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.ERRANDS),
+    EMERGENCY("Emergency card", "Who to call and where things are", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.EMERGENCY),
+    FACTS("What MEKA knows", "Car reg, GP, sizes · the facts MEKA answers from", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.FACTS),
     BRIEF("Morning brief", "Your day, who you're waiting on and headlines", null, MoreGroup.DAILY),
+    WEEK_AHEAD("Week ahead", "The coming week day by day · Sunday at 18:00", null, MoreGroup.DAILY),
     NEWS("News", "Barça, AI and the headlines · topics and sources", null, MoreGroup.DAILY),
     SHUTDOWN("Shut down the day", "Tick off, carry over and see tomorrow", null, MoreGroup.DAILY),
-    WEEK_AHEAD("Week ahead", "The coming week day by day · Sunday at 18:00", null, MoreGroup.DAILY),
-    SCHOOL("School", "Rex and Logan's days off, PE and trips", null, MoreGroup.DAILY),
-    LEAVE("Annual leave", "Days booked, days left and the school holidays", null, MoreGroup.DAILY),
-    DINNERS("Dinners", "Favourites, the week's dinners and their shopping", null, MoreGroup.DAILY),
-    DATE_NIGHT("Date night", "An evening every two weeks, kept clear", null, MoreGroup.DAILY),
-    LIFE_ADMIN("Life admin hour", "One hour a week for forms, calls and renewals", null, MoreGroup.DAILY),
-    EMERGENCY("Emergency card", "Who to call and where things are · Jeanette can read it", null, MoreGroup.DAILY),
     TRAIN_QUEUE("Train queue", "Links and podcasts saved for the commute", null, MoreGroup.DAILY),
-    ERRANDS("Errands", "Things to get or do when you're at a place", null, MoreGroup.DAILY),
-    APPOINTMENTS("Appointments", "Dentist, optician, haircut · a nudge when one's due", null, MoreGroup.DAILY),
-    BINS("Bins", "Which bins go out, the evening before", null, MoreGroup.DAILY),
-    GIFTS("Gifts", "Birthdays, anniversaries and gift ideas", null, MoreGroup.DAILY),
-    PEOPLE("People", "Promises both ways, birthdays and last contact", null, MoreGroup.DAILY),
-    TRIPS("Trips", "Trips and bookings, day by day", null, MoreGroup.DAILY),
-    FACTS("What MEKA knows", "Car reg, GP, sizes · the facts MEKA answers from", null, MoreGroup.DAILY),
+    LIFE_ADMIN("Life admin hour", "One hour a week for forms, calls and renewals", null, MoreGroup.DAILY),
+    REVIEW("Review", "Your week, looked back on", ShellDestination.REVIEW, MoreGroup.DAILY),
     WORK("Work mode", "Work hours and the Work switch", null, MoreGroup.SETTINGS),
     PROTECTED("Protected time", "Evenings and weekends, kept free of tasks", null, MoreGroup.SETTINGS),
     NOTIFICATIONS("Notifications", "Quiet hours, digests and what reaches you", null, MoreGroup.SETTINGS),
@@ -83,15 +84,17 @@ enum class MoreItem(val label: String, val line: String, val destination: ShellD
     CALENDARS("Calendars", "Connected accounts and feeds", null, MoreGroup.SETTINGS),
     FAMILY("Family", "Share the shopping list with Jeanette", null, MoreGroup.SETTINGS),
     WATCH("Watch", "Link your Galaxy Watch to MEKA", null, MoreGroup.SETTINGS),
+    AUTONOMY("What MEKA may do", "What it does on its own · the pause switch", null, MoreGroup.SETTINGS),
+    AI("MEKA's AI", "Whether it's on and what it costs this month", null, MoreGroup.SETTINGS),
+    ACTIVITY("Activity", "What MEKA did and why", null, MoreGroup.SETTINGS),
     SETUP("Setup", "Everything MEKA can do, and what's left to set up", null, MoreGroup.SETTINGS),
     HEALTH("Health", "Is everything MEKA needs working?", null, MoreGroup.SETTINGS),
-    AUTONOMY("What MEKA may do", "What it does on its own · the pause switch", null, MoreGroup.SETTINGS),
-    ACTIVITY("Activity", "What MEKA did and why", null, MoreGroup.SETTINGS),
+    VAULT("Vault", "Your data now; documents later", ShellDestination.VAULT, MoreGroup.SETTINGS),
     YOUR_DATA("Your data", "Export everything as one file", null, MoreGroup.SETTINGS),
-}
 
-/** One section of More: its label and its rows, in order. */
-data class MoreSection(val group: MoreGroup, val items: List<MoreItem>)
+    /** The one row on Ask that opens the Settings pane. */
+    SETTINGS("Settings", "Work mode, notifications, appearance, voice and MEKA's AI", null, MoreGroup.SETTINGS),
+}
 
 object ShellNav {
     /** Same breakpoint Today uses for its two panes. */
@@ -116,24 +119,54 @@ object ShellNav {
     fun direction(from: ShellDestination, to: ShellDestination): Int = to.ordinal.compareTo(from.ordinal).coerceIn(-1, 1)
 
     /**
-     * Ask's More list; Calendars and Family only once this device is connected (before that, Today offers Connect;
-     * Family's links live on MEKA's server).
+     * Everything reachable from Ask's More (the tiles, Daily, the Settings row and what's in the Settings pane);
+     * Calendars, Family and Watch only once this device is connected (they live on MEKA's server).
      */
     fun more(connected: Boolean): List<MoreItem> =
         MoreItem.entries.filter { connected || (it != MoreItem.CALENDARS && it != MoreItem.FAMILY && it != MoreItem.WATCH) }
 
-    /** More in its sections (Places · Daily · Settings), each with its rows; a section with no rows is left out. */
-    fun moreSections(connected: Boolean): List<MoreSection> =
-        MoreGroup.entries.map { g -> MoreSection(g, more(connected).filter { it.group == g }) }.filter { it.items.isNotEmpty() }
+    /** The Life grid's tiles, in the core's order (both apps). */
+    fun lifeTiles(): List<MoreItem> =
+        os.meka.core.domain.LifeTileRules.ORDER.map { t -> MoreItem.entries.first { it.tile == t } }
+
+    /** Daily's rows on Ask. */
+    fun daily(): List<MoreItem> = MoreItem.entries.filter { it.group == MoreGroup.DAILY }
+
+    /** What the Settings pane lists, in order. */
+    fun settings(connected: Boolean): List<MoreItem> =
+        more(connected).filter { it.group == MoreGroup.SETTINGS && it != MoreItem.SETTINGS }
 
     /**
-     * Stagger steps for More (40 ms apart, after the title 0, field 1): each section starts one step after the one
-     * before began rather than after its last row, so the list settles quickly; a label leads its rows by one step.
-     * Places: label 2, rows 3–6 · Daily: label 4, rows 5–14 · Settings: label 6, rows 7–20.
+     * The status row at the top of More: Health when something needs a look, else Setup while steps are left, else
+     * nothing (both stay in Settings either way).
      */
-    fun moreLabelStep(section: Int): Int = 2 + 2 * section
+    fun statusItem(healthAttention: Int, setupLeft: Int): MoreItem? = when {
+        healthAttention > 0 -> MoreItem.HEALTH
+        setupLeft > 0 -> MoreItem.SETUP
+        else -> null
+    }
+
+    /**
+     * Stagger steps for Ask (40 ms apart; the title 0, the field 1, the status row 2): each part starts one step after
+     * the one before began, its label leading. Life: label 3, tiles a row at a time from 4 · Daily: label 5, rows 6–12 ·
+     * the Settings row 7. The Settings pane's rows: 1, 2, 3… after its title.
+     */
+    const val STATUS_STEP = 2
+
+    fun moreLabelStep(section: Int): Int = 3 + 2 * section
 
     fun moreRowStep(section: Int, row: Int): Int = moreLabelStep(section) + 1 + row
+
+    fun tileStep(index: Int): Int = os.meka.core.domain.LifeTileRules.step(moreRowStep(0, 0), index)
+
+    val SETTINGS_STEP: Int get() = moreLabelStep(2)
+
+    /** Every item opens something except MEKA's AI, which only says how it is. */
+    fun opens(item: MoreItem): Boolean = item != MoreItem.AI
+
+    /** A Life tile's line: the core's live one when there is one, else the tile's fixed words. */
+    fun tileLine(item: MoreItem, live: os.meka.core.domain.LifeTileLine?): os.meka.core.domain.LifeTileLine =
+        live ?: os.meka.core.domain.LifeTileLine(item.line, false)
 
     /**
      * A More row's line: Lists says what's due when something is ("2 need you"), Health its summary once checked
