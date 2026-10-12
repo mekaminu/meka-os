@@ -60,6 +60,7 @@ import os.meka.core.wire.HealthCodec
 import os.meka.core.wire.HereCodec
 import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
+import os.meka.core.wire.UpdateFailureCodec
 import os.meka.core.wire.VoiceMessageCodec
 import os.meka.core.wire.WireCodec
 import os.meka.core.wire.WireFormatException
@@ -105,6 +106,8 @@ fun Application.mekaSync(
     family: FamilyShare? = null,
     /** Linking a watch without the enrolment code (Galaxy Watch, slice 1); null leaves its routes out. */
     deviceLink: DeviceLink? = DeviceLink(devices, verifier),
+    /** Phone update failures reported by the Fold (build plan: phone updates sometimes fail to install); null leaves the routes out. */
+    updateFailures: UpdateFailures? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -390,6 +393,27 @@ fun Application.mekaSync(
                     is Releases.Upload.Conflict -> call.respondText(r.reason, status = HttpStatusCode.Conflict)
                     is Releases.Upload.Rejected -> call.respondText(r.reason, status = HttpStatusCode.BadRequest)
                 }
+            }
+        }
+
+        if (releases != null && updateFailures != null) {
+            // Why a phone update didn't go in: the Fold reports one (keyed devices only; the publisher is refused), and
+            // the publisher (or a keyed device) reads the newest few so the publish job can print them for a build run.
+            post(UpdateFailureCodec.REPORT_PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val report = UpdateFailureCodec.decodeReport(body)
+                withContext(Dispatchers.IO) { updateFailures.report(who, report) }
+                call.application.environment.log.info("phone update failure reported") // no identifiers
+                call.respondText("{}", ContentType.Application.Json)
+            }
+
+            post(UpdateFailureCodec.LIST_PATH) {
+                val body = call.boundedBody()
+                val who = call.releaseCaller(devices, verifier, body, publisher)
+                UpdateFailureCodec.decodeListRequest(body)
+                val list = withContext(Dispatchers.IO) { updateFailures.recent(who) }
+                call.respondText(UpdateFailureCodec.encodeList(list), ContentType.Application.Json)
             }
         }
 
@@ -798,7 +822,7 @@ fun main(args: Array<String>) {
                     releases = Releases(PostgresReleaseStore(ds), onPublished = { who, r -> releaseActivity.record(who, r) }), push = push,
                     publisher = System.getenv("MEKA_RELEASE_PUBLISHER_SECRET")?.takeIf { it.isNotBlank() }?.let { SecretsManagerPublisherKey(it) },
                     voice = voice, newsImages = newsImages, calendarWriter = calendarWriter, ai = ai, speech = speech,
-                    verifier = verifier, family = family,
+                    verifier = verifier, family = family, updateFailures = UpdateFailures(PostgresUpdateFailureStore(ds)),
                 )
             }.start(wait = true)
         }
@@ -918,7 +942,7 @@ object Migrations {
         5 to "/db/V5__app_release.sql", 6 to "/db/V6__push_token.sql", 7 to "/db/V7__news_image.sql",
         8 to "/db/V8__calendar_editing.sql", 9 to "/db/V9__event_edits.sql", 10 to "/db/V10__ai_usage.sql",
         11 to "/db/V11__speech_usage.sql", 12 to "/db/V12__sign_ins.sql", 13 to "/db/V13__family_invite.sql",
-        14 to "/db/V14__ai_usage_day.sql",
+        14 to "/db/V14__ai_usage_day.sql", 15 to "/db/V15__app_update_failure.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

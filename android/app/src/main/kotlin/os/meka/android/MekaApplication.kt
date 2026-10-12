@@ -93,7 +93,7 @@ class MekaApplication : Application() {
     val openNewsStory = MutableStateFlow<String?>(null)
     /** The side button, the headphones' button, the Talk widget or a launcher open with Bluetooth audio / in the car (Talk without tapping the mic): Ask starts listening, then clears it. */
     val talkNow = MutableStateFlow<os.meka.core.domain.TalkStart?>(null)
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    internal val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     /** Hardware-held signing key; created on first use (ADR-005). */
     private val deviceKey by lazy { AndroidDeviceKey() }
     // Read timeout above the server's 20 s long-poll window (OkHttp's default is 10 s).

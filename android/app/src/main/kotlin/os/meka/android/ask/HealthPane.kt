@@ -105,6 +105,8 @@ object HealthDevice {
             callRoleHeld = MekaCallScreeningService.roleHeld(context),
             version = updater?.let { runCatching { it.installedName }.getOrNull() },
             updateReady = updater?.state?.value is UpdateState.Ready,
+            installedCode = updater?.let { runCatching { it.installedCode }.getOrNull() },
+            updateFailure = updater?.lastFailure?.value,
         )
     }
 }
@@ -136,8 +138,13 @@ fun rememberHealthFixer(core: MekaCore, openPane: ((HealthFix) -> Unit)? = null,
                 }
                 HealthFix.INSTALL_UPDATE -> {
                     val app = context.applicationContext as? MekaApplication
-                    val ready = app?.updater?.state?.value as? UpdateState.Ready
-                    if (app != null && ready != null) scope.launch { app.updater.install(ready.release) }
+                    // Ready, or Try again after a failure: installs in the app's scope (leaving Health doesn't stop it).
+                    val release = when (val st = app?.updater?.state?.value) {
+                        is UpdateState.Ready -> st.release
+                        is UpdateState.Failed -> st.release
+                        else -> null
+                    }
+                    if (app != null && release != null) app.updater.start(release)
                 }
                 HealthFix.CALENDARS, HealthFix.WORK -> f?.let { openPane?.invoke(it) }
                 null -> Unit

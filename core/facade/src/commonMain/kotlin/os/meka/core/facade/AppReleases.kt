@@ -46,6 +46,8 @@ sealed class PublishOutcome {
 object ReleaseTransfer {
     const val ANDROID = "android"
     const val ANDROID_APP_ID = "os.meka.android"
+    /** Bytes per chunk (every chunk but the last is exactly this long), so a device can resume a download. */
+    const val CHUNK_BYTES: Int = WireCodec.RELEASE_CHUNK_BYTES
     private const val ATTEMPTS = 3
 
     fun describe(platform: String, bytes: ByteArray, versionCode: Long, versionName: String): AppRelease {
@@ -93,10 +95,10 @@ object ReleaseTransfer {
     /**
      * Fetches [release] chunk by chunk into [sink], with [progress] after each one (chunks done). Each chunk is retried
      * a few times on network errors; a chunk of the wrong size stops the download. The caller checks the whole
-     * file's hash before installing.
+     * file's hash before installing. [fromChunk] resumes a download whose first chunks the caller already holds.
      */
-    suspend fun download(api: ReleasesApi, release: AppRelease, sink: suspend (ByteArray) -> Unit, progress: (Int) -> Unit) {
-        for (i in 0 until release.chunkCount) {
+    suspend fun download(api: ReleasesApi, release: AppRelease, sink: suspend (ByteArray) -> Unit, progress: (Int) -> Unit, fromChunk: Int = 0) {
+        for (i in fromChunk.coerceIn(0, release.chunkCount) until release.chunkCount) {
             val bytes = retrying { api.releaseChunk(release.platform, release.versionCode, i) }
             if (bytes.size != WireCodec.releaseChunkSize(release.sizeBytes, i)) throw TransportException("chunk $i has the wrong size")
             sink(bytes)

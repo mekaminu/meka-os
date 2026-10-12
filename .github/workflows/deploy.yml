@@ -203,6 +203,13 @@ jobs:
           fi
           echo "publish=true" >> "$GITHUB_OUTPUT"; echo "Publishing build $COUNT (published: $LATEST)"
 
+      # Why the phone's last updates didn't install (build plan: phone updates sometimes fail to install): printed as
+      # warnings on this job so a build run reads them from the check run's annotations. Never fails the job.
+      - name: Phone update failures
+        if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
+        continue-on-error: true
+        run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-failures "${{ steps.decide.outputs.url }}"
+
       - name: Build the phone app with the Mac's debug key
         if: steps.decide.outputs.publish == 'true'
         env:

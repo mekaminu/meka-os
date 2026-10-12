@@ -270,6 +270,14 @@ interface HealthApi {
 }
 
 /**
+ * Phone update failures (build plan: phone updates sometimes fail to install): `POST /v1/releases/failure` reports
+ * one. False from an older server without the route or before this device's key is registered.
+ */
+interface UpdateFailureApi {
+    suspend fun reportUpdateFailure(report: os.meka.core.wire.UpdateFailureCodec.Report): Boolean
+}
+
+/**
  * A caller's recording (call assistant polish 8c): `POST /v1/voice-message/audio` with the held message's id. The MP3's
  * bytes, or null when the server keeps none (or is older and has no route).
  */
@@ -332,7 +340,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -624,6 +632,18 @@ class HttpSyncTransport(
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/weather/here")
         }
         return codec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun reportUpdateFailure(report: os.meka.core.wire.UpdateFailureCodec.Report): Boolean {
+        val codec = os.meka.core.wire.UpdateFailureCodec
+        prepare() // the route requires the device's signing key on the server
+        val resp = send(codec.REPORT_PATH, codec.encodeReport(report))
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.REPORT_PATH}")
+            resp.status.value == 404 || resp.status.value == 403 -> false
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.REPORT_PATH}")
+            else -> true
+        }
     }
 
     override suspend fun householdHealth(): os.meka.core.wire.HealthCodec.Response? {

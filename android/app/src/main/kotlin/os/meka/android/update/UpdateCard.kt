@@ -1,6 +1,7 @@
 package os.meka.android.update
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -20,14 +21,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -44,7 +43,6 @@ import os.meka.core.domain.AppUpdateRules
  */
 @Composable
 internal fun UpdateCard(state: UpdateState, updater: AppUpdater, modifier: Modifier = Modifier) {
-    val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val activity = LocalActivity.current
     val reduced = Meka.reducedMotion
@@ -64,10 +62,10 @@ internal fun UpdateCard(state: UpdateState, updater: AppUpdater, modifier: Modif
         is UpdateState.Failed -> state.reason
         UpdateState.None -> ""
     }
-    val install: () -> Unit = { haptics.light(); scope.launch { updater.install(release) } }
+    val install: () -> Unit = { haptics.light(); updater.start(release) }
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised).padding(MekaSpace.l)
-            .semantics { contentDescription = "${AppUpdateRules.TITLE}. $line" },
+            .semantics { contentDescription = "${AppUpdateRules.TITLE}. $line" + ((state as? UpdateState.Failed)?.detail?.let { ". $it" } ?: "") },
     ) {
         Text(AppUpdateRules.TITLE, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         AnimatedContent(
@@ -76,6 +74,14 @@ internal fun UpdateCard(state: UpdateState, updater: AppUpdater, modifier: Modif
             label = "update-line",
         ) { l ->
             Text(l, style = MekaType.itemMeta, color = if (state is UpdateState.Failed) Meka.colors.accent else Meka.colors.textSecondary,
+                modifier = Modifier.padding(top = MekaSpace.xxs))
+        }
+        // Android's own words under the line (build plan: phone updates sometimes fail to install), fading in with it.
+        AnimatedVisibility(
+            visible = state is UpdateState.Failed && state.detail != null,
+            enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced)),
+        ) {
+            Text((state as? UpdateState.Failed)?.detail.orEmpty(), style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.padding(top = MekaSpace.xxs))
         }
         if (state is UpdateState.Downloading) {

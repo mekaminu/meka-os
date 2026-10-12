@@ -181,6 +181,16 @@ class HealthTest {
         val update = HealthRules.view(facts(device = fold.copy(updateReady = true)), cal)
         assertEquals("Version 0.1.214 · a newer build is ready", update.row("update").line)
         assertEquals(HealthFix.INSTALL_UPDATE, update.row("update").fix)
+        // A build that didn't install shows Android's words until it (or a newer one) is in.
+        val failure = UpdateFailure(UpdateFailureRules.STAGE_INSTALL, UpdateFailureRules.STATUS_FAILURE_BLOCKED, null, 214, 230, now - 60 * 60_000L)
+        val failed = HealthRules.view(facts(device = fold.copy(installedCode = 214, updateFailure = failure)), cal)
+        assertEquals(HealthState.WARN, failed.row("update").state)
+        assertEquals(HealthFix.INSTALL_UPDATE, failed.row("update").fix)
+        assertEquals("Try again", failed.row("update").fixLabel)
+        assertTrue(failed.row("update").line.startsWith("Version 0.1.214 · Build 230 didn't install "), failed.row("update").line)
+        assertTrue(failed.row("update").line.endsWith(" · Android: STATUS_FAILURE_BLOCKED"), failed.row("update").line)
+        val installed = HealthRules.view(facts(device = fold.copy(installedCode = 230, updateFailure = failure)), cal)
+        assertEquals("Version 0.1.214 · up to date", installed.row("update").line)
     }
 
     @Test

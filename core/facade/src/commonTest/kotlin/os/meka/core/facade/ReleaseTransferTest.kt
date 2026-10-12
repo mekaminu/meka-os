@@ -58,6 +58,19 @@ class ReleaseTransferTest {
     }
 
     @Test
+    fun aDownloadResumesAfterTheChunksAlreadyHeld() = runTest {
+        val server = FakeServer()
+        val release = (ReleaseTransfer.publish(server, "android", apk, 413, "0.1.413") as PublishOutcome.Published).release
+        val first = ReleaseTransfer.chunkOf(apk, 0)
+        val rest = mutableListOf<ByteArray>()
+        val progress = mutableListOf<Int>()
+        ReleaseTransfer.download(server, release, { rest += it }, { progress += it }, fromChunk = 1)
+        assertContentEquals(apk, first + rest.reduce { a, b -> a + b })
+        assertEquals(listOf(2, 3), progress)
+        assertEquals(WireCodec.RELEASE_CHUNK_BYTES, ReleaseTransfer.CHUNK_BYTES)
+    }
+
+    @Test
     fun aRefusalOrALostServerIsReportedPlainly() = runTest {
         val refusing = FakeServer().apply { refuse = "build 412 isn't newer than the published build 412" }
         assertEquals("Not published: build 412 isn't newer than the published build 412.", ReleaseTransfer.publish(refusing, "android", apk, 412, "0.1.412").message)

@@ -214,6 +214,7 @@ class MekaCore(
     private var speechApi: SpeechApi? = transport as? SpeechApi
     private var hereApi: HereApi? = transport as? HereApi
     private var healthApi: HealthApi? = transport as? HealthApi
+    private var updateFailureApi: UpdateFailureApi? = transport as? UpdateFailureApi
     private var voiceMessageApi: VoiceMessageApi? = transport as? VoiceMessageApi
     private var familyApi: FamilyApi? = transport as? FamilyApi
     /** Family (sharing slice 4): the links as the server last listed them, in memory only (the server holds them). */
@@ -2941,6 +2942,7 @@ class MekaCore(
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
             speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; healthApi = transport as? HealthApi
+            updateFailureApi = transport as? UpdateFailureApi
             voiceMessageApi = transport as? VoiceMessageApi; familyApi = transport as? FamilyApi; deviceLinkApi = transport as? DeviceLinkApi
         }
         startSync()
@@ -4145,11 +4147,35 @@ class MekaCore(
 
     /**
      * Downloads [release] into [sink] chunk by chunk, calling [progress] with the chunks done. Throws on network
-     * errors; the caller checks the whole file's hash before installing.
+     * errors; the caller checks the whole file's hash before installing. [fromChunk] resumes after chunks already held.
      */
-    suspend fun downloadRelease(release: AppRelease, sink: suspend (ByteArray) -> Unit, progress: (Int) -> Unit) {
+    suspend fun downloadRelease(release: AppRelease, sink: suspend (ByteArray) -> Unit, progress: (Int) -> Unit, fromChunk: Int = 0) {
         val api = releasesApi ?: throw os.meka.core.sync.TransportException("not connected")
-        ReleaseTransfer.download(api, release, sink, progress)
+        ReleaseTransfer.download(api, release, sink, progress, fromChunk)
+    }
+
+    /**
+     * A phone update that didn't go in (build plan: phone updates sometimes fail to install): written to Activity
+     * ("Build 430 didn't install", with Android's words), then reported to the server so a build run can read why.
+     * Returns whether the server took it (false offline, not connected or on an older server; the Fold keeps the
+     * failure and reports it again later).
+     */
+    suspend fun recordUpdateFailure(f: os.meka.core.domain.UpdateFailure): Boolean {
+        val rules = os.meka.core.domain.UpdateFailureRules
+        onCore {
+            activity.recordDevice(rules.activityId(f), f.atMs, rules.activitySummary(f), rules.activityWhy(f))
+            refresh()
+        }
+        return reportUpdateFailure(f)
+    }
+
+    /** Sends [f] to the server only (a report that couldn't go earlier). */
+    suspend fun reportUpdateFailure(f: os.meka.core.domain.UpdateFailure): Boolean {
+        val api = updateFailureApi ?: return false
+        val report = os.meka.core.wire.UpdateFailureCodec.Report(
+            f.stage, f.status, f.message, f.fromCode, f.toCode, f.atMs, f.storage, f.network, f.attempts,
+        )
+        return try { api.reportUpdateFailure(report) } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
     }
 
     /** Publishes a build this device holds (the Mac publishing the phone app it built). */

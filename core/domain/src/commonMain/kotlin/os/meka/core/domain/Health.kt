@@ -74,6 +74,10 @@ data class DeviceHealth(
     /** "0.1.214"; null leaves the Updates row out. */
     val version: String? = null,
     val updateReady: Boolean = false,
+    /** This build's number, for [updateFailure]; null leaves the failure out. */
+    val installedCode: Long? = null,
+    /** The last phone update that didn't go in ([UpdateFailureRules]); shown until that build is installed. */
+    val updateFailure: UpdateFailure? = null,
 )
 
 data class HealthFacts(
@@ -144,7 +148,7 @@ object HealthRules {
             add(ai(f))
             add(voice(f))
             battery(f)?.let(::add)
-            update(f)?.let(::add)
+            update(f, cal)?.let(::add)
         }
         val attention = rows.count { it.needsLook }
         val critical = rows.any { it.state == HealthState.BAD }
@@ -282,8 +286,11 @@ object HealthRules {
         }
     }
 
-    private fun update(f: HealthFacts): HealthRow? {
+    private fun update(f: HealthFacts, cal: LocalCalendar): HealthRow? {
         val v = f.device.version ?: return null
+        val installed = f.device.installedCode
+        val failed = installed?.let { UpdateFailureRules.healthLine(f.device.updateFailure, it, at(f.device.updateFailure?.atMs ?: 0L, f.nowMs, cal)) }
+        if (failed != null) return HealthRow("update", "Updates", "Version $v · $failed", HealthState.WARN, HealthFix.INSTALL_UPDATE, "Try again")
         return if (f.device.updateReady) HealthRow("update", "Updates", "Version $v · a newer build is ready", HealthState.WARN, HealthFix.INSTALL_UPDATE, "Install")
         else HealthRow("update", "Updates", "Version $v · up to date", HealthState.OK)
     }

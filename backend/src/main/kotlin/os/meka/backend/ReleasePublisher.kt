@@ -8,9 +8,12 @@ import os.meka.backend.integrations.Integrations
 import os.meka.core.domain.ActivityRules
 import os.meka.core.domain.AppUpdateRules
 import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.UpdateFailure
+import os.meka.core.domain.UpdateFailureRules
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.Op
 import os.meka.core.sync.ServerOpStore
+import os.meka.core.wire.UpdateFailureCodec
 import os.meka.core.wire.WireCodec
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient
@@ -44,7 +47,7 @@ object ReleasePublisher {
     const val LABEL = "GitHub build"
     const val AUTH_SCHEME = "Publisher"
     /** The only routes the publisher may call. */
-    val ROUTES = setOf("/v1/releases/latest", "/v1/releases/upload")
+    val ROUTES = setOf("/v1/releases/latest", "/v1/releases/upload", UpdateFailureCodec.LIST_PATH)
 
     /** A fresh key pair: (PKCS#8 private key, X.509 public key), both standard base64. */
     fun generateKeyPair(): Pair<String, String> {
@@ -165,6 +168,14 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
         return WireCodec.decodeRelease(body)
     }
 
+    /** The household's newest phone update failures (newest first); null from a server without the route yet. */
+    suspend fun failures(): List<UpdateFailureCodec.Report>? {
+        val (status, body) = send(UpdateFailureCodec.LIST_PATH, UpdateFailureCodec.encodeListRequest())
+        if (status == 404) return null
+        if (status != 200) throw IllegalStateException("HTTP $status from ${UpdateFailureCodec.LIST_PATH}")
+        return UpdateFailureCodec.decodeList(body)
+    }
+
     suspend fun publish(platform: String, bytes: ByteArray, versionCode: Long, versionName: String): Outcome {
         if (bytes.isEmpty() || bytes.size > WireCodec.RELEASE_MAX_BYTES) return Outcome.Failed("the file is empty or too large")
         val size = bytes.size.toLong()
@@ -213,10 +224,14 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  *  - `publisher-keygen`: prints `{"private_key": …, "public_key": …}` for the job to store.
  *  - `publisher-latest <url>`: prints the newest published phone build number (0 when none).
  *  - `publisher-publish <url> <apk> <output-metadata.json>`: publishes the APK; exit 0 when published or not newer.
+ *  - `publisher-failures <url>`: prints the phone's update failures of the last [FAILURE_DAYS] days as GitHub warnings
+ *    (build plan: phone updates sometimes fail to install), so a build run reads why from the job's annotations.
+ *    Always exits 0: reading them never fails the publish job.
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures")
+    const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
         if (args.first() == "publisher-keygen") {
@@ -231,6 +246,12 @@ object ReleasePublisherCli {
         return runBlocking {
             when (args.first()) {
                 "publisher-latest" -> { println(client.latest(PLATFORM)?.versionCode ?: 0); 0 }
+                "publisher-failures" -> {
+                    val list = runCatching { client.failures() }
+                        .getOrElse { println("::notice title=Phone update failures::couldn't read them (${it.message?.take(120)})"); return@runBlocking 0 }
+                    failureLines(list, System.currentTimeMillis()).forEach(::println)
+                    0
+                }
                 else -> {
                     val apk = File(args.getOrNull(2) ?: return@runBlocking fail("usage: publisher-publish <url> <apk> <metadata>"))
                     val meta = File(args.getOrNull(3) ?: return@runBlocking fail("usage: publisher-publish <url> <apk> <metadata>"))
@@ -244,6 +265,19 @@ object ReleasePublisherCli {
                     }
                 }
             }
+        }
+    }
+
+    /** The job's lines: one `::warning` per recent failure, else one notice. */
+    fun failureLines(list: List<UpdateFailureCodec.Report>?, nowMs: Long): List<String> {
+        if (list == null) return listOf("::notice title=Phone update failures::the server doesn't report them yet")
+        val recent = list.filter { nowMs - it.atMs <= FAILURE_DAYS * 86_400_000L }
+        if (recent.isEmpty()) return listOf("::notice title=Phone update failures::none reported in the last $FAILURE_DAYS days")
+        return recent.map { r ->
+            val f = UpdateFailure(r.stage, r.status, r.message, r.fromCode, r.toCode, r.atMs, r.storage, r.network, r.attempts)
+            val at = java.time.Instant.ofEpochMilli(r.atMs).toString().take(16).replace('T', ' ') + " UTC"
+            // Workflow commands end at a newline; the message is one line already, and '%' is escaped as GitHub asks.
+            "::warning title=Phone update failed::$at · ${UpdateFailureRules.reportLine(f)}".replace("%", "%25")
         }
     }
 

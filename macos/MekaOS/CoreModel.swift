@@ -1303,7 +1303,8 @@ final class CoreModel {
         defer { checkingHealth = false }
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
         let device = DeviceHealth(mac: true, batteryExempt: nil, batteryStopped: false, notificationAccess: nil,
-                                  lastNotificationMs: nil, callRoleHeld: nil, version: version, updateReady: false)
+                                  lastNotificationMs: nil, callRoleHeld: nil, version: version, updateReady: false,
+                                  installedCode: nil, updateFailure: nil)
         _ = try? await core.refreshHealth(device: device, force: force)
     }
 
