@@ -4607,6 +4607,21 @@ class MekaCore(
         return reportUpdateFailure(f)
     }
 
+    /**
+     * The phone app's first run of a build (build plan: smaller phone updates): Activity says "Updated to build 471 ·
+     * 18.2 MB" with the change from the build before, so the size of each update is visible on the phone.
+     */
+    suspend fun recordInstalledBuild(versionCode: Long, sizeBytes: Long, previousCode: Long?, previousSize: Long?, atMs: Long = nowMs()) {
+        val rules = os.meka.core.domain.AppUpdateRules
+        onCore {
+            activity.recordDevice(
+                rules.installedActivityId(versionCode), atMs,
+                rules.installedSummary(versionCode, sizeBytes, previousCode), rules.installedWhy(sizeBytes, previousCode, previousSize),
+            )
+            refresh()
+        }
+    }
+
     /** Sends [f] to the server only (a report that couldn't go earlier). */
     suspend fun reportUpdateFailure(f: os.meka.core.domain.UpdateFailure): Boolean {
         val api = updateFailureApi ?: return false

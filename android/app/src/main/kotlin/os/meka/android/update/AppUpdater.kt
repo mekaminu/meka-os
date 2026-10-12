@@ -86,6 +86,7 @@ class AppUpdater(private val app: MekaApplication) {
         if (!force && now - lastCheckMs < CHECK_EVERY_MS) return
         if (_state.value is UpdateState.Downloading || _state.value is UpdateState.Confirming) return
         lastCheckMs = now
+        recordInstalledOnce()
         forgetInstalledFailure()
         sendUnreportedFailure()
         val latest = app.core.latestRelease() ?: return
@@ -338,6 +339,19 @@ class AppUpdater(private val app: MekaApplication) {
         )
     }
 
+    /**
+     * Smaller phone updates: the first check on a new build writes "Updated to build 471 · 18.2 MB" (and the change
+     * from the build before) to Activity, once per build.
+     */
+    private suspend fun recordInstalledOnce() {
+        val recorded = prefs.getLong(KEY_SIZED_CODE, -1).takeIf { it > 0 }
+        if (!AppUpdateRules.shouldRecordInstall(installedCode, recorded)) return
+        val size = runCatching { File(app.applicationInfo.sourceDir).length() }.getOrDefault(0L).takeIf { it > 0 } ?: return
+        val previousSize = prefs.getLong(KEY_SIZED_BYTES, -1).takeIf { it > 0 }
+        runCatching { app.core.recordInstalledBuild(installedCode, size, recorded, previousSize) }
+        prefs.edit().putLong(KEY_SIZED_CODE, installedCode).putLong(KEY_SIZED_BYTES, size).apply()
+    }
+
     /** Once the failed build (or a newer one) is installed, Health no longer shows it. */
     private fun forgetInstalledFailure() {
         val f = _lastFailure.value ?: return
@@ -353,6 +367,8 @@ class AppUpdater(private val app: MekaApplication) {
 
     companion object {
         private const val KEY_LATER = "later"
+        private const val KEY_SIZED_CODE = "sized_code"
+        private const val KEY_SIZED_BYTES = "sized_bytes"
         const val CHECK_EVERY_MS = 10 * 60_000L
         private const val NO_STATUS = Int.MIN_VALUE
         private const val F_STAGE = "failure.stage"

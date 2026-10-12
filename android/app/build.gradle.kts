@@ -41,6 +41,20 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Release signing config is supplied from outside the repo (ADR-010).
         }
+        // The build GitHub publishes to the Fold (build plan: smaller phone updates; the debug build was ~55 MB).
+        // Signed with the debug key like before, so it installs over the current app (same signature, higher
+        // versionCode); R8 shrinks the code and resources, names are kept (-dontobfuscate in proguard-rules.pro) so
+        // crash and failure reports stay readable, and only the Fold's ABI ships (-Pmeka.abi=x86_64 for the emulator
+        // smoke test in fold-smoke.yml). No debug-only tooling (Compose preview, test manifest) goes in.
+        create("fold") {
+            initWith(getByName("debug"))
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            ndk { abiFilters += providers.gradleProperty("meka.abi").getOrElse("arm64-v8a").split(',') }
+            matchingFallbacks += listOf("release", "debug")
+        }
     }
 
     compileOptions {

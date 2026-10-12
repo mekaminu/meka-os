@@ -57,4 +57,14 @@ class UpdateFailureFacadeTest {
         assertFalse(c.recordUpdateFailure(failure))
         assertEquals(1, c.activityView.value.days.flatMap { it.rows }.count { it.kind == ActivityKind.DEVICE })
     }
+
+    @Test
+    fun anInstalledBuildIsInActivityOnceWithItsSize() = runTest {
+        val c = core(reports = false)
+        c.recordInstalledBuild(471, 18_200_000, previousCode = 470, previousSize = 55_100_000)
+        c.recordInstalledBuild(471, 18_200_000, previousCode = 470, previousSize = 55_100_000)
+        val rows = c.activityView.value.days.flatMap { it.rows }.filter { it.kind == ActivityKind.DEVICE }
+        assertEquals(listOf("Updated to build 471 · 18.2 MB"), rows.map { it.summary })
+        assertEquals("From build 470 (55.1 MB) · 36.9 MB smaller", rows.single().why)
+    }
 }

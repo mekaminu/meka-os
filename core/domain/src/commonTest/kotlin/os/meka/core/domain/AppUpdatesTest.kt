@@ -56,4 +56,20 @@ class AppUpdatesTest {
         assertEquals(100, AppUpdateRules.percent(25, 25))
         assertEquals(0, AppUpdateRules.percent(0, 0))
     }
+
+    // Smaller phone updates: each build says its size in Activity, once.
+    @Test
+    fun theInstalledBuildSaysItsSizeOnce() {
+        assertEquals("Updated to build 471 · 18.2 MB", AppUpdateRules.installedSummary(471, 18_200_000, previousCode = 470))
+        assertEquals("Installed build 471 · 18.2 MB", AppUpdateRules.installedSummary(471, 18_200_000, previousCode = null))
+        assertEquals("From build 470 (55.1 MB) · 36.9 MB smaller", AppUpdateRules.installedWhy(18_200_000, 470, 55_100_000))
+        assertEquals("From build 470 (18.2 MB) · same size", AppUpdateRules.installedWhy(18_210_000, 470, 18_200_000))
+        assertEquals("From build 470 (18.2 MB) · 1.0 MB bigger", AppUpdateRules.installedWhy(19_200_000, 470, 18_200_000))
+        assertEquals("From build 470", AppUpdateRules.installedWhy(18_200_000, 470, null))
+        assertEquals("MEKA takes 18.2 MB on this phone", AppUpdateRules.installedWhy(18_200_000, null, null))
+        assertEquals(true, AppUpdateRules.shouldRecordInstall(471, null))
+        assertEquals(true, AppUpdateRules.shouldRecordInstall(471, 470))
+        assertEquals(false, AppUpdateRules.shouldRecordInstall(471, 471))
+        assertEquals(AppUpdateRules.installedActivityId(471), AppUpdateRules.installedActivityId(471))
+    }
 }

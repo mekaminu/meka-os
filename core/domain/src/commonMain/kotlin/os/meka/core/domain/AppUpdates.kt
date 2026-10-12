@@ -51,6 +51,37 @@ object AppUpdateRules {
         }
     }
 
+    /**
+     * Activity's line the first time a build runs (build plan: smaller phone updates): "Updated to build 471 · 18.2 MB",
+     * the installed app's own size, so Meka sees what each update costs on mobile data. [previousCode] is the build that
+     * ran before (null on a fresh install or the first build that reports it): "Installed build 471 · 18.2 MB".
+     */
+    fun installedSummary(versionCode: Long, sizeBytes: Long, previousCode: Long?): String {
+        val what = if (previousCode != null && previousCode < versionCode) "Updated to build" else "Installed build"
+        return "$what $versionCode · ${sizeLabel(sizeBytes)}"
+    }
+
+    /** Activity's why for [installedSummary]: "From build 470 (24.9 MB) · 6.7 MB smaller", else the plain fact. */
+    fun installedWhy(sizeBytes: Long, previousCode: Long?, previousSize: Long?): String {
+        if (previousCode == null) return "MEKA takes ${sizeLabel(sizeBytes)} on this phone"
+        val from = "From build $previousCode" + (previousSize?.takeIf { it > 0 }?.let { " (${sizeLabel(it)})" } ?: "")
+        val change = previousSize?.takeIf { it > 0 }?.let { prev ->
+            val d = sizeBytes - prev
+            when {
+                d <= -50_000 -> "${sizeLabel(-d)} smaller"
+                d >= 50_000 -> "${sizeLabel(d)} bigger"
+                else -> "same size"
+            }
+        }
+        return listOfNotNull(from, change).joinToString(" · ")
+    }
+
+    /** True when [versionCode] hasn't been written to Activity yet ([recordedCode] is the last one that was). */
+    fun shouldRecordInstall(versionCode: Long, recordedCode: Long?): Boolean = recordedCode == null || versionCode > recordedCode
+
+    /** One Activity entry per build. */
+    fun installedActivityId(versionCode: Long): String = "u" + ActivityRules.fnv64("update-installed:$versionCode")
+
     /** Decimal megabytes, as Android and macOS show file sizes: "850 KB", "9.9 MB", "24.3 MB", "120 MB". */
     fun sizeLabel(bytes: Long): String = when {
         bytes < 999_500 -> "${maxOf(1, (bytes + 500) / 1000)} KB"
