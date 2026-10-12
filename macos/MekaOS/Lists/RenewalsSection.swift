@@ -26,12 +26,19 @@ struct RenewalsSection: View {
                 }
             }
         }
+        if let car = model.car, !car.rows.isEmpty {
+            ListRowView(title: CarRules.shared.LABEL, meta: car.summary, due: false, expanded: open == Self.carKey, palette: palette,
+                        toggle: { open = open == Self.carKey ? nil : Self.carKey }) {
+                CarDetails(car: car, palette: palette, open: $open)
+            }
+        }
         section("Needs doing", r?.attention ?? [])
         section("Coming up", r?.upcoming ?? [])
         section("Later", r?.later ?? [])
     }
 
     static let homeKey = "home-upkeep"
+    static let carKey = "car"
 
     @ViewBuilder private func section(_ label: String, _ items: [RenewalItem]) -> some View {
         if !items.isEmpty {
@@ -72,6 +79,45 @@ private struct UpkeepRowView: View {
                 let dateKnown = row.dateKnown
                 Button("Add") {
                     model.addHomeUpkeep(row.presetId) { id in if !dateKnown { open = id } }
+                }
+            }
+        }
+    }
+}
+
+/// Car on autopilot (V1, slice 1): the registration (typed once; Return saves it) and the car's four dates, each with
+/// Add like the home jobs; adding one unfolds its new row so the real date can be set. Reminders come four weeks and a
+/// week before.
+private struct CarDetails: View {
+    @Environment(CoreModel.self) private var model
+    let car: CarView
+    let palette: MekaPalette
+    @Binding var open: String?
+    @State private var reg = ""
+    @State private var problem: String?
+
+    var body: some View {
+        TextField(car.registration.map { "Registration (now \($0)), blank to clear" } ?? "Registration, e.g. AB12 CDE", text: $reg)
+            .textFieldStyle(.roundedBorder)
+            .frame(maxWidth: 260)
+            .onSubmit {
+                problem = model.setCarRegistration(reg)
+                if problem == nil { reg = "" }
+            }
+        if let problem { Text(problem).font(MekaType.caption).foregroundStyle(palette.critical) }
+        ForEach(car.rows, id: \.presetId) { row in
+            HStack(alignment: .center, spacing: MekaSpace.m) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Text(row.line).font(MekaType.itemMeta)
+                        .foregroundStyle(row.tracked ? palette.textSecondary : palette.textTertiary)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: true), value: row.line)
+                    Text(row.note).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+                Spacer(minLength: 0)
+                if !row.tracked {
+                    Button("Add") { model.addCarDate(row.presetId) { id in open = id } }
                 }
             }
         }

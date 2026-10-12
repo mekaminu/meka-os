@@ -198,7 +198,7 @@ class NotificationsTest {
     @Test
     fun sourcesTurnListsFastingAndShutdownIntoNotices() {
         val renewal = RenewalItem(
-            id = "r1", title = "Car insurance", kind = ObligationKind.INSURANCE, subject = null, notes = null,
+            id = "r1", title = "Home insurance", kind = ObligationKind.INSURANCE, subject = null, notes = null,
             dueDay = day + 5, cancelByDay = day + 1, leadDays = 21, costPence = 41200, repeats = RenewalRepeat.YEARLY,
             repeatLabel = "Every year", state = RenewalState.CANCEL_BY, meta = "renews …", doneLabel = "Renewed",
             stopLabel = "Cancelled it", hasConflict = false,
@@ -212,7 +212,7 @@ class NotificationsTest {
         val today = Today(emptyList(), null, emptyList(), emptyList())
         val notices = NoticeSources.collect(lists, fast, shutdown, today, at(9), cal)
         val cancel = notices.single { it.source == NoticeSource.RENEWAL_CANCEL_BY }
-        assertEquals("Cancel or keep Car insurance?", cancel.title)
+        assertEquals("Cancel or keep Home insurance?", cancel.title)
         assertEquals("Cancel by tomorrow", cancel.text)
         assertEquals(at(9), cancel.atMs)
         assertEquals(NoticeTier.DIGEST, notices.single { it.source == NoticeSource.RENEWAL }.tier)

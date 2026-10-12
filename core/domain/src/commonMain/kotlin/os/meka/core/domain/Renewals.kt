@@ -132,6 +132,7 @@ object RenewalRules {
     fun kindLabel(k: ObligationKind): String = when (k) {
         ObligationKind.MOT -> "MOT"
         ObligationKind.CAR_TAX -> "Car tax"
+        ObligationKind.CAR_SERVICE -> "Car service"
         ObligationKind.INSURANCE -> "Insurance"
         ObligationKind.BOILER -> "Boiler service"
         ObligationKind.SUBSCRIPTION -> "Subscription"
@@ -144,7 +145,7 @@ object RenewalRules {
 
     /** Days ahead MEKA shows a new item of this kind: long for things that take booking or paperwork. */
     fun defaultLeadDays(k: ObligationKind): Int = when (k) {
-        ObligationKind.MOT, ObligationKind.BOILER -> 28
+        ObligationKind.MOT, ObligationKind.BOILER, ObligationKind.CAR_SERVICE -> 28
         ObligationKind.INSURANCE -> 21
         ObligationKind.CAR_TAX, ObligationKind.WARRANTY -> 14
         ObligationKind.SUBSCRIPTION, ObligationKind.BILL -> 3
@@ -155,7 +156,7 @@ object RenewalRules {
 
     /** The repeat offered first when adding one of this kind. */
     fun defaultRepeat(k: ObligationKind): RenewalRepeat = when (k) {
-        ObligationKind.MOT, ObligationKind.CAR_TAX, ObligationKind.INSURANCE, ObligationKind.BOILER -> RenewalRepeat.YEARLY
+        ObligationKind.MOT, ObligationKind.CAR_TAX, ObligationKind.CAR_SERVICE, ObligationKind.INSURANCE, ObligationKind.BOILER -> RenewalRepeat.YEARLY
         ObligationKind.SUBSCRIPTION, ObligationKind.BILL -> RenewalRepeat.MONTHLY
         ObligationKind.HOME -> RenewalRepeat.YEARLY
         ObligationKind.LICENCE, ObligationKind.WARRANTY, ObligationKind.OTHER -> RenewalRepeat.NONE
@@ -175,7 +176,7 @@ object RenewalRules {
     fun doneLabel(k: ObligationKind): String = when (k) {
         ObligationKind.MOT -> "MOT done"
         ObligationKind.CAR_TAX, ObligationKind.BILL -> "Paid"
-        ObligationKind.BOILER -> "Serviced"
+        ObligationKind.BOILER, ObligationKind.CAR_SERVICE -> "Serviced"
         ObligationKind.INSURANCE, ObligationKind.SUBSCRIPTION, ObligationKind.LICENCE -> "Renewed"
         ObligationKind.WARRANTY, ObligationKind.HOME, ObligationKind.OTHER -> "Done"
     }

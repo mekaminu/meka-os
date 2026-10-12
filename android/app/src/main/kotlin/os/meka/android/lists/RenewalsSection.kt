@@ -11,6 +11,8 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.core.domain.HomeUpkeepRules
 import os.meka.core.domain.HomeUpkeepView
 import os.meka.core.domain.UpkeepRow
+import os.meka.core.domain.CarRules
+import os.meka.core.domain.CarView
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -65,7 +67,7 @@ data class NewRenewal(
  * new place, light haptic); a one-off leaves like a completion. Nothing is paid or cancelled for you.
  */
 internal fun LazyListScope.renewals(
-    r: RenewalsView, today: Long, open: String?, toggle: (String) -> Unit, core: MekaCore,
+    r: RenewalsView, car: CarView, today: Long, open: String?, toggle: (String) -> Unit, core: MekaCore,
     act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit, tap: () -> Unit,
 ) {
     r.costLine?.let { line ->
@@ -80,6 +82,7 @@ internal fun LazyListScope.renewals(
         )
     }
     homeUpkeep(HomeUpkeepRules.view(r.all, today), open, toggle, core, act, tap)
+    car(car, open, toggle, core, act, tap)
     section("Needs doing", r.attention, today, open, toggle, core, act, leave, tap)
     section("Coming up", r.upcoming, today, open, toggle, core, act, leave, tap)
     section("Later", r.later, today, open, toggle, core, act, leave, tap)
@@ -103,18 +106,48 @@ private fun LazyListScope.homeUpkeep(
 }
 
 private const val HOME_UPKEEP = "home-upkeep"
+private const val CAR = "car"
+
+/**
+ * Car on autopilot (V1, slice 1): one row like Home upkeep that unfolds in place into the registration (typed once,
+ * Done saves it) and the car's four dates. Add (light haptic) puts one on the radar with a placeholder date and opens
+ * its new row so the real date can be set; reminders come four weeks and a week before. Its line cross-fades to
+ * "On the radar · due …" like the home jobs'.
+ */
+private fun LazyListScope.car(
+    v: CarView, open: String?, toggle: (String) -> Unit, core: MekaCore,
+    act: (suspend () -> Unit) -> Unit, tap: () -> Unit,
+) {
+    item(key = "r-car") {
+        ListRow(CarRules.LABEL, v.summary, DueState.NONE, open == CAR, { toggle(CAR) }, Modifier.animateItem()) {
+            var regError by rememberSaveable { mutableStateOf<String?>(null) }
+            Field(v.registration?.let { "Registration (now $it), blank to clear" } ?: "Registration, e.g. AB12 CDE") { text ->
+                regError = CarRules.registrationError(text)
+                if (regError == null) { tap(); act { core.setCarRegistration(text) } }
+            }
+            regError?.let { Text(it, style = MekaType.caption, color = Meka.colors.critical) }
+            v.rows.forEach { row ->
+                UpkeepLine(row.title, row.line, row.note, row.tracked) { tap(); act { core.addCarDate(row.presetId)?.let { id -> toggle(id) } } }
+            }
+        }
+    }
+}
 
 @Composable
-private fun UpkeepRowView(row: UpkeepRow, add: () -> Unit) {
+private fun UpkeepRowView(row: UpkeepRow, add: () -> Unit) = UpkeepLine(row.title, row.line, row.note, row.tracked, add)
+
+/** One suggested job or car date: title, its line (cross-fades once added) and what it covers, with Add until tracked. */
+@Composable
+private fun UpkeepLine(title: String, line: String, note: String, tracked: Boolean, add: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
-            AnimatedContent(row.line, transitionSpec = { fadeIn(MekaMotion.appear(true)) togetherWith fadeOut(MekaMotion.appear(true)) }, label = "upkeep-line") { line ->
-                Text(line, style = MekaType.itemMeta, color = if (row.tracked) Meka.colors.textSecondary else Meka.colors.textTertiary)
+            Text(title, style = MekaType.body, color = Meka.colors.textPrimary)
+            AnimatedContent(line, transitionSpec = { fadeIn(MekaMotion.appear(true)) togetherWith fadeOut(MekaMotion.appear(true)) }, label = "upkeep-line") { l ->
+                Text(l, style = MekaType.itemMeta, color = if (tracked) Meka.colors.textSecondary else Meka.colors.textTertiary)
             }
-            Text(row.note, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Text(note, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
-        if (!row.tracked) Action("Add") { add() }
+        if (!tracked) Action("Add") { add() }
     }
 }
 

@@ -46,6 +46,7 @@ import os.meka.core.domain.ObligationKind
 import os.meka.core.domain.RenewalRepeat
 import os.meka.core.domain.Renewals
 import os.meka.core.domain.addHomeUpkeep
+import os.meka.core.domain.addCarDate
 import os.meka.core.domain.DayWindow
 import os.meka.core.domain.EveningShutdown
 import os.meka.core.domain.BriefRules
@@ -137,6 +138,7 @@ class MekaCore(
     private val shopping = os.meka.core.domain.Shopping(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val school = os.meka.core.domain.School(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val bins = os.meka.core.domain.Bins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val car = os.meka.core.domain.Car(replica)
     private val mealPlan = os.meka.core.domain.MealPlan(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val emergency = os.meka.core.domain.EmergencyCard(replica, ids::next, nowMs)
     private val lifeFacts = os.meka.core.domain.LifeFacts(replica, ids::next, nowMs)
@@ -391,6 +393,13 @@ class MekaCore(
      * collection Today says "Black bin and food caddy out tonight" and a heads-up comes at 19:00.
      */
     val binsView: StateFlow<os.meka.core.domain.BinsView> = _bins.asStateFlow()
+
+    private val _car = MutableStateFlow(os.meka.core.domain.CarView.EMPTY)
+    /**
+     * Car on autopilot (V1, slice 1): the registration and the car's four dates (MOT, tax, insurance, service) against
+     * the renewals radar (Lists → Renewals → Car). Synced.
+     */
+    val carView: StateFlow<os.meka.core.domain.CarView> = _car.asStateFlow()
     /**
      * School rhythm (V1, slice 1): Rex's and Logan's days off, dates and weekly things (Ask → More → School), and the
      * week-ahead questions ("Rex and Logan are off Mon 27 Oct · You're in the office that day. Who's covering?") that
@@ -1553,6 +1562,31 @@ class MekaCore(
     /** The suggested home jobs against the radar today (Lists → Renewals → Home upkeep). */
     fun homeUpkeep(): os.meka.core.domain.HomeUpkeepView =
         os.meka.core.domain.HomeUpkeepRules.view(_lists.value.renewals.all, todayEpochDay())
+
+    /**
+     * Car on autopilot: sets the registration from typed text ("ab12 cde"; blank clears it). The car's dates on the radar
+     * that had no registration, or the old one, take the new one as their subject. False when it doesn't read (check
+     * first with [os.meka.core.domain.CarRules.registrationError]) or nothing changed; never throws, so the Mac can call it.
+     */
+    suspend fun setCarRegistration(text: String): Boolean = onCore {
+        val old = car.registration()?.let(os.meka.core.domain.CarRules::display)
+        val changed = try { car.setRegistration(text) } catch (_: os.meka.core.domain.ValidationException) { false }
+        if (changed) {
+            val now = car.registration()?.let(os.meka.core.domain.CarRules::display)
+            renewals.items().filter { os.meka.core.domain.CarRules.isCar(it) && (it.subject == null || it.subject == old) }
+                .forEach { renewals.edit(it.id, subject = now ?: "") }
+        }
+        changed
+    }
+
+    /**
+     * Car on autopilot: adds one of [os.meka.core.domain.CarRules.PRESETS] to the radar (a placeholder date a month
+     * ahead for Meka to set, reminders four weeks and a week before). The new item's id, or null when it is already
+     * there or isn't one (never throws).
+     */
+    suspend fun addCarDate(presetId: String): String? = onCore {
+        try { renewals.addCarDate(presetId, todayEpochDay(), car.registration()) } catch (_: os.meka.core.domain.ValidationException) { null }
+    }
 
     // ---- Shopping (family sharing, slice 1; Lists → Shopping) ----
 
@@ -4107,6 +4141,7 @@ class MekaCore(
         _approvals.value = approvalStore.cards()
         _school.value = school.view(hoursOf(workState, todayDay))
         _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays)
+        _car.value = os.meka.core.domain.CarRules.view(car.registration(), listsNow.renewals.all)
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         _triage.value = triageCards.open()
         _groupGists.value = gistStore.open()
@@ -4160,6 +4195,7 @@ class MekaCore(
             weekAhead = _weekAhead.value,
             weekAheadSetting = weekAheadSettings.setting(),
             bins = bins.items(), holidays = bankHolidays.calendar(),
+            carRegistration = car.registration(),
         )
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */

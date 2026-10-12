@@ -101,6 +101,8 @@ final class CoreModel {
     var showAppointments = false
     /// Bin days (V1, slice 1): each bin with its day and pattern, the next collection (Ask → More → Bins).
     private(set) var bins: BinsView?
+    /// Car on autopilot (V1, slice 1): the registration and the car's four dates against the radar (Lists → Renewals → Car).
+    private(set) var car: CarView?
     /// Ask → More → Bins.
     var showBins = false
     /// Why a Booked… on a Needs you card couldn't be read, by appointment id (shown under its field).
@@ -323,6 +325,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await b in core.binsView { self?.bins = b }
+        })
+        observers.append(Task { [weak self] in
+            for await c in core.carView { self?.car = c }
         })
         observers.append(Task { [weak self] in
             for await m in core.mealsView { self?.meals = m }
@@ -1071,6 +1076,29 @@ final class CoreModel {
         Task {
             do {
                 if let id = try await core.addHomeUpkeep(presetId: presetId) { opened(id) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Car on autopilot: sets the registration from typed text (blank clears it). Returns what's wrong with it (shown
+    /// under the field), or nil when it was saved. Checked here first: Kotlin exceptions don't cross into Swift. Only a
+    /// String crosses.
+    @discardableResult
+    func setCarRegistration(_ text: String) -> String? {
+        if let problem = CarRules.shared.registrationError(text: text) { return problem }
+        MekaHaptics.light()
+        run { _ = try await $0.setCarRegistration(text: text) }
+        return nil
+    }
+
+    /// Adds one of the car's dates to the radar (light haptic); [opened] gets the new row's id so the sheet can unfold
+    /// it for the real date. Only a String crosses each way.
+    func addCarDate(_ presetId: String, opened: @escaping @MainActor (String) -> Void) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                if let id = try await core.addCarDate(presetId: presetId) { opened(id) }
             } catch { lastError = error.localizedDescription }
         }
     }

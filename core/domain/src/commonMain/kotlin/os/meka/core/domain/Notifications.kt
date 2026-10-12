@@ -117,6 +117,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     WEEK_AHEAD("Sunday week ahead", NoticeTier.HEADS_UP),
     /** Bin days ([BinRules.notices]): the evening before a collection at 19:00, "Black bin and food caddy out tonight". */
     BINS("Bins out the night before", NoticeTier.HEADS_UP),
+    /**
+     * Car on autopilot ([CarRules.notices]): the MOT, car tax, insurance and service, a heads-up at 09:00 four weeks
+     * and a week before each — "MOT due Thu 12 Nov · AB12 CDE" · "In 4 weeks · an MOT up to a month early keeps the same date".
+     */
+    CAR("Car: MOT, tax, insurance and service", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -521,6 +526,7 @@ object Governor {
         NoticeSource.GOALS -> if (n == 1) "a word on your goals" else "$n words on your goals"
         NoticeSource.WEEK_AHEAD -> "your week ahead"
         NoticeSource.BINS -> "bins out tonight"
+        NoticeSource.CAR -> plural(n, "car date") + " coming up"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -589,6 +595,8 @@ object NoticeSources {
         /** Bin days: the bins and the bank holidays that move them ([BinRules.notices]). */
         bins: List<BinItem> = emptyList(),
         holidays: HolidayCalendar = HolidayCalendar.NONE,
+        /** Car on autopilot: the registration, for the reminders' titles ([CarRules.notices]). */
+        carRegistration: String? = null,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -606,7 +614,9 @@ object NoticeSources {
                 )
             }
         }
-        for (r in lists.renewals.attention) {
+        // The car's dates get their own reminders a month and a week before (Car on autopilot), not the digest line;
+        // once overdue they are summed in the digest like any renewal.
+        for (r in lists.renewals.attention.filter { it.state == RenewalState.OVERDUE || !CarRules.isCar(it) }) {
             out += Notice(
                 key = "renewal:${r.id}:${r.dueDay}", source = NoticeSource.RENEWAL, tier = NoticeTier.DIGEST,
                 title = r.title, text = r.meta, atMs = todayStart, target = NoticeTarget.LISTS,
@@ -703,6 +713,7 @@ object NoticeSources {
         out += GoalRhythmRules.notices(goals.goals, goals.month, nowMs, cal)
         if (leaving != null) out += LeavingRules.notices(leaving, office, lines, nowMs, cal)
         out += BinRules.notices(bins, nowMs, cal, holidays)
+        out += CarRules.notices(lists.renewals.all, carRegistration, nowMs, cal)
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)

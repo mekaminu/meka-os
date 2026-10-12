@@ -106,7 +106,7 @@ enum class Lifecycle { INBOX, ACTIVE, SOMEDAY, WAITING, DONE, CANCELLED;
 enum class SomedayKind { IDEA, PURCHASE, PROJECT, TRIP, BOOK, RESEARCH, APPLICATION, HOME_IMPROVEMENT, OTHER }
 enum class CommitmentDirection { OWED_BY_ME, OWED_TO_ME }
 /** [HOME]: a home upkeep job (smoke alarm test, gutters, filters; Home upkeep, V1), nothing to pay or renew. */
-enum class ObligationKind { MOT, CAR_TAX, INSURANCE, BOILER, SUBSCRIPTION, BILL, LICENCE, WARRANTY, HOME, OTHER }
+enum class ObligationKind { MOT, CAR_TAX, CAR_SERVICE, INSURANCE, BOILER, SUBSCRIPTION, BILL, LICENCE, WARRANTY, HOME, OTHER }
 /**
  * A goal's horizon (Goals, properly, slice 1, 2026-10-11). Goals written before then carry SHORT, MEDIUM or LONG; they
  * are read as MONTH, QUARTER and YEAR ([GoalRules.parseHorizon]) and never rewritten.

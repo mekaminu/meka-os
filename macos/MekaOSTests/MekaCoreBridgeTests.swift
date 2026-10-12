@@ -1547,6 +1547,20 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(RenewalRules.shared.repeatLabel(r: .halfYearly), "Every 6 months")
     }
 
+    func testCarReachesSwift() {
+        // Car on autopilot, slice 1: the car's rows, the registration check and display reach the Mac (only Strings cross).
+        let view = CarRules.shared.view(registration: "AB12CDE", items: [])
+        XCTAssertEqual(view.rows.map { $0.presetId }, ["mot", "tax", "insurance", "service"])
+        XCTAssertEqual(view.registration, "AB12 CDE")
+        XCTAssertEqual(view.summary, "AB12 CDE · add the dates that apply")
+        XCTAssertFalse(view.rows[0].tracked)
+        XCTAssertEqual(view.rows[0].line, "Every year · reminders a month and a week before · you set the date")
+        XCTAssertEqual(CarRules.shared.registrationError(text: "??"), "Type the registration, like AB12 CDE")
+        XCTAssertNil(CarRules.shared.registrationError(text: "ab12 cde"))
+        XCTAssertEqual(CarRules.shared.LABEL, "Car")
+        XCTAssertEqual(RenewalRules.shared.kindLabel(k: .carService), "Car service")
+    }
+
     func testRenewalDoneFromAskReachesSwift() {
         // "I've tested the smoke alarms" in Ask and Talk (home upkeep, slice 2): the radar card's words reach the Mac.
         let p = AskProposalRenewalDone(id: "r1", title: "Test the smoke and CO alarms", doneLabel: "Done", dueDay: 0, nextDay: KotlinLong(value: 31))
