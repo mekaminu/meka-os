@@ -46,7 +46,19 @@ object AskFieldRules {
     /** What the field is called to a screen reader. */
     fun fieldLabel(canAsk: Boolean): String = if (canAsk) "Ask MEKA or search" else "Search everything"
 
-    /** The line under the field before anything is typed. */
+    /**
+     * The line under the field before anything is typed. Once Meka has asked MEKA something on this device ([used]),
+     * the long paragraph gives way to a one-line hint (Fold review 2026-10-12 17:56, item 2).
+     */
+    fun idleLine(canAsk: Boolean, mac: Boolean, used: Boolean): String = when {
+        !used -> idleLine(canAsk, mac)
+        canAsk -> HINT_ASK
+        else -> "Searched on this ${if (mac) "Mac" else "phone"}; nothing leaves it."
+    }
+
+    const val HINT_ASK = "Type to search · Return asks MEKA"
+
+    /** The first-use line under the field before anything is typed. */
     fun idleLine(canAsk: Boolean, mac: Boolean = false): String =
         if (canAsk) "Type to find tasks, events and lists; Return asks MEKA about your day, or to add, move or tick off a task, add to shopping, start a fast or set a timer. Nothing happens until you ${if (mac) "click" else "tap"}."
         else "Type to find tasks, events, lists, goals and habits. Searched on this ${if (mac) "Mac" else "phone"}; nothing leaves it."

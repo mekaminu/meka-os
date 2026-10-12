@@ -130,6 +130,9 @@ data class SchoolView(
     val covers: List<SchoolCover>,
     /** "Next day off: INSET day · Mon 27 Oct", "Nothing off coming up", or the empty line when nothing is entered. */
     val summary: String,
+    /** The next day off's title and first day from today (Ask's School tile: "Half term in 14 days"); null when none. */
+    val nextOffTitle: String? = null,
+    val nextOffDay: Long? = null,
 ) {
     val isEmpty: Boolean get() = off.isEmpty() && dates.isEmpty() && weekly.isEmpty()
 
@@ -434,7 +437,11 @@ object SchoolRules {
             off.isEmpty() -> NOTHING_OFF
             else -> off.first().let { "Next day off: ${it.title} · ${spanLabel(maxOf(it.startDay, today), it.endDay)}" }
         }
-        return SchoolView(offRows, dateRows, weeklyRows, covers(off, today, hours), summary)
+        val firstOff = off.firstOrNull()
+        return SchoolView(
+            offRows, dateRows, weeklyRows, covers(off, today, hours), summary,
+            firstOff?.title, firstOff?.let { maxOf(it.startDay, today) },
+        )
     }
 
     /**

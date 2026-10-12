@@ -249,6 +249,12 @@ enum ShellNav {
         LifeTileRules.shared.ORDER.compactMap { t in MoreItem.allCases.first { $0.tile == t } }
     }
 
+    /// Life's tiles for these lines: today's first, the rest in the usual order (Fold review 17:56, item 2).
+    static func lifeTiles(_ lines: LifeLines?) -> [MoreItem] {
+        guard let lines else { return lifeTiles() }
+        return LifeTileRules.shared.ordered(lines: lines).compactMap { t in MoreItem.allCases.first { $0.tile == t } }
+    }
+
     /// Daily's rows on Ask.
     static func daily() -> [MoreItem] { MoreItem.allCases.filter { $0.group == .daily } }
 
@@ -282,9 +288,11 @@ enum ShellNav {
     /// Every item opens something except MEKA's AI, which only says how it is.
     static func opens(_ item: MoreItem) -> Bool { item != .ai }
 
-    /// A tile's line: the core's live one when there is one (lit when it's about today), else the fixed words.
+    /// A tile's line: the core's live one (lit when it's about today), else (before the core's first lines arrive)
+    /// the tile's short prompt, never its description.
     static func tileLine(_ item: MoreItem, live: LifeTileLine?) -> (text: String, lit: Bool) {
         if let live { return (live.text, live.lit) }
+        if let tile = item.tile { return (LifeTileRules.shared.prompt(tile: tile), false) }
         return (item.line, false)
     }
 

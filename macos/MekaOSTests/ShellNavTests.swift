@@ -72,11 +72,13 @@ final class ShellNavTests: XCTestCase {
         XCTAssertNil(ShellNav.statusItem(healthAttention: 0, setupLeft: 0))
         XCTAssertEqual(ShellNav.statusItem(healthAttention: 0, setupLeft: 3), .setup)
         XCTAssertEqual(ShellNav.statusItem(healthAttention: 2, setupLeft: 3), .health)
-        XCTAssertEqual(ShellNav.tileLine(.bins, live: nil).text, "Which bins go out, the evening before")
+        XCTAssertEqual(ShellNav.tileLine(.bins, live: nil).text, "Set your bin days")
         XCTAssertFalse(ShellNav.tileLine(.bins, live: nil).lit)
         let live = ShellNav.tileLine(.dinners, live: LifeTileLine(text: "Chilli tonight", lit: true))
         XCTAssertEqual(live.text, "Chilli tonight")
         XCTAssertTrue(live.lit)
+        // Before the core's first lines, the usual order.
+        XCTAssertEqual(ShellNav.lifeTiles(nil), ShellNav.lifeTiles())
     }
 
     @MainActor

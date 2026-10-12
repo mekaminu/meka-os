@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -210,13 +213,17 @@ fun AskRoute(
             }
             // LIFE: the home-and-family places as 2-column tiles, each with its live line; they arrive a row at a time.
             item(key = "label-life") { SectionLabel(MoreGroup.LIFE.label, first = true, step = ShellNav.moreLabelStep(0)) }
-            ShellNav.lifeTiles().chunked(2).forEachIndexed { r, pair ->
-                item(key = "tiles-$r") {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            // Today's tiles float to the top (Fold review 17:56, item 2); a row keyed by its pair glides to its new place.
+            ShellNav.lifeTiles(lifeLines).chunked(2).forEachIndexed { r, pair ->
+                item(key = "tiles-" + pair.joinToString("-") { it.name }) {
+                    Row(
+                        Modifier.fillMaxWidth().animateItem().height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                    ) {
                         pair.forEachIndexed { c, tile ->
                             LifeTileCard(
                                 tile, ShellNav.tileLine(tile, tile.tile?.let { lifeLines.of(it) }), pane == tile,
-                                Modifier.weight(1f).appear(rememberAppearance(ShellNav.tileStep(r * 2 + c))),
+                                Modifier.weight(1f).fillMaxHeight().appear(rememberAppearance(ShellNav.tileStep(r * 2 + c))),
                             ) { open(tile) }
                         }
                         if (pair.size == 1) Box(Modifier.weight(1f))
@@ -393,7 +400,11 @@ private fun LifeTileCard(item: MoreItem, line: os.meka.core.domain.LifeTileLine,
             targetState = line.text,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "tile-text",
-        ) { t -> Text(t, style = MekaType.caption, color = lineColor, maxLines = 2) }
+        ) { t ->
+            // Two lines at most on every tile, so the rows keep one height.
+            Text(t, style = MekaType.caption, color = lineColor, maxLines = os.meka.core.domain.LifeTileRules.MAX_LINES,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
     }
 }
 

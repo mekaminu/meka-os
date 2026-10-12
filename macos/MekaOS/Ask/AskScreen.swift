@@ -38,12 +38,14 @@ struct AskScreen: View {
                 sectionLabel(MoreGroup.life.label, first: true).staggeredAppear(ShellNav.moreLabelStep(0))
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: MekaSpace.xs), GridItem(.flexible(), spacing: MekaSpace.xs)],
                           spacing: MekaSpace.xs) {
-                    ForEach(Array(ShellNav.lifeTiles().enumerated()), id: \.element) { i, item in
+                    // Today's tiles float to the top (Fold review 17:56, item 2) and glide to their places.
+                    ForEach(Array(ShellNav.lifeTiles(model.lifeLines).enumerated()), id: \.element) { i, item in
                         let line = ShellNav.tileLine(item, live: item.tile.flatMap { model.lifeLines?.of(tile: $0) })
                         LifeTileView(item: item, text: line.text, lit: line.lit, palette: palette) { open(item) }
                             .staggeredAppear(ShellNav.tileStep(i))
                     }
                 }
+                .animation(MekaMotion.expand(reduced: reduceMotion), value: ShellNav.lifeTiles(model.lifeLines))
                 sectionLabel(MoreGroup.daily.label, first: false).staggeredAppear(ShellNav.moreLabelStep(1))
                 ForEach(Array(ShellNav.daily().enumerated()), id: \.element) { i, item in
                     MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue), lit: false, palette: palette) { open(item) }
@@ -198,7 +200,8 @@ private struct LifeTileView: View {
                 Text(text)
                     .font(MekaType.caption)
                     .foregroundStyle(lit ? palette.accent : palette.textSecondary)
-                    .lineLimit(2)
+                    // Two lines at most, space kept for both, so every tile is the same height.
+                    .lineLimit(Int(LifeTileRules.shared.MAX_LINES), reservesSpace: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: text)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)

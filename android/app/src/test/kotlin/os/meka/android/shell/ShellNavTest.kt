@@ -97,7 +97,11 @@ class ShellNavTest {
     @Test
     fun aTileSaysWhatIsLiveElseItsWords() {
         assertEquals(LifeTileLine("Chilli tonight", true), ShellNav.tileLine(MoreItem.DINNERS, LifeTileLine("Chilli tonight", true)))
-        assertEquals(LifeTileLine("Which bins go out, the evening before", false), ShellNav.tileLine(MoreItem.BINS, null))
+        assertEquals(LifeTileLine("Set your bin days", false), ShellNav.tileLine(MoreItem.BINS, null))
+        // Today's tiles first.
+        val lines = os.meka.core.domain.LifeTileRules.lines(os.meka.core.domain.LifeTileInputs(binsTonight = "Black bin out tonight"))
+        assertEquals(MoreItem.BINS, ShellNav.lifeTiles(lines).first())
+        assertEquals(ShellNav.lifeTiles().toSet(), ShellNav.lifeTiles(lines).toSet())
     }
 
     @Test

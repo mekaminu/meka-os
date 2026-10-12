@@ -139,10 +139,14 @@ fun AskMekaSection(
     val canAsk = status?.canAsk != false
     val reduced = Meka.reducedMotion
     val context = LocalContext.current
+    // After the first ask on this phone the paragraph under the field becomes a one-line hint (Fold review 17:56, item 2).
+    var usedAsk by remember { mutableStateOf(AskUse.used(context)) }
+    fun markUsed() { if (!usedAsk) { usedAsk = true; AskUse.mark(context) } }
     val talk = remember {
         TalkController(
             context, core, scope,
             onAnswer = { q, out ->
+                markUsed()
                 asked = q
                 done = emptySet()
                 autoUndone = emptySet()
@@ -207,6 +211,7 @@ fun AskMekaSection(
         keyboard?.hide()
         haptics.light()
         shown = AskShown.Thinking(q)
+        markUsed()
         asked = q
         done = emptySet()
         autoUndone = emptySet()
@@ -352,7 +357,7 @@ fun AskMekaSection(
         ) {
             when (val s = shown) {
                 AskShown.Idle -> if (!searching) Text(
-                    AskFieldRules.idleLine(canAsk),
+                    AskFieldRules.idleLine(canAsk, mac = false, used = usedAsk),
                     style = MekaType.caption, color = Meka.colors.textTertiary,
                 )
                 is AskShown.Thinking -> {
@@ -549,5 +554,16 @@ private fun AskCardRow(card: AskCard, modifier: Modifier, onTap: () -> Unit) {
                 .clickable(role = Role.Button, onClick = onTap)
                 .semantics { contentDescription = "${card.button}: ${card.line}" }
                 .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+    }
+}
+
+/** Whether Meka has asked MEKA anything on this phone yet (the field's long first-use paragraph goes after that). */
+internal object AskUse {
+    private const val PREFS = "meka.ask"
+    private const val KEY = "used"
+    fun used(context: android.content.Context): Boolean =
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getBoolean(KEY, false)
+    fun mark(context: android.content.Context) {
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putBoolean(KEY, true).apply()
     }
 }

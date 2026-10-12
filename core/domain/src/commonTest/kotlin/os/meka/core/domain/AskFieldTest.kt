@@ -85,5 +85,9 @@ class AskFieldTest {
         assertTrue(AskFieldRules.idleLine(true).contains("Return asks MEKA"))
         assertTrue(AskFieldRules.idleLine(true, mac = true).endsWith("click."))
         assertTrue(AskFieldRules.idleLine(false, mac = true).contains("this Mac"))
+        // After the first ask, one line instead of the paragraph.
+        assertEquals(AskFieldRules.idleLine(true, false), AskFieldRules.idleLine(true, mac = false, used = false))
+        assertEquals("Type to search · Return asks MEKA", AskFieldRules.idleLine(true, mac = false, used = true))
+        assertEquals("Searched on this Mac; nothing leaves it.", AskFieldRules.idleLine(false, mac = true, used = true))
     }
 }

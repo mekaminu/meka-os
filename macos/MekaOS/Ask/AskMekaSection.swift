@@ -33,6 +33,8 @@ struct AskMekaSection: View {
     @State private var matches: AskMatches?
     @FocusState private var focused: Bool
     @State private var talk = TalkController()
+    /// After the first ask on this Mac the paragraph under the field becomes a one-line hint (Fold review 17:56, item 2).
+    @AppStorage("meka.ask.used") private var usedAsk = false
 
     private var canAsk: Bool { model.aiStatus?.canAsk ?? true }
 
@@ -193,7 +195,7 @@ struct AskMekaSection: View {
             .id(replyN)
         } else {
             if !searching {
-                Text(AskFieldRules.shared.idleLine(canAsk: canAsk, mac: true))
+                Text(AskFieldRules.shared.idleLine(canAsk: canAsk, mac: true, used: usedAsk))
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.leading, MekaSpace.xxs)
             }
@@ -208,6 +210,7 @@ struct AskMekaSection: View {
         guard let q = AskRules.shared.question(text: text), thinking == nil else { return }
         MekaHaptics.light()
         asked = q
+        if !usedAsk { usedAsk = true }
         withAnimation(MekaMotion.appear(reduced: reduceMotion)) { thinking = q }
         Task {
             let r = await model.askMeka(q)
@@ -232,6 +235,7 @@ struct AskMekaSection: View {
             case .unavailable(let u): AskReplyView(lines: [], cards: [], unavailable: u.line)
             }
             asked = q
+            if !usedAsk { usedAsk = true }
             withAnimation(MekaMotion.appear(reduced: reduceMotion)) {
                 question = q
                 reply = r

@@ -131,6 +131,10 @@ object ShellNav {
     fun lifeTiles(): List<MoreItem> =
         os.meka.core.domain.LifeTileRules.ORDER.map { t -> MoreItem.entries.first { it.tile == t } }
 
+    /** Life's tiles for these lines: today's first, the rest in the usual order (Fold review 17:56, item 2). */
+    fun lifeTiles(lines: os.meka.core.domain.LifeLines): List<MoreItem> =
+        os.meka.core.domain.LifeTileRules.ordered(lines).map { t -> MoreItem.entries.first { it.tile == t } }
+
     /** Daily's rows on Ask. */
     fun daily(): List<MoreItem> = MoreItem.entries.filter { it.group == MoreGroup.DAILY }
 
@@ -166,9 +170,9 @@ object ShellNav {
     /** Every item opens something except MEKA's AI, which only says how it is. */
     fun opens(item: MoreItem): Boolean = item != MoreItem.AI
 
-    /** A Life tile's line: the core's live one when there is one, else the tile's fixed words. */
+    /** A Life tile's line: the core's live one, else (before the core's first lines arrive) the tile's short prompt. */
     fun tileLine(item: MoreItem, live: os.meka.core.domain.LifeTileLine?): os.meka.core.domain.LifeTileLine =
-        live ?: os.meka.core.domain.LifeTileLine(item.line, false)
+        live ?: os.meka.core.domain.LifeTileLine(item.tile?.let { os.meka.core.domain.LifeTileRules.prompt(it) } ?: item.line, false)
 
     /**
      * A More row's line: Lists says what's due when something is ("2 need you"), Health its summary once checked

@@ -4892,7 +4892,7 @@ class MekaCore(
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         // Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line, from the views just made.
         _lifeLines.value = os.meka.core.domain.LifeTileRules.lines(os.meka.core.domain.LifeTileRules.inputs(
-            _today.value, _lists.value, _goals.value, _meals.value, _bins.value, _dateNight.value, _school.value,
+            todayDay, _today.value, _lists.value, _goals.value, _meals.value, _bins.value, _dateNight.value, _school.value,
             _appointments.value, _leave.value, _gifts.value, _trips.value, _errands.value, _emergency.value, _facts.value,
             _people.value,
         ))
