@@ -188,7 +188,8 @@ final class TalkController {
     func cardTapped(_ card: AskCard) {
         session = session.doCopy(phase: session.phase, conversation: session.conversation,
                                   pending: session.pending.filter { $0 != card },
-                                  questions: session.questions, endAfterSpeaking: session.endAfterSpeaking)
+                                  questions: session.questions, endAfterSpeaking: session.endAfterSpeaking,
+                                  openAfter: session.openAfter)
     }
 
     private func apply(_ step: TalkStep) {
@@ -491,7 +492,7 @@ final class TalkController {
     /// as a reading (short pieces asked for ahead, so MEKA's voice holds throughout); then MEKA listens again. Headlines
     /// are only ever read out, never acted on (ADR-006). The read-out stays on the main actor; only the String goes on.
     private func readAloud(_ readOut: ReadOut) {
-        if readOut.kind == ReadOutKind.brief {
+        if readOut.kind == ReadOut.Kind.brief {
             // The brief as MEKA's AI writes it from the facts (at most 6 s, else MEKA's own); stopped meanwhile, nothing is said.
             guard let model else { return fail(.failed) }
             said = ReadOutRules.shared.showing(read: readOut)

@@ -1118,7 +1118,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(start.session.phase, TalkPhase.listening)
         XCTAssertTrue(start.effects.first is TalkEffectListen)
         let more = TalkFlow.shared.heard(s: start.session, utterance: "more news")
-        XCTAssertEqual((more.effects.first as? TalkEffectReadOut)?.read.kind, ReadOutKind.headlines)
+        XCTAssertEqual((more.effects.first as? TalkEffectReadOut)?.read.kind, ReadOut.Kind.headlines)
     }
 
     /// Fold review 2026-10-09 07:26, item 7: the brief's Today rows (one left edge; a task carries its id for the tick).
@@ -1614,12 +1614,12 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testReadOutsReachSwift() {
         // Talk's read-outs ("read my brief", "the headlines", "Barça news"): recognised on the Mac, no AI call, the words
         // from the core as one String.
-        XCTAssertEqual(ReadOutRules.shared.request(utterance: "read my brief")?.kind, ReadOutKind.brief)
+        XCTAssertEqual(ReadOutRules.shared.request(utterance: "read my brief")?.kind, ReadOut.Kind.brief)
         XCTAssertEqual(ReadOutRules.shared.request(utterance: "Barça news")?.topicId, "barca")
         XCTAssertNil(ReadOutRules.shared.request(utterance: "read my messages"))
         let step = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "read the headlines")
         let effect = step.effects.first as? TalkEffectReadOut
-        XCTAssertEqual(effect?.read.kind, ReadOutKind.headlines)
+        XCTAssertEqual(effect?.read.kind, ReadOut.Kind.headlines)
         XCTAssertEqual(step.session.questions, 0)
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
