@@ -517,6 +517,28 @@ class Goals(
         replica.commitLocal(EntityTypes.HABIT_COMPLETION, completionId(id, day), fields)
     }
 
+    /** Health Connect: whether today already has an answer for the habit (ticked, missed, or a tick taken back). */
+    fun answeredToday(id: String): Boolean = replica.entity(EntityTypes.HABIT_COMPLETION, completionId(id, today())) != null
+
+    /**
+     * Health Connect: today's completion row for the habit, made un-ticked when there is none yet, so a tick recorded
+     * over it (and undone from Activity) leaves an answered, un-ticked day rather than deleting the row.
+     */
+    fun openToday(id: String) {
+        requireHabit(id)
+        if (answeredToday(id)) return
+        val day = today()
+        replica.commitLocal(
+            EntityTypes.HABIT_COMPLETION, completionId(id, day),
+            linkedMapOf(
+                HabitCompletionFields.HABIT_ID to id.fv(),
+                HabitCompletionFields.DAY to day.fv(),
+                HabitCompletionFields.DONE to false.fv(),
+                HabitCompletionFields.AT to nowMs().fv(),
+            ),
+        )
+    }
+
     /** Gym: the note on today's session (blank clears it). */
     fun setSessionNote(id: String, note: String?) {
         requireHabit(id)

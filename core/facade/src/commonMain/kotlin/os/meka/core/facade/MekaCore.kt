@@ -2365,6 +2365,39 @@ class MekaCore(
         val label = _sessions.value.cards.firstOrNull { it.habitId == id }?.label
         goals.answerSession(id, went = true, label = label, note = note)
     }
+    /**
+     * Health Connect, slice 1: today's [workouts] (read on the Fold, never sent anywhere) tick the habits they match
+     * ([os.meka.core.domain.WorkoutRules.ticks]): a booked session is answered Went with its label and the note
+     * "52-min workout · from Health Connect", any other habit is ticked. Each tick is an automatic action in Activity
+     * (Undo there leaves the day answered, un-ticked, so the same workout never ticks it again). Nothing happens while
+     * "What MEKA may do" is paused. Returns what was ticked, for the Fold's quiet line.
+     */
+    suspend fun tickFromWorkouts(workouts: List<os.meka.core.domain.Workout>): List<os.meka.core.domain.WorkoutTickDone> = onCore {
+        if (workouts.isEmpty() || autonomy.paused()) return@onCore emptyList()
+        val cal = ZoneCalendar(timeZone)
+        val habits = goals.habits().map {
+            os.meka.core.domain.WorkoutHabit(it.id, it.title, it.minutes, it.booked, goals.answeredToday(it.id))
+        }
+        val ticks = os.meka.core.domain.WorkoutRules.ticks(workouts, habits, cal.epochDayOf(nowMs()), nowMs()) { cal.epochDayOf(it) }
+        ticks.mapNotNull { t ->
+            val booked = habits.first { it.id == t.habitId }.booked
+            val label = if (booked) _sessions.value.cards.firstOrNull { it.habitId == t.habitId }?.label else null
+            goals.openToday(t.habitId)
+            val summary = os.meka.core.domain.WorkoutRules.summary(t)
+            val (_, id) = activity.actRecorded(
+                summary, os.meka.core.domain.WorkoutRules.WHY, os.meka.core.domain.WorkoutRules.SOURCE,
+                AutonomyLevel.AUTO_UNDER_RULE.name, detail = os.meka.core.domain.WorkoutRules.note(t),
+            ) {
+                if (booked) goals.answerSession(t.habitId, went = true, label = label, note = os.meka.core.domain.WorkoutRules.note(t))
+                else goals.setHabitDone(t.habitId, true)
+            }
+            id?.let { os.meka.core.domain.WorkoutTickDone(t.habitId, summary, it) }
+        }
+    }
+    /** The habits a workout could tick, for the Fold's Workouts line. */
+    fun workoutHabits(): List<String> = os.meka.core.domain.WorkoutRules.tickable(
+        goalsView.value.habits.map { os.meka.core.domain.WorkoutHabit(it.id, it.title, it.minutes, it.booked, it.doneToday) },
+    )
     /** "Didn't go": the session is rebooked on another day this week, if there's room. */
     suspend fun sessionMissed(id: String) = onCore { goals.answerSession(id, went = false, label = null, note = null) }
     /** The note on today's session (blank clears it). */

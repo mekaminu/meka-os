@@ -283,6 +283,8 @@ fun TodayRoute(
         // "Where I am now" (Places item 3): with the switch on, one approximate fix as Today opens (the core decides,
         // at most once per 30 minutes); away from home and work the weather line then reads "Near you · …".
         scope.launch { HereLocation.refresh(ringContext, core, null) }
+        // Health Connect, slice 1: with Workouts on, today's workouts tick their habits (at most every 5 minutes).
+        scope.launch { os.meka.android.goals.HealthWorkouts.refresh(ringContext, core) }
         val away =if (pausedAt == 0L) 0L else SystemClock.elapsedRealtime() - pausedAt
         val back = DayRingOpen.onReturn(ringContext, LocalDate.now().toEpochDay(), away, ringReduced)
         if (back != null && pausedAt != 0L) {

@@ -177,6 +177,11 @@ fun GoalsRoute(core: MekaCore) {
             }
         }
 
+        // Health Connect, slice 1: workouts tick the habits they match (off by default; this phone only).
+        if (view.habits.isNotEmpty()) item(key = "workouts") {
+            WorkoutsSection(core, Modifier.animateItem().padding(top = MekaSpace.xl))
+        }
+
         item(key = "goals-label") { SectionLabel("Goals", Modifier.padding(top = MekaSpace.xl).appear(rememberAppearance(3))) }
         // Goals, properly, item 6: last month looked back on, for the first week of a month.
         view.month?.let { m ->
