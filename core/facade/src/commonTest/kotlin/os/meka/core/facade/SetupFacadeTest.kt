@@ -80,4 +80,33 @@ class SetupFacadeTest {
         assertEquals(2, server.healthAsked)
         assertEquals(SetupState.DONE, fresh.steps.first { it.key == "mac" }.state)
     }
+
+    @Test
+    fun theFoldsScreenSaverStepComesWithItsAnswerAndTheMacsNever() = runTest {
+        val c = core()
+        c.syncNow()
+        assertEquals(null, c.refreshSetup(fold).steps.firstOrNull { it.key == os.meka.core.domain.BedsideDreamRules.SETUP_KEY })
+        val off = c.refreshSetup(fold, os.meka.core.domain.SetupScreenSaver(false))
+        val step = off.steps.first { it.key == os.meka.core.domain.BedsideDreamRules.SETUP_KEY }
+        assertEquals(SetupState.TODO, step.state)
+        assertEquals(os.meka.core.domain.SetupFix.SCREEN_SAVER, step.fix)
+        assertEquals(off, c.setupView.value)
+        val on = c.refreshSetup(fold, os.meka.core.domain.SetupScreenSaver(true), force = false)
+        assertEquals(SetupState.DONE, on.steps.first { it.key == os.meka.core.domain.BedsideDreamRules.SETUP_KEY }.state)
+        assertEquals(off.done + 1, on.done)
+        val mac = c.refreshSetup(SetupDevice(mac = true, notificationsAllowed = true), os.meka.core.domain.SetupScreenSaver(false))
+        assertEquals(null, mac.steps.firstOrNull { it.key == os.meka.core.domain.BedsideDreamRules.SETUP_KEY })
+    }
+
+    @Test
+    fun theScreenSaverIsTheBedsideClockWithNothingToTap() = runTest {
+        val c = core()
+        c.syncNow()
+        val dream = c.bedsideDream(null)
+        val bedside = c.bedside(null)
+        assertEquals(bedside.time, dream.time)
+        assertEquals(bedside.lines, dream.lines)
+        assertEquals(bedside.dim, dream.dim)
+        assertEquals(os.meka.core.domain.BedsideDreamRules.shift(now), dream.shiftXDp to dream.shiftYDp)
+    }
 }

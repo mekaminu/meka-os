@@ -13,7 +13,7 @@ package os.meka.core.domain
 enum class SetupState { DONE, TODO, ELSEWHERE, LATER, UNKNOWN }
 
 /** Where a step's button goes; the apps map each to their own screen or the system's. */
-enum class SetupFix { CALENDARS, WORK, VOICE, NOTIFICATION_ACCESS, CALL_ROLE, BATTERY, NOTIFICATIONS, RECOVERY }
+enum class SetupFix { CALENDARS, WORK, VOICE, NOTIFICATION_ACCESS, CALL_ROLE, BATTERY, NOTIFICATIONS, RECOVERY, SCREEN_SAVER }
 
 data class SetupStep(
     /** Stable: "calendar.google", "calls.role", "mac"… */
@@ -80,6 +80,12 @@ data class SetupFacts(
 /** The household's recovery key as Setup sees it ([status] null: MEKA's server couldn't be asked). */
 data class SetupRecovery(val status: RecoveryKeyRules.Status?)
 
+/**
+ * Whether MEKA's bedside clock is the phone's screen saver (bedside clock, slice 3): [isMeka] null when Android's
+ * setting couldn't be read. Only the Fold passes one; the Mac has no screen saver step.
+ */
+data class SetupScreenSaver(val isMeka: Boolean?)
+
 object SetupRules {
     const val ON_THE_FOLD = "On the Fold"
     const val TRAVEL_KEY = "travel"
@@ -93,7 +99,10 @@ object SetupRules {
      * With the household's recovery key (Recovery key, slice 2): [recovery] is what MEKA's server said (null when it
      * couldn't be read); a null [recovery] wrapper leaves the step out.
      */
-    fun view(f: SetupFacts, recovery: SetupRecovery?): SetupView {
+    fun view(f: SetupFacts, recovery: SetupRecovery?): SetupView = view(f, recovery, null)
+
+    /** With the phone's screen saver (bedside clock, slice 3): a null [screenSaver] leaves the step out. */
+    fun view(f: SetupFacts, recovery: SetupRecovery?, screenSaver: SetupScreenSaver?): SetupView {
         val sections = listOf(
             SetupSection("Calendars", calendars(f)),
             SetupSection("Call assistant", calls(f)),
@@ -101,7 +110,7 @@ object SetupRules {
             SetupSection("MEKA's voice", voice(f)),
             SetupSection("Weather and travel", places(f)),
             SetupSection("Mail", listOf(SetupStep("mail", "Mail", "Comes with email triage: you'll reconnect Google and Outlook with mail access then", SetupState.LATER))),
-            SetupSection(if (f.device.mac) "This Mac" else "This phone", device(f)),
+            SetupSection(if (f.device.mac) "This Mac" else "This phone", device(f) + listOfNotNull(screenSaver?.takeIf { !f.device.mac }?.let { BedsideDreamRules.setupStep(it.isMeka) })),
             SetupSection("Your devices", listOfNotNull(mac(f), recovery?.let { recoveryStep(f.connected, it.status) })),
         )
         return summarise(sections, f.nowMs)

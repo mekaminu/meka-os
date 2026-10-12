@@ -343,6 +343,17 @@
         <receiver
             android:name=".alarm.AlarmReceiver"
             android:exported="false" />
+        <!-- The bedside clock as the charging screen saver (bedside clock, slice 3): Settings → Display → Screen saver → MEKA. -->
+        <service
+            android:name=".fold.BedsideDreamService"
+            android:exported="true"
+            android:label="@string/bedside_dream_label"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
         <service
             android:name=".alarm.AlarmRingService"
             android:exported="false"

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -374,4 +375,95 @@ private fun isCharging(context: Context): Boolean {
     val status: Intent = ContextCompat.registerReceiver(context, null, IntentFilter(Intent.ACTION_BATTERY_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED)
         ?: return false
     return status.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+}
+
+/**
+ * The bedside clock as the charging screen saver (bedside clock, slice 3; [BedsideDreamService]): the watch face and
+ * the time with the date, then the next alarm and this part of the day's lines, centred, with nothing to press (a
+ * touch ends the screen saver). It refreshes Today each minute itself (the app's shell may not be running), dims in
+ * quiet hours ([onDim] drops the screen to its dimmest) and drifts a few dp every couple of minutes
+ * ([os.meka.core.domain.BedsideDreamRules.shift]) so a screen on all night doesn't mark.
+ *
+ * Motion: the clock fades up and the lines stagger in as on the bedside clock; the face draws itself in once; changed
+ * digits roll up; dimming blends the colours across; the drift glides slowly. Reduced motion: cross-fades, the face
+ * drawn at once and still, the drift a jump.
+ */
+@Composable
+fun BedsideDream(core: MekaCore, onDim: (Boolean) -> Unit) {
+    val context = LocalContext.current
+    var v by remember { mutableStateOf(core.bedsideDream(nextAlarm(context))) }
+    LaunchedEffect(core) {
+        while (true) {
+            runCatching { core.tick() }
+            v = core.bedsideDream(nextAlarm(context))
+            val now = System.currentTimeMillis()
+            delay((60_000 - now % 60_000).coerceIn(250, 5_000))
+        }
+    }
+    LaunchedEffect(v.dim) { onDim(v.dim) }
+    val today by core.today.collectAsState()
+    val reduced = Meka.reducedMotion
+    val drift = androidx.compose.animation.core.tween<Dp>(if (reduced) 0 else 4_000)
+    val dx by androidx.compose.animation.core.animateDpAsState(v.shiftXDp.dp, drift, label = "driftX")
+    val dy by androidx.compose.animation.core.animateDpAsState(v.shiftYDp.dp, drift, label = "driftY")
+    val primary by animateColorAsState(if (v.dim) Meka.colors.textTertiary else Meka.colors.textPrimary, MekaMotion.themeBlend(reduced), label = "dreamClock")
+    val secondary by animateColorAsState(if (v.dim) Meka.colors.textTertiary else Meka.colors.textSecondary, MekaMotion.themeBlend(reduced), label = "dreamDate")
+    val alarmColor by animateColorAsState(
+        when { v.dim -> Meka.colors.textTertiary; v.alarmSet -> Meka.colors.accent; else -> Meka.colors.textTertiary },
+        MekaMotion.themeBlend(reduced), label = "dreamAlarm",
+    )
+    val ringAlpha by animateFloatAsState(WatchFaceRules.bedsideAlpha(v.dim), MekaMotion.themeBlend(reduced), label = "dreamRing")
+    var play by remember { mutableStateOf(if (reduced) DayRingPlay.STILL else DayRingPlay.QUICK) }
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        Modifier.fillMaxSize().background(Meka.colors.background).windowInsetsPadding(WindowInsets.safeDrawing),
+        contentAlignment = Alignment.Center,
+    ) {
+        val ring = FoldModeRules.bedsideRingDp(maxHeight.value * 0.55f, maxWidth.value)?.dp
+        val face = today.watchFace.takeIf { today.timeline.dateLabel.isNotEmpty() }
+        Column(
+            Modifier.offset(dx, dy).padding(MekaSpace.gutter),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.l),
+        ) {
+            Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                if (face != null && ring != null) {
+                    WatchFaceDial(
+                        face, play, played = { play = DayRingPlay.STILL },
+                        modifier = Modifier.graphicsLayer { alpha = ringAlpha },
+                        size = ring, onOpen = null, bedside = true, quiet = v.dim,
+                    )
+                    Spacer(Modifier.width(MekaSpace.xl))
+                }
+                Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.appear(rememberAppearance(0)).semantics { contentDescription = "${v.time}, ${v.dateLabel}" }) {
+                        RollingTime(v.time, primary, reduced)
+                    }
+                    Text(v.dateLabel, style = MekaType.itemMeta, color = secondary, modifier = Modifier.appear(rememberAppearance(1)))
+                }
+            }
+            Column(
+                Modifier.appear(rememberAppearance(2)),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+            ) {
+                Text(v.alarmLine, style = MekaType.itemMeta, color = alarmColor)
+                Spacer(Modifier.height(MekaSpace.xs))
+                Text(v.heading.uppercase(), style = MekaType.sectionLabel, color = secondary)
+                AnimatedContent(
+                    targetState = v.lines,
+                    transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                    label = "dream-lines",
+                ) { lines ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                        lines.forEachIndexed { i, line ->
+                            Text(
+                                line, style = if (i == 0) MekaType.body else MekaType.itemMeta,
+                                color = if (i == 0) primary else Meka.colors.textTertiary, textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

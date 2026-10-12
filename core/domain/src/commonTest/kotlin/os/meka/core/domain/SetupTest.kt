@@ -162,4 +162,21 @@ class SetupTest {
         assertEquals(v.done + 1, ticked.done)
         assertNull(ticked.todayLine)
     }
+
+    @Test
+    fun theScreenSaverStepSitsUnderThisPhoneOnlyOnTheFold() {
+        val off = SetupRules.view(facts(), null, SetupScreenSaver(false))
+        val phone = off.sections.first { it.title == "This phone" }.steps
+        assertEquals(BedsideDreamRules.SETUP_KEY, phone.last().key)
+        assertEquals(1, off.toDo)
+        assertEquals("1 step left · Bedside screen saver", off.todayLine)
+        assertEquals(SetupState.DONE, SetupRules.view(facts(), null, SetupScreenSaver(true)).step(BedsideDreamRules.SETUP_KEY).state)
+        // Unreadable: "Couldn't check", never counted.
+        val unknown = SetupRules.view(facts(), null, SetupScreenSaver(null))
+        assertEquals(0, unknown.toDo)
+        assertEquals(SetupRules.view(facts()).total, unknown.total)
+        // No answer passed, or the Mac: no step.
+        assertNull(SetupRules.view(facts()).steps.firstOrNull { it.key == BedsideDreamRules.SETUP_KEY })
+        assertNull(SetupRules.view(facts(device = mac), null, SetupScreenSaver(false)).steps.firstOrNull { it.key == BedsideDreamRules.SETUP_KEY })
+    }
 }

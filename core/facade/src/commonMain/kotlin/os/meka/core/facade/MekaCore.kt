@@ -3003,6 +3003,10 @@ class MekaCore(
             nowMs(), ZoneCalendar(timeZone), nextAlarmMs, _notifySettings.value.quiet, _today.value, _brief.value, _shutdown.value,
         )
 
+    /** The bedside clock as the charging screen saver (bedside clock, slice 3): the same view, nothing to tap, drifting. */
+    fun bedsideDream(nextAlarmMs: Long?): os.meka.core.domain.BedsideDreamView =
+        os.meka.core.domain.BedsideDreamRules.view(bedside(nextAlarmMs), nowMs())
+
     /**
      * The "now" card (Fold modes, slice 3): the one thing that matters now (an event or booked session starting or just
      * started, a session asking "Did you go?", Up next, or clear) with its one-tap actions, for the closed Fold's cover screen and the Mac's menu bar. Pure and
@@ -3329,7 +3333,16 @@ class MekaCore(
      * replica and the server's answers (shared with Health). [force] false (Today's open) reuses the server's answers
      * for up to [os.meka.core.domain.HealthRules.TODAY_REFRESH_MS]; the Setup page forces a fresh ask. Never throws.
      */
-    suspend fun refreshSetup(device: os.meka.core.domain.SetupDevice, force: Boolean = true): os.meka.core.domain.SetupView {
+    suspend fun refreshSetup(device: os.meka.core.domain.SetupDevice, force: Boolean = true): os.meka.core.domain.SetupView =
+        refreshSetup(device, null, force)
+
+    /**
+     * The Fold's Setup with its screen saver step (bedside clock, slice 3): [screenSaver] is whether MEKA is Android's
+     * screen saver (null wrapper: no step).
+     */
+    suspend fun refreshSetup(
+        device: os.meka.core.domain.SetupDevice, screenSaver: os.meka.core.domain.SetupScreenSaver?, force: Boolean = true,
+    ): os.meka.core.domain.SetupView {
         val cached = onCore { lastHealthServer }
         val server = if (!force && cached != null && nowMs() - cached.atMs < os.meka.core.domain.HealthRules.TODAY_REFRESH_MS) cached
         else fetchHealthServer()
@@ -3350,7 +3363,7 @@ class MekaCore(
             if (!force && onCore { recoveryReadAtMs }?.let { nowMs() - it < os.meka.core.domain.HealthRules.TODAY_REFRESH_MS } == true) onCore { recoveryStatus }
             else readRecoveryStatus(),
         )
-        val view = os.meka.core.domain.SetupRules.view(facts, recovery)
+        val view = os.meka.core.domain.SetupRules.view(facts, recovery, screenSaver)
         _setup.value = view
         return view
     }

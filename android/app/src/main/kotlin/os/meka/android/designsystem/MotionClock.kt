@@ -1,6 +1,5 @@
 package os.meka.android.designsystem
 
-import androidx.activity.ComponentActivity
 import androidx.compose.runtime.MonotonicFrameClock
 import androidx.compose.runtime.PausableMonotonicFrameClock
 import androidx.compose.runtime.Recomposer
@@ -8,6 +7,7 @@ import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.platform.AndroidUiDispatcher
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -24,8 +24,11 @@ private object FullSpeed : MotionDurationScale {
     override val scaleFactor: Float get() = 1f
 }
 
-/** Pass to `setContent(parent = …)`. Lives until the activity is destroyed. */
-fun ComponentActivity.mekaRecomposer(): Recomposer {
+/**
+ * Pass to `setContent(parent = …)` (or a ComposeView's parent composition, as the bedside screen saver does). Lives
+ * until the owner is destroyed.
+ */
+fun LifecycleOwner.mekaRecomposer(): Recomposer {
     val ui = AndroidUiDispatcher.CurrentThread
     val clock = PausableMonotonicFrameClock(ui[MonotonicFrameClock]!!)
     val context = ui + clock + FullSpeed

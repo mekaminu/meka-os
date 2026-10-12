@@ -78,7 +78,7 @@ struct SetupSheet: View {
                 }
                 await model.refreshSetup()
             }
-        case .notificationAccess, .callRole, .battery: break
+        case .notificationAccess, .callRole, .battery, .screenSaver: break
         }
     }
 
@@ -87,7 +87,7 @@ struct SetupSheet: View {
         guard step.toDo, let f = step.fix else { return false }
         switch f {
         case .calendars, .work, .voice, .notifications, .recovery: return true
-        case .notificationAccess, .callRole, .battery: return false
+        case .notificationAccess, .callRole, .battery, .screenSaver: return false
         }
     }
 

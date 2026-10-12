@@ -101,6 +101,10 @@ object SetupDeviceFacts {
         )
     }
 
+    /** Whether MEKA's bedside clock is Android's screen saver (bedside clock, slice 3). */
+    fun screenSaver(context: Context): os.meka.core.domain.SetupScreenSaver =
+        os.meka.core.domain.SetupScreenSaver(os.meka.android.fold.BedsideDreamService.isMeka(context))
+
     /** The day Meka said "Not today" to Today's setup card (local epoch day), if any. */
     fun hiddenDay(context: Context): Long? =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(HIDDEN_DAY, Long.MIN_VALUE).takeIf { it != Long.MIN_VALUE }
@@ -125,6 +129,7 @@ fun rememberSetupFixer(openPane: (SetupFix) -> Unit, after: () -> Unit): (SetupS
             when (val f = step.fix) {
                 SetupFix.CALENDARS, SetupFix.WORK, SetupFix.VOICE, SetupFix.RECOVERY -> f?.let(openPane)
                 SetupFix.NOTIFICATION_ACCESS -> openListenerSettings(context)
+                SetupFix.SCREEN_SAVER -> os.meka.android.fold.BedsideDreamService.openSettings(context)
                 SetupFix.CALL_ROLE -> MekaCallScreeningService.roleRequest(context)?.let { runCatching { askRole.launch(it) } }
                 SetupFix.BATTERY -> if (BatteryCare.facts(context).exempt) BatteryCare.openSamsung(context) else BatteryCare.allowInAndroid(context)
                 SetupFix.NOTIFICATIONS -> {
@@ -159,7 +164,7 @@ fun SetupPane(core: MekaCore, onClose: () -> Unit, openPane: (SetupFix) -> Unit)
     var checking by rememberSaveable { mutableStateOf(false) }
     fun check() = scope.launch {
         checking = true
-        try { core.refreshSetup(SetupDeviceFacts.facts(context)) } finally { checking = false }
+        try { core.refreshSetup(SetupDeviceFacts.facts(context), SetupDeviceFacts.screenSaver(context)) } finally { checking = false }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { check() }
     val fix = rememberSetupFixer(openPane) { check() }
@@ -230,7 +235,7 @@ private fun SetupStepView(step: SetupStep, modifier: Modifier, onFix: () -> Unit
             }
         }
         val label = step.fixLabel
-        if (step.toDo && step.fix != null && label != null) {
+        if ((step.toDo || step.state == SetupState.UNKNOWN) && step.fix != null && label != null) {
             Box(
                 Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
                     .clickable(role = Role.Button, onClick = onFix)
@@ -256,7 +261,7 @@ fun SetupTodayCard(core: MekaCore, modifier: Modifier = Modifier) {
     val view by core.setupView.collectAsState()
     var hidden by remember { mutableLongStateOf(SetupDeviceFacts.hiddenDay(context) ?: Long.MIN_VALUE) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        scope.launch { runCatching { core.refreshSetup(SetupDeviceFacts.facts(context), force = false) } }
+        scope.launch { runCatching { core.refreshSetup(SetupDeviceFacts.facts(context), SetupDeviceFacts.screenSaver(context), force = false) } }
     }
     val reduced = Meka.reducedMotion
     val shown = SetupRules.cardShown(view, hidden.takeIf { it != Long.MIN_VALUE }, SetupDeviceFacts.today())
