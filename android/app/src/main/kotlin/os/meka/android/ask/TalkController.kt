@@ -19,6 +19,7 @@ import os.meka.core.domain.AskOutcome
 import os.meka.core.domain.BargeInOutput
 import os.meka.core.domain.BargeInRules
 import os.meka.core.domain.BargeInState
+import os.meka.core.domain.BriefFollowOnRules
 import os.meka.core.domain.TalkDid
 import os.meka.core.domain.TalkEffect
 import os.meka.core.domain.TalkFlow
@@ -90,7 +91,10 @@ class TalkController(
     val active: Boolean get() = phase != TalkPhase.ENDED
 
     /** Starts a conversation (the mic permission is already granted). */
-    fun start() {
+    fun start() = begin(TalkFlow.start())
+
+    /** Starts a conversation at [first] (a fresh one, or listening after the brief). */
+    private fun begin(first: TalkStep) {
         if (active) return
         generation++
         problem = null
@@ -100,7 +104,39 @@ class TalkController(
         talkOver = TalkAutoListen.talkOver(context)
         speaker.prepare()
         scope.launch { core.warmVoice() } // MEKA's common lines in its voice, fetched once
-        apply(TalkFlow.start())
+        apply(first)
+    }
+
+    /** While set (elapsed ms), listening after the brief: the recogniser giving up on silence listens again. */
+    private var afterBriefAt: Long? = null
+
+    /**
+     * The brief's Listen ran to its end (slice 7, [BriefFollowOnRules]): the quiet chime, then listening as if Talk had
+     * just read the brief, for up to [BriefFollowOnRules.WINDOW_MS] ("plan my day", "more news" or a question); nothing
+     * said by then → listening stops and [onLapsed] runs (the screen the brief came from comes back). The microphone is
+     * already allowed (the pane checks; nothing asks).
+     */
+    fun startAfterBrief(onLapsed: () -> Unit) {
+        if (active) return
+        val gen = ++generation
+        scope.launch {
+            TalkAutoListen.chime()
+            delay(CHIME_GAP_MS) // so the recogniser doesn't hear the chime
+            if (gen != generation || active) return@launch
+            begin(TalkFlow.afterBrief())
+            val started = generation
+            val at = android.os.SystemClock.elapsedRealtime()
+            afterBriefAt = at
+            delay(BriefFollowOnRules.WINDOW_MS)
+            if (started != generation) return@launch
+            afterBriefAt = null
+            if (phase == TalkPhase.LISTENING &&
+                BriefFollowOnRules.windowLapsed(at, android.os.SystemClock.elapsedRealtime(), speechBegan)
+            ) {
+                stop()
+                onLapsed()
+            }
+        }
     }
 
     /** Speech began (or words were heard) since the last [start]: the open's listening window doesn't close. */
@@ -149,6 +185,7 @@ class TalkController(
     /** The screen left, the app went to the background, a call: everything stops at once. */
     fun stop() {
         generation++ // also drops a room check or chime still on its way ("Listen when I open MEKA")
+        afterBriefAt = null
         if (!active) return
         apply(TalkFlow.stop(session))
     }
@@ -283,7 +320,12 @@ class TalkController(
         override fun onError(error: Int) {
             if (phase != TalkPhase.LISTENING) return // a cancel after stopping reports ERROR_CLIENT
             when (error) {
-                SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> apply(TalkFlow.silence(session))
+                SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                    // After the brief the window is the whole 8 s: the recogniser's own earlier timeout listens again.
+                    val at = afterBriefAt
+                    if (at != null && BriefFollowOnRules.listenAgain(at, android.os.SystemClock.elapsedRealtime(), speechBegan)) listen()
+                    else apply(TalkFlow.silence(session))
+                }
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> fail(TalkProblem.NO_PERMISSION)
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> fail(TalkProblem.BUSY)
                 SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> {

@@ -95,6 +95,11 @@ class MekaApplication : Application() {
     val openNewsStory = MutableStateFlow<String?>(null)
     /** The side button, the headphones' button, the Talk widget or a launcher open with Bluetooth audio / in the car (Talk without tapping the mic): Ask starts listening, then clears it. */
     val talkNow = MutableStateFlow<os.meka.core.domain.TalkStart?>(null)
+    /**
+     * The brief's Listen ran to its end ("Say “plan my day” or “more news”", slice 7): Ask listens for 8 s
+     * ([os.meka.core.domain.BriefFollowOnRules]); the value is where to go back to when nothing is said.
+     */
+    val talkAfterBrief = MutableStateFlow<os.meka.android.shell.ShellDestination?>(null)
     internal val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     /** Hardware-held signing key; created on first use (ADR-005). */
     private val deviceKey by lazy { AndroidDeviceKey() }

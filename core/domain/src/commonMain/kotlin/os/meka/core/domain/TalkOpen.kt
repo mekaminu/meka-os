@@ -59,3 +59,43 @@ object TalkOpenRules {
         TalkPlace.PLAN -> OPENED_PLAN
     }
 }
+
+/*
+ * After the brief pane's Listen (build plan V1, "A morning brief worth listening to", slice 7; non-AI, pure).
+ *
+ * The brief ends "Say “plan my day” or “more news”". Read from Talk ("read my brief"), Talk already listens after it;
+ * read from the brief's own Listen, the device now hands over to Talk the same way: Ask comes forward with the orb
+ * listening ([TalkFlow.afterBrief], which remembers the brief was read so "more news" and "plan my day" work as in
+ * Talk) for up to [WINDOW_MS]. Nothing said by then → listening stops and the screen the brief was opened from comes
+ * back. Only a read that ran to its end hands over (never Stop, Got it, closing the brief or a length change), only
+ * when the brief ends asking ([BriefScriptRules.CLOSE]), and only when the microphone (and the Mac's speech
+ * recognition) are already allowed: the brief never asks for them.
+ */
+object BriefFollowOnRules {
+    /** How long MEKA keeps listening after the brief before handing back. */
+    const val WINDOW_MS = 8_000L
+
+    /** What the conversation remembers as asked before the brief was read (the brief was read by its own Listen). */
+    const val ASKED = "Read my brief"
+
+    /** The brief [script] just read ends asking "plan my day" or "more news". */
+    fun asks(script: String): Boolean = script.trimEnd().endsWith(BriefScriptRules.CLOSE)
+
+    /**
+     * Whether the read that just ended hands over to Talk: [finished] (it ran to its end on its own), [micAllowed] (the
+     * microphone, and on the Mac speech recognition, already allowed; nothing asks), and the [script] [asks].
+     */
+    fun handOff(script: String, finished: Boolean, micAllowed: Boolean): Boolean =
+        finished && micAllowed && asks(script)
+
+    /** The window is over with nothing said ([speechBegan] false): stop listening and hand back. */
+    fun windowLapsed(startedAtMs: Long, nowMs: Long, speechBegan: Boolean): Boolean =
+        !speechBegan && nowMs - startedAtMs >= WINDOW_MS
+
+    /**
+     * The recogniser gave up on silence ([speechBegan] false) inside the window: listen again rather than end, so
+     * the window is the whole [WINDOW_MS] (Android's on-device recogniser times out sooner on its own).
+     */
+    fun listenAgain(startedAtMs: Long, nowMs: Long, speechBegan: Boolean): Boolean =
+        !speechBegan && nowMs - startedAtMs < WINDOW_MS
+}

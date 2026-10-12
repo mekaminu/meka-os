@@ -1094,6 +1094,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(done.session.openAfter)
     }
 
+    /// Morning brief, slice 7: the brief's Listen hands over to Talk (8 s) only after a finished read that ends asking.
+    func testBriefFollowOnReachesSwift() {
+        let script = "Good morning, Meka. " + BriefScriptRules.shared.CLOSE
+        XCTAssertTrue(BriefFollowOnRules.shared.handOff(script: script, finished: true, micAllowed: true))
+        XCTAssertFalse(BriefFollowOnRules.shared.handOff(script: script, finished: true, micAllowed: false))
+        XCTAssertEqual(BriefFollowOnRules.shared.WINDOW_MS, 8_000)
+        let start = TalkFlow.shared.afterBrief()
+        XCTAssertEqual(start.session.phase, TalkPhase.listening)
+        XCTAssertTrue(start.effects.first is TalkEffectListen)
+        let more = TalkFlow.shared.heard(s: start.session, utterance: "more news")
+        XCTAssertEqual((more.effects.first as? TalkEffectReadOut)?.read.kind, ReadOutKind.headlines)
+    }
+
     /// Fold review 2026-10-09 07:26, item 7: the brief's Today rows (one left edge; a task carries its id for the tick).
     func testBriefDayLinesReachSwift() {
         let task = BriefRules.shared.dayLine(r: TomorrowRow(id: "t-milk", time: nil, title: "Buy milk", isEvent: false, detail: "Overdue"))

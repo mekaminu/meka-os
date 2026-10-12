@@ -105,7 +105,9 @@ struct AskMekaSection: View {
             wireTalk()
             takeTalkRequest()
             takeTalkOnOpen()
+            takeTalkAfterBrief()
         }
+        .onChange(of: model.talkAfterBriefBack) { _, back in if back != nil { takeTalkAfterBrief() } }
         .onChange(of: model.talkRequested) { _, asked in if asked { takeTalkRequest() } }
         .onChange(of: model.talkOnOpenRequested) { _, asked in if asked { takeTalkOnOpen() } }
         .onDisappear { talk.stop() }
@@ -261,6 +263,17 @@ struct AskMekaSection: View {
         focused = false
         let model = model
         talk.startOnOpen { model.go(to: .today, reduced: MotionSetting.reduced) }
+    }
+
+    /// The brief's Listen ran to its end (morning brief, slice 7): chime, listen for 8 s; if nothing is said, the
+    /// place the brief was read from slides back.
+    private func takeTalkAfterBrief() {
+        guard let back = model.talkAfterBriefBack else { return }
+        model.talkAfterBriefBack = nil
+        guard canAsk, !talk.active else { return }
+        focused = false
+        let model = model
+        talk.startAfterBrief { if back != .ask { model.go(to: back, reduced: MotionSetting.reduced) } }
     }
 
     private func toggleTalk() {

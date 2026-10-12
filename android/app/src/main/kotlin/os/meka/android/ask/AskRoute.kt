@@ -201,7 +201,10 @@ fun AskRoute(
                 }
             }
         }
-        MekaPane(visible = pane == MoreItem.BRIEF) { BriefPane(core, onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.BRIEF) {
+            // Slice 7: the read ran to its end: the pane drops and Ask's orb listens for 8 s.
+            BriefPane(core, onClose = { pane = null }, onTalkAfter = { pane = null; healthApp?.talkAfterBrief?.value = os.meka.android.shell.ShellDestination.ASK })
+        }
         MekaPane(visible = pane == MoreItem.NEWS) { NewsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.SHUTDOWN) { ShutdownPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.WEEK_AHEAD) {

@@ -190,6 +190,16 @@ fun AskMekaSection(
             talk.startOnOpen { app?.openDestination?.value = os.meka.android.shell.ShellDestination.TODAY }
         } else startTalking()
     }
+    // After the brief's Listen ran to its end (slice 7): listen for 8 s; nothing said → back where the brief was.
+    val talkAfterBrief = app?.talkAfterBrief?.collectAsState()?.value
+    LaunchedEffect(talkAfterBrief) {
+        val back = talkAfterBrief ?: return@LaunchedEffect
+        lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+        app?.talkAfterBrief?.value = null
+        if (talk.active) return@LaunchedEffect
+        keyboard?.hide()
+        talk.startAfterBrief { if (back != os.meka.android.shell.ShellDestination.ASK) app?.openDestination?.value = back }
+    }
 
     fun ask() {
         val q = AskRules.question(text) ?: return

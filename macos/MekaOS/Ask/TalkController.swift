@@ -88,7 +88,11 @@ final class TalkController {
     }
 
     /// Starts a conversation: asks for the microphone and speech recognition the first time.
-    func start() {
+    func start() { begin(afterBrief: false) }
+
+    /// Starts a conversation fresh, or (`afterBrief`) listening as if Talk had just read the brief. The core's first
+    /// step is made inside the main-actor task, so no Kotlin value crosses isolation.
+    private func begin(afterBrief: Bool) {
         guard !active else { return }
         generation += 1
         problem = nil
@@ -103,7 +107,35 @@ final class TalkController {
             }
             guard gen == generation else { return }
             Task { await model?.warmVoice() } // MEKA's common lines in its voice, fetched once
-            apply(TalkFlow.shared.start())
+            apply(afterBrief ? TalkFlow.shared.afterBrief() : TalkFlow.shared.start())
+        }
+    }
+
+    /// The microphone and speech recognition are both already allowed (checked without asking).
+    static var allowedWithoutAsking: Bool {
+        AVCaptureDevice.authorizationStatus(for: .audio) == .authorized && SFSpeechRecognizer.authorizationStatus() == .authorized
+    }
+
+    /// The window after the brief (`BriefFollowOnRules.WINDOW_MS`) rather than the opening's.
+    @ObservationIgnored private var openAfterBrief = false
+
+    /// The brief's Listen ran to its end (morning brief, slice 7, `BriefFollowOnRules`): a quiet chime, then listening
+    /// as if Talk had just read the brief ("plan my day", "more news" or a question) for up to 8 s; nothing said →
+    /// listening stops and `onLapsed` runs. Only called with the microphone and speech recognition already allowed.
+    func startAfterBrief(onLapsed: @escaping () -> Void) {
+        guard !active, Self.allowedWithoutAsking else { return }
+        generation += 1
+        problem = nil
+        let gen = generation
+        Task {
+            chime()
+            try? await Task.sleep(for: .milliseconds(Self.chimeGapMs))
+            guard gen == generation, !active else { return }
+            begin(afterBrief: true)
+            openGen = generation
+            openAt = nil
+            openLapsed = onLapsed
+            openAfterBrief = true
         }
     }
 
@@ -130,6 +162,7 @@ final class TalkController {
             openGen = generation
             openAt = nil
             openLapsed = onLapsed
+            openAfterBrief = false
         }
     }
 
@@ -365,9 +398,13 @@ final class TalkController {
             if heardAnything {
                 openAt = nil
                 openLapsed = nil
-            } else if TalkOnOpenRules.shared.windowLapsed(startedAtMs: Int64(at.timeIntervalSince1970 * 1000),
-                                                         nowMs: Int64(now.timeIntervalSince1970 * 1000),
-                                                         speechBegan: false) {
+            } else if openAfterBrief
+                        ? BriefFollowOnRules.shared.windowLapsed(startedAtMs: Int64(at.timeIntervalSince1970 * 1000),
+                                                                 nowMs: Int64(now.timeIntervalSince1970 * 1000),
+                                                                 speechBegan: false)
+                        : TalkOnOpenRules.shared.windowLapsed(startedAtMs: Int64(at.timeIntervalSince1970 * 1000),
+                                                              nowMs: Int64(now.timeIntervalSince1970 * 1000),
+                                                              speechBegan: false) {
                 stop()
                 lapsed()
                 return

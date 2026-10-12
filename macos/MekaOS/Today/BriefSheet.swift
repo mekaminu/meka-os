@@ -239,7 +239,16 @@ struct BriefSheet: View {
             let text = await model.briefScript()
             guard !Task.isCancelled else { return }
             preparing = nil
-            speaker.say(text, reading: true)
+            // Slice 7: a read that runs to its end ("Say “plan my day” or “more news”") hands over to Talk for 8 s,
+            // with the microphone and speech recognition already allowed (the brief never asks). Only a String and
+            // Bools go to the core.
+            let model = model
+            let dismiss = dismiss
+            speaker.say(text, reading: true) {
+                guard BriefFollowOnRules.shared.handOff(script: text, finished: true, micAllowed: TalkController.allowedWithoutAsking) else { return }
+                dismiss()
+                model.requestTalkAfterBrief(reduced: MotionSetting.reduced)
+            }
         }
     }
 

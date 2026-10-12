@@ -393,6 +393,19 @@ data class TalkStep(val session: TalkSession, val effects: List<TalkEffect>)
 object TalkFlow {
     fun start(): TalkStep = TalkStep(TalkSession(TalkPhase.LISTENING), listOf(TalkEffect.Listen))
 
+    /**
+     * Listening straight after the brief's own Listen read it ([BriefFollowOnRules]): as if Meka had said "read my
+     * brief" and MEKA had just finished it, so "plan my day", "more news" or a question carry on from there. The
+     * brief's words aren't remembered (headlines are untrusted, ADR-006), only that it was read.
+     */
+    fun afterBrief(): TalkStep = TalkStep(
+        TalkSession(
+            TalkPhase.LISTENING,
+            conversation = Conversation().answered(BriefFollowOnRules.ASKED, ReadOutRules.remembered(ReadOut(ReadOut.Kind.BRIEF))),
+        ),
+        listOf(TalkEffect.Listen),
+    )
+
     /** A final transcript while listening. */
     fun heard(s: TalkSession, utterance: String): TalkStep {
         if (s.phase != TalkPhase.LISTENING) return TalkStep(s, emptyList())

@@ -1464,6 +1464,16 @@ final class CoreModel {
     /// so Ask comes forward and checks the room before listening. Ask's section takes it (sets it back to false).
     var talkOnOpenRequested = false
 
+    /// The brief's Listen ran to its end (morning brief, slice 7): Ask comes forward and listens for 8 s; nothing said →
+    /// `talkAfterBriefBack` (where the brief was read) comes back. Ask's section takes it (sets it back to nil).
+    var talkAfterBriefBack: ShellDestination?
+
+    func requestTalkAfterBrief(reduced: Bool) {
+        let back = destination
+        go(to: .ask, reduced: reduced)
+        talkAfterBriefBack = back
+    }
+
     func requestTalkOnOpen(reduced: Bool) {
         go(to: .ask, reduced: reduced)
         talkOnOpenRequested = true

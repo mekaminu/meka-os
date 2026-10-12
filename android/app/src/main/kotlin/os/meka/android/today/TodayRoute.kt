@@ -408,7 +408,13 @@ fun TodayRoute(
             }
             MekaPane(visible = showShutdown) { ShutdownPane(core, onClose = { showShutdown = false }) }
             MekaPane(visible = showBrief) {
-                BriefPane(core, onClose = { showBrief = false; briefReadAloud = false }, readAloud = briefReadAloud)
+                BriefPane(core, onClose = { showBrief = false; briefReadAloud = false }, readAloud = briefReadAloud,
+                    // Slice 7: the read ran to its end: Ask listens for 8 s, then Today comes back if nothing is said.
+                    onTalkAfter = {
+                        showBrief = false; briefReadAloud = false
+                        widgetApp?.talkAfterBrief?.value = os.meka.android.shell.ShellDestination.TODAY
+                        widgetApp?.openDestination?.value = os.meka.android.shell.ShellDestination.ASK
+                    })
             }
             // Tap the watch face: the full 24-hour Day ring springs up; an arc in it closes the sheet and opens its event or task.
             MekaPane(visible = showDayRing) {

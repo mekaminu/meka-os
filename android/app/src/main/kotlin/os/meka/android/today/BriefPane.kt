@@ -65,7 +65,11 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.goals.Chips
 import os.meka.android.ask.MekaSpeaker
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import os.meka.core.domain.BriefDayLine
+import os.meka.core.domain.BriefFollowOnRules
 import os.meka.core.domain.BriefHeadline
 import os.meka.core.domain.BriefLine
 import os.meka.core.domain.DueState
@@ -90,7 +94,7 @@ private const val GOT_IT_HOLD_MS = 600L
  * away. Reduced motion: cross-fades only.
  */
 @Composable
-fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
+fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, onTalkAfter: (() -> Unit)? = null) {
     val v by core.briefView.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
@@ -111,7 +115,12 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
         preparing = scope.launch {
             val text = core.briefScript()
             preparing = null
-            speaker.say(text, reading = true)
+            // Slice 7: a read that runs to its end ("Say “plan my day” or “more news”") hands over to Talk for 8 s,
+            // when the microphone is already allowed (the brief never asks for it).
+            speaker.say(text, reading = true) {
+                val mic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                if (onTalkAfter != null && BriefFollowOnRules.handOff(text, finished = true, micAllowed = mic)) onTalkAfter()
+            }
         }
     }
     // After the wake alarm the brief reads itself once it has something to say.
