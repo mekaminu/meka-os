@@ -126,6 +126,8 @@ final class CoreModel {
     private(set) var trips: TripsView?
     /// Ask → More → Trips.
     var showTrips = false
+    /// The Vault (V2, slice 1): the documents and when they run out.
+    private(set) var documents: DocumentsView?
     /// Why a Booked… on a Needs you card couldn't be read, by appointment id (shown under its field).
     private(set) var appointmentRefusal: (id: String, line: String)?
     /// Annual leave (V1, slice 1): the allowance, the days booked and the school holidays (Ask → More → Annual leave).
@@ -385,6 +387,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await t in core.tripsView { self?.trips = t }
+        })
+        observers.append(Task { [weak self] in
+            for await d in core.documentsView { self?.documents = d }
         })
         observers.append(Task { [weak self] in
             for await c in core.carView { self?.car = c }
@@ -2976,6 +2981,24 @@ final class CoreModel {
     func removeTrip(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeTrip(id: id) } }
 
     func removeTripBooking(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeTripBooking(id: id) } }
+
+    // MARK: The Vault (V2, slice 1)
+
+    /// Adds "Passport expires 3 Mar 2029" or "Railcard 05/2027"; only a String crosses. Says what it did like Trips.
+    func addDocument(_ text: String) async -> TripSaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            let r = try await core.addDocument(text: t)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return TripSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func removeDocument(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeDocument(id: id) } }
 
     // MARK: Gift planner (slice 1)
 

@@ -2376,6 +2376,33 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(core.tripsView.value.rows.isEmpty)
     }
 
+    func testDocumentsReachSwift() async throws {
+        // The Vault, slice 1: a typed document goes through the facade (only a String crosses) and its row, status
+        // and the Vault's notice target reach the Mac.
+        let rules = DocumentRules.shared
+        XCTAssertEqual(rules.kindOf(text: "Rex passport"), .passport)
+        XCTAssertEqual(DocumentsView.companion.EMPTY.summary, rules.EMPTY_LINE)
+        XCTAssertEqual(NoticeTarget.vault.name, "VAULT")
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "docs-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let y = Calendar.current.component(.year, from: Date()) + 5
+        let bad = try await core.addDocument(text: "Passport 31 Feb \(y)")
+        XCTAssertTrue(bad.refused)
+        let added = try await core.addDocument(text: "Passport 123456789 expires 3 Mar \(y)")
+        XCTAssertFalse(added.refused)
+        XCTAssertTrue(added.line.hasPrefix("Added Passport · expires "), added.line)
+        let row = core.documentsView.value.rows[0]
+        XCTAssertEqual(row.title, "Passport")
+        XCTAssertFalse(row.statusLit)
+        XCTAssertTrue(row.status.hasPrefix("Expires in "), row.status)
+        let removed = try await core.removeDocument(id: row.id)
+        XCTAssertTrue(removed.boolValue)
+        XCTAssertTrue(core.documentsView.value.rows.isEmpty)
+    }
+
     func testBinsReachSwift() async throws {
         // Bin days, slice 1: a typed bin is read by the core's rules, added through the facade (only a String crosses)
         // and the sheet's rows, Today's line and the heads-up's source reach the Mac.

@@ -95,6 +95,7 @@ object DataExport {
         EntityTypes.GIFT_IDEA to ("gift idea" to "gift ideas"),
         EntityTypes.TRIP to ("trip" to "trips"),
         EntityTypes.TRIP_BOOKING to ("trip booking" to "trip bookings"),
+        EntityTypes.VAULT_DOC to ("document" to "documents"),
         EntityTypes.AGENT_ACTION to ("activity entry" to "activity entries"),
     )
 
@@ -102,7 +103,7 @@ object DataExport {
     private val SUMMARY_ORDER = listOf(
         EntityTypes.TASK, EntityTypes.CHECKLIST_ITEM, EntityTypes.EVENT, EntityTypes.COMMITMENT, EntityTypes.DECISION,
         EntityTypes.OBLIGATION, EntityTypes.GOAL, EntityTypes.HABIT, EntityTypes.HABIT_COMPLETION, EntityTypes.FAST,
-        EntityTypes.SHOPPING_ITEM, EntityTypes.SCHOOL_ITEM, EntityTypes.MEAL, EntityTypes.MEAL_DAY, EntityTypes.EMERGENCY_ENTRY, EntityTypes.WIN, EntityTypes.QUEUE_ITEM, EntityTypes.LEAVE, EntityTypes.LIFE_FACT, EntityTypes.ERRAND, EntityTypes.APPOINTMENT, EntityTypes.CHECKLIST_TEMPLATE, EntityTypes.GOAL_MILESTONE, EntityTypes.GOAL_ENTRY, EntityTypes.BIN, EntityTypes.BIN_MOVE, EntityTypes.OCCASION, EntityTypes.GIFT_IDEA, EntityTypes.TRIP, EntityTypes.TRIP_BOOKING, EntityTypes.AGENT_ACTION,
+        EntityTypes.SHOPPING_ITEM, EntityTypes.SCHOOL_ITEM, EntityTypes.MEAL, EntityTypes.MEAL_DAY, EntityTypes.EMERGENCY_ENTRY, EntityTypes.WIN, EntityTypes.QUEUE_ITEM, EntityTypes.LEAVE, EntityTypes.LIFE_FACT, EntityTypes.ERRAND, EntityTypes.APPOINTMENT, EntityTypes.CHECKLIST_TEMPLATE, EntityTypes.GOAL_MILESTONE, EntityTypes.GOAL_ENTRY, EntityTypes.BIN, EntityTypes.BIN_MOVE, EntityTypes.OCCASION, EntityTypes.GIFT_IDEA, EntityTypes.TRIP, EntityTypes.TRIP_BOOKING, EntityTypes.VAULT_DOC, EntityTypes.AGENT_ACTION,
     )
 
     fun summary(data: ExportData): ExportSummary {

@@ -141,6 +141,7 @@ class MekaCore(
     private val bins = os.meka.core.domain.Bins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val gifts = os.meka.core.domain.Gifts(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val trips = os.meka.core.domain.Trips(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val documents = os.meka.core.domain.Documents(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val car = os.meka.core.domain.Car(replica)
     private val mealPlan = os.meka.core.domain.MealPlan(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val emergency = os.meka.core.domain.EmergencyCard(replica, ids::next, nowMs)
@@ -422,6 +423,13 @@ class MekaCore(
      * timeline; Today's header shows the trip a week ahead and while it's on.
      */
     val tripsView: StateFlow<os.meka.core.domain.TripsView> = _trips.asStateFlow()
+    private val _documents = MutableStateFlow(os.meka.core.domain.DocumentsView.EMPTY)
+
+    /**
+     * The Vault (V2, slice 1): the household's documents with the day each runs out ("Rex passport 20 May 2027"), the
+     * ones to renew first; their expiry dates reach the plan as heads-ups ([os.meka.core.domain.DocumentRules.notices]).
+     */
+    val documentsView: StateFlow<os.meka.core.domain.DocumentsView> = _documents.asStateFlow()
     private val _gifts = MutableStateFlow(os.meka.core.domain.GiftsView.EMPTY)
 
     /**
@@ -2276,6 +2284,17 @@ class MekaCore(
 
     /** Removes one booking for good (its id is a timeline line's `bookingId`). */
     suspend fun removeTripBooking(id: String): Boolean = onCore { trips.removeBooking(id) }
+
+    // ---- The Vault (V2, slice 1) ----
+
+    /**
+     * Adds one typed document ([os.meka.core.domain.DocumentRules.read]): "Passport expires 3 Mar 2029", "Railcard
+     * 05/2027"; one with the same title takes the new date. Refused (nothing written) when MEKA couldn't read it.
+     */
+    suspend fun addDocument(text: String): os.meka.core.domain.DocumentAdded = onCore { documents.add(text) }
+
+    /** Removes a document for good. */
+    suspend fun removeDocument(id: String): Boolean = onCore { documents.remove(id) }
 
     // ---- Gift planner (V1, slice 1; Ask → More → Gifts) ----
 
@@ -4833,6 +4852,7 @@ class MekaCore(
         _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays)
         _gifts.value = os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
         _trips.value = os.meka.core.domain.TripRules.view(tripItems, todayDay)
+        _documents.value = os.meka.core.domain.DocumentRules.view(documents.items(), todayDay)
         val heldNow = _afterWork.value
         _people.value = os.meka.core.domain.PeopleRules.view(
             listsNow.promised, listsNow.waiting, occasionItems,
@@ -4906,6 +4926,7 @@ class MekaCore(
             lifeAdmin = _lifeAdmin.value,
             occasions = gifts.items(),
             trips = trips.items(),
+            documents = documents.items(),
             sessionAskGraceMin = if (workoutsInBackground) os.meka.core.domain.WorkoutRules.ASK_GRACE_MIN else 0,
         )
 

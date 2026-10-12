@@ -35,7 +35,7 @@ enum class NoticePrecision { CLOCK, SOFT }
  * Where tapping a notification takes you. [LEAVE] is Ask → More → Annual leave with its pane up (annual leave, slice 2);
  * [WEEK_AHEAD] is Ask → More → Week ahead with its pane up (Sunday week ahead, slice 1).
  */
-enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW, LEAVE, WEEK_AHEAD }
+enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW, LEAVE, WEEK_AHEAD, VAULT }
 
 /**
  * A button on a posted notification, answered without opening the app (Gym slice 2b: "Did you go?" offers Went and
@@ -153,6 +153,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * Flight BA478 07:40" · "ref ABC123 · then Hotel Arts until Wed 18 Nov".
      */
     TRIPS("Trips: the evening before you go", NoticeTier.HEADS_UP),
+    /**
+     * The Vault, slice 1 ([DocumentRules.notices]): a document's renewal window opening (six months before a passport),
+     * a month and a week before it runs out and on the day, at 09:00 — "Rex passport expires Thu 20 May 2027".
+     */
+    DOCUMENTS("Vault: documents running out", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jeanette · due today"). */
@@ -567,6 +572,7 @@ object Governor {
         NoticeSource.BILLS -> plural(n, "bill") + " due"
         NoticeSource.LIFE_ADMIN -> "your life admin hour"
         NoticeSource.TRIPS -> if (n == 1) "a trip tomorrow" else "$n trips tomorrow"
+        NoticeSource.DOCUMENTS -> plural(n, "document") + " to renew"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.PROMISE -> if (n == 1) "a promise due" else "$n promises due"
@@ -644,6 +650,8 @@ object NoticeSources {
         occasions: List<Occasion> = emptyList(),
         /** Travel mode: the trips with their bookings, for the evening before each ([TripRules.notices]). */
         trips: List<TripItem> = emptyList(),
+        /** The Vault: the documents and when they run out ([DocumentRules.notices]). */
+        documents: List<DocumentItem> = emptyList(),
         /** Health Connect slice 2: minutes "Did you go?" waits after a session while workouts are read in the background. */
         sessionAskGraceMin: Int = 0,
     ): List<Notice> {
@@ -774,6 +782,7 @@ object NoticeSources {
         out += MoneyDateRules.notices(lists.renewals.all, nowMs, cal)
         out += BillRules.notices(lists.renewals.all, nowMs, cal)
         out += TripRules.notices(trips, nowMs, cal)
+        out += DocumentRules.notices(documents, nowMs, cal)
         if (lifeAdmin != null) out += LifeAdminRules.notices(lifeAdmin, nowMs)
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.

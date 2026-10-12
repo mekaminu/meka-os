@@ -303,6 +303,7 @@ object NotifyRouting {
         NoticeTarget.REVIEW -> ShellDestination.REVIEW
         NoticeTarget.LEAVE -> ShellDestination.ASK
         NoticeTarget.WEEK_AHEAD -> ShellDestination.ASK
+        NoticeTarget.VAULT -> ShellDestination.VAULT
     }
 
     /** What a tap hands MainActivity: a place ("dest:LISTS"), or Ask with the Annual leave pane up ("leave"). */

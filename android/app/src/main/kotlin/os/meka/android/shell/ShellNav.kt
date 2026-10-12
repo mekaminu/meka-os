@@ -90,7 +90,7 @@ enum class MoreItem(
     ACTIVITY("Activity", "What MEKA did and why", null, MoreGroup.SETTINGS),
     SETUP("Setup", "Everything MEKA can do, and what's left to set up", null, MoreGroup.SETTINGS),
     HEALTH("Health", "Is everything MEKA needs working?", null, MoreGroup.SETTINGS),
-    VAULT("Vault", "Your data now; documents later", ShellDestination.VAULT, MoreGroup.SETTINGS),
+    VAULT("Vault", "Documents and when they run out; your data", ShellDestination.VAULT, MoreGroup.SETTINGS),
     YOUR_DATA("Your data", "Export everything as one file", null, MoreGroup.SETTINGS),
 
     /** The one row on Ask that opens the Settings pane. */

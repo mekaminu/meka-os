@@ -94,6 +94,8 @@ object EntityTypes {
     const val TRIP = "trip"
     /** Travel mode, slice 1 (2026-10-12): one booking on a trip, "Flight BA478 Sat 14 Nov 07:40 ref ABC123". */
     const val TRIP_BOOKING = "trip_booking"
+    /** The Vault, slice 1 (2026-10-12): one document and the day it runs out, "Rex passport 20 May 2027" (see [Documents]). */
+    const val VAULT_DOC = "vault_doc"
     /** Messages grouped per chat, slice 3c (2026-10-12): a busy chat's one-line AI summary (never the messages, see [ChatSummaries]). */
     const val CHAT_SUMMARY = "chat_summary"
 
@@ -107,7 +109,7 @@ object EntityTypes {
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
         CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA, TRIP, TRIP_BOOKING, CHAT_SUMMARY,
-        APPROVAL_KEY,
+        APPROVAL_KEY, VAULT_DOC,
     )
 }
 
@@ -445,6 +447,9 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.TRIP -> MergePolicy.Lww
         entityType == EntityTypes.TRIP_BOOKING && field == TripBookingFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.TRIP_BOOKING -> MergePolicy.Lww
+        // Vault documents: one removed on any device is gone for good; the title and date, the latest edit wins.
+        entityType == EntityTypes.VAULT_DOC && field == VaultDocFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.VAULT_DOC -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

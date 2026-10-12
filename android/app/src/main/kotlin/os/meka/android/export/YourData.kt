@@ -132,6 +132,8 @@ fun YourData(core: MekaCore, modifier: Modifier = Modifier, onClose: (() -> Unit
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.YOUR_DATA)).sharedPlace(LocalPlaceTitleKey.current)
                 .appear(rememberAppearance(0)))
         vaultLine?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0))) }
+        // The Vault (V2, slice 1): the documents and when they run out, above the export.
+        if (vaultLine != null) VaultDocuments(core, firstIndex = 1)
 
         Spacer(Modifier.height(MekaSpace.m))
         Text("EXPORT EVERYTHING", style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(1)))

@@ -148,7 +148,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .activity: "What MEKA did and why"
         case .setup: "Everything MEKA can do, and what's left to set up"
         case .health: "Is everything MEKA needs working?"
-        case .vault: "Your data now; documents later"
+        case .vault: "Documents and when they run out; your data"
         case .yourData: "Export everything as one file"
         case .settings: "Work mode, notifications, appearance, voice and MEKA's AI"
         }
@@ -322,7 +322,7 @@ enum ShellNav {
     /// Placeholder line for destinations whose feature hasn't landed yet.
     static func upcomingLine(_ d: ShellDestination) -> String? {
         switch d {
-        case .vault: "Encrypted documents, with expiry dates sent to your plan, land here."
+        case .vault: "Your documents and when they run out; MEKA reminds you in time to renew."
         case .today, .needsYou, .calendar, .ask, .lists, .goals, .review: nil
         }
     }

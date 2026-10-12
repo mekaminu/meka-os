@@ -242,9 +242,9 @@ private fun Destination(
         ShellDestination.LISTS -> BehindAsk(go) { ListsRoute(core) }
         ShellDestination.GOALS -> BehindAsk(go) { GoalsRoute(core) }
         ShellDestination.REVIEW -> BehindAsk(go) { ReviewRoute(core) }
-        // Documents land here in V2; until then the Vault holds the export of everything (build plan M1).
+        // The Vault: the documents and when they run out (V2, slice 1), then the export of everything (build plan M1).
         ShellDestination.VAULT -> BehindAsk(go) {
-            YourData(core, vaultLine = "Encrypted documents, with expiry dates sent to your plan, land here.")
+            YourData(core, vaultLine = "Your documents and when they run out; MEKA reminds you in time to renew.")
         }
     }
 }

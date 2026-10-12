@@ -97,7 +97,7 @@ struct YourDataSheet: View {
     }
 }
 
-/// The Vault section: documents land here in V2; until then it holds the export of everything.
+/// The Vault: the documents and when they run out (V2, slice 1), then the export of everything.
 struct VaultScreen: View {
     let palette: MekaPalette
 
@@ -111,7 +111,9 @@ struct VaultScreen: View {
                 Text(ShellNav.upcomingLine(.vault) ?? "")
                     .font(MekaType.body).foregroundStyle(palette.textSecondary)
                     .staggeredAppear(1)
-                YourDataSection(palette: palette, firstIndex: 2)
+                VaultDocumentsSection(palette: palette, firstIndex: 2)
+                    .padding(.top, MekaSpace.m)
+                YourDataSection(palette: palette, firstIndex: 6)
                     .padding(.top, MekaSpace.l)
             }
             .frame(maxWidth: 520, alignment: .leading)
