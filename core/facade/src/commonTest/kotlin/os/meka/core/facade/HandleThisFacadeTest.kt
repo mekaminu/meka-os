@@ -141,6 +141,41 @@ class HandleThisFacadeTest {
     }
 
     @Test
+    fun aBookingConfirmationGoesIntoItsTripOnAddAndUndoTakesItOut() = runTest {
+        // Travel mode, slice 2b.
+        val c = core()
+        c.addTrip("Barcelona 14–18 Nov")
+        server.reply = MessageRequestCodec.Response(
+            "answered",
+            listOf(
+                MessageRequestCodec.Proposal("booking", "Flight BA478", "2026-11-14", "07:40", type = "flight", ref = "ABC123"),
+                MessageRequestCodec.Proposal("booking", "Hotel Arts", "2026-11-14", type = "stay", ref = "XKQPLM", until = "2026-11-18"),
+                MessageRequestCodec.Proposal("booking", "Flight BA999", "2026-12-20", "09:00", type = "flight"),
+            ),
+        )
+        val cards = assertIs<HandleOutcome.Cards>(c.handleThis("Your booking is confirmed. Flight BA478 Sat 14 Nov 07:40, Hotel Arts 14-18 Nov.", "Booking confirmed")).cards
+        assertEquals(
+            listOf(
+                "Add to Barcelona · Flight BA478 · Sat 14 Nov 07:40 · ref ABC123",
+                "Add to Barcelona · Hotel Arts · Sat 14 – Wed 18 Nov · ref XKQPLM",
+                // No trip on that day yet: it is offered as an event instead.
+                "Add event: Flight BA999 · Sun 20 Dec · 09:00",
+            ),
+            cards.map { it.action },
+        )
+        assertEquals(null, c.changeRequest(cards[0].id))
+
+        val done = assertNotNull(c.acceptRequest(cards[0].id))
+        assertEquals("Added to Barcelona · Flight BA478 · Sat 14 Nov 07:40 · ref ABC123", done.line)
+        assertTrue(done.undoable)
+        val trip = c.tripsView.value.rows.single()
+        assertTrue(trip.timeline.flatMap { it.lines }.any { it.text == "Flight BA478 · ref ABC123" }, trip.timeline.toString())
+
+        assertTrue(c.undoRequest(done))
+        assertTrue(c.tripsView.value.rows.single().timeline.flatMap { it.lines }.isEmpty())
+    }
+
+    @Test
     fun aReplyIsCopiedNeverSentAndSyncsToTheMac() = runTest {
         // Slice 3: a drafted reply card; Copy reply hands the draft back for the clipboard and answers the card on both
         // devices; nothing is added, and there is nothing to undo.

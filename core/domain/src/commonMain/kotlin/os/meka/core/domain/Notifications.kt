@@ -148,6 +148,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * the GP · and 2 more". None when skipped or nothing is waiting.
      */
     LIFE_ADMIN("Life admin hour", NoticeTier.HEADS_UP),
+    /**
+     * Travel mode, slice 2b ([TripRules.notices]): the evening before a trip's first day at 18:00 — "Barcelona tomorrow ·
+     * Flight BA478 07:40" · "ref ABC123 · then Hotel Arts until Wed 18 Nov".
+     */
+    TRIPS("Trips: the evening before you go", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jeanette · due today"). */
@@ -561,6 +566,7 @@ object Governor {
         NoticeSource.MONEY -> plural(n, "money date") + " coming up"
         NoticeSource.BILLS -> plural(n, "bill") + " due"
         NoticeSource.LIFE_ADMIN -> "your life admin hour"
+        NoticeSource.TRIPS -> if (n == 1) "a trip tomorrow" else "$n trips tomorrow"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.PROMISE -> if (n == 1) "a promise due" else "$n promises due"
@@ -636,6 +642,8 @@ object NoticeSources {
         lifeAdmin: LifeAdminView? = null,
         /** Gift planner: the birthdays and anniversaries with their ideas ([GiftRules.notices]). */
         occasions: List<Occasion> = emptyList(),
+        /** Travel mode: the trips with their bookings, for the evening before each ([TripRules.notices]). */
+        trips: List<TripItem> = emptyList(),
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -763,6 +771,7 @@ object NoticeSources {
         out += CarRules.notices(lists.renewals.all, carRegistration, nowMs, cal)
         out += MoneyDateRules.notices(lists.renewals.all, nowMs, cal)
         out += BillRules.notices(lists.renewals.all, nowMs, cal)
+        out += TripRules.notices(trips, nowMs, cal)
         if (lifeAdmin != null) out += LifeAdminRules.notices(lifeAdmin, nowMs)
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.

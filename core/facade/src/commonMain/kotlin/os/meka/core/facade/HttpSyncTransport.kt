@@ -248,7 +248,7 @@ sealed class HandleOutcome {
 /**
  * What Add or Change on a request card did ([MekaCore.acceptRequest], [MekaCore.changeRequest]): [line] for the undo
  * bar, and what [MekaCore.undoRequest] takes back — the task made, the calendar edit (inside its five seconds), or the
- * work-from-home day (-1 when none), or the renewal put on the radar. [copyText] ("Handle this", slice 3): a reply's
+ * work-from-home day (-1 when none), the renewal put on the radar, or the booking put into Trips. [copyText] ("Handle this", slice 3): a reply's
  * draft for the app to put on the clipboard; such a done has nothing to undo ([undoable] false), since nothing was sent
  * or added.
  */
@@ -259,9 +259,12 @@ data class RequestDone(
     val homeDay: Long = -1,
     val renewalId: String? = null,
     val copyText: String? = null,
+    /** The booking put into Trips (Travel mode, slice 2b); Undo takes it out. */
+    val bookingId: String? = null,
 ) {
     /** Whether the bar offers Undo: something was made that Undo can take back. */
-    val undoable: Boolean get() = copyText == null
+    val undoable: Boolean get() = copyText == null &&
+        (taskId != null || editId != null || homeDay >= 0 || renewalId != null || bookingId != null)
 }
 
 /** An answer to an approval card: [done] when it was taken, and the line to show ("Approved · …", or why not). */

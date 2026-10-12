@@ -323,7 +323,8 @@ object BriefScriptRules {
                 )
             }
         val requests = cards
-            .filter { it.person.isNotBlank() && it.proposal.kind != RequestKind.REPLY && it.proposal.kind != RequestKind.RENEWAL }
+            .filter { it.person.isNotBlank() && it.proposal.kind != RequestKind.REPLY && it.proposal.kind != RequestKind.RENEWAL &&
+                it.proposal.kind != RequestKind.BOOKING }
             .sortedByDescending { it.atMs }
             .map { c -> BriefAsk("r-" + c.id, c.person, c.person + " · " + c.action.substringAfter(": "), askSaid(c.person, c.proposal, today.epochDay), false) }
         return urgent + requests

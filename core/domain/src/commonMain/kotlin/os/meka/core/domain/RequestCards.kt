@@ -37,6 +37,14 @@ object RequestCardFields {
      * absent on other cards, blanked once the card is resolved like [TEXT].
      */
     const val REPLY = "reply"
+    /** A booking card's [BookingKind.wire] (Travel mode, slice 2b; additive). Absent on other cards. */
+    const val BOOKING_KIND = "bookingKind"
+    /** A booking card's last day (a stay's check-out, a hire car's return); absent when it has none. */
+    const val END_DAY = "endDay"
+    /** A booking card's reference ("ABC123"); absent when none. */
+    const val REF = "ref"
+    /** The trip a booking card named when it was made ("Barcelona"); display only, the trip is found again on Add. */
+    const val TRIP = "trip"
     /** Add, Not a task (or Change, once its task is saved) on either device: gone from Needs you on both (TrueWins). */
     const val RESOLVED = "resolved"
     /** "added" · "declined" · "changed". */
@@ -79,6 +87,12 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
                         r.costPence?.let { put(RequestCardFields.COST_PENCE, it.fv()) }
                     }
                     p.reply?.let { put(RequestCardFields.REPLY, it.take(MAX_REPLY).fv()) }
+                    p.booking?.let { b ->
+                        put(RequestCardFields.BOOKING_KIND, b.kind.wire.fv())
+                        b.endDay?.let { put(RequestCardFields.END_DAY, it.fv()) }
+                        b.ref?.let { put(RequestCardFields.REF, it.fv()) }
+                        put(RequestCardFields.TRIP, b.tripName.take(TripRules.MAX_NAME).fv())
+                    }
                 },
             )
         }
@@ -137,8 +151,14 @@ class RequestCards(private val replica: Replica, private val nowMs: () -> Long, 
         )
         // A reply card whose draft is gone (blanked, or never written) has nothing to copy: it isn't shown.
         val reply = if (kind != RequestKind.REPLY) null else e[RequestCardFields.REPLY].textOrNull ?: return@mapNotNull null
+        val booking = if (kind != RequestKind.BOOKING) null else BookingDetails(
+            BookingKind.of(e[RequestCardFields.BOOKING_KIND].textOrNull),
+            e[RequestCardFields.END_DAY].longOrNull,
+            e[RequestCardFields.REF].textOrNull,
+            e[RequestCardFields.TRIP].textOrNull.orEmpty(),
+        )
         val proposal = RequestProposal(
-            kind, title, e[RequestCardFields.DAY].longOrNull, e[RequestCardFields.MINUTE].longOrNull?.toInt(), renewal, reply,
+            kind, title, e[RequestCardFields.DAY].longOrNull, e[RequestCardFields.MINUTE].longOrNull?.toInt(), renewal, reply, booking,
         )
         val text = e[RequestCardFields.TEXT].textOrNull.orEmpty()
         e.ref.entityId to Stored(

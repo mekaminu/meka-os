@@ -44,7 +44,17 @@ object MessageRequestCodec {
      * for it; its words are [Proposal.body] (at most [MAX_BODY] characters, else the proposal is dropped).
      */
     const val REPLY = "reply"
-    val ALL_KINDS = KINDS + RENEWAL + REPLY
+    /**
+     * A travel booking for Trips (Travel mode, slice 2b): like [RENEWAL], only "Handle this" asks for it. It may carry
+     * [Proposal.type] (one of [BOOKING_TYPES]), [Proposal.ref] (the booking reference, [REF]) and [Proposal.until] (a
+     * stay's check-out or a hire car's return day, YYYY-MM-DD); anything else in them is dropped.
+     */
+    const val BOOKING = "booking"
+    val ALL_KINDS = KINDS + RENEWAL + REPLY + BOOKING
+    /** What a booking is on the wire ([Proposal.type]); the domain maps each to its booking kind. */
+    val BOOKING_TYPES = setOf("flight", "train", "stay", "car", "other")
+    /** A booking reference: 3–16 letters, digits or hyphens. */
+    private val REF = Regex("""[A-Za-z0-9-]{3,16}""")
     const val MAX_BODY = 1_500
 
     /** A renewal's repeat on the wire ([Proposal.repeat]). */
@@ -68,7 +78,8 @@ object MessageRequestCodec {
      * A proposal as the model wrote it, every field optional: [kind] (one of [KINDS]), [title], [date] (YYYY-MM-DD),
      * [time] (HH:MM), [words] the message's own when-words ("Thursday", "on the 15th") that the device resolves again.
      * A [RENEWAL] may also carry [type] (one of [RENEWAL_TYPES]), [repeat] (one of [REPEATS]) and [cost] in pounds
-     * ("412" or "9.99"); anything else in them is dropped. A [REPLY] carries its drafted words in [body].
+     * ("412" or "9.99"); anything else in them is dropped. A [REPLY] carries its drafted words in [body]. A [BOOKING]
+     * may carry [type] (one of [BOOKING_TYPES]), [ref] and [until] (additive: an older reader ignores them).
      */
     data class Proposal(
         val kind: String,
@@ -80,6 +91,8 @@ object MessageRequestCodec {
         val repeat: String? = null,
         val cost: String? = null,
         val body: String? = null,
+        val ref: String? = null,
+        val until: String? = null,
     )
 
     /** [state]: the same states as Ask's ([AskCodec.Response.ANSWERED] …). */
@@ -144,6 +157,7 @@ object MessageRequestCodec {
             val p = e as? JsonObject ?: return@mapNotNull null
             val kind = p.optStr("kind")?.takeIf { it in kinds } ?: return@mapNotNull null
             val renewal = kind == RENEWAL
+            val booking = kind == BOOKING
             // A reply without its words, or with more than MAX_BODY of them, is nothing to offer.
             val body = if (kind == REPLY) {
                 (p["body"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
@@ -151,10 +165,12 @@ object MessageRequestCodec {
             } else null
             Proposal(
                 kind, p.optStr("title"), p.optStr("date")?.takeIf(DATE::matches), p.optStr("time")?.takeIf(TIME::matches), p.optStr("words"),
-                type = p.optStr("type")?.takeIf { renewal && it in RENEWAL_TYPES },
+                type = p.optStr("type")?.takeIf { (renewal && it in RENEWAL_TYPES) || (booking && it in BOOKING_TYPES) },
                 repeat = p.optStr("repeat")?.takeIf { renewal && it in REPEATS },
                 cost = p.optStr("cost")?.removePrefix("£")?.replace(",", "")?.trim()?.takeIf { renewal && COST.matches(it) },
                 body = body,
+                ref = p.optStr("ref")?.trim()?.takeIf { booking && REF.matches(it) },
+                until = p.optStr("until")?.takeIf { booking && DATE.matches(it) },
             )
         }.take(MAX_PROPOSALS)
 
@@ -168,6 +184,8 @@ object MessageRequestCodec {
         p.repeat?.let { put("repeat", it) }
         p.cost?.let { put("cost", it) }
         p.body?.let { put("body", it) }
+        p.ref?.let { put("ref", it) }
+        p.until?.let { put("until", it) }
     }
 
     private fun JsonObject.str(k: String): String =

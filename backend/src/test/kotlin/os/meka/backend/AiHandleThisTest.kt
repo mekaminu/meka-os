@@ -91,6 +91,25 @@ class AiHandleThisTest {
     }
 
     @Test
+    fun aBookingComesBackWithItsKindReferenceAndLastDay() {
+        // Travel mode, slice 2b: a booking confirmation's legs, each with its type, reference and (a stay) check-out.
+        val model = FakeModel(answered(
+            """{"proposals":[{"kind":"booking","title":"Hotel Arts","date":"2026-11-14","until":"2026-11-18","type":"stay","ref":"XKQPLM"},""" +
+                """{"kind":"booking","title":"Flight BA478","date":"2026-11-14","time":"07:40","type":"jet","ref":"not a ref!"}]}""",
+        ))
+        val r = HandleThisService(model).read(request)
+        assertEquals(
+            listOf(
+                MessageRequestCodec.Proposal("booking", "Hotel Arts", "2026-11-14", type = "stay", ref = "XKQPLM", until = "2026-11-18"),
+                MessageRequestCodec.Proposal("booking", "Flight BA478", "2026-11-14", "07:40"),
+            ),
+            r.proposals,
+        )
+        assertTrue("\"kind\":\"booking\"" in model.asked.single().system)
+        assertEquals(r.proposals, MessageRequestCodec.decodeResponse(MessageRequestCodec.encodeResponse(r)).proposals)
+    }
+
+    @Test
     fun offOverBudgetAndFailuresSayWhy() {
         assertEquals(AskCodec.Response.OFF, HandleThisService(null).read(request).state)
         assertEquals(AskCodec.Response.OVER, HandleThisService(FakeModel(ModelOutcome.OverBudget)).read(request).state)

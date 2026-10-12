@@ -13,6 +13,7 @@ package os.meka.core.domain
  * | Work from home | that day's work band reads "Work from home" | none |
  * | Renewal ("Handle this" only) | on the renewals radar with its kind, repeat and cost | none (edited on the radar) |
  * | Reply ("Handle this" only) | Copy reply: the draft goes on the clipboard; Meka sends it himself | none (edited where he pastes it) |
+ * | Booking ("Handle this" only) | into the trip it falls on in Trips (a planned task when that trip is gone) | none (edited in Trips) |
  */
 sealed class RequestPlan {
     /** A task titled [title]; on [day] (null: Anytime today), at [minute]; reminding at [remindMinute] that day. */
@@ -32,6 +33,12 @@ sealed class RequestPlan {
      * changed, so there is nothing to undo.
      */
     data class CopyReply(val title: String, val text: String) : RequestPlan()
+
+    /**
+     * A booking into Trips (Travel mode, slice 2b): [entry] has no trip yet; the facade finds the trip its day falls on
+     * when Add is tapped ([TripRules.tripFor]) and names it [tripName] in the line.
+     */
+    data class AddBooking(val entry: BookingEntry, val tripName: String) : RequestPlan()
 }
 
 object RequestAcceptRules {
@@ -54,6 +61,7 @@ object RequestAcceptRules {
             RequestPlan.AddRenewal(p.title, day, r)
         }
         RequestKind.REPLY -> if (change) null else p.reply?.let { RequestPlan.CopyReply(p.title, it) }
+        RequestKind.BOOKING -> if (change) null else MessageRequestRules.bookingEntry(p)?.let { RequestPlan.AddBooking(it, p.booking!!.tripName) }
     }
 
     /**
@@ -91,6 +99,14 @@ object RequestAcceptRules {
         is RequestPlan.AddRenewal ->
             "On the radar: “${plan.title}” · ${RenewalRules.verb(plan.details.kind)} ${RenewalRules.dayWord(plan.day, today)}"
         is RequestPlan.CopyReply -> HandleThisRules.COPIED_LINE
+        is RequestPlan.AddBooking -> "Added to " + TripRules.bookingLine(plan.entry, plan.tripName)
+    }
+
+    /** The line when a booking's trip is no longer in Trips: kept as a planned task, "Added “Flight BA478 · ref ABC123” as a task · …". */
+    fun bookingAsTask(plan: RequestPlan.AddBooking): RequestPlan.AddTask {
+        val e = plan.entry
+        val title = MessageRequestRules.cleanTitle(e.title + (e.ref?.let { " · ref $it" } ?: "")) ?: e.title
+        return RequestPlan.AddTask(title, e.day, e.minute, null)
     }
 
     /** "Tomorrow", "Tue 20 Oct · 18:00", "Today · 18:00"; null with neither a day nor a time. */

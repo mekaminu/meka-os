@@ -1159,9 +1159,13 @@ class MekaCore(
             return HandleOutcome.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
         }
         val cards = onCore {
-            val raw = rules.allowed(reply.proposals.map { os.meka.core.domain.RawRequestProposal(it.kind, it.title, it.date, it.time, it.words, it.type, it.repeat, it.cost, it.body) })
+            val raw = rules.allowed(reply.proposals.map {
+                os.meka.core.domain.RawRequestProposal(it.kind, it.title, it.date, it.time, it.words, it.type, it.repeat, it.cost, it.body, it.ref, it.until)
+            })
             val message = os.meka.core.domain.RequestMessage(messageId, rules.PERSON, rules.quoteText(text, subject), atMs)
-            requestCards.save(message, os.meka.core.domain.MessageRequestRules.check(raw, today, cal.minuteOfDay(atMs), allowRenewal = true, allowReply = true))
+            val checked = os.meka.core.domain.MessageRequestRules.check(raw, today, cal.minuteOfDay(atMs), allowRenewal = true, allowReply = true, allowBooking = true)
+            // Travel mode, slice 2b: a booking names the trip it falls on (one with no trip yet becomes an event).
+            requestCards.save(message, rules.withTrips(checked, trips.items(), today))
         }
         return if (cards.isEmpty()) HandleOutcome.NothingToDo(rules.NOTHING_LINE) else HandleOutcome.Cards(cards, rules.readyLine(cards.size))
     }
@@ -1509,6 +1513,7 @@ class MekaCore(
         done.editId?.let { if (calendarEdits.undo(it)) undone = true }
         if (done.homeDay >= 0 && work.setHomeDay(done.homeDay, false, todayEpochDay())) undone = true
         done.renewalId?.let { id -> if (renewals.items().any { it.id == id }) { renewals.delete(id); undone = true } }
+        done.bookingId?.let { id -> if (trips.removeBooking(id)) undone = true }
         undone
     }
 
@@ -1558,6 +1563,25 @@ class MekaCore(
                     cost = d.costPence?.let { os.meka.core.domain.RenewalRules.formatPence(it) },
                 )
                 RequestDone(rules.doneLine(plan, card.proposal.kind, today), null, null, renewalId = id)
+            }
+            // Travel mode, slice 2b: into the trip its day falls on now; a planned task when that trip is gone.
+            is os.meka.core.domain.RequestPlan.AddBooking -> {
+                val trip = os.meka.core.domain.TripRules.tripFor(os.meka.core.domain.TripRules.open(trips.items(), today), plan.entry.day)
+                if (trip == null) {
+                    val asTask = rules.bookingAsTask(plan)
+                    val id = tasks.create(NewTask(asTask.title))
+                    rules.taskDay(asTask, today)?.let { day -> tasks.setWhen(id, day, asTask.minute) }
+                    followBlocks(listOf(id))
+                    RequestDone(rules.doneLine(asTask, card.proposal.kind, today), id, null)
+                } else {
+                    val entry = plan.entry.copy(tripId = trip.id)
+                    if (os.meka.core.domain.TripAskRules.already(trip, entry)) {
+                        RequestDone(os.meka.core.domain.TripAskRules.ALREADY, null, null)
+                    } else {
+                        val id = trips.addBooking(entry)
+                        RequestDone(rules.doneLine(plan.copy(entry = entry, tripName = trip.name), card.proposal.kind, today), null, null, bookingId = id)
+                    }
+                }
             }
         }
         requestCards.resolve(cardId, if (change) os.meka.core.domain.RequestResolution.CHANGED else os.meka.core.domain.RequestResolution.ADDED)
@@ -4689,6 +4713,7 @@ class MekaCore(
             carRegistration = car.registration(),
             lifeAdmin = _lifeAdmin.value,
             occasions = gifts.items(),
+            trips = trips.items(),
         )
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */

@@ -20,6 +20,11 @@ enum class RequestKind(val wire: String, val verb: String, val decline: String) 
      * proposed for something Meka shared, and MEKA never sends it.
      */
     REPLY("reply", "Draft reply", "Not needed"),
+    /**
+     * A travel booking into Trips (Travel mode, slice 2b): a flight, train, stay or hire car from a confirmation Meka
+     * shared. Only ever proposed for something Meka shared; it joins the trip it falls on ([HandleThisRules.withTrips]).
+     */
+    BOOKING("booking", "Add to trip", "Not needed"),
     ;
 
     companion object {
@@ -40,7 +45,16 @@ data class RawRequestProposal(
     val cost: String? = null,
     /** A reply's drafted words as the model wrote them ("Handle this", slice 3); checked by [HandleThisRules.cleanReply]. */
     val body: String? = null,
+    /** A booking's reference and its last day (check-out, a hire car's return) as the model wrote them (Travel mode, slice 2b). */
+    val ref: String? = null,
+    val until: String? = null,
 )
+
+/**
+ * What a booking card adds to Trips besides its title, day and time (Travel mode, slice 2b): its kind, a stay's or hire
+ * car's last day, its reference, and the trip it joins ([tripName], "" until [HandleThisRules.withTrips] finds it).
+ */
+data class BookingDetails(val kind: BookingKind, val endDay: Long?, val ref: String?, val tripName: String = "")
 
 /** What a renewal card adds to the radar besides its title and day: its kind, how it repeats and its cost. */
 data class RenewalDetails(val kind: ObligationKind, val repeat: RenewalRepeat, val costPence: Long?)
@@ -57,6 +71,8 @@ data class RequestProposal(
     val renewal: RenewalDetails? = null,
     /** A reply card's drafted words (checked: no links, addresses or numbers); null on every other kind. */
     val reply: String? = null,
+    /** A booking card's details (Travel mode, slice 2b); null on every other kind. */
+    val booking: BookingDetails? = null,
 )
 
 /** One message from a watched person, as the listener read it. */
@@ -149,11 +165,13 @@ object MessageRequestRules {
         nowMinute: Int,
         allowRenewal: Boolean = false,
         allowReply: Boolean = false,
+        allowBooking: Boolean = false,
     ): List<RequestProposal> {
         val out = mutableListOf<RequestProposal>()
         raw.forEach { r ->
             val kind = RequestKind.of(r.kind) ?: return@forEach
             if (kind == RequestKind.RENEWAL && !allowRenewal) return@forEach
+            if (kind == RequestKind.BOOKING && !allowBooking) return@forEach
             if (kind == RequestKind.REPLY) {
                 if (!allowReply || out.any { it.kind == RequestKind.REPLY }) return@forEach
                 val draft = HandleThisRules.cleanReply(r.body) ?: return@forEach
@@ -167,9 +185,10 @@ object MessageRequestRules {
                 RequestKind.WORK_FROM_HOME -> "Work from home"
                 else -> cleanTitle(r.title) ?: return@forEach
             }
-            if ((kind == RequestKind.WORK_FROM_HOME || kind == RequestKind.EVENT || kind == RequestKind.RENEWAL) && day == null) return@forEach
+            if ((kind == RequestKind.WORK_FROM_HOME || kind == RequestKind.EVENT || kind == RequestKind.RENEWAL || kind == RequestKind.BOOKING) && day == null) return@forEach
             val p = when (kind) {
                 RequestKind.RENEWAL -> RequestProposal(kind, title, day, null, renewalDetails(r))
+                RequestKind.BOOKING -> RequestProposal(kind, title.take(TripRules.MAX_TITLE).trimEnd(), day, minute, booking = bookingDetails(r, day!!))
                 RequestKind.WORK_FROM_HOME -> RequestProposal(kind, title, day, null)
                 else -> RequestProposal(kind, title, day, minute)
             }
@@ -204,6 +223,22 @@ object MessageRequestRules {
         }
         val pence = try { RenewalRules.parseCost(r.cost) } catch (e: ValidationException) { null }
         return RenewalDetails(kind, repeat, pence?.takeIf { it > 0 })
+    }
+
+    /** A booking stays this many days at most (a stay's check-out, a hire car's return); a later one is dropped. */
+    const val MAX_BOOKING_DAYS = 60
+
+    /**
+     * A booking's details from the model's words: its kind (else other), a stay's or hire car's last day (after [day],
+     * within [MAX_BOOKING_DAYS]; never for a flight or train) and its reference (3–[TripRules.MAX_REF] letters, digits
+     * or hyphens, in capitals; else none).
+     */
+    fun bookingDetails(r: RawRequestProposal, day: Long): BookingDetails {
+        val kind = BookingKind.entries.firstOrNull { it.wire == r.type } ?: BookingKind.OTHER
+        val end = r.until?.let(::isoDay)
+            ?.takeIf { (kind == BookingKind.STAY || kind == BookingKind.CAR) && it > day && it <= day + MAX_BOOKING_DAYS }
+        val ref = r.ref?.trim()?.takeIf { it.length in 3..TripRules.MAX_REF && it.all { c -> c.isLetterOrDigit() || c == '-' } }?.uppercase()
+        return BookingDetails(kind, end, ref)
     }
 
     /** The same request asked twice: the same kind and day, and titles that match ignoring case and punctuation. */
@@ -251,8 +286,9 @@ object MessageRequestRules {
             // A reply's button copies it (Meka sends it himself; MEKA never does).
             addLabel = if (p.kind == RequestKind.REPLY) HandleThisRules.COPY_REPLY else "Add",
             // Nothing to edit as a task: a work-from-home day; a renewal is changed on the radar once added; a reply is
-            // edited where Meka pastes it.
-            changeLabel = if (p.kind == RequestKind.WORK_FROM_HOME || p.kind == RequestKind.RENEWAL || p.kind == RequestKind.REPLY) null else "Change",
+            // edited where Meka pastes it; a booking in Trips.
+            changeLabel = if (p.kind == RequestKind.WORK_FROM_HOME || p.kind == RequestKind.RENEWAL || p.kind == RequestKind.REPLY ||
+                p.kind == RequestKind.BOOKING) null else "Change",
             declineLabel = p.kind.decline,
             spoken = (if (shared) "${HandleThisRules.PERSON} $quote. $action?" else "${message.personName.trim()} wrote $quote. $action?") +
                 (p.reply?.let { " The draft says: $it" } ?: ""),
@@ -272,6 +308,9 @@ object MessageRequestRules {
                 val k = p.renewal?.kind ?: ObligationKind.OTHER
                 " · ${RenewalRules.verb(k)} ${RenewalRules.dayWord(day, today)}"
             } ?: "")
+            // "Add to Barcelona · Flight BA478 · Sat 14 Nov 07:40 · ref ABC123", as Ask's booking card reads.
+            RequestKind.BOOKING -> bookingEntry(p)?.let { e -> "Add to " + TripRules.bookingLine(e, p.booking!!.tripName.ifEmpty { "trip" }) }
+                ?: "${p.kind.verb}: ${p.title}"
             else -> "${p.kind.verb}: ${p.title}" + (whenLine?.let { " · $it" } ?: "")
         }
     }
@@ -284,6 +323,13 @@ object MessageRequestRules {
         RequestKind.WORK_FROM_HOME -> p.day?.let { "${CivilDate.shortLabel(it)} shows as work from home on both apps" }
         RequestKind.RENEWAL -> p.renewal?.let { r -> renewalDetailLine(r, p.day) }
         else -> null
+    }
+
+    /** A booking card's proposal as the booking it adds (its trip still to be found by day), or null for another kind. */
+    fun bookingEntry(p: RequestProposal, tripId: String = ""): BookingEntry? {
+        val b = p.booking ?: return null
+        val day = p.day ?: return null
+        return BookingEntry(tripId, b.kind, p.title, day, b.endDay, p.minute, b.ref)
     }
 
     /** "Insurance · every year · £412 a year" · "Subscription · every month" · "Warranty · doesn't repeat · £45". */

@@ -421,6 +421,45 @@ object TripRules {
     /** "Added to Barcelona · Flight BA478 · Sat 14 Nov 07:40 · ref ABC123". */
     fun addedLine(e: BookingEntry, trip: TripItem): String = "Added to " + bookingLine(e, trip.name)
 
+    /** The evening-before heads-up comes at 18:00 the day before a trip's first day. */
+    const val EVE_MIN = 18 * 60
+    /** It stands until noon of that first day. */
+    const val EVE_UNTIL_MIN = 12 * 60
+
+    /**
+     * Travel mode, slice 2b: the evening before a trip, at [EVE_MIN], one heads-up with the first booking's time and
+     * reference — "Barcelona tomorrow · Flight BA478 07:40" · "ref ABC123 · then Hotel Arts until Wed 18 Nov" — or
+     * "Nothing booked in Trips yet" with none. The trip's first day is its start, or an earlier booking's (a hotel the
+     * night before). Standing until noon that day; one per trip and first day (moving the dates posts it again).
+     */
+    fun notices(trips: List<TripItem>, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        val today = cal.epochDayOf(nowMs)
+        return trips.mapNotNull { t ->
+            val first = minOf(t.startDay, t.bookings.minOfOrNull { it.day } ?: t.startDay)
+            if (first !in today..today + 2) return@mapNotNull null
+            val ordered = t.bookings.sortedWith(compareBy({ it.day }, { it.minute ?: Int.MAX_VALUE }, { it.addedAtMs }))
+            val lead = ordered.firstOrNull { it.day == first && it.minute != null } ?: ordered.firstOrNull { it.day == first }
+            // Posted late (added on the morning itself), it says today.
+            val head = "${t.name} ${if (first <= today) "today" else "tomorrow"}" + (lead?.let { b -> " · " + b.title + (time(b.minute)?.let { " $it" } ?: "") } ?: "")
+            val then = ordered.firstOrNull { it != lead }?.let { b ->
+                "then " + b.title + when {
+                    b.endDay != null -> " until ${CivilDate.shortLabel(b.endDay)}"
+                    b.day != first -> " · ${CivilDate.shortLabel(b.day)}"
+                    else -> time(b.minute)?.let { " $it" } ?: ""
+                }
+            }
+            val text = when {
+                lead == null -> "Nothing booked in Trips yet · ${CalendarAgenda.spanLabel(t.startDay, t.endDay)}"
+                else -> listOfNotNull(lead.ref?.let { "ref $it" }, then).joinToString(" · ").ifEmpty { CalendarAgenda.spanLabel(t.startDay, t.endDay) }
+            }
+            Notice(
+                key = "trip:${t.id}:$first", source = NoticeSource.TRIPS, tier = NoticeTier.HEADS_UP,
+                title = head, text = text, atMs = cal.toEpochMs(first - 1, EVE_MIN), target = NoticeTarget.TODAY,
+                expiresAtMs = cal.toEpochMs(first, EVE_UNTIL_MIN),
+            )
+        }
+    }
+
     /** "Barcelona · Flight BA478 · Sat 14 Nov 07:40 · ref ABC123" (a stay "Sat 14 – Wed 18 Nov"). */
     fun bookingLine(e: BookingEntry, tripName: String): String {
         val whenText = (if (e.endDay != null) CalendarAgenda.spanLabel(e.day, e.endDay) else CivilDate.shortLabel(e.day)) +

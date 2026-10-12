@@ -82,4 +82,26 @@ class HandleThisCodecTest {
         val back = MessageRequestCodec.decodeResponse(MessageRequestCodec.encodeResponse(MessageRequestCodec.Response("answered", got)))
         assertEquals(got, back.proposals)
     }
+
+    @Test
+    fun aBookingCarriesItsTypeReferenceAndLastDayAndOnlyHandleThisReadsIt() {
+        // Travel mode, slice 2b.
+        val answer = """{"proposals":[
+            {"kind":"booking","title":"Hotel Arts","date":"2026-11-14","until":"2026-11-18","type":"stay","ref":"XKQPLM"},
+            {"kind":"booking","title":"Flight","date":"2026-11-14","until":"18 Nov","type":"insurance","ref":"<script>"},
+            {"kind":"task","title":"Pack","ref":"ABC123","until":"2026-11-18","type":"flight"}
+        ]}"""
+        val got = HandleThisCodec.parseModelAnswer(answer)
+        assertEquals(
+            listOf(
+                MessageRequestCodec.Proposal("booking", "Hotel Arts", "2026-11-14", type = "stay", ref = "XKQPLM", until = "2026-11-18"),
+                MessageRequestCodec.Proposal("booking", "Flight", "2026-11-14"),
+                MessageRequestCodec.Proposal("task", "Pack"),
+            ),
+            got,
+        )
+        assertEquals(listOf("task"), MessageRequestCodec.parseModelAnswer(answer).map { it.kind })
+        val back = MessageRequestCodec.decodeResponse(MessageRequestCodec.encodeResponse(MessageRequestCodec.Response("answered", got)))
+        assertEquals(got, back.proposals)
+    }
 }

@@ -26,10 +26,11 @@ object HandleThisCodec {
 
     /**
      * The kinds "Handle this" may propose (no work-from-home day: that is only ever asked by someone close; a renewal
-     * since slice 2, a drafted reply since slice 3).
+     * since slice 2, a drafted reply since slice 3, a travel booking since Travel mode slice 2b).
      */
     val KINDS = setOf(
         MessageRequestCodec.TASK, MessageRequestCodec.EVENT, MessageRequestCodec.REMINDER, MessageRequestCodec.RENEWAL, MessageRequestCodec.REPLY,
+        MessageRequestCodec.BOOKING,
     )
 
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")

@@ -31,10 +31,12 @@ object HandleThisRules {
 
     /**
      * The model's kinds a share may become: something to do, to be at, to remember, a renewal for the radar (slice
-     * 2) or a drafted reply Meka sends himself (slice 3); never a work-from-home day.
+     * 2), a drafted reply Meka sends himself (slice 3) or a travel booking for Trips (Travel mode, slice 2b); never a
+     * work-from-home day.
      */
     val KINDS = setOf(
         RequestKind.TASK.wire, RequestKind.EVENT.wire, RequestKind.REMINDER.wire, RequestKind.RENEWAL.wire, RequestKind.REPLY.wire,
+        RequestKind.BOOKING.wire,
     )
 
     /** A reply card's button: the draft goes on the clipboard and the card is answered; nothing is sent. */
@@ -113,6 +115,33 @@ object HandleThisRules {
 
     /** The model's proposals that a share may become, before [MessageRequestRules.check] reads them. */
     fun allowed(raw: List<RawRequestProposal>): List<RawRequestProposal> = raw.filter { it.kind in KINDS }
+
+    /**
+     * Travel mode, slice 2b: a shared booking confirmation's bookings matched to Trips. A booking that falls on a trip
+     * not yet over (or the day either side, [TripRules.tripFor]) names that trip on its card; one already in it (same
+     * title, same day) is dropped; one with no trip becomes an event ("Flight BA478 · ref ABC123" on its day and time),
+     * so it still lands somewhere Meka sees until he types the trip. Other proposals pass through.
+     */
+    fun withTrips(proposals: List<RequestProposal>, trips: List<TripItem>, today: Long): List<RequestProposal> {
+        val live = TripRules.open(trips, today)
+        val out = mutableListOf<RequestProposal>()
+        proposals.forEach { p ->
+            val e = MessageRequestRules.bookingEntry(p)
+            val q = when {
+                e == null -> p
+                else -> when (val trip = TripRules.tripFor(live, e.day)) {
+                    null -> {
+                        val title = MessageRequestRules.cleanTitle(p.title + (e.ref?.let { " · ref $it" } ?: "")) ?: p.title
+                        RequestProposal(RequestKind.EVENT, title, e.day, e.minute)
+                    }
+                    else -> if (TripAskRules.already(trip, e.copy(tripId = trip.id))) null
+                        else p.copy(booking = p.booking!!.copy(tripName = trip.name))
+                }
+            }
+            if (q != null && out.none { MessageRequestRules.sameRequest(it, q) }) out += q
+        }
+        return out
+    }
 
     /** "1 thing to add" · "3 things to add". */
     fun readyLine(count: Int): String = if (count == 1) "1 thing to add" else "$count things to add"
