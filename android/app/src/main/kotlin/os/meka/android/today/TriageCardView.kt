@@ -1,6 +1,7 @@
 package os.meka.android.today
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import os.meka.android.designsystem.Meka
 import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
+import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
@@ -193,9 +195,19 @@ internal fun TriageChatView(
                 modifier = Modifier.semantics { contentDescription = chat.spoken })
             Text("${chat.countLine} · ${chat.meta}", style = MekaType.itemMeta,
                 color = if (chat.replies > 0) Meka.colors.accent else Meka.colors.textSecondary)
-            chat.top.forEach { line ->
-                Text(line, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = MekaSpace.xxs))
+            // MEKA's one-line summary of a busy chat (slice 3c) cross-fades in over the top lines once it arrives; only the
+            // lines that need a reply stay under it.
+            Crossfade(chat.summary to chat.top, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "chat-summary") { (summary, top) ->
+                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    summary?.let { s ->
+                        Text(s, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = MekaSpace.xxs).testTag("triage-chat-summary-${chat.key}"))
+                    }
+                    top.forEach { line ->
+                        Text(line, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = MekaSpace.xxs))
+                    }
+                }
             }
             // The rest of the group's chatter (slice 3b), shown once here instead of in the digest.
             chat.chatterLine?.let { line ->

@@ -52,6 +52,11 @@ private struct TriageChatRow: View {
                 Text(chat.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
                 Text("\(chat.countLine) · \(chat.meta)").font(MekaType.itemMeta)
                     .foregroundStyle(chat.replies > 0 ? palette.accent : palette.textSecondary)
+                // MEKA's one-line summary of a busy chat (slice 3c), first; only the lines that need a reply stay under it.
+                if let summary = chat.summary {
+                    Text(summary).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(3).padding(.top, MekaSpace.xxs)
+                        .transition(.opacity)
+                }
                 ForEach(chat.top, id: \.self) { line in
                     Text(line).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(2).padding(.top, MekaSpace.xxs)
                 }

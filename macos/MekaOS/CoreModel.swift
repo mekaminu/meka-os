@@ -147,8 +147,14 @@ final class CoreModel {
     /// A person's requests ride inside their chat's card (messages grouped per chat, slice 3).
     /// A group's digest chatter rides in its chat's card, shown once (slice 3b).
     var triageChats: [TriageChat] {
-        TriageChatRules.shared.withGists(chats: TriageChatRules.shared.chatsWith(cards: triage, requests: requests), gists: groupGists)
+        // A busy chat's one-line summary rides on its card (slice 3c), made on the Fold and synced.
+        ChatSummaryRules.shared.withSummaries(
+            chats: TriageChatRules.shared.withGists(chats: TriageChatRules.shared.chatsWith(cards: triage, requests: requests), gists: groupGists),
+            summaries: chatSummaries
+        )
     }
+    /// Busy chats' one-line summaries (messages grouped per chat, slice 3c): made on the Fold, never the messages.
+    private(set) var chatSummaries: [ChatSummary] = []
     /// The digest's cards no chat carries: GroupGistsView shows only these (slice 3b).
     var digestGists: [GroupGist] { TriageChatRules.shared.gistsOutside(chats: triageChats, gists: groupGists) }
     /// The requests no chat carries: Needs you shows these as cards of their own.
@@ -417,6 +423,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await g in core.groupGists { self?.groupGists = g }
+        })
+        observers.append(Task { [weak self] in
+            for await c in core.chatSummaries { self?.chatSummaries = c }
         })
         observers.append(Task { [weak self] in
             for await l in core.listsView { self?.lists = l }

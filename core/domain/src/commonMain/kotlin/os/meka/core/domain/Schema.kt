@@ -94,6 +94,8 @@ object EntityTypes {
     const val TRIP = "trip"
     /** Travel mode, slice 1 (2026-10-12): one booking on a trip, "Flight BA478 Sat 14 Nov 07:40 ref ABC123". */
     const val TRIP_BOOKING = "trip_booking"
+    /** Messages grouped per chat, slice 3c (2026-10-12): a busy chat's one-line AI summary (never the messages, see [ChatSummaries]). */
+    const val CHAT_SUMMARY = "chat_summary"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -101,7 +103,7 @@ object EntityTypes {
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
-        CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA, TRIP, TRIP_BOOKING,
+        CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA, TRIP, TRIP_BOOKING, CHAT_SUMMARY,
     )
 }
 
@@ -368,6 +370,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.TRIAGE_CARD -> MergePolicy.Lww
         // Group digest cards: written once by the Fold; Caught up (and its Undo) on either device, last one wins.
         entityType == EntityTypes.GROUP_GIST -> MergePolicy.Lww
+        // Chat summaries: only the Fold writes them; its latest summary of a chat wins.
+        entityType == EntityTypes.CHAT_SUMMARY -> MergePolicy.Lww
         // The block list: Block and Unblock on either device, the latest wins.
         entityType == EntityTypes.BLOCKED_CALLER -> MergePolicy.Lww
         // Shopping: Got and Put back on any device (or Jeanette's page), the latest wins; a removal is for good.

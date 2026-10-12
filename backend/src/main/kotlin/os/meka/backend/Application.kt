@@ -56,6 +56,7 @@ import os.meka.core.wire.GoalBreakdownCodec
 import os.meka.core.wire.HandleThisCodec
 import os.meka.core.wire.MessageRequestCodec
 import os.meka.core.wire.BriefScriptCodec
+import os.meka.core.wire.ChatSummaryCodec
 import os.meka.core.wire.GroupDigestCodec
 import os.meka.core.wire.HealthCodec
 import os.meka.core.wire.HereCodec
@@ -505,6 +506,16 @@ fun Application.mekaSync(
                 val request = GroupDigestCodec.decodeRequest(body)
                 val answer = withContext(Dispatchers.IO) { digestService.digest(request) }
                 call.respondText(GroupDigestCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+            // A busy chat's summary (messages grouped per chat, slice 3c): the busy chats' names and MEKA's gists of their
+            // messages; one line per chat back. Nothing is kept or logged.
+            val chatSummaryService = ChatSummaryService(ai.provider)
+            post("/v1/ai/chat-summary") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = ChatSummaryCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { chatSummaryService.summarise(request) }
+                call.respondText(ChatSummaryCodec.encodeResponse(answer), ContentType.Application.Json)
             }
         }
 

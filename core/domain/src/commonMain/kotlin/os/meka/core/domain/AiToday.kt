@@ -21,7 +21,8 @@ object AiTodayRules {
         feature == "ask.talk" -> Group.TALK
         feature == "ask" -> Group.ASK
         feature == "ask.brief" -> Group.BRIEF
-        feature == "extract.message" || feature == "triage.message" || feature.startsWith("digest.") -> Group.MESSAGES
+        feature == "extract.message" || feature == "triage.message" || feature.startsWith("digest.") ||
+            feature.startsWith("messages.") -> Group.MESSAGES
         feature == "extract.callscam" -> Group.CALLS
         else -> Group.OTHER
     }

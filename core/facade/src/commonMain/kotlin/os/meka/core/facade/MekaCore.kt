@@ -190,6 +190,7 @@ class MekaCore(
     private val approvalStore = os.meka.core.domain.Approvals(replica, nowMs, ZoneCalendar(timeZone))
     private val triageCards = os.meka.core.domain.TriageCards(replica, nowMs, ZoneCalendar(timeZone))
     private val gistStore = os.meka.core.domain.GroupGists(replica, nowMs)
+    private val chatSummaryStore = os.meka.core.domain.ChatSummaries(replica, nowMs)
     // Spam call protection (call assistant polish 8b): the synced block list.
     private val blockList = os.meka.core.domain.BlockedCallers(replica, nowMs, ZoneCalendar(timeZone))
     // Leave-by alarms are worked out from the calendar on every read (Alarms, slice 3).
@@ -563,6 +564,13 @@ class MekaCore(
      * on its own cards. Caught-up ones are left out.
      */
     val groupGists: StateFlow<List<os.meka.core.domain.GroupGist>> = _groupGists.asStateFlow()
+
+    private val _chatSummaries = MutableStateFlow<List<os.meka.core.domain.ChatSummary>>(emptyList())
+    /**
+     * Busy chats' one-line summaries (messages grouped per chat, slice 3c), made on the Fold and synced (never the
+     * messages); both apps fold them into the chat cards with [os.meka.core.domain.ChatSummaryRules.withSummaries].
+     */
+    val chatSummaries: StateFlow<List<os.meka.core.domain.ChatSummary>> = _chatSummaries.asStateFlow()
 
     private val _groupDigestCaughtUp = MutableStateFlow<Map<String, Long>>(emptyMap())
     /** When Meka caught up with each digest group on either device (group key → when), for the Fold's own digest. */
@@ -1358,6 +1366,53 @@ class MekaCore(
         /** A card for every group in the due digest, with its gist when it has one; returns the groups written. */
         fun saveAll(gists: Map<String, String?>): List<String> =
             cards.filter { gistStore.save(it, slotMs, slotMinute, gists[it.groupKey]) }.map { it.groupKey }
+    }
+
+    /**
+     * A busy chat's summary (messages grouped per chat, slice 3c): the Fold calls this after triaging new messages and
+     * when Needs you shows. The open chats with [os.meka.core.domain.ChatSummaryRules.MIN_MESSAGES] or more messages that
+     * have no summary for their messages yet (or news and a summary older than ten minutes) go together in **one** call
+     * to `POST /v1/ai/chat-summary` — each chat's name, whether it is a group, and each message's sender, time and MEKA's
+     * gist (never the message's own text, a number or a message kept from MEKA's AI) — and come back with one line each,
+     * checked again here and synced so the Mac's card shows it too. Nothing is sent, replied to or marked read. Nothing
+     * due → [ChatSummaryRead.NotDue]; offline or a failed call writes nothing, so the next call tries again; with MEKA's
+     * AI off or the month's budget spent nothing is written and the cards keep their top lines.
+     */
+    suspend fun summariseChats(settings: os.meka.core.domain.TriageSettings = os.meka.core.domain.TriageSettings()): ChatSummaryRead {
+        val rules = os.meka.core.domain.ChatSummaryRules
+        val cal = ZoneCalendar(timeZone)
+        val due = onCore {
+            val chats = os.meka.core.domain.TriageChatRules.chats(triageCards.open())
+            rules.toSummarise(chats, chatSummaryStore.all(), settings, nowMs())
+        }
+        if (due.isEmpty()) return ChatSummaryRead.NotDue
+        val api = aiApi ?: return ChatSummaryRead.Unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
+        val codec = os.meka.core.wire.ChatSummaryCodec
+        val request = onCore {
+            val now = nowMs()
+            val today = cal.epochDayOf(now)
+            os.meka.core.wire.ChatSummaryCodec.Request(
+                date = os.meka.core.domain.AskRules.isoDate(today),
+                now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(now))}",
+                chats = due.map { c ->
+                    os.meka.core.wire.ChatSummaryCodec.Chat(
+                        c.name.take(codec.MAX_NAME), c.isGroup,
+                        c.lines.map { os.meka.core.wire.ChatSummaryCodec.Line(it.from.take(os.meka.core.wire.MessageRequestCodec.MAX_SENDER), it.at, it.text.take(codec.MAX_LINE)) },
+                    )
+                },
+            )
+        }
+        val reply = try { api.chatSummary(request) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            return ChatSummaryRead.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
+        }
+        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) {
+            return ChatSummaryRead.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
+        }
+        return onCore {
+            val checked = rules.check(due, reply.chats.map { os.meka.core.domain.ChatSummaryRules.Raw(it.name, it.summary) })
+            due.forEach { c -> chatSummaryStore.save(c, checked[c.chatKey]) }
+            ChatSummaryRead.Read(checked.filterValues { it != null }.keys.toList())
+        }
     }
 
     /**
@@ -4578,6 +4633,7 @@ class MekaCore(
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         _triage.value = triageCards.open()
         _groupGists.value = gistStore.open()
+        _chatSummaries.value = chatSummaryStore.all()
         _blockedCallers.value = blockList.view()
         _groupDigestCaughtUp.value = gistStore.caughtUpTimes()
         _notifyPreview.value = Governor.preview(currentNotices(all), notifySettings, nowMs(), ZoneCalendar(timeZone))

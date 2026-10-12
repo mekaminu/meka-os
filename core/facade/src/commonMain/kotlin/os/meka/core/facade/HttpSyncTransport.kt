@@ -150,6 +150,14 @@ interface AiApi {
      */
     suspend fun groupDigest(request: os.meka.core.wire.GroupDigestCodec.Request): os.meka.core.wire.GroupDigestCodec.Response =
         os.meka.core.wire.GroupDigestCodec.Response(AskCodec.Response.OFF)
+
+    /**
+     * A busy chat's summary (`POST /v1/ai/chat-summary`, messages grouped per chat slice 3c): the busy chats' names and
+     * MEKA's gists of their messages; one line per chat comes back unchecked ([os.meka.core.domain.ChatSummaryRules.check]
+     * reads them). A server without the route answers "off".
+     */
+    suspend fun chatSummary(request: os.meka.core.wire.ChatSummaryCodec.Request): os.meka.core.wire.ChatSummaryCodec.Response =
+        os.meka.core.wire.ChatSummaryCodec.Response(AskCodec.Response.OFF)
 }
 
 /** What [MekaCore.gistGroupDigest] did. */
@@ -164,6 +172,16 @@ sealed class GistRead {
     ) : GistRead()
     /** Couldn't ask: offline, or the call failed; [line] says which. Nothing written, so it is tried again. */
     data class Unavailable(val line: String) : GistRead()
+}
+
+/** What [MekaCore.summariseChats] did. */
+sealed class ChatSummaryRead {
+    /** No busy chat needs a summary (none has four or more messages, or each already has one for its messages). */
+    data object NotDue : ChatSummaryRead()
+    /** The summaries written; [chats]: the keys of the chats that got a line. */
+    data class Read(val chats: List<String>) : ChatSummaryRead()
+    /** Couldn't ask: offline, AI off, or the call failed; [line] says which. Nothing written, so it is tried again. */
+    data class Unavailable(val line: String) : ChatSummaryRead()
 }
 
 /** What a Caught up on the group digest changed, for its Undo. */
@@ -602,6 +620,21 @@ class HttpSyncTransport(
             resp.status.value == 404 -> return os.meka.core.wire.GroupDigestCodec.Response(AskCodec.Response.OFF)
             resp.status.value == 403 -> return os.meka.core.wire.GroupDigestCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/group-digest")
+        }
+        return codec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun chatSummary(request: os.meka.core.wire.ChatSummaryCodec.Request): os.meka.core.wire.ChatSummaryCodec.Response {
+        val codec = os.meka.core.wire.ChatSummaryCodec
+        val body = codec.encodeRequest(request)
+        prepare() // the AI routes require the device's signing key on the server
+        val resp = send("/v1/ai/chat-summary", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/chat-summary")
+            // A server without the route (older, or no AI key): the chats keep their top lines.
+            resp.status.value == 404 -> return os.meka.core.wire.ChatSummaryCodec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.ChatSummaryCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/chat-summary")
         }
         return codec.decodeResponse(resp.bodyAsText())
     }

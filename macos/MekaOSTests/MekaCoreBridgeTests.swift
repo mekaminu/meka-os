@@ -1271,6 +1271,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(folded.first?.countLine, "3 new · 2 people · +14 in the group")
         XCTAssertEqual(TriageChatRules.shared.gistsOutside(chats: folded, gists: gists).map(\.title), ["Golf crew"])
         XCTAssertEqual(TriageChatRules.shared.gistsInside(chat: folded[0], gists: gists).map(\.groupKey), ["barça lads"])
+        // Slice 3c: a busy chat's synced summary leads its card; with none the card is as before.
+        let busy = TriageChatRules.shared.chats(cards: cards + [
+            TriageCard(id: "g4", lane: .fyi, personKey: "femi", from: "Femi in Barça lads · 14:04", gist: "Kick-off time",
+                       draft: nil, app: .whatsapp, mentioned: true, atMs: 4, spoken: "x", group: "Barça lads"),
+        ])
+        let summary = ChatSummary(chatKey: busy[0].key, title: "Barça lads", summary: "Saturday's lineup and kick-off", upToMs: 4, count: 4, madeAtMs: 5)
+        let summed = ChatSummaryRules.shared.withSummaries(chats: busy, summaries: [summary])
+        XCTAssertEqual(summed.first?.summary, "Saturday's lineup and kick-off")
+        XCTAssertEqual(summed.first?.top.count, 0)
+        XCTAssertNil(ChatSummaryRules.shared.withSummaries(chats: busy, summaries: []).first?.summary)
     }
 
     /// The group digest's synced cards (V1, messages slice 4b) reach Swift: the head line and Caught up.

@@ -48,8 +48,10 @@ import os.meka.core.domain.CardFinish
 import os.meka.core.domain.ChatFinishTap
 import os.meka.core.domain.ChatShadeRules
 import os.meka.core.domain.TriageChat
+import os.meka.core.domain.ChatSummaryRules
 import os.meka.core.domain.TriageChatRules
 import os.meka.core.domain.TriageReplyRules
+import os.meka.android.work.ChatSummarise
 import os.meka.android.work.LiveReplies
 import os.meka.core.domain.DecisionEffect
 import os.meka.core.domain.DecisionMove
@@ -346,7 +348,13 @@ internal fun NeedsYouColumn(
     val digestNow = rememberGroupDigest(captures, core, chatGroups)
     val digest = digestNow.view
     val gists by core.groupGists.collectAsState()
-    val chats = remember(grouped, digestNow.chatter, gists) { TriageChatRules.withDigest(grouped, digestNow.chatter, gists) }
+    // A busy chat's one-line summary (slice 3c), made on this phone and synced; asked for when the chats change.
+    val summaries by core.chatSummaries.collectAsState()
+    val chats = remember(grouped, digestNow.chatter, gists, summaries) {
+        ChatSummaryRules.withSummaries(TriageChatRules.withDigest(grouped, digestNow.chatter, gists), summaries)
+    }
+    val summaryApp = LocalContext.current.applicationContext as MekaApplication
+    LaunchedEffect(grouped.map { it.key to it.cards.size }) { ChatSummarise.run(summaryApp) }
     val triageSettings by captures.triageSettings.collectAsState()
     val peopleLists by captures.lists.collectAsState()
     val goals by core.goalsView.collectAsState()

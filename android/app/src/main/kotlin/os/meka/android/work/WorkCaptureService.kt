@@ -79,6 +79,8 @@ class WorkCaptureService : NotificationListenerService() {
             // After the work path, so an urgent alert never waits on the AI.
             readRequests(meka, items)
             triage(meka, items)
+            // A busy chat's one-line summary (messages grouped per chat, slice 3c): one call for the chats that need one.
+            ChatSummarise.run(meka)
             // A notification wholly from Digest groups, every message kept on this phone: cleared, so the group
             // stops sitting in the shade (slice 4). Mentions, 1:1 chats and Normal groups are never cleared.
             if (GroupDigestRules.clearsNotification(items, meka.captures.triageSettings.value, meka.captures.digestKept())) {

@@ -41,6 +41,11 @@ data class TriageChat(
     val chatterLine: String? = null,
     /** The digest's group key ([GroupDigestRules.groupKey]) for a group chat, so Done catches the chatter up too. */
     val groupKey: String? = null,
+    /**
+     * MEKA's one-line summary of a busy chat (slice 3c, [ChatSummaryRules.withSummaries]): shown first, with only the
+     * lines that need a reply kept under it. Null: the top lines are the card's summary.
+     */
+    val summary: String? = null,
 ) {
     /** One message, no request and no chatter: the message's own card, as before. */
     val single: Boolean get() = cards.size == 1 && requests.isEmpty() && chatter == 0
