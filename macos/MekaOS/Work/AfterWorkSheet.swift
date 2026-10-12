@@ -172,7 +172,7 @@ struct AfterWorkCard: View {
                         // Title with an Open › affordance, then the first two names (Fold review 2026-10-12 17:56, item 3).
                         HStack {
                             Text(summary.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-                            Spacer(minLength: MekaSpace.s)
+                            Spacer(minLength: MekaSpace.xs)
                             Text(AfterWorkSummary.companion.OPEN_LABEL + " ›").font(MekaType.captionStrong).foregroundStyle(palette.accent)
                         }
                         if let names = summary.namesLine {
