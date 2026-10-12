@@ -43,8 +43,10 @@ import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
 import os.meka.android.work.CaptureStore
 import os.meka.android.work.DigestGist
+import os.meka.core.domain.CapturedItem
 import os.meka.core.domain.GroupDigestCard
 import os.meka.core.domain.GroupDigestRules
+import os.meka.core.domain.GroupDigestThread
 import os.meka.core.domain.GroupDigestView
 import os.meka.core.domain.GroupMode
 import os.meka.core.facade.MekaCore
@@ -67,11 +69,26 @@ private val hm = DateTimeFormatter.ofPattern("HH:mm")
 private fun hhmm(ms: Long) = hm.format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))
 
 /**
- * Needs you's group digest for this phone's kept chatter, or null when no group has news. Caught up on the Mac counts
- * too (the synced cards' time, slice 4b). When it comes due, the gist is made once for the slot ([DigestGist]).
+ * The digest as Needs you uses it: the [view] (groups with a chat card of their own left out), every group's chatter
+ * card ([chatter], for [os.meka.core.domain.TriageChatRules.withDigest]) and a group's latest lines ([thread]).
+ */
+internal class GroupDigestNow(
+    val view: GroupDigestView?,
+    val chatter: List<GroupDigestCard>,
+    private val items: List<CapturedItem>,
+    private val seen: Map<String, Long>,
+) {
+    /** The group's chatter since Meka last caught up with it, the latest lines oldest first. */
+    fun thread(groupKey: String): GroupDigestThread = GroupDigestRules.expanded(items, groupKey, seen[groupKey] ?: 0L, ::hhmm)
+}
+
+/**
+ * Needs you's group digest for this phone's kept chatter. Caught up on the Mac counts too (the synced cards' time,
+ * slice 4b). Groups in [inChats] also have a chat card in Needs you (messages grouped per chat, slice 3b): their chatter
+ * rides in that card, so the digest leaves them out. When it comes due, the gist is made once for the slot ([DigestGist]).
  */
 @Composable
-internal fun rememberGroupDigest(store: CaptureStore, core: MekaCore): GroupDigestView? {
+internal fun rememberGroupDigest(store: CaptureStore, core: MekaCore, inChats: List<String> = emptyList()): GroupDigestNow {
     val items by store.digest.collectAsState()
     val settings by store.triageSettings.collectAsState()
     val local by store.digestSeen.collectAsState()
@@ -80,13 +97,16 @@ internal fun rememberGroupDigest(store: CaptureStore, core: MekaCore): GroupDige
     val clock by produceState(digestClock()) {
         while (true) { delay(60_000L - System.currentTimeMillis() % 60_000L); value = digestClock() }
     }
-    val view = remember(items, settings, seen, clock) {
-        GroupDigestRules.view(items, settings, seen, clock.dayStartMs, clock.minute)
+    val view = remember(items, settings, seen, clock, inChats) {
+        GroupDigestRules.view(items, settings, seen, clock.dayStartMs, clock.minute, inChats)
     }
+    val chatter = remember(items, settings, seen) { GroupDigestRules.cards(items, settings, seen) }
+    // The gist is made for every group with news at the slot, whether its chatter shows here or in its chat's card.
+    val all = remember(items, settings, seen, clock) { GroupDigestRules.view(items, settings, seen, clock.dayStartMs, clock.minute) }
     val app = LocalContext.current.applicationContext as MekaApplication
-    val due = view?.due == true
+    val due = all?.due == true
     LaunchedEffect(due, clock.minute >= GroupDigestRules.EVENING_MINUTE) { if (due) DigestGist.run(app) }
-    return view
+    return remember(view, chatter, items, seen) { GroupDigestNow(view, chatter, items, seen) }
 }
 
 /**

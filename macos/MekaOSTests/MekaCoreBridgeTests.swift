@@ -1260,6 +1260,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(withRequests.first?.countLine, "3 new · 2 people")
         XCTAssertTrue(withRequests.first?.requests.isEmpty ?? false)
         XCTAssertTrue(TriageChatRules.shared.looseRequests(chats: withRequests, requests: []).isEmpty)
+        // Slice 3b: the group's digest card rides in the chat's card, and the digest keeps the rest.
+        let gists = [("Barça lads", "Lineup debate"), ("Golf crew", "Tee time moved")].map { title, line in
+            GroupGist(groupKey: title.lowercased(), title: title, countLine: "14 messages", count: 14, people: "Tunde",
+                      gist: line, slotMs: 1_000, slotLabel: "Lunchtime digest", latestMs: 900, caughtUpAtMs: nil, spoken: "x")
+        }
+        let folded = TriageChatRules.shared.withGists(chats: withRequests, gists: gists)
+        XCTAssertEqual(folded.first?.chatter, 14)
+        XCTAssertEqual(folded.first?.chatterLine, "+ 14 more in the group · Lineup debate")
+        XCTAssertEqual(folded.first?.countLine, "3 new · 2 people · +14 in the group")
+        XCTAssertEqual(TriageChatRules.shared.gistsOutside(chats: folded, gists: gists).map(\.title), ["Golf crew"])
+        XCTAssertEqual(TriageChatRules.shared.gistsInside(chat: folded[0], gists: gists).map(\.groupKey), ["barça lads"])
     }
 
     /// The group digest's synced cards (V1, messages slice 4b) reach Swift: the head line and Caught up.

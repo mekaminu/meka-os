@@ -55,6 +55,10 @@ private struct TriageChatRow: View {
                 ForEach(chat.top, id: \.self) { line in
                     Text(line).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(2).padding(.top, MekaSpace.xxs)
                 }
+                // The rest of the group's chatter (slice 3b): its count and MEKA's gist, shown here instead of the digest.
+                if let chatter = chat.chatterLine {
+                    Text(chatter).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(2).padding(.top, MekaSpace.xxs)
+                }
                 HStack(spacing: MekaSpace.xs) {
                     pill(rules.DONE, filled: true) { model.doneTriageChat(chat) }
                     pill(open ? rules.SHOW_LESS : rules.expandLabel(chat: chat), filled: false) {

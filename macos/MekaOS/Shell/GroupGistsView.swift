@@ -14,7 +14,8 @@ struct GroupGistsView: View {
     var firstIndex: Int = 2
 
     var body: some View {
-        let gists = model.groupGists
+        // Groups with a chat card in Needs you carry their chatter there (messages grouped per chat, slice 3b).
+        let gists = model.digestGists
         VStack(alignment: .leading, spacing: MekaSpace.m) {
             if let head = GroupGistRules.shared.headLine(gists: gists) {
                 HStack {

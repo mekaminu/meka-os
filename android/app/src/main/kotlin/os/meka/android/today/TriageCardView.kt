@@ -48,6 +48,7 @@ import os.meka.core.domain.ChatShadeRules
 import os.meka.core.domain.TriageCard
 import os.meka.core.domain.TriageCardPrimary
 import os.meka.core.domain.TriageChat
+import os.meka.core.domain.GroupDigestThread
 import os.meka.core.domain.TriageChatRules
 import os.meka.core.domain.TriageReplyRules
 import os.meka.core.domain.TriageSendAll
@@ -167,6 +168,8 @@ internal fun TriageChatView(
     onArrival: (Boolean) -> Unit = {},
     /** The last message under Show all stayed on screen [ChatShadeRules.READ_DWELL_MS]: read to the end (slice 2b). */
     onReadToEnd: () -> Unit = {},
+    /** The group's digest chatter (slice 3b), read when Show all opens; null when the chat carries none. */
+    chatter: (() -> GroupDigestThread)? = null,
 ) {
     val haptics = rememberMekaHaptics()
     var open by rememberSaveable(chat.key) { mutableStateOf(false) }
@@ -193,6 +196,11 @@ internal fun TriageChatView(
             chat.top.forEach { line ->
                 Text(line, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = MekaSpace.xxs))
+            }
+            // The rest of the group's chatter (slice 3b), shown once here instead of in the digest.
+            chat.chatterLine?.let { line ->
+                Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = MekaSpace.xxs).testTag("triage-chat-chatter-${chat.key}"))
             }
             FlowRow(
                 Modifier.padding(top = MekaSpace.m),
@@ -222,6 +230,22 @@ internal fun TriageChatView(
                         // Mostly on screen (the list clips what has scrolled away).
                         lastShown = c.size.height > 0 && c.boundsInWindow().height >= c.size.height * 0.8f
                     })
+                }
+                // Then the group's chatter since Meka last caught up (the latest lines, oldest first), quieter.
+                chatter?.let { read ->
+                    val thread = remember(chat.chatter, chat.key) { read() }
+                    if (thread.lines.isNotEmpty()) {
+                        Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                            Text(TriageChatRules.CHATTER_LABEL, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                            thread.earlierLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                            thread.lines.forEach { l ->
+                                Column(Modifier.semantics(mergeDescendants = true) { }) {
+                                    Text(l.who, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                                    Text(l.text, style = MekaType.body, color = Meka.colors.textSecondary)
+                                }
+                            }
+                        }
+                    }
                 }
                 arrival?.let { on ->
                     val label = if (on) ChatShadeRules.ARRIVAL_OFF else ChatShadeRules.ARRIVAL_ON

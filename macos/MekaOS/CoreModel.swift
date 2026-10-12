@@ -145,7 +145,12 @@ final class CoreModel {
     private(set) var triage: [TriageCard] = []
     /// The same cards, one per conversation (messages grouped per chat, slice 1).
     /// A person's requests ride inside their chat's card (messages grouped per chat, slice 3).
-    var triageChats: [TriageChat] { TriageChatRules.shared.chatsWith(cards: triage, requests: requests) }
+    /// A group's digest chatter rides in its chat's card, shown once (slice 3b).
+    var triageChats: [TriageChat] {
+        TriageChatRules.shared.withGists(chats: TriageChatRules.shared.chatsWith(cards: triage, requests: requests), gists: groupGists)
+    }
+    /// The digest's cards no chat carries: GroupGistsView shows only these (slice 3b).
+    var digestGists: [GroupGist] { TriageChatRules.shared.gistsOutside(chats: triageChats, gists: groupGists) }
     /// The requests no chat carries: Needs you shows these as cards of their own.
     var looseRequests: [RequestCard] { TriageChatRules.shared.looseRequests(chats: triageChats, requests: requests) }
     /// The group digest (V1, messages slice 4b): one card per busy group at the latest digest time, made on the Fold
@@ -3069,9 +3074,14 @@ final class CoreModel {
         MekaHaptics.light()
         let ids = chat.ids
         let line = TriageChatRules.shared.doneLine(chat: chat)
+        // The group's digest chatter rode in this card (slice 3b): Done catches the group up too, here and on the Fold.
+        // Only the keys (Strings) cross to the core.
+        let groupKeys = TriageChatRules.shared.gistsInside(chat: chat, gists: groupGists).map(\.groupKey)
         Task {
             do {
-                if try await core.seenTriageChat(messageIds: ids).int32Value > 0 { offerEventUndo(line, nil) }
+                let seen = try await core.seenTriageChat(messageIds: ids).int32Value
+                if !groupKeys.isEmpty { _ = try await core.catchUpGroupDigest(groupKeys: groupKeys) }
+                if seen > 0 { offerEventUndo(line, nil) }
             } catch { lastError = error.localizedDescription }
         }
     }

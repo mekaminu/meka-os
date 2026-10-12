@@ -50,11 +50,15 @@ object GroupDigestRules {
     /**
      * Needs you's digest: due (shown open, its cards at the top) once a digest time has come and a group with news
      * wasn't caught up since; otherwise, with news, one quiet line Meka can open on demand. Nothing new, nothing shown.
+     * Groups in [inChats] ([TriageChatRules.groupKeys]) are left out: their chatter rides in the chat's card.
      */
     fun view(
         items: List<CapturedItem>, settings: TriageSettings, seen: Map<String, Long>, dayStartMs: Long, nowMinute: Int,
+        inChats: Collection<String> = emptyList(),
     ): GroupDigestView? {
-        val cards = cards(items, settings, seen)
+        // A group that also has a chat card in Needs you (messages grouped per chat, slice 3b) is shown once, there.
+        val skip = inChats.toSet()
+        val cards = cards(items, settings, seen).filter { it.groupKey !in skip }
         if (cards.isEmpty()) return null
         val start = slotStartMs(dayStartMs, nowMinute)
         val due = start != null && cards.any { (seen[it.groupKey] ?: 0L) < start }

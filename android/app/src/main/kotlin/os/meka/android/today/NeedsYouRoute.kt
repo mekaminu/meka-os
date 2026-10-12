@@ -265,6 +265,12 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 // Hidden from the shade only, after any Mark read (its action goes with the notification).
                 if (finish.clear) os.meka.android.work.WorkCaptureService.clear(keys)
                 val seen = runCatching { core.seenTriageChat(chat.ids) }.getOrDefault(0)
+                // The group's digest chatter rode in this card (slice 3b): finishing the chat catches the group up too,
+                // here and in the Mac's digest.
+                chat.groupKey?.takeIf { chat.chatter > 0 }?.let { k ->
+                    (context as? MekaApplication)?.captures?.caughtUp(listOf(k))
+                    runCatching { core.catchUpGroupDigest(listOf(k)) }
+                }
                 if (seen > 0 || marked || finish.openChat) undo.show(ChatShadeRules.line(chat, finish, marked), null)
                 Unit
             }
@@ -329,13 +335,18 @@ internal fun NeedsYouColumn(
     val markable by LiveReplies.markable.collectAsState()
     val sendAll = remember(triage, live) { TriageReplyRules.sendAll(triage, live) }
     // A person's requests sit inside their chat's card (slice 3); the rest keep their own cards below.
-    val chats = remember(triage, requests) { TriageChatRules.chatsWith(triage, requests) }
-    val looseRequests = remember(chats, requests) { TriageChatRules.looseRequests(chats, requests) }
+    val grouped = remember(triage, requests) { TriageChatRules.chatsWith(triage, requests) }
+    val looseRequests = remember(grouped, requests) { TriageChatRules.looseRequests(grouped, requests) }
     // Meka's edits of MEKA's drafts, by message id, so Send and "Send all" send what each card shows.
     val edits = remember { mutableStateMapOf<String, String>() }
     // Busy groups' chatter, kept on this phone (V1, messages slice 4): open at the top from 12:30 and 18:30, else a line.
     val captures = (LocalContext.current.applicationContext as MekaApplication).captures
-    val digest = rememberGroupDigest(captures, core)
+    // A group with a chat card here carries its digest chatter in that card (slice 3b): the digest leaves it out.
+    val chatGroups = remember(grouped) { TriageChatRules.groupKeys(grouped) }
+    val digestNow = rememberGroupDigest(captures, core, chatGroups)
+    val digest = digestNow.view
+    val gists by core.groupGists.collectAsState()
+    val chats = remember(grouped, digestNow.chatter, gists) { TriageChatRules.withDigest(grouped, digestNow.chatter, gists) }
     val triageSettings by captures.triageSettings.collectAsState()
     val peopleLists by captures.lists.collectAsState()
     val goals by core.goalsView.collectAsState()
@@ -406,6 +417,7 @@ internal fun NeedsYouColumn(
                     val arrival = if (ChatShadeRules.canClearOnArrival(chat, peopleLists)) chat.key in triageSettings.clearOnArrival else null
                     TriageChatView(chat, chatMarkable, { tap -> moves.onTriageChat(chat, tap) }, cardFor, m,
                         requestFor = { card, rm -> RequestCardView(card, { moves.onRequest(card, it) }, rm) },
+                        chatter = chat.groupKey?.takeIf { chat.chatter > 0 }?.let { k -> { digestNow.thread(k) } },
                         arrival = arrival, onArrival = { on -> moves.onChatArrival(chat, on) },
                         onReadToEnd = { moves.onChatReadToEnd(chat) })
                 }

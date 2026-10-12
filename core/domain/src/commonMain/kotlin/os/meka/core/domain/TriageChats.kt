@@ -32,9 +32,18 @@ data class TriageChat(
      * never answered by Done. Only a 1:1 chat carries them ([TriageChatRules.chatsWith]).
      */
     val requests: List<RequestCard> = emptyList(),
+    /**
+     * The same group's digest chatter not yet caught up (slice 3b): shown once, inside this card, instead of a digest
+     * card of its own. 0 for a 1:1 chat or a group with nothing in the digest.
+     */
+    val chatter: Int = 0,
+    /** "+ 14 more in the group · Lineup debate for Getafe": the chatter's count and MEKA's gist when there is one. */
+    val chatterLine: String? = null,
+    /** The digest's group key ([GroupDigestRules.groupKey]) for a group chat, so Done catches the chatter up too. */
+    val groupKey: String? = null,
 ) {
-    /** One message and no request: the message's own card, as before. */
-    val single: Boolean get() = cards.size == 1 && requests.isEmpty()
+    /** One message, no request and no chatter: the message's own card, as before. */
+    val single: Boolean get() = cards.size == 1 && requests.isEmpty() && chatter == 0
     val ids: List<String> get() = cards.map { it.id }
 }
 
@@ -46,6 +55,8 @@ object TriageChatRules {
     const val TOP = 3
     const val DONE = "Done"
     const val SHOW_LESS = "Show less"
+    /** Above the group's digest chatter under Show all (slice 3b). */
+    const val CHATTER_LABEL = "ALSO IN THE GROUP"
 
     /** The chat a card belongs to: the same on both devices (the person's key, or the group's name in lower case). */
     fun key(card: TriageCard): String {
@@ -91,6 +102,66 @@ object TriageChatRules {
         return requests.filter { it.id !in inside }
     }
 
+    /**
+     * The digest's group key for a group chat ([People.key] of its name, as [GroupDigestRules.groupKey] makes it from
+     * the notification's conversation); null for a 1:1 chat.
+     */
+    fun groupKeyOf(chat: TriageChat): String? = if (chat.isGroup) People.key(chat.title).takeIf { it.isNotEmpty() } else null
+
+    /** Every group chat's digest key: the digest leaves these groups out (they are shown once, in the chat's card). */
+    fun groupKeys(chats: List<TriageChat>): List<String> = chats.mapNotNull { groupKeyOf(it) }.distinct()
+
+    /**
+     * Folds the Fold's digest cards into the group chats that also have a Needs you card (slice 3b): the chat's count
+     * line gains "+ 14 more in the group" and its [TriageChat.chatterLine], with MEKA's gist from [gists] when one was
+     * made for the group. A chat with no chatter is unchanged. The digest itself drops those groups
+     * ([GroupDigestRules.view] with `inChats`), so nothing is shown twice.
+     */
+    fun withDigest(chats: List<TriageChat>, digest: List<GroupDigestCard>, gists: List<GroupGist> = emptyList()): List<TriageChat> {
+        val counts = digest.associate { it.groupKey to it.count }
+        val gistOf = gists.mapNotNull { g -> g.gist?.let { g.groupKey to it } }.toMap()
+        return chats.map { c -> fold(c, counts, gistOf) }
+    }
+
+    /**
+     * The Mac's half (slice 3b): the synced digest cards ([GroupGist], the Fold's count and MEKA's gist, never the
+     * messages) folded into the matching group chats, as [withDigest] does on the Fold.
+     */
+    fun withGists(chats: List<TriageChat>, gists: List<GroupGist>): List<TriageChat> {
+        val counts = gists.associate { it.groupKey to it.count }
+        val gistOf = gists.mapNotNull { g -> g.gist?.let { g.groupKey to it } }.toMap()
+        return chats.map { c -> fold(c, counts, gistOf) }
+    }
+
+    /** The synced digest cards no chat carries: the Mac's digest shows only these. */
+    fun gistsOutside(chats: List<TriageChat>, gists: List<GroupGist>): List<GroupGist> {
+        val inside = groupKeys(chats).toSet()
+        return gists.filter { it.groupKey !in inside }
+    }
+
+    /** The synced digest cards a chat carries, for Done to catch them up with the chat. */
+    fun gistsInside(chat: TriageChat, gists: List<GroupGist>): List<GroupGist> {
+        val key = chat.groupKey ?: return emptyList()
+        return gists.filter { it.groupKey == key }
+    }
+
+    /** "+ 14 more in the group", with " · " and MEKA's gist when there is one. */
+    fun chatterLine(count: Int, gist: String?): String = buildString {
+        append("+ $count more in the group")
+        gist?.trim()?.takeIf { it.isNotEmpty() }?.let { append(" · ").append(it) }
+    }
+
+    private fun fold(c: TriageChat, counts: Map<String, Int>, gistOf: Map<String, String>): TriageChat {
+        val key = groupKeyOf(c) ?: return c
+        val n = counts[key]?.takeIf { it > 0 } ?: return c.copy(groupKey = key)
+        val line = chatterLine(n, gistOf[key])
+        return c.copy(
+            chatter = n, chatterLine = line, groupKey = key,
+            countLine = c.countLine + " · +$n in the group",
+            spoken = c.spoken + " " + line.replace(" · ", ". ").removePrefix("+ ").replaceFirstChar { it.uppercase() } + ".",
+        )
+    }
+
     /** "Show all 20". */
     fun expandLabel(chat: TriageChat): String = "Show all ${chat.cards.size}"
 
@@ -98,6 +169,7 @@ object TriageChatRules {
     fun doneLine(chat: TriageChat): String = buildString {
         append("$DONE · ${chat.title} · ${chat.cards.size} ${if (chat.cards.size == 1) "message" else "messages"}")
         // Done never answers a request: it stays in Needs you on its own.
+        if (chat.chatter > 0) append(" · group caught up")
         val n = chat.requests.size
         if (n > 0) append(" · $n ${if (n == 1) "request" else "requests"} still waiting")
     }

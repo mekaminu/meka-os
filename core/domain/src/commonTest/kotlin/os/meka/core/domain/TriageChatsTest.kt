@@ -106,4 +106,58 @@ class TriageChatsTest {
         assertEquals("1 new · 1 request", sms.countLine)
         assertTrue(wa.single)
     }
+
+    private fun gist(group: String, count: Int, gist: String?) = GroupGist(
+        groupKey = People.key(group), title = group, countLine = "$count messages", count = count, people = "Tunde",
+        gist = gist, slotMs = 0, slotLabel = "Lunchtime digest", latestMs = 0, caughtUpAtMs = null, spoken = "spoken",
+    )
+
+    @Test
+    fun aGroupsDigestChatterRidesInItsChatCardAndIsShownOnce() {
+        val cards = listOf(
+            card("a", "Femi", at = 10, group = "Barça  Lads", gist = "Asks if you're coming Saturday?", lane = TriageLane.NEEDS_REPLY, draft = "Yes"),
+            card("b", "Ada", at = 20),
+        )
+        val chatter = (1..14).map { i ->
+            CapturedItem("d$i", CaptureApp.WHATSAPP, CaptureKind.MESSAGE, "Tunde", "Lineup for Getafe $i", "Barça Lads", 100L + i)
+        } + (1..3).map { i ->
+            CapturedItem("x$i", CaptureApp.WHATSAPP, CaptureKind.MESSAGE, "Obi", "Golf on Sunday $i", "Golf crew", 200L + i)
+        }
+        val settings = TriageSettings()
+        val digest = GroupDigestRules.cards(chatter, settings, emptyMap())
+        assertEquals(2, digest.size)
+        val chats = TriageChatRules.chats(cards)
+        val keys = TriageChatRules.groupKeys(chats)
+        assertEquals(listOf("barça lads"), keys)
+
+        // The Fold: the group's chat card carries the chatter, with MEKA's gist when one was made; Ada's is untouched.
+        val folded = TriageChatRules.withDigest(chats, digest, listOf(gist("Barça Lads", 14, "Lineup debate for Getafe")))
+        val barca = folded.single { it.isGroup }
+        assertEquals(14, barca.chatter)
+        assertEquals("1 new · +14 in the group", barca.countLine)
+        assertEquals("+ 14 more in the group · Lineup debate for Getafe", barca.chatterLine)
+        assertTrue(barca.spoken.endsWith("14 more in the group. Lineup debate for Getafe."))
+        assertFalse(barca.single)
+        assertEquals("barça lads", barca.groupKey)
+        assertEquals("Done · Barça  Lads · 1 message · group caught up", TriageChatRules.doneLine(barca))
+        assertEquals(chats.single { !it.isGroup }, folded.single { !it.isGroup })
+
+        // ...and the digest leaves that group out, so it's shown once; with no other news there's no digest at all.
+        val view = GroupDigestRules.view(chatter, settings, emptyMap(), dayStartMs = 0, nowMinute = 13 * 60, inChats = keys)!!
+        assertEquals(listOf("golf crew"), view.cards.map { it.groupKey })
+        assertEquals("1 group · 3 messages", view.line)
+        assertEquals(null, GroupDigestRules.view(chatter.take(14), settings, emptyMap(), 0, 13 * 60, inChats = keys))
+
+        // The Mac: the synced cards fold in the same way, and its digest keeps only the rest.
+        val gists = listOf(gist("Barça Lads", 14, null), gist("Golf crew", 3, "Tee time moved"))
+        val mac = TriageChatRules.withGists(chats, gists).single { it.isGroup }
+        assertEquals("+ 14 more in the group", mac.chatterLine)
+        assertEquals(listOf("Golf crew"), TriageChatRules.gistsOutside(chats, gists).map { it.title })
+        assertEquals(listOf("Barça Lads"), TriageChatRules.gistsInside(mac, gists).map { it.title })
+        // A group with nothing in the digest is unchanged apart from knowing its key.
+        val quiet = TriageChatRules.withGists(chats, emptyList()).single { it.isGroup }
+        assertEquals(0, quiet.chatter)
+        assertEquals(null, quiet.chatterLine)
+        assertEquals("1 new", quiet.countLine)
+    }
 }
