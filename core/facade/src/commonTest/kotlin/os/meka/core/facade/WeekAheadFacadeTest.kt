@@ -79,8 +79,12 @@ class WeekAheadFacadeTest {
         assertEquals(listOf(run, read), pick.goals.map { it.goalId })
         assertEquals("Pick up to 3 for the week", pick.line)
         assertTrue(fold.weekAheadView.value.spoken.endsWith("No goals picked for the week yet."))
-        now += 3_600_000L + 5 * 60_000L // 18:05
-        val n = fold.governNotifications(null, DeviceAlerts.ALL).post.single { it.source == NoticeSource.WEEK_AHEAD }
+        // As Sunday evening goes: 17:00, the 18:00 digest, then the heads-up on its own at 18:05.
+        val early = fold.governNotifications(null, DeviceAlerts.ALL)
+        now += 3_600_000L
+        val six = fold.governNotifications(early.stateEncoded, DeviceAlerts.ALL)
+        now += 5 * 60_000L
+        val n = fold.governNotifications(six.stateEncoded, DeviceAlerts.ALL).post.single { it.source == NoticeSource.WEEK_AHEAD }
         assertTrue(n.text.endsWith("Pick your goals for the week?"), n.text)
 
         // Sunday's pick is for the week starting tomorrow; today's line is untouched.
