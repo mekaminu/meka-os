@@ -62,6 +62,16 @@ interface DeviceRegistry {
 
     /** Revokes one of the household's linked watches at once. False when it isn't one (or is already unlinked). */
     fun unlink(householdId: String, deviceId: String): Boolean
+
+    /** The device's name ("Fold"), or null when it isn't one of the household's. */
+    fun name(device: DeviceIdentity): String?
+
+    /**
+     * Enrols a brand-new phone or Mac with the key it asked with ([Recovery]: the household's recovery key opened it).
+     * Never re-enrols: an id the household already has (or had and revoked) is refused, so the key can't take over a
+     * device that is still connected. Refusals: [REFUSED_TAKEN] · [REFUSED_REVOKED].
+     */
+    fun enrolRecovered(householdId: String, deviceId: String, name: String, publicKeyB64: String): EnrolOutcome
 }
 
 object Secrets {
@@ -191,6 +201,27 @@ class PostgresDeviceRegistry(private val ds: DataSource) : DeviceRegistry {
         }
     }
 
+    override fun name(device: DeviceIdentity): String? = ds.connection.use { c ->
+        c.prepareStatement("SELECT name FROM device WHERE household_id = ? AND id = ? AND revoked_at IS NULL").use { st ->
+            st.setString(1, device.householdId); st.setString(2, device.deviceId)
+            st.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
+        }
+    }
+
+    override fun enrolRecovered(householdId: String, deviceId: String, name: String, publicKeyB64: String): EnrolOutcome {
+        val existing = ds.connection.use { c ->
+            c.prepareStatement("SELECT revoked_at IS NOT NULL FROM device WHERE household_id = ? AND id = ?").use { st ->
+                st.setString(1, householdId); st.setString(2, deviceId)
+                st.executeQuery().use { rs -> if (rs.next()) rs.getBoolean(1) else null }
+            }
+        }
+        if (existing == true) return EnrolOutcome.Refused(REFUSED_REVOKED)
+        if (existing == false) return EnrolOutcome.Refused(REFUSED_TAKEN)
+        val secret = enrol(householdId, deviceId, name)
+        if (!registerKey(DeviceIdentity(householdId, deviceId), publicKeyB64)) return EnrolOutcome.Refused(REFUSED_TAKEN)
+        return EnrolOutcome.Enrolled(secret)
+    }
+
     fun revoke(householdId: String, deviceId: String) = ds.connection.use { c: Connection ->
         c.prepareStatement("UPDATE device SET revoked_at = now() WHERE household_id = ? AND id = ?").use {
             it.setString(1, householdId); it.setString(2, deviceId); it.executeUpdate()
@@ -256,7 +287,20 @@ class InMemoryDeviceRegistry : DeviceRegistry {
         byHash.entries.removeAll { it.value == who }
         return true
     }
+
+    override fun name(device: DeviceIdentity): String? =
+        if (device in revoked || byHash.values.none { it == device }) null else names[device]?.first ?: device.deviceId
+
+    override fun enrolRecovered(householdId: String, deviceId: String, name: String, publicKeyB64: String): EnrolOutcome {
+        val who = DeviceIdentity(householdId, deviceId)
+        if (who in revoked) return EnrolOutcome.Refused(REFUSED_REVOKED)
+        if (who in names || byHash.values.any { it == who }) return EnrolOutcome.Refused(REFUSED_TAKEN)
+        val secret = enrol(householdId, deviceId, name)
+        keys[who] = publicKeyB64
+        return EnrolOutcome.Enrolled(secret)
+    }
 }
 
 const val REFUSED_REVOKED = "revoked"
 const val REFUSED_HOUSEHOLD = "household"
+const val REFUSED_TAKEN = "taken"

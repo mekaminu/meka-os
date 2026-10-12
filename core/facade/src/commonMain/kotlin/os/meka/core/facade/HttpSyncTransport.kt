@@ -344,6 +344,16 @@ interface DeviceLinkApi {
     suspend fun unlinkWatch(id: String)
 }
 
+/**
+ * The recovery key from a keyed phone or Mac (build plan V1 "Recovery key"): `POST /v1/recovery/status · set`. Throws
+ * like [DeviceLinkApi] ([FamilyUnavailableException] without the route or a key yet, TransportException offline).
+ */
+interface RecoveryApi {
+    suspend fun recoveryStatus(): os.meka.core.wire.RecoveryCodec.Status
+    /** Saves a new key's verifier (never the words), replacing the old key; returns the new status. */
+    suspend fun setRecoveryKey(verifier: String): os.meka.core.wire.RecoveryCodec.Status
+}
+
 /** The server refused: [reason] is one of DeviceLinkCodec's ERR_ codes. */
 class LinkRefusedException(val reason: String) : Exception(reason)
 
@@ -368,7 +378,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, RecoveryApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -761,6 +771,12 @@ class HttpSyncTransport(
     override suspend fun unlinkWatch(id: String) {
         deviceLink("/v1/devices/unlink", os.meka.core.wire.DeviceLinkCodec.encodeUnlink(id))
     }
+
+    override suspend fun recoveryStatus(): os.meka.core.wire.RecoveryCodec.Status =
+        os.meka.core.wire.RecoveryCodec.decodeStatus(deviceLink("/v1/recovery/status", "{}"))
+
+    override suspend fun setRecoveryKey(verifier: String): os.meka.core.wire.RecoveryCodec.Status =
+        os.meka.core.wire.RecoveryCodec.decodeStatus(deviceLink("/v1/recovery/set", os.meka.core.wire.RecoveryCodec.encodeSet(verifier)))
 
     /**
      * The link routes need the device's signing key on the server. A refusal comes back as JSON (`{"error": …}`) with

@@ -112,6 +112,8 @@ fun Application.mekaSync(
     updateFailures: UpdateFailures? = null,
     /** Approval requests from outside MEKA (Kestrel's trades; build plan V1); null leaves the routes out. */
     approvals: ApprovalRoutes? = null,
+    /** The recovery key (build plan V1 "Recovery key"; ADR-005 amendment 2026-10-12); null leaves its routes out. */
+    recovery: Recovery? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -202,6 +204,33 @@ fun Application.mekaSync(
                 val body = call.boundedBody()
                 val who = call.device(devices, verifier, body, requireKey = true)
                 call.linkReply(withContext(Dispatchers.IO) { deviceLink.unlink(who, body) })
+            }
+        }
+
+        if (recovery != null) {
+            // A keyed phone or Mac saves a new key's verifier and reads the key's state (Settings → Recovery key).
+            post("/v1/recovery/set") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val r = withContext(Dispatchers.IO) { recovery.set(who, body) }
+                if (r.status == 200) call.application.environment.log.info("recovery key made") // no identifiers in logs
+                call.linkReply(r)
+            }
+            post("/v1/recovery/status") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                call.linkReply(withContext(Dispatchers.IO) { recovery.status(who) })
+            }
+            // A new phone or Mac with the 24 words connects, signed with its own new key (no bearer yet).
+            post("/v1/recovery/enrol") {
+                if (call.isPublisher()) throw Forbidden()
+                val body = call.boundedBody()
+                val h = call.request.headers
+                val r = withContext(Dispatchers.IO) {
+                    recovery.enrol(call.request.path(), body, h["X-Meka-Time"], h["X-Meka-Nonce"], h["X-Meka-Signature"])
+                }
+                if (r.status == 200) call.application.environment.log.info("device recovered") else call.application.environment.log.warn("recovery refused: ${r.status}")
+                call.linkReply(r)
             }
         }
 
@@ -882,6 +911,7 @@ fun main(args: Array<String>) {
                     voice = voice, newsImages = newsImages, calendarWriter = calendarWriter, ai = ai, speech = speech,
                     verifier = verifier, family = family, updateFailures = UpdateFailures(PostgresUpdateFailureStore(ds)),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
+                    recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
                 )
             }.start(wait = true)
         }
@@ -1014,7 +1044,7 @@ object Migrations {
         5 to "/db/V5__app_release.sql", 6 to "/db/V6__push_token.sql", 7 to "/db/V7__news_image.sql",
         8 to "/db/V8__calendar_editing.sql", 9 to "/db/V9__event_edits.sql", 10 to "/db/V10__ai_usage.sql",
         11 to "/db/V11__speech_usage.sql", 12 to "/db/V12__sign_ins.sql", 13 to "/db/V13__family_invite.sql",
-        14 to "/db/V14__ai_usage_day.sql", 15 to "/db/V15__app_update_failure.sql",
+        14 to "/db/V14__ai_usage_day.sql", 15 to "/db/V15__app_update_failure.sql", 16 to "/db/V16__recovery_key.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->
