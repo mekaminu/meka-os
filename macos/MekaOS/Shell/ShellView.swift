@@ -88,6 +88,7 @@ struct ShellView: View {
         .sheet(isPresented: Binding(get: { model.showProtected }, set: { model.showProtected = $0 })) { ProtectedTimeSheet(palette: palette) }
         // Date night (Ask → More): the fortnightly evening kept clear (date night, slice 1).
         .sheet(isPresented: Binding(get: { model.showDateNight }, set: { model.showDateNight = $0 })) { DateNightSheet(palette: palette) }
+        .sheet(isPresented: Binding(get: { model.showLifeAdmin }, set: { model.showLifeAdmin = $0 })) { LifeAdminSheet(palette: palette) }
         // Emergency card (Ask → More): who to call, where things are, key accounts by name; Jeanette reads it.
         .sheet(isPresented: Binding(get: { model.showEmergency }, set: { model.showEmergency = $0 })) { EmergencySheet(palette: palette) }
         // Annual leave (Ask → More): the allowance, the days booked and the school holidays.

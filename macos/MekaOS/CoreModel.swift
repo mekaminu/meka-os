@@ -48,6 +48,13 @@ final class CoreModel {
     private(set) var dateNight: DateNightView?
     /// Ask → More → Date night.
     var showDateNight = false
+    /// Life admin hour (V1, slice 1): the weekly hour MEKA books and the admin jobs gathered into it
+    /// (Ask → More → Life admin hour). Synced with the Fold.
+    private(set) var lifeAdmin: LifeAdminView?
+    /// Ask → More → Life admin hour.
+    var showLifeAdmin = false
+    /// The line after Skip this week / Keep it, until the sheet closes.
+    private(set) var lifeAdminSaid: String?
     /// Protected time (V1, slice 1): the evenings and weekends Plan my day and Move to later keep tasks out of
     /// (Ask → More → Protected time). Synced with the Fold.
     private(set) var protectedTime: ProtectedView?
@@ -334,6 +341,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await d in core.dateNightView { self?.dateNight = d }
+        })
+        observers.append(Task { [weak self] in
+            for await a in core.lifeAdminView { self?.lifeAdmin = a }
         })
         observers.append(Task { [weak self] in
             for await p in core.protectedView { self?.protectedTime = p }
@@ -2613,6 +2623,36 @@ final class CoreModel {
 
     /// The sheet closed: its line goes with it.
     func forgetDateNightSaid() { dateNightSaid = nil }
+
+    // MARK: Life admin hour (slice 1)
+
+    /// Books the hour every `weekday` (ISO 1…7) from `startMin`; only Ints cross.
+    func setLifeAdmin(weekday: Int32, startMin: Int32) {
+        MekaHaptics.tick()
+        lifeAdminSaid = nil
+        run { _ = try await $0.setLifeAdmin(weekday: weekday, startMin: startMin) }
+    }
+
+    /// Turns the life admin hour off.
+    func lifeAdminOff() {
+        MekaHaptics.tick()
+        lifeAdminSaid = nil
+        run { _ = try await $0.lifeAdminOff() }
+    }
+
+    /// Skips this week's hour (it's free again) or keeps it; a Bool crosses, a String comes back.
+    func skipLifeAdmin(_ skip: Bool) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do {
+                if let line = try await core.skipLifeAdmin(skip: skip) { lifeAdminSaid = line }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// The sheet closed: its line goes with it.
+    func forgetLifeAdminSaid() { lifeAdminSaid = nil }
 
     /// Booked · Skip this one on Needs you's week-before card (slice 2): an Int64 and a Bool cross, a String comes back
     /// for the undo bar. Booked only takes the card and its heads-up away on both apps; MEKA books nothing.

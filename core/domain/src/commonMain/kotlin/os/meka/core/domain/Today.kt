@@ -40,6 +40,8 @@ data class Today(
     val dinner: MealLine? = null,
     /** Date night, slice 1: "Date night tonight from 19:00" in Today's header on the day ([DateNightRules.todayLine]); set by the facade. */
     val dateNight: DateNightLine? = null,
+    /** Life admin hour, slice 1: "Life admin hour at 10:00 · 4 jobs" on the hour's day ([LifeAdminRules.todayLine]); set by the facade. */
+    val lifeAdmin: LifeAdminLine? = null,
     /** Train-time queue, slice 1: "For the train · 2 articles · 1 podcast" on an office day's commute ([QueueRules.trainLine]); set by the facade. */
     val trainQueue: QueueLine? = null,
     /** Sunday week ahead, slice 1: "Your week ahead · 4 office days · 2 matches" on Sunday from 18:00 ([WeekAheadRules.todayLine]); set by the facade. */

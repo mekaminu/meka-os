@@ -58,7 +58,7 @@ object DayPlanner {
         val habits: List<HabitPlacement> = emptyList(),
         /** Habits that needed room but found none today. */
         val habitsUnplaced: List<PlannerHabit> = emptyList(),
-        /** Blocks kept free (fasting's meals, date night), in time order. */
+        /** Blocks kept free (fasting's meals, date night, the life admin hour), in time order. */
         val meals: List<MealBlock> = emptyList(),
         /** Protected time's note ([ProtectedRules.planNote]), or null when today has none. */
         val protectedNote: String? = null,
@@ -74,12 +74,14 @@ object DayPlanner {
         private val mealsLine: String? get() {
             if (meals.isEmpty()) return null
             val date = meals.any { it.title == DateNightRules.TITLE }
-            val fast = meals.any { it.title != DateNightRules.TITLE }
-            return when {
-                date && fast -> "◐ Kept free for your fast's meals and date night. Nothing is planned over them."
-                date -> "◐ Date night is kept clear. Nothing is planned over it."
-                else -> "◐ Kept free for your fast's meals. Nothing is planned over them."
-            }
+            val admin = meals.any { it.title == LifeAdminRules.TITLE }
+            val fast = meals.any { it.title != DateNightRules.TITLE && it.title != LifeAdminRules.TITLE }
+            val parts = listOfNotNull(
+                "your fast's meals".takeIf { fast }, "date night".takeIf { date }, "your life admin hour".takeIf { admin },
+            )
+            if (!fast && parts.size == 1) return "◐ ${parts[0].replaceFirstChar { it.uppercaseChar() }} is kept clear. Nothing is planned over it."
+            val named = if (parts.size == 1) parts[0] else parts.dropLast(1).joinToString(", ") + " and " + parts.last()
+            return "◐ Kept free for $named. Nothing is planned over them."
         }
 
         /** Nothing to apply (habit blocks are shown, not applied). */

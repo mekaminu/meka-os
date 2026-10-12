@@ -64,6 +64,7 @@ enum class MoreItem(val label: String, val line: String, val destination: ShellD
     LEAVE("Annual leave", "Days booked, days left and the school holidays", null, MoreGroup.DAILY),
     DINNERS("Dinners", "Favourites, the week's dinners and their shopping", null, MoreGroup.DAILY),
     DATE_NIGHT("Date night", "An evening every two weeks, kept clear", null, MoreGroup.DAILY),
+    LIFE_ADMIN("Life admin hour", "One hour a week for forms, calls and renewals", null, MoreGroup.DAILY),
     EMERGENCY("Emergency card", "Who to call and where things are · Jeanette can read it", null, MoreGroup.DAILY),
     TRAIN_QUEUE("Train queue", "Links and podcasts saved for the commute", null, MoreGroup.DAILY),
     ERRANDS("Errands", "Things to get or do when you're at a place", null, MoreGroup.DAILY),

@@ -212,6 +212,7 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.SCHOOL) { SchoolPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.DINNERS) { MealsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.DATE_NIGHT) { DateNightPane(core, onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.LIFE_ADMIN) { LifeAdminPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.EMERGENCY) { EmergencyPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.TRAIN_QUEUE) { TrainQueuePane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.ERRANDS) { ErrandsPane(core, onClose = { pane = null }) }

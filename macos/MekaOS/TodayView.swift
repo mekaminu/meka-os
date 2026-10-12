@@ -178,6 +178,14 @@ struct TodayView: View {
                             .accessibilityLabel(night.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Life admin hour, slice 1: "Life admin hour at 10:00 · 4 jobs" on the hour's day; lit in the accent, cross-fades.
+                    if let admin = model.today?.lifeAdmin {
+                        Text(admin.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: admin.text)
+                            .accessibilityLabel(admin.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     // A calendar sign-in about to end or expired (Reliability first, item 2): one line, Reconnect.
                     if let line = model.signInLines.first {
                         SignInLineView(line: line, palette: palette)

@@ -1946,6 +1946,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(DateNightView.companion.EMPTY.summary, rules.OFF_LINE)
     }
 
+    func testLifeAdminReachesSwift() {
+        // Life admin hour, slice 1: the sheet's chips, lines and jobs come from the core's rules (only Ints and a Bool
+        // cross from the sheet).
+        let rules = LifeAdminRules.shared
+        XCTAssertEqual(rules.WEEKDAY_CHOICES.count, 7)
+        XCTAssertEqual(rules.START_CHOICES.map { $0.int32Value }.first, 9 * 60)
+        XCTAssertTrue(rules.isAdmin(title: "Call the GP"))
+        XCTAssertFalse(rules.isAdmin(title: "Gym"))
+        let empty = LifeAdminView.companion.EMPTY
+        XCTAssertEqual(empty.summary, rules.OFF_LINE)
+        XCTAssertFalse(empty.on)
+        XCTAssertEqual(empty.weekday, 6)
+        XCTAssertEqual(NoticeSource.lifeAdmin.label, "Life admin hour")
+        let job = LifeAdminJob(id: "task:a", kind: .task, title: "Call the GP", line: nil, spoken: "Call the GP")
+        XCTAssertEqual(job.kind, LifeAdminJobKind.task)
+    }
+
     func testAutonomyReachesSwift() {
         // What MEKA may do (policy engine UI, slice 1): the sheet's rows and lines come from the core's rules (only a
         // Bool or a kind's key crosses from the sheet).

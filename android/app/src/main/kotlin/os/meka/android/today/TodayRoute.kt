@@ -841,6 +841,15 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Life admin hour, slice 1: "Life admin hour at 10:00 · 4 jobs" on the hour's day; lit in the
+                    // accent, cross-fades as it comes and changes.
+                    today.lifeAdmin?.let { admin ->
+                        Crossfade(admin, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "life-admin-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
                     SyncLine(sync)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),

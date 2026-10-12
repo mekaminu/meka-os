@@ -138,6 +138,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * saved — "Council tax due Thu 15 Oct · £180" · "In 3 days · Pay opens centralbedfordshire.gov.uk". Never pays.
      */
     BILLS("Bills due: a few days before each payment", NoticeTier.HEADS_UP),
+    /**
+     * Life admin hour ([LifeAdminRules.notices]): at the week's hour, "Life admin hour · 4 jobs" · "Renew passport · Call
+     * the GP · and 2 more". None when skipped or nothing is waiting.
+     */
+    LIFE_ADMIN("Life admin hour", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
@@ -547,6 +552,7 @@ object Governor {
         NoticeSource.CAR -> plural(n, "car date") + " coming up"
         NoticeSource.MONEY -> plural(n, "money date") + " coming up"
         NoticeSource.BILLS -> plural(n, "bill") + " due"
+        NoticeSource.LIFE_ADMIN -> "your life admin hour"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
@@ -617,6 +623,8 @@ object NoticeSources {
         holidays: HolidayCalendar = HolidayCalendar.NONE,
         /** Car on autopilot: the registration, for the reminders' titles ([CarRules.notices]). */
         carRegistration: String? = null,
+        /** Life admin hour: this week's view, for the heads-up at its start ([LifeAdminRules.notices]). */
+        lifeAdmin: LifeAdminView? = null,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -736,6 +744,7 @@ object NoticeSources {
         out += CarRules.notices(lists.renewals.all, carRegistration, nowMs, cal)
         out += MoneyDateRules.notices(lists.renewals.all, nowMs, cal)
         out += BillRules.notices(lists.renewals.all, nowMs, cal)
+        if (lifeAdmin != null) out += LifeAdminRules.notices(lifeAdmin, nowMs)
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)

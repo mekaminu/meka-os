@@ -149,6 +149,9 @@ class MekaCore(
     private val appointments = os.meka.core.domain.Appointments(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val wins = os.meka.core.domain.WorkWins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
+    private val lifeAdmin = os.meka.core.domain.LifeAdmin(replica, nowMs, ZoneCalendar(timeZone))
+    /** This week's life admin hour as last booked ([refresh]), for the planner and Move to later. */
+    private var lifeAdminWeek: os.meka.core.domain.LifeAdminSlot? = null
     private val protectedTime = os.meka.core.domain.ProtectedTime(replica)
     private val leavingNow = os.meka.core.domain.LeavingNow(replica)
     private val weekAheadSettings = os.meka.core.domain.WeekAheadSettings(replica)
@@ -465,6 +468,13 @@ class MekaCore(
      */
     val dateNightView: StateFlow<os.meka.core.domain.DateNightView> = _dateNight.asStateFlow()
 
+    private val _lifeAdmin = MutableStateFlow(os.meka.core.domain.LifeAdminView.EMPTY)
+    /**
+     * Life admin hour (V1, slice 1): the weekly hour MEKA books around the calendar and the admin jobs it gathers into
+     * it (Ask → More → Life admin hour). Synced.
+     */
+    val lifeAdminView: StateFlow<os.meka.core.domain.LifeAdminView> = _lifeAdmin.asStateFlow()
+
     private val _protected = MutableStateFlow(os.meka.core.domain.ProtectedView.EMPTY)
     /**
      * Protected time (V1, slice 1): evenings and weekends the planner and Move to later keep tasks out of (Ask → More →
@@ -622,7 +632,10 @@ class MekaCore(
         }
         // Protected time and date night stay clear of a moved task too.
         val cal = ZoneCalendar(timeZone)
-        val kept = protectedSlots(day.epochDay) + listOfNotNull(os.meka.core.domain.DateNightRules.slot(dateNight.setting(), day.epochDay, cal))
+        val kept = protectedSlots(day.epochDay) + listOfNotNull(
+            os.meka.core.domain.DateNightRules.slot(dateNight.setting(), day.epochDay, cal),
+            os.meka.core.domain.LifeAdminRules.keptSlot(lifeAdmin.setting(), lifeAdminWeek, day.epochDay),
+        )
         val to = os.meka.core.domain.LateTaskRules.laterSlot(
             t, open, visibleEvents(all), _sessions.value.todayBlocks(day.epochDay, now), now, day, kept = kept,
         ) ?: return@onCore null
@@ -650,7 +663,11 @@ class MekaCore(
         val sessions = _sessions.value.todayBlocks(day.epochDay, now)
             .map { DayPlanner.HabitPlacement(it.habitId, listOfNotNull(it.title, it.label).joinToString(" · "), it.startMs, it.endMs, behind = false) }
         // Date night (slice 1) is kept free like a fasting meal.
-        val kept = fasting.plannerMeals(day) + listOfNotNull(os.meka.core.domain.DateNightRules.block(dateNight.setting(), day.epochDay, ZoneCalendar(timeZone)))
+        // The life admin hour (slice 1) too.
+        val kept = fasting.plannerMeals(day) + listOfNotNull(
+            os.meka.core.domain.DateNightRules.block(dateNight.setting(), day.epochDay, ZoneCalendar(timeZone)),
+            os.meka.core.domain.LifeAdminRules.block(lifeAdmin.setting(), lifeAdminWeek, day.epochDay),
+        )
         // Protected time (slice 1): no tasks in the protected evening or on a protected day.
         val shield = protectedTime.setting()
         val schedule = work.schedule()
@@ -2034,6 +2051,23 @@ class MekaCore(
     suspend fun bookDateNight(day: Long, booked: Boolean): String? = onCore {
         if (!dateNight.book(day, booked)) return@onCore null
         os.meka.core.domain.DateNightRules.bookedLine(day, todayEpochDay(), booked)
+    }
+
+    // ---- Life admin hour (V1, slice 1; Ask → More → Life admin hour) ----
+
+    /** Books the hour every week on [weekday] (ISO 1..7) from [startMin]. Returns the summary line, or null when nothing changed. */
+    suspend fun setLifeAdmin(weekday: Int, startMin: Int): String? = onCore {
+        if (!lifeAdmin.set(weekday, startMin)) return@onCore null
+        os.meka.core.domain.LifeAdminRules.everyLine(lifeAdmin.setting()!!)
+    }
+
+    /** Turns the life admin hour off: nothing is booked or gathered. */
+    suspend fun lifeAdminOff(): Boolean = onCore { lifeAdmin.off() }
+
+    /** Skips this week's hour (it's free again), or keeps it; returns the line to show, or null when nothing changed. */
+    suspend fun skipLifeAdmin(skip: Boolean): String? = onCore {
+        if (!lifeAdmin.skipThisWeek(skip)) return@onCore null
+        os.meka.core.domain.LifeAdminRules.skipLine(lifeAdminWeek, skip)
     }
 
     // ---- Bin days (V1, slice 1; Ask → More → Bins) ----
@@ -4099,12 +4133,32 @@ class MekaCore(
         val sessionHabits = goals.sessionHabits()
         // Date night (slice 1): its evening is busy for Gym bookings.
         val dateNightNow = dateNight.setting()
-        _sessions.value = if (sessionHabits.isEmpty()) os.meka.core.domain.SessionsView.EMPTY
-        else os.meka.core.domain.SessionRules.book(sessionHabits, todayEpochDay(), nowMs(), cal) { day ->
+        // Life admin hour (slice 1): this week's and next week's hour, booked around events, work and date night.
+        val lifeAdminNow = lifeAdmin.setting()
+        val adminBusy: (Long) -> List<os.meka.core.domain.DayPlanner.Slot> = { day ->
             os.meka.core.domain.SessionRules.busyOn(day, dayEvents, workState.schedule, workHolidays, cal) +
                 listOfNotNull(os.meka.core.domain.DateNightRules.slot(dateNightNow, day, cal))
         }
+        val adminWeek = os.meka.core.domain.GoalRules.weekStart(todayEpochDay())
+        val adminThis = os.meka.core.domain.LifeAdminRules.slot(lifeAdminNow, adminWeek, cal, adminBusy)
+        val adminNext = os.meka.core.domain.LifeAdminRules.slot(lifeAdminNow, adminWeek + 7, cal, adminBusy)
+        lifeAdminWeek = adminThis
+        _sessions.value = if (sessionHabits.isEmpty()) os.meka.core.domain.SessionsView.EMPTY
+        else os.meka.core.domain.SessionRules.book(sessionHabits, todayEpochDay(), nowMs(), cal) { day ->
+            os.meka.core.domain.SessionRules.busyOn(day, dayEvents, workState.schedule, workHolidays, cal) +
+                listOfNotNull(
+                    os.meka.core.domain.DateNightRules.slot(dateNightNow, day, cal),
+                    os.meka.core.domain.LifeAdminRules.keptSlot(lifeAdminNow, adminThis, day),
+                    os.meka.core.domain.LifeAdminRules.keptSlot(lifeAdminNow, adminNext, day),
+                )
+        }
         val listsNow = lists.view(all, renewals.view(), shopping.view())
+        val lifeAdminViewNow = os.meka.core.domain.LifeAdminRules.view(
+            lifeAdminNow, adminThis, adminNext,
+            os.meka.core.domain.LifeAdminRules.jobs(all, listsNow.renewals.attention, todayEpochDay(), adminThis, cal),
+            nowMs(),
+        )
+        _lifeAdmin.value = lifeAdminViewNow
         val fastingNow = fasting.view()
         val goalsNow = goals.view(all).withSessions(_sessions.value)
         val projected = project(all, dayEvents)
@@ -4169,6 +4223,7 @@ class MekaCore(
             school = schoolToday,
             dinner = mealPlan.tonight(),
             dateNight = os.meka.core.domain.DateNightRules.todayLine(dateNightNow, todayDay, cal.minuteOfDay(nowMs())),
+            lifeAdmin = os.meka.core.domain.LifeAdminRules.todayLine(lifeAdminViewNow, todayDay, nowMs(), cal),
             // Train-time queue, slice 1: on an office day's commute, what's saved for the train.
             trainQueue = os.meka.core.domain.QueueRules.trainLine(trainQueue.items(), office, nowMs(), cal),
             weekAhead = os.meka.core.domain.WeekAheadRules.todayLine(weekAheadNow, nowMs(), cal, weekAheadSettings.setting()),
@@ -4291,6 +4346,7 @@ class MekaCore(
             weekAheadSetting = weekAheadSettings.setting(),
             bins = bins.items(), holidays = bankHolidays.calendar(),
             carRegistration = car.registration(),
+            lifeAdmin = _lifeAdmin.value,
         )
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */
