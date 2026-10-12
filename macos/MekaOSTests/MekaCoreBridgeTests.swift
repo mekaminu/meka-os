@@ -1531,6 +1531,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 13, past: true), "skipped date night tomorrow")
     }
 
+    func testSkipLifeAdminFromAskReachesSwift() {
+        // "Skip admin this week" in Ask and Talk (life admin hour, slice 3): the skip card's words reach the Mac.
+        let card = AskRules.shared.cardOf(p: AskProposalSkipLifeAdmin(weekStart: -3, day: 2, whenLine: "Sat 3 Jan 10:00–11:00"), today: 0)
+        XCTAssertEqual(card.line, "Skip this week's life admin hour · Sat 3 Jan 10:00–11:00")
+        XCTAssertEqual(card.button, "Skip")
+        XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 1, past: true), "skipped this week's life admin hour tomorrow")
+        XCTAssertEqual(AskItemKind.lifeAdmin.wire, "life_admin")
+    }
+
     func testHomeUpkeepReachesSwift() {
         // Home upkeep, slice 1: the suggested jobs and their lines reach the Mac (only Strings and an Int64 cross).
         let sat = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 10)

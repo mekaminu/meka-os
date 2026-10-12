@@ -339,6 +339,37 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheLifeAdminHourAndSkipsThisWeeksWithUndo() = runTest {
+        val c = core()
+        c.askMeka("When's my admin hour?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.LIFE_ADMIN })
+        c.setLifeAdmin(6, 10 * 60)
+        c.addTask("Call the GP")
+
+        server.reply = AskReply.Answered("Done.", listOf(AskRawAction("skip_life_admin")))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("Skip admin this week"))
+        val ctx = server.asked.last().second
+        assertEquals(
+            listOf("Life admin hour · Saturdays from 10:00 · this week Sat 10 Oct 10:00–11:00 · 1 job: Call the GP"),
+            ctx.items.filter { it.kind == AskItemKind.LIFE_ADMIN }.map { it.line },
+        )
+        assertFalse(ctx.untrusted)
+        assertEquals(listOf("Skip this week's life admin hour · Sat 10 Oct 10:00–11:00"), out.answer.cards.map { it.line })
+        // Nothing until tapped.
+        assertFalse(c.lifeAdminView.value.skipped)
+
+        val done = c.doAsk(out.answer.cards.single())
+        assertEquals("Skipped this week's life admin hour · Sat 10 Oct is free again", done.line)
+        assertTrue(c.lifeAdminView.value.skipped)
+        assertFailsWith<ValidationException> { c.doAsk(out.answer.cards.single()) }
+
+        // Undo keeps it again, once.
+        assertTrue(c.undoAsk(assertIs<AskUndo.KeepLifeAdmin>(done.undo)))
+        assertFalse(c.lifeAdminView.value.skipped)
+        assertFalse(c.undoAsk(done.undo!!))
+    }
+
+    @Test
     fun askHearsTheComingDateNightsAndSkipDateNightSkipsOneWithUndo() = runTest {
         val c = core()
         c.askMeka("When's date night?")

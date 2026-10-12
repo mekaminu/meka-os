@@ -179,4 +179,53 @@ class LifeAdminTest {
         assertTrue(aFold.skipThisWeek(true))
         assertNull(LifeAdminRules.closeLine(aFold.setting(), free, ticked, 1, sat, free.endMs + hour))
     }
+
+    @Test
+    fun askAndTalkKnowTheHourAndCanSkipThisWeeks() {
+        assertTrue(aFold.set(6, 10 * 60))
+        val s = aFold.setting()!!
+        val free = LifeAdminRules.slot(s, mon, cal) { emptyList() }!!
+        val next = LifeAdminRules.slot(s, mon + 7, cal) { emptyList() }!!
+        val late = task("t1", "Call the GP").copy(dueAtMs = at(mon - 2, 12))
+        val jobs = LifeAdminRules.jobs(
+            listOf(late, task("t22", "Renew passport"), task("t333", "Pay the council"), task("t4444", "Post the forms"), task("t55555", "Book the MOT")),
+            emptyList(), mon, free, cal,
+        )
+        val v = LifeAdminRules.view(s, free, next, jobs, world.clock.nowMs)
+
+        // The line: when, and the jobs by name (four, then a count), overdue marked.
+        assertEquals(
+            "Life admin hour · Saturdays from 10:00 · this week Sat 17 Oct 10:00–11:00 · 5 jobs: Call the GP (overdue), Renew passport, Pay the council, Post the forms and 1 more",
+            LifeAdminRules.askLine(v, world.clock.nowMs),
+        )
+        assertEquals(
+            "Life admin hour · Saturdays from 10:00 · this week Sat 17 Oct 10:00–11:00 · on now · 5 jobs: Call the GP (overdue), Renew passport, Pay the council, Post the forms and 1 more",
+            LifeAdminRules.askLine(v, free.startMs + 60_000L),
+        )
+        val empty = LifeAdminRules.view(s, free, next, emptyList(), world.clock.nowMs)
+        assertEquals("Life admin hour · Saturdays from 10:00 · this week Sat 17 Oct 10:00–11:00 · nothing waiting", LifeAdminRules.askLine(empty, world.clock.nowMs))
+        assertNull(LifeAdminRules.askLine(LifeAdminView.EMPTY, world.clock.nowMs))
+
+        // The skip card: this week's hour, never one that's over or already skipped.
+        val ctx = AskRules.context(Today(emptyList(), null, emptyList(), emptyList()), world.clock.nowMs, cal, lifeAdmin = LifeAdminRules.askLine(v, world.clock.nowMs))
+        assertEquals(listOf(AskItemKind.LIFE_ADMIN), ctx.items.map { it.kind })
+        assertFalse(ctx.untrusted)
+        val card = AskRules.card(AskRawAction("skip_life_admin"), ctx, emptyMap(), world.clock.nowMs, cal, lifeAdmin = v)!!
+        assertEquals(AskProposal.SkipLifeAdmin(mon, sat, "Sat 17 Oct 10:00–11:00"), card.proposal)
+        assertEquals("Skip this week's life admin hour · Sat 17 Oct 10:00–11:00", card.line)
+        assertEquals("Skip", card.button)
+        assertEquals("Skipped this week's life admin hour · Sat 17 Oct is free again", AskRules.doneLine(card.proposal, mon))
+        assertEquals("skip this week's life admin hour on Saturday 17 October", TalkRules.phrase(card.proposal, mon, past = false))
+        assertEquals("skipped this week's life admin hour today", TalkRules.phrase(card.proposal, sat, past = true))
+        assertNull(TrustRules.kindOf(card.proposal))
+        assertNull(AskRules.card(AskRawAction("skip_life_admin"), ctx, emptyMap(), free.endMs, cal, lifeAdmin = v))
+        assertNull(AskRules.card(AskRawAction("skip_life_admin"), ctx, emptyMap(), world.clock.nowMs, cal, lifeAdmin = v.copy(skipped = true)))
+        assertNull(AskRules.card(AskRawAction("skip_life_admin"), ctx, emptyMap(), world.clock.nowMs, cal))
+
+        // Only this week's: a card or Undo from last week does nothing.
+        assertFalse(aFold.skipThisWeek(true, onlyWeek = mon - 7))
+        assertTrue(aFold.skipThisWeek(true, onlyWeek = mon))
+        assertFalse(aFold.skipThisWeek(false, onlyWeek = mon - 7))
+        assertTrue(aFold.skipThisWeek(false, onlyWeek = mon))
+    }
 }

@@ -68,6 +68,8 @@ class AiAskTest {
         assertTrue("plan_dinner" in AskService.KINDS)
         assertTrue("date night line" in AskService.SYSTEM)
         assertTrue("skip_date_night" in AskService.KINDS && "skip_date_night" in AskService.SYSTEM)
+        assertTrue("life admin hour line" in AskService.SYSTEM)
+        assertTrue("skip_life_admin" in AskService.KINDS && "skip_life_admin" in AskService.SYSTEM)
         assertTrue("radar lines" in AskService.SYSTEM)
         assertTrue("done_renewal" in AskService.KINDS && "done_renewal" in AskService.SYSTEM)
         assertTrue("wins lines" in AskService.SYSTEM)

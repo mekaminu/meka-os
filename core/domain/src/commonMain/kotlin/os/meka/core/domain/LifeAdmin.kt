@@ -329,6 +329,39 @@ object LifeAdminRules {
         }
     }
 
+    /** Job titles the Ask line names. */
+    const val ASK_JOBS = 4
+
+    /**
+     * Slice 3: Ask's and Talk's line, so "when's my admin hour?" has an answer: "Life admin hour · Saturdays from 10:00 ·
+     * this week Sat 17 Oct 10:00–11:00 · 4 jobs: Car insurance (overdue), Call the GP, Renew passport and 1 more", with
+     * "on now" while it is on. Null when off.
+     */
+    fun askLine(v: LifeAdminView, nowMs: Long): String? {
+        if (!v.on) return null
+        val now = v.thisWeek?.takeIf { !v.skipped && nowMs >= it.startMs && nowMs < it.endMs }?.let { "on now" }
+        val named = v.jobs.take(ASK_JOBS).map { j -> j.title + if (j.overdue) " (overdue)" else "" }
+        val more = v.jobCount - named.size
+        val jobs = if (named.isEmpty()) null else jobsCount(v.jobCount) + ": " + named.joinToString(", ") + if (more > 0) " and $more more" else ""
+        // The summary ends with the count; the named jobs replace it.
+        val summary = if (jobs != null) v.summary.substringBeforeLast(" · ") else v.summary
+        return listOfNotNull(TITLE, summary, now, jobs).joinToString(" · ")
+    }
+
+    /**
+     * Slice 3: the hour a skip card skips: this week's, while it is on or still to come and not already skipped; null
+     * otherwise (off, over, skipped, or no room this week). Only this week's can be skipped, as in the pane.
+     */
+    fun skippable(v: LifeAdminView?, nowMs: Long): AskProposal.SkipLifeAdmin? {
+        val h = v?.takeIf { it.on && !it.skipped }?.thisWeek ?: return null
+        if (nowMs >= h.endMs) return null
+        return AskProposal.SkipLifeAdmin(h.weekStart, h.day, h.whenLine)
+    }
+
+    /** The undo bar after the skip card: "Skipped this week's life admin hour · Sat 17 Oct is free again". */
+    fun skipDoneLine(p: AskProposal.SkipLifeAdmin): String =
+        "Skipped this week's life admin hour · ${CivilDate.shortLabel(p.day)} is free again"
+
     /** The line after Skip this week / Keep it: "Skipped this week's life admin hour · Sat 17 Oct is free again". */
     fun skipLine(slot: LifeAdminSlot?, skip: Boolean): String {
         val whenPart = slot?.let { CivilDate.shortLabel(it.day) }
@@ -366,10 +399,14 @@ class LifeAdmin(
         return true
     }
 
-    /** Skips this week's hour (it's free again), or keeps it. False when nothing changes. */
-    fun skipThisWeek(skip: Boolean): Boolean {
+    /**
+     * Skips this week's hour (it's free again), or keeps it. False when nothing changes, or when a Monday is
+     * given as [onlyWeek] and isn't this week any more (an Ask card or its Undo from last week).
+     */
+    fun skipThisWeek(skip: Boolean, onlyWeek: Long? = null): Boolean {
         val s = setting()?.takeIf { it.on } ?: return false
         val week = thisWeek()
+        if (onlyWeek != null && onlyWeek != week) return false
         if ((week in s.skipped) == skip) return false
         // Weeks already gone are dropped as the list is written.
         val kept = s.skipped.filter { it >= week }.toSet()
