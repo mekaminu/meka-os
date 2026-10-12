@@ -12,6 +12,8 @@ final class SetupSheetTests: XCTestCase {
         XCTAssertTrue(SetupSheet.fixHere(step(.calendars)))
         XCTAssertTrue(SetupSheet.fixHere(step(.voice)))
         XCTAssertTrue(SetupSheet.fixHere(step(.notifications)))
+        // Recovery key, slice 3: the Mac makes one in its own sheet.
+        XCTAssertTrue(SetupSheet.fixHere(step(.recovery)))
         XCTAssertFalse(SetupSheet.fixHere(step(.callRole)))
         XCTAssertFalse(SetupSheet.fixHere(step(.battery)))
         XCTAssertFalse(SetupSheet.fixHere(step(.notificationAccess)))

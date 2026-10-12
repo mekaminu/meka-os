@@ -47,6 +47,7 @@ final class ShellNavTests: XCTestCase {
         XCTAssertFalse(ShellNav.more(connected: false).contains(.calendars))
         XCTAssertFalse(ShellNav.more(connected: false).contains(.family))
         XCTAssertFalse(ShellNav.more(connected: false).contains(.watch))
+        XCTAssertFalse(ShellNav.more(connected: false).contains(.recovery))
         let places = Set(ShellNav.more(connected: false).compactMap(\.destination))
         XCTAssertEqual(places, Set(ShellDestination.allCases.filter { ShellNav.parent($0) != nil }))
         // Every item is a tile, a Daily row, the Settings row or in Settings, exactly once.
@@ -64,8 +65,9 @@ final class ShellNavTests: XCTestCase {
         XCTAssertTrue(ShellNav.lifeTiles().allSatisfy { $0.symbol != nil })
         XCTAssertEqual(ShellNav.daily().map(\.label), ["Morning brief", "Week ahead", "News", "Shut down the day", "Train queue", "Life admin hour", "Review"])
         XCTAssertEqual(ShellNav.settings(connected: true).map(\.label),
-                       ["Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"])
+                       ["Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Recovery key", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"])
         XCTAssertFalse(ShellNav.settings(connected: false).contains(.watch))
+        XCTAssertFalse(ShellNav.settings(connected: false).contains(.recovery))
         XCTAssertEqual(MoreItem.allCases.filter { !ShellNav.opens($0) }, [.ai])
         XCTAssertNil(ShellNav.statusItem(healthAttention: 0, setupLeft: 0))
         XCTAssertEqual(ShellNav.statusItem(healthAttention: 0, setupLeft: 3), .setup)

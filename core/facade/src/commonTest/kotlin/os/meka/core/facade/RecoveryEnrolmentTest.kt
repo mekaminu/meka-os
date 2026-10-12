@@ -72,4 +72,16 @@ class RecoveryEnrolmentTest {
         assertEquals(6L, t.setRecoveryKey(RecoveryKeyRules.verifier(entropy)).createdAtMs)
         assertEquals(RecoveryKeyRules.verifier(entropy), RecoveryCodec.decodeSet(body(requests.last())))
     }
+
+    @Test
+    fun theMacGetsTheSecretOrOneLine() {
+        val ok = RecoveryEnrolment.outcome(RecoveryEnrolment.Result.Enrolled("home", "mac0011", "ab".repeat(32)), "home", "mac0011", "Mac")
+        assertEquals("ab".repeat(32), ok.secret)
+        assertEquals(null, ok.problem)
+        val other = RecoveryEnrolment.outcome(RecoveryEnrolment.Result.Enrolled("away", "mac0011", "ab".repeat(32)), "home", "mac0011", "Mac")
+        assertEquals(null, other.secret)
+        assertEquals("This Mac can't join that household · reinstall MEKA and try again", other.problem)
+        assertEquals("23 of 24 words", RecoveryEnrolment.outcome(RecoveryEnrolment.Result.Unreadable("23 of 24 words"), "home", "m", "Mac").problem)
+        assertEquals("Couldn't reach the server", RecoveryEnrolment.outcome(RecoveryEnrolment.Result.Failed("Couldn't reach the server"), "home", "m", "Mac").problem)
+    }
 }

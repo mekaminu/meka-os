@@ -296,6 +296,12 @@ final class CoreModel {
     private(set) var watchLink: WatchLinkView?
     /// A watch is being linked or unlinked.
     private(set) var watchLinkBusy = false
+    /// Ask → More → Settings → Recovery key (Recovery key, slice 3): the household's key and making a new one.
+    var showRecovery = false
+    /// The Recovery key sheet's status as the server last said; nil until asked once.
+    private(set) var recoveryKey: RecoveryKeyView?
+    /// A key is being saved.
+    private(set) var recoveryBusy = false
     var showPlan = false
     private(set) var plan: DayPlanner.Plan?
     /// Plan my day's "Also add the blocks to Google" (calendar editing slice 2e); nil until read.
@@ -484,6 +490,9 @@ final class CoreModel {
             for await w in core.watchLinkView { self?.watchLink = w }
         })
         observers.append(Task { [weak self] in
+            for await r in core.recoveryKeyView { self?.recoveryKey = r }
+        })
+        observers.append(Task { [weak self] in
             for await v in core.setupView { self?.setup = v }
         })
         observers.append(Task { [weak self] in
@@ -556,6 +565,29 @@ final class CoreModel {
             case .rejected: return "That enrolment code wasn't accepted."
             case .failed(let f): return f.reason
             }
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    /// Recovery key, slice 3: this Mac joins the household with the 24 words (both devices lost) instead of the code.
+    /// Only Strings cross to the core; the words are read there and only their secret is sent. Returns a user-facing
+    /// error, or nil once connected (the data comes back with the first sync; the key is then used up).
+    func recover(serverURL: String, words: String) async -> String? {
+        guard let core, let identity else { return "Not ready yet" }
+        let url = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            let outcome = try await MacCoreFactory.shared.recover(
+                serverUrl: url, words: words, householdId: identity.householdID, deviceId: identity.deviceID,
+                deviceName: Host.current().localizedName ?? "Mac", deviceKey: deviceKey
+            )
+            // Plain Strings from here on.
+            let secret = outcome.secret, problem = outcome.problem
+            guard let secret else { return problem ?? "Couldn't connect" }
+            DeviceIdentity.saveEnrolment(serverURL: url, secret: secret)
+            try await MacCoreFactory.shared.connect(core: core, serverUrl: url, deviceSecret: secret, deviceKey: deviceKey)
+            isConnected = true
+            return nil
         } catch {
             return error.localizedDescription
         }
@@ -1401,6 +1433,29 @@ final class CoreModel {
         watchLinkBusy = true
         defer { watchLinkBusy = false }
         _ = try? await core.unlinkWatch(id: id)
+    }
+
+    // MARK: Recovery key (slice 3)
+
+    /// Asks MEKA's server about the household's key (the sheet shows "Checking…" until it answers).
+    func refreshRecoveryKey() async {
+        guard let core else { return }
+        _ = try? await core.refreshRecoveryKey()
+    }
+
+    /// A new key's words for the sheet, made on this Mac; nothing is sent until `saveRecoveryKey`. The sheet keeps it
+    /// only while it shows the words (never stored or synced).
+    func newRecoveryKey() -> RecoveryKeyDraft? { core?.newRecoveryKey() }
+
+    /// Saves `draft` once the three typed words match (only its verifier is sent; the old key stops working). The
+    /// draft crosses to the core once, here, and the sheet drops it afterwards. False when the words don't match or
+    /// the server couldn't take it (the view's problem says why).
+    func saveRecoveryKey(_ draft: RecoveryKeyDraft, answers: [String]) async -> Bool {
+        guard let core, !recoveryBusy else { return false }
+        recoveryBusy = true
+        defer { recoveryBusy = false }
+        // The core ticks Setup's step itself once saved.
+        return (try? await core.saveRecoveryKey(draft: draft, answers: answers))?.boolValue ?? false
     }
 
     // MARK: Setup checklist (Meka approved 2026-10-09)

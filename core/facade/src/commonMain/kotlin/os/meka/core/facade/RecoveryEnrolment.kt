@@ -31,6 +31,22 @@ object RecoveryEnrolment {
         data class Failed(val line: String) : Result()
     }
 
+    /**
+     * The answer flattened for Swift (the Mac's Connect sheet, Recovery key slice 3): [secret] once enrolled, else
+     * [problem] in words. The household and device id the server enrolled must be the ones this device's core was made
+     * with ([householdId], [deviceId]: every op carries them), else it can't join ([device] names it: "Mac").
+     */
+    class Outcome(val secret: String?, val problem: String?)
+
+    fun outcome(r: Result, householdId: String, deviceId: String, device: String): Outcome = when (r) {
+        is Result.Enrolled ->
+            if (r.householdId != householdId || r.deviceId != deviceId) Outcome(null, "This $device can't join that household · reinstall MEKA and try again")
+            else Outcome(r.secret, null)
+        is Result.Unreadable -> Outcome(null, r.line)
+        is Result.Refused -> Outcome(null, r.line)
+        is Result.Failed -> Outcome(null, r.line)
+    }
+
     suspend fun enrol(
         client: HttpClient,
         baseUrl: String,

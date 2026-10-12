@@ -1092,40 +1092,90 @@ struct QuickCaptureMenu: View {
     }
 }
 
-/// One-time enrolment: server address + enrolment code. Everything works offline before and after.
+/// One-time enrolment: server address + enrolment code. Everything works offline before and after. Or (Recovery key,
+/// slice 3) the 24 words when both devices were lost: the live line under them says how they read ("12 of 24 words",
+/// "Word 3 isn't one of the key's words"); the window is left out of screenshots and screen sharing meanwhile, and the
+/// words are cleared when the sheet closes.
+///
+/// Motion: the sheet scale-fades (system); switching to the words cross-fades the title and the field, and the reading
+/// line cross-fades as it changes. Reduce Motion: cross-fades.
 private struct ConnectSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     @State private var url = ""
     @State private var code = ""
     @State private var busy = false
     @State private var error: String?
+    @State private var recovering = false
+    @State private var words = ""
+
+    private var ready: Bool { recovering ? RecoveryKeyRules.shared.readable(text: words) : !code.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
-            Text("Connect this Mac").font(MekaType.upNextTitle)
+            Text(recovering ? "Recover this Mac" : "Connect this Mac").font(MekaType.upNextTitle)
+                .contentTransition(.opacity)
             TextField("Server address (https://…)", text: $url).textFieldStyle(.roundedBorder)
-            SecureField("Enrolment code", text: $code).textFieldStyle(.roundedBorder)
+            if recovering {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    Text(RecoveryKeyRules.shared.RECOVER_HOW).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Recovery key").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    TextEditor(text: Binding(get: { words }, set: { words = String($0.prefix(400)) }))
+                        .font(MekaType.body)
+                        .autocorrectionDisabled()
+                        .frame(height: 84)
+                        .scrollContentBackground(.hidden)
+                        .padding(MekaSpace.xs)
+                        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+                        .accessibilityLabel("Recovery key")
+                    if let line = RecoveryKeyRules.shared.typedLine(text: words) {
+                        Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+                    }
+                }
+                .transition(.opacity)
+            } else {
+                SecureField("Enrolment code", text: $code).textFieldStyle(.roundedBorder)
+                    .transition(.opacity)
+            }
             if let error { Text(error).font(MekaType.caption).foregroundStyle(palette.critical) }
             HStack {
+                Button(recovering ? "Use an enrolment code instead" : RecoveryKeyRules.shared.RECOVER) {
+                    recovering.toggle(); error = nil; words = ""
+                }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.caption)
+                .foregroundStyle(palette.accent)
+                .disabled(busy)
                 Spacer()
-                Button("Not now") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Not now") { words = ""; dismiss() }.keyboardShortcut(.cancelAction)
                 Button(busy ? "Connecting…" : "Connect") {
                     busy = true; error = nil
+                    let address = url, typed = words, enrolCode = code, viaKey = recovering
                     Task {
-                        error = await model.connect(serverURL: url, code: code)
+                        if viaKey {
+                            error = await model.recover(serverURL: address, words: typed)
+                        } else {
+                            error = await model.connect(serverURL: address, code: enrolCode)
+                        }
                         busy = false
-                        if error == nil { dismiss() }
+                        if error == nil { words = ""; code = ""; dismiss() }
                     }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(busy || url.isEmpty || code.isEmpty)
+                .disabled(busy || url.isEmpty || !ready)
             }
         }
         .padding(MekaSpace.l)
-        .frame(width: 420)
+        .frame(width: 460)
+        .background(HiddenFromCapture(hidden: recovering))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: recovering)
         .onAppear { url = model.defaultServerURL }
+        .onDisappear { words = "" }
     }
 }
 

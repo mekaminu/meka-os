@@ -98,6 +98,15 @@ object RecoveryKeyRules {
         Reading.Mistyped -> "One of the words is wrong · check them against the paper"
     }
 
+    /**
+     * The same as [readingLine] for the text as typed, so a screen that only holds Strings (the Mac's Connect sheet,
+     * Recovery key slice 3) can show the live line without handling a [Reading].
+     */
+    fun typedLine(text: String): String? = readingLine(read(text))
+
+    /** True when [text] reads as a whole key (24 words, checksum good): Connect can be pressed. */
+    fun readable(text: String): Boolean = read(text) is Reading.Ok
+
     /** The list word [t] stands for: itself, or the only word starting with it when four or more letters are typed. */
     fun wordOf(t: String): String? {
         if (t.isEmpty()) return null

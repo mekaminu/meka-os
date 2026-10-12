@@ -62,6 +62,12 @@ class RecoveryKeyTest {
         assertEquals("act", RecoveryKeyRules.wordOf("act"))
         assertNull(RecoveryKeyRules.wordOf("aba"))
         assertEquals("abandon", RecoveryKeyRules.wordOf("aban"))
+        // The Mac's Connect sheet reads the same lines from the text alone.
+        assertEquals("23 of 24 words", RecoveryKeyRules.typedLine(words.drop(1).joinToString(" ")))
+        assertEquals("Type the 24 words", RecoveryKeyRules.typedLine(" "))
+        assertFalse(RecoveryKeyRules.readable(wrong.joinToString(" ")))
+        assertTrue(RecoveryKeyRules.readable(words.joinToString("\n")))
+        assertNull(RecoveryKeyRules.typedLine(words.joinToString(" ")))
     }
 
     @Test

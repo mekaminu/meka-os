@@ -2447,6 +2447,30 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(line.text, "Rex: PE today")
     }
 
+    func testRecoveryKeyReachesSwift() async throws {
+        // Recovery key, slice 3: the Mac's sheet makes a draft (six rows of four, three words to type back), saving
+        // refuses words that don't match without sending anything, and Connect reads the typed words from a String.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "recovery-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let draft = core.newRecoveryKey()
+        XCTAssertEqual(draft.rows.count, 6)
+        XCTAssertTrue(draft.rows.allSatisfy { $0.count == 4 })
+        XCTAssertEqual(draft.rows.first?.first?.hasPrefix("1 "), true)
+        XCTAssertEqual(draft.confirmLabels.count, 3)
+        XCTAssertTrue(draft.confirmLabels.allSatisfy { $0.hasPrefix("Word ") })
+        let saved = try await core.saveRecoveryKey(draft: draft, answers: ["zzzz", "zzzz", "zzzz"])
+        XCTAssertFalse(saved.boolValue)
+        XCTAssertEqual(core.recoveryKeyView.value?.problem, RecoveryKeyRules.shared.NOT_MATCHING)
+        let offline = try await core.refreshRecoveryKey()
+        XCTAssertEqual(offline.problem, RecoveryKeyRules.shared.NOT_CONNECTED)
+        let rules = RecoveryKeyRules.shared
+        XCTAssertEqual(rules.typedLine(text: ""), "Type the 24 words")
+        XCTAssertFalse(rules.readable(text: "abandon ability"))
+    }
+
     func testWatchLinkReachesSwift() {
         // Galaxy Watch, slice 1: Settings → Watch's rules reach the Mac (only Strings cross from the sheet).
         let rules = WatchLinkRules.shared

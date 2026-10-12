@@ -62,6 +62,19 @@ object MacCoreFactory {
     suspend fun enrol(serverUrl: String, enrolCode: String, householdId: String, deviceId: String, deviceName: String): EnrolmentResult =
         Enrolment.enrol(http, serverUrl.trim().trimEnd('/'), enrolCode, householdId, deviceId, deviceName)
 
+    /**
+     * Recovery key, slice 3: this Mac joins the household with the 24 words instead of the enrolment code (both devices
+     * lost). Signed with the Mac's own key; only the words' secret is sent. The outcome's secret is then saved and used
+     * with [connect] exactly like an enrolment's.
+     */
+    @OptIn(kotlin.time.ExperimentalTime::class)
+    suspend fun recover(
+        serverUrl: String, words: String, householdId: String, deviceId: String, deviceName: String, deviceKey: DeviceKey,
+    ): RecoveryEnrolment.Outcome = RecoveryEnrolment.outcome(
+        RecoveryEnrolment.enrol(http, serverUrl.trim().trimEnd('/'), deviceKey, words, deviceId, deviceName, kotlin.time.Clock.System.now().toEpochMilliseconds()),
+        householdId, deviceId, "Mac",
+    )
+
     suspend fun connect(core: MekaCore, serverUrl: String, deviceSecret: String, deviceKey: DeviceKey? = null) =
         core.connect(Enrolment.transport(http, serverUrl.trim().trimEnd('/'), deviceSecret, deviceKey))
 
