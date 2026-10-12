@@ -167,7 +167,7 @@ struct BriefSheet: View {
     private func readIfAsked() {
         guard model.readBriefOnOpen, let v = model.brief, !v.dateLabel.isEmpty else { return }
         model.readBriefOnOpen = false
-        if !speaker.speaking { speaker.say(BriefSpeech.shared.script(v: v, name: "Meka"), reading: true) }
+        if !speaker.speaking { speaker.say(BriefScriptRules.shared.script(v: v, name: "Meka"), reading: true) }
     }
 
     /// Listen reads the brief aloud (light haptic); Stop ends it (tick haptic).
@@ -177,7 +177,7 @@ struct BriefSheet: View {
             speaker.stop()
         } else {
             MekaHaptics.light()
-            speaker.say(BriefSpeech.shared.script(v: v, name: "Meka"), reading: true)
+            speaker.say(BriefScriptRules.shared.script(v: v, name: "Meka"), reading: true)
         }
     }
 

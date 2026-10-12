@@ -1038,6 +1038,15 @@ final class MekaCoreBridgeTests: XCTestCase {
                        "9 to 15 degrees, light rain from 15:00, take a coat")
     }
 
+    /// A morning brief worth listening to, slice 1: the brief sheet's Listen reads the chief-of-staff script.
+    func testBriefScriptReachesSwift() {
+        let s = BriefScriptRules.shared.script(v: MorningBriefView.companion.EMPTY, name: "Meka")
+        XCTAssertTrue(s.hasPrefix("Good morning, Meka. Nothing's planned yet. "), s)
+        XCTAssertTrue(s.hasSuffix(BriefScriptRules.shared.CLOSE), s)
+        XCTAssertGreaterThan(BriefScriptRules.shared.lineCount, 30)
+        XCTAssertEqual(BriefScriptRules.shared.clock(min: 17 * 60 + 30), "half past 5")
+    }
+
     /// Fold review 2026-10-09 07:26, item 7: the brief's Today rows (one left edge; a task carries its id for the tick).
     func testBriefDayLinesReachSwift() {
         let task = BriefRules.shared.dayLine(r: TomorrowRow(id: "t-milk", time: nil, title: "Buy milk", isEvent: false, detail: "Overdue"))

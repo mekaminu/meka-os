@@ -34,7 +34,7 @@ object ReadOutRules {
         listOf("tell"), listOf("give"), listOf("read"), listOf("play"), listOf("any"),
     )
     /** Words between the asking and the thing ("the", "my", "today's", "the latest"). */
-    private val DETERMINERS = setOf("the", "my", "today's", "todays", "this", "morning's", "mornings", "latest", "new", "any", "some", "in")
+    private val DETERMINERS = setOf("the", "my", "today's", "todays", "this", "morning's", "mornings", "latest", "new", "any", "some", "in", "more")
     /** Words after the thing that change nothing ("the news today", "the headlines this morning"). */
     private val TRAILING = setOf("today", "this", "morning", "right", "now", "at", "the", "moment")
 
@@ -148,13 +148,13 @@ object ReadOutRules {
     private fun label(topicId: String?): String = spokenLabel(topicId)
 
     /**
-     * The words MEKA reads for [read]: the brief as its Listen button reads it ([BriefSpeech.script]); the brief's
+     * The words MEKA reads for [read]: the brief as its Listen button reads it ([BriefScriptRules.script], which ends asking "plan my day" or "more news"); the brief's
      * headlines ("In the news. From BBC Sport: …"); or one topic's newest [MAX_STORIES] stories from the News place
      * ("The latest Barça news. From Mundo Deportivo: …"). Each ends "Anything else?" so the conversation carries on.
      * A topic that isn't chosen, or has nothing in the last two days, is said plainly.
      */
     fun text(read: ReadOut, brief: MorningBriefView, place: NewsPlace, name: String = "Meka"): String = when (read.kind) {
-        ReadOut.Kind.BRIEF -> BriefSpeech.script(brief, name) + " " + TalkRules.ANYTHING_ELSE
+        ReadOut.Kind.BRIEF -> BriefScriptRules.script(brief, name)
         ReadOut.Kind.HEADLINES -> {
             val lines = BriefSpeech.news(brief.headlines)
             if (lines.isEmpty()) NO_HEADLINES else (lines + TalkRules.ANYTHING_ELSE).joinToString(" ")

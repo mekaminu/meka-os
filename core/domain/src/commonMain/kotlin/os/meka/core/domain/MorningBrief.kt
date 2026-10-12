@@ -75,6 +75,8 @@ data class MorningBriefView(
     val weatherLine: String? = null,
     /** School rhythm, slice 2: "Rex: PE today" under the weather ([SchoolRules.todayLine]); also on the card's line. */
     val school: SchoolLine? = null,
+    /** A morning brief worth listening to, slice 1: what the spoken brief adds ([BriefScriptRules.script]); set by the facade. */
+    val story: BriefStory = BriefStory.EMPTY,
 ) {
     /** [day] as the brief pane draws it (Fold review 2026-10-09 07:26, item 7): see [BriefRules.dayLine]. */
     val dayLines: List<BriefDayLine> get() = day.map(BriefRules::dayLine)
@@ -273,6 +275,8 @@ class MorningBrief(
         weatherNow: String? = null,
         /** What the school says about today ([SchoolRules.todayLine]). */
         school: SchoolLine? = null,
+        /** Today's Up next, named in the spoken brief's focus when nothing more pressing is ([BriefScriptRules.focus]). */
+        upNextId: String? = null,
     ): MorningBriefView {
         val now = nowMs()
         val minute = calendar.minuteOfDay(now)
@@ -364,6 +368,38 @@ class MorningBrief(
             headlines = NewsRules.forBrief(headlines, newsTopics.filter { it.chosen }.map { it.id }, now),
             newsTopics = newsTopics,
             readElsewhereLine = if (readElsewhere) BriefRules.readElsewhereLine(mark?.get(BriefFields.SEEN_ON)?.textOrNull) else null,
+            story = story(dayEvents, dayTasks, schedule, holidays, goals, today, now, workLine, upNextId),
+        )
+    }
+
+    /** The spoken brief's own facts (slice 1): timed events, the focus, habits by name and the week's goals. */
+    private fun story(
+        dayEvents: List<CalendarEvent>, dayTasks: List<Task>, schedule: WorkSchedule, holidays: HolidayCalendar,
+        goals: GoalsView, today: DayWindow, now: Long, workLine: String?, upNextId: String? = null,
+    ): BriefStory {
+        val events = dayEvents.filter { !it.allDay && it.startAtMs >= today.startMs }.sortedBy { it.startAtMs }.map { e ->
+            val start = calendar.minuteOfDay(e.startAtMs)
+            val end = start + ((e.endAtMs - e.startAtMs) / 60_000L).toInt().coerceAtLeast(0)
+            BriefEvent(e.title, start, end)
+        }
+        val weekIds = goals.week.arcs.filter { !it.done }.associate { it.goalId to it.title }
+        val iso = CivilDate.isoDayOfWeek(today.epochDay)
+        val working = workLine?.startsWith("Work ") == true
+        val weekend = iso >= 6 && !working
+        val (focus, smaller) = BriefScriptRules.focus(
+            dayTasks, today, now, weekIds, upNextId,
+            if (weekend) BriefScriptRules.MAX_FOCUS_WEEKEND else BriefScriptRules.MAX_FOCUS,
+        ) { calendar.minuteOfDay(it) }
+        return BriefStory(
+            epochDay = today.epochDay,
+            weekend = weekend,
+            workEndMin = if (working) schedule.hoursOn(iso).endMinute else null,
+            events = events,
+            focus = focus,
+            smallerCount = smaller,
+            habits = BriefScriptRules.habits(goals.habits),
+            weekGoals = goals.week.line,
+            goalTitle = weekIds.values.firstOrNull(),
         )
     }
 

@@ -66,7 +66,7 @@ import os.meka.android.goals.Chips
 import os.meka.android.ask.MekaSpeaker
 import os.meka.core.domain.BriefDayLine
 import os.meka.core.domain.BriefHeadline
-import os.meka.core.domain.BriefSpeech
+import os.meka.core.domain.BriefScriptRules
 import os.meka.core.domain.BriefLine
 import os.meka.core.domain.DueState
 import os.meka.core.domain.MorningBriefView
@@ -104,7 +104,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
         val openedAt = SystemClock.elapsedRealtime()
         onDispose { core.briefClosed("Fold", SystemClock.elapsedRealtime() - openedAt) }
     }
-    fun listen() = speaker.say(BriefSpeech.script(core.briefView.value), reading = true)
+    fun listen() = speaker.say(BriefScriptRules.script(core.briefView.value), reading = true)
     // After the wake alarm the brief reads itself once it has something to say.
     var autoRead by rememberSaveable { mutableStateOf(readAloud) }
     LaunchedEffect(autoRead, v.dateLabel) {

@@ -4428,11 +4428,24 @@ class MekaCore(
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
-            news.all(), news.choices(), workHolidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolToday).let {
+            news.all(), news.choices(), workHolidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolToday,
+            upNextId = _today.value.upNext?.id).let {
                 // Annual leave, slice 2: "… · last day before leave · back Mon 2 Nov" and "Annual leave · no work · back …".
+                val workLine = os.meka.core.domain.LeaveRules.workLine(it.workLine, leaveDays, leaveHours, today.epochDay)
+                val t = _today.value
                 it.copy(
                     weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal),
-                    workLine = os.meka.core.domain.LeaveRules.workLine(it.workLine, leaveDays, leaveHours, today.epochDay),
+                    workLine = workLine,
+                    // A morning brief worth listening to, slice 1: the commute, both places and home and family.
+                    story = it.story.copy(
+                        officeDay = office != null && workLine?.startsWith("Work ") == true,
+                        placesLine = placesLine,
+                        route = os.meka.core.domain.RouteRules.todayLine(lineStatus.snapshot(), office, nowMs(), cal)?.spoken,
+                        needsYou = _needsYouStack.value.cards.count {
+                            it.kind == os.meka.core.domain.DecisionKind.CONFLICT || it.kind == os.meka.core.domain.DecisionKind.CREDIT
+                        },
+                        family = listOfNotNull(t.bins?.spoken, t.dateNight?.spoken, t.gifts?.spoken, t.trip?.spoken),
+                    ),
                 )
             }
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))

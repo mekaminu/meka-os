@@ -103,6 +103,8 @@ class ReadOutTest {
             "In the news. From Mundo Deportivo: Barça versus Getafe: the line-ups. From BBC News: Markets rise. Anything else?",
             ReadOutRules.text(headlines, v, NewsPlace.EMPTY),
         )
-        assertEquals(BriefSpeech.script(v) + " Anything else?", ReadOutRules.text(brief, v, NewsPlace.EMPTY))
+        assertEquals(BriefScriptRules.script(v), ReadOutRules.text(brief, v, NewsPlace.EMPTY))
+        assertTrue(ReadOutRules.text(brief, v, NewsPlace.EMPTY).endsWith(BriefScriptRules.CLOSE))
+        assertEquals(ReadOut(ReadOut.Kind.HEADLINES), ReadOutRules.request("more news"))
     }
 }
