@@ -89,6 +89,11 @@ internal fun TriageCardView(
             .padding(MekaSpace.m).testTag("triage-${card.id}"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
+        // Someone Meka watches for asked this in a group (Fold review 2026-10-12, bug 3): "Jeanette asked", in brass.
+        card.askedBy?.let { name ->
+            Text(TriageChatRules.askedLine(name), style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.testTag("triage-asked-${card.id}"))
+        }
         Text("${card.from} · ${card.lane.label}", style = MekaType.itemMeta, color = Meka.colors.textSecondary,
             modifier = Modifier.semantics { contentDescription = card.spoken })
         Text(card.gist, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 3, overflow = TextOverflow.Ellipsis)
@@ -191,6 +196,11 @@ internal fun TriageChatView(
                 .padding(MekaSpace.m),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
+            // "Jeanette asked" above the group's name (Fold review 2026-10-12, bug 3): why this chat is at the top.
+            chat.askedBy?.let { name ->
+                Text(TriageChatRules.askedLine(name), style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.testTag("triage-chat-asked-${chat.key}"))
+            }
             Text(chat.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.semantics { contentDescription = chat.spoken })
             Text("${chat.countLine} · ${chat.meta}", style = MekaType.itemMeta,

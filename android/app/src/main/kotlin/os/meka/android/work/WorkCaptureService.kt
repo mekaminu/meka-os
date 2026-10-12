@@ -116,8 +116,11 @@ class WorkCaptureService : NotificationListenerService() {
     /** The messages assistant: one message at a time (under the same lock, so a re-post is never triaged twice). */
     private suspend fun triage(meka: MekaApplication, items: List<CapturedItem>) = requestLock.withLock {
         val store = meka.captures
-        // Each group's mode as switched on its digest card (slice 4); the never-to-AI list comes with slice 5's screen.
-        val settings = store.triageSettings.value
+        // Each group's mode as switched on its digest card (slice 4) and the never-to-AI list (slice 5); the people Meka
+        // watches for, so a question from Jeanette in a group is read like a mention (Fold review 2026-10-12, bug 3).
+        val settings = store.triageSettings.value.copy(
+            watched = RequestWatchRules.everyone(store.lists.value, store.watch.value).toSet(),
+        )
         val toTriage = MessageTriageRules.toTriage(items, settings, store.triageSeen(), System.currentTimeMillis())
         val digest = mutableListOf<CapturedItem>()
         val done = mutableListOf<String>()

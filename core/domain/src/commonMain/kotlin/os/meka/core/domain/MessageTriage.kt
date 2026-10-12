@@ -54,7 +54,15 @@ data class TriageSettings(
      * [TriageChatRules.key] to the chat's name as shown. Off for every chat by default; never for family or always-notify.
      */
     val clearOnArrival: Map<String, String> = emptyMap(),
+    /**
+     * The people Meka watches for ([RequestWatchRules.everyone]: the Family list and Watch for requests from), filled in
+     * by the Fold when it triages (never stored with these settings): a question or ask from one of them in a group is
+     * read like a mention (Fold review 2026-10-12, bug 3: Jeanette asking in BUFC U7s).
+     */
+    val watched: Set<String> = emptySet(),
 ) {
+    private val watchedKeys = watched.map(People::key).filter { it.isNotEmpty() }.toSet()
+    fun isWatched(name: String?): Boolean = name != null && People.key(name).let { it.isNotEmpty() && it in watchedKeys }
     private val modeByKey = groupModes.mapKeys { People.key(it.key) }
     private val privateKeys = neverToAi.map(People::key).toSet()
 
@@ -66,8 +74,11 @@ data class TriageSettings(
 sealed interface TriageRoute {
     /** Not a message with text, an ignored group, or a group left as WhatsApp shows it. */
     data object Skip : TriageRoute
-    /** To the AI for a lane ([mentioned]: a group message that names Meka). */
-    data class AskAi(val mentioned: Boolean) : TriageRoute
+    /**
+     * To the AI for a lane ([mentioned]: a group message read like a 1:1, because it names Meka or [watched]: someone
+     * he watches for (family, Watch for requests from) asks something in the group; Fold review 2026-10-12, bug 3).
+     */
+    data class AskAi(val mentioned: Boolean, val watched: Boolean = false) : TriageRoute
     /** A busy group's chatter, kept for the digest; no AI. */
     data class Digest(val groupKey: String) : TriageRoute
     /** A voice note: "Listen to Tunde's voice note", no AI. */
@@ -138,8 +149,18 @@ object MessageTriageRules {
         false
     }
 
+    /** What reads as asking something of the group: a question mark or a request's usual words, whole words, any case. */
+    val ASK_CUES = listOf(
+        "can you", "could you", "would you", "will you", "can someone", "can anyone", "could someone", "anyone",
+        "please", "pls", "plz", "don't forget", "dont forget", "remember to", "need you", "need someone", "who's", "who is",
+    )
+
+    /** Whether [text] asks something ([ASK_CUES] or a "?"), read by hand like [mentions]. */
+    fun asks(text: String): Boolean = '?' in text || mentions(text.replace('\u2019', '\''), ASK_CUES)
+
     /**
-     * Where [item] goes: a group message that names Meka is triaged like a 1:1 message (unless the group is ignored);
+     * Where [item] goes: a group message that names Meka, or asks something ([asks]) from someone he watches
+     * ([TriageSettings.watched]), is triaged like a 1:1 message (unless the group is ignored);
      * other group messages are digested or left alone by the group's mode; a voice note becomes a reminder and a
      * person or group in [TriageSettings.neverToAi] is FYI, both with no AI.
      */
@@ -148,10 +169,11 @@ object MessageTriageRules {
         if (item.kind == CaptureKind.MISSED_CALL || text.isEmpty()) return TriageRoute.Skip
         val group = ChatTitleRules.cleanOrNull(item.conversation)
         val voice = item.kind == CaptureKind.VOICE_MESSAGE || MessageRequestRules.isVoiceNote(text)
+        val watched = group != null && settings.isWatched(item.personName)
         if (group != null) {
             val mode = settings.modeOf(group)
             if (mode == GroupMode.IGNORE) return TriageRoute.Skip
-            if (!mentions(text, settings.names)) {
+            if (!mentions(text, settings.names) && !(watched && asks(text))) {
                 return if (mode == GroupMode.DIGEST) TriageRoute.Digest(People.key(group)) else TriageRoute.Skip
             }
         }
@@ -159,7 +181,7 @@ object MessageTriageRules {
             voice -> TriageRoute.VoiceNote
             settings.isPrivate(item.personName) || settings.isPrivate(group) -> TriageRoute.LocalFyi
             !MessageRequestRules.worthAsking(text) -> TriageRoute.LocalFyi
-            else -> TriageRoute.AskAi(mentioned = group != null)
+            else -> TriageRoute.AskAi(mentioned = group != null, watched = watched)
         }
     }
 

@@ -1234,7 +1234,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testTriageReplyRulesReachSwift() {
         let rules = TriageReplyRules.shared
         let card = TriageCard(id: "wa-1", lane: .needsReply, personKey: "tunde", from: "Tunde · 14:02", gist: "Asks if you're coming",
-                              draft: "Yes, see you then", app: .whatsapp, mentioned: false, atMs: 1_000, spoken: "Tunde", group: nil)
+                              draft: "Yes, see you then", app: .whatsapp, mentioned: false, atMs: 1_000, spoken: "Tunde", group: nil, askedBy: nil)
         XCTAssertEqual(rules.label(primary: rules.primary(card: card, live: false, canSend: false)), "Copy reply")
         XCTAssertEqual(rules.secondary(card: card), "Not now")
         XCTAssertEqual(rules.copiedLine(card: card), "Reply to Tunde copied")
@@ -1246,7 +1246,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testTriageChatsReachSwift() {
         let cards = (1...3).map { i in
             TriageCard(id: "g\(i)", lane: .fyi, personKey: i == 2 ? "obi" : "femi", from: "\(i == 2 ? "Obi" : "Femi") in Barça lads · 14:0\(i)",
-                       gist: "Lineup talk", draft: nil, app: .whatsapp, mentioned: true, atMs: Int64(i), spoken: "x", group: "Barça lads")
+                       gist: "Lineup talk", draft: nil, app: .whatsapp, mentioned: true, atMs: Int64(i), spoken: "x", group: "Barça lads", askedBy: nil)
         }
         let chat = TriageChatRules.shared.chats(cards: cards).first!
         XCTAssertEqual(chat.title, "Barça lads")
@@ -1274,8 +1274,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Slice 3c: a busy chat's synced summary leads its card; with none the card is as before.
         let busy = TriageChatRules.shared.chats(cards: cards + [
             TriageCard(id: "g4", lane: .fyi, personKey: "femi", from: "Femi in Barça lads · 14:04", gist: "Kick-off time",
-                       draft: nil, app: .whatsapp, mentioned: true, atMs: 4, spoken: "x", group: "Barça lads"),
+                       draft: nil, app: .whatsapp, mentioned: true, atMs: 4, spoken: "x", group: "Barça lads", askedBy: nil),
         ])
+        // Fold review 2026-10-12, bug 3: a question from someone Meka watches for lifts the group with "Jeanette asked".
+        let asked = TriageChatRules.shared.chats(cards: cards + [
+            TriageCard(id: "j1", lane: .fyi, personKey: "jeanette", from: "Jeanette in BUFC U7s · 14:05", gist: "Asks if there's no match Saturday",
+                       draft: nil, app: .whatsapp, mentioned: true, atMs: 1, spoken: "x", group: "BUFC U7s", askedBy: "Jeanette"),
+        ])
+        XCTAssertEqual(asked.map(\.title), ["BUFC U7s", "Barça lads"])
+        XCTAssertEqual(asked.first?.askedBy, "Jeanette")
+        XCTAssertEqual(TriageChatRules.shared.askedLine(name: "Jeanette"), "Jeanette asked")
+        XCTAssertNil(asked.last?.askedBy)
         let summary = ChatSummary(chatKey: busy[0].key, title: "Barça lads", summary: "Saturday's lineup and kick-off", upToMs: 4, count: 4, madeAtMs: 5)
         let summed = ChatSummaryRules.shared.withSummaries(chats: busy, summaries: [summary])
         XCTAssertEqual(summed.first?.summary, "Saturday's lineup and kick-off")

@@ -111,7 +111,7 @@ object GroupDigestRules {
     /** What each mode means, under the switch. */
     fun modeHint(mode: GroupMode): String = when (mode) {
         GroupMode.DIGEST -> "Gathered here at 12:30 and 18:30; MEKA clears its notifications"
-        GroupMode.NORMAL -> "Notifications as usual; MEKA reads only a mention of you"
+        GroupMode.NORMAL -> "Notifications as usual; MEKA reads only a mention of you or a question from family"
         GroupMode.IGNORE -> "MEKA never reads it, not even a mention"
     }
 

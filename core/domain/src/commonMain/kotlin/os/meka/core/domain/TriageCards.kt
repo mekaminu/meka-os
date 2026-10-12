@@ -28,6 +28,11 @@ object TriageCardFields {
     const val SUMMARY = "summary"
     /** The drafted reply (checked by [MessageTriageRules.cleanDraft]); never sent without Meka's tap. */
     const val DRAFT = "draft"
+    /**
+     * True for a group message from someone Meka watches for (family, Watch for requests from) that asked something
+     * (Fold review 2026-10-12, bug 3): the group's card rises to the top with "Jeanette asked". Absent otherwise.
+     */
+    const val WATCHED = "watched"
     /** True when the message never went to the AI (a person or group Meka keeps from it). */
     const val LOCAL = "local"
     /** Sent, Not now or Seen on either device: gone from Needs you on both (TrueWins). */
@@ -67,6 +72,11 @@ data class TriageCard(
     val spoken: String,
     /** The group's name for a group message that named Meka; null for a 1:1 chat (messages grouped per chat, slice 1). */
     val group: String? = null,
+    /**
+     * "Jeanette" when someone Meka watches for asked this in a group (Fold review 2026-10-12, bug 3): the card shows
+     * "Jeanette asked" and its chat goes to the top of Needs you. Null for a 1:1 chat or anyone else.
+     */
+    val askedBy: String? = null,
 ) {
     companion object {
         const val LOCAL_LINE = "Not sent to MEKA's AI"
@@ -85,7 +95,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
      * Writes [triage] for [item] unless that message already has a card; returns the card shown for it (null when it
      * was already stored, or it is an Action, which Needs you shows as request cards). [local]: kept from the AI.
      */
-    fun save(item: CapturedItem, triage: MessageTriage, local: Boolean = false): TriageCard? {
+    fun save(item: CapturedItem, triage: MessageTriage, local: Boolean = false, watched: Boolean = false): TriageCard? {
         val id = entityId(item.id)
         if (replica.entity(EntityTypes.TRIAGE_CARD, id) != null) return null
         val group = ChatTitleRules.cleanOrNull(item.conversation)
@@ -101,6 +111,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
                 triage.summary?.let { put(TriageCardFields.SUMMARY, it.take(MessageTriageRules.MAX_SUMMARY + 1).fv()) }
                 if (triage.lane == TriageLane.NEEDS_REPLY) triage.draft?.let { put(TriageCardFields.DRAFT, it.fv()) }
                 if (local) put(TriageCardFields.LOCAL, true.fv())
+                if (watched && group != null) put(TriageCardFields.WATCHED, true.fv())
             },
         )
         return open().firstOrNull { it.id == item.id }
@@ -174,6 +185,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
         val draft: String?,
         val local: Boolean,
         val resolved: Boolean,
+        val watched: Boolean = false,
     )
 
     private fun stored(): List<Stored> = replica.entities(EntityTypes.TRIAGE_CARD).mapNotNull { e ->
@@ -190,6 +202,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
             draft = e[TriageCardFields.DRAFT].textOrNull,
             local = e[TriageCardFields.LOCAL].boolOrNull == true,
             resolved = e[TriageCardFields.RESOLVED].boolOrNull == true,
+            watched = e[TriageCardFields.WATCHED].boolOrNull == true,
         )
     }
 
@@ -204,7 +217,9 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
             else -> s.summary?.takeIf { it.isNotBlank() } ?: TriageCard.NO_GIST_LINE
         }
         val draft = if (s.lane == TriageLane.NEEDS_REPLY) s.draft else null
+        val askedBy = who.takeIf { s.watched && s.group != null && it.isNotEmpty() }
         val spoken = buildString {
+            askedBy?.let { append(TriageChatRules.askedLine(it)).append(". ") }
             append(if (s.group != null) "$who in ${s.group.trim()}" else who)
             append(", ").append(s.lane.label).append(": ").append(gist.trimEnd('.')).append('.')
             draft?.let { append(" Suggested reply: ").append(it) }
@@ -213,6 +228,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
             id = s.messageId, lane = s.lane, personKey = People.key(s.person), from = from, gist = gist, draft = draft,
             app = s.app, mentioned = s.group != null, atMs = s.atMs, spoken = spoken,
             group = s.group?.trim()?.take(40)?.takeIf { it.isNotEmpty() },
+            askedBy = askedBy,
         )
     }
 

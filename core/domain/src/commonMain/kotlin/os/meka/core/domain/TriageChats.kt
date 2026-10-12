@@ -51,6 +51,11 @@ data class TriageChat(
      * bug 1): never shown, but Done and Not now clear them with the chat so they can't come back as a card of their own.
      */
     val repeatIds: List<String> = emptyList(),
+    /**
+     * "Jeanette" when someone Meka watches for asked something in this group (Fold review 2026-10-12, bug 3): the card
+     * shows [TriageChatRules.askedLine] in brass above its name and the chat sits at the top of Needs you.
+     */
+    val askedBy: String? = null,
 ) {
     /** One message, no request and no chatter: the message's own card, as before. */
     val single: Boolean get() = cards.size == 1 && requests.isEmpty() && chatter == 0
@@ -75,9 +80,17 @@ object TriageChatRules {
         return "$app|$who"
     }
 
+    /** "Jeanette asked": above a group's card when someone Meka watches for asked something there. */
+    fun askedLine(name: String): String = "$name asked"
+
+    /** A group where someone Meka watches for asked something first, then chats needing a reply, then the newest. */
     fun chats(cards: List<TriageCard>): List<TriageChat> =
         cards.groupBy { key(it) }.map { (k, list) -> chat(k, list) }
-            .sortedWith(compareByDescending<TriageChat> { it.replies > 0 }.thenByDescending { it.latestMs })
+            .sortedWith(
+                compareByDescending<TriageChat> { it.askedBy != null }
+                    .thenByDescending { it.replies > 0 }
+                    .thenByDescending { it.latestMs },
+            )
 
     /**
      * [chats] with each request from a person filed under that person's 1:1 chat (the latest one when they wrote on two
@@ -213,8 +226,10 @@ object TriageChatRules {
         }
         val time = latest.from.substringAfterLast(" · ", "").takeIf { it.isNotBlank() }
         val meta = listOfNotNull(TriageReplyRules.appName(latest.app), time).joinToString(" · ")
+        val askedBy = if (group != null) list.filter { it.askedBy != null }.maxByOrNull { it.atMs }?.askedBy else null
         val ranked = list.sortedWith(
-            compareBy<TriageCard> { if (it.lane == TriageLane.NEEDS_REPLY) 0 else 1 }
+            compareBy<TriageCard> { if (it.askedBy != null) 0 else 1 }
+                .thenBy { if (it.lane == TriageLane.NEEDS_REPLY) 0 else 1 }
                 .thenBy { if ('?' in it.gist) 0 else 1 }
                 .thenByDescending { it.atMs },
         )
@@ -223,12 +238,13 @@ object TriageChatRules {
             if (group != null) "$who: ${c.gist}" else c.gist
         }.distinct().take(TOP)
         val spoken = buildString {
+            askedBy?.let { append(askedLine(it)).append(" in ") }
             append(title).append(", ").append(countLine.replace(" · ", ", ")).append(". ")
             top.forEach { append(it.trimEnd('.')).append(". ") }
         }.trim()
         return TriageChat(
             key, title, latest.app, group != null, countLine, meta, top, oldestFirst, replies, latest.atMs, spoken,
-            repeatIds = repeats,
+            repeatIds = repeats, askedBy = askedBy,
         )
     }
 }

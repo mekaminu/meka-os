@@ -83,6 +83,23 @@ class MessageTriageFacadeTest {
     }
 
     @Test
+    fun aQuestionFromJeanetteInAGroupGoesOutWithTheGroupAndHerCardSaysSheAsked() = runTest {
+        // Fold review 2026-10-12, bug 3: someone Meka watches for counts in groups too.
+        val c = core()
+        server.reply = MessageTriageCodec.Response("answered", lane = "needs_reply", summary = "Asks if there's no match Saturday", draft = "No match this week")
+        val settings = TriageSettings(watched = setOf("Jeanette"))
+        val read = assertIs<TriageRead.Read>(c.triageMessage(msg("Jeanette", "Is there no match this Saturday?", group = "BUFC U7s (2 messages)"), settings))
+        assertEquals("BUFC U7s (2 messages)", server.sent.single().group)
+        val card = assertNotNull(read.card)
+        assertEquals("Jeanette", card.askedBy)
+        assertEquals("BUFC U7s", card.group)
+        // The same question from someone else, or with no one watched, is the digest's chatter: nothing goes out.
+        assertIs<TriageRead.Digest>(c.triageMessage(msg("Coach", "Is there no match this Saturday?", group = "BUFC U7s"), settings))
+        assertIs<TriageRead.Digest>(c.triageMessage(msg("Jeanette", "Anyone got spare shin pads?", group = "BUFC U7s", at = now - 1_000)))
+        assertEquals(1, server.sent.size)
+    }
+
+    @Test
     fun sentAndSeenTakeTheCardsOutOnceAndRecordHowWithoutSendingAnything() = runTest {
         val c = core()
         server.reply = MessageTriageCodec.Response("answered", lane = "needs_reply", summary = "Asks if you're coming", draft = "Yes, see you then")

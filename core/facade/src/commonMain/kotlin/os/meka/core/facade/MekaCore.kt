@@ -1267,7 +1267,9 @@ class MekaCore(
                 val quote = checked.summary ?: os.meka.core.domain.TriageCard.NO_GIST_LINE
                 requestCards.save(os.meka.core.domain.RequestMessage(item.id, item.personName.trim(), quote, item.atMs), checked.proposals)
             } else emptyList()
-            TriageRead.Read(triageCards.save(item, checked), requests)
+            // A question from someone Meka watches for in a group (Fold review 2026-10-12, bug 3): "Jeanette asked".
+            val watched = (route as? os.meka.core.domain.TriageRoute.AskAi)?.watched == true
+            TriageRead.Read(triageCards.save(item, checked, watched = watched), requests)
         }
     }
 

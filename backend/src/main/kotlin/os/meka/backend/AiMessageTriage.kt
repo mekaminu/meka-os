@@ -5,7 +5,7 @@ import os.meka.core.wire.MessageTriageCodec
 
 /**
  * The messages assistant (build plan V1, "Messages assistant — all WhatsApp and texts", slice 1; ADR-006 §2–4). The Fold
- * sends one message (a 1:1 chat, or a group message that names Meka) with the sender's label and the time; the server
+ * sends one message (a 1:1 chat, or a group message that names Meka or is a family member's question) with the sender's label and the time; the server
  * asks the small model once, with no tools, which lane it belongs in (needs a reply · an action for Meka · FYI), for a
  * one-line gist, a short reply draft when it needs one and, for an action, proposals of MEKA's own kinds. The device
  * checks it all again; a draft is only ever sent by Meka's tap. Nothing of the message or the answer is stored or
@@ -46,7 +46,7 @@ class MessageTriageService(private val provider: LanguageModelProvider?) {
               Titles are short imperatives from Meka's point of view (at most 8 words); "words" is the message's own words for when, copied exactly; leave out what the message doesn't say.
             - "fyi": news, thanks, greetings, plans others are making, anything that needs nothing from Meka.
             Always add "summary": the gist in at most 12 words ("Tunde asks if you're coming Saturday").
-            When the message came from a group (group="…"), it mentions Meka; answer only what it asks of him.
+            When the message came from a group (group="…"), it mentions Meka or comes from his family asking the group something (a question he may be the one to answer); answer only what it asks of him, and when it is a question to the group about something he would know or decide (a fixture, a pickup, a plan), it needs a reply.
             Reply with one JSON object and nothing else: {"lane":"…","summary":"…","draft":"…","proposals":[…]}.
         """.trimIndent()
 
