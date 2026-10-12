@@ -119,7 +119,7 @@ class BriefScriptFacadeTest {
 
         fold.setBriefLength("short")
         assertEquals(BriefLength.SHORT, fold.briefView.value.story.length)
-        assertEquals(listOf(false, true, false), fold.briefView.value.lengths.map { it.chosen })
+        assertEquals(listOf(true, false, false), fold.briefView.value.lengths.map { it.chosen })
         fold.syncNow(); mac.syncNow()
         assertEquals(BriefLength.SHORT, mac.briefView.value.story.length)
         mac.setBriefLength("full")

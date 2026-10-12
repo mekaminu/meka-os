@@ -155,7 +155,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
                     }
                 }
                 // Slice 3: how long the spoken brief is (synced): Short ~45 s · Standard ~90 s · Full ~3 min.
-                Box(Modifier.padding(top = MekaSpace.s)) {
+                Box(Modifier.padding(top = MekaSpace.xs)) {
                     Chips(null, v.lengths.map { it.label to it.chosen }) { i ->
                         val c = v.lengths[i]
                         if (!c.chosen) {
