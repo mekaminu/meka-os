@@ -11,6 +11,14 @@ object NotificationRules {
     val SMS_PACKAGES = setOf("com.samsung.android.messaging", "com.google.android.apps.messaging")
     val DIALER_PACKAGES = setOf("com.samsung.android.dialer", "com.google.android.dialer", "com.android.server.telecom", "com.android.phone")
     const val CATEGORY_MISSED_CALL = "missed_call" // Notification.CATEGORY_MISSED_CALL
+    const val CATEGORY_MESSAGE = "msg" // Notification.CATEGORY_MESSAGE
+
+    /**
+     * Whether a messaging app's notification is a conversation MEKA reads (Fold review 2026-10-12, bug 2): one carrying
+     * messages (MessagingStyle) or marked as a message. Anything else from the same app — "Spam protection disabled",
+     * "Backing up chats", a promotion — is ignored, never captured, triaged or digested.
+     */
+    fun isConversation(category: String?, hasMessages: Boolean): Boolean = hasMessages || category == CATEGORY_MESSAGE
 
     /** Null for everything MEKA leaves alone. [defaultSms] is the phone's default SMS app, if any. */
     fun appFor(packageName: String, category: String?, defaultSms: String?): CaptureApp? = when {

@@ -139,7 +139,7 @@ class TriageChatsTest {
         assertTrue(barca.spoken.endsWith("14 more in the group. Lineup debate for Getafe."))
         assertFalse(barca.single)
         assertEquals("barça lads", barca.groupKey)
-        assertEquals("Done · Barça  Lads · 1 message · group caught up", TriageChatRules.doneLine(barca))
+        assertEquals("Done · Barça Lads · 1 message · group caught up", TriageChatRules.doneLine(barca))
         assertEquals(chats.single { !it.isGroup }, folded.single { !it.isGroup })
 
         // ...and the digest leaves that group out, so it's shown once; with no other news there's no digest at all.

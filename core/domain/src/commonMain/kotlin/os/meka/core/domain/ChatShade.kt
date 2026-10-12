@@ -75,7 +75,7 @@ object ChatShadeRules {
 
     /** The chat key of a captured message, the same as [TriageChatRules.key] gives its card. */
     fun key(item: CapturedItem): String {
-        val who = item.conversation?.trim()?.lowercase()?.let { "g:$it" } ?: "p:${People.key(item.personName)}"
+        val who = ChatTitleRules.cleanOrNull(item.conversation)?.lowercase()?.let { "g:$it" } ?: "p:${People.key(item.personName)}"
         return "${item.app.name}|$who"
     }
 

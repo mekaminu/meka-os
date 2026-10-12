@@ -88,7 +88,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
     fun save(item: CapturedItem, triage: MessageTriage, local: Boolean = false): TriageCard? {
         val id = entityId(item.id)
         if (replica.entity(EntityTypes.TRIAGE_CARD, id) != null) return null
-        val group = item.conversation?.trim()?.takeIf { it.isNotEmpty() }
+        val group = ChatTitleRules.cleanOrNull(item.conversation)
         replica.commitLocal(
             EntityTypes.TRIAGE_CARD, id,
             buildMap {
@@ -163,7 +163,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
         )
     }
 
-    private class Stored(
+    private data class Stored(
         val messageId: String,
         val person: String,
         val group: String?,
@@ -193,7 +193,9 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
         )
     }
 
-    private fun card(s: Stored): TriageCard {
+    private fun card(raw: Stored): TriageCard {
+        // A group name stored with the app's count ("BUFC U7s (2 messages)") reads as the group (Fold review 2026-10-12).
+        val s = raw.copy(group = ChatTitleRules.cleanOrNull(raw.group))
         val who = s.person.trim().take(40)
         val time = TaskWhenRules.timeLabel(calendar.minuteOfDay(s.atMs))
         val from = if (s.group != null) "$who in ${s.group.trim().take(40)} · $time" else "$who · $time"

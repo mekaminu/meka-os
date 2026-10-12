@@ -115,7 +115,7 @@ object GroupDigestRules {
         GroupMode.IGNORE -> "MEKA never reads it, not even a mention"
     }
 
-    fun groupKey(item: CapturedItem): String = People.key(item.conversation.orEmpty())
+    fun groupKey(item: CapturedItem): String = People.key(ChatTitleRules.clean(item.conversation.orEmpty()))
 
     private fun clean(s: String): String {
         val t = s.replace(Regex("""[\u0000-\u001F\u007F]"""), " ").replace(Regex("""\s+"""), " ").trim()

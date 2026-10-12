@@ -18,6 +18,7 @@ import os.meka.core.domain.CaptureApp
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.CapturedItem
 import os.meka.core.domain.ChatShadeRules
+import os.meka.core.domain.ChatTitleRules
 import os.meka.core.domain.GroupDigestRules
 import os.meka.core.domain.MessageTriageRules
 import os.meka.core.domain.RequestWatchRules
@@ -166,8 +167,11 @@ class WorkCaptureService : NotificationListenerService() {
 
         // Messaging apps: prefer the structured messages (each with its own sender and time).
         val style = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(n)
+        // Only conversations: an app's own notices ("Spam protection disabled" from an SMS app) are not messages.
+        if (!NotificationRules.isConversation(n.category, style != null && style.messages.isNotEmpty())) return emptyList()
         if (style != null && style.messages.isNotEmpty()) {
-            val group = if (style.isGroupConversation) style.conversationTitle?.toString() else null
+            // Without WhatsApp's "(2 messages)" count, so a bundled re-post is the same group and the same message ids.
+            val group = if (style.isGroupConversation) ChatTitleRules.cleanOrNull(style.conversationTitle?.toString()) else null
             return style.messages.mapNotNull { m ->
                 val sender = m.person?.name?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null // null = Meka himself
                 val body = m.text?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
@@ -176,7 +180,7 @@ class WorkCaptureService : NotificationListenerService() {
         }
         if (NotificationRules.isSummaryOnly(title, text)) return emptyList()
         val (group, sender) = NotificationRules.splitGroupTitle(title!!.trim())
-        return listOf(item(app, CaptureKind.MESSAGE, sender, text!!.trim(), group, at))
+        return listOf(item(app, CaptureKind.MESSAGE, sender, text!!.trim(), ChatTitleRules.cleanOrNull(group), at))
     }
 
     companion object {

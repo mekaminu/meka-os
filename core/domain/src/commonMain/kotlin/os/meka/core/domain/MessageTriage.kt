@@ -146,7 +146,7 @@ object MessageTriageRules {
     fun route(item: CapturedItem, settings: TriageSettings = TriageSettings()): TriageRoute {
         val text = item.text?.trim().orEmpty()
         if (item.kind == CaptureKind.MISSED_CALL || text.isEmpty()) return TriageRoute.Skip
-        val group = item.conversation?.trim()?.takeIf { it.isNotEmpty() }
+        val group = ChatTitleRules.cleanOrNull(item.conversation)
         val voice = item.kind == CaptureKind.VOICE_MESSAGE || MessageRequestRules.isVoiceNote(text)
         if (group != null) {
             val mode = settings.modeOf(group)
@@ -231,11 +231,18 @@ object MessageTriageRules {
             .filter { it.atMs > sinceMs }
             .mapNotNull { item -> (route(item, settings) as? TriageRoute.Digest)?.let { it.groupKey to item } }
             .groupBy({ it.first }, { it.second })
-            .map { (key, msgs) -> digestCard(key, msgs.distinctBy { it.id }.sortedBy { it.atMs }) }
+            .map { (key, msgs) -> digestCard(key, msgs.distinctBy { it.id }.distinctBy { sameMessage(it) }.sortedBy { it.atMs }) }
             .sortedWith(compareByDescending<GroupDigestCard> { it.count }.thenByDescending { it.latestMs })
 
+    /**
+     * The same message seen twice (Fold review 2026-10-12, bug 1): once in the group's first notification and again
+     * in the bundled one titled "… (2 messages)", whose id carried the count. Same app, sender, time and words.
+     */
+    internal fun sameMessage(item: CapturedItem): String =
+        listOf(item.app.name, People.key(item.personName), item.atMs.toString(), item.text?.trim().orEmpty()).joinToString("|")
+
     private fun digestCard(key: String, msgs: List<CapturedItem>): GroupDigestCard {
-        val title = msgs.last().conversation!!.trim().replace(Regex("""\s+"""), " ").take(40)
+        val title = ChatTitleRules.clean(msgs.last().conversation!!).take(40)
         val count = msgs.size
         val countLine = if (count == 1) "1 message" else "$count messages"
         val writers = msgs.reversed().map { it.personName.trim() }.distinctBy(People::key)

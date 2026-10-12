@@ -46,10 +46,15 @@ data class TriageChat(
      * lines that need a reply kept under it. Null: the top lines are the card's summary.
      */
     val summary: String? = null,
+    /**
+     * Cards for a message already in [cards], seen a second time under another notification (Fold review 2026-10-12,
+     * bug 1): never shown, but Done and Not now clear them with the chat so they can't come back as a card of their own.
+     */
+    val repeatIds: List<String> = emptyList(),
 ) {
     /** One message, no request and no chatter: the message's own card, as before. */
     val single: Boolean get() = cards.size == 1 && requests.isEmpty() && chatter == 0
-    val ids: List<String> get() = cards.map { it.id }
+    val ids: List<String> get() = cards.map { it.id } + repeatIds
 }
 
 /**
@@ -66,7 +71,7 @@ object TriageChatRules {
     /** The chat a card belongs to: the same on both devices (the person's key, or the group's name in lower case). */
     fun key(card: TriageCard): String {
         val app = card.app?.name ?: "APP"
-        val who = card.group?.trim()?.lowercase()?.let { "g:$it" } ?: "p:${card.personKey}"
+        val who = ChatTitleRules.cleanOrNull(card.group)?.lowercase()?.let { "g:$it" } ?: "p:${card.personKey}"
         return "$app|$who"
     }
 
@@ -183,10 +188,20 @@ object TriageChatRules {
     fun replyChats(cards: List<TriageCard>): Int =
         cards.filter { it.lane == TriageLane.NEEDS_REPLY }.map { key(it) }.distinct().size
 
-    private fun chat(key: String, list: List<TriageCard>): TriageChat {
+    /**
+     * The same message stored twice (once from the group's notification, once from WhatsApp's bundled "… (2 messages)"
+     * one): same sender at the same moment. The one needing a reply is kept, else the first stored.
+     */
+    internal fun repeatKey(card: TriageCard): String = "${card.personKey}|${card.atMs}"
+
+    private fun chat(key: String, all: List<TriageCard>): TriageChat {
+        val kept = all.sortedBy { if (it.lane == TriageLane.NEEDS_REPLY) 0 else 1 }.distinctBy { repeatKey(it) }
+        val keptIds = kept.map { it.id }.toSet()
+        val repeats = all.map { it.id }.filter { it !in keptIds }
+        val list = all.filter { it.id in keptIds }
         val oldestFirst = list.sortedBy { it.atMs }
         val latest = oldestFirst.last()
-        val group = latest.group ?: list.firstNotNullOfOrNull { it.group }
+        val group = ChatTitleRules.cleanOrNull(latest.group ?: list.firstNotNullOfOrNull { it.group })
         val title = group ?: TriageReplyRules.who(latest).substringBefore(" in ")
         val people = list.map { it.personKey }.distinct()
         val replies = list.count { it.lane == TriageLane.NEEDS_REPLY }
@@ -211,6 +226,9 @@ object TriageChatRules {
             append(title).append(", ").append(countLine.replace(" · ", ", ")).append(". ")
             top.forEach { append(it.trimEnd('.')).append(". ") }
         }.trim()
-        return TriageChat(key, title, latest.app, group != null, countLine, meta, top, oldestFirst, replies, latest.atMs, spoken)
+        return TriageChat(
+            key, title, latest.app, group != null, countLine, meta, top, oldestFirst, replies, latest.atMs, spoken,
+            repeatIds = repeats,
+        )
     }
 }

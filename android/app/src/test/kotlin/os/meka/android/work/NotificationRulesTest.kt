@@ -40,4 +40,13 @@ class NotificationRulesTest {
         assertEquals("Five-a-side" to "Tom", NotificationRules.splitGroupTitle("Five-a-side: Tom"))
         assertEquals(null to "Tom", NotificationRules.splitGroupTitle("Tom"))
     }
+
+    @Test
+    fun onlyConversationsAreRead() {
+        // Fold review 2026-10-12, bug 2: an SMS app's "Spam protection disabled" notice is not a message.
+        assertFalse(NotificationRules.isConversation(category = "status", hasMessages = false))
+        assertFalse(NotificationRules.isConversation(category = null, hasMessages = false))
+        assertTrue(NotificationRules.isConversation(category = "msg", hasMessages = false))
+        assertTrue(NotificationRules.isConversation(category = null, hasMessages = true))
+    }
 }
