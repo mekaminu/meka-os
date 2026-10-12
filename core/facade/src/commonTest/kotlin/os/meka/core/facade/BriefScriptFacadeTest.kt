@@ -3,6 +3,7 @@ package os.meka.core.facade
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.AskContext
+import os.meka.core.domain.BriefLength
 import os.meka.core.domain.BriefScriptRules
 import os.meka.core.domain.TalkTurn
 import os.meka.core.sync.PullRequest
@@ -100,5 +101,36 @@ class BriefScriptFacadeTest {
         assertEquals(BriefScriptRules.script(fold.briefView.value), fold.briefScript())
         assertEquals(3, server.sent.size)
         assertEquals(BriefScriptRules.script(fold.briefView.value), fold.talkReadOut(ReadOut(ReadOut.Kind.BRIEF)))
+    }
+
+    @Test
+    fun theLengthIsChosenOnceForBothDevicesAndTheFocusRowsTickTasksOff() = runTest {
+        val service = SyncService(InMemoryServerOpStore())
+        fun device(id: String) = MekaCore(
+            householdId = "hh", deviceId = id, store = InMemoryReplicaStore(),
+            transport = os.meka.core.testing.FaultyTransport(service),
+            secureRandom = Random(id.hashCode()), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        )
+        val fold = device("android")
+        val mac = device("mac")
+        fold.addTask("Renew passport")
+        assertEquals(BriefLength.STANDARD, fold.briefView.value.story.length)
+        assertEquals("Focus · Renew passport · up next", fold.briefView.value.focusCardLine)
+
+        fold.setBriefLength("short")
+        assertEquals(BriefLength.SHORT, fold.briefView.value.story.length)
+        assertEquals(listOf(false, true, false), fold.briefView.value.lengths.map { it.chosen })
+        fold.syncNow(); mac.syncNow()
+        assertEquals(BriefLength.SHORT, mac.briefView.value.story.length)
+        mac.setBriefLength("full")
+        mac.syncNow(); fold.syncNow()
+        assertEquals(BriefLength.FULL, fold.briefView.value.story.length)
+
+        // The focus row ticks the task off, like the brief's Today rows.
+        val row = fold.briefView.value.focusLines.single()
+        assertEquals("Renew passport", row.title)
+        fold.complete(row.taskId!!)
+        assertTrue(fold.briefView.value.focusLines.isEmpty())
+        assertEquals(null, fold.briefView.value.focusCardLine)
     }
 }

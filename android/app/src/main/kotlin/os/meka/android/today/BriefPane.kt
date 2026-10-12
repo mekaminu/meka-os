@@ -154,6 +154,39 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
                         else -> { haptics.light(); listen() }
                     }
                 }
+                // Slice 3: how long the spoken brief is (synced): Short ~45 s · Standard ~90 s · Full ~3 min.
+                Box(Modifier.padding(top = MekaSpace.s)) {
+                    Chips(null, v.lengths.map { it.label to it.chosen }) { i ->
+                        val c = v.lengths[i]
+                        if (!c.chosen) {
+                            haptics.tick()
+                            speaker.stop()
+                            scope.launch { runCatching { core.setBriefLength(c.id) } }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Slice 3: the focus the spoken brief names, with why, then the smaller ones counted and Needs you.
+        if (v.focusLines.isNotEmpty() || v.focusMore != null || v.needsYouLine != null) {
+            item(key = "h-focus") {
+                SectionLabel("Focus", Modifier.animateItem().appear(rememberAppearance(1)))
+            }
+            items(v.focusLines, key = { it.id }) { r ->
+                BriefDayRow(r, Modifier.animateItem().appear(rememberAppearance(1))) { id -> scope.launch { runCatching { core.complete(id) } } }
+            }
+            val more = listOfNotNull(v.focusMore, v.needsYouLine)
+            if (more.isNotEmpty()) {
+                item(key = "f-more") {
+                    Column(Modifier.padding(bottom = MekaSpace.m).animateItem().appear(rememberAppearance(1))) {
+                        more.forEach { line ->
+                            Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "focus-more") {
+                                Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(vertical = MekaSpace.xxs))
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -233,6 +266,12 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
             HeadlineLine(h, Modifier.animateItem().appear(rememberAppearance(5))) { url ->
                 runCatching { uriHandler.openUri(url) }
             }
+        }
+
+        // Slice 3: the one-liner the spoken brief closes with.
+        item(key = "one-liner") {
+            Text("“${v.oneLiner}”", style = MekaType.body, color = Meka.colors.textSecondary,
+                modifier = Modifier.padding(top = MekaSpace.xl).animateItem().appear(rememberAppearance(6)))
         }
 
         item(key = "got-it") {
@@ -401,6 +440,12 @@ internal fun BriefCard(v: MorningBriefView, onOpen: () -> Unit, modifier: Modifi
         // it cross-fades as the weather or the day changes.
         Crossfade(v.cardLine, Modifier.padding(top = MekaSpace.xxs), animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "brief-card-line") { line ->
             Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        }
+        // Slice 3: the first task the spoken brief names: "Focus · Renew passport · overdue · + 2 more".
+        v.focusCardLine?.let { focus ->
+            Crossfade(focus, Modifier.padding(top = MekaSpace.xxs), animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "brief-card-focus") { line ->
+                Text(line, style = MekaType.caption, color = Meka.colors.accent)
+            }
         }
     }
 }

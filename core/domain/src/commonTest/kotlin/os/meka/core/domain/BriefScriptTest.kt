@@ -43,9 +43,9 @@ class BriefScriptTest {
         ) { minute(it) }
         assertEquals(
             listOf(
-                BriefFocus("Renew passport", "it's overdue"),
-                BriefFocus("Call the garage", "it's due at 3 o'clock"),
-                BriefFocus("Send the Q4 deck", "it moves your goal, Q4 plan"),
+                BriefFocus("Renew passport", "it's overdue", "3"),
+                BriefFocus("Call the garage", "it's due at 3 o'clock", "4"),
+                BriefFocus("Send the Q4 deck", "it moves your goal, Q4 plan", "2"),
             ),
             focus,
         )
@@ -149,5 +149,79 @@ class BriefScriptTest {
         }
         assertEquals(BriefScriptRules.oneLiner(BriefStory(epochDay = day)), BriefScriptRules.oneLiner(BriefStory(epochDay = day)))
         assertTrue("Send the Q4 deck" in BriefScriptRules.oneLiner(facts[1].copy(epochDay = BriefScriptRules.lineCount * 700L)))
+    }
+
+    // ---- Slice 3: Short · Standard · Full, and the card matching the script ----
+
+    private fun busy(length: BriefLength) = BriefStory(
+        epochDay = day, officeDay = true, workEndMin = 17 * 60 + 30, length = length,
+        events = listOf(
+            BriefEvent("Standup", 570, 585), BriefEvent("1:1 with Sam", 660, 690), BriefEvent("Design review", 720, 780),
+            BriefEvent("Budget call", 840, 870),
+        ),
+        focus = listOf(
+            BriefFocus("Renew passport", "it's overdue", "t1"), BriefFocus("Call the garage", "it's due at 3 o'clock", "t2"),
+            BriefFocus("Send the Q4 deck", "it moves your goal, Q4 plan", "t3"), BriefFocus("Book flights", "it's up next", "t4"),
+        ),
+        smallerCount = 2, needsYou = 2,
+        habits = listOf("gym, 1 of 3 this week", "reading, a 4-day streak"),
+        weekGoals = "This week: 2 of 3 goals moving",
+        family = listOf("Black bin out tonight.", "Date night at 8."),
+    )
+
+    private val news = (1..6).map { BriefHeadline("n$it", "Story $it", null, "BBC News · UK") }
+
+    @Test
+    fun shortStandardAndFullChangeHowMuchIsSaid() {
+        val short = BriefScriptRules.script(weekday(busy(BriefLength.SHORT), news))
+        assertTrue("One thing to focus on: Renew passport, it's overdue. Plus 5 smaller ones." in short, short)
+        assertFalse("Call the garage" in short || "Then 1:1 with Sam" in short || "goals moving" in short, short)
+        assertTrue("Today's habit: gym, 1 of 3 this week." in short && "Date night" !in short, short)
+        assertTrue("Story 1" in short && "Story 2" !in short, "one headline: $short")
+        assertTrue(BriefScriptRules.body(weekday(busy(BriefLength.SHORT), news)).joinToString(" ").length <= BriefLength.SHORT.maxChars)
+
+        val standard = BriefScriptRules.script(weekday(busy(BriefLength.STANDARD), news))
+        assertTrue("Three things to focus on." in standard && "Book flights" !in standard && "Plus 3 smaller ones." in standard, standard)
+        assertTrue("Story 3" in standard && "Story 4" !in standard, standard)
+
+        val full = BriefScriptRules.script(weekday(busy(BriefLength.FULL), news))
+        assertTrue("Then Send the Q4 deck, it moves your goal, Q4 plan. And Book flights, it's up next. Plus 2 smaller ones." in full, full)
+        assertTrue("Then 1:1 with Sam at 11 o'clock, Design review at 12 o'clock and Budget call at 2 o'clock." in full, full)
+        assertTrue("Story 5" in full && "Story 6" !in full, full)
+        assertTrue(short.length < standard.length && standard.length < full.length)
+        // The weekend says two at most in Full, one otherwise.
+        assertEquals(2, BriefLength.FULL.focusFor(weekend = true))
+        assertEquals(BriefLength.STANDARD, BriefLength.of(null))
+        assertEquals(BriefLength.FULL, BriefLength.of(" Full "))
+        assertEquals(BriefLength.STANDARD, BriefLength.of("long"))
+    }
+
+    @Test
+    fun theCardNamesTheSameFocusWithWhyAndTheOneLiner() {
+        val v = weekday(busy(BriefLength.STANDARD), news)
+        assertEquals(listOf("Renew passport", "Call the garage", "Send the Q4 deck"), v.focusLines.map { it.title })
+        assertEquals(listOf("Overdue", "Due at 3 o'clock", "Moves your goal, Q4 plan"), v.focusLines.map { it.caption })
+        assertEquals(listOf(true, false, false), v.focusLines.map { it.lit })
+        assertEquals(listOf("t1", "t2", "t3"), v.focusLines.map { it.taskId })
+        assertEquals("Focus, Renew passport, Overdue", v.focusLines[0].spoken)
+        assertEquals("+ 3 smaller ones on Today", v.focusMore)
+        assertEquals("2 decisions waiting in Needs you", v.needsYouLine)
+        assertEquals("Focus · Renew passport · overdue · + 2 more", v.focusCardLine)
+        assertEquals(BriefScriptRules.oneLiner(v.story), v.oneLiner)
+        assertTrue(BriefScriptRules.script(v).contains(v.oneLiner))
+        assertEquals(listOf("Short" to false, "Standard" to true, "Full" to false), v.lengths.map { it.label to it.chosen })
+
+        val short = weekday(busy(BriefLength.SHORT))
+        assertEquals(listOf("Renew passport"), short.focusLines.map { it.title })
+        assertEquals("+ 5 smaller ones on Today", short.focusMore)
+        assertEquals("Focus · Renew passport · overdue", short.focusCardLine)
+
+        val nothing = weekday(BriefStory(epochDay = day, smallerCount = 1))
+        assertTrue(nothing.focusLines.isEmpty())
+        assertNull(nothing.focusCardLine)
+        assertNull(nothing.needsYouLine)
+        assertEquals("Nothing urgent · 1 small one on Today", nothing.focusMore)
+        assertEquals("Up next at 10 o'clock", BriefCardRules.caption("it's up next at 10 o'clock"))
+        assertNull(BriefCardRules.caption(null))
     }
 }

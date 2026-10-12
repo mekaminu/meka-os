@@ -48,8 +48,34 @@ struct BriefSheet: View {
                 .help(speaker.speaking || preparing != nil ? "Stop reading" : "Read the brief aloud")
                 .accessibilityLabel(speaker.speaking ? "Stop reading the brief" : "Read the brief aloud")
                 .staggeredAppear(0)
+                // Slice 3: how long the spoken brief is (synced): Short ~45 s · Standard ~90 s · Full ~3 min.
+                Picker("Length", selection: Binding(
+                    get: { v.lengths.first(where: \.chosen)?.id ?? "standard" },
+                    set: { id in
+                        speaker.stop()
+                        model.setBriefLength(id)
+                    }
+                )) {
+                    ForEach(v.lengths, id: \.id) { c in Text(c.label).tag(c.id) }
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize()
+                .help("How long the spoken brief is")
+                .staggeredAppear(0)
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        // Slice 3: the focus the spoken brief names, with why, the smaller ones counted, Needs you.
+                        let focusMore = [v.focusMore, v.needsYouLine].compactMap { $0 }
+                        if !v.focusLines.isEmpty || !focusMore.isEmpty {
+                            SectionLabel("Focus", palette).staggeredAppear(1)
+                            ForEach(v.focusLines, id: \.id) { r in
+                                BriefDayRow(line: r, palette: palette).staggeredAppear(1)
+                            }
+                            ForEach(focusMore, id: \.self) { line in
+                                Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                    .contentTransition(.opacity).staggeredAppear(1)
+                            }
+                            Spacer().frame(height: MekaSpace.m)
+                        }
                         SectionLabel("Today", palette).staggeredAppear(1)
                         Text(v.daySummary).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                             .contentTransition(.opacity)
@@ -123,9 +149,13 @@ struct BriefSheet: View {
                             HeadlineRow(headline: h, palette: palette) { url in openURL(url) }
                                 .staggeredAppear(5)
                         }
+                        // Slice 3: the one-liner the spoken brief closes with.
+                        Text("“\(v.oneLiner)”").font(MekaType.body).foregroundStyle(palette.textSecondary)
+                            .padding(.top, MekaSpace.l).staggeredAppear(6)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .animation(MekaMotion.replan(reduced: reduceMotion), value: v.dayLines.map(\.id))
+                    .animation(MekaMotion.replan(reduced: reduceMotion), value: v.focusLines.map(\.id))
                     .animation(MekaMotion.replan(reduced: reduceMotion), value: v.headlines.map(\.id))
                 }
                 .frame(maxHeight: 460)
@@ -277,6 +307,12 @@ struct BriefCard: View {
                 Text(brief.cardLine).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: brief.cardLine)
+                // Slice 3: "Focus · Renew passport · overdue · + 2 more".
+                if let focus = brief.focusCardLine {
+                    Text(focus).font(MekaType.caption).foregroundStyle(palette.accent)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: focus)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(MekaSpace.l)

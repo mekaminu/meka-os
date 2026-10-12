@@ -17,6 +17,13 @@ class BriefScriptCodecTest {
         assertFailsWith<WireFormatException> { BriefScriptCodec.decodeRequest(BriefScriptCodec.encodeRequest(request.copy(facts = listOf("x".repeat(301))))) }
         assertFailsWith<WireFormatException> { BriefScriptCodec.decodeRequest(BriefScriptCodec.encodeRequest(request.copy(facts = List(41) { "a" }))) }
         assertFailsWith<WireFormatException> { BriefScriptCodec.decodeRequest(BriefScriptCodec.encodeRequest(request.copy(date = "today"))) }
+        // Slice 3: the length goes along; an older device's request (no length) is Standard; an unknown one is refused.
+        val full = request.copy(length = "full")
+        assertEquals(full, BriefScriptCodec.decodeRequest(BriefScriptCodec.encodeRequest(full)))
+        val old = BriefScriptCodec.encodeRequest(request).replace(",\"length\":\"standard\"", "")
+        assertTrue("length" !in old, old)
+        assertEquals("standard", BriefScriptCodec.decodeRequest(old).length)
+        assertFailsWith<WireFormatException> { BriefScriptCodec.decodeRequest(BriefScriptCodec.encodeRequest(request.copy(length = "epic"))) }
         val r = BriefScriptCodec.Response("answered", "Good morning, Meka.")
         assertEquals(r, BriefScriptCodec.decodeResponse(BriefScriptCodec.encodeResponse(r)))
     }

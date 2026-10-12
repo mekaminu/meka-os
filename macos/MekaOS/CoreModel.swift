@@ -1273,6 +1273,8 @@ final class CoreModel {
     func deskNewsWidget() -> DeskNewsView? { core?.deskNewsWidget() }
 
     /// Shows or hides a news topic's headlines in the brief; synced with the Fold.
+    /// "A morning brief worth listening to", slice 3: Short · Standard · Full (synced). Only the id String crosses.
+    func setBriefLength(_ id: String) { MekaHaptics.tick(); run { try await $0.setBriefLength(id: id) } }
     func setNewsTopic(_ id: String, on: Bool) { MekaHaptics.tick(); run { try await $0.setNewsTopic(topicId: id, on: on) } }
     /// News → Spanish sources (off = English only everywhere news shows); synced.
     func setNewsSpanish(on: Bool) { MekaHaptics.tick(); run { try await $0.setNewsSpanish(on: on) } }

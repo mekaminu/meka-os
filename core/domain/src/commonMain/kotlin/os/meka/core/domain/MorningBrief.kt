@@ -21,6 +21,8 @@ object BriefFields {
     const val SEEN_BY = "briefSeenBy"
     /** That device's name as its app gives it ("Mac", "Fold"); empty when unknown. */
     const val SEEN_ON = "briefSeenOn"
+    /** "A morning brief worth listening to", slice 3: Short · Standard · Full ([BriefLength.id]); plain last-writer-wins. */
+    const val LENGTH = "briefLength"
 }
 
 /** Something on the radar or in Lists that needs you today: a renewal, a cancel-by date, a decision to review. */
@@ -80,6 +82,19 @@ data class MorningBriefView(
 ) {
     /** [day] as the brief pane draws it (Fold review 2026-10-09 07:26, item 7): see [BriefRules.dayLine]. */
     val dayLines: List<BriefDayLine> get() = day.map(BriefRules::dayLine)
+
+    /** Slice 3: the tasks the spoken brief names, with why ("Overdue"), as the pane's Focus rows ([BriefCardRules]). */
+    val focusLines: List<BriefDayLine> get() = BriefCardRules.focusLines(story)
+    /** "+ 4 smaller ones on Today" under the focus; null for none. */
+    val focusMore: String? get() = BriefCardRules.focusMore(story)
+    /** "1 decision waiting in Needs you"; null for none. */
+    val needsYouLine: String? get() = BriefCardRules.needsYouLine(story)
+    /** Today's card's third line: "Focus · Renew passport · overdue · + 2 more"; null with no focus. */
+    val focusCardLine: String? get() = BriefCardRules.cardLine(story)
+    /** The one-liner the spoken brief closes with ([BriefScriptRules.oneLiner]), at the foot of the pane. */
+    val oneLiner: String get() = BriefScriptRules.oneLiner(story)
+    /** Short · Standard · Full, the chosen one lit. */
+    val lengths: List<BriefLengthChoice> get() = BriefCardRules.lengths(story.length)
 
     companion object {
         val EMPTY = MorningBriefView(
@@ -244,6 +259,14 @@ class MorningBrief(
     private val nowMs: () -> Long,
     private val calendar: LocalCalendar = LocalCalendar.UTC,
 ) {
+    /** Short · Standard · Full (slice 3); Standard until chosen. */
+    fun length(): BriefLength = BriefLength.of(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(BriefFields.LENGTH)?.textOrNull)
+
+    /** Chooses how long the spoken brief is, on every device. */
+    fun setLength(length: BriefLength) {
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(BriefFields.LENGTH to length.id.fv()))
+    }
+
     fun seenDay(): Long? = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(BriefFields.SEEN_DAY)?.longOrNull
 
     /** "Got it": the card is put away on every device until tomorrow morning. [on] names this device ("Mac", "Fold"). */
@@ -386,9 +409,9 @@ class MorningBrief(
         val iso = CivilDate.isoDayOfWeek(today.epochDay)
         val working = workLine?.startsWith("Work ") == true
         val weekend = iso >= 6 && !working
+        val length = length()
         val (focus, smaller) = BriefScriptRules.focus(
-            dayTasks, today, now, weekIds, upNextId,
-            if (weekend) BriefScriptRules.MAX_FOCUS_WEEKEND else BriefScriptRules.MAX_FOCUS,
+            dayTasks, today, now, weekIds, upNextId, length.focusFor(weekend),
         ) { calendar.minuteOfDay(it) }
         return BriefStory(
             epochDay = today.epochDay,
@@ -400,6 +423,7 @@ class MorningBrief(
             habits = BriefScriptRules.habits(goals.habits),
             weekGoals = goals.week.line,
             goalTitle = weekIds.values.firstOrNull(),
+            length = length,
         )
     }
 

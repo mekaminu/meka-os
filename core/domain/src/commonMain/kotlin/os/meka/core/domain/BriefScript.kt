@@ -13,8 +13,47 @@ package os.meka.core.domain
 /** A timed calendar event today, by local minute of the day ([endMin] may pass midnight: 24 × 60 and more). */
 data class BriefEvent(val title: String, val startMin: Int, val endMin: Int)
 
-/** A task named in the brief's focus, and why it matters ("it's overdue"); [why] is null for a plain Up next. */
-data class BriefFocus(val title: String, val why: String?)
+/**
+ * A task named in the brief's focus, and why it matters ("it's overdue"); [why] is null for a plain Up next. [taskId]
+ * (slice 3) lets the brief's Focus rows tick it off.
+ */
+data class BriefFocus(val title: String, val why: String?, val taskId: String? = null)
+
+/**
+ * Slice 3: how long the spoken brief is (Meka's setting, synced on the brief's `context_mode` entity as
+ * [BriefFields.LENGTH]): [SHORT] about 45 seconds (one focus, the first meeting, one headline), [STANDARD] about 90
+ * seconds, [FULL] about three minutes (up to five tasks named, the whole calendar, what's on your lists, five headlines).
+ */
+enum class BriefLength(
+    val id: String,
+    val label: String,
+    /** The body ([BriefScriptRules.body]) in characters at most, whole sentences only. */
+    val maxChars: Int,
+    val maxFocus: Int,
+    val maxFocusWeekend: Int,
+    val maxHeadlines: Int,
+    /** Events named after the first one. */
+    val moreEvents: Int,
+    val maxChases: Int,
+    /** Renewals and decisions from your lists named. */
+    val maxAttention: Int,
+    /** The day's shape, the week's goals, a running fast and more than one home line. */
+    val extras: Boolean,
+) {
+    SHORT("short", "Short", 700, 1, 1, 1, 0, 1, 0, false),
+    STANDARD("standard", "Standard", 1_400, 3, 1, 3, 2, 2, 2, true),
+    FULL("full", "Full", 2_800, 5, 2, 5, 5, 4, 4, true);
+
+    fun focusFor(weekend: Boolean) = if (weekend) maxFocusWeekend else maxFocus
+
+    companion object {
+        val DEFAULT = STANDARD
+        fun of(id: String?): BriefLength = entries.firstOrNull { it.id == id?.trim()?.lowercase() } ?: DEFAULT
+    }
+}
+
+/** One of the brief's length choices as the apps list them ("Short", lit when chosen). */
+data class BriefLengthChoice(val id: String, val label: String, val chosen: Boolean)
 
 data class BriefStory(
     /** Today's local epoch day (picks the one-liner, [BriefScriptRules.oneLiner]). */
@@ -45,6 +84,8 @@ data class BriefStory(
     val family: List<String> = emptyList(),
     /** One of this week's goals still open, for the one-liner. */
     val goalTitle: String? = null,
+    /** Slice 3: Short · Standard · Full. */
+    val length: BriefLength = BriefLength.DEFAULT,
 ) {
     companion object {
         val EMPTY = BriefStory()
@@ -74,13 +115,14 @@ object BriefScriptRules {
      * Slice 2: the brief's facts, the sentences before the news ([script] without [tail]), fitted to [MAX_CHARS]. These
      * are what MEKA's AI rewrites ([BriefAiRules]); every name and time it may say is in them.
      */
-    fun body(v: MorningBriefView, name: String = "Meka"): List<String> = fit(sentences(v, name))
+    fun body(v: MorningBriefView, name: String = "Meka"): List<String> = fit(sentences(v, name), v.story.length.maxChars)
 
     /** The end every brief has, AI-written or not: three headlines, the one-liner and [CLOSE]. */
-    fun tail(v: MorningBriefView): List<String> = news(v.headlines) + listOf(oneLiner(v.story), CLOSE)
+    fun tail(v: MorningBriefView): List<String> = news(v.headlines, v.story.length.maxHeadlines) + listOf(oneLiner(v.story), CLOSE)
 
     private fun sentences(v: MorningBriefView, name: String): List<String> {
         val s = v.story
+        val len = s.length
         val out = mutableListOf<String>()
         out += "${v.greeting}, $name."
         dayKind(v)?.let { out += it }
@@ -102,22 +144,22 @@ object BriefScriptRules {
 
         // Waiting on him.
         if (s.needsYou > 0) out += if (s.needsYou == 1) "One decision is waiting for you in Needs you." else "${s.needsYou} decisions are waiting for you in Needs you."
-        val chases = v.waiting.filter { it.state == DueState.DUE }.take(2)
+        val chases = v.waiting.filter { it.state == DueState.DUE }.take(len.maxChases)
         if (chases.isNotEmpty()) out += sentence("Chase " + listing(chases.map { w -> w.who?.let { "$it about ${w.title}" } ?: w.title }))
-        if (!s.weekend && v.attention.isNotEmpty()) out += sentence("On your lists: " + listing(v.attention.take(2).map { it.title }))
+        if (!s.weekend && len.maxAttention > 0 && v.attention.isNotEmpty()) out += sentence("On your lists: " + listing(v.attention.take(len.maxAttention).map { it.title }))
 
         // Habits and goals.
         when (s.habits.size) {
             0 -> {}
             1 -> out += sentence("Today's habit: ${s.habits[0]}")
-            else -> out += sentence("Habits today: " + listing(s.habits.take(3)))
+            else -> out += if (len.extras) sentence("Habits today: " + listing(s.habits.take(3))) else sentence("Today's habit: ${s.habits[0]}")
         }
-        if (!s.weekend) s.weekGoals?.let { out += sentence(it) }
-        v.fastingLine?.let { out += sentence(it) }
+        if (!s.weekend && len.extras) s.weekGoals?.let { out += sentence(it) }
+        if (len.extras) v.fastingLine?.let { out += sentence(it) }
 
         // Home and family.
         v.school?.let { out += it.spoken }
-        out += s.family.map { sentence(it) }
+        out += s.family.take(if (len.extras) s.family.size else 1).map { sentence(it) }
 
         return out.filter { it.isNotBlank() }
     }
@@ -157,14 +199,15 @@ object BriefScriptRules {
         val firstSaid = FootballRules.spokenFixture(first.title)?.let { "$it at ${clock(first.startMin)}" }
             ?: "${first.title} at ${clock(first.startMin)}"
         out += sentence(if (events.size == 1) "One thing in the calendar: $firstSaid" else "First up, $firstSaid")
-        if (events.size > 1) {
-            val rest = events.drop(1).take(2).map { e ->
+        val len = s.length
+        if (events.size > 1 && len.moreEvents > 0) {
+            val rest = events.drop(1).take(len.moreEvents).map { e ->
                 FootballRules.spokenFixture(e.title)?.let { "$it at ${clock(e.startMin)}" } ?: "${e.title} at ${clock(e.startMin)}"
             }
             val more = events.size - 1 - rest.size
             out += sentence("Then " + listing(rest) + if (more > 0) ", and $more more" else "")
         }
-        shape(events, s.workEndMin)?.let { out += sentence(it) }
+        if (len.extras) shape(events, s.workEndMin)?.let { out += sentence(it) }
         clash(events)?.let { out += sentence(it) }
         return out
     }
@@ -214,10 +257,10 @@ object BriefScriptRules {
             val goal = t.goalId?.let { weekGoals[it] }
             val due = t.dueAtMs
             val r = when {
-                due != null && due < nowMs -> Ranked(0, i, BriefFocus(t.title, "it's overdue"))
-                due != null && due < today.endMs -> Ranked(1, i, BriefFocus(t.title, "it's due at ${clock(clockOf(due))}"))
-                goal != null -> Ranked(2, i, BriefFocus(t.title, "it moves your goal, $goal"))
-                t.id == upNextId -> Ranked(3, i, BriefFocus(t.title, t.scheduledAtMs?.takeIf { it >= today.startMs }?.let { "it's up next at ${clock(clockOf(it))}" } ?: "it's up next"))
+                due != null && due < nowMs -> Ranked(0, i, BriefFocus(t.title, "it's overdue", t.id))
+                due != null && due < today.endMs -> Ranked(1, i, BriefFocus(t.title, "it's due at ${clock(clockOf(due))}", t.id))
+                goal != null -> Ranked(2, i, BriefFocus(t.title, "it moves your goal, $goal", t.id))
+                t.id == upNextId -> Ranked(3, i, BriefFocus(t.title, t.scheduledAtMs?.takeIf { it >= today.startMs }?.let { "it's up next at ${clock(clockOf(it))}" } ?: "it's up next", t.id))
                 else -> null
             } ?: return@mapIndexedNotNull null
             if (t.isRepeating) r.copy(order = r.order + 10_000) else r
@@ -243,7 +286,7 @@ object BriefScriptRules {
         }
 
     private fun focusLines(s: BriefStory, v: MorningBriefView): List<String> {
-        val max = if (s.weekend) MAX_FOCUS_WEEKEND else MAX_FOCUS
+        val max = s.length.focusFor(s.weekend)
         val named = s.focus.take(max)
         val smaller = s.smallerCount + (s.focus.size - named.size)
         if (named.isEmpty()) {
@@ -265,8 +308,8 @@ object BriefScriptRules {
         return out
     }
 
-    /** At most [MAX_HEADLINES], one sentence each: "In the news." then "From BBC Sport: Barça win again." */
-    fun news(headlines: List<BriefHeadline>): List<String> = BriefSpeech.news(headlines.take(MAX_HEADLINES))
+    /** At most [max] ([MAX_HEADLINES]), one sentence each: "In the news." then "From BBC Sport: Barça win again." */
+    fun news(headlines: List<BriefHeadline>, max: Int = MAX_HEADLINES): List<String> = BriefSpeech.news(headlines.take(max))
 
     /**
      * The closing one-liner: short, about his day where the facts allow (the first focus, a goal, a habit, the
@@ -336,12 +379,12 @@ object BriefScriptRules {
         { _ -> "Make today a day you'd happily repeat." },
     )
 
-    /** The sentences kept while they fit in [MAX_CHARS]. */
-    internal fun fit(sentences: List<String>): List<String> {
+    /** The sentences kept while they fit in [max] ([MAX_CHARS]). */
+    internal fun fit(sentences: List<String>, max: Int = MAX_CHARS): List<String> {
         val kept = mutableListOf<String>()
         var length = 0
         for (s in sentences) {
-            if (length + 1 + s.length > MAX_CHARS) break
+            if (length + 1 + s.length > max) break
             kept += s
             length += 1 + s.length
         }
@@ -360,4 +403,61 @@ object BriefScriptRules {
         val c = BriefSpeech.clean(text).trimEnd(',', ';', ' ')
         return if (c.isEmpty() || c.last() in ".!?…") c else "$c."
     }
+}
+
+/**
+ * Slice 3: the brief's pane and Today's card match the script. The Focus rows name the same tasks with the same why
+ * (as a caption: "Overdue", "Due at 3 o'clock", "Moves your goal, Q4 plan", "Up next"), the smaller ones are counted,
+ * Needs you is said, and the one-liner closes the pane. Pure.
+ */
+object BriefCardRules {
+    /** The focus as the pane draws it (the same rows as the brief's Today: a tick circle to complete each). */
+    fun focusLines(s: BriefStory): List<BriefDayLine> = s.focus.take(s.length.focusFor(s.weekend)).mapIndexed { i, f ->
+        val caption = caption(f.why)
+        BriefDayLine(
+            id = "f-" + (f.taskId ?: i.toString()), taskId = f.taskId, title = f.title, caption = caption,
+            lit = f.why == OVERDUE,
+            spoken = listOfNotNull("Focus", f.title, caption).joinToString(", "),
+        )
+    }
+
+    /** "+ 4 smaller ones on Today" under the focus; "4 small ones on Today, nothing urgent" with none named; null for none. */
+    fun focusMore(s: BriefStory): String? {
+        val named = s.focus.take(s.length.focusFor(s.weekend)).size
+        val smaller = s.smallerCount + (s.focus.size - named)
+        if (smaller <= 0) return null
+        val ones = if (smaller == 1) "1 smaller one" else "$smaller smaller ones"
+        return if (named == 0) "Nothing urgent · ${ones.replace("smaller", "small")} on Today" else "+ $ones on Today"
+    }
+
+    /** "1 decision waiting in Needs you"; null for none. */
+    fun needsYouLine(s: BriefStory): String? = when {
+        s.needsYou <= 0 -> null
+        s.needsYou == 1 -> "1 decision waiting in Needs you"
+        else -> "${s.needsYou} decisions waiting in Needs you"
+    }
+
+    /** Today's card's focus line: "Focus · Renew passport · overdue", "+ 2 more" when more are named; null with none. */
+    fun cardLine(s: BriefStory): String? {
+        val named = s.focus.take(s.length.focusFor(s.weekend))
+        val first = named.firstOrNull() ?: return null
+        val why = caption(first.why)?.replaceFirstChar { it.lowercase() }
+        return listOfNotNull("Focus", first.title, why, (named.size - 1).takeIf { it > 0 }?.let { "+ $it more" }).joinToString(" · ")
+    }
+
+    /** "it's overdue" → "Overdue", "it moves your goal, Q4" → "Moves your goal, Q4"; null for none. */
+    fun caption(why: String?): String? {
+        val w = why?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val bare = when {
+            w.startsWith("it's ") -> w.removePrefix("it's ")
+            w.startsWith("it ") -> w.removePrefix("it ")
+            else -> w
+        }
+        return bare.replaceFirstChar { it.uppercase() }
+    }
+
+    /** The lengths to choose from, [chosen] lit. */
+    fun lengths(chosen: BriefLength): List<BriefLengthChoice> = BriefLength.entries.map { BriefLengthChoice(it.id, it.label, it == chosen) }
+
+    private const val OVERDUE = "it's overdue"
 }

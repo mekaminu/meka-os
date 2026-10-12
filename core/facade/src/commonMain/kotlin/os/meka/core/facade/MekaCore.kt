@@ -2490,6 +2490,11 @@ class MekaCore(
     }
     /** [briefLookedAt] without waiting, for a pane that is going away (its own scope is ending). */
     fun briefClosed(on: String, openForMs: Long) { scope.launch { runCatching { briefLookedAt(on, openForMs) } } }
+    /**
+     * "A morning brief worth listening to", slice 3: how long the spoken brief is ("short", "standard", "full";
+     * [os.meka.core.domain.BriefLength]); synced. An unknown id is Standard.
+     */
+    suspend fun setBriefLength(id: String) = onCore { brief.setLength(os.meka.core.domain.BriefLength.of(id)) }
     /** Shows or hides a news topic in the brief and the News place ([os.meka.core.domain.NewsTopics]); synced. */
     suspend fun setNewsTopic(topicId: String, on: Boolean) = onCore { news.setTopic(topicId, on) }
 
@@ -3313,6 +3318,7 @@ class MekaCore(
             now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(atMs))}",
             weekend = v.story.weekend,
             facts = facts,
+            length = v.story.length.id,
         )
         val reply = (
             try {
@@ -3321,7 +3327,7 @@ class MekaCore(
             ) ?: return fallback
         // Off, over budget or failed: read MEKA's own and ask again next time.
         if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) return fallback
-        val kept = rules.check(reply.script, facts)
+        val kept = rules.check(reply.script, facts, v.story.length.maxChars)
         briefAi = key to kept
         return rules.script(kept, v) ?: fallback
     }

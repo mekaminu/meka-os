@@ -46,6 +46,16 @@ class AiBriefScriptTest {
     }
 
     @Test
+    fun theLengthIsSaidOnTheBriefTagUnlessStandard() {
+        val model = FakeModel(answered("""{"script":"Good morning, Meka."}"""))
+        BriefScriptService(model).write(request.copy(length = "full"))
+        BriefScriptService(model).write(request.copy(length = "standard"))
+        assertTrue(model.asked[0].turns.single().text.startsWith("<brief date=\"2026-10-12\" now=\"Monday 12 October 2026 · 07:30\" weekend=\"yes\" length=\"full\">"))
+        assertTrue("length=" !in model.asked[1].turns.single().text)
+        assertTrue("length=\"full\", about 250 to 450 words" in model.asked[0].system)
+    }
+
+    @Test
     fun chatterIsNothingAndFailuresSayWhy() {
         assertEquals("", BriefScriptService(FakeModel(answered("Here you go!"))).write(request).script)
         assertEquals(AskCodec.Response.OFF, BriefScriptService(null).write(request).state)

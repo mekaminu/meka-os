@@ -25,14 +25,17 @@ object BriefScriptCodec {
     const val MAX_FACTS = 40
     const val MAX_FACT = 300
     /** What is read of a model's answer at most (the device keeps fewer). */
-    const val MAX_SCRIPT = 2_400
+    const val MAX_SCRIPT = 3_200
+    /** Slice 3: how long the brief is (`BriefLength.id` in core/domain); missing is [STANDARD]. */
+    const val STANDARD = "standard"
+    val LENGTHS = setOf("short", STANDARD, "full")
     const val MAX_REASON = 300
 
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
     private val json = Json { ignoreUnknownKeys = true }
 
     /** [date] the device's local ISO date, [now] its readable "Monday 12 October 2026 · 07:30". */
-    data class Request(val date: String, val now: String, val weekend: Boolean, val facts: List<String>)
+    data class Request(val date: String, val now: String, val weekend: Boolean, val facts: List<String>, val length: String = STANDARD)
 
     /** [state]: the same states as Ask's; [script] is empty unless answered. */
     data class Response(val state: String, val script: String = "", val reason: String? = null)
@@ -43,6 +46,7 @@ object BriefScriptCodec {
         put("now", r.now)
         put("weekend", r.weekend)
         putJsonArray("facts") { r.facts.forEach { add(JsonPrimitive(it)) } }
+        put("length", r.length)
     }.toString()
 
     fun decodeRequest(body: String): Request = wrap("brief script request") {
@@ -60,7 +64,10 @@ object BriefScriptCodec {
             require(s.isNotEmpty() && s.length <= MAX_FACT) { "facts" }
             s
         }
-        Request(date, now, weekend, facts)
+        // Slice 3 (additive): an older device sends no length, which is Standard.
+        val length = (o["length"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: STANDARD
+        require(length in LENGTHS) { "length" }
+        Request(date, now, weekend, facts, length)
     }
 
     fun encodeResponse(r: Response): String = buildJsonObject {

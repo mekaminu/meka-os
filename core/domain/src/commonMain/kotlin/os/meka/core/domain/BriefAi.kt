@@ -28,12 +28,12 @@ object BriefAiRules {
     /**
      * The AI's [answer] checked against [facts]: its sentences in order, each kept only when every number, number word
      * and capitalised word in it (a sentence's first word may also be an ordinary opener: "Then", "Your") is in the
-     * facts. Fitted to [BriefScriptRules.MAX_CHARS].
+     * facts. Fitted to [maxChars] (the chosen [BriefLength]'s).
      */
-    fun check(answer: String, facts: List<String>): List<String> {
+    fun check(answer: String, facts: List<String>, maxChars: Int = BriefScriptRules.MAX_CHARS): List<String> {
         val vocab = facts.flatMap { tokens(it) }.map { norm(it) }.flatMap { listOf(it, stem(it)) }.toSet()
         val kept = sentences(answer).filter { it.length <= MAX_SENTENCE && it.any { c -> c.isLetter() } && grounded(it, vocab) }
-        return BriefScriptRules.fit(kept)
+        return BriefScriptRules.fit(kept, maxChars)
     }
 
     /** The brief read aloud from [kept] ([check]), or null when too little survived (read the deterministic one). */
