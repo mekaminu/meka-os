@@ -1,6 +1,7 @@
 package os.meka.android.calendar
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -50,7 +52,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
@@ -154,7 +158,6 @@ private sealed interface Entry {
         override val key = section.id + "/" + row.id
     }
     data class Empty(override val section: AgendaSection, val text: String) : Entry { override val key = "x-" + section.id }
-    data class Work(override val section: AgendaSection, val text: String) : Entry { override val key = "w-" + section.id }
     data class HiddenLabel(override val section: AgendaSection, val text: String) : Entry { override val key = "hl-" + section.id }
     data class Hidden(override val section: AgendaSection, val event: CalendarEvent) : Entry { override val key = section.id + "/hidden-" + event.id }
 }
@@ -168,7 +171,6 @@ private fun flatten(v: CalendarView, allDayOpen: Set<String>): List<Entry> = bui
             AllDayRules.shown(s.allDayItems, open).forEach { add(Entry.AllDay(s, it)) }
             AllDayRules.moreLabel(s.allDayItems, open)?.let { add(Entry.AllDayMoreLine(s, it)) }
         }
-        s.workTitle?.let { add(Entry.Work(s, it)) }
         s.ended.forEach { add(Entry.Line(s, it, past = true)) }
         s.rows.forEach { add(Entry.Line(s, it, past = false)) }
         s.emptyLine?.let { add(Entry.Empty(s, it)) }
@@ -358,12 +360,6 @@ private fun AgendaList(
                     e.text, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = m.padding(start = os.meka.android.today.TIME_COLUMN, bottom = MekaSpace.xs),
                 )
-                // Work hours (Fold review 2026-10-08): "Work 09:00–17:30" as the quiet band Today uses, full width like
-                // Today's, and "Work · Now · until 17:30" with the bar lit while at work (Meka's 10:48 screenshots).
-                is Entry.Work -> os.meka.android.today.WorkBand(
-                    e.text, e.section.workDetail, running = e.section.workRunning,
-                    modifier = m.padding(start = os.meka.android.today.TIME_COLUMN, bottom = MekaSpace.xs).fillMaxWidth(),
-                )
                 is Entry.HiddenLabel -> Text(
                     e.text, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = m.padding(start = os.meka.android.today.TIME_COLUMN, top = MekaSpace.xs),
@@ -379,14 +375,18 @@ private fun AgendaList(
                     TimelineKind.NOW -> NowLine(e.row, m)
                     TimelineKind.GAP -> Unit // the agenda has no gaps; Today shows free time
                     TimelineKind.SESSION -> Unit // booked sessions live on Today (and Goals), not in the agenda
-                    TimelineKind.WORK -> Unit // the agenda says "Work 09:00–17:30" once per day instead
+                    TimelineKind.WORK -> Unit // the day's heading says "Work 09:00–17:30" instead
                 }
             }
         }
     }
 }
 
-/** "Today" with "Tuesday 6 October" beside it; a free stretch is one quiet line. */
+/**
+ * "Today" with "Tuesday 6 October" beside it; a free stretch is one quiet line. On a work day the heading carries a
+ * quiet label at its end, a thin bar and "Work 09:00–17:30" (Fold review 2026-10-12, polish 5: the Work row under every
+ * day read as an event), lit "Work until 17:30" while at work; it cross-fades as it changes.
+ */
 @Composable
 private fun SectionHeader(s: AgendaSection, modifier: Modifier) {
     val free = s.kind == AgendaKind.FREE
@@ -400,7 +400,19 @@ private fun SectionHeader(s: AgendaSection, modifier: Modifier) {
         )
         s.subtitle?.let {
             Spacer(Modifier.width(MekaSpace.xs))
-            Text(it, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false))
+        }
+        s.workLabel?.let { work ->
+            Spacer(Modifier.weight(1f).widthIn(min = MekaSpace.xs))
+            Crossfade(work to s.workRunning, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "work-label") { (label, on) ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) {}) {
+                    Box(Modifier.width(2.dp).height(10.dp).clip(RoundedCornerShape(1.dp))
+                        .background(if (on) Meka.colors.accent else Meka.colors.textTertiary))
+                    Spacer(Modifier.width(MekaSpace.xxs))
+                    Text(label, style = MekaType.caption, color = if (on) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1)
+                }
+            }
         }
     }
 }

@@ -2979,14 +2979,18 @@ class MekaCore(
      * cheap, read from the current Today (which refreshes every minute). Nothing is stored.
      */
     fun coverNow(): os.meka.core.domain.NowView =
-        os.meka.core.domain.CoverNowRules.now(_today.value, nowMs(), ZoneCalendar(timeZone), _sessions.value.cards)
+        os.meka.core.domain.CoverNowRules.now(_today.value, nowMs(), ZoneCalendar(timeZone), _sessions.value.cards, weekGoalTitles())
 
     /**
      * Up next as the closed Fold's card on every screen (Fold review 2026-10-09, item 3): "UP NEXT", the title, its line
      * and Done · Tomorrow · Open, for the open Fold's Today and the Mac's window. Null when nothing is up next. Pure.
      */
     fun upNextCard(): os.meka.core.domain.NowView? =
-        os.meka.core.domain.CoverNowRules.upNext(_today.value, nowMs(), ZoneCalendar(timeZone))
+        os.meka.core.domain.CoverNowRules.upNext(_today.value, nowMs(), ZoneCalendar(timeZone), weekGoalTitles())
+
+    /** This week's open goals (goal id → title): Up next's why says "On this week's goal" (Fold review 2026-10-12). */
+    private fun weekGoalTitles(): Map<String, String> =
+        _goals.value.week.arcs.filter { !it.done }.associate { it.goalId to it.title }
 
     /**
      * The Galaxy Watch's one screen (Galaxy Watch, slice 2): the cover screen's "now" card with only the taps a wrist can
@@ -3076,7 +3080,7 @@ class MekaCore(
         val cal = ZoneCalendar(timeZone)
         val today = _today.value
         return os.meka.core.domain.HomeWidgetRules.view(
-            os.meka.core.domain.CoverNowRules.now(today, nowMs(), cal, _sessions.value.cards), today, _lists.value.dueCount,
+            os.meka.core.domain.CoverNowRules.now(today, nowMs(), cal, _sessions.value.cards, weekGoalTitles()), today, _lists.value.dueCount,
             _needsYouStack.value, _fasting.value, nowMs(), cal,
         )
     }

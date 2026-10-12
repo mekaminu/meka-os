@@ -576,7 +576,7 @@ struct TaskRow: View {
             }
             CompleteButton(task: task, palette: palette)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(task.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(TaskTitleRules.shared.display(title: task.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let line = subtitle {
                     Text(line).font(MekaType.itemMeta)
                         .foregroundStyle(isAlert ? palette.critical : (late && reason == nil && time != nil ? palette.accent : palette.textSecondary))

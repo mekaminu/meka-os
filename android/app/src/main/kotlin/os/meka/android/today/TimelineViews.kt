@@ -126,7 +126,7 @@ internal fun WorkTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
     }
 }
 
-/** The work band itself; the Calendar tab uses it for "Work 09:00–17:30" on each work day. */
+/** The work band itself (Today's timeline; the Calendar tab says work on each day's heading instead). */
 @Composable
 internal fun WorkBand(title: String, detail: String?, running: Boolean, modifier: Modifier = Modifier) {
     Row(

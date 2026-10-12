@@ -267,9 +267,24 @@ private struct AgendaSectionView: View {
                     .font(free ? MekaType.body : MekaType.itemTitle)
                     .foregroundStyle(free ? palette.textTertiary : palette.textPrimary)
                 if let sub = section.subtitle {
-                    Text(sub).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Text(sub).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                }
+                // Work on the heading (Fold review 2026-10-12, polish 5): a thin bar and "Work 09:00–17:30" at its end,
+                // lit "Work until 17:30" while at work, instead of a band under every day; it cross-fades as it changes.
+                if let work = section.workLabel {
+                    Spacer(minLength: MekaSpace.xs)
+                    HStack(spacing: MekaSpace.xxs) {
+                        RoundedRectangle(cornerRadius: 1).fill(section.workRunning ? palette.accent : palette.textTertiary)
+                            .frame(width: 2, height: 10)
+                        Text(work).font(MekaType.caption)
+                            .foregroundStyle(section.workRunning ? palette.accent : palette.textTertiary).lineLimit(1)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .id(work)
+                    .transition(.opacity)
                 }
             }
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: section.workLabel)
             .padding(.top, free ? MekaSpace.xs : MekaSpace.l)
             .padding(.bottom, MekaSpace.xs)
 
@@ -288,13 +303,6 @@ private struct AgendaSectionView: View {
                     ), palette: palette)
                     .padding(.leading, MekaSpace.xs)
                 }
-            }
-            // Work hours (Fold review 2026-10-08): "Work 09:00–17:30" as the quiet band Today uses, full width, and
-            // "Work · Now · until 17:30" with the bar lit while at work (Meka's 10:48 screenshots, 2026-10-09).
-            if let work = section.workTitle {
-                WorkBand(title: work, detail: section.workDetail, running: section.workRunning, palette: palette)
-                    .padding(.leading, TimelineMetrics.timeColumn + MekaSpace.xs)
-                    .padding(.bottom, MekaSpace.xxs)
             }
             ForEach(section.ended, id: \.id) { r in AgendaEventRow(row: r, past: true, tone: tone(r), palette: palette) }
             ForEach(section.rows, id: \.id) { r in

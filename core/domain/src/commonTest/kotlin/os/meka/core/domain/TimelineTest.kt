@@ -73,7 +73,7 @@ class TimelineTest {
         assertEquals("morning", t.upNext!!.id)
         assertTrue(t.timeline.rows.first().late)
         assertEquals(listOf("t-morning", "now", "t-later"), t.timeline.rows.map { if (it.kind == TimelineKind.GAP) "gap" else it.id })
-        assertEquals("5 h free until later", t.timeline.rows[1].detail)
+        assertEquals("5 h free until Later", t.timeline.rows[1].detail) // titles show capitalised (Fold review 2026-10-12)
     }
 
     @Test

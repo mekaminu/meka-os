@@ -77,6 +77,14 @@ data class AgendaSection(
     /** One row per all-day entry ([allDay] in order), with its calendar under the title only when calendars are mixed. */
     val allDayItems: List<AllDayItem> = emptyList(),
 ) {
+    /**
+     * The quiet label beside the day's heading (Fold review 2026-10-12, polish 5: the Work row repeated under every day
+     * read as an event): "Work 09:00–17:30", or "Work until 17:30" (lit) while at work today; null on a day off.
+     */
+    val workLabel: String? get() = if (workRunning && workTitle != null && workDetail != null) {
+        "$workTitle until ${workDetail.substringAfter("until ")}"
+    } else workLine
+
     /** "1 hidden from your day" · "2 hidden from your day"; null when none. */
     val hiddenLabel: String? get() = if (hidden.isEmpty()) null else "${hidden.size} hidden from your day"
 }
@@ -213,7 +221,7 @@ object CalendarAgenda {
                 planned.filter { it.scheduledAtMs!! in w }.forEach { t ->
                     val start = t.scheduledAtMs!!
                     val detail = taskDetail(t, d)
-                    add(Item(TimelineRow("t-" + t.id, TimelineKind.TASK, hhmm(start), t.title, detail, t, null, false, start), start, start, false))
+                    add(Item(TimelineRow("t-" + t.id, TimelineKind.TASK, hhmm(start), TaskTitleRules.display(t.title), detail, t, null, false, start), start, start, false))
                 }
             }.sortedWith(compareBy<Item> { it.start }.thenBy { !it.isEvent }.thenBy { it.row.title })
 

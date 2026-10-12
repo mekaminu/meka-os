@@ -116,7 +116,11 @@ object CoverNowRules {
     const val NOTHING = "Nothing else planned today"
     private const val MIN_MS = 60_000L
 
-    fun now(today: Today, nowMs: Long, cal: LocalCalendar, sessions: List<SessionCard> = emptyList()): NowView {
+    fun now(
+        today: Today, nowMs: Long, cal: LocalCalendar, sessions: List<SessionCard> = emptyList(),
+        /** This week's open goals (goal id → title), for Up next's why ([UpNextWhyRules]). */
+        weekGoals: Map<String, String> = emptyMap(),
+    ): NowView {
         fun hhmm(ms: Long) = LocalClock.formatMinute(cal.minuteOfDay(ms))
         val tl = today.timeline
         val nextEvent = tl.nextEvent
@@ -204,7 +208,7 @@ object CoverNowRules {
             }
             NowKind.TASK -> {
                 val t = task!!
-                val line = taskLine(t, tl, nowMs, cal)
+                val line = taskLine(t, tl, nowMs, cal, weekGoals)
                 // The next event (within the hour) or, failing that, the next timed thing after the task.
                 val thenEvent = if (sessionFirst) null else nextEvent?.event ?: running
                 val thenLine = when {
@@ -236,23 +240,28 @@ object CoverNowRules {
      * Open — instead of a bare title with a ring. No "Then" or Needs you lines: those screens list the next event and
      * Needs you beside it. Null when nothing is up next.
      */
-    fun upNext(today: Today, nowMs: Long, cal: LocalCalendar): NowView? {
+    fun upNext(today: Today, nowMs: Long, cal: LocalCalendar, weekGoals: Map<String, String> = emptyMap()): NowView? {
         val t = today.upNext ?: return null
         return taskView(
-            t, taskLine(t, today.timeline, nowMs, cal), thenLine = null, thenEvent = null, needs = null,
+            t, taskLine(t, today.timeline, nowMs, cal, weekGoals), thenLine = null, thenEvent = null, needs = null,
             late = today.upNextLate(nowMs), laterAtMs = today.upNextLaterMs,
         )
     }
 
     /**
      * "At 14:00 · 30 min · ↻ Every weekday" when the task is on the timeline ("Since 09:15 · 30 min" once it's late),
-     * else "Anytime today" (and its repeat).
+     * else why it's next ("Carried over 2 days · On this week's goal", [UpNextWhyRules]; Fold review 2026-10-12,
+     * polish 6) or "Anytime today", and its repeat.
      */
-    private fun taskLine(t: Task, tl: DayTimeline, nowMs: Long, cal: LocalCalendar): String {
+    private fun taskLine(t: Task, tl: DayTimeline, nowMs: Long, cal: LocalCalendar, weekGoals: Map<String, String>): String {
         val row = tl.rows.firstOrNull { it.kind == TimelineKind.TASK && it.task?.id == t.id }
         return if (row != null && row.late) row.detail ?: LateTaskRules.sinceLabel(row.time)
         else if (row != null) listOfNotNull("At ${row.time}", row.detail).joinToString(" · ")
-        else listOfNotNull("Anytime today", t.repeatMeta(cal.epochDayOf(nowMs))?.let { "↻ $it" }).joinToString(" · ")
+        else {
+            val day = cal.epochDayOf(nowMs)
+            val why = UpNextWhyRules.why(t, CalendarAgenda.window(day, cal), nowMs, weekGoals, cal::minuteOfDay, cal::epochDayOf)
+            listOfNotNull(why ?: "Anytime today", t.repeatMeta(day)?.let { "↻ $it" }).joinToString(" · ")
+        }
     }
 
     /**
@@ -267,7 +276,7 @@ object CoverNowRules {
         val actions = if (later != null) listOf(NowAction.DONE, NowAction.LATER, NowAction.TOMORROW)
         else listOf(NowAction.DONE, NowAction.TOMORROW, NowAction.OPEN_TASK)
         return NowView(
-            kind = NowKind.TASK, label = UP_NEXT_LABEL, lit = late, title = t.title, line = line, event = null, task = t,
+            kind = NowKind.TASK, label = UP_NEXT_LABEL, lit = late, title = TaskTitleRules.display(t.title), line = line, event = null, task = t,
             join = null, mapsQuery = null, actions = actions,
             thenLine = thenLine, thenEvent = thenEvent, thenTask = null, needsYouLine = needs,
             late = late, laterAtMs = later,

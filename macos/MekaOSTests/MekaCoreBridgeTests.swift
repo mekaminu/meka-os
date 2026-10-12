@@ -1364,9 +1364,12 @@ final class MekaCoreBridgeTests: XCTestCase {
                                                               synced: true, events: [], nowMs: 0), "No events in the next 30 days")
     }
 
-    /// Fold review 2026-10-09 13:45, item 4: at work the now line reads as work with the anytime tasks left.
+    /// Fold review 2026-10-09 13:45, item 4: at work the now line counts the anytime tasks left; 2026-10-12, polish 6:
+    /// the work row above already says until when, so the now line doesn't repeat it.
     func testNowLineAtWorkReachesSwift() {
-        XCTAssertEqual(TimelineRules.shared.restLabel(until: "17:30", work: "Work", anytime: 4), "Work until 17:30 · 4 anytime tasks")
+        XCTAssertEqual(TimelineRules.shared.restLabel(until: "17:30", work: "Work", anytime: 4), "4 anytime tasks")
+        XCTAssertEqual(TaskTitleRules.shared.display(title: "renew passport"), "Renew passport")
+        XCTAssertEqual(UpNextWhyRules.shared.carriedLabel(days: 2, repeating: false), "Carried over 2 days")
         XCTAssertEqual(TimelineRules.shared.restLabel(until: "15:00", work: nil, anytime: 1), "Free after 15:00 · 1 anytime task")
         XCTAssertEqual(TimelineRules.shared.restLabel(until: nil, work: nil, anytime: 0), "Nothing else planned today")
     }

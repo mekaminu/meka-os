@@ -185,7 +185,7 @@ object TimelineRules {
         sessions: List<BookedSession> = emptyList(),
         /** Today's work blocks ([WorkHours.blocks]); none on a day off. */
         work: List<WorkBlock> = emptyList(),
-        /** Anytime tasks still to do today, Up next's included (the now line counts them: "Work until 17:30 · 4 anytime tasks"). */
+        /** Anytime tasks still to do today, Up next's included (the now line counts them at work: "4 anytime tasks"). */
         anytimeLeft: Int = anytime.size,
     ): DayTimeline {
         fun hhmm(ms: Long) = LocalClock.formatMinute(calendar.minuteOfDay(ms))
@@ -217,7 +217,7 @@ object TimelineRules {
                     if (late) listOfNotNull(LateTaskRules.sinceLabel(hhmm(start)), d).joinToString(" · ") else d
                 }
                 val end = start + (t.estimateMinutes ?: DEFAULT_TASK_MIN) * MIN_MS
-                add(Item(TimelineRow("t-" + t.id, TimelineKind.TASK, hhmm(start), t.title, detail, t, null, false, start, late = late), start, end, false))
+                add(Item(TimelineRow("t-" + t.id, TimelineKind.TASK, hhmm(start), TaskTitleRules.display(t.title), detail, t, null, false, start, late = late), start, end, false))
             }
             sessions.filter { it.startMs in today && it.endMs > nowMs }.forEach { s ->
                 val running = s.startMs <= nowMs
@@ -335,7 +335,8 @@ object TimelineRules {
 
     /**
      * The now line's words when nothing timed is ahead but something is on (Fold review 2026-10-09 13:45, item 4):
-     * at work "Work until 17:30 · 4 anytime tasks" ("Work from home until 17:30" on a home day); after an event with
+     * at work just "4 anytime tasks", since the work row right above says "Work · Now · until 17:30" (Fold review
+     * 2026-10-12, polish 6: say it once), or "Nothing else planned after 17:30" with none left; after an event with
      * anytime tasks left "Free after 15:00 · 2 anytime tasks"; "Nothing else planned after 15:00" / "… today" only
      * when no anytime task is left either. [until] null when what's on runs past midnight; [work] the running work
      * block's title when work is what ends last.
@@ -343,7 +344,7 @@ object TimelineRules {
     fun restLabel(until: String?, work: String?, anytime: Int): String {
         val tasks = if (anytime > 0) anytimeLabel(anytime) else null
         return when {
-            work != null && until != null -> listOfNotNull("$work until $until", tasks).joinToString(" · ")
+            work != null && until != null -> tasks ?: nothingAfterLabel(until)
             tasks == null -> nothingAfterLabel(until)
             until != null -> "Free after $until · $tasks"
             else -> "$NOTHING_ELSE_TIMED · $tasks"
