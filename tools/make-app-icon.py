@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""MEKA's app icon: the gold watch face on black (build plan, call assistant polish item 9).
+"""MEKA's app icon: option A, "Bezel M" (Fold review 2026-10-12, polish 8; Meka picked it on 2026-10-12 18:01).
 
-One geometry, two outputs, so the Fold and the Mac wear the same face:
+The old icon (the full watch face) read as a clock app on the home screen. This one keeps the watch's brass rim and
+its four markers and puts an M inside whose middle point is the hands' pivot (a small brass pin with a hole), so it
+reads as MEKA and still belongs to the watch face Today draws. The geometry is option A's in
+tools/make-icon-options.py (docs/design/icons/option-a.svg), drawn from one outline so every output matches:
   * the Fold's adaptive icon (vector drawables: foreground, monochrome, background) in android/app/src/main/res,
     and the same for the Galaxy Watch in wear/app/src/main/res
   * the Mac's AppIcon.appiconset (PNGs at every size macOS asks for) in macos/MekaOS/Assets.xcassets
-
-The face is the watch face Today's header draws (WatchFace.kt): a brass rim, twelve markers with no numerals
-(12 · 3 · 6 · 9 heavier), tapered hour and minute hands at 10:08 and a fine second hand. Colours are the design
-tokens' dark theme: accent #C9B37E on true black.
+  * docs/design/icons/app-icon-512.png, a 512 px square for anywhere a flat icon is wanted
+Colours are the design tokens' dark theme: accent #C9B37E on true black. Today's living watch face is unchanged.
 
 Run from the repo root: python3 tools/make-app-icon.py   (needs Pillow; the outputs are committed)
 """
@@ -19,44 +20,44 @@ import os
 BRASS = "#C9B37E"
 BRASS_RGB = (0xC9, 0xB3, 0x7E)
 
-# Face units: centre (0, 0), y down, angles clockwise from 12 o'clock.
+# Icon units: the 108-unit adaptive-icon viewport, centre (54, 54), y down, angles clockwise from 12 o'clock.
+C = 54.0
 RIM_R = 26.0
 RIM_W = 3.0
-MAJOR_FROM, MAJOR_TO, MAJOR_W = 17.6, 21.6, 2.4
-MINOR_R, MINOR_DOT = 19.8, 1.05
-HOUR = dict(deg=(10 + 8 / 60) * 30, length=11.5, tail=2.5, base=3.6, tip=1.7)
-MINUTE = dict(deg=8 * 6, length=16.8, tail=2.5, base=2.8, tip=1.1)
-SECOND = dict(deg=203, length=18.5, tail=5.0, width=0.8)
-PIN_R = 2.7
+TICK_FROM, TICK_TO, TICK_W = 18.6, 22.0, 2.2
+M_POINTS = [(42.2, 65.0), (42.2, 41.2), (C, C), (65.8, 41.2), (65.8, 65.0)]  # the M's centre line
+M_W = 3.6
+PIN_R, PIN_HOLE = 3.3, 1.05
 
 
 def at(deg, r):
     a = math.radians(deg)
-    return (r * math.sin(a), -r * math.cos(a))
+    return (C + r * math.sin(a), C - r * math.cos(a))
 
 
-def hand_polygon(h):
-    """A tapered hand: wide at the pin, narrow at the tip, a short tail behind the pin."""
-    a = math.radians(h["deg"])
-    d = (math.sin(a), -math.cos(a))
-    n = (math.cos(a), math.sin(a))
-    def p(along, half):
-        return (d[0] * along + n[0] * half, d[1] * along + n[1] * half)
-    return [p(-h["tail"], h["base"] / 2), p(h["length"], h["tip"] / 2),
-            p(h["length"], -h["tip"] / 2), p(-h["tail"], -h["base"] / 2)]
+def ticks():
+    return [(at(d, TICK_FROM), at(d, TICK_TO)) for d in (0, 90, 180, 270)]
 
 
-def majors():
-    return [(at(d, MAJOR_FROM), at(d, MAJOR_TO)) for d in (0, 90, 180, 270)]
-
-
-def minors():
-    return [at(d, MINOR_R) for d in range(30, 360, 30) if d % 90]
-
-
-def second_line():
-    s = SECOND
-    return (at(s["deg"] + 180, s["tail"]), at(s["deg"], s["length"]))
+def m_outline():
+    """The M's stroke as one polygon: butt ends, mitred corners (all within SVG's miter limit 4, so this is
+    exactly what option-a.svg's polyline draws)."""
+    def side(sign):
+        lines = []
+        for a, b in zip(M_POINTS, M_POINTS[1:]):
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            length = math.hypot(dx, dy)
+            nx, ny = -dy / length * M_W / 2 * sign, dx / length * M_W / 2 * sign
+            lines.append(((a[0] + nx, a[1] + ny), (b[0] + nx, b[1] + ny)))
+        out = [lines[0][0]]
+        for (a1, b1), (a2, b2) in zip(lines, lines[1:]):
+            d1 = (b1[0] - a1[0], b1[1] - a1[1])
+            d2 = (b2[0] - a2[0], b2[1] - a2[1])
+            t = ((a2[0] - a1[0]) * d2[1] - (a2[1] - a1[1]) * d2[0]) / (d1[0] * d2[1] - d1[1] * d2[0])
+            out.append((a1[0] + d1[0] * t, a1[1] + d1[1] * t))
+        out.append(lines[-1][1])
+        return out
+    return side(1) + side(-1)[::-1]
 
 
 # ---- Android: 108 dp adaptive icon, face centred (the 66 dp safe zone holds the rim: 2 × 27.5 = 55 dp).
@@ -71,34 +72,26 @@ def circle_path(cx, cy, r):
 
 
 def android_foreground(colour):
-    c = 54.0
-    t = lambda pt: (c + pt[0], c + pt[1])
-    paths = []
-    paths.append(f'    <path android:strokeColor="{colour}" android:strokeWidth="{f(RIM_W)}" '
-                 f'android:pathData="{circle_path(c, c, RIM_R)}" />')
-    major_d = "".join(f"M{f(t(a)[0])},{f(t(a)[1])}L{f(t(b)[0])},{f(t(b)[1])}" for a, b in majors())
-    paths.append(f'    <path android:strokeColor="{colour}" android:strokeWidth="{f(MAJOR_W)}" '
-                 f'android:strokeLineCap="round" android:pathData="{major_d}" />')
-    minor_d = "".join(circle_path(*t(m), MINOR_DOT) for m in minors())
-    paths.append(f'    <path android:fillColor="{colour}" android:pathData="{minor_d}" />')
-    a, b = second_line()
-    paths.append(f'    <path android:strokeColor="{colour}" android:strokeWidth="{f(SECOND["width"])}" '
-                 f'android:strokeLineCap="round" android:strokeAlpha="0.8" '
-                 f'android:pathData="M{f(t(a)[0])},{f(t(a)[1])}L{f(t(b)[0])},{f(t(b)[1])}" />')
-    for h in (HOUR, MINUTE):
-        pts = [t(p) for p in hand_polygon(h)]
-        d = "M" + "L".join(f"{f(x)},{f(y)}" for x, y in pts) + "Z"
-        paths.append(f'    <path android:fillColor="{colour}" android:pathData="{d}" />')
-    paths.append(f'    <path android:fillColor="{colour}" android:pathData="{circle_path(c, c, PIN_R)}" />')
+    paths = [f'    <path android:strokeColor="{colour}" android:strokeWidth="{f(RIM_W)}" '
+             f'android:pathData="{circle_path(C, C, RIM_R)}" />']
+    tick_d = "".join(f"M{f(a[0])},{f(a[1])}L{f(b[0])},{f(b[1])}" for a, b in ticks())
+    paths.append(f'    <path android:strokeColor="{colour}" android:strokeWidth="{f(TICK_W)}" '
+                 f'android:strokeLineCap="round" android:pathData="{tick_d}" />')
+    # The M and the pin, each with the pivot's hole cut through (even-odd: the hole sits inside both).
+    hole = circle_path(C, C, PIN_HOLE)
+    m_d = "M" + "L".join(f"{f(x)},{f(y)}" for x, y in m_outline()) + "Z" + hole
+    paths.append(f'    <path android:fillColor="{colour}" android:fillType="evenOdd" android:pathData="{m_d}" />')
+    paths.append(f'    <path android:fillColor="{colour}" android:fillType="evenOdd" '
+                 f'android:pathData="{circle_path(C, C, PIN_R)}{hole}" />')
     return ("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-            "<!-- Generated by tools/make-app-icon.py: MEKA's watch face. Edit the script, not this file. -->\n"
+            "<!-- Generated by tools/make-app-icon.py: MEKA's Bezel M. Edit the script, not this file. -->\n"
             "<vector xmlns:android=\"http://schemas.android.com/apk/res/android\"\n"
             "    android:width=\"108dp\" android:height=\"108dp\" android:viewportWidth=\"108\" "
             "android:viewportHeight=\"108\">\n" + "\n".join(paths) + "\n</vector>\n")
 
 
 ANDROID_BACKGROUND = """<?xml version="1.0" encoding="utf-8"?>
-<!-- Generated by tools/make-app-icon.py: black with a faint warm glow behind the face. -->
+<!-- Generated by tools/make-app-icon.py: black with a faint warm glow behind the M. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
@@ -144,35 +137,26 @@ def mac_icon(size_px=1024, ss=4):
     # Hairline edge so the black body reads on a dark Dock.
     ImageDraw.Draw(img).rounded_rectangle(body, radius=185.4 * k, outline=(0x26, 0x26, 0x2B, 255),
                                           width=max(1, int(3 * k)))
-    d = ImageDraw.Draw(img)
-    u = 300 * k / RIM_R
-    cx = cy = S / 2
-    t = lambda pt: (cx + pt[0] * u, cy + pt[1] * u)
-    brass = BRASS_RGB + (255,)
+    # The art at the adaptive icon's scale: the 72 visible units of the 108 fill the 824 px body.
+    u = 824 * k / 72
+    t = lambda pt: (S / 2 + (pt[0] - C) * u, S / 2 + (pt[1] - C) * u)
+    ink = Image.new("L", (S, S), 0)
+    d = ImageDraw.Draw(ink)
 
-    def disc(p, r, col=brass):
-        d.ellipse((p[0] - r, p[1] - r, p[0] + r, p[1] + r), fill=col)
+    def disc(p, r, fill=255):
+        d.ellipse((p[0] - r, p[1] - r, p[0] + r, p[1] + r), fill=fill)
 
-    def round_line(a, b, w, col=brass):
-        d.line([a, b], fill=col, width=int(round(w)))
-        disc(a, w / 2, col)
-        disc(b, w / 2, col)
-
-    r_out, r_in = (RIM_R + RIM_W / 2) * u, (RIM_R - RIM_W / 2) * u
-    d.ellipse((cx - r_out, cy - r_out, cx + r_out, cy + r_out), fill=brass)
-    hole = Image.new("L", (S, S), 0)
-    ImageDraw.Draw(hole).ellipse((cx - r_in, cy - r_in, cx + r_in, cy + r_in), fill=255)
-    img.paste(bg, (0, 0), hole)
-    d = ImageDraw.Draw(img)
-    for a, b in majors():
-        round_line(t(a), t(b), MAJOR_W * u)
-    for m in minors():
-        disc(t(m), MINOR_DOT * u)
-    a, b = second_line()
-    round_line(t(a), t(b), SECOND["width"] * u, BRASS_RGB + (205,))
-    for h in (HOUR, MINUTE):
-        d.polygon([t(p) for p in hand_polygon(h)], fill=brass)
-    disc((cx, cy), PIN_R * u)
+    centre = t((C, C))
+    disc(centre, (RIM_R + RIM_W / 2) * u)
+    disc(centre, (RIM_R - RIM_W / 2) * u, 0)
+    for a, b in ticks():
+        d.line([t(a), t(b)], fill=255, width=int(round(TICK_W * u)))
+        disc(t(a), TICK_W * u / 2)
+        disc(t(b), TICK_W * u / 2)
+    d.polygon([t(p) for p in m_outline()], fill=255)
+    disc(centre, PIN_R * u)
+    disc(centre, PIN_HOLE * u, 0)
+    img.paste(Image.new("RGBA", (S, S), BRASS_RGB + (255,)), (0, 0), ink)
     return img.resize((size_px, size_px), Image.LANCZOS)
 
 
@@ -183,13 +167,13 @@ def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     files = {
         "drawable/ic_launcher_foreground.xml": android_foreground(BRASS),
-        # Themed icons: the launcher tints this one shape, so it's the same face in a single colour.
+        # Themed icons: the launcher tints this one shape, so it's the same M in a single colour.
         "drawable/ic_launcher_monochrome.xml": android_foreground("#FFFFFFFF"),
         "drawable/ic_launcher_background.xml": ANDROID_BACKGROUND,
         "mipmap-anydpi/ic_launcher.xml": ANDROID_ADAPTIVE,
         "mipmap-anydpi/ic_launcher_round.xml": ANDROID_ADAPTIVE,
     }
-    # The phone and the Galaxy Watch (Galaxy Watch, slice 2) carry the same face.
+    # The phone and the Galaxy Watch (Galaxy Watch, slice 2) carry the same icon.
     for app in ("android/app", "wear/app"):
         res = os.path.join(root, app, "src/main/res")
         for sub in ("drawable", "mipmap-anydpi"):
@@ -204,6 +188,9 @@ def main():
         json.dump({"info": {"author": "xcode", "version": 1}}, fh, indent=2)
         fh.write("\n")
     master = mac_icon(1024)
+    from PIL import Image
+    master.crop((100, 100, 924, 924)).resize((512, 512), Image.LANCZOS).save(
+        os.path.join(root, "docs/design/icons/app-icon-512.png"), optimize=True)
     images = []
     for pt, scale in MAC_SIZES:
         px = pt * scale

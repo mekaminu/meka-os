@@ -4,12 +4,15 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-/** MEKA's launcher icon (call assistant polish item 9): the watch face, never Android's default robot. */
+/**
+ * MEKA's launcher icon: the Bezel M (Fold review 2026-10-12, polish 8; Meka picked option A), never Android's default
+ * robot and no longer the full watch face, which read as a clock app.
+ */
 class AppIconTest {
     private fun res(path: String) = File("src/main/res/$path").readText()
 
     @Test
-    fun theAppWearsTheWatchFaceIcon() {
+    fun theAppWearsTheBezelMIcon() {
         val manifest = File("src/main/AndroidManifest.xml").readText()
         val application = manifest.substringAfter("<application").substringBefore(">")
         assertTrue("android:icon=\"@mipmap/ic_launcher\"" in application)
@@ -24,16 +27,20 @@ class AppIconTest {
     }
 
     @Test
-    fun theFaceIsTheDarkThemesBrassAndFitsTheSafeZone() {
+    fun theIconIsTheDarkThemesBrassAndFitsTheSafeZone() {
         val tokens = File("../../design/tokens/tokens.json").readText()
         val brass = Regex("\"accent\"\\s*:\\s*\\{\\s*\"\\\$value\"\\s*:\\s*\"(#[0-9A-Fa-f]{6})\"").find(tokens)!!.groupValues[1]
-        val face = res("drawable/ic_launcher_foreground.xml")
-        assertTrue(brass.uppercase() in face.uppercase(), "the face is drawn in the dark theme's accent $brass")
+        val icon = res("drawable/ic_launcher_foreground.xml")
+        assertTrue(brass.uppercase() in icon.uppercase(), "the icon is drawn in the dark theme's accent $brass")
         // Every point stays inside the adaptive icon's 66 dp safe zone (a circle of radius 33 round 54,54).
-        val numbers = Regex("pathData=\"([^\"]+)\"").findAll(face).flatMap { m ->
+        val numbers = Regex("pathData=\"([^\"]+)\"").findAll(icon).flatMap { m ->
             Regex("[ML](-?[0-9.]+),(-?[0-9.]+)").findAll(m.groupValues[1]).map { it.groupValues[1].toDouble() to it.groupValues[2].toDouble() }
         }.toList()
         assertTrue(numbers.size > 10)
+        // The M: ten corners, its middle point on the pivot, and the pivot's hole cut through (no hands any more).
+        assertTrue("MEKA's Bezel M" in icon)
+        assertTrue(icon.split("android:fillType=\"evenOdd\"").size == 3, "the M and the pin both have the hole cut through")
+        assertTrue(numbers.count { (x, _) -> x == 54.0 } >= 2, "the M's middle points sit on the centre line")
         for ((x, y) in numbers) {
             val r = Math.hypot(x - 54, y - 54)
             assertTrue(r <= 33.0, "($x, $y) is $r from the centre")
