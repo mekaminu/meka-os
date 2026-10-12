@@ -3,6 +3,8 @@ package os.meka.core.facade
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.ActivityKind
+import os.meka.core.domain.ApprovalFields
+import os.meka.core.domain.ApprovalKeyFields
 import os.meka.core.domain.ApprovalKind
 import os.meka.core.domain.DeviceAlerts
 import os.meka.core.domain.NoticeSource
@@ -54,6 +56,13 @@ class ApprovalsFacadeTest {
         return id
     }
 
+    /** What the app does around the fingerprint prompt: prepare, sign the text with the approval key, approve. */
+    private suspend fun signAndApprove(c: MekaCore, id: String, signature: String = "MEUCIQ-signed", key: String = "MFkw-fold-key") =
+        c.prepareApproval(id).let { p ->
+            if (p.refusal != null) ApprovalAnswer(false, p.refusal!!)
+            else c.approve(id, p.decisionKey, p.decidedAtMs, key, signature, "Fold")
+        }
+
     @Test
     fun approvingNeedsTheFingerprintAndTheAnswerReachesTheMacAndActivity() = runTest {
         val fold = core("android")
@@ -64,13 +73,22 @@ class ApprovalsFacadeTest {
         assertEquals("Asked 22:50 · expires in 10 min", fold.approvals.value.single().why)
         assertEquals(1, mac.approvals.value.size)
 
-        // Without the fingerprint nothing is written.
-        val refused = fold.approve(id, confirmedWithBiometric = false)
+        // Without the approval key's signature (the fingerprint unlocks it) nothing is written.
+        val refused = signAndApprove(fold, id, signature = "")
         assertFalse(refused.done)
         assertEquals(ApprovalRefusal.NEEDS_BIOMETRIC.line, refused.line)
         assertEquals(1, fold.approvals.value.size)
 
-        val yes = fold.approve(id, confirmedWithBiometric = true)
+        val prep = fold.prepareApproval(id)
+        assertEquals(null, prep.refusal)
+        val message = prep.message!!
+        assertTrue(message.startsWith("MEKA-APPROVAL1\n$id\napproved\ntrade\nKestrel\n${prep.decisionKey}\n${prep.decidedAtMs}\n"))
+        assertTrue(message.endsWith("\nandroid\n" + ApprovalRules.shownHash("Buy 0.05 BTC at market", listOf("About £2,410"))))
+        // A prep left for more than five minutes (the prompt stayed open) has to be signed again.
+        now += 6 * 60_000L
+        assertEquals(ApprovalRefusal.STALE.line, fold.approve(id, prep.decisionKey, prep.decidedAtMs, "MFkw-fold-key", "sig", "Fold").line)
+        now -= 6 * 60_000L
+        val yes = fold.approve(id, prep.decisionKey, prep.decidedAtMs, "MFkw-fold-key", "MEUCIQ-signed", "Fold")
         assertTrue(yes.done)
         assertEquals("Approved · Buy 0.05 BTC at market", yes.line)
         assertTrue(fold.approvals.value.isEmpty())
@@ -79,6 +97,16 @@ class ApprovalsFacadeTest {
 
         fold.syncNow(); mac.syncNow()
         assertTrue(mac.approvals.value.isEmpty())
+        // What the server reads: the signed yes and the Fold's own approval key, written by the Fold.
+        val answered = ops.after("hh", 0, Int.MAX_VALUE).map { it.op }.filter { it.entityType == EntityTypes.APPROVAL && it.entityId == id }
+        assertEquals(prep.decisionKey, answered.single { it.field == ApprovalFields.DECISION_KEY }.value.textOrNull)
+        assertEquals("MEUCIQ-signed", answered.single { it.field == ApprovalFields.ANSWER_SIGNATURE }.value.textOrNull)
+        assertEquals("android", answered.single { it.field == ApprovalFields.ANSWER_SIGNATURE }.deviceId)
+        val key = ops.after("hh", 0, Int.MAX_VALUE).map { it.op }.filter { it.entityType == EntityTypes.APPROVAL_KEY }
+        assertEquals(setOf("android"), key.map { it.entityId }.toSet())
+        assertEquals("MFkw-fold-key", key.single { it.field == ApprovalKeyFields.PUBLIC_KEY }.value.textOrNull)
+        assertFalse(fold.registerApprovalKey("MFkw-fold-key", "Fold")) // already known: nothing written
+        assertTrue(mac.registerApprovalKey("MFkw-mac-key", "Mac"))
         val late = mac.declineApproval(id)
         assertFalse(late.done)
         assertEquals(ApprovalRefusal.ANSWERED.line, late.line)
@@ -94,7 +122,10 @@ class ApprovalsFacadeTest {
         assertEquals(listOf(b, a), fold.approvals.value.map { it.id })
         assertEquals("Declined · Sell 0.05 BTC", fold.declineApproval(a).line)
         now += 6 * 60_000L
-        assertEquals(ApprovalRefusal.EXPIRED.line, fold.approve(b, confirmedWithBiometric = true).line)
+        val prep = fold.prepareApproval(b)
+        assertEquals(ApprovalRefusal.EXPIRED.line, prep.refusal)
+        assertEquals(null, prep.message) // nothing to sign: the fingerprint is never asked
+        assertEquals(ApprovalRefusal.GONE.line, fold.prepareApproval("nope").refusal)
     }
 
     /** Slice 2: a server-written request is a Needs a decision notice on each device; answered on one, both take it down. */
@@ -115,7 +146,7 @@ class ApprovalsFacadeTest {
             assertEquals(NoticeTarget.NEEDS_YOU, n.target)
             assertEquals("approval:$id", n.postId)
         }
-        assertTrue(fold.approve(id, confirmedWithBiometric = true).done)
+        assertTrue(signAndApprove(fold, id).done)
         fold.syncNow(); mac.syncNow()
         assertEquals(listOf("approval:$id"), fold.governNotifications(foldPost.stateEncoded, DeviceAlerts.ALL).withdraw)
         assertEquals(listOf("approval:$id"), mac.governNotifications(macPost.stateEncoded, DeviceAlerts.ALL).withdraw)

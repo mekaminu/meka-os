@@ -97,6 +97,9 @@ object EntityTypes {
     /** Messages grouped per chat, slice 3c (2026-10-12): a busy chat's one-line AI summary (never the messages, see [ChatSummaries]). */
     const val CHAT_SUMMARY = "chat_summary"
 
+    /** Trading approvals, slice 2 (2026-10-12): one device's fingerprint-only approval key, id = the device's id (see [ApprovalKeys]). */
+    const val APPROVAL_KEY = "approval_key"
+
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
         GOAL, HABIT, HABIT_COMPLETION, EVENT, RELATION, CONTEXT_MODE, FAST, FASTING_PLAN, HEADLINE, INTERRUPTION_DAY,
@@ -104,6 +107,7 @@ object EntityTypes {
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
         CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA, TRIP, TRIP_BOOKING, CHAT_SUMMARY,
+        APPROVAL_KEY,
     )
 }
 
@@ -408,6 +412,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.APPROVAL && field == ApprovalFields.APPROVED -> MergePolicy.TrueWins
         entityType == EntityTypes.APPROVAL && field == ApprovalFields.DECLINED -> MergePolicy.TrueWins
         entityType == EntityTypes.APPROVAL -> MergePolicy.Lww
+        // Approval keys: each device writes only its own; a renewed key replaces the old one.
+        entityType == EntityTypes.APPROVAL_KEY -> MergePolicy.Lww
         // Errands: one removed on any device is gone for good; done/back and the rest, the latest edit wins.
         entityType == EntityTypes.ERRAND && field == ErrandFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.ERRAND -> MergePolicy.Lww

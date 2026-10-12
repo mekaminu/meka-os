@@ -1,6 +1,7 @@
 # Kestrel → MEKA trading approvals: integration spec
 
-Status: MEKA's side built 2026-10-12 (build plan V1, "Trading approvals from Kestrel", slice 1). **Kestrel's side is not
+Status: MEKA's side built 2026-10-12 (build plan V1, "Trading approvals from Kestrel", slices 1 and 2: the desk, then
+Meka's fingerprint signature on every yes). **Kestrel's side is not
 changed by unattended build runs**: it lives in Meka's live trading system (~/Meka/Trading Bots) and is done in a
 supervised session (Needs Meka #27).
 
@@ -18,9 +19,9 @@ Kestrel must treat that as **no**.
   request carries only what Meka needs to read to decide.
 - Kestrel signs every request with its own P-256 private key. MEKA knows only the public half. Nothing Kestrel sends can
   make MEKA approve anything: title and lines are shown to Meka, never followed (ADR-006).
-- Kestrel may ask only for `trade` approvals and may call only the two routes below. At most 10 requests can wait at once.
+- Kestrel may ask only for `trade` approvals and may call only the three routes below. At most 10 requests can wait at once.
 - Expired, declined, an error, no answer, or MEKA unreachable all mean **don't trade**. Only `state: "approved"` with a
-  `decisionKey` is a yes.
+  `decisionKey` **and an `answerSignature` that verifies with one of the approval keys Kestrel pinned** (below) is a yes.
 - Kestrel acts on a given `decisionKey` at most once (store it with the order; an order already placed for that key is
   never placed again).
 
@@ -97,21 +98,65 @@ Body `{"ref": "<ref>"}`. Answers `200`:
   "state": "pending | approved | declined | expired",
   "askedAtMs": 1760305200000,
   "expiresAtMs": 1760306400000,
+  "title": "Buy 0.05 BTC at market",
+  "lines": ["About £2,410", "Stop loss 5% · take profit 12%", "Strategy: Merlin breakout"],
   "decidedAtMs": 1760305500000,
   "confirmedBy": "biometric",
-  "decisionKey": "…"
+  "decisionKey": "…",
+  "answerSignature": "MEUCIQ…",
+  "answerDevice": "…",
+  "answerPublicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE…",
+  "answerMessage": "MEKA-APPROVAL1\n…"
 }
 ```
 
-`decidedAtMs`, `confirmedBy` and `decisionKey` appear only once answered. `404` for a ref Kestrel never sent.
+`title` and `lines` are as Meka saw them (cleaned and cut). `decidedAtMs`, `confirmedBy` and `decisionKey` appear only
+once answered; the four `answer…` fields only on an approval whose signature MEKA's server checked (below). `404` for a
+ref Kestrel never sent.
 
 Polling: every 15 s while pending is plenty (Meka's answer reaches the server within seconds of his tap); stop at
 `expiresAtMs`. Each poll is a fresh signature and nonce.
 
-## Coming next (MEKA slice 2)
+## `POST /v1/approvals/keys`
 
-The answer will also carry a signature made on Meka's device by a key that only his fingerprint unlocks (an auth-bound
-Android Keystore key; the Mac's Secure Enclave with `.biometryCurrentSet`), with the device's public key registered with
-MEKA, so Kestrel can check the yes came from his finger rather than trusting MEKA's server. Fields to be added
-(additive): `answerSignature`, `answerDevice`, `answerPublicKey`. Kestrel should ignore unknown fields until then, and
-once slice 2 lands, require a valid `answerSignature` on every approval.
+Body `{}`. Answers `200` with the approval keys of Meka's devices, each registered by that device itself:
+
+```json
+{"keys": [{"device": "…", "label": "Fold", "publicKey": "MFkwEwYH…", "sinceMs": 1760305200000}]}
+```
+
+## Meka's signature on a yes (slice 2)
+
+Each of Meka's devices holds an **approval key**: ECDSA P-256 made in its secure hardware that only his fingerprint
+unlocks, once per signature (Fold: an auth-bound Android Keystore key, strong biometrics only, destroyed when a new
+fingerprint is enrolled; Mac: Secure Enclave with `.biometryCurrentSet`). Approve signs this exact text (UTF-8,
+newline-separated, no trailing newline) inside the fingerprint prompt:
+
+```
+MEKA-APPROVAL1
+<id>
+approved
+<kind>                 trade
+<source>               Kestrel
+<decisionKey>
+<decidedAtMs>
+<expiresAtMs>
+<answerDevice>
+<lowercase hex SHA-256 of the title and each line, joined with "\n">
+```
+
+MEKA's server only includes the `answer…` fields when every answer field was written by the answering device, that
+device registered the same key itself, and the signature verifies. **Kestrel must not rely on that**: it checks itself.
+
+**Pinning (in the supervised session):** call `/v1/approvals/keys` and store the `publicKey`s (with Meka confirming the
+devices) in Kestrel's own config. From then on Kestrel trusts only those keys, so a compromised MEKA server can't forge a
+yes. A key changes only when Meka changes his enrolled fingerprints (the app says "approval key renewed"); re-pin then.
+
+**Kestrel's check on every `approved` status (any failure = don't trade):**
+1. `answerPublicKey` is one of the pinned keys.
+2. Rebuild the text from the status: `id`, `approved`, `trade`, `Kestrel`, `decisionKey`, `decidedAtMs`,
+   `expiresAtMs`, `answerDevice`, SHA-256 of `title` and `lines`; it must equal `answerMessage`.
+3. `title` (and the lines) are what Kestrel sent (Kestrel keeps its titles one line and under 120 characters so they
+   arrive unchanged).
+4. The ECDSA P-256 / SHA-256 signature `answerSignature` (base64 DER) verifies over the text with `answerPublicKey`.
+5. `decidedAtMs` is before `expiresAtMs`, and the `decisionKey` hasn't been acted on before.

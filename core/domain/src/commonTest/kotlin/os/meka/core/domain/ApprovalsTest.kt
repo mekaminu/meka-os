@@ -21,6 +21,8 @@ class ApprovalsTest {
     private val mac = world.device("mac")
     private fun approvals(d: Device) = Approvals(d.replica, { world.clock.nowMs }, cal)
 
+    private val signed = ApprovalSignature("pub", "sig")
+
     init { world.clock.nowMs = at(sun, 21, 40) }
 
     private fun trade(d: Device = fold, expires: Long? = at(sun, 21, 54)): String = assertNotNull(
@@ -62,13 +64,18 @@ class ApprovalsTest {
         assertEquals(ApprovalDecision.Refused(ApprovalRefusal.NEEDS_BIOMETRIC), a.decide(id, true, ApprovalConfirmation.TAP, "k1", "android"))
         assertEquals(1, a.cards().size)
 
-        val yes = assertIs<ApprovalDecision.Write>(a.decide(id, true, ApprovalConfirmation.BIOMETRIC, "k1", "android"))
+        // A fingerprint without the approval key's signature isn't enough (slice 2).
+        assertEquals(ApprovalDecision.Refused(ApprovalRefusal.NEEDS_BIOMETRIC), a.decide(id, true, ApprovalConfirmation.BIOMETRIC, "k1", "android"))
+        val yes = assertIs<ApprovalDecision.Write>(a.decide(id, true, ApprovalConfirmation.BIOMETRIC, "k1", "android", signed))
         assertEquals("Approved · Buy 0.05 BTC at market", yes.line)
         assertTrue(a.cards().isEmpty())
         val stored = assertNotNull(a.find(id))
         assertEquals(ApprovalState.APPROVED, stored.state(world.clock.nowMs))
         assertEquals("biometric", stored.confirmedBy)
         assertEquals("k1", stored.decisionKey)
+        assertEquals("android", stored.decidedOn)
+        assertEquals("sig", stored.answerSignature)
+        assertEquals("pub", stored.answerPublicKey)
 
         // Answered once: a second answer is refused.
         assertEquals(ApprovalDecision.Refused(ApprovalRefusal.ANSWERED), a.decide(id, false, ApprovalConfirmation.TAP, "k2", "android"))
@@ -84,7 +91,7 @@ class ApprovalsTest {
         val id = trade()
         world.clock.nowMs = at(sun, 21, 54)
         assertTrue(approvals(fold).cards().isEmpty())
-        assertEquals(ApprovalDecision.Refused(ApprovalRefusal.EXPIRED), approvals(fold).decide(id, true, ApprovalConfirmation.BIOMETRIC, "k", "android"))
+        assertEquals(ApprovalDecision.Refused(ApprovalRefusal.EXPIRED), approvals(fold).decide(id, true, ApprovalConfirmation.BIOMETRIC, "k", "android", signed))
     }
 
     @Test
@@ -100,7 +107,7 @@ class ApprovalsTest {
         // Both answer at once, differently: once synced it is a no on both.
         val id2 = approvals(fold).request(ApprovalKind.TRADE, "Kestrel", "sig-2", "Sell 0.05 BTC", emptyList(), at(sun, 23))!!
         fold.sync(); mac.sync()
-        approvals(fold).decide(id2, true, ApprovalConfirmation.BIOMETRIC, "kf", "android")
+        approvals(fold).decide(id2, true, ApprovalConfirmation.BIOMETRIC, "kf", "android", signed)
         approvals(mac).decide(id2, false, ApprovalConfirmation.TAP, "km2", "mac")
         fold.sync(); mac.sync(); fold.sync()
         assertEquals(ApprovalState.DECLINED, approvals(fold).find(id2)!!.state(world.clock.nowMs))
@@ -143,5 +150,43 @@ class ApprovalsTest {
         approvals(fold).request(ApprovalKind.PAYMENT, "Kestrel", "late", "Later one", emptyList(), at(sun, 23))
         approvals(fold).request(ApprovalKind.TRADE, "Kestrel", "soon", "Sooner one", emptyList(), at(sun, 22))
         assertEquals(listOf("Sooner one", "Later one"), approvals(fold).cards().map { it.title })
+    }
+
+    @Test
+    fun theSignedTextNamesTheRequestTheAnswerAndTheDeviceAndADeclineIsNeverSigned() {
+        val id = trade()
+        val a = approvals(fold)
+        val prep = a.prepare(id, "k9", "android")
+        val t = world.clock.nowMs
+        val shown = ApprovalRules.shownHash("Buy 0.05 BTC at market", listOf("About £2,410", "Stop loss 5%"))
+        assertEquals(
+            "MEKA-APPROVAL1\n$id\napproved\ntrade\nKestrel\nk9\n$t\n${at(sun, 21, 54)}\nandroid\n$shown", prep.message,
+        )
+        assertEquals(64, shown.length)
+        // SHA-256 of "abc" (FIPS 180-4's own example): the hash Kestrel recomputes must be the standard one.
+        assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", os.meka.core.sync.Sha256.hexOf("abc"))
+
+        // The answer keeps the prep's time, so the stored fields rebuild the same text.
+        world.clock.nowMs = t + 30_000
+        a.decide(id, true, ApprovalConfirmation.BIOMETRIC, "k9", "android", signed, decidedAtMs = t)
+        val stored = assertNotNull(a.find(id))
+        assertEquals(t, stored.decidedAtMs)
+        assertEquals(prep.message, ApprovalRules.answerMessage(stored, stored.decisionKey!!, stored.decidedAtMs!!, stored.decidedOn!!))
+        assertEquals(ApprovalRefusal.ANSWERED.line, a.prepare(id, "k10", "android").refusal)
+
+        val other = assertNotNull(a.request(ApprovalKind.TRADE, "Kestrel", "sig-9", "Sell", emptyList()))
+        assertIs<ApprovalDecision.Write>(a.decide(other, false, ApprovalConfirmation.TAP, "k11", "android"))
+        assertNull(assertNotNull(a.find(other)).answerSignature)
+    }
+
+    @Test
+    fun eachDeviceRegistersItsOwnApprovalKeyOnceAndARenewedKeyReplacesIt() {
+        val keys = ApprovalKeys(fold.replica) { world.clock.nowMs }
+        assertNull(keys.mine())
+        assertTrue(keys.register("pub1", "Fold"))
+        assertEquals(false, keys.register("pub1", "Fold"))
+        assertTrue(keys.register("pub2", "Fold"))
+        assertEquals("pub2", keys.mine())
+        assertEquals(listOf("android"), fold.replica.entities(EntityTypes.APPROVAL_KEY).map { it.ref.entityId })
     }
 }

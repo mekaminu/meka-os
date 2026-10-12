@@ -26,4 +26,20 @@ enum MacBiometric {
             }
         }
     }
+
+    /// Trading approvals, slice 2: Touch ID, then the approval key signs [message] with that same unlocked context
+    /// (MacApprovalKey). Only Strings cross back, on the main actor.
+    static func sign(reason: String, message: String, done: @escaping @MainActor @Sendable (MacApprovalKey.Signed) -> Void) {
+        let ctx = LAContext()
+        ctx.localizedFallbackTitle = "" // no "Use Password…"
+        context = ctx
+        ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { @Sendable (ok, _) in
+            Task { @MainActor in
+                let unlocked = context
+                context = nil
+                guard ok, let unlocked else { done(.failed); return }
+                done(MacApprovalKey.sign(message, context: unlocked))
+            }
+        }
+    }
 }

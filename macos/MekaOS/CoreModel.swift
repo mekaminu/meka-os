@@ -331,6 +331,11 @@ final class CoreModel {
             deviceKey: syncURL == nil ? nil : deviceKey
         )
         self.core = core
+        // Trading approvals, slice 2: this Mac's Touch ID-only approval key is known (synced) before the first yes, so
+        // Kestrel can pin it. Nothing without Touch ID and a Secure Enclave.
+        if MacBiometric.available, let approvalKey = MacApprovalKey.publicKey() {
+            run { _ = try await $0.registerApprovalKey(publicKeyBase64: approvalKey, label: MacApprovalKey.label) }
+        }
         observers.append(Task { [weak self] in
             for await t in core.today { self?.today = t }
         })
@@ -2982,11 +2987,13 @@ final class CoreModel {
 
     // MARK: Approvals inbox
 
-    /// Approve on an approval card: Touch ID first, every time (biometrics only, no password); only then does the
-    /// card's id (a String) and a Bool cross to the core. A Mac without Touch ID says to approve on the Fold.
+    /// Approve on an approval card: Touch ID first, every time (biometrics only, no password). Slice 2: the core says
+    /// what to sign (an expired or answered one is refused before any prompt), Touch ID unlocks the Mac's approval key
+    /// (Secure Enclave) for that one signature, and only Strings and an Int64 cross back to the core with the signed
+    /// yes. A Mac without Touch ID or a Secure Enclave says to approve on the Fold.
     func approve(_ card: ApprovalCard) {
-        guard core != nil else { return }
-        guard MacBiometric.available else {
+        guard let core else { return }
+        guard MacBiometric.available, MacApprovalKey.publicKey() != nil else {
             MekaHaptics.tick()
             offerEventUndo(ApprovalRules.shared.NO_BIOMETRIC_MAC, nil)
             return
@@ -2994,20 +3001,44 @@ final class CoreModel {
         let id = card.id
         let reason = ApprovalRules.shared.promptReason(card: card)
         MekaHaptics.light()
-        MacBiometric.confirm(reason: reason) { [weak self] ok in
-            guard ok else { return }
-            self?.finishApprove(id)
+        Task {
+            do {
+                let prep = try await core.prepareApproval(approvalId: id)
+                if let refusal = prep.refusal {
+                    offerEventUndo(refusal, nil)
+                    return
+                }
+                guard let message = prep.message else { return }
+                let key = prep.decisionKey
+                let at = prep.decidedAtMs
+                MacBiometric.sign(reason: reason, message: message) { [weak self] signed in
+                    self?.finishApprove(id, decisionKey: key, decidedAtMs: at, signed: signed)
+                }
+            } catch { lastError = error.localizedDescription }
         }
     }
 
-    private func finishApprove(_ id: String) {
+    private func finishApprove(_ id: String, decisionKey: String, decidedAtMs: Int64, signed: MacApprovalKey.Signed) {
         guard let core else { return }
-        Task {
-            do {
-                let answer = try await core.approve(approvalId: id, confirmedWithBiometric: true)
-                if answer.done { MekaHaptics.medium() }
-                offerEventUndo(answer.line, nil)
-            } catch { lastError = error.localizedDescription }
+        switch signed {
+        case .failed:
+            return
+        case .renewed:
+            if let pub = MacApprovalKey.publicKey() {
+                run { _ = try await $0.registerApprovalKey(publicKeyBase64: pub, label: MacApprovalKey.label) }
+            }
+            offerEventUndo(ApprovalRules.shared.KEY_RENEWED_MAC, nil)
+        case .signature(let signature, let publicKey):
+            Task {
+                do {
+                    let answer = try await core.approve(
+                        approvalId: id, decisionKey: decisionKey, decidedAtMs: decidedAtMs,
+                        publicKeyBase64: publicKey, signatureBase64: signature, keyLabel: MacApprovalKey.label
+                    )
+                    if answer.done { MekaHaptics.medium() }
+                    offerEventUndo(answer.line, nil)
+                } catch { lastError = error.localizedDescription }
+            }
         }
     }
 

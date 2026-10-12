@@ -142,6 +142,15 @@ class MekaApplication : Application() {
         // Health Connect, slice 2: the background read follows the switch and Health Connect's permissions (both can
         // change while MEKA is closed); also tells the core whether "Did you go?" waits for the watch.
         appScope.launch { runCatching { os.meka.android.goals.HealthWorkouts.sync(this@MekaApplication, core) } }
+        // Trading approvals, slice 2: this phone's fingerprint-only approval key is known (synced) before the first yes,
+        // so Kestrel can pin it; renewed after a fingerprint change. Nothing without an enrolled fingerprint.
+        appScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            runCatching {
+                if (os.meka.android.security.FoldBiometric.available(this@MekaApplication)) {
+                    os.meka.android.security.FoldApprovalKey.publicKey()?.let { core.registerApprovalKey(it, os.meka.android.security.FoldApprovalKey.LABEL) }
+                }
+            }
+        }
         // Messages held before the summary was synced join it once (re-holding is a no-op, cleared ones stay cleared).
         appScope.launch { runCatching { core.holdCaptured(captures.items.value, captures.lists.value) } }
         // People, slice 4: the Family, Always notify and watched lists (they stay on this phone) give those people a

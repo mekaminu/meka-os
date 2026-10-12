@@ -2191,8 +2191,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         let answer = try await core.declineApproval(approvalId: "nope")
         XCTAssertFalse(answer.done)
         XCTAssertEqual(answer.line, ApprovalRefusal.gone.line)
-        let refused = try await core.approve(approvalId: "nope", confirmedWithBiometric: true)
+        // Trading approvals, slice 2: what to sign comes first (refused here, so no Touch ID is asked), and a yes
+        // without the approval key's signature is refused.
+        let prep = try await core.prepareApproval(approvalId: "nope")
+        XCTAssertEqual(prep.refusal, ApprovalRefusal.gone.line)
+        XCTAssertNil(prep.message)
+        let refused = try await core.approve(
+            approvalId: "nope", decisionKey: prep.decisionKey, decidedAtMs: prep.decidedAtMs,
+            publicKeyBase64: "", signatureBase64: "", keyLabel: "Mac"
+        )
         XCTAssertFalse(refused.done)
+        let registered = try await core.registerApprovalKey(publicKeyBase64: "MFkw-test", label: "Mac")
+        XCTAssertTrue(registered.boolValue)
+        XCTAssertEqual(ApprovalRules.shared.KEY_RENEWED_MAC, "Touch ID changed on this Mac · approval key renewed · approve again")
         XCTAssertEqual(ApprovalRules.shared.LOCK_MAC, "Approving needs Touch ID")
     }
 

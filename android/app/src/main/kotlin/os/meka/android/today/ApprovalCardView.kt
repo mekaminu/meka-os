@@ -18,12 +18,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.security.FoldApprovalKey
 import os.meka.android.security.FoldBiometric
 import os.meka.core.domain.ApprovalCard
 import os.meka.core.domain.ApprovalRules
@@ -33,7 +36,8 @@ import os.meka.core.facade.MekaCore
  * The approvals inbox (V1, slice 1), first in Needs you: a request from outside MEKA to trade, pay or share a document
  * ("TRADE · KESTREL", what would happen, its detail lines, "Asked 21:40 · expires in 14 min", lit in the critical
  * colour in its last 15 minutes), then Approve and Decline. **Approve asks for the fingerprint every time** (strong
- * biometrics only); only after the system prompt accepts it does the core hear a yes. Decline is a tap. Nothing
+ * biometrics only); the finger unlocks the phone's approval key ([FoldApprovalKey], slice 2) for one signature over the
+ * core's text, and only that signed yes reaches the core. Decline is a tap. Nothing
  * happens until Meka answers; answering here clears the Mac. Buttons press in (Approve a light haptic, Decline a
  * tick); once taken the card folds away with the list's item motion (a medium haptic on a yes) and the bar says
  * "Approved · …" (no Undo: the one who asked acts on it). Cards stagger in after the title. Reduced motion: the list's
@@ -48,17 +52,32 @@ internal fun ApprovalCardView(card: ApprovalCard, core: MekaCore, say: (String) 
         haptics.light()
         if (!FoldBiometric.available(context)) {
             say(ApprovalRules.NO_BIOMETRIC_FOLD)
-        } else {
-            FoldBiometric.confirm(context, card.title, ApprovalRules.promptReason(card)) { ok ->
-                if (ok) scope.launch {
-                    val answer = runCatching { core.approve(card.id, confirmedWithBiometric = true) }.getOrNull()
-                    if (answer != null) {
-                        if (answer.done) haptics.medium()
-                        say(answer.line)
+        } else scope.launch {
+            // Slice 2: what to sign first (an expired or answered one is refused before any prompt), then the
+            // fingerprint unlocks the approval key for that one signature, then the signed yes goes to the core.
+            val prep = runCatching { core.prepareApproval(card.id) }.getOrNull() ?: return@launch
+            prep.refusal?.let { say(it); return@launch }
+            val message = prep.message ?: return@launch
+            when (val ready = withContext(Dispatchers.Default) { FoldApprovalKey.ready() }) {
+                FoldApprovalKey.Ready.Unavailable -> say(ApprovalRules.NO_BIOMETRIC_FOLD)
+                FoldApprovalKey.Ready.Renewed -> {
+                    withContext(Dispatchers.Default) { FoldApprovalKey.publicKey() }?.let { runCatching { core.registerApprovalKey(it, FoldApprovalKey.LABEL) } }
+                    say(ApprovalRules.KEY_RENEWED_FOLD)
+                }
+                is FoldApprovalKey.Ready.Sign -> FoldBiometric.sign(context, card.title, ApprovalRules.promptReason(card), ready.signature, message) { sig ->
+                    if (sig != null) scope.launch {
+                        val answer = runCatching {
+                            core.approve(card.id, prep.decisionKey, prep.decidedAtMs, ready.publicKey, sig, FoldApprovalKey.LABEL)
+                        }.getOrNull()
+                        if (answer != null) {
+                            if (answer.done) haptics.medium()
+                            say(answer.line)
+                        }
                     }
                 }
             }
         }
+        Unit
     }
     val decline = {
         haptics.tick()

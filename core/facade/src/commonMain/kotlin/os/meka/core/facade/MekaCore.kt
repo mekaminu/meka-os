@@ -192,6 +192,7 @@ class MekaCore(
     private val requestCards = os.meka.core.domain.RequestCards(replica, nowMs, ZoneCalendar(timeZone))
     // The approvals inbox (V1, slice 1): requests to do something with money or documents, answered in Needs you.
     private val approvalStore = os.meka.core.domain.Approvals(replica, nowMs, ZoneCalendar(timeZone))
+    private val approvalKeys = os.meka.core.domain.ApprovalKeys(replica, nowMs)
     private val triageCards = os.meka.core.domain.TriageCards(replica, nowMs, ZoneCalendar(timeZone))
     private val gistStore = os.meka.core.domain.GroupGists(replica, nowMs)
     private val chatSummaryStore = os.meka.core.domain.ChatSummaries(replica, nowMs)
@@ -1461,25 +1462,47 @@ class MekaCore(
         onCore { messageIds.count { triageCards.resolve(it, os.meka.core.domain.TriageResolution.SEEN) } }
 
     /**
-     * Approve on an approval card (approvals inbox, slice 1). [confirmedWithBiometric] is true only when the app's
-     * system fingerprint prompt (BiometricPrompt, strong biometrics only; Touch ID on the Mac) has just succeeded for
-     * this card: without it the answer is refused ([os.meka.core.domain.ApprovalRefusal.NEEDS_BIOMETRIC]) and nothing is
-     * written. A yes is recorded with a fresh idempotency key for whoever asked to act on once, and in Activity.
+     * Step one of Approve on an approval card (Trading approvals, slice 2): what this device must sign
+     * ([os.meka.core.domain.ApprovalPrep.message]) with its approval key, which only Meka's fingerprint unlocks, and
+     * the decision key and time that text names; or [os.meka.core.domain.ApprovalPrep.refusal] (gone, answered,
+     * expired), shown without asking for the fingerprint. Nothing is written.
      */
-    suspend fun approve(approvalId: String, confirmedWithBiometric: Boolean): ApprovalAnswer = onCore {
+    suspend fun prepareApproval(approvalId: String): os.meka.core.domain.ApprovalPrep =
+        onCore { approvalStore.prepare(approvalId, ids.next(), replica.deviceId) }
+
+    /**
+     * Step two: the yes, once the app's fingerprint prompt has unlocked this device's approval key and it signed
+     * [prepareApproval]'s message. [decisionKey] and [decidedAtMs] are the prep's; [publicKeyBase64] is the key's public
+     * half (registered for this device with [keyLabel] if it isn't already) and [signatureBase64] the DER signature. A
+     * missing signature is refused ([os.meka.core.domain.ApprovalRefusal.NEEDS_BIOMETRIC]); a prep older than five
+     * minutes too. The server and Kestrel check the signature; the yes is recorded once and in Activity.
+     */
+    suspend fun approve(
+        approvalId: String, decisionKey: String, decidedAtMs: Long, publicKeyBase64: String, signatureBase64: String, keyLabel: String,
+    ): ApprovalAnswer = onCore {
+        if (publicKeyBase64.isNotBlank() && signatureBase64.isNotBlank()) approvalKeys.register(publicKeyBase64, keyLabel)
         answerApproval(
-            approvalId, approve = true,
-            if (confirmedWithBiometric) os.meka.core.domain.ApprovalConfirmation.BIOMETRIC else os.meka.core.domain.ApprovalConfirmation.TAP,
+            approvalId, approve = true, os.meka.core.domain.ApprovalConfirmation.BIOMETRIC, decisionKey,
+            os.meka.core.domain.ApprovalSignature(publicKeyBase64, signatureBase64), decidedAtMs,
         )
     }
+
+    /**
+     * Records this device's approval key (its public half; "Fold" or "Mac" as [label]) so it is known before the first
+     * yes, and a renewed key (after a fingerprint change) replaces the old one. True when something was written.
+     */
+    suspend fun registerApprovalKey(publicKeyBase64: String, label: String): Boolean = onCore { approvalKeys.register(publicKeyBase64, label) }
 
     /** Decline on an approval card: no fingerprint needed (saying no is always safe); in Activity. */
     suspend fun declineApproval(approvalId: String): ApprovalAnswer =
         onCore { answerApproval(approvalId, approve = false, os.meka.core.domain.ApprovalConfirmation.TAP) }
 
-    private fun answerApproval(id: String, approve: Boolean, confirmation: os.meka.core.domain.ApprovalConfirmation): ApprovalAnswer {
+    private fun answerApproval(
+        id: String, approve: Boolean, confirmation: os.meka.core.domain.ApprovalConfirmation, key: String = ids.next(),
+        signature: os.meka.core.domain.ApprovalSignature? = null, decidedAtMs: Long? = null,
+    ): ApprovalAnswer {
         val before = approvalStore.find(id)
-        return when (val d = approvalStore.decide(id, approve, confirmation, ids.next(), replica.deviceId)) {
+        return when (val d = approvalStore.decide(id, approve, confirmation, key, replica.deviceId, signature, decidedAtMs)) {
             is os.meka.core.domain.ApprovalDecision.Refused -> ApprovalAnswer(false, d.reason.line)
             is os.meka.core.domain.ApprovalDecision.Write -> {
                 before?.let { a ->

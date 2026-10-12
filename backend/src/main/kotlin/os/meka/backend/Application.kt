@@ -581,7 +581,11 @@ fun Application.mekaSync(
                 val asker = call.asker(approvals, verifier, body)
                 val household = withContext(Dispatchers.IO) { devices.soleHousehold() } ?: throw Forbidden()
                 val reply = withContext(Dispatchers.IO) {
-                    if (path == ApprovalDesk.REQUEST_PATH) approvals.desk.request(household, asker, body) else approvals.desk.status(household, asker, body)
+                    when (path) {
+                        ApprovalDesk.REQUEST_PATH -> approvals.desk.request(household, asker, body)
+                        ApprovalDesk.STATUS_PATH -> approvals.desk.status(household, asker, body)
+                        else -> approvals.desk.keys(household)
+                    }
                 }
                 when (reply) {
                     is ApprovalDesk.Reply.Ok -> call.respondText(reply.json, ContentType.Application.Json)
@@ -920,7 +924,10 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
  */
 fun approvalsFromEnv(opStore: PostgresOpStore, onWritten: (householdId: String) -> Unit = {}): ApprovalRoutes? {
     val secret = System.getenv("MEKA_APPROVALS_KESTREL_SECRET")?.takeIf { it.isNotBlank() } ?: return null
-    val desk = ApprovalDesk(opStore, { hh -> opStore.latestFieldOps(hh, EntityTypes.APPROVAL) }, onWritten = onWritten)
+    val desk = ApprovalDesk(
+        opStore, { hh -> opStore.latestFieldOps(hh, EntityTypes.APPROVAL) },
+        readKeys = { hh -> opStore.latestFieldOps(hh, EntityTypes.APPROVAL_KEY) }, onWritten = onWritten,
+    )
     return ApprovalRoutes(desk, listOf(ApprovalDesk.kestrel(SecretsManagerPublisherKey(secret))))
 }
 

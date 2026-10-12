@@ -45,6 +45,10 @@ struct DeviceIdentity {
     nonisolated static func signingKey() -> Lookup { lookup("device_signing_key") }
     nonisolated static func saveSigningKey(_ value: String) { write("device_signing_key", value) }
 
+    /// The approval key's enclave handle (Trading approvals, slice 2; see MacApprovalKey), base64.
+    nonisolated static func approvalKey() -> Lookup { lookup("approval_key") }
+    nonisolated static func saveApprovalKey(_ value: String) { write("approval_key", value) }
+
     /// The 256-bit database key as 64 hex characters (Mac database encryption, slice 2b), and whether it was made on
     /// this launch. Kept only as a sealed file, never in the Keychain fallback: nil when this Mac has no sealed files
     /// (no Secure Enclave, or the move from the Keychain didn't finish) or the key file won't open. A new key is

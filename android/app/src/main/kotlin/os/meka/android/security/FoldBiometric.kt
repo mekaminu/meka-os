@@ -38,4 +38,34 @@ object FoldBiometric {
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = once(false)
         })
     }
+
+    /**
+     * Trading approvals, slice 2: the same prompt with the approval key's [signature] as its CryptoObject, so the
+     * fingerprint unlocks that one signature inside secure hardware. [done] gets the base64 DER signature over
+     * [message] only when the finger was accepted and the key signed; null on cancel, an error or a failed signature.
+     */
+    fun sign(context: Context, title: String, subtitle: String, signature: java.security.Signature, message: String, done: (String?) -> Unit) {
+        var answered = false
+        val once: (String?) -> Unit = { sig -> if (!answered) { answered = true; done(sig) } }
+        val executor = context.mainExecutor
+        val prompt = BiometricPrompt.Builder(context)
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setAllowedAuthenticators(STRONG)
+            .setConfirmationRequired(true)
+            .setNegativeButton("Cancel", executor) { _, _ -> once(null) }
+            .build()
+        prompt.authenticate(BiometricPrompt.CryptoObject(signature), CancellationSignal(), executor, object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                val s = result.cryptoObject?.signature ?: return once(null)
+                once(
+                    runCatching {
+                        s.update(message.toByteArray())
+                        android.util.Base64.encodeToString(s.sign(), android.util.Base64.NO_WRAP)
+                    }.getOrNull(),
+                )
+            }
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = once(null)
+        })
+    }
 }

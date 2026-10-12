@@ -40,7 +40,45 @@ object ApprovalFields {
     const val DECISION_KEY = "decisionKey"
     /** The device that answered. */
     const val DECIDED_ON = "decidedOn"
+    /**
+     * Slice 2 (Trading approvals, 2026-10-12): a yes is signed on the answering device by its approval key, which only
+     * Meka's fingerprint unlocks ([ApprovalKeyFields]); base64 DER ECDSA P-256 / SHA-256 over [ApprovalRules.answerMessage].
+     */
+    const val ANSWER_SIGNATURE = "answerSignature"
+    /** The approval key's public half that made [ANSWER_SIGNATURE] (X.509 SubjectPublicKeyInfo DER, base64). */
+    const val ANSWER_PUBLIC_KEY = "answerPublicKey"
 }
+
+/**
+ * One device's approval key (entity `approval_key`, id = the device's id; ADR-008 addendum 2026-10-12): an ECDSA P-256
+ * key made in the device's secure hardware that **only a fingerprint unlocks** (an auth-bound Android Keystore key that
+ * a new enrolled fingerprint invalidates; the Mac's Secure Enclave with `.biometryCurrentSet`). Its private half never
+ * leaves the chip; only the public half is synced, written by the device itself, so the server (and Kestrel, which pins
+ * the keys at setup) can check that a yes came from Meka's finger. A key renewed after a fingerprint change replaces it.
+ */
+object ApprovalKeyFields {
+    /** X.509 SubjectPublicKeyInfo, DER, base64. */
+    const val PUBLIC_KEY = "publicKey"
+    /** "Fold" · "Mac": which device, for the keys list. */
+    const val LABEL = "label"
+    const val SINCE = "sinceMs"
+}
+
+/** A yes, signed on the device ([ApprovalFields.ANSWER_SIGNATURE], [ApprovalFields.ANSWER_PUBLIC_KEY]). */
+data class ApprovalSignature(val publicKey: String, val signature: String)
+
+/**
+ * What to sign before approving ([ApprovalRules.prepare]): the exact [message], and the idempotency key and answer time
+ * it names, which the answer then writes unchanged. [refusal] instead when the request can't be approved now (gone,
+ * answered, expired): the app shows it and never asks for the fingerprint.
+ */
+data class ApprovalPrep(
+    val approvalId: String,
+    val message: String?,
+    val decisionKey: String,
+    val decidedAtMs: Long,
+    val refusal: String?,
+)
 
 /** What a request asks to do, and the policy engine's action behind it ([action] is an `ActionType` name). */
 enum class ApprovalKind(val wire: String, val label: String, val action: String) {
@@ -74,6 +112,9 @@ data class Approval(
     val decidedAtMs: Long?,
     val confirmedBy: String?,
     val decisionKey: String?,
+    val decidedOn: String? = null,
+    val answerSignature: String? = null,
+    val answerPublicKey: String? = null,
 ) {
     /** Declined wins over approved (two devices answering differently is a no); an unanswered one expires. */
     fun state(nowMs: Long): ApprovalState = when {
@@ -109,6 +150,8 @@ enum class ApprovalRefusal(val line: String) {
     ANSWERED("Already answered on your other device"),
     EXPIRED("This request has expired · nothing was approved"),
     NEEDS_BIOMETRIC("Confirm it's you to approve"),
+    /** The fingerprint prompt stayed open past [ApprovalRules.PREP_TTL_MS]: sign again. */
+    STALE("That took too long · approve again"),
 }
 
 sealed class ApprovalDecision {
@@ -138,6 +181,41 @@ object ApprovalRules {
     /** When this device can't take a fingerprint at all. */
     const val NO_BIOMETRIC_FOLD = "Set up a fingerprint on this phone to approve"
     const val NO_BIOMETRIC_MAC = "This Mac has no Touch ID · approve on the Fold"
+
+    /** A prepared answer ([prepare]) must be signed and given within this. */
+    const val PREP_TTL_MS = 5 * 60_000L
+    const val ANSWER_VERSION = "MEKA-APPROVAL1"
+    /** When this device's fingerprints changed since its approval key was made (the key is renewed; sign again). */
+    const val KEY_RENEWED_FOLD = "Fingerprints changed on this phone · approval key renewed · approve again"
+    const val KEY_RENEWED_MAC = "Touch ID changed on this Mac · approval key renewed · approve again"
+
+    /**
+     * The exact text a device signs to say yes to [a] (slice 2; docs/kestrel-integration.md), one value per line, no
+     * trailing newline: the version, the approval's id, "approved", its kind, who asked, the decision key, the answer
+     * time, when it expires, the answering device, and the lowercase hex SHA-256 of the title and its lines as shown
+     * (joined with newlines). Kestrel rebuilds it from the status it reads and checks the signature with a key it pinned.
+     */
+    fun answerMessage(a: Approval, decisionKey: String, decidedAtMs: Long, deviceId: String): String = listOf(
+        ANSWER_VERSION, a.id, "approved", a.kind.wire, a.source, decisionKey, decidedAtMs.toString(), a.expiresAtMs.toString(),
+        deviceId, shownHash(a.title, a.lines),
+    ).joinToString("\n")
+
+    /** SHA-256 hex of the title and lines as Meka saw them, joined with "\n". */
+    fun shownHash(title: String, lines: List<String>): String =
+        os.meka.core.sync.Sha256.hexOf((listOf(title) + lines).joinToString("\n"))
+
+    /** Step one of a yes: what to sign now, or why it can't be approved. */
+    fun prepare(a: Approval?, id: String, nowMs: Long, key: String, deviceId: String): ApprovalPrep {
+        val refusal = when {
+            a == null -> ApprovalRefusal.GONE
+            else -> when (a.state(nowMs)) {
+                ApprovalState.APPROVED, ApprovalState.DECLINED -> ApprovalRefusal.ANSWERED
+                ApprovalState.EXPIRED -> ApprovalRefusal.EXPIRED
+                ApprovalState.PENDING -> null
+            }
+        }
+        return ApprovalPrep(id, if (refusal == null && a != null) answerMessage(a, key, nowMs, deviceId) else null, key, nowMs, refusal?.line)
+    }
 
     /** The `approval` id for a request: the same however often the asker sends it ([source] and its own [ref]). */
     fun entityId(source: String, ref: String): String = "ap" + ActivityRules.fnv64("approval:${source.trim().lowercase()}:$ref")
@@ -182,6 +260,9 @@ object ApprovalRules {
             decidedAtMs = f[ApprovalFields.DECIDED_AT]?.longOrNull,
             confirmedBy = f[ApprovalFields.CONFIRMED_BY]?.textOrNull,
             decisionKey = f[ApprovalFields.DECISION_KEY]?.textOrNull,
+            decidedOn = f[ApprovalFields.DECIDED_ON]?.textOrNull,
+            answerSignature = f[ApprovalFields.ANSWER_SIGNATURE]?.textOrNull,
+            answerPublicKey = f[ApprovalFields.ANSWER_PUBLIC_KEY]?.textOrNull,
         )
     }
 
@@ -202,9 +283,14 @@ object ApprovalRules {
     /**
      * Meka's answer to [a]. Approve needs [ApprovalConfirmation.BIOMETRIC] when the kind does (always, here); declining
      * takes a tap. An answered or expired request can't be answered again. [key] is the idempotency key made now.
+     * Slice 2: a yes also needs [signature], made by this device's approval key (fingerprint-only) over
+     * [answerMessage] with [key] and [decidedAtMs] ([prepare]'s, within [PREP_TTL_MS]); without one it is refused as
+     * [ApprovalRefusal.NEEDS_BIOMETRIC]. The core can't check the signature itself (no crypto in common code): the
+     * server and Kestrel do.
      */
     fun decide(
         a: Approval?, approve: Boolean, confirmation: ApprovalConfirmation, nowMs: Long, key: String, deviceId: String,
+        signature: ApprovalSignature? = null, decidedAtMs: Long = nowMs,
     ): ApprovalDecision {
         if (a == null) return ApprovalDecision.Refused(ApprovalRefusal.GONE)
         when (a.state(nowMs)) {
@@ -212,15 +298,23 @@ object ApprovalRules {
             ApprovalState.EXPIRED -> return ApprovalDecision.Refused(ApprovalRefusal.EXPIRED)
             ApprovalState.PENDING -> Unit
         }
-        if (approve && a.kind.biometric && confirmation != ApprovalConfirmation.BIOMETRIC) {
-            return ApprovalDecision.Refused(ApprovalRefusal.NEEDS_BIOMETRIC)
+        if (approve && a.kind.biometric) {
+            if (confirmation != ApprovalConfirmation.BIOMETRIC) return ApprovalDecision.Refused(ApprovalRefusal.NEEDS_BIOMETRIC)
+            if (signature == null || signature.signature.isBlank() || signature.publicKey.isBlank()) {
+                return ApprovalDecision.Refused(ApprovalRefusal.NEEDS_BIOMETRIC)
+            }
+            if (decidedAtMs > nowMs + 60_000L || nowMs - decidedAtMs > PREP_TTL_MS) return ApprovalDecision.Refused(ApprovalRefusal.STALE)
         }
         val fields = buildMap {
             put(if (approve) ApprovalFields.APPROVED else ApprovalFields.DECLINED, true.fv())
-            put(ApprovalFields.DECIDED_AT, nowMs.fv())
+            put(ApprovalFields.DECIDED_AT, (if (approve) decidedAtMs else nowMs).fv())
             put(ApprovalFields.CONFIRMED_BY, confirmation.wire.fv())
             put(ApprovalFields.DECISION_KEY, key.fv())
             put(ApprovalFields.DECIDED_ON, deviceId.fv())
+            if (approve && signature != null) {
+                put(ApprovalFields.ANSWER_SIGNATURE, signature.signature.fv())
+                put(ApprovalFields.ANSWER_PUBLIC_KEY, signature.publicKey.fv())
+            }
         }
         return ApprovalDecision.Write(fields, approve, (if (approve) "Approved · " else "Declined · ") + a.title)
     }
@@ -341,10 +435,39 @@ class Approvals(private val replica: Replica, private val nowMs: () -> Long, pri
         return id
     }
 
+    /** Step one of a yes ([ApprovalRules.prepare]). */
+    fun prepare(id: String, key: String, deviceId: String): ApprovalPrep = ApprovalRules.prepare(find(id), id, nowMs(), key, deviceId)
+
     /** Answers [id] ([ApprovalRules.decide]) and writes it when taken. */
-    fun decide(id: String, approve: Boolean, confirmation: ApprovalConfirmation, key: String, deviceId: String): ApprovalDecision {
-        val d = ApprovalRules.decide(find(id), approve, confirmation, nowMs(), key, deviceId)
+    fun decide(
+        id: String, approve: Boolean, confirmation: ApprovalConfirmation, key: String, deviceId: String,
+        signature: ApprovalSignature? = null, decidedAtMs: Long? = null,
+    ): ApprovalDecision {
+        val now = nowMs()
+        val d = ApprovalRules.decide(find(id), approve, confirmation, now, key, deviceId, signature, decidedAtMs ?: now)
         if (d is ApprovalDecision.Write) replica.commitLocal(EntityTypes.APPROVAL, id, d.fields)
         return d
+    }
+}
+
+/**
+ * The household's approval keys ([ApprovalKeyFields]): each device writes only its own ([register]), and only when the
+ * public half changed (a new key after a fingerprint change replaces the old one).
+ */
+class ApprovalKeys(private val replica: Replica, private val nowMs: () -> Long) {
+    fun mine(): String? = replica.entity(EntityTypes.APPROVAL_KEY, replica.deviceId)?.fields?.get(ApprovalKeyFields.PUBLIC_KEY)?.textOrNull
+
+    /** Records this device's approval key; true when something was written. */
+    fun register(publicKey: String, label: String): Boolean {
+        if (publicKey.isBlank() || mine() == publicKey) return false
+        replica.commitLocal(
+            EntityTypes.APPROVAL_KEY, replica.deviceId,
+            mapOf(
+                ApprovalKeyFields.PUBLIC_KEY to publicKey.fv(),
+                ApprovalKeyFields.LABEL to label.take(40).fv(),
+                ApprovalKeyFields.SINCE to nowMs().fv(),
+            ),
+        )
+        return true
     }
 }
