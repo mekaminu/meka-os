@@ -46,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
@@ -337,7 +338,12 @@ fun AfterWorkCard(core: MekaCore, modifier: Modifier = Modifier, onOpen: () -> U
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onOpen() }.padding(MekaSpace.m),
     ) {
-        Text(summary.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        // Title with an Open › affordance, then the first two names over the counts (Fold review 2026-10-12 17:56, item 3).
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(summary.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            Text(AfterWorkSummary.OPEN_LABEL + " ›", style = MekaType.captionStrong, color = Meka.colors.accent)
+        }
+        summary.namesLine?.let { Text(it, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         Text(summary.headline, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         if (summary.urgentPeople > 0) {
             Text("${summary.urgentPeople} urgent", style = MekaType.captionStrong, color = Meka.colors.critical)

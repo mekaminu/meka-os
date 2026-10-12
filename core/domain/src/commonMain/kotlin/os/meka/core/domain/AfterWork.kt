@@ -265,6 +265,8 @@ data class AfterWorkSummary(val people: List<PersonSummary>) {
     companion object {
         const val WORK_TITLE = "While you were at work"
         const val AWAY_TITLE = "Messages MEKA took"
+        /** The card's affordance beside its title (Fold review 2026-10-12 17:56, item 3). */
+        const val OPEN_LABEL = "Open"
     }
 
     /**
@@ -275,7 +277,21 @@ data class AfterWorkSummary(val people: List<PersonSummary>) {
         if (lists.family.isEmpty() && lists.alwaysNotify.isEmpty() && names === CallerNames.NONE) this
         else AfterWorkSummaries.build(people.flatMap { it.items }, lists, names)
 
-    /** "4 people · 9 messages · 2 missed calls" */
+    /**
+     * The first two people by the summary's order and how many more (Fold review 2026-10-12 17:56, item 3: the card
+     * gave no names): "Jeanette and Ada", "Jeanette, Ada and 3 more"; null when empty.
+     */
+    val namesLine: String? get() = when (people.size) {
+        0 -> null
+        1 -> people[0].personName
+        2 -> "${people[0].personName} and ${people[1].personName}"
+        else -> "${people[0].personName}, ${people[1].personName} and ${people.size - 2} more"
+    }
+
+    /** Messages and voice messages waiting to be caught up on (Needs you's empty line counts them). */
+    val toCatchUp: Int get() = messages + voiceMessages
+
+        /** "4 people · 9 messages · 2 missed calls" */
     val headline: String get() = if (isEmpty) "Nothing came in." else listOfNotNull(
         plural(people.size, "person", "people"),
         plural(messages, "message").takeIf { messages > 0 },

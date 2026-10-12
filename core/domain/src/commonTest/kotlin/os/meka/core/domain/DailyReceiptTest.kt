@@ -36,9 +36,9 @@ class DailyReceiptTest {
             item(ActivityKind.PUBLISHED),
             item(ActivityKind.CALENDAR),
         )!!
-        assertEquals("MEKA handled 8 things today", r.line)
-        assertEquals(8, r.count)
-        // Ties keep the fixed order (calls stopped before digests); the phone build is in the count, not the detail.
+        assertEquals("MEKA handled 7 things today", r.line)
+        assertEquals(7, r.count)
+        // Ties keep the fixed order (calls stopped before digests); the phone build isn't counted at all.
         assertEquals("3 reminders · 2 calls stopped · 2 digests", r.detail)
     }
 
@@ -56,5 +56,14 @@ class DailyReceiptTest {
         // 00:30 today counts; 23:30 yesterday doesn't.
         val r = receipt(item(ActivityKind.DIGEST, atMs = day * CivilDate.DAY_MS + hourMs / 2), item(ActivityKind.DIGEST, atMs = day * CivilDate.DAY_MS - hourMs / 2))!!
         assertEquals("1 digest", r.detail)
+    }
+
+    @Test
+    fun phoneBuildsNeverCountAndAloneGiveNoLine() {
+        // Fold review 2026-10-12 17:56, item 1: "MEKA handled 54 things today · 51 phone builds".
+        assertNull(receipt(*Array(51) { item(ActivityKind.PUBLISHED) }))
+        val r = receipt(*Array(51) { item(ActivityKind.PUBLISHED) }, item(ActivityKind.REMINDED), item(ActivityKind.REMINDED), item(ActivityKind.SCREENED))!!
+        assertEquals("MEKA handled 3 things today", r.line)
+        assertEquals("2 reminders · 1 call stopped", r.detail)
     }
 }

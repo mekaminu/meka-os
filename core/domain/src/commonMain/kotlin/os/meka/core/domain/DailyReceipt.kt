@@ -3,8 +3,10 @@ package os.meka.core.domain
 /**
  * Daily receipt (build plan V1), non-AI: an evening line on Today, "MEKA handled 12 things today", that opens the
  * activity log. It counts today's entries of what MEKA did on its own (reminders and digests it sent, changes it made
- * that are still in place, calls it stopped or the call assistant handled, phone builds it published); Meka's own calendar edits, family
- * links and watch links are things he did, so they aren't counted. Nothing new is stored: it is read from the log.
+ * that are still in place, calls it stopped or the call assistant handled); Meka's own calendar edits, family links and watch
+ * links are things he did, so they aren't counted. Phone builds (and any other build or deploy entry) are MEKA's own
+ * development, not something done for Meka, so they never count either (Fold review 2026-10-12 17:56, item 1: "54 things
+ * today · 51 phone builds"). Nothing new is stored: it is read from the log.
  */
 data class DailyReceipt(
     /** "MEKA handled 12 things today" */
@@ -21,7 +23,7 @@ object ReceiptRules {
     /** The kinds that are MEKA acting for Meka, in the order the detail names them when counts tie. */
     val HANDLED: List<ActivityKind> = listOf(
         ActivityKind.CHANGED, ActivityKind.REMINDED, ActivityKind.SCREENED, ActivityKind.CALL,
-        ActivityKind.DIGEST, ActivityKind.PUBLISHED,
+        ActivityKind.DIGEST,
     )
 
     fun counts(i: ActivityItem): Boolean =
@@ -51,7 +53,6 @@ object ReceiptRules {
         ActivityKind.SCREENED -> plural(n, "call stopped", "calls stopped")
         ActivityKind.CALL -> plural(n, "call handled", "calls handled")
         ActivityKind.DIGEST -> plural(n, "digest")
-        ActivityKind.PUBLISHED -> plural(n, "phone build")
         else -> plural(n, "thing")
     }
 }

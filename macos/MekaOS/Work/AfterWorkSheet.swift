@@ -169,7 +169,15 @@ struct AfterWorkCard: View {
             } else {
                 Button { model.showAfterWork = true } label: {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                        Text(summary.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                        // Title with an Open › affordance, then the first two names (Fold review 2026-10-12 17:56, item 3).
+                        HStack {
+                            Text(summary.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                            Spacer(minLength: MekaSpace.s)
+                            Text(AfterWorkSummary.companion.OPEN_LABEL + " ›").font(MekaType.captionStrong).foregroundStyle(palette.accent)
+                        }
+                        if let names = summary.namesLine {
+                            Text(names).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
+                        }
                         Text(summary.headline).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                         if summary.urgentPeople > 0 {
                             Text("\(summary.urgentPeople) urgent").font(MekaType.captionStrong).foregroundStyle(palette.critical)

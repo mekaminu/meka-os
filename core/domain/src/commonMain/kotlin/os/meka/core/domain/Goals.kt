@@ -881,7 +881,8 @@ class Goals(
             val streak = GoalRules.streak(target, days, today, createdDay)
             HabitItem(
                 id = id,
-                title = s[ActionableFields.TITLE].textOrNull ?: "",
+                // Shown capitalised like tasks ("gym" → "Gym"; Fold review 2026-10-12 17:56, item 3).
+                title = TaskTitleRules.display(s[ActionableFields.TITLE].textOrNull ?: ""),
                 targetPerWeek = target,
                 timing = s[HabitFields.PREFERRED_TIMING].textOrNull?.let { enumOrNull<HabitTiming>(it) } ?: HabitTiming.ANYTIME,
                 minutes = (s[HabitFields.MINUTES].longOrNull?.toInt() ?: GoalRules.DEFAULT_MINUTES).coerceIn(1, MAX_MINUTES),

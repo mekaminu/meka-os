@@ -69,7 +69,7 @@ struct CommandNeedsYouView: View {
                     // review 2026-10-09 00:10, item 6).
                     HStack(spacing: MekaSpace.m) {
                         BreathingRingView(palette: palette, size: 20, check: true)
-                        Text(NeedsYouStackRules.shared.EMPTY_LINE)
+                        Text(NeedsYouStackRules.shared.emptyLine(toCatchUp: model.afterWork?.toCatchUp ?? 0))
                             .font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
                     }
                     .accessibilityElement(children: .combine)

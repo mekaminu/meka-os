@@ -211,7 +211,7 @@ struct NeedsYouView: View {
                         HStack(spacing: MekaSpace.m) {
                             BreathingRingView(palette: palette, check: true)
                             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                                Text(NeedsYouStackRules.shared.EMPTY_LINE)
+                                Text(NeedsYouStackRules.shared.emptyLine(toCatchUp: model.afterWork?.toCatchUp ?? 0))
                                     .font(MekaType.body).foregroundStyle(palette.textPrimary)
                                 Text(NeedsYouStackRules.shared.EMPTY_CAPTION)
                                     .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)

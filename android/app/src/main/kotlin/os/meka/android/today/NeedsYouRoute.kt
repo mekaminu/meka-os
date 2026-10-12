@@ -360,6 +360,8 @@ internal fun NeedsYouColumn(
     val goals by core.goalsView.collectAsState()
     val lists by core.listsView.collectAsState()
     val meanwhile = remember(goals, lists) { NeedsYouMeanwhileRules.build(goals, lists) }
+    // Messages still waiting turn "Nothing needs you" into "Nothing to decide · 9 messages to catch up on".
+    val afterWork by core.afterWork.collectAsState()
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
     val tickHabit: (HabitItem) -> Unit = { h -> haptics.light(); scope.launch { runCatching { core.setHabitDone(h.id, !h.doneToday) } } }
@@ -512,7 +514,7 @@ internal fun NeedsYouColumn(
                     verticalAlignment = Alignment.CenterVertically) {
                     BreathingRing(Modifier.padding(end = MekaSpace.m), size = if (compact) 22.dp else 28.dp, check = true)
                     Column {
-                        Text(NeedsYouStackRules.EMPTY_LINE, style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
+                        Text(NeedsYouStackRules.emptyLine(afterWork.toCatchUp), style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
                         if (!compact) Text(NeedsYouStackRules.EMPTY_CAPTION, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
                     }
                 }

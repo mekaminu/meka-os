@@ -105,8 +105,10 @@ object LifeTileRules {
     ): LifeTileInputs = LifeTileInputs(
         listsDue = lists.dueLine,
         toBuy = lists.shopping.toBuy.size,
-        habits = goals.habits.size,
-        habitsDone = goals.doneToday,
+        // One rule for which habits are today's, the same as Needs you and the Day ring (Fold review 2026-10-12 17:56,
+        // item 3: the tile said "0 of 2" while Needs you said "0 of 1").
+        habits = DayTileRules.habitsToday(goals.habits),
+        habitsDone = DayTileRules.habitsDone(goals.habits),
         dinnerTonight = today.dinner?.text,
         dinnerTitle = meals.week.firstOrNull()?.title,
         mealsSummary = meals.summary.takeIf { meals.favourites.isNotEmpty() },

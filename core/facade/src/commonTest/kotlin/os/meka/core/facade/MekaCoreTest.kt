@@ -1263,7 +1263,7 @@ class MekaCoreTest {
         a.setHabitDone(id, true)
         assertTrue(!a.goalsView.value.offersAddGym, "no separate Add Gym beside a habit called gym")
         assertEquals(id, a.goalsView.value.bookOffer?.id)
-        assertEquals("Let MEKA book “gym”", os.meka.core.domain.SessionRules.bookOfferLabel(a.goalsView.value.bookOffer!!.title))
+        assertEquals("Let MEKA book “Gym”", os.meka.core.domain.SessionRules.bookOfferLabel(a.goalsView.value.bookOffer!!.title))
         a.letMekaBook(id)
         val h = a.goalsView.value.habits.single()
         assertEquals(id, h.id)

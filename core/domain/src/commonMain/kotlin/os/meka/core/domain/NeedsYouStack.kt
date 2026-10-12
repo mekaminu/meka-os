@@ -76,6 +76,16 @@ object NeedsYouStackRules {
      */
     const val EMPTY_LINE = "Nothing needs you"
     const val EMPTY_CAPTION = "Approvals, replies and decisions land here."
+    const val NOTHING_TO_DECIDE = "Nothing to decide"
+
+    /**
+     * The empty line with messages still waiting (Fold review 2026-10-12 17:56, item 3: "Nothing needs you" right under
+     * 9 unread messages read as a contradiction): "Nothing to decide · 9 messages to catch up on"; [EMPTY_LINE] when
+     * none are waiting.
+     */
+    fun emptyLine(toCatchUp: Int): String =
+        if (toCatchUp <= 0) EMPTY_LINE
+        else "$NOTHING_TO_DECIDE · $toCatchUp ${if (toCatchUp == 1) "message" else "messages"} to catch up on"
 
     /**
      * Today's Needs you (conflicts, overdue, due today unscheduled, in that order), then the lists card. A lit [credit]

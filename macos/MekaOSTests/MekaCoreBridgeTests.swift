@@ -821,6 +821,12 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testNeedsYouEmptyStateReachesSwift() {
         XCTAssertEqual(NeedsYouStackRules.shared.EMPTY_LINE, "Nothing needs you")
         XCTAssertEqual(NeedsYouStackRules.shared.EMPTY_CAPTION, "Approvals, replies and decisions land here.")
+        // Fold review 2026-10-12 17:56, item 3: messages waiting change the line; the after-work card names people.
+        XCTAssertEqual(NeedsYouStackRules.shared.emptyLine(toCatchUp: 9), "Nothing to decide · 9 messages to catch up on")
+        XCTAssertEqual(NeedsYouStackRules.shared.emptyLine(toCatchUp: 0), "Nothing needs you")
+        XCTAssertEqual(AfterWorkSummary.companion.OPEN_LABEL, "Open")
+        XCTAssertNil(AfterWorkSummary(people: []).namesLine)
+        XCTAssertEqual(AfterWorkSummary(people: []).toCatchUp, 0)
     }
 
     /// Can't see the animations (2026-10-08): the Motion check and the build line reach Swift.
