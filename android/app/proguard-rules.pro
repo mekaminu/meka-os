@@ -13,3 +13,8 @@
 -dontwarn org.openjsse.**
 -dontwarn java.lang.management.**
 -dontwarn javax.naming.**
+# WorkManager opens its Room database and makes workers by reflection; the fold-smoke run (2026-10-12) crashed at
+# start with WorkDatabase_Impl.<init> stripped. Keep Room databases' and workers' constructors.
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
+-keep class * extends androidx.work.ListenableWorker { <init>(android.content.Context, androidx.work.WorkerParameters); }
+-keep class * extends androidx.work.InputMerger { <init>(); }
