@@ -456,6 +456,93 @@ object GiftRules {
     }
 }
 
+/**
+ * Gift planner, slice 2: Ask and Talk know the birthdays, anniversaries and ideas ("when's Mum's birthday?", "what
+ * did I note for Jeanette?"), and a model's `add_gift_idea` ("Mum: silk scarf") becomes a card that notes the idea
+ * on Meka's tap, with Undo. Plain rules; nothing is ordered or sent.
+ */
+object GiftAskRules {
+    /** Occasions the Ask lines name (soonest first). */
+    const val ASK_ITEMS = 8
+    /** Ideas named on one line. */
+    const val ASK_IDEAS = 4
+    const val ALREADY = "That gift idea is already noted"
+    const val GONE = "That birthday or anniversary isn't in Gifts any more"
+
+    private val KIND_WORDS = setOf("birthday", "bday", "anniversary", "wedding", "gift", "gifts", "present", "presents", "idea", "ideas", "for", "the", "my", "our")
+
+    /**
+     * The gifts as MEKA describes them to the model (Ask's `gifts` lines): "Gifts · 3 birthdays and anniversaries",
+     * then each, soonest first: "Mum's birthday · Tue 3 Nov · in 22 days · turns 60 · order by Fri 30 Oct · 3 days'
+     * delivery · ideas: Silk scarf, Garden voucher". Nothing at all while none are entered.
+     */
+    fun askLines(view: GiftsView): List<String> {
+        if (view.rows.isEmpty()) return emptyList()
+        val n = view.rows.size
+        val head = "Gifts · $n " + (if (n == 1) "birthday or anniversary" else "birthdays and anniversaries") +
+            if (n > ASK_ITEMS) " · the soonest $ASK_ITEMS below" else ""
+        return listOf(head) + view.rows.take(ASK_ITEMS).map { r ->
+            val note = r.note.removePrefix("✓ ").replaceFirstChar { it.lowercase() }
+            val ideas = if (r.ideas.isEmpty()) "no gift ideas yet" else
+                "ideas: " + r.ideas.take(ASK_IDEAS).joinToString(", ") { it.text } + if (r.ideas.size > ASK_IDEAS) " and ${r.ideas.size - ASK_IDEAS} more" else ""
+            listOf(r.title, r.line, note, ideas).joinToString(" · ")
+        }
+    }
+
+    private fun words(s: String): List<String> {
+        val out = mutableListOf<String>()
+        val sb = StringBuilder()
+        for (c in s) {
+            if (c.isLetterOrDigit() || c == '\'' || c == '’' || c == '-') sb.append(c) else if (sb.isNotEmpty()) { out += sb.toString(); sb.clear() }
+        }
+        if (sb.isNotEmpty()) out += sb.toString()
+        return out
+    }
+
+    private fun bare(w: String): String {
+        val l = w.lowercase()
+        for (suffix in listOf("'s", "’s")) if (l.endsWith(suffix)) return l.dropLast(2)
+        return l.trimEnd('\'', '’')
+    }
+
+    /**
+     * The occasion "Mum", "Mum's birthday", "Jeanette's", "the wedding anniversary" or "Mum and Dad's anniversary"
+     * names; a birthday before an anniversary when only the person is given; null when none matches.
+     */
+    fun match(items: List<Occasion>, who: String): Occasion? {
+        val w = words(who).map(::bare)
+        val wantsAnniversary = w.any { it == "anniversary" || it == "wedding" }
+        val wantsBirthday = w.any { it == "birthday" || it == "bday" }
+        val person = w.filter { it.isNotEmpty() && it !in KIND_WORDS }.joinToString(" ")
+        val found = items.filter { o ->
+            o.person.lowercase() == person &&
+                (!wantsAnniversary || o.kind == OccasionKind.ANNIVERSARY) && (!wantsBirthday || o.kind == OccasionKind.BIRTHDAY)
+        }
+        return found.firstOrNull { it.kind == OccasionKind.BIRTHDAY } ?: found.firstOrNull()
+    }
+
+    /**
+     * A model's `add_gift_idea` ("Mum: silk scarf", "Wedding anniversary: weekend away") as a card: the occasion as
+     * Gifts has it and the idea, at most [GiftRules.MAX_IDEA] characters. Null when it names no occasion Meka has,
+     * no idea, one already noted, or one with [GiftRules.MAX_IDEAS] already.
+     */
+    fun proposal(items: List<Occasion>, title: String?): AskProposal.AddGiftIdea? {
+        val t = title?.replace('\n', ' ')?.trim() ?: return null
+        val colon = t.indexOf(':').takeIf { it > 0 } ?: return null
+        val o = match(items, t.substring(0, colon)) ?: return null
+        val idea = t.substring(colon + 1).trim().take(GiftRules.MAX_IDEA).trim()
+        if (idea.isEmpty() || o.ideas.size >= GiftRules.MAX_IDEAS) return null
+        if (o.ideas.any { it.text.equals(idea, ignoreCase = true) }) return null
+        return AskProposal.AddGiftIdea(o.id, GiftRules.title(o), idea)
+    }
+
+    /** The card's words: "Gift idea for Mum's birthday · Silk scarf". */
+    fun cardLine(p: AskProposal.AddGiftIdea): String = "Gift idea for ${p.title} · ${p.idea}"
+
+    /** The undo bar's line: "Noted Silk scarf for Mum's birthday". */
+    fun doneLine(p: AskProposal.AddGiftIdea): String = "Noted ${p.idea} for ${p.title}"
+}
+
 /** The birthdays, anniversaries and gift ideas on a replica. */
 class Gifts(
     private val replica: Replica,
@@ -512,6 +599,24 @@ class Gifts(
             GiftIdeaFields.DELETED to false.fv(),
         ))
         return true
+    }
+
+    /**
+     * Slice 2: the Ask card's add, the new idea's id; null when the occasion is gone, full, or the idea is already
+     * noted (so Undo never removes one Meka typed himself).
+     */
+    fun addIdeaFromAsk(occasionId: String, text: String): String? {
+        val o = live(occasionId) ?: return null
+        val t = text.trim().replace('\n', ' ').take(GiftRules.MAX_IDEA).trim()
+        if (t.isEmpty() || o.ideas.size >= GiftRules.MAX_IDEAS || o.ideas.any { it.text.equals(t, ignoreCase = true) }) return null
+        val id = newId()
+        replica.commitLocal(EntityTypes.GIFT_IDEA, id, mapOf(
+            GiftIdeaFields.OCCASION to occasionId.fv(),
+            GiftIdeaFields.TEXT to t.fv(),
+            GiftIdeaFields.ADDED_AT to nowMs().fv(),
+            GiftIdeaFields.DELETED to false.fv(),
+        ))
+        return id
     }
 
     fun removeIdea(id: String): Boolean {

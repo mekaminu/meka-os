@@ -140,4 +140,56 @@ class GiftsTest {
         sync()
         assertEquals(listOf("Wedding anniversary"), gFold.view().rows.map { it.title })
     }
+
+    @Test
+    fun askAndTalkKnowTheGiftsAndNoteAnIdea() {
+        assertTrue(GiftAskRules.askLines(gFold.view()).isEmpty())
+        gFold.add("Mum's birthday 3 Nov 1966")
+        gFold.add("Wedding anniversary 20 Aug 2015")
+        gFold.add("Mum and Dad's anniversary 12 May")
+        val mumId = gFold.items().first { it.person == "Mum" }.id
+        gFold.addIdea(mumId, "Silk scarf")
+
+        assertEquals(
+            listOf(
+                "Gifts · 3 birthdays and anniversaries",
+                "Mum's birthday · Tue 3 Nov · in 24 days · turns 60 · order by Fri 30 Oct · 3 days' delivery · ideas: Silk scarf",
+                "Mum and Dad's anniversary · Wed 12 May · in 214 days · order by Sat 8 May · 3 days' delivery · no gift ideas yet",
+                "Wedding anniversary · Fri 20 Aug · in 314 days · 12 years · order by Mon 16 Aug · 3 days' delivery · no gift ideas yet",
+            ),
+            GiftAskRules.askLines(gFold.view()),
+        )
+
+        // Which occasion a model's words name: the birthday before an anniversary for the same person.
+        val items = gFold.items()
+        assertEquals("Mum's birthday", GiftAskRules.match(items, "Mum")?.let(GiftRules::title))
+        assertEquals("Mum's birthday", GiftAskRules.match(items, "Mum's birthday")?.let(GiftRules::title))
+        assertEquals("Wedding anniversary", GiftAskRules.match(items, "Wedding anniversary")?.let(GiftRules::title))
+        assertEquals("Mum and Dad's anniversary", GiftAskRules.match(items, "mum and dad's anniversary")?.let(GiftRules::title))
+        assertNull(GiftAskRules.match(items, "Jeanette"))
+        assertNull(GiftAskRules.match(items, "Mum's anniversary"))
+
+        val ctx = AskRules.context(Today(emptyList(), null, emptyList(), emptyList()), world.clock.nowMs, cal, gifts = GiftAskRules.askLines(gFold.view()))
+        assertEquals(4, ctx.items.count { it.kind == AskItemKind.GIFTS })
+        assertFalse(ctx.untrusted)
+        val card = AskRules.card(AskRawAction("add_gift_idea", title = "Mum: garden voucher"), ctx, emptyMap(), world.clock.nowMs, cal, occasions = items)!!
+        assertEquals(AskProposal.AddGiftIdea(mumId, "Mum's birthday", "garden voucher"), card.proposal)
+        assertEquals("Gift idea for Mum's birthday · garden voucher", card.line)
+        assertEquals("Note", card.button)
+        assertEquals("Noted garden voucher for Mum's birthday", AskRules.doneLine(card.proposal, sat))
+        assertEquals("note garden voucher as a gift idea for Mum's birthday", TalkRules.phrase(card.proposal, sat, past = false))
+        assertEquals("noted garden voucher as a gift idea for Mum's birthday", TalkRules.phrase(card.proposal, sat, past = true))
+        assertNull(TrustRules.kindOf(card.proposal))
+        // No one Meka keeps, no colon, no idea, or one already noted: no card.
+        for (t in listOf("Jeanette: perfume", "Mum silk scarf", "Mum:  ", "Mum: silk SCARF")) {
+            assertNull(AskRules.card(AskRawAction("add_gift_idea", title = t), ctx, emptyMap(), world.clock.nowMs, cal, occasions = items), t)
+        }
+
+        // The add the card makes: the new idea's id, never for one already there.
+        val id = gFold.addIdeaFromAsk(mumId, "garden voucher")!!
+        assertNull(gFold.addIdeaFromAsk(mumId, "Garden voucher"))
+        assertEquals(listOf("Silk scarf", "garden voucher"), gFold.items().first { it.id == mumId }.ideas.map { it.text })
+        assertTrue(gFold.removeIdea(id))
+        assertNull(gFold.addIdeaFromAsk("gone", "anything"))
+    }
 }

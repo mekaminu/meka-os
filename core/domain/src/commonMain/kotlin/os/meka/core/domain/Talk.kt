@@ -229,6 +229,8 @@ object TalkRules {
             today + 1 -> "tomorrow"
             else -> "on " + CivilDate.longLabel(p.day)
         }
+        // "note silk scarf as a gift idea for Mum's birthday" / "noted …".
+        is AskProposal.AddGiftIdea -> (if (past) "noted " else "note ") + clean(p.idea) + " as a gift idea for " + clean(p.title)
         // "mark Boiler service serviced, next due Monday 1 November" / "marked Car tax paid".
         is AskProposal.RenewalDone -> (if (past) "marked " else "mark ") + clean(p.title) + " " + p.doneLabel.lowercase() +
             (p.nextDay?.let { ", next due " + spokenWhen(it, null, today) } ?: "")

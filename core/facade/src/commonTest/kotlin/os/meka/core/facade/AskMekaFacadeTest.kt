@@ -339,6 +339,36 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheGiftsAndNotesAnIdeaWithUndo() = runTest {
+        val c = core()
+        c.askMeka("When's Mum's birthday?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.GIFTS })
+        c.addOccasion("Mum's birthday 3 Nov")
+
+        server.reply = AskReply.Answered("Noted.", listOf(AskRawAction("add_gift_idea", title = "Mum: silk scarf")))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("Note a silk scarf as a gift idea for Mum"))
+        val ctx = server.asked.last().second
+        assertEquals(
+            listOf("Gifts · 1 birthday or anniversary", "Mum's birthday · Tue 3 Nov · in 26 days · order by Fri 30 Oct · 3 days' delivery · no gift ideas yet"),
+            ctx.items.filter { it.kind == AskItemKind.GIFTS }.map { it.line },
+        )
+        assertFalse(ctx.untrusted)
+        assertEquals(listOf("Gift idea for Mum's birthday · silk scarf"), out.answer.cards.map { it.line })
+        // Nothing until tapped.
+        assertTrue(c.giftsView.value.rows.single().ideas.isEmpty())
+
+        val done = c.doAsk(out.answer.cards.single())
+        assertEquals("Noted silk scarf for Mum's birthday", done.line)
+        assertEquals(listOf("silk scarf"), c.giftsView.value.rows.single().ideas.map { it.text })
+        assertFailsWith<ValidationException> { c.doAsk(out.answer.cards.single()) }
+
+        // Undo takes the idea off, once.
+        assertTrue(c.undoAsk(assertIs<AskUndo.RemoveGiftIdea>(done.undo)))
+        assertTrue(c.giftsView.value.rows.single().ideas.isEmpty())
+        assertFalse(c.undoAsk(done.undo!!))
+    }
+
+    @Test
     fun askHearsTheLifeAdminHourAndSkipsThisWeeksWithUndo() = runTest {
         val c = core()
         c.askMeka("When's my admin hour?")

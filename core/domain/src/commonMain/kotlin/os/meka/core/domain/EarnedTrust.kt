@@ -75,6 +75,8 @@ object TrustRules {
         is AskProposal.AddGoal -> null
         // Skipping the life admin hour (slice 3) frees an hour Meka chose to keep, so he always sees it first.
         is AskProposal.SkipLifeAdmin -> null
+        // A gift idea (Gift planner slice 2) is Meka's own note about someone, so he always sees it before it's kept.
+        is AskProposal.AddGiftIdea -> null
     }
 
     fun read(fields: Map<String, FieldValue>?): Map<TrustKind, TrustState> = TrustKind.entries.associateWith { k ->

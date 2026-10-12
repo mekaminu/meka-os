@@ -1540,6 +1540,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(AskItemKind.lifeAdmin.wire, "life_admin")
     }
 
+    func testGiftIdeaFromAskReachesSwift() {
+        // "Note a scarf as a gift idea for Mum" in Ask and Talk (gift planner, slice 2): the card's words reach the Mac.
+        let card = AskRules.shared.cardOf(p: AskProposalAddGiftIdea(occasionId: "o1", title: "Mum's birthday", idea: "Silk scarf"), today: 0)
+        XCTAssertEqual(card.line, "Gift idea for Mum's birthday · Silk scarf")
+        XCTAssertEqual(card.button, "Note")
+        XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "noted Silk scarf as a gift idea for Mum's birthday")
+        XCTAssertEqual(AskItemKind.gifts.wire, "gifts")
+    }
+
     func testHomeUpkeepReachesSwift() {
         // Home upkeep, slice 1: the suggested jobs and their lines reach the Mac (only Strings and an Int64 cross).
         let sat = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 10)

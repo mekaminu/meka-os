@@ -3295,7 +3295,9 @@ class MekaCore(
                 // Car on autopilot, slice 3: the DVLA's answer and the car's dates, so "is the car taxed?" has an answer.
                 os.meka.core.domain.CarAskRules.askLines(os.meka.core.domain.CarRules.view(car.registration(), renewals.items(), carCheck(), cal.epochDayOf(nowMs()), cal), cal.epochDayOf(nowMs())),
                 // Life admin hour, slice 3: the hour and its jobs, so "when's my admin hour?" has an answer.
-                lifeAdmin = os.meka.core.domain.LifeAdminRules.askLine(_lifeAdmin.value, nowMs()))
+                lifeAdmin = os.meka.core.domain.LifeAdminRules.askLine(_lifeAdmin.value, nowMs()),
+                // Gift planner, slice 2: each birthday and anniversary with its ideas, so "when's Mum's birthday?" has an answer.
+                gifts = os.meka.core.domain.GiftAskRules.askLines(gifts.view()))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -3305,7 +3307,7 @@ class MekaCore(
             is AskReply.Answered -> onCore {
                 val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
                 val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),
-                    os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all(), errands.items(), tasks.all(), goals.goals(tasks.all()).first, _lifeAdmin.value)
+                    os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all(), errands.items(), tasks.all(), goals.goals(tasks.all()).first, _lifeAdmin.value, gifts.items())
                 val allowed = answer.cards.filter { askAllowed(it.proposal, context.untrusted) }
                 // Earned trust: a kind Meka said "just do it" to runs now, recorded in Activity with Undo, when the
                 // policy engine permits Level 4 under his rule (never for a question that carried untrusted lines).
@@ -3412,6 +3414,12 @@ class MekaCore(
                 if (!lifeAdmin.skipThisWeek(true, p.weekStart)) throw os.meka.core.domain.ValidationException("That life admin hour can't be skipped any more")
                 os.meka.core.domain.AskUndo.KeepLifeAdmin(p.weekStart)
             }
+            // Checked again now: the occasion still there, the idea not noted meanwhile (here or on the other device).
+            is os.meka.core.domain.AskProposal.AddGiftIdea -> {
+                if (gifts.items().none { it.id == p.occasionId }) throw os.meka.core.domain.ValidationException(os.meka.core.domain.GiftAskRules.GONE)
+                val id = gifts.addIdeaFromAsk(p.occasionId, p.idea) ?: throw os.meka.core.domain.ValidationException(os.meka.core.domain.GiftAskRules.ALREADY)
+                os.meka.core.domain.AskUndo.RemoveGiftIdea(id)
+            }
             // Checked again now: only while it is still due on the card's day (Done here or on the other device moved it on).
             is os.meka.core.domain.AskProposal.RenewalDone -> os.meka.core.domain.AskUndo.PutBackRenewal(renewals.doneFromAsk(p.id, p.dueDay))
             // Kept in today's week (whatever week the review shows); the same line already there is refused.
@@ -3492,6 +3500,8 @@ class MekaCore(
             is os.meka.core.domain.AskUndo.KeepDateNight -> dateNight.skip(undo.day, false)
             // Kept again only in the same week while it is still skipped.
             is os.meka.core.domain.AskUndo.KeepLifeAdmin -> lifeAdmin.skipThisWeek(false, undo.weekStart)
+            // The idea the card noted leaves Gifts (false when it was already removed, here or on the other device).
+            is os.meka.core.domain.AskUndo.RemoveGiftIdea -> gifts.removeIdea(undo.ideaId)
             // Put back only while it is still as Done left it (a change since, here or on the other device, wins).
             is os.meka.core.domain.AskUndo.PutBackRenewal -> renewals.undoDone(undo.before)
             // The win the card kept leaves the log (false when it was already removed, here or on the other device).
@@ -4056,6 +4066,8 @@ class MekaCore(
             is os.meka.core.domain.AskProposal.SkipDateNight -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             // Meka's own weekly hour (nothing is booked, cancelled or sent).
             is os.meka.core.domain.AskProposal.SkipLifeAdmin -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+            // A note in Meka's own Gifts (nothing is ordered, bought or sent).
+            is os.meka.core.domain.AskProposal.AddGiftIdea -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             // Marks Meka's own radar item done, like its button (nothing is paid, booked or sent).
             is os.meka.core.domain.AskProposal.RenewalDone -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
             // Keeps a line in Meka's own wins log (nothing is sent to anyone).
