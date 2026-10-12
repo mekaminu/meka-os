@@ -134,7 +134,10 @@ object TalkRules {
      * or without "the second one", "both", "all of them") confirms, a no leaves them; otherwise a goodbye ends and
      * anything else is a new question. "Both" needs exactly two cards; a position past the last card is a question.
      */
-    fun reply(utterance: String, pendingCards: Int): TalkReply {
+    fun reply(utterance: String, pendingCards: Int): TalkReply = reply(utterance, pendingCards, TalkOpenRules.DEFAULT)
+
+    /** As [reply], with the places this device can open ([TalkOpenRules.FOLD] on the Fold). */
+    fun reply(utterance: String, pendingCards: Int, places: Set<TalkPlace>): TalkReply {
         val question = AskRules.question(utterance) ?: return TalkReply.Silence
         val ws = words(question)
         if (ws.isEmpty() || ws.all { it in FILLERS }) return TalkReply.Silence
@@ -144,7 +147,7 @@ object TalkRules {
         }
         if (VoicePlaylistRules.isPlayRequest(question)) return TalkReply.PlayMessages(question)
         ReadOutRules.request(question)?.let { return TalkReply.ReadOut(question, it) }
-        TalkOpenRules.request(question)?.let { return TalkReply.Open(question, it) }
+        TalkOpenRules.request(question, places)?.let { return TalkReply.Open(question, it) }
         if (isEnding(question)) return TalkReply.End
         return TalkReply.Ask(question)
     }
@@ -407,9 +410,12 @@ object TalkFlow {
     )
 
     /** A final transcript while listening. */
-    fun heard(s: TalkSession, utterance: String): TalkStep {
+    fun heard(s: TalkSession, utterance: String): TalkStep = heard(s, utterance, TalkOpenRules.DEFAULT)
+
+    /** As [heard], with the places this device can open ("bedside clock" on the Fold). */
+    fun heard(s: TalkSession, utterance: String, places: Set<TalkPlace>): TalkStep {
         if (s.phase != TalkPhase.LISTENING) return TalkStep(s, emptyList())
-        return when (val r = TalkRules.reply(utterance, s.pending.size)) {
+        return when (val r = TalkRules.reply(utterance, s.pending.size, places)) {
             TalkReply.Silence -> silence(s)
             TalkReply.End -> end(s)
             is TalkReply.Confirm -> TalkStep(s.copy(phase = TalkPhase.DOING), listOf(TalkEffect.Do(r.indices.map { s.pending[it] })))

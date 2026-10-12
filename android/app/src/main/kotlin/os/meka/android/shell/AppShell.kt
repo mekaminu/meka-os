@@ -75,6 +75,7 @@ import os.meka.android.today.TodayRoute
 import os.meka.android.ask.AskRoute
 import os.meka.android.fold.BedsideClock
 import os.meka.android.fold.rememberFoldState
+import os.meka.core.domain.BedsideEntryRules
 import os.meka.core.domain.FoldMode
 import os.meka.core.domain.FoldModeRules
 import androidx.compose.ui.platform.LocalConfiguration
@@ -158,12 +159,22 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     val fold = rememberFoldState()
     val mode = FoldModeRules.mode(LocalConfiguration.current.screenWidthDp.toFloat(), fold.posture)
     val reducedMode = Meka.reducedMotion
+    // Bedside clock slice 1: also opened by hand (Ask → Daily, Talk); ‹ Back on a table stand steps out of it until the
+    // Fold stops standing.
+    val autoBedside = mode == FoldMode.BEDSIDE
+    val manualBedside by app.openBedside.collectAsState()
+    var bedsideDismissed by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(autoBedside) { bedsideDismissed = BedsideEntryRules.dismissedAfterPosture(autoBedside, bedsideDismissed) }
+    val leaveBedside = {
+        bedsideDismissed = BedsideEntryRules.dismissedAfterBack(autoBedside)
+        app.openBedside.value = false
+    }
     AnimatedContent(
-        targetState = mode == FoldMode.BEDSIDE,
+        targetState = BedsideEntryRules.shows(autoBedside, manualBedside, bedsideDismissed),
         transitionSpec = { fadeIn(MekaMotion.appear(reducedMode)) togetherWith fadeOut(MekaMotion.appear(reducedMode)) },
         label = "fold-mode",
     ) { bedside ->
-    if (bedside) BedsideClock(core, fold) else
+    if (bedside) BedsideClock(core, fold, onBack = leaveBedside) else
     // One shared-transition layout for the whole shell: titles travel within a screen and, from cards and More rows,
     // across the shell's slide into the place they open (Four tabs, slice 3).
     MekaSharedLayout(Modifier.fillMaxSize()) {

@@ -211,6 +211,9 @@ fun HealthPane(core: MekaCore, onClose: () -> Unit, openPane: (HealthFix) -> Uni
         } else {
             SkeletonRows(6, Modifier.padding(top = MekaSpace.xs))
         }
+        // Bedside clock slice 1: what the hinge reports right now and its last 20 changes.
+        Text("Fold", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
+        os.meka.android.fold.FoldPostureLines(withLog = true)
     }
 }
 

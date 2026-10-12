@@ -74,6 +74,7 @@ enum class MoreItem(
     SHUTDOWN("Shut down the day", "Tick off, carry over and see tomorrow", null, MoreGroup.DAILY),
     TRAIN_QUEUE("Train queue", "Links and podcasts saved for the commute", null, MoreGroup.DAILY),
     LIFE_ADMIN("Life admin hour", "One hour a week for forms, calls and renewals", null, MoreGroup.DAILY),
+    BEDSIDE(os.meka.core.domain.BedsideEntryRules.ROW_LABEL, os.meka.core.domain.BedsideEntryRules.ROW_LINE, null, MoreGroup.DAILY),
     REVIEW("Review", "Your week, looked back on", ShellDestination.REVIEW, MoreGroup.DAILY),
     WORK("Work mode", "Work hours and the Work switch", null, MoreGroup.SETTINGS),
     PROTECTED("Protected time", "Evenings and weekends, kept free of tasks", null, MoreGroup.SETTINGS),

@@ -251,6 +251,8 @@ class TalkController(
             // "Plan my day": the conversation has ended (End came first); Today opens with the planner up.
             is TalkEffect.Open -> when (effect.place) {
                 os.meka.core.domain.TalkPlace.PLAN -> { (context.applicationContext as? os.meka.android.MekaApplication)?.openPlan?.value = true }
+                // Bedside clock slice 1: "bedside clock" said to Talk opens it; ‹ Back leaves it.
+                os.meka.core.domain.TalkPlace.BEDSIDE -> { (context.applicationContext as? os.meka.android.MekaApplication)?.openBedside?.value = true }
             }
             TalkEffect.StopSpeaking -> stopSaying()
             TalkEffect.End -> {
@@ -314,7 +316,7 @@ class TalkController(
             if (phase != TalkPhase.LISTENING) return
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
             if (text.isNotBlank()) heard = text
-            apply(TalkFlow.heard(session, text))
+            apply(TalkFlow.heard(session, text, os.meka.core.domain.TalkOpenRules.FOLD))
         }
 
         override fun onError(error: Int) {

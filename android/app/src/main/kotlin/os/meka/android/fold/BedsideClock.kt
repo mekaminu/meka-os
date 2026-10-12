@@ -124,7 +124,7 @@ import os.meka.core.facade.MekaCore
  * motion: cross-fades, the ring drawn at once and still, the strip a still card with ‹ ›.
  */
 @Composable
-fun BedsideClock(core: MekaCore, fold: FoldState) {
+fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
     val context = LocalContext.current
     val view = LocalView.current
     val activity = LocalActivity.current
@@ -168,6 +168,8 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
     BackHandler(enabled = newsOpen != null) { newsOpen = null }
     BackHandler(enabled = talkOpen && newsOpen == null) { talkOpen = false }
     BackHandler(enabled = dayOpen && !talkOpen && newsOpen == null) { dayOpen = false }
+    // ‹ Back (bedside clock slice 1): leaves the clock for the app; on a table stand it stays away until the Fold stops standing.
+    BackHandler(enabled = !dayOpen && !talkOpen && newsOpen == null && open == null) { onBack() }
     val talkApp = context.applicationContext as? os.meka.android.MekaApplication
     val density = LocalDensity.current
     var topInWindow by remember { mutableIntStateOf(0) }
@@ -201,6 +203,14 @@ fun BedsideClock(core: MekaCore, fold: FoldState) {
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)),
             ) { id -> newsOpen = id }
         }
+        // ‹ Back, quiet in the clock's corner (dimmer in quiet hours, like the clock).
+        Text(
+            "‹ Back", style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.align(Alignment.TopStart)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                .padding(MekaSpace.m).alpha(if (v.dim) 0.5f else 1f)
+                .minTouch().clickable(role = Role.Button, onClickLabel = "Leave the bedside clock") { onBack() },
+        )
         MekaPane(visible = open == BedsideOpens.BRIEF) { BriefPane(core, onClose = { open = null }) }
         MekaPane(visible = open == BedsideOpens.SHUTDOWN) { ShutdownPane(core, onClose = { open = null }) }
         MekaPane(visible = dayOpen) {

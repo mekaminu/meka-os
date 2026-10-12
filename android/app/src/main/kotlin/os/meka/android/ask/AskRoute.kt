@@ -120,11 +120,14 @@ fun AskRoute(
     val lifeLines by core.lifeLines.collectAsState()
     // The Settings pane (Fold review 2026-10-12, item 7): every setting behind one row on Ask.
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    val bedsideApp = LocalContext.current.applicationContext as? os.meka.android.MekaApplication
     val open: (MoreItem) -> Unit = { item ->
         val d = item.destination
         when {
             d != null -> { settingsOpen = false; openPlace(d) }
             item == MoreItem.SETTINGS -> settingsOpen = true
+            // Bedside clock slice 1: the clock takes the screen, ‹ Back returns here.
+            item == MoreItem.BEDSIDE -> bedsideApp?.openBedside?.value = true
             ShellNav.opens(item) -> pane = item
         }
     }
@@ -481,6 +484,8 @@ internal fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> 
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = openTopics)
                         .padding(MekaSpace.xxs))
             }
+            // How the Fold reports it is held (bedside clock slice 1), live, so the bedside clock's trigger can be seen.
+            os.meka.android.fold.FoldPostureLines(Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.xxs))
             // The build on this phone (Meka, 2026-10-08), so we can tell whether it has the latest motion work.
             val app = context as? MekaApplication
             if (app != null) {

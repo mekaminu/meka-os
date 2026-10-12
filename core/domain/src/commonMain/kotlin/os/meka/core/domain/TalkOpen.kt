@@ -10,8 +10,12 @@ package os.meka.core.domain
  * the planner opens (ending first, so leaving Ask for Today never cuts MEKA off).
  */
 
-/** A place Talk can open when asked ([TalkOpenRules.request]). */
-enum class TalkPlace { PLAN }
+/**
+ * A place Talk can open when asked ([TalkOpenRules.request]). [BEDSIDE] (the bedside clock, slice 1 of "Bedside clock
+ * doesn't appear on the Fold 8") only on a device that has one: the Fold asks with [TalkOpenRules.FOLD]; the Mac keeps
+ * [TalkOpenRules.DEFAULT], so "bedside clock" there is a question like any other.
+ */
+enum class TalkPlace { PLAN, BEDSIDE }
 
 object TalkOpenRules {
     /** What MEKA says before the planner opens. */
@@ -19,6 +23,20 @@ object TalkOpenRules {
 
     /** What the conversation remembers MEKA did. */
     const val OPENED_PLAN = "Opened Plan my day."
+
+    /** What a device without a bedside clock (the Mac) can open. */
+    val DEFAULT: Set<TalkPlace> = setOf(TalkPlace.PLAN)
+
+    /** The Fold: the planner and the bedside clock. */
+    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE)
+
+    /** "Bedside clock", "open the bedside clock", "show me the bedside clock", "night clock", "bedside mode". */
+    private val BEDSIDE = setOf(
+        listOf("bedside", "clock"), listOf("the", "bedside", "clock"), listOf("open", "bedside", "clock"),
+        listOf("open", "the", "bedside", "clock"), listOf("show", "bedside", "clock"), listOf("show", "the", "bedside", "clock"),
+        listOf("bedside", "mode"), listOf("bedside"), listOf("night", "clock"), listOf("the", "night", "clock"),
+        listOf("open", "the", "night", "clock"), listOf("show", "the", "night", "clock"), listOf("nightstand", "clock"),
+    )
 
     /** Words around the request that change nothing ("ok MEKA, can you plan my day for me please"). */
     private val DROP = setOf(
@@ -44,19 +62,28 @@ object TalkOpenRules {
      * "let's plan today", "make a plan for the day", "what's my plan for today". Anything with more in it ("plan my day
      * around the dentist", "plan a trip") goes to MEKA as a question.
      */
-    fun request(utterance: String): TalkPlace? {
+    fun request(utterance: String): TalkPlace? = request(utterance, DEFAULT)
+
+    /** As [request], opening only what [places] holds ("bedside clock" on the Fold). */
+    fun request(utterance: String, places: Set<TalkPlace>): TalkPlace? {
         val ws = ReadOutRules.words(utterance).filter { it !in DROP }
-        return if (ws in PLAN) TalkPlace.PLAN else null
+        return when {
+            ws in PLAN && TalkPlace.PLAN in places -> TalkPlace.PLAN
+            ws in BEDSIDE && TalkPlace.BEDSIDE in places -> TalkPlace.BEDSIDE
+            else -> null
+        }
     }
 
     /** What MEKA says before opening [place]. */
     fun opening(place: TalkPlace): String = when (place) {
         TalkPlace.PLAN -> OPENING_PLAN
+        TalkPlace.BEDSIDE -> BedsideEntryRules.OPENING
     }
 
     /** What the conversation remembers about opening [place]. */
     fun remembered(place: TalkPlace): String = when (place) {
         TalkPlace.PLAN -> OPENED_PLAN
+        TalkPlace.BEDSIDE -> BedsideEntryRules.OPENED
     }
 }
 

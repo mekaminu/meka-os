@@ -75,6 +75,8 @@ class MekaApplication : Application() {
     val openBrief = MutableStateFlow(false)
     /** "Plan my day" said to Talk (morning brief, slice 5): Today opens the planner, then clears it. */
     val openPlan = MutableStateFlow(false)
+    /** The bedside clock opened by hand (Ask → Daily → Bedside clock, or Talk "bedside clock"); ‹ Back clears it. */
+    val openBedside = MutableStateFlow(false)
     /** Today's health line → Ask → More → Health (Reliability first, item 3). */
     val openHealth = MutableStateFlow(false)
     /** Today's setup card → Ask → More → Setup (Setup checklist). */
