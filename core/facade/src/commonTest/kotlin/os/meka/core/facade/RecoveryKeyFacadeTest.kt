@@ -62,7 +62,7 @@ class RecoveryKeyFacadeTest {
         assertEquals("Make a recovery key", first.action)
         assertNull(first.warning)
 
-        val draft = c.newRecoveryKey()
+        val draft = c.makeRecoveryKey()
         assertEquals(24, draft.words.size)
         assertEquals(6, draft.rows.size)
         assertEquals(3, draft.confirmPositions.size)
@@ -90,7 +90,7 @@ class RecoveryKeyFacadeTest {
         assertEquals(listOf(RecoveryKeyRules.MADE_SUMMARY), activity)
 
         // A second key is a different set of words.
-        assertNotEquals(draft.words, c.newRecoveryKey().words)
+        assertNotEquals(draft.words, c.makeRecoveryKey().words)
     }
 
     @Test
@@ -100,7 +100,7 @@ class RecoveryKeyFacadeTest {
         val v = c.refreshRecoveryKey()
         assertEquals(RecoveryKeyRules.OFFLINE, v.problem)
         assertEquals("Can't check right now · MEKA's server didn't answer", v.line)
-        val draft = c.newRecoveryKey()
+        val draft = c.makeRecoveryKey()
         assertFalse(c.saveRecoveryKey(draft, draft.confirmPositions.map { draft.words[it] }))
         assertEquals(RecoveryKeyRules.OFFLINE, c.recoveryKeyView.value!!.problem)
 
@@ -116,7 +116,7 @@ class RecoveryKeyFacadeTest {
         assertEquals(SetupState.TODO, before.state)
         assertEquals("Make one", before.fixLabel)
         c.refreshRecoveryKey()
-        val draft = c.newRecoveryKey()
+        val draft = c.makeRecoveryKey()
         assertTrue(c.saveRecoveryKey(draft, draft.confirmPositions.map { draft.words[it] }))
         assertEquals(SetupState.DONE, c.setupView.value!!.steps.first { it.key == SetupRules.RECOVERY_KEY }.state)
 

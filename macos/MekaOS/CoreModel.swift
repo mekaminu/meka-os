@@ -1453,7 +1453,7 @@ final class CoreModel {
 
     /// A new key's words for the sheet, made on this Mac; nothing is sent until `saveRecoveryKey`. The sheet keeps it
     /// only while it shows the words (never stored or synced).
-    func newRecoveryKey() -> RecoveryKeyDraft? { core?.newRecoveryKey() }
+    func makeRecoveryKey() -> RecoveryKeyDraft? { core?.makeRecoveryKey() }
 
     /// Saves `draft` once the three typed words match (only its verifier is sent; the old key stops working). The
     /// draft crosses to the core once, here, and the sheet drops it afterwards. False when the words don't match or

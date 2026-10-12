@@ -7,6 +7,7 @@ final class SearchNavTests: XCTestCase {
     @MainActor
     func testListResultsOpenTheirTabGoalsAndHabitsOpenGoals() {
         XCTAssertEqual(SearchNav.destination(.listsWaiting), .lists)
+        XCTAssertEqual(SearchNav.destination(.appointments), .ask) // appointment nudges, slice 2a
         XCTAssertEqual(SearchNav.destination(.listsRenewals), .lists)
         XCTAssertEqual(SearchNav.destination(.goals), .goals)
         XCTAssertEqual(SearchNav.listTab(.listsWaiting), .waiting)

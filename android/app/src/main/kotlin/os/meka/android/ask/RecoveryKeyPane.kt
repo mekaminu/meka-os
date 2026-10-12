@@ -130,7 +130,7 @@ fun RecoveryKeyPane(core: MekaCore, onClose: () -> Unit) {
                 s == 0 || d == null -> StatusSection(view, saved, busy) {
                     haptics.light(); saved = false; confirming = false
                     answers.indices.forEach { answers[it] = "" }
-                    draft = core.newRecoveryKey()
+                    draft = core.makeRecoveryKey()
                 }
                 s == 1 -> WordsSection(d, onWritten = { haptics.light(); confirming = true }, onCancel = { haptics.tick(); draft = null })
                 else -> ConfirmSection(d, answers, busy, onSave = { save() }, onBack = { haptics.tick(); confirming = false })

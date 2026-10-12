@@ -1013,7 +1013,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     /// Requests slice 4: what Add on a request card says reaches Swift, and answering a card that isn't there is a no-op.
     func testRequestAnswersReachSwift() async throws {
         let thu: Int64 = 20_741 // Thu 15 Oct 2026
-        let home = RequestAcceptRules.shared.doneLine(plan: RequestPlanHomeDay(day: thu), kind: .workFromHome, today: thu - 6,
+        let home = RequestAcceptRules.shared.doneLine(plan: RequestPlan.HomeDay(day: thu), kind: .workFromHome, today: thu - 6,
                                                       provider: nil, isWorkDay: true)
         XCTAssertEqual(home, "Thu 15 Oct: work from home")
         let core = MacCoreFactory.shared.create(
@@ -1438,7 +1438,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     /// Calendar editing, slice 2c: the Edit form's words and the detail's edit note reach Swift.
     func testEditEventRulesReachSwift() {
         XCTAssertTrue(EditEventRules.shared.TIME_NOTE.hasPrefix("Its time can't be changed"))
-        let note = EventEditNote(editId: "e1", text: "This cancels it for 4 people", needsMeka: true, deleteAnyway: true, waiting: false)
+        let note = EventEditNote(editId: "e1", text: "This cancels it for 4 people", needsMeka: true, deleteAnyway: true, waiting: false, clash: nil)
         XCTAssertTrue(note.deleteAnyway)
         XCTAssertFalse(note.waiting)
     }
@@ -1986,7 +1986,6 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testAppointmentsInAskAndSearchReachSwift() {
         // Appointment nudges, slice 2a: Search has an Appointments group that opens the sheet; an empty list sends Ask nothing.
         XCTAssertEqual(SearchKind.appointment.label, "Appointments")
-        XCTAssertEqual(SearchNav.destination(.appointments), .ask)
         XCTAssertTrue(AppointmentAskRules.shared.askLines(view: AppointmentView.companion.EMPTY).isEmpty)
     }
 
@@ -2194,7 +2193,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(empty.on)
         XCTAssertEqual(empty.weekday, 6)
         XCTAssertEqual(NoticeSource.lifeAdmin.label, "Life admin hour")
-        let job = LifeAdminJob(id: "task:a", kind: .task, title: "Call the GP", line: nil, spoken: "Call the GP")
+        let job = LifeAdminJob(id: "task:a", kind: .task, title: "Call the GP", line: nil, spoken: "Call the GP", overdue: false)
         XCTAssertEqual(job.kind, LifeAdminJobKind.task)
     }
 
@@ -2298,7 +2297,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Protected time, slice 1: the sheet's chips and lines come from the core's rules (only two Bools and an Int
         // cross from the sheet).
         let rules = ProtectedRules.shared
-        XCTAssertEqual(rules.FROM_CHOICES.map { $0.int32Value }, [18 * 60, 18 * 60 + 30, 19 * 60, 19 * 60 + 30, 20 * 60])
+        let fromChoices: [Int32] = rules.FROM_CHOICES.map { $0.int32Value }
+        let expectedFrom: [Int32] = [1080, 1110, 1140, 1170, 1200] // 18:00, 18:30, 19:00, 19:30, 20:00
+        XCTAssertEqual(fromChoices, expectedFrom)
         XCTAssertEqual(ProtectedView.companion.EMPTY.summary, rules.OFF_LINE)
         XCTAssertNil(ProtectedView.companion.EMPTY.todayLine)
         let setting = ProtectedSetting(evenings: true, fromMin: 19 * 60, weekends: true)
@@ -2505,7 +2506,7 @@ final class MekaCoreBridgeTests: XCTestCase {
             databaseKeyHex: nil, encrypted: false,
             databaseDirectory: NSTemporaryDirectory(), databaseName: "recovery-\(UUID().uuidString).db", deviceKey: nil
         )
-        let draft = core.newRecoveryKey()
+        let draft = core.makeRecoveryKey()
         XCTAssertEqual(draft.rows.count, 6)
         XCTAssertTrue(draft.rows.allSatisfy { $0.count == 4 })
         XCTAssertEqual(draft.rows.first?.first?.hasPrefix("1 "), true)

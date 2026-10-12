@@ -157,7 +157,7 @@ struct RecoveryKeySheet: View {
     private func make() {
         MekaHaptics.light()
         saved = false; confirming = false; answers = ["", "", ""]
-        draft = model.newRecoveryKey()
+        draft = model.makeRecoveryKey()
     }
 
     private func save() {

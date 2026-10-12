@@ -4307,7 +4307,7 @@ class MekaCore(
     }
 
     /** A new key's words for the screen (made on this device; nothing is sent until [saveRecoveryKey]). */
-    fun newRecoveryKey(): os.meka.core.domain.RecoveryKeyDraft =
+    fun makeRecoveryKey(): os.meka.core.domain.RecoveryKeyDraft =
         os.meka.core.domain.RecoveryKeyRules.draft(keyRandom.nextBytes(os.meka.core.domain.RecoveryKeyRules.ENTROPY_BYTES)) { keyRandom.nextInt(it) }
 
     /**
