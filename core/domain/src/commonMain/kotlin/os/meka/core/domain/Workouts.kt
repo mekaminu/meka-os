@@ -89,18 +89,37 @@ object WorkoutRules {
     /** Activity's summary and the Fold's line: "Ticked Gym · 52-min workout". */
     fun summary(t: WorkoutTick): String = "Ticked ${t.habitTitle} · ${what(t)}"
 
+    /**
+     * Health Connect slice 2: with background reading allowed, the Fold reads every [BACKGROUND_EVERY_MIN] minutes even
+     * while MEKA is closed, and a booked session's "Did you go?" waits [ASK_GRACE_MIN] minutes after the slot so the
+     * watch's workout (synced to Health Connect a few minutes after it ends) can tick it first.
+     */
+    const val BACKGROUND_EVERY_MIN = 15
+    const val ASK_GRACE_MIN = 30
+
     /** The switch's state on the Fold. */
     enum class Access { UNAVAILABLE, OFF, NEEDS_PERMISSION, ON }
 
     /** The line under Goals' "Workouts" switch. */
-    fun settingLine(access: Access, habitTitles: List<String>): String = when (access) {
+    fun settingLine(access: Access, habitTitles: List<String>, background: Boolean = false): String = when (access) {
         Access.UNAVAILABLE -> "Health Connect isn't on this phone"
         Access.OFF -> "Off · turn on and a workout your watch logs ticks the habit it matches. Read on this phone only."
         Access.NEEDS_PERMISSION -> "Allow MEKA to read exercise in Health Connect"
         Access.ON -> when {
             habitTitles.isEmpty() -> "On · add a habit like Gym or Run and its workouts tick it"
+            background -> "On · workouts tick ${andList(habitTitles.take(3))}, even while MEKA is closed. Read on this phone only."
             else -> "On · workouts tick ${andList(habitTitles.take(3))}. Read on this phone only."
         }
+    }
+
+    /**
+     * The quiet line under an On switch without background reading (slice 2); null once it's allowed, or when it can't
+     * be offered again: [offered] false after Health Connect didn't grant it (refused, or an older Health Connect).
+     */
+    fun backgroundLine(access: Access, background: Boolean, offered: Boolean): String? = when {
+        access != Access.ON || background -> null
+        !offered -> "Read while MEKA is open · background reading wasn't allowed (change it in Health Connect → MEKA)"
+        else -> "Read while MEKA is open · allow in the background and a workout ticks it before “Did you go?”"
     }
 
     /** The habits a workout could tick (for [settingLine]). */

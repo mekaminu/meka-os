@@ -16,4 +16,13 @@ class HealthWorkoutsTest {
         assertEquals(WorkoutKind.FOOTBALL, HealthWorkouts.kindOf(ExerciseSessionRecord.EXERCISE_TYPE_SOCCER))
         assertEquals(WorkoutKind.OTHER, HealthWorkouts.kindOf(ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT))
     }
+
+    /** Slice 2: the background read runs only with the switch on and Health Connect's background permission. */
+    @Test
+    fun theBackgroundReadRunsOnlyWhenOnAndAllowed() {
+        assertEquals(true, HealthWorkouts.shouldSchedule(on = true, background = true))
+        assertEquals(false, HealthWorkouts.shouldSchedule(on = true, background = false))
+        assertEquals(false, HealthWorkouts.shouldSchedule(on = false, background = true))
+        assertEquals("android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND", HealthWorkouts.READ_IN_BACKGROUND)
+    }
 }

@@ -407,9 +407,11 @@ object SessionRules {
      * unanswered session "Gym · Push at 17:45" · "Leave by 17:30 · until 18:45" (stale once it starts), and when its slot
      * is over "Did you go? · Gym · Push" · "17:45–18:45 · Went or Didn't go in Today" (standing until the day ends).
      * Answering (Went / Didn't go) takes both away; a session moved by a new meeting gets a fresh "time to go". Never a
-     * nag: one of each per session, and a missed one is rebooked, not chased.
+     * nag: one of each per session, and a missed one is rebooked, not chased. [askGraceMin] holds "Did you go?" that long
+     * after the slot (Health Connect slice 2: with workouts read in the background, the watch's workout usually ticks
+     * the session first, so the question never comes).
      */
-    fun notices(view: SessionsView, cal: LocalCalendar): List<Notice> {
+    fun notices(view: SessionsView, cal: LocalCalendar, askGraceMin: Int = 0): List<Notice> {
         val out = mutableListOf<Notice>()
         val min = 60_000L
         fun hhmm(ms: Long) = LocalClock.formatMinute(cal.minuteOfDay(ms))
@@ -427,7 +429,8 @@ object SessionRules {
             out += Notice(
                 key = "session:${c.habitId}:$day:ask", source = NoticeSource.SESSION_ASK, tier = NoticeTier.HEADS_UP,
                 title = "Did you go? · ${c.heading}", text = "${hhmm(start)}–${hhmm(end)} · Went or Didn't go in Today",
-                atMs = end, target = NoticeTarget.TODAY, expiresAtMs = cal.toEpochMs(day + 1, 0),
+                atMs = if (askGraceMin <= 0) end else minOf(end + askGraceMin * min, cal.toEpochMs(day + 1, 0) - min),
+                target = NoticeTarget.TODAY, expiresAtMs = cal.toEpochMs(day + 1, 0),
                 actions = listOf(NoticeAction.WENT, NoticeAction.DIDNT_GO),
             )
         }

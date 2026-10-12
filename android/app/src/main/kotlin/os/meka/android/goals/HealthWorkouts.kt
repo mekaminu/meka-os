@@ -27,9 +27,16 @@ object HealthWorkouts {
     private const val KEY_ON = "on"
     private const val KEY_READ_AT = "readAt"
     private const val KEY_LAST = "last"
+    private const val KEY_BG_ASKED = "bgAsked"
 
     /** The one permission MEKA asks for: reading exercise sessions. */
     val READ_EXERCISE: String by lazy { HealthPermission.getReadPermission(ExerciseSessionRecord::class) }
+
+    /**
+     * Slice 2: reading while MEKA is closed (Health Connect's own permission, asked for separately). Written out rather
+     * than taken from the client library so an older Health Connect simply never grants it.
+     */
+    const val READ_IN_BACKGROUND = "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
 
     fun available(context: Context): Boolean =
         runCatching { HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE }.getOrDefault(false)
@@ -51,6 +58,48 @@ object HealthWorkouts {
     } catch (e: Exception) {
         false
     }
+
+    /** Background reading is allowed (and the switch is on with exercise allowed: otherwise there's nothing to read). */
+    suspend fun inBackground(context: Context): Boolean = try {
+        if (!available(context) || !isOn(context)) false
+        else HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions()
+            .let { READ_EXERCISE in it && READ_IN_BACKGROUND in it }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        false
+    }
+
+    /** Whether to offer "Allow in the background": not after Health Connect was asked and didn't grant it. */
+    fun backgroundOffered(context: Context): Boolean = !prefs(context).getBoolean(KEY_BG_ASKED, false)
+
+    /** Health Connect was asked for background reading; [granted] or not, it isn't offered again unless granted later. */
+    fun backgroundAsked(context: Context, granted: Boolean) {
+        prefs(context).edit().putBoolean(KEY_BG_ASKED, !granted).apply()
+    }
+
+    /**
+     * Brings the background read in line with the switch and Health Connect's permissions: the 15-minute job runs only
+     * while both reads are allowed, and the core holds "Did you go?" for the watch only then. Call at process start and
+     * whenever the switch or a permission changes; never throws. Returns whether background reading is on.
+     */
+    suspend fun sync(context: Context, core: MekaCore): Boolean {
+        val bg = inBackground(context)
+        runCatching { if (shouldSchedule(isOn(context), bg)) HealthWorker.schedule(context) else HealthWorker.cancel(context) }
+        runCatching { core.setWorkoutsReadInBackground(bg) }
+        // The question's time moved: let the governor look again (it also runs at process start, so the first sync
+        // after a restart counts as a change).
+        if (lastBackground != bg) {
+            lastBackground = bg
+            (context.applicationContext as? os.meka.android.MekaApplication)?.let { app -> runCatching { app.governor.run() } }
+        }
+        return bg
+    }
+
+    @Volatile private var lastBackground: Boolean? = null
+
+    /** The background job runs only with the switch on and background reading allowed. Pure. */
+    fun shouldSchedule(on: Boolean, background: Boolean): Boolean = on && background
 
     suspend fun access(context: Context): WorkoutRules.Access = when {
         !available(context) -> WorkoutRules.Access.UNAVAILABLE

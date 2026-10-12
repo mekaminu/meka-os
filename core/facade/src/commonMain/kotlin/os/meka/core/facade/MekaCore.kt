@@ -154,6 +154,8 @@ class MekaCore(
     private val lifeAdmin = os.meka.core.domain.LifeAdmin(replica, nowMs, ZoneCalendar(timeZone))
     /** This week's life admin hour as last booked ([refresh]), for the planner and Move to later. */
     private var lifeAdminWeek: os.meka.core.domain.LifeAdminSlot? = null
+    /** Health Connect slice 2: this device reads workouts in the background (set by the Fold; never synced). */
+    private var workoutsInBackground = false
     private val protectedTime = os.meka.core.domain.ProtectedTime(replica)
     private val leavingNow = os.meka.core.domain.LeavingNow(replica)
     private val weekAheadSettings = os.meka.core.domain.WeekAheadSettings(replica)
@@ -2394,6 +2396,14 @@ class MekaCore(
             id?.let { os.meka.core.domain.WorkoutTickDone(t.habitId, summary, it) }
         }
     }
+    /**
+     * Health Connect slice 2: this device reads workouts in the background ([on]), so a booked session's "Did you go?"
+     * waits [os.meka.core.domain.WorkoutRules.ASK_GRACE_MIN] minutes after the slot for the watch's workout to tick it
+     * first. Kept on this device only (the Fold says it at start and whenever the switch or the permission changes).
+     */
+    suspend fun setWorkoutsReadInBackground(on: Boolean) = onCore { workoutsInBackground = on }
+    /** Notices as the governor would see them now (tests). */
+    internal suspend fun noticesNow(): List<os.meka.core.domain.Notice> = onCore { refresh(); currentNotices() }
     /** The habits a workout could tick, for the Fold's Workouts line. */
     fun workoutHabits(): List<String> = os.meka.core.domain.WorkoutRules.tickable(
         goalsView.value.habits.map { os.meka.core.domain.WorkoutHabit(it.id, it.title, it.minutes, it.booked, it.doneToday) },
@@ -4747,6 +4757,7 @@ class MekaCore(
             lifeAdmin = _lifeAdmin.value,
             occasions = gifts.items(),
             trips = trips.items(),
+            sessionAskGraceMin = if (workoutsInBackground) os.meka.core.domain.WorkoutRules.ASK_GRACE_MIN else 0,
         )
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */

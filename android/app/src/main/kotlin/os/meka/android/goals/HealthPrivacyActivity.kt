@@ -46,7 +46,7 @@ class HealthPrivacyActivity : ComponentActivity() {
 
     companion object {
         val LINES = listOf(
-            "MEKA reads only your exercise sessions, and only today's, while MEKA is open.",
+            "MEKA reads only your exercise sessions, and only today's: while MEKA is open, and every 15 minutes in the background only if you allow that too.",
             "A workout ticks the habit it matches, like Gym or Run, and Activity lists it with Undo.",
             "What Health Connect holds stays on this phone. Only the tick is synced to your other devices through MEKA's own server; nothing goes to MEKA's AI or anyone else.",
             "Turn it off in MEKA under Goals → Workouts, or remove MEKA's access in Health Connect.",

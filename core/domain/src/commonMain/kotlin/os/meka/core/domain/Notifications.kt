@@ -644,6 +644,8 @@ object NoticeSources {
         occasions: List<Occasion> = emptyList(),
         /** Travel mode: the trips with their bookings, for the evening before each ([TripRules.notices]). */
         trips: List<TripItem> = emptyList(),
+        /** Health Connect slice 2: minutes "Did you go?" waits after a session while workouts are read in the background. */
+        sessionAskGraceMin: Int = 0,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -752,7 +754,7 @@ object NoticeSources {
         // Weekend football: "How did it go?" after a club match with nothing kept yet.
         out += FootballRules.notices(events, marks, nowMs, cal)
         // Booked sessions (Gym): time to go, then "Did you go?" once the slot is over.
-        out += SessionRules.notices(sessions, cal)
+        out += SessionRules.notices(sessions, cal, sessionAskGraceMin)
         // Remind me, set on tasks.
         out += TaskReminderRules.notices(tasks, nowMs, cal)
         // Rain at today's plans you go out for (Weather), summed in the next digest.

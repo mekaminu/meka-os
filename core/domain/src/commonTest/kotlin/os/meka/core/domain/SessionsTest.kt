@@ -342,6 +342,20 @@ class SessionsTest {
     }
 
     @Test
+    fun withWorkoutsReadInTheBackgroundDidYouGoWaitsHalfAnHour() {
+        val v = book(listOf(gym()))
+        val ask = NoticeSources.collect(
+            ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, Today(emptyList(), null, emptyList(), emptyList()), at(mon, 8), cal,
+            sessions = v, sessionAskGraceMin = WorkoutRules.ASK_GRACE_MIN,
+        ).single { it.source == NoticeSource.SESSION_ASK }
+        assertEquals(at(mon, 19, 15), ask.atMs)
+        assertEquals(at(mon + 1, 0), ask.expiresAtMs)
+        // The time to go isn't held, and a long wait never pushes the question past the day.
+        assertEquals(at(mon, 17, 15), SessionRules.notices(v, cal, 30).single { it.source == NoticeSource.SESSION_LEAVE }.atMs)
+        assertEquals(at(mon, 23, 59), SessionRules.notices(v, cal, 600).single { it.source == NoticeSource.SESSION_ASK }.atMs)
+    }
+
+    @Test
     fun answeringTakesTheNoticesAwayAndAMovedSessionGetsAFreshOne() {
         assertTrue(sessionNotices(book(listOf(gym(done = setOf(mon))), now = at(mon, 19))).isEmpty())
         assertTrue(sessionNotices(book(listOf(gym(missed = setOf(mon))), now = at(mon, 19))).isEmpty())

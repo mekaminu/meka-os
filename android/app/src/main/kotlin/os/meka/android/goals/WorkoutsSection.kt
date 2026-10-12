@@ -39,7 +39,8 @@ import os.meka.core.facade.MekaCore
  * once allowed, today's workouts are read as Goals or Today opens and tick the habits they match (the habit's ring
  * draws its check as any tick does). The line under the label cross-fades as the state changes; the last tick's line
  * unfolds under it. Turn off stops reading (MEKA's access stays in Health Connect until removed there). Reduced motion:
- * cross-fades only.
+ * cross-fades only. Slice 2: "Allow in the background" asks Health Connect for reading while MEKA is closed (every 15
+ * minutes), so a workout ticks Gym before "Did you go?", which then waits half an hour after the slot for it.
  */
 @Composable
 internal fun WorkoutsSection(core: MekaCore, modifier: Modifier = Modifier) {
@@ -50,10 +51,14 @@ internal fun WorkoutsSection(core: MekaCore, modifier: Modifier = Modifier) {
     val view by core.goalsView.collectAsState()
     var access by remember { mutableStateOf<WorkoutRules.Access?>(null) }
     var last by remember { mutableStateOf(HealthWorkouts.lastLine(context)) }
+    var background by remember { mutableStateOf(false) }
+    var offered by remember { mutableStateOf(HealthWorkouts.backgroundOffered(context)) }
 
     suspend fun reread(force: Boolean) {
         val now = HealthWorkouts.access(context)
         access = now
+        background = HealthWorkouts.sync(context, core)
+        offered = HealthWorkouts.backgroundOffered(context)
         if (now == WorkoutRules.Access.ON) {
             if (HealthWorkouts.refresh(context, core, force).isNotEmpty()) haptics.light()
             last = HealthWorkouts.lastLine(context)
@@ -63,6 +68,14 @@ internal fun WorkoutsSection(core: MekaCore, modifier: Modifier = Modifier) {
     val ask = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) {
         scope.launch { reread(force = true) }
     }
+    val askBackground = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { granted ->
+        HealthWorkouts.backgroundAsked(context, HealthWorkouts.READ_IN_BACKGROUND in granted)
+        scope.launch { reread(force = true) }
+    }
+    fun turnOff() {
+        haptics.tick(); HealthWorkouts.setOn(context, false); access = WorkoutRules.Access.OFF
+        scope.launch { background = HealthWorkouts.sync(context, core) }
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { scope.launch { reread(force = false) } }
 
     val a = access ?: return
@@ -71,7 +84,7 @@ internal fun WorkoutsSection(core: MekaCore, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         SectionLabel("Workouts")
         AnimatedContent(
-            targetState = WorkoutRules.settingLine(a, titles),
+            targetState = WorkoutRules.settingLine(a, titles, background),
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "workouts-line",
         ) { line -> Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
@@ -80,6 +93,13 @@ internal fun WorkoutsSection(core: MekaCore, modifier: Modifier = Modifier) {
             enter = fadeIn(MekaMotion.appear(reduced)) + expandVertically(),
             exit = fadeOut(MekaMotion.appear(reduced)) + shrinkVertically(),
         ) { Text("Last: ${last.orEmpty()} · Undo in Activity", style = MekaType.caption, color = Meka.colors.textTertiary) }
+        // Slice 2: without background reading, a quiet line says what it would add; it folds away once allowed.
+        val bgLine = WorkoutRules.backgroundLine(a, background, offered)
+        AnimatedVisibility(
+            bgLine != null,
+            enter = fadeIn(MekaMotion.appear(reduced)) + expandVertically(),
+            exit = fadeOut(MekaMotion.appear(reduced)) + shrinkVertically(),
+        ) { Text(bgLine.orEmpty(), style = MekaType.caption, color = Meka.colors.textTertiary) }
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
             when (a) {
                 WorkoutRules.Access.OFF -> Action("Turn on") {
@@ -95,10 +115,14 @@ internal fun WorkoutsSection(core: MekaCore, modifier: Modifier = Modifier) {
                 }
                 WorkoutRules.Access.NEEDS_PERMISSION -> {
                     Action("Allow") { haptics.light(); ask.launch(setOf(HealthWorkouts.READ_EXERCISE)) }
-                    Action("Turn off") { haptics.tick(); HealthWorkouts.setOn(context, false); access = WorkoutRules.Access.OFF }
+                    Action("Turn off") { turnOff() }
                 }
-                WorkoutRules.Access.ON -> Action("Turn off") {
-                    haptics.tick(); HealthWorkouts.setOn(context, false); access = WorkoutRules.Access.OFF
+                WorkoutRules.Access.ON -> {
+                    if (!background && offered) Action("Allow in the background") {
+                        haptics.light()
+                        askBackground.launch(setOf(HealthWorkouts.READ_EXERCISE, HealthWorkouts.READ_IN_BACKGROUND))
+                    }
+                    Action("Turn off") { turnOff() }
                 }
                 WorkoutRules.Access.UNAVAILABLE -> Unit
             }

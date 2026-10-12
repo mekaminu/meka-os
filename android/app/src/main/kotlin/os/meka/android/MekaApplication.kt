@@ -139,6 +139,9 @@ class MekaApplication : Application() {
         }
         // Urgent voice messages from the call assistant ring through as soon as they sync (also with the app open).
         appScope.launch { core.afterWork.collect { runCatching { nudger.alertVoiceMessages() } } }
+        // Health Connect, slice 2: the background read follows the switch and Health Connect's permissions (both can
+        // change while MEKA is closed); also tells the core whether "Did you go?" waits for the watch.
+        appScope.launch { runCatching { os.meka.android.goals.HealthWorkouts.sync(this@MekaApplication, core) } }
         // Messages held before the summary was synced join it once (re-holding is a no-op, cleared ones stay cleared).
         appScope.launch { runCatching { core.holdCaptured(captures.items.value, captures.lists.value) } }
         // People, slice 4: the Family, Always notify and watched lists (they stay on this phone) give those people a

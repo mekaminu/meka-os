@@ -57,4 +57,18 @@ class WorkoutTicksFacadeTest {
         assertTrue(c.goalsView.value.habits.single { it.id == run }.doneToday)
         assertEquals(listOf("Run"), c.workoutHabits())
     }
+
+    @Test
+    fun readingInTheBackgroundHoldsDidYouGoUntilTheWatchHasHadItsChance() = runTest {
+        now = start - 9 * 3_600_000L // Thursday 08:15: today's session is still ahead
+        val c = core()
+        c.addGym()
+        fun ask(ns: List<os.meka.core.domain.Notice>) = ns.single { it.source == os.meka.core.domain.NoticeSource.SESSION_ASK }
+        val end = ask(c.noticesNow()).atMs
+        assertEquals(c.sessionsView.value.cards.first { it.endMs != null }.endMs, end)
+        c.setWorkoutsReadInBackground(true)
+        assertEquals(end + 30 * 60_000L, ask(c.noticesNow()).atMs)
+        c.setWorkoutsReadInBackground(false)
+        assertEquals(end, ask(c.noticesNow()).atMs)
+    }
 }
