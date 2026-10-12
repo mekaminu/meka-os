@@ -30,7 +30,7 @@ case "$URL" in https://*) ;; *) echo "The address must start with https://"; exi
 mkdir -p "$(dirname "$URL_FILE")" && printf '%s\n' "$URL" > "$URL_FILE"
 
 # Pair the first time (the watch's Wireless debugging → Pair new device shows an address and a 6-digit code).
-if [ -n "${1:-}" ]; then
+if [ -n "${1:-}" ] && [ "$1" != "--debug" ]; then
   echo "Pairing with $1. Type the 6-digit code the watch shows, then press Return."
   "$ADB" pair "$1"
 fi
@@ -62,6 +62,25 @@ fi
 export ANDROID_SERIAL="$WATCH"
 echo "Watch: $("$ADB" shell getprop ro.product.model | tr -d '\r') via $ANDROID_SERIAL"
 
-./gradlew :wear:app:installDebug -Pmeka.syncUrl="$URL"
-"$ADB" shell am start -n os.meka.android/os.meka.wear.WatchActivity >/dev/null
+# The shrunk `watch` build (smaller updates); if it doesn't stay open, the debug build goes on instead.
+#   ./tools/install-watch.sh --debug   skips straight to the debug build.
+opens() {
+  "$ADB" shell am start -W -n os.meka.android/os.meka.wear.WatchActivity >/dev/null
+  sleep 8
+  [ -n "$("$ADB" shell pidof os.meka.android | tr -d '\r')" ]
+}
+if [ "${1:-}" != "--debug" ] && [ "${2:-}" != "--debug" ]; then
+  ./gradlew :wear:app:installWatch -Pmeka.syncUrl="$URL"
+  APK=wear/app/build/outputs/apk/watch/app-watch.apk
+  [ -f "$APK" ] && echo "Watch build: $(( $(wc -c < "$APK") / 1000 )) KB"
+  if ! opens; then
+    echo "The shrunk watch build didn't stay open; installing the debug build instead (tell MEKA's build: the watch build crashes)."
+    "$ADB" logcat -d -v brief AndroidRuntime:E '*:S' | tail -30 || true
+    ./gradlew :wear:app:installDebug -Pmeka.syncUrl="$URL"
+    opens || true
+  fi
+else
+  ./gradlew :wear:app:installDebug -Pmeka.syncUrl="$URL"
+  opens || true
+fi
 echo "Installed and opened MEKA on the watch. Type the code it shows on the Fold: Ask → More → Watch."

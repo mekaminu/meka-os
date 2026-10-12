@@ -10,6 +10,8 @@ on:
     paths:
       - "android/app/build.gradle.kts"
       - "android/app/proguard-rules.pro"
+      - "wear/app/build.gradle.kts"
+      - "wear/app/proguard-rules.pro"
       - "android/app/src/main/AndroidManifest.xml"
       - "gradle/libs.versions.toml"
       - ".github/workflows/fold-smoke.yml"
@@ -40,6 +42,13 @@ jobs:
           tools/ci-run.sh ./gradlew :android:app:assembleFold
           A=android/app/build/outputs/apk/fold/app-fold.apk
           echo "::notice title=Fold build size::$(stat -c %s "$A") bytes (arm64-v8a, R8, resources shrunk)"
+      - name: The watch's shrunk build and its size (R8 must pass; installed from the Mac by tools/install-watch.sh)
+        run: |
+          set -euo pipefail
+          tools/ci-run.sh ./gradlew :wear:app:assembleWatch
+          W=wear/app/build/outputs/apk/watch/app-watch.apk
+          D=$(stat -c %s "$W")
+          echo "::notice title=Watch build size::$D bytes (Arm, R8, resources shrunk)"
       - name: The same build for the emulator (x86_64)
         run: tools/ci-run.sh ./gradlew :android:app:assembleFold -Pmeka.abi=x86_64
       - name: Enable KVM

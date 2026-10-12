@@ -41,6 +41,19 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Release signing config is supplied from outside the repo (ADR-010), the same key as the phone's.
         }
+        // What tools/install-watch.sh installs (build plan: smaller phone updates, the watch like the Fold): debug-signed
+        // so it installs over the debug build and pairs with the phone's app, R8 + resource shrinking with names kept
+        // (-dontobfuscate), Arm only (Galaxy Watches ship 32- or 64-bit userspace, so both Arm ABIs stay). The script
+        // falls back to the debug build if this one doesn't open.
+        create("watch") {
+            initWith(getByName("debug"))
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
+            matchingFallbacks += listOf("release", "debug")
+        }
     }
 
     compileOptions {

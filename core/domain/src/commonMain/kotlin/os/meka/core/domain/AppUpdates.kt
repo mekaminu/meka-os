@@ -76,6 +76,16 @@ object AppUpdateRules {
         return listOfNotNull(from, change).joinToString(" · ")
     }
 
+    /**
+     * Health's Updates row (build plan: smaller phone updates): the installed app's size, and the build before's when
+     * it differs by 50 KB or more: "10.3 MB · was 55.1 MB". Null when the size isn't known.
+     */
+    fun healthSize(sizeBytes: Long?, previousSize: Long?): String? {
+        val size = sizeBytes?.takeIf { it > 0 } ?: return null
+        val prev = previousSize?.takeIf { it > 0 && kotlin.math.abs(it - size) >= 50_000 }
+        return sizeLabel(size) + (prev?.let { " · was ${sizeLabel(it)}" } ?: "")
+    }
+
     /** True when [versionCode] hasn't been written to Activity yet ([recordedCode] is the last one that was). */
     fun shouldRecordInstall(versionCode: Long, recordedCode: Long?): Boolean = recordedCode == null || versionCode > recordedCode
 

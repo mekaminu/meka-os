@@ -349,8 +349,17 @@ class AppUpdater(private val app: MekaApplication) {
         val size = runCatching { File(app.applicationInfo.sourceDir).length() }.getOrDefault(0L).takeIf { it > 0 } ?: return
         val previousSize = prefs.getLong(KEY_SIZED_BYTES, -1).takeIf { it > 0 }
         runCatching { app.core.recordInstalledBuild(installedCode, size, recorded, previousSize) }
-        prefs.edit().putLong(KEY_SIZED_CODE, installedCode).putLong(KEY_SIZED_BYTES, size).apply()
+        prefs.edit().putLong(KEY_SIZED_CODE, installedCode).putLong(KEY_SIZED_BYTES, size)
+            .putLong(KEY_PREVIOUS_BYTES, previousSize ?: -1).apply()
     }
+
+    /** Health's Updates row: this build's size on the phone ("10.3 MB"), null if Android won't say. */
+    val installedSizeBytes: Long?
+        get() = runCatching { File(app.applicationInfo.sourceDir).length() }.getOrNull()?.takeIf { it > 0 }
+
+    /** The build before's size, as recorded when this build first ran ("· was 55.1 MB"). */
+    val previousSizeBytes: Long?
+        get() = prefs.getLong(KEY_PREVIOUS_BYTES, -1).takeIf { it > 0 }
 
     /** Once the failed build (or a newer one) is installed, Health no longer shows it. */
     private fun forgetInstalledFailure() {
@@ -369,6 +378,7 @@ class AppUpdater(private val app: MekaApplication) {
         private const val KEY_LATER = "later"
         private const val KEY_SIZED_CODE = "sized_code"
         private const val KEY_SIZED_BYTES = "sized_bytes"
+        private const val KEY_PREVIOUS_BYTES = "previous_bytes"
         const val CHECK_EVERY_MS = 10 * 60_000L
         private const val NO_STATUS = Int.MIN_VALUE
         private const val F_STAGE = "failure.stage"

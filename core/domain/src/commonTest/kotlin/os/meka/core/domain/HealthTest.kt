@@ -191,6 +191,11 @@ class HealthTest {
         assertTrue(failed.row("update").line.endsWith(" · Android: STATUS_FAILURE_BLOCKED"), failed.row("update").line)
         val installed = HealthRules.view(facts(device = fold.copy(installedCode = 230, updateFailure = failure)), cal)
         assertEquals("Version 0.1.214 · up to date", installed.row("update").line)
+        // Smaller phone updates: the row says the app's size, and the build before's when it changed.
+        val sized = HealthRules.view(facts(device = fold.copy(sizeBytes = 10_300_000, previousSizeBytes = 55_100_000)), cal)
+        assertEquals("Version 0.1.214 · 10.3 MB · was 55.1 MB · up to date", sized.row("update").line)
+        val same = HealthRules.view(facts(device = fold.copy(updateReady = true, sizeBytes = 10_300_000, previousSizeBytes = 10_320_000)), cal)
+        assertEquals("Version 0.1.214 · 10.3 MB · a newer build is ready", same.row("update").line)
     }
 
     @Test

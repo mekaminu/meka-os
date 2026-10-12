@@ -78,6 +78,9 @@ data class DeviceHealth(
     val installedCode: Long? = null,
     /** The last phone update that didn't go in ([UpdateFailureRules]); shown until that build is installed. */
     val updateFailure: UpdateFailure? = null,
+    /** The installed app's size and the build before's (smaller phone updates); null leaves them out. */
+    val sizeBytes: Long? = null,
+    val previousSizeBytes: Long? = null,
 )
 
 data class HealthFacts(
@@ -291,7 +294,8 @@ object HealthRules {
         val installed = f.device.installedCode
         val failed = installed?.let { UpdateFailureRules.healthLine(f.device.updateFailure, it, at(f.device.updateFailure?.atMs ?: 0L, f.nowMs, cal)) }
         if (failed != null) return HealthRow("update", "Updates", "Version $v · $failed", HealthState.WARN, HealthFix.INSTALL_UPDATE, "Try again")
-        return if (f.device.updateReady) HealthRow("update", "Updates", "Version $v · a newer build is ready", HealthState.WARN, HealthFix.INSTALL_UPDATE, "Install")
-        else HealthRow("update", "Updates", "Version $v · up to date", HealthState.OK)
+        val size = AppUpdateRules.healthSize(f.device.sizeBytes, f.device.previousSizeBytes)?.let { " · $it" } ?: ""
+        return if (f.device.updateReady) HealthRow("update", "Updates", "Version $v$size · a newer build is ready", HealthState.WARN, HealthFix.INSTALL_UPDATE, "Install")
+        else HealthRow("update", "Updates", "Version $v$size · up to date", HealthState.OK)
     }
 }

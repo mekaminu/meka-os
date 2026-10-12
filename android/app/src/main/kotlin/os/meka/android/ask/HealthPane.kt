@@ -107,6 +107,8 @@ object HealthDevice {
             updateReady = updater?.state?.value is UpdateState.Ready,
             installedCode = updater?.let { runCatching { it.installedCode }.getOrNull() },
             updateFailure = updater?.lastFailure?.value,
+            sizeBytes = updater?.let { runCatching { it.installedSizeBytes }.getOrNull() },
+            previousSizeBytes = updater?.previousSizeBytes,
         )
     }
 }

@@ -71,5 +71,9 @@ class AppUpdatesTest {
         assertEquals(true, AppUpdateRules.shouldRecordInstall(471, 470))
         assertEquals(false, AppUpdateRules.shouldRecordInstall(471, 471))
         assertEquals(AppUpdateRules.installedActivityId(471), AppUpdateRules.installedActivityId(471))
+        assertEquals("10.3 MB · was 55.1 MB", AppUpdateRules.healthSize(10_300_000, 55_100_000))
+        assertEquals("10.3 MB", AppUpdateRules.healthSize(10_300_000, null))
+        assertEquals("10.3 MB", AppUpdateRules.healthSize(10_300_000, 10_310_000))
+        assertEquals(null, AppUpdateRules.healthSize(null, 55_100_000))
     }
 }
