@@ -328,7 +328,9 @@ internal fun NeedsYouColumn(
     val live by LiveReplies.live.collectAsState()
     val markable by LiveReplies.markable.collectAsState()
     val sendAll = remember(triage, live) { TriageReplyRules.sendAll(triage, live) }
-    val chats = remember(triage) { TriageChatRules.chats(triage) }
+    // A person's requests sit inside their chat's card (slice 3); the rest keep their own cards below.
+    val chats = remember(triage, requests) { TriageChatRules.chatsWith(triage, requests) }
+    val looseRequests = remember(chats, requests) { TriageChatRules.looseRequests(chats, requests) }
     // Meka's edits of MEKA's drafts, by message id, so Send and "Send all" send what each card shows.
     val edits = remember { mutableStateMapOf<String, String>() }
     // Busy groups' chatter, kept on this phone (V1, messages slice 4): open at the top from 12:30 and 18:30, else a line.
@@ -350,7 +352,7 @@ internal fun NeedsYouColumn(
     ) {
         item(key = "title") {
             if (compact) {
-                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + approvals.size + requests.size + chats.size + asks), Modifier.animateItem().appear(rememberAppearance(0, play)))
+                SectionLabel(CommandCentreRules.needsYouHeading(cards.size + approvals.size + looseRequests.size + chats.size + asks), Modifier.animateItem().appear(rememberAppearance(0, play)))
             } else {
                 Text("Needs you", style = MekaType.greeting, color = Meka.colors.textPrimary,
                     modifier = Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play)))
@@ -403,6 +405,7 @@ internal fun NeedsYouColumn(
                 } else {
                     val arrival = if (ChatShadeRules.canClearOnArrival(chat, peopleLists)) chat.key in triageSettings.clearOnArrival else null
                     TriageChatView(chat, chatMarkable, { tap -> moves.onTriageChat(chat, tap) }, cardFor, m,
+                        requestFor = { card, rm -> RequestCardView(card, { moves.onRequest(card, it) }, rm) },
                         arrival = arrival, onArrival = { on -> moves.onChatArrival(chat, on) },
                         onReadToEnd = { moves.onChatReadToEnd(chat) })
                 }
@@ -467,7 +470,7 @@ internal fun NeedsYouColumn(
         }
         // Requests from people Meka watches, oldest first, above the stack (V1, requests slice 4): each staggers in
         // after the after-work card and folds away with the list's item motion once answered.
-        requests.forEachIndexed { i, card ->
+        looseRequests.forEachIndexed { i, card ->
             item(key = "request-${card.id}") {
                 RequestCardView(card, { moves.onRequest(card, it) },
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + asks + i, play)))

@@ -16,17 +16,17 @@ struct RequestCardsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
-            ForEach(Array(model.requests.enumerated()), id: \.element.id) { i, card in
+            ForEach(Array(model.looseRequests.enumerated()), id: \.element.id) { i, card in
                 RequestCardRow(card: card, palette: palette) { model.answerRequest(card, $0) }
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                     .staggeredAppear(firstIndex + i)
             }
         }
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.requests.map(\.id))
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.looseRequests.map(\.id))
     }
 }
 
-private struct RequestCardRow: View {
+struct RequestCardRow: View {
     let card: RequestCard
     let palette: MekaPalette
     let answer: (RequestAnswer) -> Void

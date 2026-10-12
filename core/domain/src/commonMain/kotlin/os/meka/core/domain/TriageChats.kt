@@ -27,8 +27,14 @@ data class TriageChat(
     val latestMs: Long,
     /** One sentence for TalkBack / VoiceOver. */
     val spoken: String,
+    /**
+     * Requests from the same person (slice 3): shown inside the chat's card with their own Add · Change · Not a task,
+     * never answered by Done. Only a 1:1 chat carries them ([TriageChatRules.chatsWith]).
+     */
+    val requests: List<RequestCard> = emptyList(),
 ) {
-    val single: Boolean get() = cards.size == 1
+    /** One message and no request: the message's own card, as before. */
+    val single: Boolean get() = cards.size == 1 && requests.isEmpty()
     val ids: List<String> get() = cards.map { it.id }
 }
 
@@ -52,12 +58,49 @@ object TriageChatRules {
         cards.groupBy { key(it) }.map { (k, list) -> chat(k, list) }
             .sortedWith(compareByDescending<TriageChat> { it.replies > 0 }.thenByDescending { it.latestMs })
 
+    /**
+     * [chats] with each request from a person filed under that person's 1:1 chat (the latest one when they wrote on two
+     * apps), so Jeanette's messages and what she asked are one card (slice 3). A request from a group, from Meka himself
+     * ("Handle this", the brief's share) or from someone with no open message stays a card of its own ([looseRequests]).
+     */
+    fun chatsWith(cards: List<TriageCard>, requests: List<RequestCard>): List<TriageChat> {
+        val plain = chats(cards)
+        if (requests.isEmpty()) return plain
+        val home = mutableMapOf<String, String>()
+        plain.filter { !it.isGroup }.sortedByDescending { it.latestMs }.forEach { c ->
+            val person = c.cards.first().personKey
+            if (person.isNotBlank()) home.getOrPut(person) { c.key }
+        }
+        val byChat = requests.filter { it.person.isNotBlank() && it.personKey.isNotBlank() }
+            .mapNotNull { r -> home[r.personKey]?.let { it to r } }
+            .groupBy({ it.first }, { it.second })
+        return plain.map { c ->
+            val mine = byChat[c.key]?.sortedBy { it.atMs } ?: return@map c
+            val n = mine.size
+            c.copy(
+                requests = mine,
+                countLine = c.countLine + " · $n ${if (n == 1) "request" else "requests"}",
+                spoken = c.spoken + " " + mine.joinToString(" ") { it.action.trimEnd('.') + "." },
+            )
+        }
+    }
+
+    /** The requests [chatsWith] didn't put inside a chat, in their own order: Needs you shows these on their own. */
+    fun looseRequests(chats: List<TriageChat>, requests: List<RequestCard>): List<RequestCard> {
+        val inside = chats.flatMap { c -> c.requests.map { it.id } }.toSet()
+        return requests.filter { it.id !in inside }
+    }
+
     /** "Show all 20". */
     fun expandLabel(chat: TriageChat): String = "Show all ${chat.cards.size}"
 
     /** The undo bar after Done: "Done · Barça lads · 20 messages". */
-    fun doneLine(chat: TriageChat): String =
-        "$DONE · ${chat.title} · ${chat.cards.size} ${if (chat.cards.size == 1) "message" else "messages"}"
+    fun doneLine(chat: TriageChat): String = buildString {
+        append("$DONE · ${chat.title} · ${chat.cards.size} ${if (chat.cards.size == 1) "message" else "messages"}")
+        // Done never answers a request: it stays in Needs you on its own.
+        val n = chat.requests.size
+        if (n > 0) append(" · $n ${if (n == 1) "request" else "requests"} still waiting")
+    }
 
     /** How many chats have a reply waiting, for the Needs you badge (one per chat, not per message). */
     fun replyChats(cards: List<TriageCard>): Int =

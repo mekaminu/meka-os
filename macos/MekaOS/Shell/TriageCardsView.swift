@@ -31,6 +31,7 @@ struct TriageCardsView: View {
             }
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.triage.map(\.id))
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.requests.map(\.id))
     }
 }
 
@@ -69,6 +70,16 @@ private struct TriageChatRow: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel(chat.spoken)
             .mekaHoverLift()
+            // What the person asked for stays in view under the card (slice 3): Done never answers it.
+            if !chat.requests.isEmpty {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    ForEach(chat.requests, id: \.id) { request in
+                        RequestCardRow(card: request, palette: palette) { model.answerRequest(request, $0) }
+                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+                .padding(.leading, MekaSpace.m)
+            }
             if open {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     ForEach(chat.cards, id: \.id) { card in

@@ -57,4 +57,53 @@ class TriageChatsTest {
         // The badge counts chats with a reply waiting, not messages.
         assertEquals(1, TriageChatRules.replyChats(cards + card("f", "Ada", at = 6, lane = TriageLane.NEEDS_REPLY)))
     }
+
+    private fun request(id: String, who: String, at: Long, action: String) = RequestCard(
+        id = id, messageId = "m-$id", personKey = if (who.isBlank()) "" else People.key(who),
+        proposal = RequestProposal(RequestKind.TASK, action, null, null),
+        from = "From $who · 14:00", quote = "“…”", action = action, detail = null, declineLabel = "Not a task",
+        spoken = "spoken", atMs = at, person = who,
+    )
+
+    @Test
+    fun aPersonsRequestsSitInsideTheirChatAndDoneLeavesThemWaiting() {
+        val cards = listOf(
+            card("a", "Wife", at = 10, gist = "Running late"),
+            card("b", "Wife", at = 20, lane = TriageLane.NEEDS_REPLY, gist = "Asks when you're home?", draft = "About 7"),
+            card("c", "Wife", at = 30, group = "Family"),
+            card("d", "Tunde", at = 40),
+        )
+        val requests = listOf(
+            request("r2", "Wife", at = 25, action = "Add task: Book the dentist"),
+            request("r1", "Wife", at = 15, action = "Add task: Pick up dry cleaning · Tomorrow"),
+            request("r3", "Ade", at = 5, action = "Add task: Return the drill"),
+            request("r4", "", at = 6, action = "Add event: Parents' evening"),
+        )
+        val chats = TriageChatRules.chatsWith(cards, requests)
+        val wife = chats.single { it.title == "Wife" }
+        assertEquals(listOf("r1", "r2"), wife.requests.map { it.id })
+        assertEquals("2 new · 1 needs a reply · 2 requests", wife.countLine)
+        assertTrue(wife.spoken.endsWith("Add task: Pick up dry cleaning · Tomorrow. Add task: Book the dentist."))
+        assertEquals("Done · Wife · 2 messages · 2 requests still waiting", TriageChatRules.doneLine(wife))
+        // The family group and Tunde carry none; Ade (no open message) and Meka's own share stay on their own.
+        assertTrue(chats.filter { it.title != "Wife" }.all { it.requests.isEmpty() })
+        assertEquals(listOf("r3", "r4"), TriageChatRules.looseRequests(chats, requests).map { it.id })
+        // With no requests nothing changes.
+        assertEquals(TriageChatRules.chats(cards), TriageChatRules.chatsWith(cards, emptyList()))
+    }
+
+    @Test
+    fun oneMessageWithARequestBecomesAChatCardAndTheLatestAppTakesIt() {
+        val cards = listOf(
+            card("a", "Wife", at = 10),
+            card("b", "Wife", at = 50, app = CaptureApp.SMS),
+        )
+        val chats = TriageChatRules.chatsWith(cards, listOf(request("r1", "Wife", at = 12, action = "Add task: Buy milk")))
+        val sms = chats.single { it.app == CaptureApp.SMS }
+        val wa = chats.single { it.app == CaptureApp.WHATSAPP }
+        assertEquals(1, sms.requests.size)
+        assertFalse(sms.single)
+        assertEquals("1 new · 1 request", sms.countLine)
+        assertTrue(wa.single)
+    }
 }

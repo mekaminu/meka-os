@@ -144,7 +144,10 @@ final class CoreModel {
     /// never sends: Copy reply puts the draft on the pasteboard; Not now / Seen clear the card on both devices.
     private(set) var triage: [TriageCard] = []
     /// The same cards, one per conversation (messages grouped per chat, slice 1).
-    var triageChats: [TriageChat] { TriageChatRules.shared.chats(cards: triage) }
+    /// A person's requests ride inside their chat's card (messages grouped per chat, slice 3).
+    var triageChats: [TriageChat] { TriageChatRules.shared.chatsWith(cards: triage, requests: requests) }
+    /// The requests no chat carries: Needs you shows these as cards of their own.
+    var looseRequests: [RequestCard] { TriageChatRules.shared.looseRequests(chats: triageChats, requests: requests) }
     /// The group digest (V1, messages slice 4b): one card per busy group at the latest digest time, made on the Fold
     /// (its name, how many messages, who wrote, MEKA's gist; never the messages). Caught up here clears it there too.
     private(set) var groupGists: [GroupGist] = []

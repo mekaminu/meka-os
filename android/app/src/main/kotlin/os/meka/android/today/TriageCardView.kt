@@ -39,6 +39,8 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.ChatFinishTap
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
+import os.meka.core.domain.RequestCard
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import kotlinx.coroutines.delay
@@ -158,6 +160,8 @@ internal fun TriageCardView(
 internal fun TriageChatView(
     chat: TriageChat, markable: Boolean, onFinish: (ChatFinishTap) -> Unit, cardFor: @Composable (TriageCard, Modifier) -> Unit,
     modifier: Modifier = Modifier,
+    /** A request inside the chat (slice 3): always shown under the card, with its own Add · Change · Not a task. */
+    requestFor: @Composable (RequestCard, Modifier) -> Unit = { _, _ -> },
     /** "Clear this chat from the shade as it comes" (slice 2b): on, off, or null when not offered (family, always-notify). */
     arrival: Boolean? = null,
     onArrival: (Boolean) -> Unit = {},
@@ -202,6 +206,12 @@ internal fun TriageChatView(
                 TriagePill(label, filled = false, spoken = label) { haptics.tick(); open = !open }
                 val (mark, tap) = ChatShadeRules.markButton(chat.app, markable)
                 TriagePill(mark, filled = false, quiet = !markable, spoken = "$mark: ${chat.title}") { haptics.light(); onFinish(tap) }
+            }
+        }
+        // What the person asked for stays in view (Done never answers it); each folds away once answered.
+        if (chat.requests.isNotEmpty()) {
+            Column(Modifier.padding(start = MekaSpace.m, top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                chat.requests.forEach { r -> key(r.id) { requestFor(r, Modifier) } }
             }
         }
         AnimatedVisibility(open, enter = unfold(), exit = fold()) {

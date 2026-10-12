@@ -1255,6 +1255,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(chat.ids, ["g1", "g2", "g3"])
         XCTAssertEqual(TriageChatRules.shared.doneLine(chat: chat), "Done · Barça lads · 3 messages")
         XCTAssertEqual(TriageChatRules.shared.replyChats(cards: cards), 0)
+        // Slice 3: a group carries no requests, and with none every chat is as before.
+        let withRequests = TriageChatRules.shared.chatsWith(cards: cards, requests: [])
+        XCTAssertEqual(withRequests.first?.countLine, "3 new · 2 people")
+        XCTAssertTrue(withRequests.first?.requests.isEmpty ?? false)
+        XCTAssertTrue(TriageChatRules.shared.looseRequests(chats: withRequests, requests: []).isEmpty)
     }
 
     /// The group digest's synced cards (V1, messages slice 4b) reach Swift: the head line and Caught up.
