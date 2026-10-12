@@ -323,8 +323,9 @@ internal fun MoreRow(
     item: MoreItem, line: String, lit: Boolean, paneOpen: Boolean, modifier: Modifier = Modifier, travel: Boolean = true,
     onClick: () -> Unit,
 ) {
+    val reduced = Meka.reducedMotion
     val lineColor by animateColorAsState(
-        if (lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(Meka.reducedMotion), label = "more-line",
+        if (lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "more-line",
     )
     val opens = ShellNav.opens(item)
     Row(
@@ -348,7 +349,7 @@ internal fun MoreRow(
             Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = move)
             AnimatedContent(
                 targetState = line,
-                transitionSpec = { fadeIn(MekaMotion.appear(Meka.reducedMotion)) togetherWith fadeOut(MekaMotion.appear(Meka.reducedMotion)) },
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
                 label = "more-row-line",
             ) { l -> Text(l, style = MekaType.caption, color = lineColor, maxLines = 2) }
         }
