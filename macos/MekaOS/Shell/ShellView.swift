@@ -97,6 +97,8 @@ struct ShellView: View {
         .sheet(isPresented: Binding(get: { model.showWeekAhead }, set: { model.showWeekAhead = $0 })) { WeekAheadSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showErrands }, set: { model.showErrands = $0 })) { ErrandsSheet(palette: palette) }
         .sheet(isPresented: Binding(get: { model.showAppointments }, set: { model.showAppointments = $0 })) { AppointmentsSheet(palette: palette) }
+        // Bins (Ask → More): each bin's day and pattern, and the next collection.
+        .sheet(isPresented: Binding(get: { model.showBins }, set: { model.showBins = $0 })) { BinsSheet(palette: palette) }
         // What MEKA knows (Ask → More): the facts page Ask and Talk answer from.
         .sheet(isPresented: Binding(get: { model.showFacts }, set: { model.showFacts = $0 })) { FactsSheet(palette: palette) }
         // What MEKA knows, slice 4: a form shared with "Handle this with MEKA" answered from the facts page.

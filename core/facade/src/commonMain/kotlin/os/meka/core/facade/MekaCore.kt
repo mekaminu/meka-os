@@ -136,6 +136,7 @@ class MekaCore(
     private val renewals = Renewals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shopping = os.meka.core.domain.Shopping(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val school = os.meka.core.domain.School(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val bins = os.meka.core.domain.Bins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val mealPlan = os.meka.core.domain.MealPlan(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val emergency = os.meka.core.domain.EmergencyCard(replica, ids::next, nowMs)
     private val lifeFacts = os.meka.core.domain.LifeFacts(replica, ids::next, nowMs)
@@ -383,6 +384,13 @@ class MekaCore(
     val afterWork: StateFlow<os.meka.core.domain.AfterWorkSummary> = _afterWork.asStateFlow()
 
     private val _school = MutableStateFlow(os.meka.core.domain.SchoolView.EMPTY)
+    private val _bins = MutableStateFlow(os.meka.core.domain.BinsView.EMPTY)
+
+    /**
+     * Bin days (V1, slice 1): each bin typed once with its day and pattern (Ask → More → Bins); the evening before a
+     * collection Today says "Black bin and food caddy out tonight" and a heads-up comes at 19:00.
+     */
+    val binsView: StateFlow<os.meka.core.domain.BinsView> = _bins.asStateFlow()
     /**
      * School rhythm (V1, slice 1): Rex's and Logan's days off, dates and weekly things (Ask → More → School), and the
      * week-ahead questions ("Rex and Logan are off Mon 27 Oct · You're in the office that day. Who's covering?") that
@@ -1902,6 +1910,18 @@ class MekaCore(
         if (!dateNight.book(day, booked)) return@onCore null
         os.meka.core.domain.DateNightRules.bookedLine(day, todayEpochDay(), booked)
     }
+
+    // ---- Bin days (V1, slice 1; Ask → More → Bins) ----
+
+    /**
+     * Adds one typed bin ("Black bin Tue fortnightly from 13 Oct", "Food caddy every Tuesday";
+     * [os.meka.core.domain.BinRules.read]); a bin already there by name is updated. Refused (nothing written) when
+     * MEKA couldn't read a day or a bin in it.
+     */
+    suspend fun addBin(text: String): os.meka.core.domain.BinAdded = onCore { bins.add(text) }
+
+    /** Removes a bin for good. */
+    suspend fun removeBin(id: String): Boolean = onCore { bins.remove(id) }
 
     // ---- School rhythm (V1, slice 1; Ask → More → School, and Needs you's cover questions) ----
 
@@ -3966,6 +3986,8 @@ class MekaCore(
         // School rhythm, slice 2: what the school says about today (Today's header, the brief) and tomorrow (the shutdown).
         val schoolItems = school.items()
         val schoolToday = os.meka.core.domain.SchoolRules.todayLine(schoolItems, todayDay, holidays)
+        // Bin days, slice 1: the bins (each collection a day later in a bank-holiday week).
+        val binItems = bins.items()
         // The Sunday week ahead, slice 1: the coming week from what MEKA already knows.
         val weekAheadNow = os.meka.core.domain.WeekAheadRules.view(
             os.meka.core.domain.WeekAheadInputs(
@@ -3978,6 +4000,7 @@ class MekaCore(
                 appointments = appointments.items(),
                 forecast = forecast,
                 goals = goalsNow.goals,
+                bins = binItems,
             ),
             nowMs(), cal, ::dayWindowOf,
         )
@@ -4013,6 +4036,7 @@ class MekaCore(
             // Train-time queue, slice 1: on an office day's commute, what's saved for the train.
             trainQueue = os.meka.core.domain.QueueRules.trainLine(trainQueue.items(), office, nowMs(), cal),
             weekAhead = os.meka.core.domain.WeekAheadRules.todayLine(weekAheadNow, nowMs(), cal, weekAheadSettings.setting()),
+            bins = os.meka.core.domain.BinRules.tonightLine(binItems, todayDay, cal.minuteOfDay(nowMs()), holidays),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
@@ -4074,6 +4098,7 @@ class MekaCore(
         _requests.value = requestCards.open()
         _approvals.value = approvalStore.cards()
         _school.value = school.view(hoursOf(workState, todayDay))
+        _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays)
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         _triage.value = triageCards.open()
         _groupGists.value = gistStore.open()
@@ -4126,6 +4151,7 @@ class MekaCore(
             leaving = leavingNow.setting(),
             weekAhead = _weekAhead.value,
             weekAheadSetting = weekAheadSettings.setting(),
+            bins = bins.items(), holidays = bankHolidays.calendar(),
         )
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */

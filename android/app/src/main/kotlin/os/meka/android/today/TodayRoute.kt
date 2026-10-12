@@ -824,6 +824,15 @@ private fun TodayPane(
                                     .semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Bin days, slice 1: "Black bin and food caddy out tonight" the evening before from 16:00; lit in the
+                    // accent (something to do tonight), cross-fades as it comes and changes.
+                    today.bins?.let { bins ->
+                        Crossfade(bins, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "bins-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
                     // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
                     today.dateNight?.let { night ->
                         Crossfade(night, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "date-night-line") { l ->

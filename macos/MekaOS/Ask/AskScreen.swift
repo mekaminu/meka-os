@@ -67,6 +67,7 @@ struct AskScreen: View {
         case .trainQueue: model.showTrainQueue = true
         case .errands: model.showErrands = true
         case .appointments: model.showAppointments = true
+        case .bins: model.showBins = true
         case .facts: model.showFacts = true
         case .work: model.showWork = true
         case .protectedTime: model.showProtected = true

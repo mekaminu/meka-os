@@ -82,6 +82,8 @@ object EntityTypes {
     const val GOAL_MILESTONE = "goal_milestone"
     /** Goals, properly, slice 3 (2026-10-11): one update to a numeric goal ("+£200"). */
     const val GOAL_ENTRY = "goal_entry"
+    /** Bin days, slice 1 (2026-10-12): one bin and its collection pattern, "Black bin every other Tuesday" (see [Bins]). */
+    const val BIN = "bin"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -89,7 +91,7 @@ object EntityTypes {
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
-        CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY,
+        CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN,
     )
 }
 
@@ -402,6 +404,9 @@ object MekaSchema : SchemaRegistry {
         // Numeric goal updates: one removed on any device is gone for good; the rest is written once.
         entityType == EntityTypes.GOAL_ENTRY && field == GoalEntryFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.GOAL_ENTRY -> MergePolicy.Lww
+        // Bins: one removed on any device is gone for good; the pattern, the latest edit wins.
+        entityType == EntityTypes.BIN && field == BinFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.BIN -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

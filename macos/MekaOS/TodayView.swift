@@ -161,6 +161,15 @@ struct TodayView: View {
                         .accessibilityLabel(week.spoken)
                         .staggeredAppear(0, play: play)
                     }
+                    // Bin days, slice 1: "Black bin and food caddy out tonight" the evening before from 16:00; lit in the
+                    // accent, cross-fades.
+                    if let bins = model.today?.bins {
+                        Text(bins.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: bins.text)
+                            .accessibilityLabel(bins.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
                     if let night = model.today?.dateNight {
                         Text(night.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)

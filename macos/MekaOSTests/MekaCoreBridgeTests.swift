@@ -2023,6 +2023,37 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NoticeSource.dateNight.label, "Date night")
     }
 
+    func testBinsReachSwift() async throws {
+        // Bin days, slice 1: a typed bin is read by the core's rules, added through the facade (only a String crosses)
+        // and the sheet's rows, Today's line and the heads-up's source reach the Mac.
+        let rules = BinRules.shared
+        let sat = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 10)
+        let black = rules.read(text: "Black bin Tue fortnightly from 13 Oct", today: sat)
+        XCTAssertEqual(black?.name, "Black bin")
+        XCTAssertEqual(black?.weekday, 2)
+        XCTAssertEqual(black?.everyWeeks, 2)
+        XCTAssertEqual(black?.anchorDay, CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 13))
+        XCTAssertNil(rules.read(text: "Black bin", today: sat))
+        XCTAssertEqual(NoticeSource.bins.label, "Bins out the night before")
+        XCTAssertEqual(BinsView.companion.EMPTY.summary, rules.EMPTY_LINE)
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "bins-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let added = try await core.addBin(text: "Food caddy every Tuesday")
+        XCTAssertFalse(added.refused)
+        XCTAssertTrue(added.line.hasPrefix("Added Food caddy · every Tuesday · next "))
+        let refused = try await core.addBin(text: "the bins")
+        XCTAssertTrue(refused.refused)
+        let rows = core.binsView.value.rows
+        XCTAssertEqual(rows.map(\.name), ["Food caddy"])
+        XCTAssertEqual(rows.first?.line, "Every Tuesday")
+        let removed = try await core.removeBin(id: rows[0].id)
+        XCTAssertTrue(removed.boolValue)
+        XCTAssertTrue(core.binsView.value.rows.isEmpty)
+    }
+
     func testSchoolReachesSwift() {
         // School rhythm, slice 1: a typed line is read by the core's rules and the sheet's words reach the Mac (only
         // Strings cross from the sheet; the cover answer sends an id and a Bool).

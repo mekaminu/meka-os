@@ -99,6 +99,10 @@ final class CoreModel {
     private(set) var appointments: AppointmentView?
     /// Ask → More → Appointments.
     var showAppointments = false
+    /// Bin days (V1, slice 1): each bin with its day and pattern, the next collection (Ask → More → Bins).
+    private(set) var bins: BinsView?
+    /// Ask → More → Bins.
+    var showBins = false
     /// Why a Booked… on a Needs you card couldn't be read, by appointment id (shown under its field).
     private(set) var appointmentRefusal: (id: String, line: String)?
     /// Annual leave (V1, slice 1): the allowance, the days booked and the school holidays (Ask → More → Annual leave).
@@ -316,6 +320,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await s in core.schoolView { self?.school = s }
+        })
+        observers.append(Task { [weak self] in
+            for await b in core.binsView { self?.bins = b }
         })
         observers.append(Task { [weak self] in
             for await m in core.mealsView { self?.meals = m }
@@ -2659,6 +2666,30 @@ final class CoreModel {
             } catch { lastError = error.localizedDescription }
         }
     }
+
+    // MARK: Bin days (slice 1)
+
+    /// What adding a typed bin said: the line under the field, and whether nothing was written.
+    struct BinSaid: Equatable {
+        let line: String
+        let refused: Bool
+    }
+
+    /// Adds "Black bin Tue fortnightly from 13 Oct" (a bin already there by name is updated); only a String crosses.
+    func addBin(_ text: String) async -> BinSaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            let r = try await core.addBin(text: t)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return BinSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func removeBin(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeBin(id: id) } }
 
     // MARK: School rhythm (slice 1)
 

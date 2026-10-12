@@ -5,7 +5,7 @@ import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
 
 /** What a line in the week ahead is about (it picks the lead mark the pane draws). */
-enum class WeekAheadKind { EVENT, FIXTURE, SCHOOL, DATE_NIGHT, DUE, APPOINTMENT }
+enum class WeekAheadKind { EVENT, FIXTURE, SCHOOL, DATE_NIGHT, DUE, APPOINTMENT, BINS }
 
 /**
  * One thing on a day of the week ahead: "17:30 · Barça v Getafe", "Rex: PE", "Date night from 19:00". [time] leads the
@@ -120,6 +120,8 @@ data class WeekAheadInputs(
     val forecast: WeatherForecast = WeatherForecast.EMPTY,
     /** Meka's open goals in the Goals order (the week's pick offers them). */
     val goals: List<GoalItem> = emptyList(),
+    /** Bin days: each collection on its day (a bank holiday's shift included). */
+    val bins: List<BinItem> = emptyList(),
 )
 
 /**
@@ -130,7 +132,7 @@ data class WeekAheadInputs(
  * - **Each day:** the kind of day (office or from home with its hours, annual leave, a bank holiday), the forecast
  *   while the 7-day forecast reaches it, then in time order: all-day events (on their first day in the week, "until
  *   Wed 14"), timed events, Barça's and the boys' club fixtures, what the school says (days off, dates, PE), date
- *   night, appointments booked and renewals or bills due (a cancel-by date lit). At most [MAX_LINES] a day.
+ *   night, appointments booked, bin collections and renewals or bills due (a cancel-by date lit). At most [MAX_LINES] a day.
  * - **Family sync** (things that need both of them, at most [MAX_SYNC]): the boys off on an office day (who's
  *   covering?), the boys' club fixtures (who's taking them?), date night (sitter sorted?) and family events (an event
  *   whose title or calendar names Jeanette, family, school or the boys).
@@ -236,6 +238,9 @@ object WeekAheadRules {
             val text = SchoolRules.thingText(t)
             val lit = t.kind == SchoolKind.OFF && office
             out += Keyed(window.startMs - 1, WeekAheadLine("s-${t.id}", WeekAheadKind.SCHOOL, null, text, lit, SchoolRules.spokenThing(t)))
+        }
+        BinRules.weekLine(inputs.bins, day, inputs.holidays)?.let { text ->
+            out += Keyed(window.startMs - 1, WeekAheadLine("b-$day", WeekAheadKind.BINS, null, text, false, "Bins: $text"))
         }
         if (DateNightRules.kept(inputs.dateNight, day)) {
             val s = inputs.dateNight!!
