@@ -369,6 +369,37 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsThePeopleAndAddsAPromiseWithUndo() = runTest {
+        val c = core()
+        c.askMeka("What did I promise Rex?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.PEOPLE })
+        c.addPromise("Fix his bike", "Rex", null)
+
+        server.reply = AskReply.Answered("Added.", listOf(AskRawAction("add_promise", title = "rex: lift to football")))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("I told Rex I'd give him a lift to football"))
+        val ctx = server.asked.last().second
+        assertEquals(
+            listOf("People · 1 person", "Rex · you promised 1", "Rex · you promised: Fix his bike · since today"),
+            ctx.items.filter { it.kind == AskItemKind.PEOPLE }.map { it.line },
+        )
+        assertFalse(ctx.untrusted)
+        assertEquals(listOf("Promise to Rex · Lift to football"), out.answer.cards.map { it.line })
+        // Nothing until tapped.
+        assertEquals(1, c.listsView.value.promised.size)
+
+        val done = c.doAsk(out.answer.cards.single())
+        assertEquals("Added your promise to Rex: Lift to football", done.line)
+        assertEquals(listOf("Fix his bike", "Lift to football"), c.listsView.value.promised.map { it.title }.sorted())
+        assertEquals("You promised 2", c.peopleView.value.rows.single().owedLine)
+        assertFailsWith<ValidationException> { c.doAsk(out.answer.cards.single()) }
+
+        // Undo takes the promise off, once.
+        assertTrue(c.undoAsk(assertIs<AskUndo.RemovePromise>(done.undo)))
+        assertEquals(listOf("Fix his bike"), c.listsView.value.promised.map { it.title })
+        assertFalse(c.undoAsk(done.undo!!))
+    }
+
+    @Test
     fun askHearsTheLifeAdminHourAndSkipsThisWeeksWithUndo() = runTest {
         val c = core()
         c.askMeka("When's my admin hour?")

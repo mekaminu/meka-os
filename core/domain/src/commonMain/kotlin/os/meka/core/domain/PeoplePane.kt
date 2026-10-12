@@ -172,3 +172,80 @@ object PeopleRules {
         return t.ifEmpty { null }
     }
 }
+
+/**
+ * People, slice 3: Ask and Talk know the People pane ("what did I promise Jeanette?", "what am I waiting on from
+ * Rex?", "when did Mum last message?"), and a model's `add_promise` ("Rex: fix his bike", a by-day optional) becomes a
+ * card that adds the promise to Lists → Promises on Meka's tap, with Undo. Plain rules; nothing is sent to anyone.
+ */
+object PeopleAskRules {
+    /** People the Ask lines name (lit first, as the pane orders them). */
+    const val ASK_PEOPLE = 8
+    /** Promises and waiting-fors named per person. */
+    const val ASK_OWED = 4
+    /** At most this many lines in all, the head included. */
+    const val ASK_LINES = 28
+    const val GONE = "That promise isn't in Lists any more"
+
+    /**
+     * The pane as MEKA describes it to the model (Ask's `people` lines): "People · 3 people · 1 promise due", then
+     * per person "Rex · you promised 1 · waiting for 1 · birthday Tue 3 Nov · in 22 days · turns 12 · last message Tue
+     * 13:02 · WhatsApp" and a line for each thing owed: "Rex · you promised: Fix his bike · by tomorrow", "Rex ·
+     * waiting for: The drill back · chase today". Nothing at all while the pane is empty.
+     */
+    fun askLines(view: PeopleView): List<String> {
+        if (view.rows.isEmpty()) return emptyList()
+        val head = "People · " + view.summary + if (view.rows.size > ASK_PEOPLE) " · the first $ASK_PEOPLE below" else ""
+        val out = mutableListOf(head)
+        for (r in view.rows.take(ASK_PEOPLE)) {
+            val about = listOfNotNull(
+                r.name,
+                r.promised.size.takeIf { it > 0 }?.let { "you promised $it" },
+                r.waiting.size.takeIf { it > 0 }?.let { "waiting for $it" },
+                r.birthday?.replaceFirstChar { it.lowercase() },
+                r.lastContact?.let { if (it.startsWith("You ")) it.replaceFirst("You ", "you ") else it.replaceFirstChar { c -> c.lowercase() } },
+            ).joinToString(" · ")
+            out += about
+            r.promised.take(ASK_OWED).forEach { out += "${r.name} · you promised: ${it.title} · ${bareMeta(it.meta, r.key)}" }
+            if (r.promised.size > ASK_OWED) out += "${r.name} · you promised ${r.promised.size - ASK_OWED} more"
+            r.waiting.take(ASK_OWED).forEach { out += "${r.name} · waiting for: ${it.title} · ${bareMeta(it.meta, r.key)}" }
+            if (r.waiting.size > ASK_OWED) out += "${r.name} · waiting for ${r.waiting.size - ASK_OWED} more"
+        }
+        return out.take(ASK_LINES)
+    }
+
+    /** A promise's or waiting-for's meta without the person it already names ("Rex · by tomorrow" → "by tomorrow"). */
+    fun bareMeta(meta: String, key: String): String {
+        val first = meta.substringBefore(" · ")
+        return if (meta.contains(" · ") && People.key(first) == key) meta.substringAfter(" · ") else meta
+    }
+
+    /**
+     * A model's `add_promise` as a card: "Rex: fix his bike" (the person, a colon, what Meka promised) or just "Fix
+     * the shed door" (nobody named), by [byDay] or no date. A person the pane already has is written as the pane
+     * writes them ("rex" → "Rex"). Null with nothing promised, or one already open to the same person.
+     */
+    fun proposal(rows: List<PersonRow>, promised: List<PromiseItem>, title: String?, byDay: Long?): AskProposal.AddPromise? {
+        val t = title?.replace('\n', ' ')?.split(' ', '\t')?.filter { it.isNotEmpty() }?.joinToString(" ") ?: return null
+        val colon = t.indexOf(':')
+        val rawWho = if (colon > 0) t.substring(0, colon).trim().take(60) else ""
+        val what = (if (colon > 0) t.substring(colon + 1) else t).trim().take(Lists.MAX_TITLE).trim()
+        if (what.isEmpty()) return null
+        val who = rawWho.takeIf { it.isNotEmpty() }?.let { w ->
+            PeopleRules.match(People.key(w), rows.map { it.key })?.let { k -> rows.first { it.key == k }.name } ?: w
+        }
+        val whoKey = who?.let(People::key)
+        if (promised.any { it.title.equals(what, ignoreCase = true) && it.to?.let(People::key) == whoKey }) return null
+        return AskProposal.AddPromise(who, what.replaceFirstChar { it.uppercase() }, byDay)
+    }
+
+    private fun byWords(byDay: Long?, today: Long): String? = byDay?.let { "by " + ListRules.dayWord(it, today) }
+
+    /** The card's words: "Promise to Rex · Fix his bike · by tomorrow" / "Promise · Fix the shed door". */
+    fun cardLine(p: AskProposal.AddPromise, today: Long): String =
+        listOfNotNull(p.to?.let { "Promise to $it" } ?: "Promise", p.title, byWords(p.byDay, today)).joinToString(" · ")
+
+    /** The undo bar's line: "Added your promise to Rex: Fix his bike · by tomorrow". */
+    fun doneLine(p: AskProposal.AddPromise, today: Long): String =
+        "Added your promise" + (p.to?.let { " to $it: " } ?: ": ") + p.title + (byWords(p.byDay, today)?.let { " · $it" } ?: "")
+}

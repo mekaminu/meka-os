@@ -1593,6 +1593,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(AskItemKind.gifts.wire, "gifts")
     }
 
+    func testPromiseFromAskReachesSwift() {
+        // "I told Rex I'd fix his bike" in Ask and Talk (People, slice 3): the card's words reach the Mac.
+        let card = AskRules.shared.cardOf(p: AskProposalAddPromise(to: "Rex", title: "Fix his bike", byDay: KotlinLong(value: 1)), today: 0)
+        XCTAssertEqual(card.line, "Promise to Rex · Fix his bike · by tomorrow")
+        XCTAssertEqual(card.button, "Add")
+        XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "added your promise to Rex: Fix his bike, by tomorrow")
+        XCTAssertEqual(AskItemKind.people.wire, "people")
+    }
+
     func testHomeUpkeepReachesSwift() {
         // Home upkeep, slice 1: the suggested jobs and their lines reach the Mac (only Strings and an Int64 cross).
         let sat = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 10)
