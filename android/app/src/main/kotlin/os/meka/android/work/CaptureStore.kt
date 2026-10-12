@@ -137,6 +137,12 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
         save()
     }
 
+    /** "Mark read when I finish a card" (messages grouped per chat, slice 2; off by default). */
+    fun setMarkReadOnDone(on: Boolean) = synchronized(lock) {
+        _triageSettings.value = _triageSettings.value.copy(markReadOnDone = on)
+        save()
+    }
+
     /** Caught up with [groupKeys] now: their cards leave until something new comes. */
     fun caughtUp(groupKeys: Collection<String>) = synchronized(lock) {
         if (groupKeys.isEmpty()) return@synchronized
@@ -182,6 +188,7 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
         _triageSettings.value = TriageSettings(
             groupModes = json.optJSONObject("groupModes")?.let { o -> o.keys().asSequence().associateWith { GroupMode.of(o.optString(it)) } }.orEmpty(),
             neverToAi = json.optJSONArray("neverToAi")?.let { a -> (0 until a.length()).mapTo(LinkedHashSet()) { a.getString(it) } }.orEmpty(),
+            markReadOnDone = json.optBoolean("markReadOnDone", false),
         )
         _digestSeen.value = GroupDigestRules.caughtUp(
             json.optJSONObject("digestSeen")?.let { o -> o.keys().asSequence().associateWith { o.optLong(it) } }.orEmpty(),
@@ -204,6 +211,7 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
             .put("digest", JSONArray().also { a -> _digest.value.forEach { a.put(writeItem(it)) } })
             .put("groupModes", JSONObject().also { o -> _triageSettings.value.groupModes.forEach { (g, m) -> o.put(g, m.wire) } })
             .put("neverToAi", JSONArray(_triageSettings.value.neverToAi.toList()))
+            .put("markReadOnDone", _triageSettings.value.markReadOnDone)
             .put("digestSeen", JSONObject().also { o -> _digestSeen.value.forEach { (g, at) -> o.put(g, at) } })
         val sealed = seal(json.toString().toByteArray(Charsets.UTF_8))
         val out = file.startWrite()

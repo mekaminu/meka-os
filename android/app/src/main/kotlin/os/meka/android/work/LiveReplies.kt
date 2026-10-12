@@ -35,6 +35,8 @@ object LiveReplies {
         val reply: PendingIntent?,
         val inputs: Array<RemoteInput>?,
         val open: PendingIntent?,
+        /** The notification's own "Mark as read" (SEMANTIC_ACTION_MARK_AS_READ), when it offers one. */
+        val markRead: PendingIntent?,
         /** The 1:1 chat's person as the notification named them, when every message it carried came from one person outside a group. */
         val person: String?,
         /** When it was remembered, so [sendTo] answers the newest. */
@@ -43,9 +45,13 @@ object LiveReplies {
 
     private val byMessage = ConcurrentHashMap<String, Live>()
     private val _live = MutableStateFlow<Set<String>>(emptySet())
+    private val _markable = MutableStateFlow<Set<String>>(emptySet())
 
     /** The message ids whose notification still offers a Reply MEKA can fill. */
     val live: StateFlow<Set<String>> = _live.asStateFlow()
+
+    /** The message ids whose notification still offers Mark as read (messages grouped per chat, slice 2). */
+    val markable: StateFlow<Set<String>> = _markable.asStateFlow()
 
     /** Remembers [sbn]'s Reply action and tap target for each of the [messageIds] it carried. */
     fun remember(sbn: StatusBarNotification, messageIds: List<String>, person: String? = null) {
@@ -54,7 +60,7 @@ object LiveReplies {
         val reply = replyAction(n)
         val entry = Live(
             sbn.key, sbn.packageName, reply?.actionIntent, reply?.remoteInputs, n.contentIntent,
-            person, System.currentTimeMillis(),
+            markReadAction(n)?.actionIntent, person, System.currentTimeMillis(),
         )
         messageIds.forEach { byMessage[it] = entry }
         publish()
@@ -82,6 +88,25 @@ object LiveReplies {
             if (ok) { byMessage.values.removeIf { it.sbnKey == live.sbnKey }; publish() }
         }
     }
+
+    /**
+     * Marks [messageIds]' chat read in the app through each live notification's own Mark as read (once per notification).
+     * Only ever called from Meka's tap (the chat card's Mark read, or Done with "Mark read when I finish a card" on).
+     * Returns how many notifications took it; 0 when none showed or offered it (the caller opens the chat instead).
+     */
+    fun markRead(context: Context, messageIds: Collection<String>): Int {
+        val lives = messageIds.mapNotNull { byMessage[it] }.distinctBy { it.sbnKey }
+        var fired = 0
+        lives.forEach { live ->
+            val pi = live.markRead ?: return@forEach
+            val fill = Intent().addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            if (runCatching { pi.send(context, 0, fill) }.isSuccess) fired++
+        }
+        return fired
+    }
+
+    /** The notification keys carrying [messageIds] still in the shade, for clearing them once the chat is finished. */
+    fun keysFor(messageIds: Collection<String>): Set<String> = messageIds.mapNotNullTo(HashSet()) { byMessage[it]?.sbnKey }
 
     /**
      * "Leaving now": sends [text] to [person]'s 1:1 chat through its live notification's own Reply action (the newest
@@ -131,5 +156,17 @@ object LiveReplies {
         }
     }
 
-    private fun publish() { _live.value = byMessage.keys.toSet() }
+    /** The notification's Mark as read (the phone's own actions first, then the ones it offers watches). */
+    private fun markReadAction(n: Notification): Notification.Action? {
+        val all = (n.actions?.toList() ?: emptyList()) + Notification.WearableExtender(n).actions
+        return all.firstOrNull { a ->
+            a.actionIntent != null && a.semanticAction == Notification.Action.SEMANTIC_ACTION_MARK_AS_READ &&
+                a.remoteInputs.isNullOrEmpty()
+        }
+    }
+
+    private fun publish() {
+        _live.value = byMessage.keys.toSet()
+        _markable.value = byMessage.filterValues { it.markRead != null }.keys.toSet()
+    }
 }

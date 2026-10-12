@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -34,6 +36,8 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.ChatFinishTap
+import os.meka.core.domain.ChatShadeRules
 import os.meka.core.domain.TriageCard
 import os.meka.core.domain.TriageCardPrimary
 import os.meka.core.domain.TriageChat
@@ -129,12 +133,15 @@ internal fun TriageCardView(
  * One conversation's messages as one card (messages grouped per chat, slice 1): the chat's name, "21 new · 4 people ·
  * 1 needs a reply" with the app and the latest time, and up to three lines of what matters (a reply or a question
  * first). Show all unfolds every message's own card under it, oldest first (expand spring; tick haptic), each with its
- * Send · Edit · Not now; Done (light haptic) takes the whole chat off both devices and the undo bar says so. Nothing is
- * sent or marked read in the app by Done.
+ * Send · Edit · Not now; Done (light haptic) takes the whole chat off both devices, clears its notifications from the
+ * shade and the undo bar says so (slice 2). "Mark read in WhatsApp" (while a notification offers it; else "Open
+ * WhatsApp to mark read") fires the notification's own Mark as read on Meka's tap. Nothing is ever sent.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TriageChatView(
-    chat: TriageChat, onDone: () -> Unit, cardFor: @Composable (TriageCard, Modifier) -> Unit, modifier: Modifier = Modifier,
+    chat: TriageChat, markable: Boolean, onFinish: (ChatFinishTap) -> Unit, cardFor: @Composable (TriageCard, Modifier) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val haptics = rememberMekaHaptics()
     var open by rememberSaveable(chat.key) { mutableStateOf(false) }
@@ -152,12 +159,18 @@ internal fun TriageChatView(
                 Text(line, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = MekaSpace.xxs))
             }
-            Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            FlowRow(
+                Modifier.padding(top = MekaSpace.m),
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
                 TriagePill(TriageChatRules.DONE, filled = true, spoken = "Done with ${chat.title}, ${chat.cards.size} messages") {
-                    haptics.light(); onDone()
+                    haptics.light(); onFinish(ChatFinishTap.DONE)
                 }
                 val label = if (open) TriageChatRules.SHOW_LESS else TriageChatRules.expandLabel(chat)
                 TriagePill(label, filled = false, spoken = label) { haptics.tick(); open = !open }
+                val (mark, tap) = ChatShadeRules.markButton(chat.app, markable)
+                TriagePill(mark, filled = false, quiet = !markable, spoken = "$mark: ${chat.title}") { haptics.light(); onFinish(tap) }
             }
         }
         AnimatedVisibility(open, enter = unfold(), exit = fold()) {

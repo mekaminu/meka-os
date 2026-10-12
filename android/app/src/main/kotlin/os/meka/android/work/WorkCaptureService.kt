@@ -39,7 +39,8 @@ import os.meka.core.facade.TriageRead
  * on this phone, sealed, for the digest, with no AI. Each message is triaged once.
  *
  * It never replies on its own and never marks anything read. The only notifications it dismisses are a Digest group's
- * chatter once every message in it is kept for the digest (slice 4: the group stops sitting in the shade). From a
+ * chatter once every message in it is kept for the digest (slice 4: the group stops sitting in the shade), and a chat's
+ * notifications once Meka finishes its Needs you card ([clear], messages grouped per chat slice 2; hidden only). From a
  * digest time on, the first message to come in also makes the digest's gist ([DigestGist], slice 4b). While a
  * message's notification shows, its Reply action is held in memory ([LiveReplies]) so Send on its Needs you card (Meka's
  * tap, slice 3) answers through Android's own Reply.
@@ -119,11 +120,22 @@ class WorkCaptureService : NotificationListenerService() {
         store.markTriageSeen(done)
     }
 
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        connected = java.lang.ref.WeakReference(this)
+    }
+
+    override fun onListenerDisconnected() {
+        if (connected?.get() === this) connected = null
+        super.onListenerDisconnected()
+    }
+
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         if (sbn.packageName != packageName) LiveReplies.forget(sbn)
     }
 
     override fun onDestroy() {
+        if (connected?.get() === this) connected = null
         scope.cancel()
         super.onDestroy()
     }
@@ -153,6 +165,20 @@ class WorkCaptureService : NotificationListenerService() {
         if (NotificationRules.isSummaryOnly(title, text)) return emptyList()
         val (group, sender) = NotificationRules.splitGroupTitle(title!!.trim())
         return listOf(item(app, CaptureKind.MESSAGE, sender, text!!.trim(), group, at))
+    }
+
+    companion object {
+        @Volatile private var connected: java.lang.ref.WeakReference<WorkCaptureService>? = null
+
+        /**
+         * Clears the notifications with [keys] from the shade (Meka finished that chat's card). Hiding only: it never
+         * marks read and never deletes anything in WhatsApp. False when notification access isn't connected.
+         */
+        fun clear(keys: Collection<String>): Boolean {
+            if (keys.isEmpty()) return true
+            val service = connected?.get() ?: return false
+            return runCatching { service.cancelNotifications(keys.toTypedArray()) }.isSuccess
+        }
     }
 
     private fun item(app: CaptureApp, kind: CaptureKind, who: String, text: String?, group: String?, at: Long) =

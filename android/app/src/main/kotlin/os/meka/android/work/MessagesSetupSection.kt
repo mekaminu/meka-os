@@ -47,6 +47,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.ChatShadeRules
 import os.meka.core.domain.GroupMode
 import os.meka.core.domain.MessagesSetupRow
 import os.meka.core.domain.MessagesSetupRules
@@ -131,6 +132,19 @@ internal fun MessagesSetupSection(core: MekaCore, store: CaptureStore, listening
             modifier = Modifier.clickable(role = Role.Button) {
                 runCatching { pick.launch(Intent(Intent.ACTION_PICK, Phone.CONTENT_URI)) }
             }.padding(vertical = MekaSpace.xs))
+
+        // Messages grouped per chat, slice 2: Done on a chat's card also marks it read (off: blue ticks).
+        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(ChatShadeRules.SETTING_TITLE, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+                Crossfade(if (settings.markReadOnDone) ChatShadeRules.SETTING_ON else ChatShadeRules.SETTING_OFF,
+                    animationSpec = MekaMotion.appear(reduced), label = "mark-read-line") { line ->
+                    Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
+                }
+            }
+            SettingChip(if (settings.markReadOnDone) "On" else "Off", settings.markReadOnDone,
+                spoken = ChatShadeRules.SETTING_TITLE) { haptics.tick(); store.setMarkReadOnDone(!settings.markReadOnDone) }
+        }
 
         Text("Privacy and cost", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
         (MessagesSetupRules.PRIVACY + MessagesSetupRules.COST).forEach { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }

@@ -47,6 +47,8 @@ data class TriageSettings(
     val groupModes: Map<String, GroupMode> = emptyMap(),
     val neverToAi: Set<String> = emptySet(),
     val names: List<String> = MessageTriageRules.DEFAULT_NAMES,
+    /** "Mark read when I finish a card" (messages grouped per chat, slice 2): Done also fires Mark as read. Off by default. */
+    val markReadOnDone: Boolean = false,
 ) {
     private val modeByKey = groupModes.mapKeys { People.key(it.key) }
     private val privateKeys = neverToAi.map(People::key).toSet()

@@ -44,6 +44,8 @@ import os.meka.core.domain.DecisionCard
 import os.meka.core.domain.RequestCard
 import os.meka.core.domain.SchoolCover
 import os.meka.core.domain.TriageCard
+import os.meka.core.domain.ChatFinishTap
+import os.meka.core.domain.ChatShadeRules
 import os.meka.core.domain.TriageChat
 import os.meka.core.domain.TriageChatRules
 import os.meka.core.domain.TriageReplyRules
@@ -132,8 +134,11 @@ internal class DecisionMoves(
     val changed: MutableState<RequestChange?> = mutableStateOf(null),
     /** Send · Open chat · Edit · Not now · Seen on a triaged message (V1, messages slice 3). */
     val onTriage: (TriageCard, TriageChoice) -> Unit = { _, _ -> },
-    /** Done on a chat's card (messages grouped per chat, slice 1): every message in it seen, on both devices. */
-    val onTriageChat: (TriageChat) -> Unit = {},
+    /**
+     * Done, Mark read or Open … to mark read on a chat's card (messages grouped per chat, slices 1–2): every message in
+     * it seen on both devices, the notification's own Mark as read on Meka's tap, then its notifications cleared.
+     */
+    val onTriageChat: (TriageChat, ChatFinishTap) -> Unit = { _, _ -> },
     /** "Send all 3": each easy reply's draft, as its card shows it, on Meka's one tap. */
     val onSendAll: (List<TriageCard>) -> Unit = {},
     /** The undo bar, for the group digest's Caught up and group switches (slice 4). */
@@ -229,9 +234,21 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 }
                 Unit
             }
-        }, onTriageChat = { chat ->
+        }, onTriageChat = { chat, tap ->
             scope.launch {
-                if (runCatching { core.seenTriageChat(chat.ids) }.getOrDefault(0) > 0) undo.show(TriageChatRules.doneLine(chat), null)
+                val markable = ChatShadeRules.markable(chat, LiveReplies.markable.value)
+                val onDone = (context as? MekaApplication)?.captures?.triageSettings?.value?.markReadOnDone == true
+                var finish = ChatShadeRules.finish(tap, markable, onDone)
+                // The keys first: a fired Mark as read makes WhatsApp take its notification (and LiveReplies forgets it).
+                val keys = LiveReplies.keysFor(chat.ids)
+                val marked = finish.markRead && LiveReplies.markRead(context, chat.ids) > 0
+                // Mark read asked for but WhatsApp refused it: open the chat so Meka marks it there.
+                if (tap == ChatFinishTap.MARK_READ && !marked) finish = finish.copy(markRead = false, clear = false, openChat = true)
+                if (finish.openChat) LiveReplies.open(context, chat.cards.last().id, chat.app, null)
+                // Hidden from the shade only, after any Mark read (its action goes with the notification).
+                if (finish.clear) os.meka.android.work.WorkCaptureService.clear(keys)
+                val seen = runCatching { core.seenTriageChat(chat.ids) }.getOrDefault(0)
+                if (seen > 0 || marked || finish.openChat) undo.show(ChatShadeRules.line(chat, finish, marked), null)
                 Unit
             }
         }, onSendAll = { cards ->
@@ -284,6 +301,7 @@ internal fun NeedsYouColumn(
     val appContext = LocalContext.current.applicationContext
     val asks = covers.size + (if (nudge != null) 1 else 0) + due.size
     val live by LiveReplies.live.collectAsState()
+    val markable by LiveReplies.markable.collectAsState()
     val sendAll = remember(triage, live) { TriageReplyRules.sendAll(triage, live) }
     val chats = remember(triage) { TriageChatRules.chats(triage) }
     // Meka's edits of MEKA's drafts, by message id, so Send and "Send all" send what each card shows.
@@ -348,7 +366,7 @@ internal fun NeedsYouColumn(
                 }
                 val m = Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + i, play))
                 if (chat.single) cardFor(chat.cards.single(), m)
-                else TriageChatView(chat, { moves.onTriageChat(chat) }, cardFor, m)
+                else TriageChatView(chat, ChatShadeRules.markable(chat, markable), { tap -> moves.onTriageChat(chat, tap) }, cardFor, m)
             }
         }
         // School days off on office days, a week ahead (school rhythm, slice 1): soonest first, above the requests.
