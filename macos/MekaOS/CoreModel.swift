@@ -120,6 +120,10 @@ final class CoreModel {
     private(set) var people: PeopleView?
     /// Ask → More → People.
     var showPeople = false
+    /// Travel mode (V1, slice 1): trips and their bookings as day-by-day timelines (Ask → More → Trips).
+    private(set) var trips: TripsView?
+    /// Ask → More → Trips.
+    var showTrips = false
     /// Why a Booked… on a Needs you card couldn't be read, by appointment id (shown under its field).
     private(set) var appointmentRefusal: (id: String, line: String)?
     /// Annual leave (V1, slice 1): the allowance, the days booked and the school holidays (Ask → More → Annual leave).
@@ -346,6 +350,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await p in core.peopleView { self?.people = p }
+        })
+        observers.append(Task { [weak self] in
+            for await t in core.tripsView { self?.trips = t }
         })
         observers.append(Task { [weak self] in
             for await c in core.carView { self?.car = c }
@@ -2827,6 +2834,32 @@ final class CoreModel {
     }
 
     func removeBin(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeBin(id: id) } }
+
+    // MARK: Travel mode (slice 1)
+
+    /// What adding a typed trip or booking said: the line under the field, and whether nothing was written.
+    struct TripSaid: Equatable {
+        let line: String
+        let refused: Bool
+    }
+
+    /// Adds "Barcelona 14–18 Nov" or "Flight BA478 Sat 14 Nov 07:40 ref ABC123"; only a String crosses.
+    func addTrip(_ text: String) async -> TripSaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            let r = try await core.addTrip(text: t)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return TripSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func removeTrip(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeTrip(id: id) } }
+
+    func removeTripBooking(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeTripBooking(id: id) } }
 
     // MARK: Gift planner (slice 1)
 

@@ -50,6 +50,8 @@ data class Today(
     val bins: BinLine? = null,
     /** Gift planner, slice 1: "Mum's birthday today · turns 60", "Order Mum's gift today · birthday Sat 31 Oct" ([GiftRules.todayLine]); set by the facade. */
     val gifts: GiftLine? = null,
+    /** Travel mode, slice 1: "Barcelona in 3 days · Flight BA478 Sat 07:40", "Barcelona · day 2 of 5 · …" ([TripRules.todayLine]); set by the facade. */
+    val trip: TripLine? = null,
 ) {
     /** The Up next task is a planned task whose time has gone by ([LateTaskRules.isLate]). */
     fun upNextLate(nowMs: Long): Boolean = upNext?.let { LateTaskRules.isLate(it, nowMs) } ?: false

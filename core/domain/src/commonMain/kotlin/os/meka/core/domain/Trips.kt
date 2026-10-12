@@ -1,0 +1,481 @@
+package os.meka.core.domain
+
+import os.meka.core.sync.FieldValue
+import os.meka.core.sync.Replica
+import os.meka.core.sync.fv
+
+/**
+ * Travel mode (V1), slice 1: trips and their bookings, typed by Meka, as a day-by-day timeline. One field in
+ * Ask → More → Trips takes both: "Barcelona 14–18 Nov" adds a trip; "Flight BA478 Sat 14 Nov 07:40 ref ABC123",
+ * "Hotel Arts 14–18 Nov", "Train 18 Nov 13:05" add a booking to the trip whose days it falls on (or the day either
+ * side, for a night flight). Today's header shows the trip a week ahead ("Barcelona in 3 days · Flight BA478 Sat
+ * 07:40") and while it's on ("Barcelona · day 2 of 5 · 18:20 Flight BA479"); the week ahead lists the trip and each
+ * booking on its day. Plain, non-AI rules; nothing leaves Meka's synced data.
+ *
+ * Bookings read from email wait on mail access (Needs Meka #4) and travel documents offline on the Vault; both would
+ * write the same entities. Two synced entity types (ADR-008 addendum 2026-10-12): `trip` and `trip_booking`.
+ */
+object TripFields {
+    /** "Barcelona" (at most [TripRules.MAX_NAME]). */
+    const val NAME = "name"
+    /** The first and last day away (local epoch days). */
+    const val START = "startDay"
+    const val END = "endDay"
+    const val ADDED_AT = "addedAtMs"
+    const val DELETED = ActionableFields.DELETED
+}
+
+object TripBookingFields {
+    const val TRIP = "tripId"
+    /** [BookingKind.wire]. */
+    const val KIND = "kind"
+    /** "Flight BA478", "Hotel Arts" (at most [TripRules.MAX_TITLE]). */
+    const val TITLE = "title"
+    /** The day it happens (a stay's check-in day). */
+    const val DAY = "day"
+    /** A stay's or a hire car's last day (check-out, drop-off); absent for the rest. */
+    const val END_DAY = "endDay"
+    /** The local minute it starts (departure, check-in time); absent when no time was typed. */
+    const val MINUTE = "minute"
+    /** The booking reference, "ABC123"; absent when none was typed. */
+    const val REF = "ref"
+    const val ADDED_AT = "addedAtMs"
+    const val DELETED = ActionableFields.DELETED
+}
+
+/** What a booking is; [label] leads its line when it has no time. */
+enum class BookingKind(val wire: String, val label: String) {
+    FLIGHT("flight", "Flight"),
+    TRAIN("train", "Train"),
+    STAY("stay", "Stay"),
+    CAR("car", "Car"),
+    OTHER("other", "Booked");
+
+    companion object { fun of(wire: String?): BookingKind = entries.firstOrNull { it.wire == wire } ?: OTHER }
+}
+
+data class TripBooking(
+    val id: String, val tripId: String, val kind: BookingKind, val title: String, val day: Long, val endDay: Long?,
+    val minute: Int?, val ref: String?, val addedAtMs: Long,
+)
+
+/** One stored trip with its live bookings, in time order. */
+data class TripItem(
+    val id: String, val name: String, val startDay: Long, val endDay: Long, val addedAtMs: Long,
+    val bookings: List<TripBooking> = emptyList(),
+) {
+    val days: Int get() = (endDay - startDay + 1).toInt()
+}
+
+/** One line of a trip's timeline: "07:40" · "Flight BA478 · ref ABC123" (the kind's label leads when there's no time). */
+data class TripLineRow(val key: String, val bookingId: String, val lead: String, val text: String, val spoken: String)
+
+/** One day of a trip's timeline: "Sat 14 Nov · day 1" and what's booked that day. */
+data class TripDayRow(val epochDay: Long, val label: String, val lines: List<TripLineRow>)
+
+/**
+ * A row in Trips: "Barcelona" · "Sat 14 – Wed 18 Nov · 5 days · 3 bookings" · "In 33 days" ([statusLit] while it's
+ * on); unfolded, its days with bookings.
+ */
+data class TripRow(
+    val id: String,
+    val name: String,
+    val line: String,
+    val status: String,
+    val statusLit: Boolean,
+    val timeline: List<TripDayRow>,
+    val spoken: String,
+)
+
+data class TripsView(
+    val rows: List<TripRow>,
+    /** "On a trip: Barcelona · day 2 of 5", "Next: Barcelona · Sat 14 Nov · in 33 days", or the empty line. */
+    val summary: String,
+) {
+    val isEmpty: Boolean get() = rows.isEmpty()
+
+    companion object { val EMPTY = TripsView(emptyList(), TripRules.EMPTY_LINE) }
+}
+
+/** Today's header: "Barcelona in 3 days · Flight BA478 Sat 07:40", "Barcelona · day 2 of 5 · 18:20 Flight BA479". */
+data class TripLine(val text: String, val spoken: String, val lit: Boolean)
+
+/** What adding a line did: the line under the field, and whether nothing was written. */
+data class TripAdded(val line: String, val refused: Boolean)
+
+/** A typed trip ([TripRules.read]). */
+data class TripEntry(val name: String, val startDay: Long, val endDay: Long)
+
+/** A typed booking ([TripRules.read]), for the trip [tripId]. */
+data class BookingEntry(
+    val tripId: String, val kind: BookingKind, val title: String, val day: Long, val endDay: Long?, val minute: Int?, val ref: String?,
+)
+
+object TripRules {
+    const val MAX_NAME = 40
+    const val MAX_TITLE = 60
+    const val MAX_REF = 16
+    /** Today's header shows a trip from this many days before it starts. */
+    const val LEAD_DAYS = 7
+    /** An ended trip stays in the pane this many days. */
+    const val KEEP_DAYS = 30
+    /** A booking may fall this many days either side of its trip (a night flight, a hotel the night before). */
+    const val SLACK_DAYS = 1
+
+    const val ADD_HINT = "Add… (Barcelona 14–18 Nov, Flight BA478 Sat 14 Nov 07:40 ref ABC123)"
+    const val EMPTY_LINE = "No trips yet. Type a trip with its dates, then each booking with its day, time and reference."
+    const val NOT_READ = "MEKA couldn't read that. Try \"Barcelona 14–18 Nov\" or \"Flight BA478 Sat 14 Nov 07:40 ref ABC123\"."
+    const val NO_DAY = "MEKA couldn't read a day in that booking. Try \"Flight BA478 Sat 14 Nov 07:40 ref ABC123\"."
+    const val NO_TRIP = "Add the trip first, with its dates (\"Barcelona 14–18 Nov\"), then its bookings."
+    const val NO_BOOKINGS = "Nothing booked yet. Type each booking above with its day: \"Hotel Arts 14–18 Nov\"."
+    const val NOTE = "Typed by you. Bookings from your email and travel documents offline come later (with mail access and the Vault)."
+
+    private val KINDS: Map<String, BookingKind> = buildMap {
+        listOf("flight", "flights", "fly", "flying", "plane").forEach { put(it, BookingKind.FLIGHT) }
+        listOf("train", "trains", "eurostar", "rail", "coach", "bus").forEach { put(it, BookingKind.TRAIN) }
+        listOf("hotel", "airbnb", "stay", "staying", "apartment", "villa", "hostel", "checkin", "check-in", "checkout", "check-out")
+            .forEach { put(it, BookingKind.STAY) }
+        listOf("car", "hire", "rental", "taxi", "transfer", "uber", "cab", "parking").forEach { put(it, BookingKind.CAR) }
+        listOf("ferry", "ticket", "tickets", "tour", "table", "dinner", "lunch", "restaurant", "reservation", "show", "museum", "match")
+            .forEach { put(it, BookingKind.OTHER) }
+    }
+    private val REF_WORDS = setOf("ref", "reference", "booking", "confirmation", "conf", "pnr")
+    private val REF_FILLER = setOf("ref", "reference", "no", "number", "code", "#", ":")
+
+    /** A word with its surrounding punctuation trimmed (hyphens and apostrophes kept), lower case. */
+    private fun bare(w: String): String = w.trim { !it.isLetterOrDigit() && it != '-' && it != '#' }.lowercase()
+
+    /** The kind the line's first words name ("Flight …", "Check in …", "Car hire …"), or null for a trip. */
+    fun kindOf(text: String): BookingKind? {
+        val ws = text.split(' ').map(::bare).filter { it.isNotEmpty() }
+        if (ws.isEmpty()) return null
+        if (ws[0] == "check" && ws.getOrNull(1) in setOf("in", "out")) return BookingKind.STAY
+        return KINDS[ws[0]]
+    }
+
+    /**
+     * The booking reference ("ref ABC123", "booking ref: XKQPLM", "confirmation 4471-22") and the text without it. A
+     * reference has a digit or was typed in capitals, so "booking for two" keeps its words.
+     */
+    fun takeRef(text: String): Pair<String?, String> {
+        val ws = text.split(' ').filter { it.isNotEmpty() }
+        for (i in ws.indices) {
+            if (bare(ws[i]).trimEnd(':') !in REF_WORDS) continue
+            var j = i + 1
+            while (j < ws.size && bare(ws[j]).trimEnd(':').ifEmpty { ":" } in REF_FILLER) j++
+            val raw = ws.getOrNull(j) ?: continue
+            val ref = raw.trim { !it.isLetterOrDigit() && it != '-' }
+            val ok = ref.length in 3..MAX_REF && ref.all { it.isLetterOrDigit() || it == '-' } &&
+                (ref.any { it.isDigit() } || ref.all { !it.isLetter() || it.isUpperCase() })
+            if (!ok) continue
+            return ref.uppercase() to (ws.subList(0, i) + ws.subList(j + 1, ws.size)).joinToString(" ")
+        }
+        return null to text
+    }
+
+    /** What one typed line says. */
+    sealed interface Read {
+        data class Trip(val entry: TripEntry) : Read
+        data class Booking(val entry: BookingEntry) : Read
+        data class Refused(val line: String) : Read
+    }
+
+    /** Trips a booking can join or a name can update: not ended before yesterday. */
+    fun open(trips: List<TripItem>, today: Long): List<TripItem> = trips.filter { it.endDay >= today - SLACK_DAYS }
+
+    /** The trip whose days (or the day either side) [day] falls on, the earliest first. */
+    fun tripFor(trips: List<TripItem>, day: Long): TripItem? =
+        trips.sortedBy { it.startDay }.firstOrNull { day in (it.startDay - SLACK_DAYS)..(it.endDay + SLACK_DAYS) }
+
+    /**
+     * Reads a line typed in Trips. A line that starts with a booking word ([kindOf]) is a booking: its day or days
+     * ("Sat 14 Nov", "14–18 Nov" for a stay), a time at the end ("07:40", "3pm"), a reference; it joins the trip
+     * it falls on. Otherwise a date or a range makes a trip named by the words left ("Barcelona"), unless a time was
+     * typed and a trip covers that day ("Dinner at Can Solé 15 Nov 20:30" joins the trip).
+     */
+    fun read(text: String, today: Long, nowMinute: Int, trips: List<TripItem>): Read {
+        val s = SchoolRules.tidy(text)
+        if (s.isEmpty()) return Read.Refused(NOT_READ)
+        val (ref, s1) = takeRef(s)
+        val kind = kindOf(s1)
+        val span = SchoolRules.findSpan(s1, today, earliest = today - SLACK_DAYS)
+        if (span == SpanFound.Bad) return Read.Refused(if (kind != null) NO_DAY else NOT_READ)
+        val days = span as? SpanFound.Days
+        val rest = days?.rest ?: s1
+        val typed = EventTypingRules.parse(SchoolRules.tidy(rest), today, nowMinute)
+        val live = open(trips, today)
+        fun booking(k: BookingKind, title: String): Read {
+            val day = days?.startDay ?: typed?.day ?: return Read.Refused(NO_DAY)
+            val trip = tripFor(live, day) ?: return Read.Refused(
+                if (live.isEmpty()) NO_TRIP else "No trip on ${CivilDate.shortLabel(day)} yet. $NO_TRIP",
+            )
+            val end = days?.endDay?.takeIf { it > day && (k == BookingKind.STAY || k == BookingKind.CAR) }
+            val minute = typed?.takeIf { !it.allDay }?.minute
+            val t = title.ifEmpty { k.label }.take(MAX_TITLE).trim()
+            return Read.Booking(BookingEntry(trip.id, k, t, day, end, minute, ref))
+        }
+        if (kind != null) return booking(kind, SchoolRules.cleanTitle(typed?.title ?: rest))
+        if (days == null) return Read.Refused(NOT_READ)
+        if (days.startDay == days.endDay && typed?.minute != null && !typed.allDay && tripFor(live, days.startDay) != null) {
+            return booking(BookingKind.OTHER, SchoolRules.cleanTitle(typed.title))
+        }
+        val name = SchoolRules.cleanTitle(rest).take(MAX_NAME).trim()
+        if (name.isEmpty()) return Read.Refused(NOT_READ)
+        return Read.Trip(TripEntry(name, days.startDay, days.endDay))
+    }
+
+    // ---- Stored entities ----
+
+    private fun Map<String, FieldValue>.f(field: String): FieldValue = this[field] ?: FieldValue.Null
+
+    fun bookings(entities: Map<String, Map<String, FieldValue>>): Map<String, List<TripBooking>> = entities.mapNotNull { (id, s) ->
+        if (s.f(TripBookingFields.DELETED).boolOrNull == true) return@mapNotNull null
+        val trip = s.f(TripBookingFields.TRIP).textOrNull ?: return@mapNotNull null
+        val day = s.f(TripBookingFields.DAY).longOrNull ?: return@mapNotNull null
+        val title = s.f(TripBookingFields.TITLE).textOrNull?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        val minute = s.f(TripBookingFields.MINUTE).longOrNull?.toInt()?.takeIf { it in 0 until 24 * 60 }
+        val end = s.f(TripBookingFields.END_DAY).longOrNull?.takeIf { it > day }
+        TripBooking(
+            id, trip, BookingKind.of(s.f(TripBookingFields.KIND).textOrNull), title, day, end, minute,
+            s.f(TripBookingFields.REF).textOrNull?.takeIf { it.isNotBlank() }, s.f(TripBookingFields.ADDED_AT).longOrNull ?: 0L,
+        )
+    }.sortedWith(compareBy<TripBooking> { it.day }.thenBy { it.minute ?: -1 }.thenBy { it.addedAtMs }.thenBy { it.id })
+        .groupBy { it.tripId }
+
+    /** The live trips, soonest first, each with its bookings; unreadable ones are skipped. */
+    fun items(trips: Map<String, Map<String, FieldValue>>, bookings: Map<String, List<TripBooking>>): List<TripItem> =
+        trips.mapNotNull { (id, s) ->
+            if (s.f(TripFields.DELETED).boolOrNull == true) return@mapNotNull null
+            val name = s.f(TripFields.NAME).textOrNull?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val start = s.f(TripFields.START).longOrNull ?: return@mapNotNull null
+            val end = s.f(TripFields.END).longOrNull?.takeIf { it >= start } ?: start
+            TripItem(id, name, start, end, s.f(TripFields.ADDED_AT).longOrNull ?: 0L, bookings[id].orEmpty())
+        }.sortedWith(compareBy<TripItem> { it.startDay }.thenBy { it.addedAtMs }.thenBy { it.id })
+
+    fun fields(e: TripEntry, nowMs: Long): Map<String, FieldValue> = mapOf(
+        TripFields.NAME to e.name.fv(),
+        TripFields.START to e.startDay.fv(),
+        TripFields.END to e.endDay.fv(),
+        TripFields.ADDED_AT to nowMs.fv(),
+        TripFields.DELETED to false.fv(),
+    )
+
+    fun fields(e: BookingEntry, nowMs: Long): Map<String, FieldValue> = mapOf(
+        TripBookingFields.TRIP to e.tripId.fv(),
+        TripBookingFields.KIND to e.kind.wire.fv(),
+        TripBookingFields.TITLE to e.title.fv(),
+        TripBookingFields.DAY to e.day.fv(),
+        TripBookingFields.END_DAY to e.endDay.fv(),
+        TripBookingFields.MINUTE to e.minute.fv(),
+        TripBookingFields.REF to e.ref.fv(),
+        TripBookingFields.ADDED_AT to nowMs.fv(),
+        TripBookingFields.DELETED to false.fv(),
+    )
+
+    // ---- Words ----
+
+    private fun time(m: Int?): String? = m?.let { LocalClock.formatMinute(it) }
+
+    /** "Flight BA478 · ref ABC123". */
+    fun bookingText(b: TripBooking): String = b.title + (b.ref?.let { " · ref $it" } ?: "")
+
+    /** "In 33 days", "Tomorrow", "Day 2 of 5", "Ended Wed 18 Nov". */
+    fun status(t: TripItem, today: Long): String = when {
+        today < t.startDay -> when (val n = t.startDay - today) { 1L -> "Tomorrow"; else -> "In $n days" }
+        today <= t.endDay -> "Day ${today - t.startDay + 1} of ${t.days}"
+        else -> "Ended ${CivilDate.shortLabel(t.endDay)}"
+    }
+
+    private fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
+
+    /** "Sat 14 – Wed 18 Nov · 5 days · 3 bookings". */
+    fun rowLine(t: TripItem): String = listOfNotNull(
+        CalendarAgenda.spanLabel(t.startDay, t.endDay),
+        plural(t.days, "day"),
+        t.bookings.size.takeIf { it > 0 }?.let { plural(it, "booking") },
+    ).joinToString(" · ")
+
+    /** Each booking's lines by day: its own day, and a stay's check-out (a hire car's drop-off) on its last day. */
+    private fun linesByDay(t: TripItem): Map<Long, List<TripLineRow>> {
+        data class K(val day: Long, val minute: Int, val line: TripLineRow)
+        val out = mutableListOf<K>()
+        for (b in t.bookings) {
+            val text = bookingText(b) + if (b.endDay != null) " · until ${CivilDate.shortLabel(b.endDay)}" else ""
+            val lead = time(b.minute) ?: b.kind.label
+            out += K(b.day, b.minute ?: -1, TripLineRow("bk-${b.id}", b.id, lead, text, "$lead, $text"))
+            if (b.endDay != null) {
+                val word = if (b.kind == BookingKind.CAR) "Drop off" else "Check out"
+                val outText = "$word · ${b.title}"
+                out += K(b.endDay, -1, TripLineRow("bk-${b.id}-end", b.id, b.kind.label, outText, "${b.kind.label}, $outText"))
+            }
+        }
+        return out.sortedWith(compareBy<K> { it.day }.thenBy { it.minute }).groupBy({ it.day }, { it.line })
+    }
+
+    /** The trip's days that have something booked (and its first day, always), "Sat 14 Nov · day 1". */
+    fun timeline(t: TripItem): List<TripDayRow> {
+        val byDay = linesByDay(t)
+        val days = (byDay.keys + t.startDay).distinct().sorted()
+        return days.map { d ->
+            val n = d - t.startDay + 1
+            val label = CivilDate.shortLabel(d) + when {
+                n < 1 -> " · the day before"
+                d > t.endDay -> " · the day after"
+                else -> " · day $n"
+            }
+            TripDayRow(d, label, byDay[d].orEmpty())
+        }
+    }
+
+    /** The trips the pane shows: those not ended more than [KEEP_DAYS] ago. */
+    private fun shown(trips: List<TripItem>, today: Long) = trips.filter { it.endDay >= today - KEEP_DAYS }
+
+    private fun ongoing(trips: List<TripItem>, today: Long) = trips.firstOrNull { today in it.startDay..it.endDay }
+    private fun upcoming(trips: List<TripItem>, today: Long) = trips.filter { it.startDay > today }.minByOrNull { it.startDay }
+
+    private fun inDays(day: Long, today: Long): String = when (val n = day - today) {
+        0L -> "today"; 1L -> "tomorrow"; else -> "in $n days"
+    }
+
+    /** The Trips pane: on now, then to come soonest first, then those just ended. */
+    fun view(trips: List<TripItem>, today: Long): TripsView {
+        val list = shown(trips, today)
+        if (list.isEmpty()) return TripsView.EMPTY
+        val ordered = list.filter { it.endDay >= today } + list.filter { it.endDay < today }.sortedByDescending { it.endDay }
+        val rows = ordered.map { t ->
+            val status = status(t, today)
+            val line = rowLine(t)
+            TripRow(t.id, t.name, line, status, today in t.startDay..t.endDay, timeline(t), "${t.name}. $line. $status")
+        }
+        val now = ongoing(list, today)
+        val next = upcoming(list, today)
+        val summary = when {
+            now != null -> "On a trip: ${now.name} · day ${today - now.startDay + 1} of ${now.days}"
+            next != null -> "Next: ${next.name} · ${CivilDate.shortLabel(next.startDay)} · ${inDays(next.startDay, today)}"
+            else -> "No trips coming up"
+        }
+        return TripsView(rows, summary)
+    }
+
+    /** "Flight BA478 Sat 07:40" (the day's short name only when it isn't today). */
+    private fun nextText(b: TripBooking, today: Long): String {
+        val day = when (b.day) {
+            today -> null
+            today + 1 -> "tomorrow"
+            else -> LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(b.day) - 1]
+        }
+        return listOfNotNull(b.title, day, time(b.minute)).joinToString(" ")
+    }
+
+    /**
+     * Today's header: a trip within [LEAD_DAYS] says when it starts and its first booking ("Barcelona in 3 days ·
+     * Flight BA478 Sat 07:40", lit the day before); while it's on, which day it is and what's next today or tomorrow
+     * ("Barcelona · day 2 of 5 · Flight BA479 18:20", lit when something is booked later today). Null otherwise.
+     */
+    fun todayLine(trips: List<TripItem>, today: Long, nowMinute: Int): TripLine? {
+        ongoing(trips, today)?.let { t ->
+            val next = t.bookings.firstOrNull { b ->
+                (b.day == today && b.minute != null && b.minute >= nowMinute) || b.day == today + 1
+            }
+            val head = "${t.name} · day ${today - t.startDay + 1} of ${t.days}"
+            val text = head + (next?.let { " · ${nextText(it, today)}" } ?: "")
+            val spoken = "${t.name}, day ${today - t.startDay + 1} of ${t.days}." + (next?.let { " Next: ${nextText(it, today)}." } ?: "")
+            return TripLine(text, spoken, lit = next?.day == today)
+        }
+        val t = upcoming(trips, today)?.takeIf { it.startDay - today <= LEAD_DAYS } ?: return null
+        // The way there: the first timed booking by the first day (a departure), else the first at all.
+        val first = t.bookings.firstOrNull { it.day <= t.startDay && it.minute != null } ?: t.bookings.firstOrNull()
+        val text = "${t.name} ${inDays(t.startDay, today)}" + (first?.let { " · ${nextText(it, today)}" } ?: "")
+        val spoken = "${t.name} ${inDays(t.startDay, today)}." + (first?.let { " ${nextText(it, today)}." } ?: "")
+        return TripLine(text, spoken, lit = t.startDay == today + 1)
+    }
+
+    /**
+     * The week ahead's lines on [day]: the trip on its first day in the week ("Barcelona trip · until Wed 18 Nov"),
+     * then each booking on its day ([time] with its minute) and a stay's check-out. Each is (minute or null, text, id).
+     */
+    fun weekLines(trips: List<TripItem>, day: Long, weekFirst: Long): List<Triple<Int?, String, String>> {
+        val out = mutableListOf<Triple<Int?, String, String>>()
+        for (t in trips) {
+            if (day == maxOf(t.startDay, weekFirst) && day <= t.endDay) {
+                val until = if (t.endDay > day) " · until ${CivilDate.shortLabel(t.endDay)}" else ""
+                out += Triple(null, "${t.name} trip$until", "t-${t.id}")
+            }
+            for (b in t.bookings) {
+                if (b.day == day) out += Triple(b.minute, bookingText(b), "tb-${b.id}")
+                if (b.endDay == day) {
+                    val word = if (b.kind == BookingKind.CAR) "Drop off" else "Check out"
+                    out += Triple(null, "$word · ${b.title}", "tb-${b.id}-end")
+                }
+            }
+        }
+        return out
+    }
+
+    /** The line after adding: "Added Barcelona · Sat 14 – Wed 18 Nov · in 33 days". */
+    fun addedLine(e: TripEntry, today: Long, replaced: Boolean): String {
+        val whenWord = if (e.startDay <= today) "on now" else inDays(e.startDay, today)
+        return "${if (replaced) "Updated" else "Added"} ${e.name} · ${CalendarAgenda.spanLabel(e.startDay, e.endDay)} · $whenWord"
+    }
+
+    /** "Added to Barcelona · Flight BA478 · Sat 14 Nov 07:40 · ref ABC123". */
+    fun addedLine(e: BookingEntry, trip: TripItem): String {
+        val whenText = (if (e.endDay != null) CalendarAgenda.spanLabel(e.day, e.endDay) else CivilDate.shortLabel(e.day)) +
+            (time(e.minute)?.let { " $it" } ?: "")
+        return listOfNotNull("Added to ${trip.name}", e.title, whenText, e.ref?.let { "ref $it" }).joinToString(" · ")
+    }
+}
+
+/** The trips and bookings on a replica. */
+class Trips(
+    private val replica: Replica,
+    private val newId: () -> String,
+    private val nowMs: () -> Long,
+    private val calendar: LocalCalendar = LocalCalendar.UTC,
+) {
+    fun items(): List<TripItem> {
+        val bookings = TripRules.bookings(replica.entities(EntityTypes.TRIP_BOOKING).associate { it.ref.entityId to it.fields })
+        return TripRules.items(replica.entities(EntityTypes.TRIP).associate { it.ref.entityId to it.fields }, bookings)
+    }
+
+    fun view(): TripsView = TripRules.view(items(), calendar.epochDayOf(nowMs()))
+
+    /**
+     * Adds what [text] says ([TripRules.read]): a trip (one not yet over by the same name has its dates updated) or a
+     * booking on the trip it falls on. Refused (nothing written) when MEKA couldn't read it.
+     */
+    fun add(text: String): TripAdded {
+        val now = nowMs()
+        val today = calendar.epochDayOf(now)
+        val trips = items()
+        return when (val r = TripRules.read(text, today, calendar.minuteOfDay(now), trips)) {
+            is TripRules.Read.Refused -> TripAdded(r.line, refused = true)
+            is TripRules.Read.Trip -> {
+                val existing = TripRules.open(trips, today).firstOrNull { it.name.equals(r.entry.name, ignoreCase = true) }
+                val fields = TripRules.fields(r.entry, now).let { f -> if (existing != null) f - TripFields.ADDED_AT else f }
+                replica.commitLocal(EntityTypes.TRIP, existing?.id ?: newId(), fields)
+                TripAdded(TripRules.addedLine(r.entry, today, replaced = existing != null), refused = false)
+            }
+            is TripRules.Read.Booking -> {
+                val trip = trips.first { it.id == r.entry.tripId }
+                replica.commitLocal(EntityTypes.TRIP_BOOKING, newId(), TripRules.fields(r.entry, now))
+                TripAdded(TripRules.addedLine(r.entry, trip), refused = false)
+            }
+        }
+    }
+
+    /** Removes a trip and its bookings for good; false when it isn't there. */
+    fun remove(id: String): Boolean {
+        val trip = items().firstOrNull { it.id == id } ?: return false
+        trip.bookings.forEach { replica.commitLocal(EntityTypes.TRIP_BOOKING, it.id, mapOf(TripBookingFields.DELETED to true.fv())) }
+        replica.commitLocal(EntityTypes.TRIP, id, mapOf(TripFields.DELETED to true.fv()))
+        return true
+    }
+
+    /** Removes one booking for good; false when it isn't there. */
+    fun removeBooking(id: String): Boolean {
+        replica.entity(EntityTypes.TRIP_BOOKING, id)?.takeIf { it.fields[TripBookingFields.DELETED]?.boolOrNull != true } ?: return false
+        replica.commitLocal(EntityTypes.TRIP_BOOKING, id, mapOf(TripBookingFields.DELETED to true.fv()))
+        return true
+    }
+}

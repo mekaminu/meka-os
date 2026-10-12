@@ -220,6 +220,7 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.BINS) { BinsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.GIFTS) { GiftsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.PEOPLE) { PeoplePane(core, onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.TRIPS) { TripsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.FACTS) { FactsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.LEAVE) { LeavePane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.WORK) { WorkPane(core, onClose = { pane = null }) }

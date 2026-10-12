@@ -2197,6 +2197,42 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(core.giftsView.value.rows.isEmpty)
     }
 
+    func testTripsReachSwift() async throws {
+        // Travel mode, slice 1: a typed trip and booking go through the facade (only Strings cross) and the sheet's
+        // rows, the timeline and the week ahead's kind reach the Mac.
+        let rules = TripRules.shared
+        XCTAssertEqual(rules.kindOf(text: "Flight BA478 Sat 14 Nov"), .flight)
+        XCTAssertEqual(rules.kindOf(text: "Check out 11:00"), .stay)
+        XCTAssertNil(rules.kindOf(text: "Barcelona 14–18 Nov"))
+        XCTAssertEqual(WeekAheadKind.trip.name, "TRIP")
+        XCTAssertEqual(TripsView.companion.EMPTY.summary, rules.EMPTY_LINE)
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "trips-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let y = Calendar.current.component(.year, from: Date()) + 1
+        let none = try await core.addTrip(text: "Flight TP1361 3 Mar \(y) 09:15")
+        XCTAssertTrue(none.refused)
+        let trip = try await core.addTrip(text: "Lisbon 3–6 Mar \(y)")
+        XCTAssertFalse(trip.refused)
+        XCTAssertTrue(trip.line.hasPrefix("Added Lisbon · "))
+        let flight = try await core.addTrip(text: "Flight TP1361 3 Mar \(y) 09:15 ref QX12AB")
+        XCTAssertFalse(flight.refused)
+        XCTAssertTrue(flight.line.hasSuffix("09:15 · ref QX12AB"), flight.line)
+        let row = core.tripsView.value.rows[0]
+        XCTAssertEqual(row.name, "Lisbon")
+        XCTAssertTrue(row.line.hasSuffix("4 days · 1 booking"), row.line)
+        let line = row.timeline[0].lines[0]
+        XCTAssertEqual(line.lead, "09:15")
+        XCTAssertEqual(line.text, "Flight TP1361 · ref QX12AB")
+        let gone = try await core.removeTripBooking(id: line.bookingId)
+        XCTAssertTrue(gone.boolValue)
+        let removed = try await core.removeTrip(id: row.id)
+        XCTAssertTrue(removed.boolValue)
+        XCTAssertTrue(core.tripsView.value.rows.isEmpty)
+    }
+
     func testBinsReachSwift() async throws {
         // Bin days, slice 1: a typed bin is read by the core's rules, added through the facade (only a String crosses)
         // and the sheet's rows, Today's line and the heads-up's source reach the Mac.

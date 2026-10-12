@@ -140,6 +140,7 @@ class MekaCore(
     private val school = os.meka.core.domain.School(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val bins = os.meka.core.domain.Bins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val gifts = os.meka.core.domain.Gifts(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val trips = os.meka.core.domain.Trips(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val car = os.meka.core.domain.Car(replica)
     private val mealPlan = os.meka.core.domain.MealPlan(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val emergency = os.meka.core.domain.EmergencyCard(replica, ids::next, nowMs)
@@ -402,6 +403,13 @@ class MekaCore(
      */
     val binsView: StateFlow<os.meka.core.domain.BinsView> = _bins.asStateFlow()
 
+    private val _trips = MutableStateFlow(os.meka.core.domain.TripsView.EMPTY)
+
+    /**
+     * Travel mode (V1, slice 1): trips and their bookings typed in Ask → More → Trips, each trip a day-by-day
+     * timeline; Today's header shows the trip a week ahead and while it's on.
+     */
+    val tripsView: StateFlow<os.meka.core.domain.TripsView> = _trips.asStateFlow()
     private val _gifts = MutableStateFlow(os.meka.core.domain.GiftsView.EMPTY)
 
     /**
@@ -2123,6 +2131,21 @@ class MekaCore(
 
     /** Removes a bin for good. */
     suspend fun removeBin(id: String): Boolean = onCore { bins.remove(id) }
+
+    // ---- Travel mode (V1, slice 1; Ask → More → Trips) ----
+
+    /**
+     * Adds one typed line ([os.meka.core.domain.TripRules.read]): a trip ("Barcelona 14–18 Nov"; one not over yet by
+     * the same name has its dates updated) or a booking on the trip it falls on ("Flight BA478 Sat 14 Nov 07:40 ref
+     * ABC123", "Hotel Arts 14–18 Nov"). Refused (nothing written) when MEKA couldn't read it.
+     */
+    suspend fun addTrip(text: String): os.meka.core.domain.TripAdded = onCore { trips.add(text) }
+
+    /** Removes a trip and its bookings for good. */
+    suspend fun removeTrip(id: String): Boolean = onCore { trips.remove(id) }
+
+    /** Removes one booking for good (its id is a timeline line's `bookingId`). */
+    suspend fun removeTripBooking(id: String): Boolean = onCore { trips.removeBooking(id) }
 
     // ---- Gift planner (V1, slice 1; Ask → More → Gifts) ----
 
@@ -4307,6 +4330,8 @@ class MekaCore(
         val binItems = bins.items()
         // Gift planner, slice 1: the birthdays and anniversaries with their ideas.
         val occasionItems = gifts.items()
+        // Travel mode, slice 1: the trips with their bookings.
+        val tripItems = trips.items()
         // The Sunday week ahead, slice 1: the coming week from what MEKA already knows.
         val weekAheadNow = os.meka.core.domain.WeekAheadRules.view(
             os.meka.core.domain.WeekAheadInputs(
@@ -4322,6 +4347,7 @@ class MekaCore(
                 goals = goalsNow.goals,
                 bins = binItems,
                 occasions = occasionItems,
+                trips = tripItems,
             ),
             nowMs(), cal, ::dayWindowOf,
         )
@@ -4362,6 +4388,7 @@ class MekaCore(
             weekAhead = os.meka.core.domain.WeekAheadRules.todayLine(weekAheadNow, nowMs(), cal, weekAheadSettings.setting()),
             bins = os.meka.core.domain.BinRules.tonightLine(binItems, todayDay, cal.minuteOfDay(nowMs()), holidays),
             gifts = os.meka.core.domain.GiftRules.todayLine(occasionItems, todayDay),
+            trip = os.meka.core.domain.TripRules.todayLine(tripItems, todayDay, cal.minuteOfDay(nowMs())),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
@@ -4425,6 +4452,7 @@ class MekaCore(
         _school.value = school.view(hoursOf(workState, todayDay))
         _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays)
         _gifts.value = os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
+        _trips.value = os.meka.core.domain.TripRules.view(tripItems, todayDay)
         val heldNow = _afterWork.value
         _people.value = os.meka.core.domain.PeopleRules.view(
             listsNow.promised, listsNow.waiting, occasionItems,

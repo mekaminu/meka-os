@@ -90,6 +90,10 @@ object EntityTypes {
     const val OCCASION = "occasion"
     /** Gift planner, slice 1 (2026-10-12): one gift idea noted against an occasion. */
     const val GIFT_IDEA = "gift_idea"
+    /** Travel mode, slice 1 (2026-10-12): one trip, "Barcelona 14–18 Nov" (see [Trips]). */
+    const val TRIP = "trip"
+    /** Travel mode, slice 1 (2026-10-12): one booking on a trip, "Flight BA478 Sat 14 Nov 07:40 ref ABC123". */
+    const val TRIP_BOOKING = "trip_booking"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -97,7 +101,7 @@ object EntityTypes {
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
-        CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA,
+        CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA, TRIP, TRIP_BOOKING,
     )
 }
 
@@ -426,6 +430,11 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.OCCASION -> MergePolicy.Lww
         entityType == EntityTypes.GIFT_IDEA && field == GiftIdeaFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.GIFT_IDEA -> MergePolicy.Lww
+        // Trips and their bookings: one removed on any device is gone for good; the rest, the latest edit wins.
+        entityType == EntityTypes.TRIP && field == TripFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.TRIP -> MergePolicy.Lww
+        entityType == EntityTypes.TRIP_BOOKING && field == TripBookingFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.TRIP_BOOKING -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

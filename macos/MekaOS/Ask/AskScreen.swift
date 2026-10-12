@@ -71,6 +71,7 @@ struct AskScreen: View {
         case .bins: model.showBins = true
         case .gifts: model.showGifts = true
         case .people: model.showPeople = true
+        case .trips: model.showTrips = true
         case .facts: model.showFacts = true
         case .work: model.showWork = true
         case .protectedTime: model.showProtected = true

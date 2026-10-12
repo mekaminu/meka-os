@@ -104,6 +104,8 @@ struct ShellView: View {
         .sheet(isPresented: Binding(get: { model.showGifts }, set: { model.showGifts = $0 })) { GiftsSheet(palette: palette) }
         // People (Ask → More): promises both ways, birthdays and last contact, by person.
         .sheet(isPresented: Binding(get: { model.showPeople }, set: { model.showPeople = $0 })) { PeopleSheet(palette: palette) }
+        // Trips (Ask → More): trips and their bookings, day by day.
+        .sheet(isPresented: Binding(get: { model.showTrips }, set: { model.showTrips = $0 })) { TripsSheet(palette: palette) }
         // What MEKA knows (Ask → More): the facts page Ask and Talk answer from.
         .sheet(isPresented: Binding(get: { model.showFacts }, set: { model.showFacts = $0 })) { FactsSheet(palette: palette) }
         // What MEKA knows, slice 4: a form shared with "Handle this with MEKA" answered from the facts page.
