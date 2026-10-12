@@ -262,7 +262,53 @@ object BinRules {
         }
     }
 
-    /** The line after adding: "Added Black bin · every other Tuesday · next Tue 13 Oct" (and the week check when guessed). */
+    /** At most this many bins go with a question (slice 2), in the order entered. */
+    const val ASK_BINS = 6
+
+    /** The coming collection days that go with a question. */
+    const val ASK_DAYS = 4
+
+    private fun relation(day: Long, today: Long): String? = when {
+        day == today -> "today"
+        day == today + 1 -> "tomorrow"
+        monday(day) == monday(today) -> "this week"
+        monday(day) == monday(today) + 7 -> "next week"
+        else -> null
+    }
+
+    private fun dated(day: Long, today: Long): String = CivilDate.shortLabel(day) + (relation(day, today)?.let { " ($it)" } ?: "")
+
+    /**
+     * The bins as MEKA describes them to the model (slice 2, Ask's `bins` lines), so "which bin is it this week?" and
+     * "when are the bins?" have an answer: "Bins · 2 bins · typed by Meka", then each bin ("Black bin · every other
+     * Tuesday · next Tue 13 Oct (tomorrow) · then Tue 27 Oct"), then the coming collection days ("Collection · Tue
+     * 13 Oct (tomorrow) · Black bin and food caddy · out the evening before", with the bank-holiday note). Meka's own
+     * typed lines in MEKA's words, never untrusted. Nothing while no bins are entered.
+     */
+    fun askLines(bins: List<BinItem>, today: Long, holidays: HolidayCalendar): List<String> {
+        if (bins.isEmpty()) return emptyList()
+        val more = if (bins.size > ASK_BINS) " · the first $ASK_BINS below" else ""
+        val head = "Bins · ${bins.size} ${if (bins.size == 1) "bin" else "bins"} · typed by Meka$more"
+        val each = bins.take(ASK_BINS).map { b ->
+            val next = next(b, today, holidays)
+            val then = next?.let { next(b, it + 1, holidays) }
+            listOfNotNull(
+                b.name, patternLabel(b).replaceFirstChar { it.lowercase() },
+                next?.let { "next ${dated(it, today)}" + if (shifted(b, it)) " · $SHIFT_NOTE" else "" },
+                then?.let { "then ${CivilDate.shortLabel(it)}" },
+            ).joinToString(" · ")
+        }
+        val days = bins.mapNotNull { b -> next(b, today, holidays)?.let { listOf(it) + listOfNotNull(next(b, it + 1, holidays)) } }
+            .flatten().distinct().sorted().take(ASK_DAYS)
+        val collections = days.map { day ->
+            val going = onDay(bins, day, holidays)
+            "Collection · ${dated(day, today)} · ${names(going)} · out the evening before" +
+                if (going.any { shifted(it, day) }) " · $SHIFT_NOTE" else ""
+        }
+        return listOf(head) + each + collections
+    }
+
+    /** The line after adding:"Added Black bin · every other Tuesday · next Tue 13 Oct" (and the week check when guessed). */
     fun addedLine(e: BinEntry, today: Long, replaced: Boolean): String {
         val pattern = (if (e.everyWeeks == 2) "every other " else "every ") + CivilDate.DAY_LONG[e.weekday - 1]
         val next = dayWord(e.anchorDay, today).let { if (it == "Today" || it == "Tomorrow") it.lowercase() else it }

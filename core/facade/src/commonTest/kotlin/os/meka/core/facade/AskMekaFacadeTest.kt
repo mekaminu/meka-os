@@ -864,4 +864,21 @@ class AskMekaFacadeTest {
         // Again, nothing is left to take back.
         assertFalse(c.undoTalk(did.undos))
     }
+
+    @Test
+    fun askHearsTheBinsAndTheirComingCollections() = runTest {
+        val c = core()
+        c.askMeka("Which bin is it this week?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.BINS })
+        c.addBin("Black bin Tue fortnightly from 13 Oct")
+        c.askMeka("Which bin is it this week?")
+        val ctx = server.asked.last().second
+        assertEquals(listOf(
+            "Bins · 1 bin · typed by Meka",
+            "Black bin · every other Tuesday · next Tue 13 Oct (next week) · then Tue 27 Oct",
+            "Collection · Tue 13 Oct (next week) · Black bin · out the evening before",
+            "Collection · Tue 27 Oct · Black bin · out the evening before",
+        ), ctx.items.filter { it.kind == AskItemKind.BINS }.map { it.line })
+        assertFalse(ctx.untrusted)
+    }
 }

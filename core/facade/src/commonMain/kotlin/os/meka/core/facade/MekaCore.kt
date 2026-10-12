@@ -3095,7 +3095,9 @@ class MekaCore(
                 // Checklists in tasks, slice 3b: each open task's checklist, so "what's left on the party checklist?" has an answer.
                 os.meka.core.domain.ChecklistAskRules.askLines(tasks.all(), cal.epochDayOf(nowMs())),
                 // Goals, properly, slice 8: each open goal with its progress and next step, so "how are my goals?" has an answer.
-                os.meka.core.domain.GoalAskRules.askLines(goals.view(tasks.all())))
+                os.meka.core.domain.GoalAskRules.askLines(goals.view(tasks.all())),
+                // Bin days, slice 2: each bin and the coming collections, so "which bin is it this week?" has an answer.
+                os.meka.core.domain.BinRules.askLines(bins.items(), cal.epochDayOf(nowMs()), bankHolidays.calendar()))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)

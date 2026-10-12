@@ -118,4 +118,28 @@ class BinsTest {
         sync()
         assertEquals(listOf("Black bin", "Food caddy"), bFold.items().map { it.name })
     }
+
+    @Test
+    fun askAndTalkHearEachBinAndTheComingCollections() {
+        assertEquals(emptyList(), BinRules.askLines(emptyList(), sat, HolidayCalendar()))
+        val bins = listOf(bin("Black bin", 2, 2, d(10, 13)), bin("Food caddy", 2, 1, d(10, 13)))
+        assertEquals(listOf(
+            "Bins · 2 bins · typed by Meka",
+            "Black bin · every other Tuesday · next Tue 13 Oct (next week) · then Tue 27 Oct",
+            "Food caddy · every Tuesday · next Tue 13 Oct (next week) · then Tue 20 Oct",
+            "Collection · Tue 13 Oct (next week) · Black bin and food caddy · out the evening before",
+            "Collection · Tue 20 Oct · Food caddy · out the evening before",
+            "Collection · Tue 27 Oct · Black bin and food caddy · out the evening before",
+        ), BinRules.askLines(bins, sat, HolidayCalendar()))
+        // Monday: tomorrow's.
+        assertTrue("Collection · Tue 13 Oct (tomorrow) · Black bin and food caddy · out the evening before" in BinRules.askLines(bins, d(10, 12), HolidayCalendar()))
+        // Christmas week: Friday's collection moves to Saturday.
+        val friday = listOf(bin("Green bin", 5, 1, d(10, 16)))
+        assertEquals(listOf(
+            "Bins · 1 bin · typed by Meka",
+            "Green bin · every Friday · next Sat 26 Dec (this week) · ${BinRules.SHIFT_NOTE} · then Sat 2 Jan",
+            "Collection · Sat 26 Dec (this week) · Green bin · out the evening before · ${BinRules.SHIFT_NOTE}",
+            "Collection · Sat 2 Jan (next week) · Green bin · out the evening before · ${BinRules.SHIFT_NOTE}",
+        ), BinRules.askLines(friday, d(12, 21), christmas))
+    }
 }
