@@ -1072,6 +1072,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(BriefCardRules.shared.caption(why: "it's overdue"), "Overdue")
     }
 
+    /// Morning brief slice 4: who's waiting on you reaches Swift (the sheet's rows; the brief says them).
+    func testBriefAsksReachSwift() {
+        XCTAssertTrue(MorningBriefView.companion.EMPTY.asks.isEmpty)
+        let note = MessageRequestRules.shared.voiceNoteProposal(personName: "Mum")
+        XCTAssertEqual(BriefScriptRules.shared.askSaid(who: "Mum", p: note, today: 0), "Mum sent you a voice note to listen to.")
+        let a = BriefAsk(id: "v-1", who: "Dave", line: "Urgent · Voice message from Dave · 16:10", spoken: "Dave left an urgent voice message at 4:10.", urgent: true)
+        XCTAssertTrue(a.urgent)
+        XCTAssertEqual(a.line, "Urgent · Voice message from Dave · 16:10")
+    }
+
     /// Fold review 2026-10-09 07:26, item 7: the brief's Today rows (one left edge; a task carries its id for the tick).
     func testBriefDayLinesReachSwift() {
         let task = BriefRules.shared.dayLine(r: TomorrowRow(id: "t-milk", time: nil, title: "Buy milk", isEvent: false, detail: "Overdue"))

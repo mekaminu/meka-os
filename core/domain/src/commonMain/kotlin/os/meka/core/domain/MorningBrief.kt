@@ -89,6 +89,8 @@ data class MorningBriefView(
     val focusMore: String? get() = BriefCardRules.focusMore(story)
     /** "1 decision waiting in Needs you"; null for none. */
     val needsYouLine: String? get() = BriefCardRules.needsYouLine(story)
+    /** Slice 4: requests from watched people and urgent voice messages, urgent first ("Waiting on you" in the pane). */
+    val asks: List<BriefAsk> get() = BriefCardRules.askLines(story)
     /** Today's card's third line: "Focus · Renew passport · overdue · + 2 more"; null with no focus. */
     val focusCardLine: String? get() = BriefCardRules.cardLine(story)
     /** The one-liner the spoken brief closes with ([BriefScriptRules.oneLiner]), at the foot of the pane. */

@@ -76,6 +76,18 @@ struct BriefSheet: View {
                             }
                             Spacer().frame(height: MekaSpace.m)
                         }
+                        // Slice 4: who's waiting on you — urgent voice messages (accent), then requests — as the brief says.
+                        if !v.asks.isEmpty {
+                            SectionLabel("Waiting on you", palette).staggeredAppear(1)
+                            ForEach(v.asks, id: \.id) { a in
+                                Text(a.line).font(MekaType.body)
+                                    .foregroundStyle(a.urgent ? palette.accent : palette.textPrimary)
+                                    .padding(.vertical, MekaSpace.xxs)
+                                    .accessibilityLabel(a.spoken)
+                                    .staggeredAppear(1)
+                            }
+                            Spacer().frame(height: MekaSpace.m)
+                        }
                         SectionLabel("Today", palette).staggeredAppear(1)
                         Text(v.daySummary).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                             .contentTransition(.opacity)
@@ -156,6 +168,7 @@ struct BriefSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .animation(MekaMotion.replan(reduced: reduceMotion), value: v.dayLines.map(\.id))
                     .animation(MekaMotion.replan(reduced: reduceMotion), value: v.focusLines.map(\.id))
+                    .animation(MekaMotion.replan(reduced: reduceMotion), value: v.asks.map(\.id))
                     .animation(MekaMotion.replan(reduced: reduceMotion), value: v.headlines.map(\.id))
                 }
                 .frame(maxHeight: 460)

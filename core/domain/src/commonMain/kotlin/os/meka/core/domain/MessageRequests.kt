@@ -93,6 +93,8 @@ data class RequestCard(
     val atMs: Long = 0L,
     /** A reply card's drafted words, shown whole under the action and copied by its button ("Handle this", slice 3). */
     val draft: String? = null,
+    /** Who asked, as the notification named them ("Wife"); "" on a card Meka shared himself (morning brief slice 4). */
+    val person: String = "",
 )
 
 object MessageRequestRules {
@@ -256,6 +258,7 @@ object MessageRequestRules {
                 (p.reply?.let { " The draft says: $it" } ?: ""),
             atMs = message.atMs,
             draft = p.reply,
+            person = if (shared) "" else message.personName.trim().take(40),
         )
     }
 

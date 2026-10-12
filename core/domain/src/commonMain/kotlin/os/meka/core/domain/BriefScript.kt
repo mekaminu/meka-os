@@ -52,6 +52,23 @@ enum class BriefLength(
     }
 }
 
+/**
+ * Slice 4: someone waiting on Meka, as the brief names them: a request MEKA read from a watched person's message (its
+ * Needs you card), or an urgent voice message the call assistant took. Never the message's own words (untrusted,
+ * ADR-006): a request is said through its card's checked action, a voice message by who left it and when.
+ */
+data class BriefAsk(
+    val id: String,
+    /** "Wife", "Dave", or "A caller" for someone known only by number. */
+    val who: String,
+    /** The pane's line: "Wife · Pick up dry cleaning · Tomorrow", "Urgent · Voice message from Dave · 16:10". */
+    val line: String,
+    /** The brief's sentence: "Wife asked you to pick up dry cleaning, tomorrow." */
+    val spoken: String,
+    /** An urgent voice message (said first, lit in the pane). */
+    val urgent: Boolean,
+)
+
 /** One of the brief's length choices as the apps list them ("Short", lit when chosen). */
 data class BriefLengthChoice(val id: String, val label: String, val chosen: Boolean)
 
@@ -86,6 +103,8 @@ data class BriefStory(
     val goalTitle: String? = null,
     /** Slice 3: Short · Standard · Full. */
     val length: BriefLength = BriefLength.DEFAULT,
+    /** Slice 4: requests from watched people and urgent voice messages ([BriefScriptRules.asks]), urgent first. */
+    val asks: List<BriefAsk> = emptyList(),
 ) {
     companion object {
         val EMPTY = BriefStory()
@@ -142,7 +161,8 @@ object BriefScriptRules {
         // Focus.
         out += focusLines(s, v)
 
-        // Waiting on him.
+        // Waiting on him: urgent voice messages, then what people asked for, then decisions and chases.
+        out += askLines(s)
         if (s.needsYou > 0) out += if (s.needsYou == 1) "One decision is waiting for you in Needs you." else "${s.needsYou} decisions are waiting for you in Needs you."
         val chases = v.waiting.filter { it.state == DueState.DUE }.take(len.maxChases)
         if (chases.isNotEmpty()) out += sentence("Chase " + listing(chases.map { w -> w.who?.let { "$it about ${w.title}" } ?: w.title }))
@@ -267,6 +287,72 @@ object BriefScriptRules {
         }.sortedWith(compareBy<Ranked> { it.rank }.thenBy { it.order })
         val named = ranked.take(max).map { it.f }
         return named to (tasks.size - named.size).coerceAtLeast(0)
+    }
+
+    /** Urgent voice messages said, at most (the rest are on the pane and in the after-work summary). */
+    const val MAX_URGENT = 2
+    /** How far back an urgent voice message is still news in the morning. */
+    const val ASK_LOOKBACK_MS = 24L * 60 * 60 * 1000
+
+    /**
+     * Slice 4: what people are waiting on Meka for, urgent first. Urgent voice messages from the last day (newest
+     * first; someone known only by number is "A caller"), then the open request cards from watched people (newest
+     * first; a card Meka shared himself with "Handle this", a drafted reply and a renewal are his own lists' business,
+     * not someone waiting). [today] is the brief's day; [minuteOf] reads a local minute.
+     */
+    fun asks(cards: List<RequestCard>, held: List<CapturedItem>, today: DayWindow, minuteOf: (Long) -> Int): List<BriefAsk> {
+        val urgent = held
+            .filter { it.kind == CaptureKind.VOICE_MESSAGE && it.urgent && it.atMs >= today.startMs - ASK_LOOKBACK_MS }
+            .sortedByDescending { it.atMs }
+            .map { m ->
+                val number = People.key(m.personName).startsWith("tel:")
+                val who = if (number) "A caller" else m.personName.trim().take(40)
+                val minute = minuteOf(m.atMs)
+                val yesterday = m.atMs < today.startMs
+                val said = (if (yesterday) "yesterday at " else "at ") + clock(minute)
+                val time = (if (yesterday) "Yesterday " else "") + TaskWhenRules.timeLabel(minute)
+                BriefAsk(
+                    id = "v-" + m.id, who = who,
+                    line = "Urgent · Voice message from ${m.personName.trim().take(40)} · $time",
+                    spoken = "$who left an urgent voice message $said.",
+                    urgent = true,
+                )
+            }
+        val requests = cards
+            .filter { it.person.isNotBlank() && it.proposal.kind != RequestKind.REPLY && it.proposal.kind != RequestKind.RENEWAL }
+            .sortedByDescending { it.atMs }
+            .map { c -> BriefAsk("r-" + c.id, c.person, c.person + " · " + c.action.substringAfter(": "), askSaid(c.person, c.proposal, today.epochDay), false) }
+        return urgent + requests
+    }
+
+    /** "Wife asked you to pick up dry cleaning, tomorrow." · "Wife asked you to work from home on Thu 15 Oct." */
+    fun askSaid(who: String, p: RequestProposal, today: Long): String {
+        val day = p.day?.let { d -> TaskWhenRules.label(d, null, today).let { if (it == "Today" || it == "Tomorrow") it.lowercase() else it } }
+        val time = p.minute?.let { "at " + clock(it) }
+        val whenSaid = listOfNotNull(day, time).joinToString(" ").ifEmpty { null }
+        val title = p.title.trim().let { t -> if (t.length > 1 && t[1].isLowerCase()) t.replaceFirstChar { it.lowercase() } else t }
+        return sentence(when {
+            // A voice note's card ([MessageRequestRules.voiceNoteProposal]) is said as what it is.
+            p.kind == RequestKind.REMINDER && p.title == MessageRequestRules.voiceNoteProposal(who).title -> "$who sent you a voice note to listen to"
+            else -> when (p.kind) {
+            RequestKind.WORK_FROM_HOME -> "$who asked you to work from home" + (day?.let { if (it == "today" || it == "tomorrow") " $it" else " on $it" } ?: "")
+            RequestKind.EVENT -> "$who mentioned ${p.title.trim()}" + (whenSaid?.let { ", $it" } ?: "")
+            RequestKind.REMINDER -> "$who asked you to remember to $title" + (whenSaid?.let { ", $it" } ?: "")
+            else -> "$who asked you to $title" + (whenSaid?.let { ", $it" } ?: "")
+            }
+        })
+    }
+
+    private fun askLines(s: BriefStory): List<String> {
+        val urgent = s.asks.filter { it.urgent }
+        val requests = s.asks.filter { !it.urgent }
+        val out = mutableListOf<String>()
+        out += urgent.take(MAX_URGENT).map { it.spoken }
+        if (urgent.size > MAX_URGENT) out += sentence("And ${count(urgent.size - MAX_URGENT, "more urgent voice message")} in your messages")
+        val max = s.length.maxChases
+        out += requests.take(max).map { it.spoken }
+        if (requests.size > max) out += sentence("Plus ${count(requests.size - max, "more request")} in Needs you")
+        return out
     }
 
     /**
@@ -429,6 +515,9 @@ object BriefCardRules {
         val ones = if (smaller == 1) "1 smaller one" else "$smaller smaller ones"
         return if (named == 0) "Nothing urgent · ${ones.replace("smaller", "small")} on Today" else "+ $ones on Today"
     }
+
+    /** Slice 4: who's waiting on you, urgent first (the pane's "Waiting on you" rows; [BriefAsk.urgent] lit). */
+    fun askLines(s: BriefStory): List<BriefAsk> = s.asks
 
     /** "1 decision waiting in Needs you"; null for none. */
     fun needsYouLine(s: BriefStory): String? = when {

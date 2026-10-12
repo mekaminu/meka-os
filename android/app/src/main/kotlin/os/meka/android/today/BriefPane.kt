@@ -190,6 +190,19 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
             }
         }
 
+        // Slice 4: who's waiting on you — urgent voice messages (lit), then what people asked for — as the brief says.
+        if (v.asks.isNotEmpty()) {
+            item(key = "h-asks") {
+                SectionLabel("Waiting on you", Modifier.animateItem().appear(rememberAppearance(1)))
+            }
+            items(v.asks, key = { "k-" + it.id }) { a ->
+                Text(a.line, style = MekaType.body, color = if (a.urgent) Meka.colors.accent else Meka.colors.textPrimary,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs).animateItem().appear(rememberAppearance(1))
+                        .semantics { contentDescription = a.spoken })
+            }
+            item(key = "k-gap") { Spacer(Modifier.height(MekaSpace.m)) }
+        }
+
         item(key = "h-day") {
             Column(Modifier.animateItem().appear(rememberAppearance(1))) {
                 SectionLabel("Today")

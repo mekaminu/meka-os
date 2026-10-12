@@ -4507,6 +4507,8 @@ class MekaCore(
                             it.kind == os.meka.core.domain.DecisionKind.CONFLICT || it.kind == os.meka.core.domain.DecisionKind.CREDIT
                         },
                         family = listOfNotNull(t.bins?.spoken, t.dateNight?.spoken, t.gifts?.spoken, t.trip?.spoken),
+                        // Slice 4: urgent voice messages and requests from watched people, waiting on you.
+                        asks = os.meka.core.domain.BriefScriptRules.asks(requestCards.open(), held.items(), today) { cal.minuteOfDay(it) },
                     ),
                 )
             }

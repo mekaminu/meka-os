@@ -49,6 +49,35 @@ class BriefScriptFacadeTest {
         assertEquals(s, fold.talkReadOut(ReadOut(ReadOut.Kind.BRIEF)))
     }
 
+    @Test
+    fun anUrgentVoiceMessageAndARequestAreWaitingOnYouInTheBriefNotTheirWords() = runTest {
+        val fold = core()
+        fold.addTask("Renew passport")
+        val lists = os.meka.core.domain.PeopleLists(family = setOf("Mum"))
+        fold.holdCaptured(
+            listOf(
+                os.meka.core.domain.CapturedItem(
+                    "v-1", os.meka.core.domain.CaptureApp.PHONE, os.meka.core.domain.CaptureKind.VOICE_MESSAGE, "Dave",
+                    "the boiler is leaking", null, now - 15 * 3_600_000L, urgent = true,
+                ),
+            ),
+            lists,
+        )
+        fold.readRequest(
+            os.meka.core.domain.CapturedItem(
+                "wa-1", os.meka.core.domain.CaptureApp.WHATSAPP, os.meka.core.domain.CaptureKind.MESSAGE, "Mum",
+                "🎤 Voice message (0:12)", null, now - 600_000L,
+            ),
+            lists, emptySet(),
+        )
+        val v = fold.briefView.value
+        assertEquals(listOf(true, false), v.asks.map { it.urgent })
+        assertEquals("Urgent · Voice message from Dave · Yesterday 16:30", v.asks[0].line)
+        val s = BriefScriptRules.script(v)
+        assertTrue("Dave left an urgent voice message yesterday at half past 4. Mum sent you a voice note to listen to." in s, s)
+        assertFalse("boiler" in s)
+    }
+
     private class Server(service: SyncService) : SyncTransport, AiApi {
         private val sync = os.meka.core.testing.FaultyTransport(service)
         val sent = mutableListOf<BriefScriptCodec.Request>()
