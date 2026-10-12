@@ -145,7 +145,7 @@ private fun LazyListScope.car(
 }
 
 @Composable
-private fun UpkeepRowView(row: UpkeepRow, add: () -> Unit) = UpkeepLine(row.title, row.line, row.note, row.tracked, add)
+private fun UpkeepRowView(row: UpkeepRow, add: () -> Unit) = UpkeepLine(row.title, row.line, row.note, row.tracked, add = add)
 
 /** One suggested job or car date: title, its line (cross-fades once added) and what it covers, with Add until tracked. */
 @Composable
