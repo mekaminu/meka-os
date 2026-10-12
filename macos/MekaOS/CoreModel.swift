@@ -1646,6 +1646,18 @@ final class CoreModel {
         return core.talkReadOut(read: read)
     }
 
+    /// The brief as MEKA reads it ("A morning brief worth listening to", slice 2): written by MEKA's AI from the brief's
+    /// facts when it answers within 6 s, else MEKA's own. Nothing but the String crosses back; never fails.
+    func briefScript() async -> String {
+        let fallback = brief.map { BriefScriptRules.shared.script(v: $0, name: "Meka") } ?? ""
+        guard let core else { return fallback }
+        do {
+            return try await core.briefScript(name: "Meka")
+        } catch {
+            return fallback
+        }
+    }
+
     func blockHeldCaller(_ person: PersonSummary) {
         guard let core else { return }
         Task {

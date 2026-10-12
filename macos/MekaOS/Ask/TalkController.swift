@@ -450,8 +450,24 @@ final class TalkController {
     /// as a reading (short pieces asked for ahead, so MEKA's voice holds throughout); then MEKA listens again. Headlines
     /// are only ever read out, never acted on (ADR-006). The read-out stays on the main actor; only the String goes on.
     private func readAloud(_ readOut: ReadOut) {
+        if readOut.kind == ReadOutKind.brief {
+            // The brief as MEKA's AI writes it from the facts (at most 6 s, else MEKA's own); stopped meanwhile, nothing is said.
+            guard let model else { return fail(.failed) }
+            said = ReadOutRules.shared.showing(read: readOut)
+            let gen = generation
+            Task {
+                let text = await model.briefScript()
+                guard gen == generation else { return }
+                readText(text)
+            }
+            return
+        }
         guard let text = model?.talkReadOut(readOut) else { return fail(.failed) }
         said = ReadOutRules.shared.showing(read: readOut)
+        readText(text)
+    }
+
+    private func readText(_ text: String) {
         utterance += 1
         let id = utterance
         speaker.say(text, reading: true) { [weak self] in self?.finishedSaying(id) }

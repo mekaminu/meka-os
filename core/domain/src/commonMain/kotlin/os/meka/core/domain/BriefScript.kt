@@ -68,7 +68,18 @@ object BriefScriptRules {
      * by name with why, and the smaller ones counted; what's waiting on him; habits and the week's goals; home and
      * family; three headlines; the one-liner; and the close. The weekend version drops the commute, names one focus.
      */
-    fun script(v: MorningBriefView, name: String = "Meka"): String {
+    fun script(v: MorningBriefView, name: String = "Meka"): String = (body(v, name) + tail(v)).joinToString(" ")
+
+    /**
+     * Slice 2: the brief's facts, the sentences before the news ([script] without [tail]), fitted to [MAX_CHARS]. These
+     * are what MEKA's AI rewrites ([BriefAiRules]); every name and time it may say is in them.
+     */
+    fun body(v: MorningBriefView, name: String = "Meka"): List<String> = fit(sentences(v, name))
+
+    /** The end every brief has, AI-written or not: three headlines, the one-liner and [CLOSE]. */
+    fun tail(v: MorningBriefView): List<String> = news(v.headlines) + listOf(oneLiner(v.story), CLOSE)
+
+    private fun sentences(v: MorningBriefView, name: String): List<String> {
         val s = v.story
         val out = mutableListOf<String>()
         out += "${v.greeting}, $name."
@@ -108,8 +119,7 @@ object BriefScriptRules {
         v.school?.let { out += it.spoken }
         out += s.family.map { sentence(it) }
 
-        val tail = news(v.headlines) + listOf(oneLiner(s), CLOSE)
-        return (fit(out.filter { it.isNotBlank() }) + tail).joinToString(" ")
+        return out.filter { it.isNotBlank() }
     }
 
     /**
@@ -327,7 +337,7 @@ object BriefScriptRules {
     )
 
     /** The sentences kept while they fit in [MAX_CHARS]. */
-    private fun fit(sentences: List<String>): List<String> {
+    internal fun fit(sentences: List<String>): List<String> {
         val kept = mutableListOf<String>()
         var length = 0
         for (s in sentences) {

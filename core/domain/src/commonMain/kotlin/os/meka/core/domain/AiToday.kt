@@ -15,11 +15,12 @@ object AiTodayRules {
     const val PREFIX = "MEKA's AI today"
 
     /** The groups, in the order they are said, and the server's feature names they gather. */
-    enum class Group(val label: String) { TALK("Talk"), ASK("Ask"), MESSAGES("Messages"), CALLS("Calls"), OTHER("Other") }
+    enum class Group(val label: String) { TALK("Talk"), ASK("Ask"), BRIEF("Brief"), MESSAGES("Messages"), CALLS("Calls"), OTHER("Other") }
 
     fun groupOf(feature: String): Group = when {
         feature == "ask.talk" -> Group.TALK
         feature == "ask" -> Group.ASK
+        feature == "ask.brief" -> Group.BRIEF
         feature == "extract.message" || feature == "triage.message" || feature.startsWith("digest.") -> Group.MESSAGES
         feature == "extract.callscam" -> Group.CALLS
         else -> Group.OTHER

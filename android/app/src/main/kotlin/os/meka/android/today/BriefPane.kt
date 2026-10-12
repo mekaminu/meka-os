@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
@@ -66,7 +67,6 @@ import os.meka.android.goals.Chips
 import os.meka.android.ask.MekaSpeaker
 import os.meka.core.domain.BriefDayLine
 import os.meka.core.domain.BriefHeadline
-import os.meka.core.domain.BriefScriptRules
 import os.meka.core.domain.BriefLine
 import os.meka.core.domain.DueState
 import os.meka.core.domain.MorningBriefView
@@ -104,7 +104,16 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
         val openedAt = SystemClock.elapsedRealtime()
         onDispose { core.briefClosed("Fold", SystemClock.elapsedRealtime() - openedAt) }
     }
-    fun listen() = speaker.say(BriefScriptRules.script(core.briefView.value), reading = true)
+    // Slice 2: MEKA's AI writes the brief from its facts (at most 6 s, "One moment…" on the pill), else MEKA's own.
+    var preparing by remember { mutableStateOf<Job?>(null) }
+    fun listen() {
+        preparing?.cancel()
+        preparing = scope.launch {
+            val text = core.briefScript()
+            preparing = null
+            speaker.say(text, reading = true)
+        }
+    }
     // After the wake alarm the brief reads itself once it has something to say.
     var autoRead by rememberSaveable { mutableStateOf(readAloud) }
     LaunchedEffect(autoRead, v.dateLabel) {
@@ -138,8 +147,12 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
                 // School rhythm, slice 2: "Rex: PE today".
                 v.school?.let { Text(it.text, style = MekaType.caption, color = Meka.colors.textSecondary,
                     modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = it.spoken }) }
-                ListenPill(speaking = speaker.speaking, modifier = Modifier.padding(top = MekaSpace.m)) {
-                    if (speaker.speaking) { haptics.tick(); speaker.stop() } else { haptics.light(); listen() }
+                ListenPill(speaking = speaker.speaking, preparing = preparing != null, modifier = Modifier.padding(top = MekaSpace.m)) {
+                    when {
+                        speaker.speaking -> { haptics.tick(); speaker.stop() }
+                        preparing != null -> { haptics.tick(); preparing?.cancel(); preparing = null }
+                        else -> { haptics.light(); listen() }
+                    }
                 }
             }
         }
@@ -250,15 +263,19 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false) {
  * Reduced motion: the same short cross-fade.
  */
 @Composable
-private fun ListenPill(speaking: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun ListenPill(speaking: Boolean, preparing: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val state = when { speaking -> 2; preparing -> 1; else -> 0 }
     Box(
         modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-            .semantics { stateDescription = if (speaking) "Reading the brief aloud" else "" }
-            .clickable(role = Role.Button, onClickLabel = if (speaking) "Stop reading" else "Read the brief aloud") { onClick() }
+            .semantics { stateDescription = when (state) { 2 -> "Reading the brief aloud"; 1 -> "Getting the brief ready"; else -> "" } }
+            .clickable(role = Role.Button, onClickLabel = if (state > 0) "Stop reading" else "Read the brief aloud") { onClick() }
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     ) {
-        Crossfade(targetState = speaking, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "listen") { on ->
-            Text(if (on) "■  Stop" else "▶  Listen", style = MekaType.itemMeta, color = Meka.colors.accent)
+        Crossfade(targetState = state, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "listen") { on ->
+            Text(
+                when (on) { 2 -> "■  Stop"; 1 -> "One moment…"; else -> "▶  Listen" },
+                style = MekaType.itemMeta, color = Meka.colors.accent,
+            )
         }
     }
 }

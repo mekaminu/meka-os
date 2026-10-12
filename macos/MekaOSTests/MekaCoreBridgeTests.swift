@@ -1047,6 +1047,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(BriefScriptRules.shared.clock(min: 17 * 60 + 30), "half past 5")
     }
 
+    /// A morning brief worth listening to, slice 2: the AI's brief is checked against the facts before the Mac reads it.
+    func testBriefAiCheckReachesSwift() {
+        let facts = ["Good morning, Meka.", "It's Monday 12 October.", "One thing to focus on: Renew passport, it's up next."]
+        let kept = BriefAiRules.shared.check(answer: "Good morning, Meka. It's Monday 12 October. Lunch with Priya. Renew passport is up next.", facts: facts)
+        XCTAssertEqual(kept, ["Good morning, Meka.", "It's Monday 12 October.", "Renew passport is up next."])
+        let s = BriefAiRules.shared.script(kept: kept, v: MorningBriefView.companion.EMPTY)
+        XCTAssertTrue(s?.hasSuffix(BriefScriptRules.shared.CLOSE) == true)
+        XCTAssertNil(BriefAiRules.shared.script(kept: [], v: MorningBriefView.companion.EMPTY))
+        XCTAssertEqual(BriefAiRules.shared.WAIT_MS, 6_000)
+    }
+
     /// Fold review 2026-10-09 07:26, item 7: the brief's Today rows (one left edge; a task carries its id for the tick).
     func testBriefDayLinesReachSwift() {
         let task = BriefRules.shared.dayLine(r: TomorrowRow(id: "t-milk", time: nil, title: "Buy milk", isEvent: false, detail: "Overdue"))

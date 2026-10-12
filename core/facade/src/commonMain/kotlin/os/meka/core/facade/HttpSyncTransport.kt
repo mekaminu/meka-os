@@ -129,6 +129,13 @@ interface AiApi {
         os.meka.core.wire.GoalBreakdownCodec.Response(AskCodec.Response.OFF)
 
     /**
+     * The morning brief written by MEKA's AI (`POST /v1/ai/brief-script`, slice 2): the brief's facts; the spoken text
+     * comes back unchecked ([os.meka.core.domain.BriefAiRules.check] reads it). A server without the route answers "off".
+     */
+    suspend fun briefScript(request: os.meka.core.wire.BriefScriptCodec.Request): os.meka.core.wire.BriefScriptCodec.Response =
+        os.meka.core.wire.BriefScriptCodec.Response(AskCodec.Response.OFF)
+
+    /**
      * The messages assistant (`POST /v1/ai/message-triage`): one message's text, its sender's label, the group's name when
      * it named Meka, and its time; the lane, gist, draft and proposals come back unchecked
      * ([os.meka.core.domain.MessageTriageRules.check] reads them). A server without the route answers "off".
@@ -550,6 +557,21 @@ class HttpSyncTransport(
             resp.status.value == 404 -> return os.meka.core.wire.GoalBreakdownCodec.Response(AskCodec.Response.OFF)
             resp.status.value == 403 -> return os.meka.core.wire.GoalBreakdownCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/goal-breakdown")
+        }
+        return codec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun briefScript(request: os.meka.core.wire.BriefScriptCodec.Request): os.meka.core.wire.BriefScriptCodec.Response {
+        val codec = os.meka.core.wire.BriefScriptCodec
+        val body = codec.encodeRequest(request)
+        prepare() // the AI routes require the device's signing key on the server
+        val resp = send("/v1/ai/brief-script", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/brief-script")
+            // A server without the route (older, or no AI key): the device reads its own brief.
+            resp.status.value == 404 -> return os.meka.core.wire.BriefScriptCodec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.BriefScriptCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/brief-script")
         }
         return codec.decodeResponse(resp.bodyAsText())
     }

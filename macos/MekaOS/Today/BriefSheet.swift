@@ -18,6 +18,8 @@ struct BriefSheet: View {
     @State private var openedAt = Date()
     /// Listen (Weather and a voice, slice 8): MEKA reads the brief aloud in its voice, else the Mac's own.
     @State private var speaker = MekaSpeaker()
+    /// Slice 2: MEKA's AI writing the brief from its facts (at most 6 s); "One moment…" on the button meanwhile.
+    @State private var preparing: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -36,13 +38,14 @@ struct BriefSheet: View {
                         .accessibilityLabel(school.spoken).staggeredAppear(0)
                 }
                 Button { toggleListen(v) } label: {
-                    Text(speaker.speaking ? "■  Stop" : "▶  Listen")
+                    Text(speaker.speaking ? "■  Stop" : preparing != nil ? "One moment…" : "▶  Listen")
                         .font(MekaType.itemMeta).foregroundStyle(palette.accent)
                         .contentTransition(.opacity)
                 }
                 .buttonStyle(.borderless)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: speaker.speaking)
-                .help(speaker.speaking ? "Stop reading" : "Read the brief aloud")
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: preparing != nil)
+                .help(speaker.speaking || preparing != nil ? "Stop reading" : "Read the brief aloud")
                 .accessibilityLabel(speaker.speaking ? "Stop reading the brief" : "Read the brief aloud")
                 .staggeredAppear(0)
                 ScrollView {
@@ -156,6 +159,8 @@ struct BriefSheet: View {
         .onChange(of: model.brief?.dateLabel) { readIfAsked() }
         .onChange(of: model.readBriefOnOpen) { readIfAsked() }
         .onDisappear {
+            preparing?.cancel()
+            preparing = nil
             speaker.stop()
             model.readBriefOnOpen = false // closed before the day came in: the next open stays quiet
             // Calm Today: open long enough to read counts as read, so Today's card folds away (a glance leaves it).
@@ -167,17 +172,31 @@ struct BriefSheet: View {
     private func readIfAsked() {
         guard model.readBriefOnOpen, let v = model.brief, !v.dateLabel.isEmpty else { return }
         model.readBriefOnOpen = false
-        if !speaker.speaking { speaker.say(BriefScriptRules.shared.script(v: v, name: "Meka"), reading: true) }
+        if !speaker.speaking && preparing == nil { startReading() }
     }
 
     /// Listen reads the brief aloud (light haptic); Stop ends it (tick haptic).
     private func toggleListen(_ v: MorningBriefView) {
-        if speaker.speaking {
+        if speaker.speaking || preparing != nil {
             MekaHaptics.tick()
+            preparing?.cancel()
+            preparing = nil
             speaker.stop()
         } else {
             MekaHaptics.light()
-            speaker.say(BriefScriptRules.shared.script(v: v, name: "Meka"), reading: true)
+            startReading()
+        }
+    }
+
+    /// The brief as MEKA's AI writes it from the facts (the core waits at most 6 s, else reads MEKA's own); only a
+    /// String comes back from the core. Stopped or closed meanwhile, nothing is said.
+    private func startReading() {
+        preparing?.cancel()
+        preparing = Task { @MainActor in
+            let text = await model.briefScript()
+            guard !Task.isCancelled else { return }
+            preparing = nil
+            speaker.say(text, reading: true)
         }
     }
 

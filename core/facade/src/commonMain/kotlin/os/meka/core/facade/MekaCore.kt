@@ -3281,7 +3281,63 @@ class MekaCore(
      * actor.
      */
     fun talkReadOut(read: os.meka.core.domain.ReadOut): String =
-        os.meka.core.domain.ReadOutRules.text(read, _brief.value, _newsPlace.value)
+        if (read.kind == os.meka.core.domain.ReadOut.Kind.BRIEF) briefScriptNow()
+        else os.meka.core.domain.ReadOutRules.text(read, _brief.value, _newsPlace.value)
+
+    /** The AI's checked sentences for the brief's facts last asked ([briefScript]): facts → kept (empty: fell short). */
+    private var briefAi: Pair<String, List<String>>? = null
+
+    /**
+     * "A morning brief worth listening to", slice 2: the brief as MEKA reads it, written by MEKA's AI from the brief's
+     * facts ([os.meka.core.domain.BriefAiRules]; `POST /v1/ai/brief-script`, metered `ask.brief`). One call per brief: the
+     * answer is kept for as long as the facts are the same. Only the facts are sent; the answer is checked sentence by
+     * sentence (anything naming what isn't in them is dropped) and the news, the one-liner and the close are added here.
+     * No AI, offline, no answer within [os.meka.core.domain.BriefAiRules.WAIT_MS] or too little surviving the check: the
+     * deterministic brief ([os.meka.core.domain.BriefScriptRules.script]). Never throws.
+     */
+    suspend fun briefScript(name: String = "Meka"): String {
+        val v = _brief.value
+        val fallback = os.meka.core.domain.BriefScriptRules.script(v, name)
+        if (v.dateLabel.isBlank()) return fallback
+        val rules = os.meka.core.domain.BriefAiRules
+        val facts = rules.facts(v, name)
+        if (facts.isEmpty()) return fallback
+        val key = facts.joinToString("\n")
+        briefAi?.let { (k, kept) -> if (k == key) return rules.script(kept, v) ?: fallback }
+        val api = aiApi ?: return fallback
+        val atMs = nowMs()
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(atMs)
+        val request = os.meka.core.wire.BriefScriptCodec.Request(
+            date = os.meka.core.domain.AskRules.isoDate(today),
+            now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(atMs))}",
+            weekend = v.story.weekend,
+            facts = facts,
+        )
+        val reply = (
+            try {
+                withTimeoutOrNull(rules.WAIT_MS) { api.briefScript(request) }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+            ) ?: return fallback
+        // Off, over budget or failed: read MEKA's own and ask again next time.
+        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) return fallback
+        val kept = rules.check(reply.script, facts)
+        briefAi = key to kept
+        return rules.script(kept, v) ?: fallback
+    }
+
+    /**
+     * The brief as [briefScript] last had it for today's facts, without asking (Talk's "read my brief" on the Mac's main
+     * actor): the AI's when it was kept for these facts, else the deterministic brief. Pure and cheap.
+     */
+    fun briefScriptNow(name: String = "Meka"): String {
+        val v = _brief.value
+        val fallback = os.meka.core.domain.BriefScriptRules.script(v, name)
+        val (k, kept) = briefAi ?: return fallback
+        val rules = os.meka.core.domain.BriefAiRules
+        if (k != rules.facts(v, name).joinToString("\n")) return fallback
+        return rules.script(kept, v) ?: fallback
+    }
 
     // ---- Ask MEKA (build plan V1, AI layer slice 3; ADR-006) ----
 

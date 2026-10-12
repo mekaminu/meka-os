@@ -55,6 +55,7 @@ import os.meka.core.wire.AskCodec
 import os.meka.core.wire.GoalBreakdownCodec
 import os.meka.core.wire.HandleThisCodec
 import os.meka.core.wire.MessageRequestCodec
+import os.meka.core.wire.BriefScriptCodec
 import os.meka.core.wire.GroupDigestCodec
 import os.meka.core.wire.HealthCodec
 import os.meka.core.wire.HereCodec
@@ -475,6 +476,15 @@ fun Application.mekaSync(
                 val request = GoalBreakdownCodec.decodeRequest(body)
                 val answer = withContext(Dispatchers.IO) { breakdownService.breakDown(request) }
                 call.respondText(GoalBreakdownCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+            // The morning brief written by the AI: the brief's facts out, the spoken text back. Nothing is kept or logged.
+            val briefScriptService = BriefScriptService(ai.provider)
+            post("/v1/ai/brief-script") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = BriefScriptCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { briefScriptService.write(request) }
+                call.respondText(BriefScriptCodec.encodeResponse(answer), ContentType.Application.Json)
             }
             // The messages assistant: one message (1:1, or a group message naming Meka); a lane, gist, draft or proposals
             // back. Nothing is kept or logged.

@@ -324,8 +324,17 @@ class TalkController(
      * Headlines are only ever read out, never acted on (ADR-006).
      */
     private fun readOut(read: os.meka.core.domain.ReadOut) {
-        val text = core.talkReadOut(read)
         said = os.meka.core.domain.ReadOutRules.showing(read)
+        if (read.kind != os.meka.core.domain.ReadOut.Kind.BRIEF) return readText(core.talkReadOut(read))
+        // The brief as MEKA's AI writes it from the facts (at most 6 s, else MEKA's own); stopped meanwhile, nothing is said.
+        val gen = generation
+        scope.launch {
+            val text = core.briefScript()
+            if (gen == generation) readText(text)
+        }
+    }
+
+    private fun readText(text: String) {
         val id = ++utterance
         speaker.say(text, reading = true) { finishedSaying(id) }
         listenOver()
