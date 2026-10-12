@@ -181,6 +181,10 @@ fun GoalsRoute(core: MekaCore) {
         if (view.habits.isNotEmpty()) item(key = "workouts") {
             WorkoutsSection(core, Modifier.animateItem().padding(top = MekaSpace.xl))
         }
+        // Health Connect, slice 3: a short night plans a lighter day (off by default; this phone only).
+        item(key = "sleep") {
+            SleepSection(core, Modifier.animateItem().padding(top = MekaSpace.xl))
+        }
 
         item(key = "goals-label") { SectionLabel("Goals", Modifier.padding(top = MekaSpace.xl).appear(rememberAppearance(3))) }
         // Goals, properly, item 6: last month looked back on, for the first week of a month.

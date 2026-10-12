@@ -71,4 +71,21 @@ class WorkoutTicksFacadeTest {
         c.setWorkoutsReadInBackground(false)
         assertEquals(end, ask(c.noticesNow()).atMs)
     }
+
+    @Test
+    fun aShortNightPlansALighterDayOnThisDeviceOnly() = runTest {
+        now = start - 9 * 3_600_000L // Thursday 08:15
+        val c = core()
+        repeat(8) { c.addTask("Task $it") } // 30 min each: four hours
+        assertEquals(8, c.planDay().placements.size)
+        val night = os.meka.core.domain.SleepSession(start - 18 * 3_600_000L, start - 18 * 3_600_000L + 310 * 60_000L) // 23:15 → 04:25
+        assertEquals(310, c.setSleep(listOf(night)))
+        val light = c.planDay()
+        assertEquals(6, light.placements.size)
+        assertEquals(2, light.restedOut.size)
+        assertTrue(light.keptLine!!.startsWith("☾ Short night · 5 h 10 m asleep"))
+        // Sleep switched off (nothing read): the usual plan.
+        assertEquals(null, c.setSleep(emptyList()))
+        assertEquals(8, c.planDay().placements.size)
+    }
 }

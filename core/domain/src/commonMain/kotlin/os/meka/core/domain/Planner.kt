@@ -21,6 +21,9 @@ package os.meka.core.domain
  * Protected time ([ProtectedRules.slots]: evenings and weekends Meka has protected) takes no tasks. Habit room, booked
  * sessions and kept-free blocks are his own time and are placed as before; the note under the plan says what was
  * protected, and on a wholly protected day the leftover tasks "wait for Mon 12 Oct" rather than "won't fit today".
+ *
+ * After a short night ([SleepRules.taskCap], Health Connect slice 3) at most that many minutes of tasks are planned;
+ * anything due today or overdue still goes in (and counts), the rest is "Left for a lighter day".
  */
 object DayPlanner {
     data class Prefs(
@@ -64,12 +67,22 @@ object DayPlanner {
         val protectedNote: String? = null,
         /** What the leftover tasks are called: "Won't fit today", or "Waits for Mon 12 Oct" on a protected day. */
         val waitLabel: String = WONT_FIT,
+        /** Tasks left out after a short night (they had room, but the day is lighter), in the order they'd have gone in. */
+        val restedOut: List<Task> = emptyList(),
+        /** The short night's note ([SleepRules.planNote]), or null. */
+        val restNote: String? = null,
     ) {
-        /** "Won't fit today: Send the invoice, Call the bank", or null when every task found room. */
-        val unplacedLine: String? get() = unplaced.takeIf { it.isNotEmpty() }?.let { "$waitLabel: " + it.joinToString(", ") { t -> t.title } }
+        /**
+         * "Won't fit today: Send the invoice, Call the bank", then "Left for a lighter day: …" after a short night, or
+         * null when every task found room.
+         */
+        val unplacedLine: String? get() = listOfNotNull(
+            unplaced.takeIf { it.isNotEmpty() }?.let { "$waitLabel: " + it.joinToString(", ") { t -> t.title } },
+            restedOut.takeIf { it.isNotEmpty() }?.let { "${SleepRules.LIGHTER}: " + it.joinToString(", ") { t -> t.title } },
+        ).takeIf { it.isNotEmpty() }?.joinToString("\n")
 
-        /** The note under the plan for its kept-free blocks and protected time, or null when there are none. */
-        val keptLine: String? get() = listOfNotNull(mealsLine, protectedNote).takeIf { it.isNotEmpty() }?.joinToString("\n")
+        /** The note under the plan for a short night, its kept-free blocks and protected time, or null when there are none. */
+        val keptLine: String? get() = listOfNotNull(restNote, mealsLine, protectedNote).takeIf { it.isNotEmpty() }?.joinToString("\n")
 
         private val mealsLine: String? get() {
             if (meals.isEmpty()) return null
@@ -87,7 +100,7 @@ object DayPlanner {
         /** Nothing to apply (habit blocks are shown, not applied). */
         val isEmpty: Boolean get() = placements.isEmpty()
         /** Nothing to show at all. */
-        val isBlank: Boolean get() = placements.isEmpty() && unplaced.isEmpty() && habits.isEmpty() && habitsUnplaced.isEmpty() && meals.isEmpty()
+        val isBlank: Boolean get() = placements.isEmpty() && unplaced.isEmpty() && restedOut.isEmpty() && habits.isEmpty() && habitsUnplaced.isEmpty() && meals.isEmpty()
     }
 
     private const val MIN = 60_000L
@@ -105,6 +118,8 @@ object DayPlanner {
         protected: List<Slot> = emptyList(),
         protectedNote: String? = null,
         waitLabel: String? = null,
+        taskCapMin: Int? = null,
+        restNote: String? = null,
     ): Plan {
         val g = prefs.granularityMin * MIN
         val windowStart = maxOf(day.startMs + prefs.dayStartMin * MIN, ceilTo(nowMs, day.startMs, g))
@@ -146,12 +161,18 @@ object DayPlanner {
         val taken = mutableListOf<Slot>()
         val placements = mutableListOf<Placement>()
         val unplaced = mutableListOf<Task>()
+        val restedOut = mutableListOf<Task>()
+        var planned = 0L
+        // After a short night, due-today and overdue tasks (first in [candidates]) still go in and count towards the cap.
         for (t in candidates) {
             val need = (t.estimateMinutes ?: prefs.defaultEstimateMin).coerceAtLeast(prefs.granularityMin) * MIN
+            val due = t.dueAtMs != null && t.dueAtMs < day.endMs
+            if (taskCapMin != null && !due && planned + need > taskCapMin * MIN) { restedOut += t; continue }
             val start = firstFit(free, need, day.startMs, g)
             if (start == null) { unplaced += t; continue }
             val p = Placement(t, start, start + need)
             placements += p
+            planned += need
             val slot = Slot(p.startMs, ceilTo(p.endMs, day.startMs, g))
             taken += slot
             free = subtract(free, listOf(slot))
@@ -160,6 +181,7 @@ object DayPlanner {
         return Plan(
             placements, unplaced, left, timed.sortedBy { it.startAtMs }, habitPlacements, habitsUnplaced, todaysMeals,
             protectedNote = protectedNote, waitLabel = waitLabel ?: WONT_FIT,
+            restedOut = restedOut, restNote = restNote.takeIf { taskCapMin != null },
         )
     }
 

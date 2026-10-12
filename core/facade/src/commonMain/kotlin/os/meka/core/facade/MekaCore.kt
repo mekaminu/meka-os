@@ -156,6 +156,8 @@ class MekaCore(
     private var lifeAdminWeek: os.meka.core.domain.LifeAdminSlot? = null
     /** Health Connect slice 2: this device reads workouts in the background (set by the Fold; never synced). */
     private var workoutsInBackground = false
+    /** Health Connect slice 3: the sleep sessions the Fold read (this device only, in memory, never synced or stored). */
+    private var sleepSessions: List<os.meka.core.domain.SleepSession> = emptyList()
     private val protectedTime = os.meka.core.domain.ProtectedTime(replica)
     private val leavingNow = os.meka.core.domain.LeavingNow(replica)
     private val weekAheadSettings = os.meka.core.domain.WeekAheadSettings(replica)
@@ -711,11 +713,15 @@ class MekaCore(
         val shield = protectedTime.setting()
         val schedule = work.schedule()
         val holidays = bankHolidays.calendar()
+        val slept = os.meka.core.domain.SleepRules.lastNight(sleepSessions, day.startMs)
         DayPlanner.plan(
             all, visibleEvents(all), now, day, habits = goals.plannerHabits(), meals = kept.sortedBy { it.startMs }, sessions = sessions,
             protected = protectedSlots(day.epochDay),
             protectedNote = os.meka.core.domain.ProtectedRules.planNote(shield, day.epochDay, schedule, holidays),
             waitLabel = os.meka.core.domain.ProtectedRules.waitLabel(shield, day.epochDay, schedule, holidays),
+            // Health Connect slice 3: a short night (read on the Fold only) plans a lighter day.
+            taskCapMin = os.meka.core.domain.SleepRules.taskCap(slept),
+            restNote = os.meka.core.domain.SleepRules.planNote(slept),
         )
     }
 
@@ -2402,6 +2408,16 @@ class MekaCore(
      * first. Kept on this device only (the Fold says it at start and whenever the switch or the permission changes).
      */
     suspend fun setWorkoutsReadInBackground(on: Boolean) = onCore { workoutsInBackground = on }
+
+    /**
+     * Health Connect slice 3: the sleep sessions the Fold read since yesterday evening (empty when Sleep is off). Kept
+     * in memory on this device only, never synced; Plan my day plans lighter after a short night. Returns last night's
+     * minutes asleep, or null when none was logged.
+     */
+    suspend fun setSleep(sessions: List<os.meka.core.domain.SleepSession>): Int? = onCore {
+        sleepSessions = sessions
+        os.meka.core.domain.SleepRules.lastNight(sessions, dayWindow(nowMs()).startMs)
+    }
     /** Notices as the governor would see them now (tests). */
     internal suspend fun noticesNow(): List<os.meka.core.domain.Notice> = onCore { refresh(); currentNotices() }
     /** The habits a workout could tick, for the Fold's Workouts line. */

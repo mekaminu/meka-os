@@ -50,6 +50,9 @@
     <!-- Health Connect, slice 2 (asked for separately, Goals → Workouts → Allow in the background): the same read every
          15 minutes while MEKA is closed, so a workout ticks Gym before "Did you go?". Still nothing leaves the phone. -->
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
+    <!-- Health Connect, slice 3 (off by default, Goals → Sleep): last night's sleep sessions, read on the phone when
+         Goals opens and before Plan my day plans; a short night plans a lighter day. Never leaves the phone. -->
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
 
     <!-- Talk to MEKA: see the speech recogniser and the text-to-speech engine on Android 11+ (package visibility). -->
     <queries>

@@ -32,6 +32,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -48,6 +49,7 @@ import os.meka.android.shell.SharedMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.minTouch
+import os.meka.android.goals.HealthSleep
 import os.meka.android.designsystem.MekaType
 import os.meka.core.domain.DayPlanner
 import os.meka.core.domain.PlanCalendarSetting
@@ -79,7 +81,9 @@ fun PlanPane(
     var toCalendar by remember { mutableStateOf(PlanCalendarSetting.OFF) }
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
-    LaunchedEffect(Unit) { plan = core.planDay() }
+    val context = LocalContext.current
+    // Health Connect slice 3: last night's sleep is read first (nothing when Sleep is off), so a short night plans lighter.
+    LaunchedEffect(Unit) { HealthSleep.refresh(context, core); plan = core.planDay() }
     LaunchedEffect(Unit) {
         runCatching { core.refreshCalendarAccounts() }
         toCalendar = core.planCalendarSetting()
