@@ -245,6 +245,15 @@ export class MekaStack extends cdk.Stack {
       secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
     });
 
+    // Kestrel's trading approvals (build plan V1, approved 2026-10-07): the PUBLIC half of Kestrel's P-256 key, '{}' until
+    // Meka pastes it in a supervised session. The private key stays with Kestrel; MEKA never holds a trading credential.
+    const approvalsKestrel = new secretsmanager.Secret(this, 'ApprovalsKestrel', {
+      secretName: `${prefix}/approvals/kestrel`,
+      encryptionKey: this.key,
+      description: 'MEKA OS approvals: {"public_key": "<X.509 base64>"}, the public half of Kestrel\'s request-signing key',
+      secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
+    });
+
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc, clusterName: prefix, containerInsightsV2: ecs.ContainerInsights.DISABLED });
     const task = new ecs.FargateTaskDefinition(this, 'Task', {
       cpu: 256,
@@ -271,6 +280,7 @@ export class MekaStack extends cdk.Stack {
         MEKA_VOICE_TWILIO_SECRET: voiceTwilio.secretArn,
         MEKA_MAPS_GOOGLE_SECRET: mapsGoogle.secretArn,
         MEKA_CAR_DVLA_SECRET: carDvla.secretArn,
+        MEKA_APPROVALS_KESTREL_SECRET: approvalsKestrel.secretArn,
         // MEKA's voice (build plan V1, Weather and a voice: Amazon Polly in MEKA's own account, approved 2026-10-08).
         MEKA_SPEECH_ENGINE: 'polly',
         // Callers' messages transcribed by Amazon Transcribe in MEKA's own account (call assistant polish 8d i).
@@ -303,6 +313,7 @@ export class MekaStack extends cdk.Stack {
     voiceTwilio.grantRead(task.taskRole);
     mapsGoogle.grantRead(task.taskRole);
     carDvla.grantRead(task.taskRole);
+    approvalsKestrel.grantRead(task.taskRole); // a public key only
     // MEKA's voice: turn MEKA's own reply text into speech and list the voices, nothing else (no lexicons, no S3
     // speech tasks). Polly's synthesis actions have no resource-level scoping, so the resource is '*'.
     task.taskRole.addToPrincipalPolicy(new cdk.aws_iam.PolicyStatement({

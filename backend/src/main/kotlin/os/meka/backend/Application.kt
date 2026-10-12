@@ -110,6 +110,8 @@ fun Application.mekaSync(
     deviceLink: DeviceLink? = DeviceLink(devices, verifier),
     /** Phone update failures reported by the Fold (build plan: phone updates sometimes fail to install); null leaves the routes out. */
     updateFailures: UpdateFailures? = null,
+    /** Approval requests from outside MEKA (Kestrel's trades; build plan V1); null leaves the routes out. */
+    approvals: ApprovalRoutes? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -571,6 +573,23 @@ fun Application.mekaSync(
             }
         }
 
+        if (approvals != null) {
+            // Approval requests from an asker outside MEKA (Kestrel): known by its public key alone, signing this exact
+            // request; it may call only these two routes, for the server's one household. Answers stay in the apps.
+            for (path in ApprovalDesk.ROUTES) post(path) {
+                val body = call.boundedBody()
+                val asker = call.asker(approvals, verifier, body)
+                val household = withContext(Dispatchers.IO) { devices.soleHousehold() } ?: throw Forbidden()
+                val reply = withContext(Dispatchers.IO) {
+                    if (path == ApprovalDesk.REQUEST_PATH) approvals.desk.request(household, asker, body) else approvals.desk.status(household, asker, body)
+                }
+                when (reply) {
+                    is ApprovalDesk.Reply.Ok -> call.respondText(reply.json, ContentType.Application.Json)
+                    is ApprovalDesk.Reply.Refused -> call.respondText(reply.reason, status = HttpStatusCode.fromValue(reply.status))
+                }
+            }
+        }
+
         if (voice != null) {
             // The call assistant's phone service (Twilio): form posts signed by the service over the exact public URL.
             // No device or publisher may call these; an unsigned or wrongly signed request is refused.
@@ -729,6 +748,7 @@ private fun ApplicationCall.isPublisher(): Boolean = request.header("Authorizati
 
 private fun ApplicationCall.bearer(devices: DeviceRegistry): DeviceIdentity {
     if (isPublisher()) throw Forbidden() // the release-only publisher may call nothing that takes a device
+    if (request.header("Authorization")?.startsWith("${ApprovalDesk.AUTH_SCHEME} ") == true) throw Forbidden() // nor may an asker
     val auth = request.header("Authorization") ?: throw Unauthorised()
     if (!auth.startsWith("Bearer ")) throw Unauthorised()
     return devices.authenticate(auth.removePrefix("Bearer ").trim()) ?: throw Unauthorised()
@@ -769,6 +789,19 @@ private suspend fun ApplicationCall.releaseCaller(devices: DeviceRegistry, verif
     }
     val household = withContext(Dispatchers.IO) { devices.soleHousehold() } ?: throw Forbidden()
     return DeviceIdentity(household, ReleasePublisher.ID)
+}
+
+/** An approval asker (Kestrel): its name in `Authorization: Asker <id>` and a valid signature by its registered key. */
+private suspend fun ApplicationCall.asker(routes: ApprovalRoutes, verifier: RequestVerifier, body: String): ApprovalAsker {
+    val auth = request.header("Authorization") ?: throw Unauthorised()
+    if (!auth.startsWith("${ApprovalDesk.AUTH_SCHEME} ")) throw Unauthorised()
+    val asker = routes.askers[auth.removePrefix("${ApprovalDesk.AUTH_SCHEME} ").trim()] ?: throw Unauthorised()
+    val key = withContext(Dispatchers.IO) { asker.key.publicKey() } ?: throw Forbidden()
+    val h = request.headers
+    if (!verifier.verify(key, request.httpMethod.value, request.path(), body, h["X-Meka-Time"], h["X-Meka-Nonce"], h["X-Meka-Signature"])) {
+        throw Unauthorised()
+    }
+    return asker
 }
 
 /** Reads at most MAX_BODY_BYTES + 1 bytes, so chunked bodies cannot exhaust memory. */
@@ -844,6 +877,7 @@ fun main(args: Array<String>) {
                     publisher = System.getenv("MEKA_RELEASE_PUBLISHER_SECRET")?.takeIf { it.isNotBlank() }?.let { SecretsManagerPublisherKey(it) },
                     voice = voice, newsImages = newsImages, calendarWriter = calendarWriter, ai = ai, speech = speech,
                     verifier = verifier, family = family, updateFailures = UpdateFailures(PostgresUpdateFailureStore(ds)),
+                    approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                 )
             }.start(wait = true)
         }
@@ -878,6 +912,16 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         cars = System.getenv("MEKA_CAR_DVLA_SECRET")?.takeIf { it.isNotBlank() }
             ?.let { listOf(DvlaCarLookup.fromSecret(it)).associateBy { p -> p.id } }.orEmpty(),
     )
+}
+
+/**
+ * The approval desk (Kestrel's trading approvals). Null unless the deployment names Kestrel's key secret; while it is
+ * still `{}` every asker request is refused (no public key to check signatures with).
+ */
+fun approvalsFromEnv(opStore: PostgresOpStore, onWritten: (householdId: String) -> Unit = {}): ApprovalRoutes? {
+    val secret = System.getenv("MEKA_APPROVALS_KESTREL_SECRET")?.takeIf { it.isNotBlank() } ?: return null
+    val desk = ApprovalDesk(opStore, { hh -> opStore.latestFieldOps(hh, EntityTypes.APPROVAL) }, onWritten = onWritten)
+    return ApprovalRoutes(desk, listOf(ApprovalDesk.kestrel(SecretsManagerPublisherKey(secret))))
 }
 
 /** What the devices wrote, by one indexed query per type ([PostgresOpStore.latestFields]). */

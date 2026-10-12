@@ -195,6 +195,20 @@ describe('MekaStack security and cost invariants (ADR-004)', () => {
     for (const s of grants) expect(([] as string[]).concat(s.Action).every((a) => /^secretsmanager:(GetSecretValue|DescribeSecret)$/.test(a))).toBe(true);
   });
 
+  test("Kestrel's approval requests are checked with a public key from their own secret, read-only", () => {
+    t.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'meka-os-dev/approvals/kestrel', SecretString: '{}' });
+    const secrets = t.findResources('AWS::SecretsManager::Secret');
+    const kId = Object.entries(secrets).find(([, r]: any) => r.Properties.Name === 'meka-os-dev/approvals/kestrel')![0];
+    t.hasResourceProperties('AWS::ECS::TaskDefinition', {
+      ContainerDefinitions: [Match.objectLike({ Environment: Match.arrayWith([Match.objectLike({ Name: 'MEKA_APPROVALS_KESTREL_SECRET', Value: { Ref: kId } })]) })],
+    });
+    const policies = Object.values(t.findResources('AWS::IAM::Policy')) as any[];
+    const grants = policies.flatMap((p) => p.Properties.PolicyDocument.Statement)
+      .filter((s: any) => ([] as any[]).concat(s.Resource).some((r) => r && r.Ref === kId));
+    expect(grants.length).toBeGreaterThan(0);
+    for (const s of grants) expect(([] as string[]).concat(s.Action).every((a) => /^secretsmanager:(GetSecretValue|DescribeSecret)$/.test(a))).toBe(true);
+  });
+
   test("MEKA's voice may only synthesise speech and list voices with Polly", () => {
     t.hasResourceProperties('AWS::ECS::TaskDefinition', {
       ContainerDefinitions: [Match.objectLike({ Environment: Match.arrayWith([Match.objectLike({ Name: 'MEKA_SPEECH_ENGINE', Value: 'polly' })]) })],
