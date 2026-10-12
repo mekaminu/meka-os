@@ -2691,6 +2691,9 @@ final class CoreModel {
 
     func removeBin(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeBin(id: id) } }
 
+    /// Takes back a bin one-off (slice 3): that collection goes on its usual day again; only the id String crosses.
+    func removeBinMove(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeBinMove(id: id) } }
+
     // MARK: School rhythm (slice 1)
 
     /// Adds one typed line ("INSET 27 Oct", "Rex PE Tue"); only a String crosses. Returns the line to show under the

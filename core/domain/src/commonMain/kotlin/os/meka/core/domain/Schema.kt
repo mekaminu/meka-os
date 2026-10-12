@@ -84,6 +84,8 @@ object EntityTypes {
     const val GOAL_ENTRY = "goal_entry"
     /** Bin days, slice 1 (2026-10-12): one bin and its collection pattern, "Black bin every other Tuesday" (see [Bins]). */
     const val BIN = "bin"
+    /** Bin days, slice 3 (2026-10-12): a one-off move or skip of one collection, "Black bin Sat 2 Jan instead of 29 Dec". */
+    const val BIN_MOVE = "bin_move"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -91,7 +93,7 @@ object EntityTypes {
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
-        CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN,
+        CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE,
     )
 }
 
@@ -407,6 +409,9 @@ object MekaSchema : SchemaRegistry {
         // Bins: one removed on any device is gone for good; the pattern, the latest edit wins.
         entityType == EntityTypes.BIN && field == BinFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.BIN -> MergePolicy.Lww
+        // Bin one-offs: one taken back on any device is gone for good; the day it moves to, the latest edit wins.
+        entityType == EntityTypes.BIN_MOVE && field == BinMoveFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.BIN_MOVE -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

@@ -65,4 +65,24 @@ class BinsFacadeTest {
         mac.syncNow(); fold.syncNow()
         assertEquals(listOf("Food caddy"), fold.binsView.value.rows.map { it.name })
     }
+
+    @Test
+    fun aOneOffTypedOnTheMacMovesTheFoldsCollectionAndRemoveTakesItBack() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.addBin("Food caddy every Tuesday")
+        fold.syncNow(); mac.syncNow()
+        assertEquals("Moved Food caddy to Wed 14 Oct instead of Tue 13 Oct", mac.addBin("Food caddy Wed 14 Oct instead of 13 Oct").line)
+        assertTrue(mac.addBin("Food caddy Wed 14 Oct instead of 15 Oct").refused)
+        mac.syncNow(); fold.syncNow()
+        assertEquals(listOf("Wed 14 Oct instead of Tue 13 Oct"), fold.binsView.value.oneOffs.map { it.line })
+        assertEquals("Next: Food caddy · Wed 14 Oct", fold.binsView.value.summary)
+        val wed = fold.weekAheadView.value.days.first { it.label.startsWith("Wed") }
+        assertEquals(listOf("Food caddy · moved from Tue 13 Oct"), wed.lines.filter { it.kind == WeekAheadKind.BINS }.map { it.text })
+
+        assertTrue(fold.removeBinMove(fold.binsView.value.oneOffs.single().id))
+        fold.syncNow(); mac.syncNow()
+        assertTrue(mac.binsView.value.oneOffs.isEmpty())
+        assertEquals("Next: Food caddy · Tue 13 Oct", mac.binsView.value.summary)
+    }
 }

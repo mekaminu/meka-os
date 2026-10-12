@@ -51,7 +51,8 @@ import os.meka.core.facade.MekaCore
 /**
  * Ask → More → Bins (bin days, slice 1): each bin typed once with its day — "Black bin Tue fortnightly from 13 Oct",
  * "Food caddy every Tuesday" — a row per bin with its pattern and next collection (a day later after a bank holiday),
- * each with Remove. The evening before, Today says "Black bin and food caddy out tonight" and a heads-up comes at 19:00.
+ * each with Remove. Slice 3: one-offs typed in the same field ("Black bin Sat 2 Jan instead of 29 Dec", "No black bin
+ * 29 Dec") list under ONE-OFFS, each with Remove (the collection goes on its usual day again). The evening before, Today says "Black bin and food caddy out tonight" and a heads-up comes at 19:00.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and the line under the field
  * cross-fade (a refused line lit in the accent); rows stagger in 40 ms apart and arrive, move and leave with the list's
@@ -111,6 +112,18 @@ fun BinsPane(core: MekaCore, onClose: () -> Unit) {
                 scope.launch { runCatching { core.removeBin(r.id) } }
             }
         }
+        // Slice 3: the one-offs still to come ("Sat 2 Jan instead of Wed 30 Dec"), each with Remove to take it back.
+        if (v.oneOffs.isNotEmpty()) {
+            item(key = "one-offs") {
+                SectionLabel("ONE-OFFS", Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+        }
+        itemsIndexed(v.oneOffs, key = { _, r -> "move-${r.id}" }) { i, r ->
+            BinRowView(r, Modifier.animateItem().appear(rememberAppearance(4 + v.rows.size + i)), "Remove the one-off for ${r.name}, ${r.line}") {
+                haptics.tick()
+                scope.launch { runCatching { core.removeBinMove(r.id) } }
+            }
+        }
         item(key = "council") {
             Text(BinRules.COUNCIL, style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
@@ -119,7 +132,7 @@ fun BinsPane(core: MekaCore, onClose: () -> Unit) {
 }
 
 @Composable
-private fun BinRowView(row: BinRow, modifier: Modifier, onRemove: () -> Unit) {
+private fun BinRowView(row: BinRow, modifier: Modifier, removeLabel: String = "Remove ${row.name}", onRemove: () -> Unit) {
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
@@ -136,7 +149,7 @@ private fun BinRowView(row: BinRow, modifier: Modifier, onRemove: () -> Unit) {
             "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onRemove)
-                .semantics { contentDescription = "Remove ${row.name}" }
+                .semantics { contentDescription = removeLabel }
                 .padding(MekaSpace.xs),
         )
     }

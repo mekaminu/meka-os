@@ -1918,10 +1918,16 @@ class MekaCore(
      * [os.meka.core.domain.BinRules.read]); a bin already there by name is updated. Refused (nothing written) when
      * MEKA couldn't read a day or a bin in it.
      */
-    suspend fun addBin(text: String): os.meka.core.domain.BinAdded = onCore { bins.add(text) }
+    suspend fun addBin(text: String): os.meka.core.domain.BinAdded = onCore { bins.add(text, bankHolidays.calendar()) }
 
     /** Removes a bin for good. */
     suspend fun removeBin(id: String): Boolean = onCore { bins.remove(id) }
+
+    /**
+     * Bin days, slice 3: takes back a one-off ("Black bin Sat 2 Jan instead of 29 Dec", typed through [addBin]), so
+     * that collection goes on its usual day again. Its id is a row's in [os.meka.core.domain.BinsView.oneOffs].
+     */
+    suspend fun removeBinMove(id: String): Boolean = onCore { bins.removeMove(id) }
 
     // ---- School rhythm (V1, slice 1; Ask → More → School, and Needs you's cover questions) ----
 

@@ -90,6 +90,7 @@ object DataExport {
         EntityTypes.GOAL_MILESTONE to ("goal milestone" to "goal milestones"),
         EntityTypes.GOAL_ENTRY to ("goal update" to "goal updates"),
         EntityTypes.BIN to ("bin" to "bins"),
+        EntityTypes.BIN_MOVE to ("bin one-off" to "bin one-offs"),
         EntityTypes.AGENT_ACTION to ("activity entry" to "activity entries"),
     )
 
@@ -97,7 +98,7 @@ object DataExport {
     private val SUMMARY_ORDER = listOf(
         EntityTypes.TASK, EntityTypes.CHECKLIST_ITEM, EntityTypes.EVENT, EntityTypes.COMMITMENT, EntityTypes.DECISION,
         EntityTypes.OBLIGATION, EntityTypes.GOAL, EntityTypes.HABIT, EntityTypes.HABIT_COMPLETION, EntityTypes.FAST,
-        EntityTypes.SHOPPING_ITEM, EntityTypes.SCHOOL_ITEM, EntityTypes.MEAL, EntityTypes.MEAL_DAY, EntityTypes.EMERGENCY_ENTRY, EntityTypes.WIN, EntityTypes.QUEUE_ITEM, EntityTypes.LEAVE, EntityTypes.LIFE_FACT, EntityTypes.ERRAND, EntityTypes.APPOINTMENT, EntityTypes.CHECKLIST_TEMPLATE, EntityTypes.GOAL_MILESTONE, EntityTypes.GOAL_ENTRY, EntityTypes.BIN, EntityTypes.AGENT_ACTION,
+        EntityTypes.SHOPPING_ITEM, EntityTypes.SCHOOL_ITEM, EntityTypes.MEAL, EntityTypes.MEAL_DAY, EntityTypes.EMERGENCY_ENTRY, EntityTypes.WIN, EntityTypes.QUEUE_ITEM, EntityTypes.LEAVE, EntityTypes.LIFE_FACT, EntityTypes.ERRAND, EntityTypes.APPOINTMENT, EntityTypes.CHECKLIST_TEMPLATE, EntityTypes.GOAL_MILESTONE, EntityTypes.GOAL_ENTRY, EntityTypes.BIN, EntityTypes.BIN_MOVE, EntityTypes.AGENT_ACTION,
     )
 
     fun summary(data: ExportData): ExportSummary {

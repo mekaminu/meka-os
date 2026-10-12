@@ -3,7 +3,9 @@ import SwiftUI
 
 /// Ask → More → Bins on the Mac (bin days, slice 1), like the Fold's BinsPane: each bin typed once with its day
 /// ("Black bin Tue fortnightly from 13 Oct", "Food caddy every Tuesday"), a row per bin with its pattern and next
-/// collection (a day later after a bank holiday), each with Remove. Only Strings cross to the core.
+/// collection (a day later after a bank holiday), each with Remove. Slice 3: one-offs typed in the same field ("Black
+/// bin Sat 2 Jan instead of 29 Dec", "No black bin 29 Dec") list under ONE-OFFS, each with Remove. Only Strings cross
+/// to the core.
 ///
 /// Motion: the sheet scale-fades (system); the summary and the line under the field cross-fade (a refused line lit in
 /// the accent); rows stagger in and arrive or leave on the expand spring; Add gives a light haptic (a tick when
@@ -20,6 +22,7 @@ struct BinsSheet: View {
     var body: some View {
         let v = model.bins
         let rows = v?.rows ?? []
+        let oneOffs = v?.oneOffs ?? []
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Bins").font(MekaType.upNextTitle).staggeredAppear(0)
             Text(v?.summary ?? BinRules.shared.EMPTY_LINE).font(MekaType.body).foregroundStyle(palette.textSecondary)
@@ -57,8 +60,20 @@ struct BinsSheet: View {
                             .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                             .staggeredAppear(4 + i)
                     }
+                    // Slice 3: the one-offs still to come, each with Remove (the collection goes on its usual day again).
+                    if !oneOffs.isEmpty {
+                        Text("ONE-OFFS")
+                            .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                            .foregroundStyle(palette.textTertiary)
+                            .padding(.top, MekaSpace.m)
+                    }
+                    ForEach(Array(oneOffs.enumerated()), id: \.element.id) { i, row in
+                        BinRowView(row: row, palette: palette) { model.removeBinMove(row.id) }
+                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                            .staggeredAppear(4 + rows.count + i)
+                    }
                 }
-                .animation(MekaMotion.expand(reduced: reduceMotion), value: rows.map(\.id))
+                .animation(MekaMotion.expand(reduced: reduceMotion), value: rows.map(\.id) + oneOffs.map(\.id))
             }
             .frame(maxHeight: 320)
             Text(BinRules.shared.COUNCIL).font(MekaType.caption).foregroundStyle(palette.textTertiary)

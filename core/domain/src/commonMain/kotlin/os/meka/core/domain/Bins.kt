@@ -27,11 +27,33 @@ object BinFields {
     const val DELETED = ActionableFields.DELETED
 }
 
+/**
+ * Slice 3 (2026-10-12): a one-off change to one collection, typed in Bins — "Black bin Sat 2 Jan instead of 29 Dec"
+ * (moved) or "No black bin 29 Dec" (skipped). One synced `bin_move` entity per bin and week (ADR-008 addendum
+ * 2026-10-12); [FROM] is the day the pattern would have collected (after any bank-holiday shift).
+ */
+object BinMoveFields {
+    const val BIN = "binId"
+    const val FROM = "fromDay"
+    /** The day it goes instead; equal to [FROM] when [SKIPPED]. */
+    const val TO = "toDay"
+    const val SKIPPED = "skipped"
+    const val ADDED_AT = "addedAtMs"
+    const val DELETED = ActionableFields.DELETED
+}
+
+/** One stored one-off: the bin's collection on [fromDay] goes on [toDay] instead, or not at all (null). */
+data class BinMove(val id: String, val binId: String, val fromDay: Long, val toDay: Long?)
+
 /** What one typed line says ([BinRules.read]). [dated] is false when a fortnightly bin's week was guessed (no date typed). */
 data class BinEntry(val name: String, val weekday: Int, val everyWeeks: Int, val anchorDay: Long, val dated: Boolean = true)
 
 /** One stored bin. */
-data class BinItem(val id: String, val name: String, val weekday: Int, val everyWeeks: Int, val anchorDay: Long, val addedAtMs: Long)
+data class BinItem(
+    val id: String, val name: String, val weekday: Int, val everyWeeks: Int, val anchorDay: Long, val addedAtMs: Long,
+    /** One-off moves (slice 3), any order. */
+    val moves: List<BinMove> = emptyList(),
+)
 
 /** A row in the Bins pane: "Black bin" · "Every other Tuesday" · "Next: Tue 13 Oct" (or "Tomorrow · a day later for the bank holiday"). */
 data class BinRow(val id: String, val name: String, val line: String, val note: String?, val spoken: String)
@@ -43,6 +65,8 @@ data class BinsView(
     val rows: List<BinRow>,
     /** "Next: Black bin and food caddy · Tue 13 Oct", or the empty line. */
     val summary: String,
+    /** Slice 3: the one-offs still to come, soonest first: "Black bin" · "Sat 2 Jan instead of Wed 30 Dec" (Remove takes it back). */
+    val oneOffs: List<BinRow> = emptyList(),
 ) {
     val isEmpty: Boolean get() = rows.isEmpty()
 
@@ -64,7 +88,10 @@ object BinRules {
     const val EMPTY_LINE = "Nothing entered yet. Type each bin once with its day, and for every-other-week bins the date of one collection."
     const val NOT_READ = "MEKA couldn't read that. Try \"Black bin Tue fortnightly from 13 Oct\" or \"Food caddy every Tuesday\"."
     const val SHIFT_NOTE = "a day later for the bank holiday"
-    const val COUNCIL = "Typed by you. Central Bedfordshire's own collection days can fill this later; Christmas weeks may differ, so check the council's dates then."
+    const val COUNCIL = "Typed by you. Christmas weeks: type a one-off, \"Black bin Sat 2 Jan instead of 29 Dec\" or \"No black bin 29 Dec\". Central Bedfordshire's own collection days can fill this later."
+    /** A one-off moves a collection at most this many days either way. */
+    const val MOVE_MAX_DAYS = 14
+    private val SKIP_WORDS = setOf("no", "skip", "skipped", "cancelled", "canceled", "none", "not")
 
     private val DAY_WORDS = mapOf(
         "mon" to 1, "monday" to 1, "mondays" to 1, "tue" to 2, "tues" to 2, "tuesday" to 2, "tuesdays" to 2,
@@ -142,6 +169,94 @@ object BinRules {
 
     private fun Map<String, FieldValue>.f(field: String): FieldValue = this[field] ?: FieldValue.Null
 
+    /** What a one-off line (slice 3) says: which bins, the collection it changes, and where it goes (null: no collection). */
+    sealed interface MoveRead {
+        /** Not a one-off: read it as a bin's pattern. */
+        data object NotAMove : MoveRead
+        data class Refused(val line: String) : MoveRead
+        data class Move(val bins: List<BinItem>, val fromDays: List<Long>, val toDay: Long?) : MoveRead
+    }
+
+    const val MOVE_NOT_READ = "MEKA couldn't read that one-off. Try \"Black bin Sat 2 Jan instead of 29 Dec\" or \"No black bin 29 Dec\"."
+
+    private val MOVE_FILLER = FILLER + setOf("instead", "moved", "move", "moves", "to", "collection", "bin's", "bins", "this", "time", "only", "once", "one", "off", "oneoff")
+
+    /** The bins a one-off names ("Black bin and food caddy", "black"), or null for a name no bin has; empty when it names none. */
+    private fun namedBins(words: List<String>, bins: List<BinItem>): List<BinItem>? {
+        val groups = mutableListOf(mutableListOf<String>())
+        for (w in words) if (w.lowercase() == "and" || w == "&") groups += mutableListOf<String>() else groups.last() += w
+        val out = mutableListOf<BinItem>()
+        for (g in groups) {
+            val kept = g.filter { it.lowercase() !in MOVE_FILLER && it.lowercase() !in SKIP_WORDS && it.lowercase() !in DAY_WORDS }
+            if (kept.isEmpty()) continue
+            val name = tidyName(kept.joinToString(" "))
+            out += bins.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: return null
+        }
+        return out.distinct()
+    }
+
+    /**
+     * A one-off typed in Bins (slice 3): "Black bin Sat 2 Jan instead of 29 Dec" moves one collection, "No black bin
+     * 29 Dec" (or "skip", "cancelled") drops one; with no bin named, every bin collected that day. The old day must be
+     * one of the bin's collections (the pattern's day or its bank-holiday day); a move goes at most [MOVE_MAX_DAYS]
+     * either way. Anything else is [MoveRead.NotAMove] and read as a pattern.
+     */
+    fun readMove(text: String, today: Long, bins: List<BinItem>, holidays: HolidayCalendar): MoveRead {
+        val s = SchoolRules.tidy(text)
+        val lowerAll = words(s).map { it.lowercase() }
+        val at = s.lowercase().indexOf("instead of")
+        val skip = at < 0 && (lowerAll.any { it in SKIP_WORDS } || "no collection" in s.lowercase())
+        if (at < 0 && !skip) return MoveRead.NotAMove
+        val toDay: Long?
+        val fromDay: Long
+        val nameText: String
+        if (at >= 0) {
+            val left = SchoolRules.findSpan(s.substring(0, at), today)
+            val right = SchoolRules.findSpan(s.substring(at + "instead of".length), today)
+            if (left !is SpanFound.Days || right !is SpanFound.Days || left.startDay != left.endDay || right.startDay != right.endDay) {
+                return MoveRead.Refused(MOVE_NOT_READ)
+            }
+            toDay = left.startDay; fromDay = right.startDay
+            nameText = left.rest + " " + right.rest
+        } else {
+            val found = SchoolRules.findSpan(s, today)
+            if (found !is SpanFound.Days || found.startDay != found.endDay) return MoveRead.Refused(MOVE_NOT_READ)
+            toDay = null; fromDay = found.startDay; nameText = found.rest
+        }
+        if (toDay != null && (toDay == fromDay || kotlin.math.abs(toDay - fromDay) > MOVE_MAX_DAYS)) {
+            return MoveRead.Refused("A one-off moves a collection to another day up to two weeks either way.")
+        }
+        val named = namedBins(words(nameText), bins)
+            ?: return MoveRead.Refused("No bin by that name yet. Your bins: ${bins.joinToString(", ") { it.name }.ifEmpty { "none" }}.")
+        val wk = monday(fromDay)
+        fun scheduled(b: BinItem): Long? = collectionIn(b, wk, holidays)?.takeIf { it == fromDay || wk + b.weekday - 1 == fromDay }
+        val chosen = named.ifEmpty { bins.filter { scheduled(it) != null } }
+        if (chosen.isEmpty()) return MoveRead.Refused("No bin is collected on ${CivilDate.shortLabel(fromDay)}.")
+        for (b in chosen) {
+            if (scheduled(b) == null) {
+                val near = next(b.copy(moves = emptyList()), wk, holidays)
+                return MoveRead.Refused("${b.name} isn't collected on ${CivilDate.shortLabel(fromDay)}" +
+                    (near?.let { " · that week's is ${CivilDate.shortLabel(it)}" } ?: "") + ".")
+            }
+        }
+        return MoveRead.Move(chosen, chosen.map { scheduled(it)!! }, toDay)
+    }
+
+    /** "Moved Black bin to Sat 2 Jan instead of Wed 30 Dec" / "No collection for black bin on Tue 29 Dec". */
+    fun movedLine(bins: List<BinItem>, fromDay: Long, toDay: Long?): String =
+        toDay?.let { "Moved ${names(bins)} to ${CivilDate.shortLabel(it)} instead of ${CivilDate.shortLabel(fromDay)}" }
+            ?: "No collection for ${names(bins).replaceFirstChar { it.lowercase() }} on ${CivilDate.shortLabel(fromDay)}"
+
+    /** The one-offs from each `bin_move` entity's fields, by bin; removed and unreadable ones are skipped. */
+    fun moves(entities: Map<String, Map<String, FieldValue>>): Map<String, List<BinMove>> = entities.mapNotNull { (id, f) ->
+        if (f.f(BinMoveFields.DELETED).boolOrNull == true) return@mapNotNull null
+        val bin = f.f(BinMoveFields.BIN).textOrNull ?: return@mapNotNull null
+        val from = f.f(BinMoveFields.FROM).longOrNull ?: return@mapNotNull null
+        val skipped = f.f(BinMoveFields.SKIPPED).boolOrNull == true
+        val to = if (skipped) null else f.f(BinMoveFields.TO).longOrNull ?: return@mapNotNull null
+        BinMove(id, bin, from, to)
+    }.sortedBy { it.id }.groupBy { it.binId }
+
     /** The live bins from each entity's fields; unreadable ones are skipped. */
     fun items(entities: Map<String, Map<String, FieldValue>>): List<BinItem> = entities.mapNotNull { (id, s) ->
         if (s.f(BinFields.DELETED).boolOrNull == true) return@mapNotNull null
@@ -178,22 +293,61 @@ object BinRules {
         return minOf(scheduled + shift, weekMonday + 5)
     }
 
+    /** The collection the pattern makes in [weekMonday]'s week (as [collectionIn]) and the one-off that changes it, if any. */
+    private fun moveFor(bin: BinItem, weekMonday: Long, scheduled: Long): BinMove? =
+        bin.moves.firstOrNull { it.fromDay == scheduled || it.fromDay == weekMonday + bin.weekday - 1 }
+
+    /**
+     * Every collection of [bin] from [from] to [to] (both counted), soonest first: the pattern with its bank-holiday
+     * shifts, then the one-offs (slice 3) moving or dropping single collections.
+     */
+    fun collections(bin: BinItem, from: Long, to: Long, holidays: HolidayCalendar): List<Long> {
+        val out = mutableSetOf<Long>()
+        var wk = monday(from - MOVE_MAX_DAYS)
+        val last = to + MOVE_MAX_DAYS
+        while (wk <= last) {
+            val s = collectionIn(bin, wk, holidays)
+            if (s != null) {
+                val move = moveFor(bin, wk, s)
+                val day = if (move != null) move.toDay else s
+                if (day != null && day in from..to) out += day
+            }
+            wk += 7
+        }
+        return out.sorted()
+    }
+
+    /** What's unusual about [bin]'s collection on [day]: "moved from Tue 29 Dec", the bank-holiday note, or null. */
+    fun note(bin: BinItem, day: Long): String? {
+        bin.moves.firstOrNull { it.toDay == day && it.fromDay != day }?.let { return "moved from ${CivilDate.shortLabel(it.fromDay)}" }
+        return if (shifted(bin, day)) SHIFT_NOTE else null
+    }
+
+    /** The notes of the bins going on [day], " · " first; empty when none. */
+    private fun notes(going: List<BinItem>, day: Long): String =
+        going.mapNotNull { note(it, day) }.distinct().joinToString(" · ").let { if (it.isEmpty()) "" else " · $it" }
+
     /** Whether the bin's collection that week was moved by a bank holiday. */
     fun shifted(bin: BinItem, day: Long): Boolean = CivilDate.isoDayOfWeek(day) != bin.weekday
 
     /** The bin's next collection from [from] on (today counts). */
-    fun next(bin: BinItem, from: Long, holidays: HolidayCalendar): Long? {
-        var wk = monday(from)
-        repeat(6) {
-            collectionIn(bin, wk, holidays)?.let { if (it >= from) return it }
-            wk += 7
-        }
-        return null
-    }
+    fun next(bin: BinItem, from: Long, holidays: HolidayCalendar): Long? = collections(bin, from, from + 42, holidays).firstOrNull()
 
     /** The bins collected on [day], in the order entered. */
     fun onDay(bins: List<BinItem>, day: Long, holidays: HolidayCalendar): List<BinItem> =
-        bins.filter { collectionIn(it, monday(day), holidays) == day }
+        bins.filter { day in collections(it, day, day, holidays) }
+
+    /**
+     * Bins whose usual collection on [day] a one-off moved or dropped (slice 3), with what happened:
+     * "Black bin moved to Sat 2 Jan", "No black bin collection".
+     */
+    fun heldBack(bins: List<BinItem>, day: Long, holidays: HolidayCalendar): List<Pair<BinItem, String>> = bins.mapNotNull { b ->
+        val wk = monday(day)
+        val s = collectionIn(b, wk, holidays)?.takeIf { it == day } ?: return@mapNotNull null
+        val m = moveFor(b, wk, s) ?: return@mapNotNull null
+        if (m.toDay == day) return@mapNotNull null
+        b to (m.toDay?.let { "${b.name} moved to ${CivilDate.shortLabel(it)}" } ?: "No ${b.name.replaceFirstChar { it.lowercase() }} collection")
+    }
 
     /** "Black bin", "Black bin and food caddy", "Black bin, blue bin and food caddy" (later names lower-cased). */
     fun names(bins: List<BinItem>): String {
@@ -217,28 +371,48 @@ object BinRules {
         if (bins.isEmpty()) return BinsView.EMPTY
         val rows = bins.map { b ->
             val next = next(b, today, holidays)
-            val note = next?.let { "Next: ${dayWord(it, today)}" + if (shifted(b, it)) " · $SHIFT_NOTE" else "" }
+            val note = next?.let { "Next: ${dayWord(it, today)}" + (note(b, it)?.let { n -> " · $n" } ?: "") }
             val line = patternLabel(b)
             BinRow(b.id, b.name, line, note, listOfNotNull(b.name, line, note).joinToString(". "))
         }
         val firstDay = bins.mapNotNull { next(it, today, holidays) }.minOrNull()
         val summary = firstDay?.let { "Next: ${names(onDay(bins, it, holidays))} · ${dayWord(it, today)}" } ?: EMPTY_LINE
-        return BinsView(rows, summary)
+        return BinsView(rows, summary, oneOffRows(bins, today))
     }
+
+    /** "Sat 2 Jan instead of Wed 30 Dec" / "No collection on Tue 29 Dec". */
+    fun moveLabel(m: BinMove): String =
+        m.toDay?.let { "${CivilDate.shortLabel(it)} instead of ${CivilDate.shortLabel(m.fromDay)}" } ?: "No collection on ${CivilDate.shortLabel(m.fromDay)}"
+
+    /** The one-offs not yet past, soonest first (by the day they change). */
+    fun oneOffRows(bins: List<BinItem>, today: Long): List<BinRow> = bins.flatMap { b -> b.moves.map { b to it } }
+        .filter { (_, m) -> maxOf(m.fromDay, m.toDay ?: m.fromDay) >= today }
+        .sortedWith(compareBy<Pair<BinItem, BinMove>> { it.second.fromDay }.thenBy { it.first.name.lowercase() })
+        .map { (b, m) -> BinRow(m.id, b.name, moveLabel(m), null, "${b.name}. One-off. ${moveLabel(m)}") }
 
     /** Today's header the evening before (from [EVE_FROM_MIN]): "Black bin and food caddy out tonight"; null otherwise. */
     fun tonightLine(bins: List<BinItem>, today: Long, minuteOfDay: Int, holidays: HolidayCalendar): BinLine? {
         if (minuteOfDay < EVE_FROM_MIN) return null
-        val going = onDay(bins, today + 1, holidays).takeIf { it.isNotEmpty() } ?: return null
-        val late = going.any { shifted(it, today + 1) }
-        val text = "${names(going)} out tonight" + if (late) " · $SHIFT_NOTE" else ""
-        return BinLine(text, "${names(going)} ${if (going.size == 1) "goes" else "go"} out tonight" + if (late) ", $SHIFT_NOTE." else ".")
+        val going = onDay(bins, today + 1, holidays)
+        val held = heldBack(bins, today + 1, holidays).map { it.second }
+        if (going.isEmpty()) {
+            // Slice 3: the usual collection tomorrow was moved or dropped, so nothing goes out by habit.
+            if (held.isEmpty()) return null
+            val text = held.joinToString(" · ") + " · not out tonight"
+            return BinLine(text, held.joinToString(". ") + ". Nothing goes out tonight.")
+        }
+        val extra = notes(going, today + 1)
+        val heldText = held.joinToString("") { " · ${it.replaceFirstChar { c -> c.lowercase() }}" }
+        val text = "${names(going)} out tonight$extra$heldText"
+        val spokenExtra = (if (extra.isEmpty()) "" else ", ${extra.removePrefix(" · ").replace(" · ", ", ")}") +
+            held.joinToString("") { ". $it" }
+        return BinLine(text, "${names(going)} ${if (going.size == 1) "goes" else "go"} out tonight$spokenExtra.")
     }
 
     /** The week ahead's line on a collection day: "Black bin and food caddy" (with the bank-holiday note). */
     fun weekLine(bins: List<BinItem>, day: Long, holidays: HolidayCalendar): String? {
         val going = onDay(bins, day, holidays).takeIf { it.isNotEmpty() } ?: return null
-        return names(going) + if (going.any { shifted(it, day) }) " · $SHIFT_NOTE" else ""
+        return names(going) + notes(going, day)
     }
 
     /**
@@ -251,11 +425,10 @@ object BinRules {
         val today = cal.epochDayOf(nowMs)
         return (today..today + 7).mapNotNull { day ->
             val going = onDay(bins, day, holidays).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-            val late = going.any { shifted(it, day) }
             Notice(
                 key = "bins:$day", source = NoticeSource.BINS, tier = NoticeTier.HEADS_UP,
                 title = "${names(going)} out tonight",
-                text = "Collected tomorrow, ${CivilDate.shortLabel(day)}" + if (late) " · $SHIFT_NOTE" else "",
+                text = "Collected tomorrow, ${CivilDate.shortLabel(day)}" + notes(going, day),
                 atMs = cal.toEpochMs(day - 1, NOTICE_MIN), target = NoticeTarget.TODAY,
                 expiresAtMs = cal.toEpochMs(day, STALE_MIN),
             )
@@ -294,7 +467,7 @@ object BinRules {
             val then = next?.let { next(b, it + 1, holidays) }
             listOfNotNull(
                 b.name, patternLabel(b).replaceFirstChar { it.lowercase() },
-                next?.let { "next ${dated(it, today)}" + if (shifted(b, it)) " · $SHIFT_NOTE" else "" },
+                next?.let { "next ${dated(it, today)}" + (note(b, it)?.let { n -> " · $n" } ?: "") },
                 then?.let { "then ${CivilDate.shortLabel(it)}" },
             ).joinToString(" · ")
         }
@@ -302,10 +475,13 @@ object BinRules {
             .flatten().distinct().sorted().take(ASK_DAYS)
         val collections = days.map { day ->
             val going = onDay(bins, day, holidays)
-            "Collection · ${dated(day, today)} · ${names(going)} · out the evening before" +
-                if (going.any { shifted(it, day) }) " · $SHIFT_NOTE" else ""
+            "Collection · ${dated(day, today)} · ${names(going)} · out the evening before" + notes(going, day)
         }
-        return listOf(head) + each + collections
+        val oneOffs = bins.flatMap { b -> b.moves.map { b to it } }
+            .filter { (_, m) -> maxOf(m.fromDay, m.toDay ?: m.fromDay) >= today }
+            .sortedBy { it.second.fromDay }.take(ASK_DAYS)
+            .map { (b, m) -> "One-off · ${b.name} · ${moveLabel(m)}" }
+        return listOf(head) + each + collections + oneOffs
     }
 
     /** The line after adding:"Added Black bin · every other Tuesday · next Tue 13 Oct" (and the week check when guessed). */
@@ -324,15 +500,40 @@ class Bins(
     private val nowMs: () -> Long,
     private val calendar: LocalCalendar = LocalCalendar.UTC,
 ) {
-    fun items(): List<BinItem> = BinRules.items(replica.entities(EntityTypes.BIN).associate { it.ref.entityId to it.fields })
+    fun items(): List<BinItem> {
+        val moves = BinRules.moves(replica.entities(EntityTypes.BIN_MOVE).associate { it.ref.entityId to it.fields })
+        return BinRules.items(replica.entities(EntityTypes.BIN).associate { it.ref.entityId to it.fields })
+            .map { b -> moves[b.id]?.let { b.copy(moves = it) } ?: b }
+    }
 
     fun view(holidays: HolidayCalendar): BinsView = BinRules.view(items(), calendar.epochDayOf(nowMs()), holidays)
 
     /** Adds (or, for a bin already there by name, updates) what [text] says; refused when MEKA couldn't read it. */
-    fun add(text: String): BinAdded {
+    fun add(text: String, holidays: HolidayCalendar = HolidayCalendar.NONE): BinAdded {
         val today = calendar.epochDayOf(nowMs())
+        val bins = items()
+        when (val m = BinRules.readMove(text, today, bins, holidays)) {
+            BinRules.MoveRead.NotAMove -> Unit
+            is BinRules.MoveRead.Refused -> return BinAdded(m.line, refused = true)
+            is BinRules.MoveRead.Move -> {
+                m.bins.forEachIndexed { i, b ->
+                    val from = m.fromDays[i]
+                    // The same bin and day again changes that one-off rather than adding a second.
+                    val id = b.moves.firstOrNull { it.fromDay == from }?.id ?: newId()
+                    replica.commitLocal(EntityTypes.BIN_MOVE, id, mapOf(
+                        BinMoveFields.BIN to b.id.fv(),
+                        BinMoveFields.FROM to from.fv(),
+                        BinMoveFields.TO to (m.toDay ?: from).fv(),
+                        BinMoveFields.SKIPPED to (m.toDay == null).fv(),
+                        BinMoveFields.ADDED_AT to nowMs().fv(),
+                        BinMoveFields.DELETED to false.fv(),
+                    ))
+                }
+                return BinAdded(BinRules.movedLine(m.bins, m.fromDays.first(), m.toDay), refused = false)
+            }
+        }
         val e = BinRules.read(text, today) ?: return BinAdded(BinRules.NOT_READ, refused = true)
-        val existing = items().firstOrNull { it.name.equals(e.name, ignoreCase = true) }
+        val existing = bins.firstOrNull { it.name.equals(e.name, ignoreCase = true) }
         val id = existing?.id ?: newId()
         val fields = BinRules.fields(e, nowMs()).let { f -> if (existing != null) f - BinFields.ADDED_AT else f }
         replica.commitLocal(EntityTypes.BIN, id, fields)
@@ -343,6 +544,13 @@ class Bins(
     fun remove(id: String): Boolean {
         replica.entity(EntityTypes.BIN, id)?.takeIf { it[BinFields.DELETED].boolOrNull != true } ?: return false
         replica.commitLocal(EntityTypes.BIN, id, mapOf(BinFields.DELETED to true.fv()))
+        return true
+    }
+
+    /** Takes back a one-off (slice 3): the collection goes on its usual day again. False when it isn't there. */
+    fun removeMove(id: String): Boolean {
+        replica.entity(EntityTypes.BIN_MOVE, id)?.takeIf { it[BinMoveFields.DELETED].boolOrNull != true } ?: return false
+        replica.commitLocal(EntityTypes.BIN_MOVE, id, mapOf(BinMoveFields.DELETED to true.fv()))
         return true
     }
 }

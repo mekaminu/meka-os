@@ -142,4 +142,48 @@ class BinsTest {
             "Collection · Sat 2 Jan (next week) · Green bin · out the evening before · ${BinRules.SHIFT_NOTE}",
         ), BinRules.askLines(friday, d(12, 21), christmas))
     }
+
+    @Test
+    fun christmasOneOffsMoveOrDropOneCollectionEverywhereThePatternShows() {
+        world.clock.nowMs = cal.toEpochMs(d(12, 21), 10 * 60) // Mon 21 Dec
+        bFold.add("Black bin Tue fortnightly from 12 Jan", christmas) // 29 Dec is a black bin week
+        bFold.add("Food caddy every Tuesday", christmas)
+        // Boxing Day's Monday puts Tuesday's on Wednesday 30th; the council says Saturday 2 Jan instead.
+        assertEquals(BinAdded("Moved Black bin to Sat 2 Jan instead of Wed 30 Dec", false),
+            bFold.add("Black bin Sat 2 Jan instead of 29 Dec", christmas))
+        assertEquals(BinAdded("No collection for food caddy on Wed 30 Dec", false), bFold.add("No food caddy 30 Dec", christmas))
+        // Refused: a day the bin doesn't go, a bin that isn't there, too far, nothing readable.
+        assertTrue(bFold.add("Black bin Sat 9 Jan instead of 5 Jan", christmas).line.startsWith("Black bin isn't collected on Tue 5 Jan"))
+        assertTrue(bFold.add("Green bin Sat 2 Jan instead of 29 Dec", christmas).line.startsWith("No bin by that name"))
+        assertTrue(bFold.add("Black bin 30 Jan instead of 29 Dec", christmas).refused)
+        assertTrue(bFold.add("Black bin moved instead of Tuesday", christmas).refused)
+        sync()
+
+        val bins = bMac.items()
+        val today = d(12, 21)
+        assertEquals(listOf(d(1, 2, 2027), d(1, 12, 2027)), BinRules.collections(bins[0], today, d(1, 14, 2027), christmas))
+        assertEquals(listOf(d(12, 22), d(1, 5, 2027), d(1, 12, 2027)), BinRules.collections(bins[1], today, d(1, 14, 2027), christmas))
+        assertEquals(emptyList(), BinRules.onDay(bins, d(12, 30), christmas))
+        assertEquals("Black bin · moved from Wed 30 Dec", BinRules.weekLine(bins, d(1, 2, 2027), christmas))
+        // Tuesday evening: nothing out by habit; Friday evening: the black bin.
+        assertEquals("Black bin moved to Sat 2 Jan · No food caddy collection · not out tonight",
+            BinRules.tonightLine(bins, d(12, 29), 18 * 60, christmas)?.text)
+        assertEquals("Black bin out tonight · moved from Wed 30 Dec", BinRules.tonightLine(bins, d(1, 1, 2027), 18 * 60, christmas)?.text)
+        val v = bMac.view(christmas)
+        assertEquals(listOf("Next: Sat 2 Jan · moved from Wed 30 Dec", "Next: Tomorrow"), v.rows.map { it.note })
+        assertEquals(listOf("Sat 2 Jan instead of Wed 30 Dec", "No collection on Wed 30 Dec"), v.oneOffs.map { it.line })
+        assertTrue("One-off · Black bin · Sat 2 Jan instead of Wed 30 Dec" in BinRules.askLines(bins, today, christmas))
+
+        // Typing it again changes the same one-off; Remove takes it back and the pattern returns.
+        bMac.add("Black bin Thu 31 Dec instead of 30 Dec", christmas)
+        sync()
+        assertEquals(listOf("Thu 31 Dec instead of Wed 30 Dec", "No collection on Wed 30 Dec"), bFold.view(christmas).oneOffs.map { it.line })
+        val caddyMove = bFold.view(christmas).oneOffs[1].id
+        assertTrue(bFold.removeMove(caddyMove))
+        assertFalse(bFold.removeMove(caddyMove))
+        sync()
+        assertEquals(listOf("Food caddy"), BinRules.onDay(bMac.items(), d(12, 30), christmas).map { it.name })
+        // Past one-offs leave the list.
+        assertTrue(BinRules.oneOffRows(bMac.items(), d(1, 1, 2027)).isEmpty())
+    }
 }

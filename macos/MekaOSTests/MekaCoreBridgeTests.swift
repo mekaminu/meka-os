@@ -2052,6 +2052,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         let removed = try await core.removeBin(id: rows[0].id)
         XCTAssertTrue(removed.boolValue)
         XCTAssertTrue(core.binsView.value.rows.isEmpty)
+        // Slice 3: a one-off reaches the sheet's ONE-OFFS rows and the collection's note; Remove sends only the id.
+        let tue13 = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 13)
+        let move = BinMove(id: "m", binId: "b", fromDay: tue13, toDay: KotlinLong(longLong: tue13 + 1))
+        let caddy = BinItem(id: "b", name: "Food caddy", weekday: 2, everyWeeks: 1, anchorDay: tue13, addedAtMs: 0, moves: [move])
+        XCTAssertEqual(rules.oneOffRows(bins: [caddy], today: sat).map(\.line), ["Wed 14 Oct instead of Tue 13 Oct"])
+        XCTAssertEqual(rules.note(bin: caddy, day: tue13 + 1), "moved from Tue 13 Oct")
+        XCTAssertTrue(core.binsView.value.oneOffs.isEmpty)
+        let gone = try await core.removeBinMove(id: "nope")
+        XCTAssertFalse(gone.boolValue)
     }
 
     func testSchoolReachesSwift() {
