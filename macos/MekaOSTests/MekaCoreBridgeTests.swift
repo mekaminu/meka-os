@@ -1559,6 +1559,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(CarRules.shared.registrationError(text: "ab12 cde"))
         XCTAssertEqual(CarRules.shared.LABEL, "Car")
         XCTAssertEqual(RenewalRules.shared.kindLabel(k: .carService), "Car service")
+        // Slice 2: without the DVLA's answer there is no DVLA line and nothing to offer.
+        XCTAssertNil(view.dvlaLine)
+        XCTAssertNil(view.historyLine)
+        XCTAssertNil(view.rows[0].dvlaOffer)
+        XCTAssertEqual(CarCheckRules.shared.ENTITY_ID, "car_check")
     }
 
     func testRenewalDoneFromAskReachesSwift() {

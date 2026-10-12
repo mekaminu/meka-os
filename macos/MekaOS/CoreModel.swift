@@ -1091,6 +1091,12 @@ final class CoreModel {
         return nil
     }
 
+    /// Car slice 2: moves the radar's MOT or tax date to the DVLA's day (only on this tap). Only a String crosses.
+    func useDvlaDate(_ presetId: String) {
+        MekaHaptics.light()
+        run { _ = try await $0.useDvlaDate(presetId: presetId) }
+    }
+
     /// Adds one of the car's dates to the radar (light haptic); [opened] gets the new row's id so the sheet can unfold
     /// it for the real date. Only a String crosses each way.
     func addCarDate(_ presetId: String, opened: @escaping @MainActor (String) -> Void) {

@@ -31,6 +31,11 @@ import os.meka.core.domain.WorkPlaceStore
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.EventMarkFields
 import os.meka.core.domain.TravelRules
+import os.meka.core.domain.CarCheck
+import os.meka.core.domain.CarCheckFields
+import os.meka.core.domain.CarCheckRules
+import os.meka.core.domain.CarFields
+import os.meka.core.domain.CarRules
 import os.meka.core.sync.EntityRef
 import os.meka.core.sync.EntitySnapshot
 import os.meka.core.sync.Hlc
@@ -82,6 +87,8 @@ class Integrations(
     private val travel: Map<String, TravelProvider> = emptyMap(),
     /** The local calendar the football's evening before and kick-off are judged in. */
     private val calendar: os.meka.core.domain.LocalCalendar = os.meka.backend.LondonCalendar,
+    /** The car's MOT and tax from the DVLA (car on autopilot, slice 2; off until the DVLA keys are pasted). */
+    private val cars: Map<String, CarLookupProvider> = emptyMap(),
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -206,7 +213,8 @@ class Integrations(
     /** Every household follows the default feeds (owner's stated MVP need). Idempotent. */
     fun ensureFeeds() {
         val all = feeds.values.map { it.id to it.label } + news.values.map { it.id to it.source } + holidays.values.map { it.id to it.label } +
-            weather.values.map { it.id to it.label } + lines.values.map { it.id to it.label } + travel.values.map { it.id to it.label }
+            weather.values.map { it.id to it.label } + lines.values.map { it.id to it.label } + travel.values.map { it.id to it.label } +
+            cars.values.map { it.id to it.label }
         for (hh in store.households()) for ((id, label) in all) {
             if (store.accounts(hh).none { it.provider == id }) {
                 store.transaction { store.upsertAccount(hh, id, label, ByteArray(0)) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) } }
@@ -228,6 +236,7 @@ class Integrations(
         weather[a.provider]?.let { source -> return syncWeather(a, source) }
         lines[a.provider]?.let { source -> return syncLines(a, source) }
         travel[a.provider]?.let { source -> return syncTravel(a, source) }
+        cars[a.provider]?.let { source -> return syncCar(a, source) }
         val p = providers[a.provider] ?: return
         val client = clients.get(a.provider) ?: return
         val ctx = context(a.householdId, a.provider)
@@ -449,6 +458,76 @@ class Integrations(
             if (count >= TravelRules.MAX_PER_DAY) return false
             travelDay = day to count + 1
             return true
+        }
+    }
+
+    /** When each car feed last asked the DVLA (account id → ms), and lookups made today (London day → count). */
+    private val carAsked = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private var carDay: Pair<Long, Int> = 0L to 0
+
+    /**
+     * The car's MOT and tax (car on autopilot, slice 2): every [CAR_PERIOD_MS] the stored registration
+     * (`context_mode/car`) is compared with the last answer (`context_mode/car_check`); when the registration changed or
+     * the answer is a day old ([CarCheckRules.due]) the DVLA is asked (only the registration is sent) and the answer
+     * written into `car_check`, waking the devices when more than the checked time changed. A failed look is tried
+     * again after [CarCheckRules.RETRY_MS]; at most [CAR_MAX_PER_DAY] looks a day. Without the keys the feed is
+     * [CarCheckRules.STATUS_OFF] and nothing is read or sent.
+     */
+    private fun syncCar(a: AccountRow, source: CarLookupProvider) {
+        if (!runCatching { source.configured() }.getOrDefault(false)) {
+            if (a.status != CarCheckRules.STATUS_OFF) store.transaction { store.markError(a.id, CarCheckRules.STATUS_OFF, "no keys") }
+            return
+        }
+        val last = a.lastSyncAtMs
+        if (a.status == "ok" && last != null && now() - last < CAR_PERIOD_MS) return
+        val asked = carAsked[a.id]
+        if (a.status == "error" && asked != null && now() - asked < CarCheckRules.RETRY_MS) return
+        try {
+            val wrote = carPass(a, source)
+            store.transaction { store.markSynced(a.id, now()) }
+            if (wrote) runCatching { onChanged(a.householdId) }
+        } catch (e: Exception) {
+            store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
+            throw e
+        }
+    }
+
+    /** One look for [a]'s household; returns whether the answer changed (beyond the checked time). */
+    internal fun carPass(a: AccountRow, source: CarLookupProvider): Boolean {
+        val hh = a.householdId
+        val reg = (reader.entity(hh, EntityTypes.CONTEXT_MODE, CarRules.ENTITY_ID)?.get(CarFields.REGISTRATION) as? FieldValue.Text)?.value
+            ?.takeIf { CarRules.registrationError(it) == null }?.let { CarRules.normalise(it) }
+        val current = CarCheckRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, CarCheckRules.ENTITY_ID))
+        if (!CarCheckRules.due(reg, current, now())) return false
+        if (!takeCarLookup()) return false
+        carAsked[a.id] = now()
+        val answer = source.lookup(reg!!, now())
+        return applyCar(a, answer)
+    }
+
+    private fun takeCarLookup(): Boolean {
+        synchronized(this) {
+            val day = calendar.epochDayOf(now())
+            val (d, n) = carDay
+            val count = if (d == day) n else 0
+            if (count >= CAR_MAX_PER_DAY) return false
+            carDay = day to count + 1
+            return true
+        }
+    }
+
+    /** Writes the DVLA's answer into `context_mode/car_check`; returns whether more than the checked time changed. */
+    internal fun applyCar(a: AccountRow, answer: CarCheck): Boolean = store.transaction {
+        ops.transaction {
+            store.lockAccount(a.id)
+            val prev = store.mirror(a.householdId, a.id)[CarCheckRules.ENTITY_ID]
+            val desired = CarCheckRules.fields(answer)
+            val changed = desired.any { (field, value) ->
+                field != CarCheckFields.CHECKED && prev?.fieldOps?.get(field)?.second != valueKey(value) &&
+                    !(value == FieldValue.Null && prev?.fieldOps?.get(field) == null)
+            }
+            write(a, CarCheckRules.ENTITY_ID, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
+            changed
         }
     }
 
@@ -696,6 +775,9 @@ class Integrations(
         const val LINES_PERIOD_MS = 4 * 60_000L
         const val LINES_FROM_HOUR = 5
         const val LINES_TO_HOUR = 23
+        /** The car: a look at the registration every 10 minutes (the DVLA is asked only when [CarCheckRules.due]). */
+        const val CAR_PERIOD_MS = 10 * 60_000L
+        const val CAR_MAX_PER_DAY = 20
         /** Drive times: a look every 10 minutes (only due fixtures are asked about), at most 3 lookups a pass. */
         const val TRAVEL_PERIOD_MS = 10 * 60_000L
         const val TRAVEL_PER_PASS = 3

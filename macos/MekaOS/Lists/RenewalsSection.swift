@@ -87,7 +87,7 @@ private struct UpkeepRowView: View {
 
 /// Car on autopilot (V1, slice 1): the registration (typed once; Return saves it) and the car's four dates, each with
 /// Add like the home jobs; adding one unfolds its new row so the real date can be set. Reminders come four weeks and a
-/// week before.
+/// week before. Slice 2: the DVLA's line and MOT history, and "Use the DVLA's date" when the radar's date differs.
 private struct CarDetails: View {
     @Environment(CoreModel.self) private var model
     let car: CarView
@@ -105,6 +105,13 @@ private struct CarDetails: View {
                 if problem == nil { reg = "" }
             }
         if let problem { Text(problem).font(MekaType.caption).foregroundStyle(palette.critical) }
+        // Slice 2: what the DVLA says (MEKA's server asks once a day).
+        if let dvla = car.dvlaLine {
+            Text(dvla).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: true), value: dvla)
+        }
+        if let history = car.historyLine { Text(history).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
         ForEach(car.rows, id: \.presetId) { row in
             HStack(alignment: .center, spacing: MekaSpace.m) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -118,6 +125,9 @@ private struct CarDetails: View {
                 Spacer(minLength: 0)
                 if !row.tracked {
                     Button("Add") { model.addCarDate(row.presetId) { id in open = id } }
+                } else if row.dvlaOffer != nil {
+                    // The radar's date differs from the DVLA's; never changed without this click.
+                    Button("Use the DVLA's date") { model.useDvlaDate(row.presetId) }
                 }
             }
         }

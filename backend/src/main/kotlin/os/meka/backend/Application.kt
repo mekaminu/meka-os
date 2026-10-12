@@ -24,6 +24,7 @@ import io.ktor.server.response.header
 import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.get
 import os.meka.backend.integrations.BbcNewsRss
+import os.meka.backend.integrations.DvlaCarLookup
 import os.meka.backend.integrations.CalendarWriter
 import os.meka.backend.integrations.EntityReader
 import os.meka.backend.integrations.PublicNewsFeeds
@@ -828,6 +829,9 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         // Weekend football, slice 2b: off (and nothing sent) until Meka pastes the Google key into the secret.
         travel = System.getenv("MEKA_MAPS_GOOGLE_SECRET")?.takeIf { it.isNotBlank() }
             ?.let { listOf(GoogleRoutes.fromSecret(it)).associateBy { p -> p.id } }.orEmpty(),
+        // Car on autopilot, slice 2: off (and nothing sent) until Meka pastes the DVLA keys into the secret.
+        cars = System.getenv("MEKA_CAR_DVLA_SECRET")?.takeIf { it.isNotBlank() }
+            ?.let { listOf(DvlaCarLookup.fromSecret(it)).associateBy { p -> p.id } }.orEmpty(),
     )
 }
 

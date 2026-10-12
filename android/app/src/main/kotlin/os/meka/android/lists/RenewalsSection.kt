@@ -112,7 +112,8 @@ private const val CAR = "car"
  * Car on autopilot (V1, slice 1): one row like Home upkeep that unfolds in place into the registration (typed once,
  * Done saves it) and the car's four dates. Add (light haptic) puts one on the radar with a placeholder date and opens
  * its new row so the real date can be set; reminders come four weeks and a week before. Its line cross-fades to
- * "On the radar · due …" like the home jobs'.
+ * "On the radar · due …" like the home jobs'. Slice 2: the DVLA's line and the MOT history under the registration, the
+ * DVLA's day on the MOT and tax lines, and "Use the DVLA's date" when the radar's date differs.
  */
 private fun LazyListScope.car(
     v: CarView, open: String?, toggle: (String) -> Unit, core: MekaCore,
@@ -126,8 +127,18 @@ private fun LazyListScope.car(
                 if (regError == null) { tap(); act { core.setCarRegistration(text) } }
             }
             regError?.let { Text(it, style = MekaType.caption, color = Meka.colors.critical) }
+            // Slice 2: what the DVLA says (MEKA's server asks once a day), cross-fading as a new answer arrives.
+            AnimatedContent(v.dvlaLine to v.historyLine, transitionSpec = { fadeIn(MekaMotion.appear(true)) togetherWith fadeOut(MekaMotion.appear(true)) }, label = "car-dvla") { (dvla, history) ->
+                Column {
+                    dvla?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
+                    history?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                }
+            }
             v.rows.forEach { row ->
-                UpkeepLine(row.title, row.line, row.note, row.tracked) { tap(); act { core.addCarDate(row.presetId)?.let { id -> toggle(id) } } }
+                UpkeepLine(
+                    row.title, row.line, row.note, row.tracked,
+                    use = row.dvlaOffer?.let { { tap(); act { core.useDvlaDate(row.presetId) } } },
+                ) { tap(); act { core.addCarDate(row.presetId)?.let { id -> toggle(id) } } }
             }
         }
     }
@@ -138,7 +149,7 @@ private fun UpkeepRowView(row: UpkeepRow, add: () -> Unit) = UpkeepLine(row.titl
 
 /** One suggested job or car date: title, its line (cross-fades once added) and what it covers, with Add until tracked. */
 @Composable
-private fun UpkeepLine(title: String, line: String, note: String, tracked: Boolean, add: () -> Unit) {
+private fun UpkeepLine(title: String, line: String, note: String, tracked: Boolean, use: (() -> Unit)? = null, add: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MekaType.body, color = Meka.colors.textPrimary)
@@ -148,6 +159,8 @@ private fun UpkeepLine(title: String, line: String, note: String, tracked: Boole
             Text(note, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         if (!tracked) Action("Add") { add() }
+        // Car slice 2: the radar's date differs from the DVLA's; never changed without this tap.
+        else if (use != null) Action("Use the DVLA's date") { use() }
     }
 }
 

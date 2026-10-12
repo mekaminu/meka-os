@@ -12,9 +12,9 @@ import os.meka.core.sync.fv
  * own Repeats (every 6 months or every year).
  *
  * The registration lives on one `context_mode` entity, id [CarRules.ENTITY_ID] (ADR-008 addendum 2026-10-12): field
- * `registration`, LWW. A later slice has MEKA's server read the MOT due date and history (DVLA's MOT History API) and
- * the tax status (the Vehicle Enquiry Service) for it, once Meka has the free keys (Needs Meka #26). Non-AI, pure:
- * nothing here leaves the device.
+ * `registration`, LWW. Slice 2 ([CarCheck]) has MEKA's server read the MOT due date and history (DVLA's MOT History
+ * API) and the tax status (the Vehicle Enquiry Service) for it, once Meka has the free keys (Needs Meka #26). Non-AI,
+ * pure: nothing here leaves the device.
  */
 object CarFields {
     /** The registration as Meka typed it, normalised: upper case, no spaces ("AB12CDE"). */
@@ -42,6 +42,10 @@ data class CarRow(
     val line: String,
     /** The radar item that is this one, or null while it isn't tracked. */
     val trackedId: String?,
+    /** The DVLA's day for it (MOT and tax, slice 2), or null. */
+    val dvlaDay: Long? = null,
+    /** "Use the DVLA's date · Thu 12 Nov" when the radar's date differs from the DVLA's; null otherwise. */
+    val dvlaOffer: String? = null,
 ) {
     val tracked: Boolean get() = trackedId != null
 }
@@ -52,6 +56,10 @@ data class CarView(
     val rows: List<CarRow>,
     /** "AB12 CDE · 2 of 4 on the radar", "MOT, tax, insurance and service · type the registration once". */
     val summary: String,
+    /** "DVLA · Ford · MOT due Thu 12 Nov · taxed until Tue 1 Dec · checked today" (slice 2), or null. */
+    val dvlaLine: String? = null,
+    /** "MOT history · passed 3 Nov 2025 · 2 advisories", or null. */
+    val historyLine: String? = null,
 ) {
     val trackedCount: Int get() = rows.count { it.tracked }
 
@@ -73,9 +81,11 @@ object CarRules {
     const val WEEK_DAYS = 7
     /** Each reminder at 09:00 on its day. */
     const val NOTICE_MIN = 9 * 60
-    /** A new item's placeholder date, days ahead (Meka sets the real one: only he knows it until the DVLA lookup). */
+    /** A new item's placeholder date, days ahead (Meka sets the real one), unless the DVLA's answer has it. */
     const val PLACEHOLDER_DAYS = 30
     const val MAX_REG = 8
+    /** A DVLA day further than this from today is not used for a new item (it is still shown). */
+    const val DVLA_DAYS_MAX = 3 * 366L
 
     val PRESETS: List<CarPreset> = listOf(
         CarPreset(
@@ -134,15 +144,29 @@ object CarRules {
         } else reg
 
     /** The car's rows against what is on the radar ([items]: every live renewal), with the stored [registration]. */
-    fun view(registration: String?, items: List<RenewalItem>): CarView {
+    fun view(registration: String?, items: List<RenewalItem>): CarView = view(registration, items, null, 0, null)
+
+    /**
+     * The same with the DVLA's answer ([check], slice 2): its line and the MOT history under the summary; the MOT and tax
+     * rows say the DVLA's day, and a tracked one whose radar date differs offers it ([CarRow.dvlaOffer]).
+     */
+    fun view(registration: String?, items: List<RenewalItem>, check: CarCheck?, today: Long, cal: LocalCalendar?): CarView {
         val reg = registration?.let(::display)
+        val k = CarCheckRules.forRegistration(check, registration)
         val used = mutableSetOf<String>()
         val rows = PRESETS.map { p ->
             val item = items.sortedBy { it.dueDay }.firstOrNull { it.id !in used && matches(p, it) }
             item?.let { used += it.id }
-            val line = if (item != null) "On the radar · ${item.meta}"
-            else "${RenewalRules.repeatLabel(p.repeat)} · reminders a month and a week before · you set the date"
-            CarRow(p.id, p.title, p.note, line, item?.id)
+            val dvla = CarCheckRules.dayFor(p.id, k)
+            val differs = item != null && dvla != null && dvla != item.dueDay
+            val line = when {
+                item != null && differs -> "On the radar · ${item.meta} · the DVLA says ${CarCheckRules.dayLabel(dvla!!, today)}"
+                item != null -> "On the radar · ${item.meta}"
+                dvla != null -> "DVLA: due ${CarCheckRules.dayLabel(dvla, today)} · reminders a month and a week before"
+                else -> "${RenewalRules.repeatLabel(p.repeat)} · reminders a month and a week before · you set the date"
+            }
+            val offer = if (differs) "Use the DVLA's date · ${CarCheckRules.dayLabel(dvla!!, today)}" else null
+            CarRow(p.id, p.title, p.note, line, item?.id, dvla, offer)
         }
         val n = rows.count { it.tracked }
         val count = when (n) {
@@ -154,7 +178,11 @@ object CarRules {
             reg == null && n == 0 -> "MOT, tax, insurance and service · type the registration once"
             else -> "${reg ?: "Your car"} · $count"
         }
-        return CarView(reg, rows, summary)
+        return CarView(
+            reg, rows, summary,
+            dvlaLine = CarCheckRules.line(k, registration, today, cal),
+            historyLine = k?.takeIf { it.found }?.let(CarCheckRules::historyLine),
+        )
     }
 
     /**
@@ -220,11 +248,14 @@ class Car(private val replica: Replica) {
  * Adds one of the car's dates to the radar (refused when it is already there) with its repeat, the reminders' lead
  * (shown 4 weeks before), the registration as its subject and a placeholder date a month ahead for Meka to set.
  */
-fun Renewals.addCarDate(presetId: String, today: Long, registration: String?): String {
+fun Renewals.addCarDate(presetId: String, today: Long, registration: String?, check: CarCheck? = null): String {
     val p = CarRules.preset(presetId) ?: throw ValidationException("That isn't one of the car's dates")
     if (items().any { CarRules.matches(p, it) }) throw ValidationException("“${p.title}” is already on the radar")
+    // The DVLA's day when its answer is for this registration and the day is a sensible one (slice 2).
+    val dvla = CarCheckRules.dayFor(p.id, CarCheckRules.forRegistration(check, registration))
+        ?.takeIf { kotlin.math.abs(it - today) <= CarRules.DVLA_DAYS_MAX }
     return add(
-        p.title, p.kind, today + CarRules.PLACEHOLDER_DAYS, p.repeat,
+        p.title, p.kind, dvla ?: (today + CarRules.PLACEHOLDER_DAYS), p.repeat,
         subject = registration?.let(CarRules::display), leadDays = CarRules.MONTH_DAYS,
     )
 }

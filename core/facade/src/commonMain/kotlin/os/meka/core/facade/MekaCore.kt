@@ -1585,8 +1585,26 @@ class MekaCore(
      * there or isn't one (never throws).
      */
     suspend fun addCarDate(presetId: String): String? = onCore {
-        try { renewals.addCarDate(presetId, todayEpochDay(), car.registration()) } catch (_: os.meka.core.domain.ValidationException) { null }
+        try { renewals.addCarDate(presetId, todayEpochDay(), car.registration(), carCheck()) } catch (_: os.meka.core.domain.ValidationException) { null }
     }
+
+    /**
+     * Car on autopilot, slice 2: moves the radar's MOT or tax date ([presetId] "mot" / "tax") to the DVLA's day (the Car
+     * row's "Use the DVLA's date"). Only on Meka's tap; false when there is no DVLA day, no such date on the radar, or
+     * it already matches. Never throws.
+     */
+    suspend fun useDvlaDate(presetId: String): Boolean = onCore {
+        val p = os.meka.core.domain.CarRules.preset(presetId) ?: return@onCore false
+        val check = os.meka.core.domain.CarCheckRules.forRegistration(carCheck(), car.registration())
+        val day = os.meka.core.domain.CarCheckRules.dayFor(p.id, check) ?: return@onCore false
+        val item = renewals.items().sortedBy { it.dueDay }.firstOrNull { os.meka.core.domain.CarRules.matches(p, it) } ?: return@onCore false
+        if (item.dueDay == day) return@onCore false
+        try { renewals.setDue(item.id, day); true } catch (_: os.meka.core.domain.ValidationException) { false }
+    }
+
+    /** What MEKA's server last heard from the DVLA (slice 2), or null. */
+    private fun carCheck(): os.meka.core.domain.CarCheck? =
+        os.meka.core.domain.CarCheckRules.read(replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.CarCheckRules.ENTITY_ID)?.fields)
 
     // ---- Shopping (family sharing, slice 1; Lists → Shopping) ----
 
@@ -4141,7 +4159,7 @@ class MekaCore(
         _approvals.value = approvalStore.cards()
         _school.value = school.view(hoursOf(workState, todayDay))
         _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays)
-        _car.value = os.meka.core.domain.CarRules.view(car.registration(), listsNow.renewals.all)
+        _car.value = os.meka.core.domain.CarRules.view(car.registration(), listsNow.renewals.all, carCheck(), todayDay, cal)
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         _triage.value = triageCards.open()
         _groupGists.value = gistStore.open()

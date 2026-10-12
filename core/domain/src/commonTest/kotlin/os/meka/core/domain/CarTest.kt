@@ -99,4 +99,53 @@ class CarTest {
         r.add("Netflix", ObligationKind.SUBSCRIPTION, due, RenewalRepeat.MONTHLY)
         assertEquals(1, on(due - 7).size)
     }
+
+    @Test
+    fun theDvlasAnswerShowsFillsANewDateAndOffersItsDayWhenTheRadarDiffers() {
+        at(2026, 10, 12)
+        val now = world.clock.nowMs
+        val mot = CivilDate.toEpochDay(2026, 11, 2)
+        val tax = CivilDate.toEpochDay(2026, 12, 1)
+        val check = CarCheck(
+            "AB12CDE", found = true, make = "FORD", motDueDay = mot, taxStatus = "Taxed", taxDueDay = tax,
+            lastTestDay = CivilDate.toEpochDay(2025, 11, 3), lastPassed = true, advisories = 2, checkedMs = now,
+        )
+        // Written and read back as the server writes it.
+        assertEquals(check, CarCheckRules.read(CarCheckRules.fields(check)))
+        assertNull(CarCheckRules.read(emptyMap()))
+        assertTrue(CarCheckRules.due("AB12CDE", null, now))
+        assertFalse(CarCheckRules.due("AB12CDE", check, now + 3_600_000L))
+        assertTrue(CarCheckRules.due("AB12CDE", check, now + CarCheckRules.PERIOD_MS))
+        assertTrue(CarCheckRules.due("XY99ZZZ", check, now))
+        assertFalse(CarCheckRules.due(null, check, now))
+
+        val cal = LocalCalendar.UTC
+        var v = CarRules.view("AB12CDE", r.items(), check, today(), cal)
+        assertEquals("DVLA · Ford · MOT due Mon 2 Nov · taxed until Tue 1 Dec · checked today", v.dvlaLine)
+        assertEquals("MOT history · passed 3 Nov 2025 · 2 advisories", v.historyLine)
+        assertEquals("DVLA: due Mon 2 Nov · reminders a month and a week before", v.rows[0].line)
+        assertEquals(tax, v.rows[1].dvlaDay)
+        assertNull(v.rows[2].dvlaDay)
+        // An answer for another plate is ignored.
+        assertNull(CarRules.view("XY99ZZZ", r.items(), check, today(), cal).dvlaLine)
+
+        // Adding the MOT takes the DVLA's day, not the placeholder.
+        val id = r.addCarDate("mot", today(), "AB12CDE", check)
+        assertEquals(mot, r.items().single { it.id == id }.dueDay)
+        v = CarRules.view("AB12CDE", r.items(), check, today(), cal)
+        assertNull(v.rows[0].dvlaOffer)
+        // Meka typed another day: the row says the DVLA's and offers it.
+        r.setDue(id, mot + 3)
+        v = CarRules.view("AB12CDE", r.items(), check, today(), cal)
+        assertEquals("Use the DVLA's date · Mon 2 Nov", v.rows[0].dvlaOffer)
+        assertTrue(v.rows[0].line.endsWith("· the DVLA says Mon 2 Nov"))
+
+        // Not known to the DVLA; untaxed; a failed test; a date next year.
+        assertEquals("DVLA has no vehicle AB12 CDE · check the registration", CarCheckRules.line(CarCheck("AB12CDE", found = false), "AB12CDE", today()))
+        val untaxed = check.copy(taxStatus = "Untaxed", taxDueDay = CivilDate.toEpochDay(2026, 8, 1), lastPassed = false, advisories = 0)
+        assertEquals("untaxed · tax was due Sat 1 Aug", CarCheckRules.taxLine(untaxed, today()))
+        assertNull(CarCheckRules.dayFor("tax", untaxed))
+        assertEquals("MOT history · failed 3 Nov 2025", CarCheckRules.historyLine(untaxed))
+        assertEquals("Tue 2 Nov 2027", CarCheckRules.dayLabel(CivilDate.toEpochDay(2027, 11, 2), today()))
+    }
 }

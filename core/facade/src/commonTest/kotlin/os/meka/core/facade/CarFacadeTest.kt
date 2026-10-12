@@ -60,4 +60,43 @@ class CarFacadeTest {
         mac.tick()
         assertTrue(mac.weekAheadView.value.days.flatMap { it.lines }.any { it.kind == WeekAheadKind.DUE && it.text.startsWith("MOT due") })
     }
+
+    @Test
+    fun theDvlasAnswerFromTheServerFillsTheMotAndOffersItsDayOnBothApps() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.setCarRegistration("AB12 CDE"))
+        fold.syncNow()
+        // MEKA's server writes the DVLA's answer (slice 2) as server ops.
+        val server = os.meka.core.sync.Replica(
+            "hh", "server", os.meka.core.sync.HlcClock("server", { now }), InMemoryReplicaStore(), os.meka.core.domain.MekaSchema,
+        ) { "s" + (n++) }
+        val mot = os.meka.core.domain.CivilDate.toEpochDay(2026, 11, 2)
+        val check = os.meka.core.domain.CarCheck(
+            "AB12CDE", found = true, make = "FORD", motDueDay = mot, taxStatus = "Taxed",
+            taxDueDay = os.meka.core.domain.CivilDate.toEpochDay(2026, 12, 1),
+            lastTestDay = os.meka.core.domain.CivilDate.toEpochDay(2025, 11, 3), lastPassed = true, advisories = 2, checkedMs = now,
+        )
+        ops.transaction {
+            server.commitLocal(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.CarCheckRules.ENTITY_ID, os.meka.core.domain.CarCheckRules.fields(check))
+                .forEach { ops.append(it) }
+        }
+        fold.syncNow(); mac.syncNow()
+        assertEquals("DVLA · Ford · MOT due Mon 2 Nov · taxed until Tue 1 Dec · checked today", mac.carView.value.dvlaLine)
+        assertEquals("MOT history · passed 3 Nov 2025 · 2 advisories", fold.carView.value.historyLine)
+
+        // Add takes the DVLA's day; a different day typed later is offered back, and one tap puts it right.
+        val id = fold.addCarDate("mot")!!
+        assertEquals(mot, fold.listsView.value.renewals.all.single { it.id == id }.dueDay)
+        assertFalse(fold.useDvlaDate("mot"))
+        fold.setRenewalDue(id, mot + 5)
+        fold.syncNow(); mac.syncNow()
+        assertEquals("Use the DVLA's date · Mon 2 Nov", mac.carView.value.rows.first().dvlaOffer)
+        assertTrue(mac.useDvlaDate("mot"))
+        assertEquals(mot, mac.listsView.value.renewals.all.single { it.id == id }.dueDay)
+        assertNull(mac.carView.value.rows.first().dvlaOffer)
+        assertFalse(mac.useDvlaDate("insurance"))
+    }
+
+    private var n = 0
 }

@@ -20,6 +20,7 @@ object CalendarAccountRules {
         "weather" -> "Weather"
         "lines" -> "Train lines"
         TravelRules.PROVIDER -> "Travel times"
+        CarCheckRules.PROVIDER -> "Car (DVLA)"
         else -> provider
     }
 
@@ -95,6 +96,7 @@ object CalendarAccountRules {
         return when {
             status == "needs_reconnect" -> "$who · access expired · Reconnect"
             status == "error" -> "$who · couldn't sync last time · retrying"
+            status == CarCheckRules.STATUS_OFF && provider == CarCheckRules.PROVIDER -> "$who · off · waiting for the DVLA keys"
             status == TravelRules.STATUS_OFF -> "$who · off · add the Google key (see Setup)"
             syncedAt != null -> "$who · synced $syncedAt"
             else -> "$who · first sync in progress"

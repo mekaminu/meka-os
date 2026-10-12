@@ -236,6 +236,15 @@ export class MekaStack extends cdk.Stack {
       secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
     });
 
+    // The car's MOT and tax from the DVLA (car on autopilot, slice 2; Needs Meka #26): '{}' until he pastes the free
+    // keys. Read at use time; empty = feature off, and only the registration is ever sent to the DVLA.
+    const carDvla = new secretsmanager.Secret(this, 'CarDvla', {
+      secretName: `${prefix}/car/dvla`,
+      encryptionKey: this.key,
+      description: 'MEKA OS car: {"ves_api_key","mot_client_id","mot_client_secret","mot_api_key","mot_token_url"} from the DVLA and DVSA',
+      secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
+    });
+
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc, clusterName: prefix, containerInsightsV2: ecs.ContainerInsights.DISABLED });
     const task = new ecs.FargateTaskDefinition(this, 'Task', {
       cpu: 256,
@@ -261,6 +270,7 @@ export class MekaStack extends cdk.Stack {
         MEKA_RELEASE_PUBLISHER_SECRET: publisherPublic.secretArn,
         MEKA_VOICE_TWILIO_SECRET: voiceTwilio.secretArn,
         MEKA_MAPS_GOOGLE_SECRET: mapsGoogle.secretArn,
+        MEKA_CAR_DVLA_SECRET: carDvla.secretArn,
         // MEKA's voice (build plan V1, Weather and a voice: Amazon Polly in MEKA's own account, approved 2026-10-08).
         MEKA_SPEECH_ENGINE: 'polly',
         // Callers' messages transcribed by Amazon Transcribe in MEKA's own account (call assistant polish 8d i).
@@ -292,6 +302,7 @@ export class MekaStack extends cdk.Stack {
     publisherPublic.grantRead(task.taskRole); // the public half only; the private key is never granted to the service
     voiceTwilio.grantRead(task.taskRole);
     mapsGoogle.grantRead(task.taskRole);
+    carDvla.grantRead(task.taskRole);
     // MEKA's voice: turn MEKA's own reply text into speech and list the voices, nothing else (no lexicons, no S3
     // speech tasks). Polly's synthesis actions have no resource-level scoping, so the resource is '*'.
     task.taskRole.addToPrincipalPolicy(new cdk.aws_iam.PolicyStatement({
