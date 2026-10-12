@@ -2,7 +2,8 @@ import Foundation
 import LocalAuthentication
 
 /// Touch ID for approving (approvals inbox, slice 1; ADR-006: financial and trading approvals always need biometric
-/// confirmation). Biometrics only: no password fallback, so a yes is always Meka's finger. Only a Bool comes back, on
+/// confirmation). Biometrics only: no password fallback, so a yes is always Meka's finger. Since Trading approvals
+/// slice 2 Touch ID only ever unlocks the approval key (MacApprovalKey) for one signature; only Strings come back, on
 /// the main actor; the LAContext stays here, kept alive while the system asks.
 @MainActor
 enum MacBiometric {
@@ -12,19 +13,6 @@ enum MacBiometric {
     static var available: Bool {
         var error: NSError?
         return LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
-    }
-
-    /// Asks for Touch ID with [reason]; [done] gets true only when it succeeded.
-    static func confirm(reason: String, done: @escaping @MainActor @Sendable (Bool) -> Void) {
-        let ctx = LAContext()
-        ctx.localizedFallbackTitle = "" // no "Use Password…"
-        context = ctx
-        ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { @Sendable (ok, _) in
-            Task { @MainActor in
-                context = nil
-                done(ok)
-            }
-        }
     }
 
     /// Trading approvals, slice 2: Touch ID, then the approval key signs [message] with that same unlocked context
