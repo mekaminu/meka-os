@@ -225,6 +225,8 @@ class MekaCore(
     private val _watchLink = MutableStateFlow<os.meka.core.domain.WatchLinkView?>(null)
     /** "Where I am now" (Places item 3): the last answer, in memory only (never stored or synced), on the core thread. */
     private var hereFix: os.meka.core.domain.HereFix? = null
+    /** People, slice 4: the Fold's Family, Always notify and watched lists, passed in; in memory only, never synced. */
+    private var listedPeople = os.meka.core.domain.ListedPeople.NONE
     /** MEKA's voice: the synced choice, the clips said so far (in memory, newest last) and a pause after a refusal. */
     private val mekaVoice = os.meka.core.domain.MekaVoiceStore(replica)
     private val speechClips = LinkedHashMap<String, String>()
@@ -1541,6 +1543,19 @@ class MekaCore(
     suspend fun received(id: String) = onCore { lists.received(id) }
     suspend fun editWaiting(id: String, title: String?, who: String?, notes: String?) = onCore { lists.editWaiting(id, title, who, notes) }
     suspend fun deleteWaiting(id: String) = onCore { lists.deleteWaiting(id) }
+
+    /**
+     * People, slice 4: the Fold passes its own lists (Work mode → People's Family and Always notify, and "Watch for
+     * requests from") so those people have a People row before any promise names them. Kept in memory on this device
+     * only: the lists stay on the phone and are never synced or sent. The Mac never calls this.
+     */
+    suspend fun setListedPeople(family: List<String>, alwaysNotify: List<String>, watched: List<String>) = onCore {
+        val next = os.meka.core.domain.ListedPeople(family.toSet(), alwaysNotify.toSet(), watched.toSet())
+        if (next != listedPeople) {
+            listedPeople = next
+            refresh()
+        }
+    }
 
     /** People, slice 1: something you promised [to] someone, by [byInDays] from today (null: no date). Nothing is sent. */
     suspend fun addPromise(title: String, to: String?, byInDays: Int?): String = onCore { lists.addPromise(title, to, byInDays) }
@@ -4388,6 +4403,7 @@ class MekaCore(
         _people.value = os.meka.core.domain.PeopleRules.view(
             listsNow.promised, listsNow.waiting, occasionItems,
             triageCards.contacts() + os.meka.core.domain.PeopleRules.heldContacts(heldNow), todayDay, nowMs(), cal,
+            listedPeople,
         )
         _car.value = os.meka.core.domain.CarRules.view(car.registration(), listsNow.renewals.all, carCheck(), todayDay, cal)
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)

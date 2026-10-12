@@ -16,6 +16,25 @@ data class ContactSeen(
     val kind: CaptureKind = CaptureKind.MESSAGE,
 )
 
+/**
+ * People, slice 4: who Meka lists on the Fold (Work mode → People: Family and Always notify; "Watch for requests from"),
+ * so they have a row before any promise or birthday names them. These lists stay on the phone: the Fold passes them to
+ * its own core in memory ([os.meka.core.domain.PeopleRules.view]'s `listed`); they are never synced, so the Mac's pane
+ * doesn't have them.
+ */
+data class ListedPeople(
+    val family: Set<String> = emptySet(),
+    val alwaysNotify: Set<String> = emptySet(),
+    val watched: Set<String> = emptySet(),
+) {
+    companion object {
+        val NONE = ListedPeople()
+        const val FAMILY = "Family"
+        const val ALWAYS = "Always notify"
+        const val WATCHED = "Watched for requests"
+    }
+}
+
 data class PersonOwed(val id: String, val title: String, val meta: String, val due: Boolean)
 
 data class PersonRow(
@@ -35,6 +54,8 @@ data class PersonRow(
     /** A promise or a chase is due, or the birthday is within [PeopleRules.BIRTHDAY_SOON_DAYS]. */
     val lit: Boolean,
     val spoken: String,
+    /** Which of the Fold's lists has them: "Family", "Always notify" or "Watched for requests" (the first that does). */
+    val listed: String? = null,
 )
 
 data class PeopleView(val rows: List<PersonRow>, val summary: String) {
@@ -44,7 +65,7 @@ data class PeopleView(val rows: List<PersonRow>, val summary: String) {
 }
 
 object PeopleRules {
-    const val EMPTY_LINE = "People you promise things to, wait on or have a birthday for show here"
+    const val EMPTY_LINE = "People you promise things to, wait on, have a birthday for or list as family show here"
     const val BIRTHDAY_SOON_DAYS = 7L
 
     private class Acc(val key: String) {
@@ -53,6 +74,7 @@ object PeopleRules {
         val waiting = mutableListOf<PersonOwed>()
         var birthday: Occasion? = null
         var last: ContactSeen? = null
+        var listed: String? = null
         fun offer(n: String) {
             // The first spelling seen wins, unless a later one is capitalised and the first wasn't ("rex" → "Rex").
             if (name.isEmpty() || (name.first().isLowerCase() && n.first().isUpperCase())) name = n
@@ -63,7 +85,9 @@ object PeopleRules {
      * The People pane. [promises] and [waiting] as Lists reads them, [occasions] from Gifts (anniversaries aren't a
      * person's and are left out), [contacts] from the triage cards and held messages. A contact only adds to a row
      * someone else made (MEKA doesn't list everyone who ever messaged): the same name, or a first name that only one
-     * row has ("Jeanette" and "Jeanette Akunebuni").
+     * row has ("Jeanette" and "Jeanette Akunebuni"). [listed] (the Fold's own lists, slice 4) gives each listed name
+     * a row of its own, or joins the row its name (or a first name only one row has) already made; a listed phone
+     * number with no name is left out.
      */
     fun view(
         promises: List<PromiseItem>,
@@ -73,6 +97,7 @@ object PeopleRules {
         today: Long,
         nowMs: Long,
         cal: LocalCalendar,
+        listed: ListedPeople = ListedPeople.NONE,
     ): PeopleView {
         val rows = LinkedHashMap<String, Acc>()
         fun acc(name: String): Acc? {
@@ -86,6 +111,15 @@ object PeopleRules {
             val a = acc(o.person) ?: return@forEach
             val b = a.birthday
             if (b == null || GiftRules.next(o, today) < GiftRules.next(b, today)) a.birthday = o
+        }
+        for ((names, tag) in listOf(listed.family to ListedPeople.FAMILY, listed.alwaysNotify to ListedPeople.ALWAYS, listed.watched to ListedPeople.WATCHED)) {
+            names.sortedBy(People::key).forEach { name ->
+                val n = tidy(name) ?: return@forEach
+                val k = People.key(n)
+                if (k.startsWith("tel:")) return@forEach
+                val a = match(k, rows.keys)?.let { rows.getValue(it) } ?: acc(n) ?: return@forEach
+                if (a.listed == null) a.listed = tag
+            }
         }
         contacts.forEach { c ->
             val k = match(People.key(c.person), rows.keys) ?: return@forEach
@@ -159,12 +193,13 @@ object PeopleRules {
         val lit = soon || promised.any { it.due } || waiting.any { it.due }
         val spoken = buildString {
             append(a.name).append('.')
+            a.listed?.let { append(' ').append(it).append('.') }
             promised.forEach { append(" You promised: ").append(it.title).append(", ").append(it.meta).append('.') }
             waiting.forEach { append(" Waiting for: ").append(it.title).append(", ").append(it.meta).append('.') }
             birthday?.let { append(' ').append(it).append('.') }
             last?.let { append(' ').append(it).append('.') }
         }
-        return PersonRow(a.key, a.name, owed, promised, waiting, birthday, last, lit, spoken)
+        return PersonRow(a.key, a.name, owed, promised, waiting, birthday, last, lit, spoken, a.listed)
     }
 
     private fun tidy(name: String): String? {
@@ -200,6 +235,7 @@ object PeopleAskRules {
         for (r in view.rows.take(ASK_PEOPLE)) {
             val about = listOfNotNull(
                 r.name,
+                r.listed?.lowercase(),
                 r.promised.size.takeIf { it > 0 }?.let { "you promised $it" },
                 r.waiting.size.takeIf { it > 0 }?.let { "waiting for $it" },
                 r.birthday?.replaceFirstChar { it.lowercase() },

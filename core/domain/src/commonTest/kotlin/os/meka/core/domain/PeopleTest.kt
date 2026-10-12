@@ -161,4 +161,36 @@ class PeopleTest {
             assertNull(card(t, d), "$t $d")
         }
     }
+
+    @Test
+    fun theFoldsListsGivePeopleARowAndJoinTheOnesThatExist() {
+        val listed = ListedPeople(
+            family = setOf("Jeanette", "mum", "07700 900123"),
+            alwaysNotify = setOf("Mum", "Tunde"),
+            watched = setOf("Coach Dave", "Tunde"),
+        )
+        val v = PeopleRules.view(
+            promises = listOf(promise("p", "Book the table", "Jeanette Akunebuni")),
+            waiting = emptyList(),
+            occasions = listOf(birthday("Mum", 11, 3, 1966)),
+            contacts = listOf(ContactSeen("Tunde", now - hour, CaptureApp.WHATSAPP, fromMe = false)),
+            today = today, nowMs = now, cal = cal, listed = listed,
+        )
+        // A first name joins the promise's row; a number with no name is no row; the first list that has them names them.
+        assertEquals(listOf("Coach Dave", "Jeanette Akunebuni", "Mum", "Tunde"), v.rows.map { it.name })
+        assertEquals(listOf("Watched for requests", "Family", "Family", "Always notify"), v.rows.map { it.listed })
+        val tunde = v.rows.last()
+        assertNull(tunde.owedLine)
+        assertFalse(tunde.lit)
+        assertEquals("Last message 14:00 · WhatsApp", tunde.lastContact) // a listed person's contact now has a row to join
+        assertEquals("Tunde. Always notify. Last message 14:00 · WhatsApp.", tunde.spoken)
+        assertEquals("4 people", v.summary)
+        assertEquals("Mum · family · birthday Tue 3 Nov · in 22 days · turns 60", PeopleAskRules.askLines(v)[4])
+        // Without the lists (the Mac) only promises and birthdays make rows, as before.
+        assertEquals(listOf("Jeanette Akunebuni", "Mum"), PeopleRules.view(
+            listOf(promise("p", "Book the table", "Jeanette Akunebuni")), emptyList(), listOf(birthday("Mum", 11, 3, 1966)),
+            emptyList(), today, now, cal,
+        ).rows.map { it.name })
+        assertTrue(PeopleRules.view(emptyList(), emptyList(), emptyList(), emptyList(), today, now, cal, ListedPeople(family = setOf("07700 900123"))).isEmpty)
+    }
 }

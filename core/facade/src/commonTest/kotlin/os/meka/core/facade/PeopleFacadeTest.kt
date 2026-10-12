@@ -46,4 +46,22 @@ class PeopleFacadeTest {
         mac.tick()
         assertEquals(null, mac.peopleView.value.rows.first { it.name == "Rex" }.owedLine)
     }
+
+    @Test
+    fun theFoldsListsMakeRowsOnTheFoldOnlyAndNeverSync() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.addPromise("Fix Rex's bike", "Rex", 2)
+        fold.setListedPeople(listOf("Jeanette", "Rex"), listOf("Mum"), listOf("Coach Dave"))
+        assertEquals(
+            listOf("Coach Dave" to "Watched for requests", "Jeanette" to "Family", "Mum" to "Always notify", "Rex" to "Family"),
+            fold.peopleView.value.rows.map { it.name to it.listed },
+        )
+        fold.syncNow(); mac.syncNow()
+        mac.tick()
+        assertEquals(listOf("Rex" to null), mac.peopleView.value.rows.map { it.name to it.listed })
+        // Taken off the lists on the Fold: the row goes unless something else made it.
+        fold.setListedPeople(emptyList(), emptyList(), emptyList())
+        assertEquals(listOf("Rex" to null), fold.peopleView.value.rows.map { it.name to it.listed })
+    }
 }

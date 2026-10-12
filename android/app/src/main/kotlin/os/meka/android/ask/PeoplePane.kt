@@ -98,7 +98,7 @@ fun PeoplePane(core: MekaCore, onClose: () -> Unit) {
         }
         item(key = "note") {
             Text(
-                "Promises are made in Lists → Promises, birthdays in Gifts. Last contact comes from the messages MEKA has already seen; nothing new is read.",
+                "Promises are made in Lists → Promises, birthdays in Gifts, and Family, Always notify and Watch for requests in Work mode → People (those lists stay on this phone). Last contact comes from the messages MEKA has already seen; nothing new is read.",
                 style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l),
             )
@@ -130,6 +130,7 @@ private fun PersonRowView(
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
             Text(row.name, style = MekaType.body, color = Meka.colors.textPrimary)
+            row.listed?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
             row.owedLine?.let { Text(it, style = MekaType.caption, color = lineColor) }
             row.birthday?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
             row.lastContact?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }

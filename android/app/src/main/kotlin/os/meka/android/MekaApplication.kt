@@ -134,6 +134,14 @@ class MekaApplication : Application() {
         appScope.launch { core.afterWork.collect { runCatching { nudger.alertVoiceMessages() } } }
         // Messages held before the summary was synced join it once (re-holding is a no-op, cleared ones stay cleared).
         appScope.launch { runCatching { core.holdCaptured(captures.items.value, captures.lists.value) } }
+        // People, slice 4: the Family, Always notify and watched lists (they stay on this phone) give those people a
+        // People row; passed to this phone's core in memory whenever they change, and once at process start.
+        appScope.launch {
+            kotlinx.coroutines.flow.combine(captures.lists, captures.watch) { l, w ->
+                Triple(l.family.toList(), l.alwaysNotify.toList(), w.people.toList())
+            }.distinctUntilChanged()
+                .collect { (f, a, w) -> runCatching { core.setListedPeople(f, a, w) } }
+        }
         // The governor looks again whenever what it reads changes (settled for a moment, so a burst of edits or a
         // sync is one evaluation), and once at process start, which re-arms its alarm. Time is its own alarm.
         appScope.launch {
