@@ -116,6 +116,10 @@ final class CoreModel {
     private(set) var gifts: GiftsView?
     /// Ask → More → Gifts.
     var showGifts = false
+    /// People (V1, slice 2): one row per person in a promise either way or a birthday (Ask → More → People).
+    private(set) var people: PeopleView?
+    /// Ask → More → People.
+    var showPeople = false
     /// Why a Booked… on a Needs you card couldn't be read, by appointment id (shown under its field).
     private(set) var appointmentRefusal: (id: String, line: String)?
     /// Annual leave (V1, slice 1): the allowance, the days booked and the school holidays (Ask → More → Annual leave).
@@ -339,6 +343,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await g in core.giftsView { self?.gifts = g }
+        })
+        observers.append(Task { [weak self] in
+            for await p in core.peopleView { self?.people = p }
         })
         observers.append(Task { [weak self] in
             for await c in core.carView { self?.car = c }

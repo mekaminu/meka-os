@@ -71,6 +71,7 @@ enum class MoreItem(val label: String, val line: String, val destination: ShellD
     APPOINTMENTS("Appointments", "Dentist, optician, haircut · a nudge when one's due", null, MoreGroup.DAILY),
     BINS("Bins", "Which bins go out, the evening before", null, MoreGroup.DAILY),
     GIFTS("Gifts", "Birthdays, anniversaries and gift ideas", null, MoreGroup.DAILY),
+    PEOPLE("People", "Promises both ways, birthdays and last contact", null, MoreGroup.DAILY),
     FACTS("What MEKA knows", "Car reg, GP, sizes · the facts MEKA answers from", null, MoreGroup.DAILY),
     WORK("Work mode", "Work hours and the Work switch", null, MoreGroup.SETTINGS),
     PROTECTED("Protected time", "Evenings and weekends, kept free of tasks", null, MoreGroup.SETTINGS),

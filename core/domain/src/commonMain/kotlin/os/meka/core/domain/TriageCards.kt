@@ -145,6 +145,22 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
         return true
     }
 
+    /**
+     * Every 1:1 message triaged so far, open or not, as last-contact facts for People (slice 2): when they wrote, and
+     * when Meka replied through a card (resolved as Sent). Group messages aren't a contact with one person.
+     */
+    fun contacts(): List<ContactSeen> = replica.entities(EntityTypes.TRIAGE_CARD).flatMap { e ->
+        val person = e[TriageCardFields.PERSON].textOrNull?.takeIf { it.isNotBlank() } ?: return@flatMap emptyList()
+        if (e[TriageCardFields.GROUP].textOrNull != null) return@flatMap emptyList()
+        val app = e[TriageCardFields.APP].textOrNull?.let { n -> CaptureApp.entries.firstOrNull { it.name == n } }
+        listOfNotNull(
+            e[TriageCardFields.AT].longOrNull?.let { ContactSeen(person, it, app, fromMe = false) },
+            e[TriageCardFields.RESOLVED_AT].longOrNull
+                ?.takeIf { e[TriageCardFields.RESOLUTION].textOrNull == TriageResolution.SENT.wire }
+                ?.let { ContactSeen(person, it, app, fromMe = true) },
+        )
+    }
+
     private class Stored(
         val messageId: String,
         val person: String,

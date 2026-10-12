@@ -149,6 +149,28 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(core.listsView.value.waiting.count, 1)
     }
 
+    func testPeopleReachSwift() async throws {
+        // People, slice 2: a promise each way to the same person makes one People row on the Mac with what's owed both
+        // ways; Kept on the row's promise (only the id String crosses) leaves only the waiting-for.
+        XCTAssertTrue(PeopleView.companion.EMPTY.isEmpty)
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "people-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let id = try await core.addPromise(title: "Fix the bike", to: "Rex", byInDays: KotlinInt(int: 0))
+        _ = try await core.addWaiting(title: "Football photos", who: "rex", chaseInDays: nil)
+        let row = try XCTUnwrap(core.peopleView.value.rows.first)
+        XCTAssertEqual(core.peopleView.value.rows.count, 1)
+        XCTAssertEqual(row.name, "Rex")
+        XCTAssertEqual(row.owedLine, "You promised 1 · Waiting for 1")
+        XCTAssertTrue(row.lit)
+        XCTAssertEqual(row.promised.map(\.id), [id])
+        XCTAssertEqual(core.peopleView.value.summary, "1 person · 1 promise due")
+        try await core.keptPromise(id: id)
+        XCTAssertEqual(core.peopleView.value.rows.first?.owedLine, "Waiting for 1")
+    }
+
     func testRenewalsThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

@@ -407,6 +407,15 @@ class MekaCore(
      */
     val giftsView: StateFlow<os.meka.core.domain.GiftsView> = _gifts.asStateFlow()
 
+    private val _people = MutableStateFlow(os.meka.core.domain.PeopleView.EMPTY)
+
+    /**
+     * People (V1, slice 2; Ask → More → People): one row per person in a promise either way or a birthday in Gifts,
+     * with what's owed both ways, the next birthday and the last contact MEKA already knows of (triage cards, held
+     * messages). Read only: the rows' promises are kept, moved and deleted through the Lists commands.
+     */
+    val peopleView: StateFlow<os.meka.core.domain.PeopleView> = _people.asStateFlow()
+
     private val _car = MutableStateFlow(os.meka.core.domain.CarView.EMPTY)
     /**
      * Car on autopilot (V1, slice 1): the registration and the car's four dates (MOT, tax, insurance, service) against
@@ -4357,6 +4366,11 @@ class MekaCore(
         _school.value = school.view(hoursOf(workState, todayDay))
         _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays)
         _gifts.value = os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
+        val heldNow = _afterWork.value
+        _people.value = os.meka.core.domain.PeopleRules.view(
+            listsNow.promised, listsNow.waiting, occasionItems,
+            triageCards.contacts() + os.meka.core.domain.PeopleRules.heldContacts(heldNow), todayDay, nowMs(), cal,
+        )
         _car.value = os.meka.core.domain.CarRules.view(car.registration(), listsNow.renewals.all, carCheck(), todayDay, cal)
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         _triage.value = triageCards.open()

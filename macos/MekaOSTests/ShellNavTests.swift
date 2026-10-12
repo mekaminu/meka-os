@@ -45,7 +45,7 @@ final class ShellNavTests: XCTestCase {
     func testMoreListsEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
         XCTAssertEqual(
             ShellNav.more(connected: true).map(\.label),
-            ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Week ahead", "School", "Annual leave", "Dinners", "Date night", "Life admin hour", "Emergency card", "Train queue", "Errands", "Appointments", "Bins", "Gifts", "What MEKA knows", "Work mode", "Protected time", "Notifications",
+            ["Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Week ahead", "School", "Annual leave", "Dinners", "Date night", "Life admin hour", "Emergency card", "Train queue", "Errands", "Appointments", "Bins", "Gifts", "People", "What MEKA knows", "Work mode", "Protected time", "Notifications",
              "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "What MEKA may do", "Activity", "Your data"]
         )
         XCTAssertFalse(ShellNav.more(connected: false).contains(.calendars))
@@ -61,7 +61,7 @@ final class ShellNavTests: XCTestCase {
         let sections = ShellNav.moreSections(connected: true)
         XCTAssertEqual(sections.map(\.group.label), ["Places", "Daily", "Settings"])
         XCTAssertEqual(sections[0].items.map(\.label), ["Lists", "Goals and habits", "Review", "Vault"])
-        XCTAssertEqual(sections[1].items.map(\.label), ["Morning brief", "News", "Shut down the day", "Week ahead", "School", "Annual leave", "Dinners", "Date night", "Life admin hour", "Emergency card", "Train queue", "Errands", "Appointments", "Bins", "Gifts", "What MEKA knows"])
+        XCTAssertEqual(sections[1].items.map(\.label), ["Morning brief", "News", "Shut down the day", "Week ahead", "School", "Annual leave", "Dinners", "Date night", "Life admin hour", "Emergency card", "Train queue", "Errands", "Appointments", "Bins", "Gifts", "People", "What MEKA knows"])
         XCTAssertNil(MoreItem.dateNight.destination)
         XCTAssertNil(MoreItem.weekAhead.destination)
         XCTAssertEqual(MoreItem.weekAhead.group, .daily)
