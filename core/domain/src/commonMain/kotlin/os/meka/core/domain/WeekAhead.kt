@@ -5,7 +5,7 @@ import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
 
 /** What a line in the week ahead is about (it picks the lead mark the pane draws). */
-enum class WeekAheadKind { EVENT, FIXTURE, SCHOOL, DATE_NIGHT, DUE, APPOINTMENT, BINS }
+enum class WeekAheadKind { EVENT, FIXTURE, SCHOOL, DATE_NIGHT, DUE, APPOINTMENT, BINS, OCCASION }
 
 /**
  * One thing on a day of the week ahead: "17:30 · Barça v Getafe", "Rex: PE", "Date night from 19:00". [time] leads the
@@ -122,6 +122,8 @@ data class WeekAheadInputs(
     val goals: List<GoalItem> = emptyList(),
     /** Bin days: each collection on its day (a bank holiday's shift included). */
     val bins: List<BinItem> = emptyList(),
+    /** Gift planner: birthdays and anniversaries on their day, and a gift's order-by day (lit). */
+    val occasions: List<Occasion> = emptyList(),
 )
 
 /**
@@ -241,6 +243,9 @@ object WeekAheadRules {
         }
         BinRules.weekLine(inputs.bins, day, inputs.holidays)?.let { text ->
             out += Keyed(window.startMs - 1, WeekAheadLine("b-$day", WeekAheadKind.BINS, null, text, false, "Bins: $text"))
+        }
+        GiftRules.weekLines(inputs.occasions, day).forEachIndexed { i, (text, lit) ->
+            out += Keyed(window.startMs - 1, WeekAheadLine("g-$day-$i", WeekAheadKind.OCCASION, null, text, lit, text))
         }
         if (DateNightRules.kept(inputs.dateNight, day)) {
             val s = inputs.dateNight!!

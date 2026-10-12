@@ -112,6 +112,10 @@ final class CoreModel {
     private(set) var car: CarView?
     /// Ask → More → Bins.
     var showBins = false
+    /// Gift planner (V1, slice 1): birthdays and anniversaries, their ideas and order-by days (Ask → More → Gifts).
+    private(set) var gifts: GiftsView?
+    /// Ask → More → Gifts.
+    var showGifts = false
     /// Why a Booked… on a Needs you card couldn't be read, by appointment id (shown under its field).
     private(set) var appointmentRefusal: (id: String, line: String)?
     /// Annual leave (V1, slice 1): the allowance, the days booked and the school holidays (Ask → More → Annual leave).
@@ -332,6 +336,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await b in core.binsView { self?.bins = b }
+        })
+        observers.append(Task { [weak self] in
+            for await g in core.giftsView { self?.gifts = g }
         })
         observers.append(Task { [weak self] in
             for await c in core.carView { self?.car = c }
@@ -2800,6 +2807,41 @@ final class CoreModel {
     }
 
     func removeBin(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeBin(id: id) } }
+
+    // MARK: Gift planner (slice 1)
+
+    /// What adding a typed birthday or anniversary said: the line under the field, and whether nothing was written.
+    struct GiftSaid: Equatable {
+        let line: String
+        let refused: Bool
+    }
+
+    /// Adds "Mum's birthday 3 Nov" (the same person and kind again updates it); only a String crosses.
+    func addOccasion(_ text: String) async -> GiftSaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            let r = try await core.addOccasion(text: t)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return GiftSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func removeOccasion(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeOccasion(id: id) } }
+
+    func addGiftIdea(_ occasionId: String, _ text: String) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        MekaHaptics.light()
+        run { _ = try await $0.addGiftIdea(occasionId: occasionId, text: t) }
+    }
+
+    func removeGiftIdea(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeGiftIdea(id: id) } }
+
+    func setGiftSorted(_ id: String, _ sorted: Bool) { MekaHaptics.light(); run { _ = try await $0.setGiftSorted(id: id, sorted: sorted) } }
 
     /// Takes back a bin one-off (slice 3): that collection goes on its usual day again; only the id String crosses.
     func removeBinMove(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeBinMove(id: id) } }

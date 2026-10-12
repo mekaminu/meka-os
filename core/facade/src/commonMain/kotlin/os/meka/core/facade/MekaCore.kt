@@ -139,6 +139,7 @@ class MekaCore(
     private val shopping = os.meka.core.domain.Shopping(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val school = os.meka.core.domain.School(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val bins = os.meka.core.domain.Bins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val gifts = os.meka.core.domain.Gifts(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val car = os.meka.core.domain.Car(replica)
     private val mealPlan = os.meka.core.domain.MealPlan(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val emergency = os.meka.core.domain.EmergencyCard(replica, ids::next, nowMs)
@@ -397,6 +398,14 @@ class MekaCore(
      * collection Today says "Black bin and food caddy out tonight" and a heads-up comes at 19:00.
      */
     val binsView: StateFlow<os.meka.core.domain.BinsView> = _bins.asStateFlow()
+
+    private val _gifts = MutableStateFlow(os.meka.core.domain.GiftsView.EMPTY)
+
+    /**
+     * Gift planner (V1, slice 1): birthdays and anniversaries typed once (Ask → More → Gifts), gift ideas against each
+     * and the order-by day; a heads-up two weeks ahead and on the order-by day, Today's line and the week ahead.
+     */
+    val giftsView: StateFlow<os.meka.core.domain.GiftsView> = _gifts.asStateFlow()
 
     private val _car = MutableStateFlow(os.meka.core.domain.CarView.EMPTY)
     /**
@@ -2081,6 +2090,26 @@ class MekaCore(
 
     /** Removes a bin for good. */
     suspend fun removeBin(id: String): Boolean = onCore { bins.remove(id) }
+
+    // ---- Gift planner (V1, slice 1; Ask → More → Gifts) ----
+
+    /**
+     * Adds one typed birthday or anniversary ("Mum's birthday 3 Nov", "Wedding anniversary 20 Aug 2015", "… delivery
+     * 5 days"; [os.meka.core.domain.GiftRules.read]); the same person and kind again updates it. Refused (nothing
+     * written) when MEKA couldn't read a day and month, or no one for a birthday.
+     */
+    suspend fun addOccasion(text: String): os.meka.core.domain.GiftAdded = onCore { gifts.add(text) }
+
+    /** Removes a birthday or anniversary for good. */
+    suspend fun removeOccasion(id: String): Boolean = onCore { gifts.remove(id) }
+
+    /** Notes a gift idea against a birthday or anniversary. */
+    suspend fun addGiftIdea(occasionId: String, text: String): Boolean = onCore { gifts.addIdea(occasionId, text) }
+
+    suspend fun removeGiftIdea(id: String): Boolean = onCore { gifts.removeIdea(id) }
+
+    /** Marks the gift for its next occurrence sorted (the reminders stop) or not. */
+    suspend fun setGiftSorted(id: String, sorted: Boolean): Boolean = onCore { gifts.setSorted(id, sorted) }
 
     /**
      * Bin days, slice 3: takes back a one-off ("Black bin Sat 2 Jan instead of 29 Dec", typed through [addBin]), so
@@ -4188,6 +4217,8 @@ class MekaCore(
         val schoolToday = os.meka.core.domain.SchoolRules.todayLine(schoolItems, todayDay, holidays)
         // Bin days, slice 1: the bins (each collection a day later in a bank-holiday week).
         val binItems = bins.items()
+        // Gift planner, slice 1: the birthdays and anniversaries with their ideas.
+        val occasionItems = gifts.items()
         // The Sunday week ahead, slice 1: the coming week from what MEKA already knows.
         val weekAheadNow = os.meka.core.domain.WeekAheadRules.view(
             os.meka.core.domain.WeekAheadInputs(
@@ -4202,6 +4233,7 @@ class MekaCore(
                 forecast = forecast,
                 goals = goalsNow.goals,
                 bins = binItems,
+                occasions = occasionItems,
             ),
             nowMs(), cal, ::dayWindowOf,
         )
@@ -4241,6 +4273,7 @@ class MekaCore(
             trainQueue = os.meka.core.domain.QueueRules.trainLine(trainQueue.items(), office, nowMs(), cal),
             weekAhead = os.meka.core.domain.WeekAheadRules.todayLine(weekAheadNow, nowMs(), cal, weekAheadSettings.setting()),
             bins = os.meka.core.domain.BinRules.tonightLine(binItems, todayDay, cal.minuteOfDay(nowMs()), holidays),
+            gifts = os.meka.core.domain.GiftRules.todayLine(occasionItems, todayDay),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
@@ -4303,6 +4336,7 @@ class MekaCore(
         _approvals.value = approvalStore.cards()
         _school.value = school.view(hoursOf(workState, todayDay))
         _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays)
+        _gifts.value = os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
         _car.value = os.meka.core.domain.CarRules.view(car.registration(), listsNow.renewals.all, carCheck(), todayDay, cal)
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         _triage.value = triageCards.open()
@@ -4360,6 +4394,7 @@ class MekaCore(
             bins = bins.items(), holidays = bankHolidays.calendar(),
             carRegistration = car.registration(),
             lifeAdmin = _lifeAdmin.value,
+            occasions = gifts.items(),
         )
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */

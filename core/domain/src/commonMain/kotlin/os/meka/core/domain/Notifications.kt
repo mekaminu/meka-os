@@ -123,6 +123,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     /** Bin days ([BinRules.notices]): the evening before a collection at 19:00, "Black bin and food caddy out tonight". */
     BINS("Bins out the night before", NoticeTier.HEADS_UP),
     /**
+     * Gift planner ([GiftRules.notices]): two weeks before a birthday or anniversary and on its order-by day, at 09:00 —
+     * "Mum's birthday in 2 weeks · Sat 31 Oct" · "Ideas: scarf · order by Tue 27 Oct"; "Order Mum's gift today".
+     */
+    GIFTS("Gifts: birthdays and anniversaries", NoticeTier.HEADS_UP),
+    /**
      * Car on autopilot ([CarRules.notices]): the MOT, car tax, insurance and service, a heads-up at 09:00 four weeks
      * and a week before each — "MOT due Thu 12 Nov · AB12 CDE" · "In 4 weeks · an MOT up to a month early keeps the same date".
      */
@@ -549,6 +554,7 @@ object Governor {
         NoticeSource.GOALS -> if (n == 1) "a word on your goals" else "$n words on your goals"
         NoticeSource.WEEK_AHEAD -> "your week ahead"
         NoticeSource.BINS -> "bins out tonight"
+        NoticeSource.GIFTS -> plural(n, "gift") + " to sort"
         NoticeSource.CAR -> plural(n, "car date") + " coming up"
         NoticeSource.MONEY -> plural(n, "money date") + " coming up"
         NoticeSource.BILLS -> plural(n, "bill") + " due"
@@ -625,6 +631,8 @@ object NoticeSources {
         carRegistration: String? = null,
         /** Life admin hour: this week's view, for the heads-up at its start ([LifeAdminRules.notices]). */
         lifeAdmin: LifeAdminView? = null,
+        /** Gift planner: the birthdays and anniversaries with their ideas ([GiftRules.notices]). */
+        occasions: List<Occasion> = emptyList(),
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -742,6 +750,7 @@ object NoticeSources {
         out += GoalRhythmRules.notices(goals.goals, goals.month, nowMs, cal)
         if (leaving != null) out += LeavingRules.notices(leaving, office, lines, nowMs, cal)
         out += BinRules.notices(bins, nowMs, cal, holidays)
+        out += GiftRules.notices(occasions, nowMs, cal)
         out += CarRules.notices(lists.renewals.all, carRegistration, nowMs, cal)
         out += MoneyDateRules.notices(lists.renewals.all, nowMs, cal)
         out += BillRules.notices(lists.renewals.all, nowMs, cal)

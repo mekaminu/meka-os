@@ -86,6 +86,10 @@ object EntityTypes {
     const val BIN = "bin"
     /** Bin days, slice 3 (2026-10-12): a one-off move or skip of one collection, "Black bin Sat 2 Jan instead of 29 Dec". */
     const val BIN_MOVE = "bin_move"
+    /** Gift planner, slice 1 (2026-10-12): one birthday or anniversary, "Mum's birthday 3 Nov" (see [Gifts]). */
+    const val OCCASION = "occasion"
+    /** Gift planner, slice 1 (2026-10-12): one gift idea noted against an occasion. */
+    const val GIFT_IDEA = "gift_idea"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -93,7 +97,7 @@ object EntityTypes {
         AGENT_ACTION, EVENT_MARK, CALENDAR_MARK, HELD_MESSAGE, ALARM, EVENT_EDIT, REQUEST_CARD,
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
-        CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE,
+        CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA,
     )
 }
 
@@ -417,6 +421,11 @@ object MekaSchema : SchemaRegistry {
         // Bin one-offs: one taken back on any device is gone for good; the day it moves to, the latest edit wins.
         entityType == EntityTypes.BIN_MOVE && field == BinMoveFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.BIN_MOVE -> MergePolicy.Lww
+        // Birthdays and anniversaries, and gift ideas: one removed on any device is gone for good; the rest, the latest edit wins.
+        entityType == EntityTypes.OCCASION && field == OccasionFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.OCCASION -> MergePolicy.Lww
+        entityType == EntityTypes.GIFT_IDEA && field == GiftIdeaFields.DELETED -> MergePolicy.TrueWins
+        entityType == EntityTypes.GIFT_IDEA -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

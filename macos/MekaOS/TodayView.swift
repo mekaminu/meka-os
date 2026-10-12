@@ -170,6 +170,16 @@ struct TodayView: View {
                             .accessibilityLabel(bins.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Gift planner, slice 1: "Mum's birthday today · turns 60" (quiet), "Order Mum's gift today · …" (lit in
+                    // the accent); cross-fades.
+                    if let gifts = model.today?.gifts {
+                        Text(gifts.text).font(MekaType.caption)
+                            .foregroundStyle(gifts.lit ? palette.accent : palette.textSecondary).lineLimit(1)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: gifts.text)
+                            .accessibilityLabel(gifts.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
                     if let night = model.today?.dateNight {
                         Text(night.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)

@@ -833,6 +833,15 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Gift planner, slice 1: "Mum's birthday today · turns 60" (quiet), "Order Mum's gift today · birthday
+                    // Sat 31 Oct" (lit in the accent: something to do); cross-fades as it comes and changes.
+                    today.gifts?.let { gifts ->
+                        Crossfade(gifts, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "gifts-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
                     // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
                     today.dateNight?.let { night ->
                         Crossfade(night, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "date-night-line") { l ->

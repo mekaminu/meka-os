@@ -48,6 +48,8 @@ data class Today(
     val weekAhead: WeekAheadToday? = null,
     /** Bin days, slice 1: "Black bin and food caddy out tonight" the evening before from 16:00 ([BinRules.tonightLine]); set by the facade. */
     val bins: BinLine? = null,
+    /** Gift planner, slice 1: "Mum's birthday today · turns 60", "Order Mum's gift today · birthday Sat 31 Oct" ([GiftRules.todayLine]); set by the facade. */
+    val gifts: GiftLine? = null,
 ) {
     /** The Up next task is a planned task whose time has gone by ([LateTaskRules.isLate]). */
     fun upNextLate(nowMs: Long): Boolean = upNext?.let { LateTaskRules.isLate(it, nowMs) } ?: false

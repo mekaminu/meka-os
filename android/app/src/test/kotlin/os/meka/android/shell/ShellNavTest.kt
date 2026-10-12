@@ -52,7 +52,7 @@ class ShellNavTest {
     fun moreListsEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
         assertEquals(
             listOf(
-                "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Week ahead", "School", "Annual leave", "Dinners", "Date night", "Life admin hour", "Emergency card", "Train queue", "Errands", "Appointments", "Bins", "What MEKA knows", "Work mode", "Protected time", "Notifications",
+                "Lists", "Goals and habits", "Review", "Vault", "Morning brief", "News", "Shut down the day", "Week ahead", "School", "Annual leave", "Dinners", "Date night", "Life admin hour", "Emergency card", "Train queue", "Errands", "Appointments", "Bins", "Gifts", "What MEKA knows", "Work mode", "Protected time", "Notifications",
                 "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "What MEKA may do", "Activity", "Your data",
             ),
             ShellNav.more(connected = true).map { it.label },
@@ -71,7 +71,7 @@ class ShellNavTest {
         val sections = ShellNav.moreSections(connected = true)
         assertEquals(listOf("Places", "Daily", "Settings"), sections.map { it.group.label })
         assertEquals(listOf("Lists", "Goals and habits", "Review", "Vault"), sections[0].items.map { it.label })
-        assertEquals(listOf("Morning brief", "News", "Shut down the day", "Week ahead", "School", "Annual leave", "Dinners", "Date night", "Life admin hour", "Emergency card", "Train queue", "Errands", "Appointments", "Bins", "What MEKA knows"), sections[1].items.map { it.label })
+        assertEquals(listOf("Morning brief", "News", "Shut down the day", "Week ahead", "School", "Annual leave", "Dinners", "Date night", "Life admin hour", "Emergency card", "Train queue", "Errands", "Appointments", "Bins", "Gifts", "What MEKA knows"), sections[1].items.map { it.label })
         assertEquals(
             listOf("Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Setup", "Health", "What MEKA may do", "Activity", "Your data"),
             sections[2].items.map { it.label },

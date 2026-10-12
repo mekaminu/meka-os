@@ -2089,6 +2089,43 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NoticeSource.dateNight.label, "Date night")
     }
 
+    func testGiftsReachSwift() async throws {
+        // Gift planner, slice 1: a typed birthday is read by the core's rules, added through the facade (only Strings
+        // and Bools cross) and the sheet's rows, ideas and sorted state reach the Mac.
+        let rules = GiftRules.shared
+        let mum = rules.read(text: "Mum's birthday 3 Nov 1966", thisYear: 2026)
+        XCTAssertEqual(mum?.person, "Mum")
+        XCTAssertEqual(mum?.kind, .birthday)
+        XCTAssertEqual(mum?.month, 11)
+        XCTAssertEqual(mum?.year, 1966)
+        XCTAssertNil(rules.read(text: "birthday 3 Nov", thisYear: 2026))
+        XCTAssertEqual(NoticeSource.gifts.label, "Gifts: birthdays and anniversaries")
+        XCTAssertEqual(GiftsView.companion.EMPTY.summary, rules.EMPTY_LINE)
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "gifts-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let added = try await core.addOccasion(text: "Wedding anniversary 20 Aug 2015")
+        XCTAssertFalse(added.refused)
+        XCTAssertTrue(added.line.hasPrefix("Added Wedding anniversary · "))
+        let refused = try await core.addOccasion(text: "soon")
+        XCTAssertTrue(refused.refused)
+        let id = core.giftsView.value.rows[0].id
+        let noted = try await core.addGiftIdea(occasionId: id, text: "Dinner at the Ivy")
+        XCTAssertTrue(noted.boolValue)
+        let sorted = try await core.setGiftSorted(id: id, sorted: true)
+        XCTAssertTrue(sorted.boolValue)
+        let row = core.giftsView.value.rows[0]
+        XCTAssertEqual(row.title, "Wedding anniversary")
+        XCTAssertEqual(row.ideas.map(\.text), ["Dinner at the Ivy"])
+        XCTAssertTrue(row.sorted)
+        XCTAssertEqual(row.note, "✓ Gift sorted")
+        let removed = try await core.removeOccasion(id: id)
+        XCTAssertTrue(removed.boolValue)
+        XCTAssertTrue(core.giftsView.value.rows.isEmpty)
+    }
+
     func testBinsReachSwift() async throws {
         // Bin days, slice 1: a typed bin is read by the core's rules, added through the facade (only a String crosses)
         // and the sheet's rows, Today's line and the heads-up's source reach the Mac.
