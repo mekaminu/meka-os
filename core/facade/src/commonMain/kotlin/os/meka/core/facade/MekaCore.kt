@@ -4742,7 +4742,7 @@ class MekaCore(
         _lifeAdmin.value = lifeAdminViewNow
         val fastingNow = fasting.view()
         val goalsNow = goals.view(all).withSessions(_sessions.value)
-        val projected = project(all, dayEvents)
+        val projected = project(all, dayEvents, marks.clubChildren)
         val today = dayWindow(nowMs())
         // The forecast (Weather slice 2): Today's line, the brief's today, the shutdown's tomorrow, rain on the Day ring.
         val forecast = weather.forecast()
@@ -5000,12 +5000,16 @@ class MekaCore(
         )
     }
 
-    private fun project(all: List<os.meka.core.domain.Task> = tasks.all(), dayEvents: List<os.meka.core.domain.CalendarEvent> = visibleEvents(all)): Today {
+    private fun project(
+        all: List<os.meka.core.domain.Task> = tasks.all(), dayEvents: List<os.meka.core.domain.CalendarEvent> = visibleEvents(all),
+        // Read here, not from _eventMarks: the first projection runs while the core is still being built.
+        children: Map<String, String> = eventActions.clubChildren(),
+    ): Today {
         val now = nowMs()
         val day = dayWindow(now)
         return TodayProjection.project(
             all, now, day, dayEvents, ZoneCalendar(timeZone), _sessions.value.todayBlocks(day.epochDay, now),
-            work = work.hours(localClock(), day.epochDay), children = _eventMarks.value.clubChildren,
+            work = work.hours(localClock(), day.epochDay), children = children,
         )
     }
 

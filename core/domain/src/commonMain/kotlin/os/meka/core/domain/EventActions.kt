@@ -161,7 +161,7 @@ class EventActions(
         val driveKeys = entities.mapNotNull { e -> e[EventMarkFields.TRAVEL_DRIVE_KEY].textOrNull?.let { e.ref.entityId to it } }.toMap()
         val drives = TravelRules.follow(setTravel, driveKeys, routes)
         val travel = setTravel + drives.mapValues { TravelRules.travelMin(it.value.driveMin) }
-        val clubChildren = ClubChildRules.read(replica.entities(EntityTypes.CLUB_SERIES).map { it.ref.entityId to it[ClubSeriesFields.CHILD].textOrNull })
+        val clubChildren = clubChildren()
         return EventMarks(hidden, prep, minutes(EventMarkFields.REMIND_MIN), travel, calendars, leaveAlarms, shown, kit, venues, results, routes, drives, clubChildren)
     }
 
@@ -200,6 +200,10 @@ class EventActions(
         )
         return before
     }
+
+    /** Club series id → whose session it is ([EventMarks.clubChildren]), read on its own. */
+    fun clubChildren(): Map<String, String> =
+        ClubChildRules.read(replica.entities(EntityTypes.CLUB_SERIES).map { it.ref.entityId to it[ClubSeriesFields.CHILD].textOrNull })
 
     /**
      * Fold review 17:56, slice 3: [child] ("Rex"; null clears it) is whose club session [e]'s whole series is. Returns
