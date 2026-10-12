@@ -1082,6 +1082,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(a.line, "Urgent · Voice message from Dave · 16:10")
     }
 
+    /// Morning brief slice 5: "plan my day" said to Talk ends the conversation, then opens the planner.
+    func testPlanMyDayFromTalkReachesSwift() {
+        let reply = TalkRules.shared.reply(utterance: "plan my day please", pendingCards: 0)
+        XCTAssertEqual((reply as? TalkReplyOpen)?.place, TalkPlace.plan)
+        let said = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "plan my day")
+        XCTAssertEqual((said.effects.first as? TalkEffectSpeak)?.text, TalkOpenRules.shared.OPENING_PLAN)
+        let done = TalkFlow.shared.spoke(s: said.session)
+        XCTAssertTrue(done.effects.first is TalkEffectEnd)
+        XCTAssertEqual((done.effects.last as? TalkEffectOpen)?.place, TalkPlace.plan)
+        XCTAssertNil(done.session.openAfter)
+    }
+
     /// Fold review 2026-10-09 07:26, item 7: the brief's Today rows (one left edge; a task carries its id for the tick).
     func testBriefDayLinesReachSwift() {
         let task = BriefRules.shared.dayLine(r: TomorrowRow(id: "t-milk", time: nil, title: "Buy milk", isEvent: false, detail: "Overdue"))

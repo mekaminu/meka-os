@@ -660,6 +660,14 @@ final class CoreModel {
         showBrief = true
     }
 
+    /// "Plan my day" said to Talk (morning brief, slice 5): Today comes forward and the planner opens over it, as the
+    /// command bar's Plan my day does (nothing is planned until Apply).
+    func openPlanFromTalk() {
+        go(to: .today, reduced: MotionSetting.reduced)
+        showBrief = false
+        showPlan = true
+    }
+
     /// Runs a command-bar row by doing what the same button elsewhere on the Mac does (appearance is the view's).
     func perform(_ row: CommandBarRow, reduced: Bool) {
         if let d = CommandBarNav.destination(row.action) {

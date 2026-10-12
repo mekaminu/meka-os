@@ -73,6 +73,8 @@ class MekaApplication : Application() {
     val playVoiceMessage = MutableStateFlow<String?>(null)
     /** Dismissing the wake alarm: Today opens the morning brief, then clears it. */
     val openBrief = MutableStateFlow(false)
+    /** "Plan my day" said to Talk (morning brief, slice 5): Today opens the planner, then clears it. */
+    val openPlan = MutableStateFlow(false)
     /** Today's health line → Ask → More → Health (Reliability first, item 3). */
     val openHealth = MutableStateFlow(false)
     /** Today's setup card → Ask → More → Setup (Setup checklist). */

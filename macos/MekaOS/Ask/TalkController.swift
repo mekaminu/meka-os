@@ -48,7 +48,7 @@ final class TalkController {
     var onDid: ([Int]) -> Void = { _ in }
 
     @ObservationIgnored private var model: CoreModel?
-    @ObservationIgnored private var session = TalkSession(phase: .ended, conversation: Conversation(turns: []), pending: [], questions: 0, endAfterSpeaking: false)
+    @ObservationIgnored private var session = TalkSession(phase: .ended, conversation: Conversation(turns: []), pending: [], questions: 0, endAfterSpeaking: false, openAfter: nil)
     /// Bumped by every start and stop, so a late answer or callback from an earlier conversation changes nothing.
     @ObservationIgnored private var generation = 0
 
@@ -202,6 +202,10 @@ final class TalkController {
             playMessages()
         } else if let readOut = effect as? TalkEffectReadOut {
             readAloud(readOut.read)
+        } else if let open = effect as? TalkEffectOpen {
+            // "Plan my day" (morning brief, slice 5): the conversation has ended (End came first); Today opens with
+            // the planner up, as its button does. Only a Kotlin enum is compared here, on the main actor.
+            if open.place == TalkPlace.plan { model?.openPlanFromTalk() }
         } else if effect is TalkEffectStopSpeaking {
             stopSaying()
         } else if effect is TalkEffectEnd {

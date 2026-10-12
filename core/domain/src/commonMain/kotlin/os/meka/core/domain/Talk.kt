@@ -45,6 +45,8 @@ sealed interface TalkReply {
     data class PlayMessages(val question: String) : TalkReply
     /** "Read my brief", "the headlines", "Barça news" ([ReadOutRules.request]): read aloud on the device, no AI. */
     data class ReadOut(val question: String, val read: os.meka.core.domain.ReadOut) : TalkReply
+    /** "Plan my day" ([TalkOpenRules.request]): MEKA says so, the conversation ends and the planner opens; no AI. */
+    data class Open(val question: String, val place: TalkPlace) : TalkReply
     /** Anything else is a new question. */
     data class Ask(val question: String) : TalkReply
 }
@@ -142,6 +144,7 @@ object TalkRules {
         }
         if (VoicePlaylistRules.isPlayRequest(question)) return TalkReply.PlayMessages(question)
         ReadOutRules.request(question)?.let { return TalkReply.ReadOut(question, it) }
+        TalkOpenRules.request(question)?.let { return TalkReply.Open(question, it) }
         if (isEnding(question)) return TalkReply.End
         return TalkReply.Ask(question)
     }
@@ -353,6 +356,11 @@ sealed interface TalkEffect {
      * reports with [TalkFlow.spoke]. Plain text only: nothing in it is ever acted on (ADR-006).
      */
     data class ReadOut(val read: os.meka.core.domain.ReadOut) : TalkEffect
+    /**
+     * Open [place] on this device ("plan my day": Today with the planner up). Always comes after [End], so leaving Ask
+     * never cuts MEKA off; opening changes nothing by itself (the planner applies only on Meka's tap).
+     */
+    data class Open(val place: TalkPlace) : TalkEffect
     /** Say [text] on the device, then report with [TalkFlow.spoke]. */
     data class Speak(val text: String) : TalkEffect
     /** Stop speaking at once (Meka talked over MEKA). */
@@ -371,6 +379,8 @@ data class TalkSession(
     val pending: List<AskCard> = emptyList(),
     val questions: Int = 0,
     val endAfterSpeaking: Boolean = false,
+    /** Where to go once the conversation ends after this line ("plan my day"); a stop (the orb, a call) goes nowhere. */
+    val openAfter: TalkPlace? = null,
 )
 
 data class TalkStep(val session: TalkSession, val effects: List<TalkEffect>)
@@ -399,6 +409,10 @@ object TalkFlow {
             is TalkReply.ReadOut -> TalkStep(
                 s.copy(phase = TalkPhase.SPEAKING, pending = emptyList(), conversation = s.conversation.answered(r.question, ReadOutRules.remembered(r.read))),
                 listOf(TalkEffect.ReadOut(r.read)),
+            )
+            is TalkReply.Open -> say(
+                s.copy(pending = emptyList(), endAfterSpeaking = true, openAfter = r.place, conversation = s.conversation.answered(r.question, TalkOpenRules.remembered(r.place))),
+                TalkOpenRules.opening(r.place),
             )
             is TalkReply.Ask -> {
                 if (s.questions >= TalkRules.MAX_QUESTIONS) return say(s.copy(endAfterSpeaking = true), TalkRules.TOO_MANY)
@@ -451,19 +465,21 @@ object TalkFlow {
     /** Meka started talking while MEKA spoke: stop and listen (a closing line is cut short and the conversation ends). */
     fun bargeIn(s: TalkSession): TalkStep {
         if (s.phase != TalkPhase.SPEAKING) return TalkStep(s, emptyList())
-        if (s.endAfterSpeaking) return TalkStep(s.copy(phase = TalkPhase.ENDED), listOf(TalkEffect.StopSpeaking, TalkEffect.End))
+        if (s.endAfterSpeaking) return TalkStep(s.copy(phase = TalkPhase.ENDED, openAfter = null), listOfNotNull(TalkEffect.StopSpeaking, TalkEffect.End, s.openAfter?.let { TalkEffect.Open(it) }))
         return TalkStep(s.copy(phase = TalkPhase.LISTENING), listOf(TalkEffect.StopSpeaking, TalkEffect.Listen))
     }
 
     /** The orb tapped, the screen left, a call coming in: everything stops at once. */
     fun stop(s: TalkSession): TalkStep =
         if (s.phase == TalkPhase.ENDED) TalkStep(s, emptyList())
-        else TalkStep(s.copy(phase = TalkPhase.ENDED), listOfNotNull(TalkEffect.StopSpeaking.takeIf { s.phase == TalkPhase.SPEAKING }, TalkEffect.End))
+        else TalkStep(s.copy(phase = TalkPhase.ENDED, openAfter = null), listOfNotNull(TalkEffect.StopSpeaking.takeIf { s.phase == TalkPhase.SPEAKING }, TalkEffect.End))
 
     private fun say(s: TalkSession, text: String): TalkStep =
         TalkStep(s.copy(phase = TalkPhase.SPEAKING), listOf(TalkEffect.Speak(text)))
 
-    private fun end(s: TalkSession): TalkStep = TalkStep(s.copy(phase = TalkPhase.ENDED), listOf(TalkEffect.End))
+    /** Ends the conversation, then opens what it was asked to ([TalkSession.openAfter]). */
+    private fun end(s: TalkSession): TalkStep =
+        TalkStep(s.copy(phase = TalkPhase.ENDED, openAfter = null), listOfNotNull(TalkEffect.End, s.openAfter?.let { TalkEffect.Open(it) }))
 }
 
 // ---- On the device: the voice, the orb and what goes wrong (build plan V1, voice slice 2; non-AI, pure) ----

@@ -138,6 +138,13 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
             arrival = SharedMotion.arrivalAfterGo(ShellDestination.TODAY, arrival); current = ShellDestination.TODAY
         }
     }
+    // "Plan my day" said to Talk lands on Today, which then springs the planner up.
+    val openPlan by app.openPlan.collectAsState()
+    LaunchedEffect(openPlan) {
+        if (openPlan && current != ShellDestination.TODAY) {
+            arrival = SharedMotion.arrivalAfterGo(ShellDestination.TODAY, arrival); current = ShellDestination.TODAY
+        }
+    }
     // Tapping a MEKA notification lands where it belongs (a digest on Needs you, a cancel-by date on Lists…).
     val openDestination by app.openDestination.collectAsState()
     LaunchedEffect(openDestination) {

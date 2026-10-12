@@ -211,6 +211,10 @@ class TalkController(
             }
             TalkEffect.PlayMessages -> playMessages()
             is TalkEffect.ReadOut -> readOut(effect.read)
+            // "Plan my day": the conversation has ended (End came first); Today opens with the planner up.
+            is TalkEffect.Open -> when (effect.place) {
+                os.meka.core.domain.TalkPlace.PLAN -> { (context.applicationContext as? os.meka.android.MekaApplication)?.openPlan?.value = true }
+            }
             TalkEffect.StopSpeaking -> stopSaying()
             TalkEffect.End -> {
                 recognizer?.cancel()

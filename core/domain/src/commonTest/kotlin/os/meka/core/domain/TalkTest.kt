@@ -253,4 +253,38 @@ class TalkTest {
         // Talking on and on stops at the recogniser's limit.
         assertEquals(ListenStep.FINISH, TalkEndpoint.step(t0, true, t0 + 55_000, t0 + TalkEndpoint.LONGEST_MS))
     }
+
+    // ---- "Plan my day" (morning brief, slice 5) ----
+
+    @Test
+    fun planMyDayOpensThePlannerAndAnythingMoreIsAQuestion() {
+        listOf(
+            "Plan my day", "plan my day please", "OK MEKA, can you plan the day for me?", "let's plan today",
+            "make a plan for the day", "What's my plan for today", "yes, plan my day", "open the planner", "help me plan my day",
+        ).forEach { assertEquals(TalkReply.Open(AskRules.question(it)!!, TalkPlace.PLAN), TalkRules.reply(it, 0), it) }
+        listOf("plan my day around the dentist", "plan a trip to Barcelona", "what's the plan for Saturday", "planning", "my day")
+            .forEach { assertIs<TalkReply.Ask>(TalkRules.reply(it, 0), it) }
+        // The brief's own close still means the news: "more news" is a read-out.
+        assertIs<TalkReply.ReadOut>(TalkRules.reply("more news", 0))
+    }
+
+    @Test
+    fun planMyDaySaysOneLineEndsThenOpensThePlanner() {
+        val listening = TalkFlow.spoke(TalkFlow.heard(TalkFlow.start().session, "read my brief").session).session
+        assertEquals(TalkPhase.LISTENING, listening.phase)
+        val said = TalkFlow.heard(listening, "plan my day")
+        assertEquals(listOf<TalkEffect>(TalkEffect.Speak(TalkOpenRules.OPENING_PLAN)), said.effects)
+        assertEquals(TalkPhase.SPEAKING, said.session.phase)
+        assertEquals(0, said.session.questions)
+        assertEquals(TalkOpenRules.OPENED_PLAN, said.session.conversation.turns.last().answer)
+        // Said: the conversation ends first, then the planner opens.
+        val done = TalkFlow.spoke(said.session)
+        assertEquals(listOf(TalkEffect.End, TalkEffect.Open(TalkPlace.PLAN)), done.effects)
+        assertEquals(TalkPhase.ENDED, done.session.phase)
+        assertEquals(null, done.session.openAfter)
+        // Talked over: it still opens (he asked for it).
+        assertEquals(listOf(TalkEffect.StopSpeaking, TalkEffect.End, TalkEffect.Open(TalkPlace.PLAN)), TalkFlow.bargeIn(said.session).effects)
+        // Stopped (the orb, a call): nothing opens.
+        assertEquals(listOf(TalkEffect.StopSpeaking, TalkEffect.End), TalkFlow.stop(said.session).effects)
+    }
 }

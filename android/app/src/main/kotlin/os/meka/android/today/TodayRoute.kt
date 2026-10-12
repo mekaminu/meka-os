@@ -224,6 +224,11 @@ fun TodayRoute(
     LaunchedEffect(alarmBrief) {
         if (alarmBrief) { briefReadAloud = !showBrief; showBrief = true; widgetApp?.openBrief?.value = false }
     }
+    // "Plan my day" said to Talk (morning brief, slice 5): the planner springs up over Today, as its button does.
+    val talkPlan = widgetApp?.openPlan?.collectAsState()?.value ?: false
+    LaunchedEffect(talkPlan) {
+        if (talkPlan) { showBrief = false; showPlan = true; widgetApp?.openPlan?.value = false }
+    }
     val newsPlace by core.newsPlace.collectAsState()
     // The news ticker under the header (news ticker, slice 2): the per-device choice from Appearance.
     val ticker = remember(newsPlace) { TickerRules.ticker(newsPlace) }
