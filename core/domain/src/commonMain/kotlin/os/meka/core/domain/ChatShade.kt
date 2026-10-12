@@ -29,6 +29,9 @@ enum class ChatFinishTap {
     OPEN_TO_MARK,
 }
 
+/** How Meka finished a one-message card (slice 2b). */
+enum class CardFinish { SENT, SEEN, NOT_NOW, OPENED }
+
 object ChatShadeRules {
     const val SETTING_TITLE = "Mark read when I finish a card"
     const val SETTING_ON = "Done also marks the chat read in WhatsApp or Messages (people see blue ticks if read receipts are on)"
@@ -36,6 +39,77 @@ object ChatShadeRules {
 
     /** "Mark read in WhatsApp", "Mark read in Messages". */
     fun markReadLabel(app: CaptureApp?): String = "Mark read in ${TriageReplyRules.appName(app)}"
+
+    /**
+     * A one-message card's Mark read pill (slice 2b): only while its notification offers Mark as read (the card's own
+     * Open chat already covers the rest), else null.
+     */
+    fun singleMarkButton(app: CaptureApp?, markable: Boolean): String? = if (markable) markReadLabel(app) else null
+
+    /**
+     * Whether finishing a one-message card the way [finish] says also clears its notification from the shade (slice 2b):
+     * Send (after the reply went through the notification's own Reply) and Seen do; Not now keeps it there for later,
+     * and Open chat leaves it to WhatsApp, which clears it once the chat is read.
+     */
+    fun clearsAfter(finish: CardFinish): Boolean = finish == CardFinish.SENT || finish == CardFinish.SEEN
+
+    // --- Read to the end (slice 2b) ---
+
+    /** How long the last message under Show all stays on screen before the chat counts as read to the end. */
+    const val READ_DWELL_MS = 1_500L
+
+    /**
+     * Reading a chat to its last message under Show all clears its notifications from the shade (hidden only: it never
+     * marks read and the card stays until Done). Not while a reply is waiting: clearing would take away the
+     * notification's Reply that Send answers through.
+     */
+    fun readToEndClears(chat: TriageChat): Boolean = !chat.single && chat.replies == 0
+
+    // --- Clear from the shade as soon as MEKA has it (slice 2b) ---
+
+    const val ARRIVAL_ON = "Clear this chat from the shade as it comes"
+    const val ARRIVAL_OFF = "Stop clearing this chat from the shade"
+    const val ARRIVAL_SETTING_TITLE = "Cleared from the shade as they come"
+    const val ARRIVAL_SETTING_LINE =
+        "MEKA keeps every message and its card; WhatsApp still shows them unread. Send then opens the chat with the reply copied."
+
+    /** The chat key of a captured message, the same as [TriageChatRules.key] gives its card. */
+    fun key(item: CapturedItem): String {
+        val who = item.conversation?.trim()?.lowercase()?.let { "g:$it" } ?: "p:${People.key(item.personName)}"
+        return "${item.app.name}|$who"
+    }
+
+    /**
+     * Whether [chat] may have "Clear from the shade as soon as MEKA has it": never a one-to-one chat with someone on
+     * the family or always-notify list (Jeanette's messages always stay in the shade).
+     */
+    fun canClearOnArrival(chat: TriageChat, lists: PeopleLists): Boolean =
+        chat.isGroup || chat.cards.none { lists.isFamily(it.personKey) || lists.isAlwaysNotify(it.personKey) } &&
+            !lists.isFamily(chat.title) && !lists.isAlwaysNotify(chat.title)
+
+    /** Switches [chat]'s arrival clearing [on] or off. */
+    fun setClearOnArrival(current: Map<String, String>, chat: TriageChat, on: Boolean): Map<String, String> =
+        if (on) current + (chat.key to chat.title) else current - chat.key
+
+    /** The undo bar's line after switching it. */
+    fun arrivalLine(title: String, on: Boolean): String =
+        if (on) "$title · cleared from the shade as it comes; MEKA keeps every message" else "$title · stays in the shade as usual"
+
+    /** "Barça lads, Five-a-side": the Messages setting's line, or null when no chat has it. */
+    fun arrivalSummary(settings: TriageSettings): String? =
+        settings.clearOnArrival.values.sorted().takeIf { it.isNotEmpty() }?.joinToString(", ")
+
+    /**
+     * Whether a just-posted notification carrying [items] leaves the shade at once: every message is from a chat with
+     * the setting on and MEKA already has each one ([had]: triaged or kept for the digest, so nothing is lost and no
+     * retry needs WhatsApp's re-post); never when any message is from family or the always-notify list, or is urgent
+     * (those alert). Hiding only: it never marks read and never deletes anything in WhatsApp.
+     */
+    fun clearsOnArrival(items: List<CapturedItem>, settings: TriageSettings, lists: PeopleLists, had: Set<String>): Boolean =
+        settings.clearOnArrival.isNotEmpty() && items.isNotEmpty() && items.all { item ->
+            key(item) in settings.clearOnArrival && item.id in had && item.kind == CaptureKind.MESSAGE &&
+                !lists.isFamily(item.personName) && !lists.isAlwaysNotify(item.personName) && Capture.breakThrough(item, lists) == null
+        }
 
     /** "Open WhatsApp to mark read": the notification has gone, so only the app can mark it. */
     fun openToMarkLabel(app: CaptureApp?): String = "Open ${TriageReplyRules.appName(app)} to mark read"

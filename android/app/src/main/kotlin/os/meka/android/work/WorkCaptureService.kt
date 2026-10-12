@@ -17,6 +17,7 @@ import os.meka.core.domain.Capture
 import os.meka.core.domain.CaptureApp
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.CapturedItem
+import os.meka.core.domain.ChatShadeRules
 import os.meka.core.domain.GroupDigestRules
 import os.meka.core.domain.MessageTriageRules
 import os.meka.core.domain.RequestWatchRules
@@ -39,8 +40,9 @@ import os.meka.core.facade.TriageRead
  * on this phone, sealed, for the digest, with no AI. Each message is triaged once.
  *
  * It never replies on its own and never marks anything read. The only notifications it dismisses are a Digest group's
- * chatter once every message in it is kept for the digest (slice 4: the group stops sitting in the shade), and a chat's
- * notifications once Meka finishes its Needs you card ([clear], messages grouped per chat slice 2; hidden only). From a
+ * chatter once every message in it is kept for the digest (slice 4: the group stops sitting in the shade), a chat's
+ * notifications once Meka finishes its Needs you card ([clear], messages grouped per chat slice 2; hidden only), and a
+ * chat Meka set to "Clear from the shade as soon as MEKA has it" once MEKA has each message (slice 2b). From a
  * digest time on, the first message to come in also makes the digest's gist ([DigestGist], slice 4b). While a
  * message's notification shows, its Reply action is held in memory ([LiveReplies]) so Send on its Needs you card (Meka's
  * tap, slice 3) answers through Android's own Reply.
@@ -80,6 +82,14 @@ class WorkCaptureService : NotificationListenerService() {
             // A notification wholly from Digest groups, every message kept on this phone: cleared, so the group
             // stops sitting in the shade (slice 4). Mentions, 1:1 chats and Normal groups are never cleared.
             if (GroupDigestRules.clearsNotification(items, meka.captures.triageSettings.value, meka.captures.digestKept())) {
+                runCatching { cancelNotification(sbn.key) }
+            } else if (ChatShadeRules.clearsOnArrival(
+                    items, meka.captures.triageSettings.value, meka.captures.lists.value,
+                    meka.captures.triageSeen() + meka.captures.digestKept(),
+                )
+            ) {
+                // A chat Meka set to "Clear from the shade as soon as MEKA has it" (messages grouped per chat, slice
+                // 2b): every message is triaged or kept, none from family, always-notify or urgent. Hidden only.
                 runCatching { cancelNotification(sbn.key) }
             }
             // At a digest time, the busy groups' gist in one call and the digest's synced cards (slice 4b); once a slot.

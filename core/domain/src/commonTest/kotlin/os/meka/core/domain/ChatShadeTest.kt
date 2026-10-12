@@ -43,4 +43,53 @@ class ChatShadeTest {
         val done = ChatShadeRules.finish(ChatFinishTap.DONE, markable = false, markReadOnDone = false)
         assertEquals("Done · Barça lads · 2 messages", ChatShadeRules.line(chat, done, marked = false))
     }
+
+    private fun item(id: String, who: String, group: String? = "Barça lads", text: String = "Anyone for five-a-side?") =
+        CapturedItem(id, CaptureApp.WHATSAPP, CaptureKind.MESSAGE, who, text, group, 1_000L)
+
+    @Test
+    fun aNoisyChatLeavesTheShadeOnceMekaHasEachMessageButNeverFamilyOrUrgent() {
+        val lists = PeopleLists(family = setOf("Jeanette"), alwaysNotify = setOf("Mum"))
+        // The item's key matches the card's, so the switch on the chat's card reaches what the listener sees.
+        assertEquals(chat.key, ChatShadeRules.key(item("x", "Tunde")))
+        val on = TriageSettings(clearOnArrival = ChatShadeRules.setClearOnArrival(emptyMap(), chat, on = true))
+        assertEquals("Barça lads", ChatShadeRules.arrivalSummary(on))
+        assertEquals(null, ChatShadeRules.arrivalSummary(TriageSettings()))
+        val chatter = listOf(item("1", "Tunde"), item("2", "Femi"))
+        assertTrue(ChatShadeRules.clearsOnArrival(chatter, on, lists, had = setOf("1", "2")))
+        // Off by default; a message MEKA hasn't got yet (AI offline) stays for WhatsApp's re-post.
+        assertFalse(ChatShadeRules.clearsOnArrival(chatter, TriageSettings(), lists, had = setOf("1", "2")))
+        assertFalse(ChatShadeRules.clearsOnArrival(chatter, on, lists, had = setOf("1")))
+        // Jeanette, Mum or an urgent message in the same notification: it stays.
+        assertFalse(ChatShadeRules.clearsOnArrival(chatter + item("3", "Jeanette"), on, lists, had = setOf("1", "2", "3")))
+        assertFalse(ChatShadeRules.clearsOnArrival(listOf(item("4", "Mum")), on, lists, had = setOf("4")))
+        assertFalse(ChatShadeRules.clearsOnArrival(listOf(item("5", "Tunde", text = "URGENT call me")), on, lists, had = setOf("5")))
+        // Another chat's message isn't touched.
+        assertFalse(ChatShadeRules.clearsOnArrival(listOf(item("6", "Tunde", group = "Work")), on, lists, had = setOf("6")))
+        // Switching off forgets it.
+        assertTrue(ChatShadeRules.setClearOnArrival(on.clearOnArrival, chat, on = false).isEmpty())
+    }
+
+    @Test
+    fun theSwitchIsNeverOfferedForJeanetteOrAlwaysNotifyOneToOne() {
+        val lists = PeopleLists(family = setOf("Jeanette"), alwaysNotify = setOf("Mum"))
+        val jeanette = TriageChatRules.chats(listOf(card("j1", "Jeanette", 1, group = null), card("j2", "Jeanette", 2, group = null))).single()
+        val tunde = TriageChatRules.chats(listOf(card("t1", "Tunde", 1, group = null), card("t2", "Tunde", 2, group = null))).single()
+        assertFalse(ChatShadeRules.canClearOnArrival(jeanette, lists))
+        assertTrue(ChatShadeRules.canClearOnArrival(tunde, lists))
+        assertTrue(ChatShadeRules.canClearOnArrival(chat, lists))
+    }
+
+    @Test
+    fun aOneMessageCardMarksReadAndClearsAndReadingToTheEndClearsOnlyWithoutAReplyWaiting() {
+        assertEquals("Mark read in WhatsApp", ChatShadeRules.singleMarkButton(CaptureApp.WHATSAPP, true))
+        assertEquals(null, ChatShadeRules.singleMarkButton(CaptureApp.WHATSAPP, false))
+        assertTrue(ChatShadeRules.clearsAfter(CardFinish.SENT))
+        assertTrue(ChatShadeRules.clearsAfter(CardFinish.SEEN))
+        assertFalse(ChatShadeRules.clearsAfter(CardFinish.NOT_NOW))
+        assertFalse(ChatShadeRules.clearsAfter(CardFinish.OPENED))
+        assertTrue(ChatShadeRules.readToEndClears(chat))
+        val asks = TriageChatRules.chats(listOf(card("a", "Tunde", 1), card("b", "Femi", 2).copy(lane = TriageLane.NEEDS_REPLY))).single()
+        assertFalse(ChatShadeRules.readToEndClears(asks))
+    }
 }

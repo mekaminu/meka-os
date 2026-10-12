@@ -37,6 +37,11 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.ChatFinishTap
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import kotlinx.coroutines.delay
 import os.meka.core.domain.ChatShadeRules
 import os.meka.core.domain.TriageCard
 import os.meka.core.domain.TriageCardPrimary
@@ -61,10 +66,14 @@ sealed interface TriageChoice {
  * card shows. Not now / Seen take it off both devices. Each press gives a light
  * haptic (Not now a tick); the card folds away with the list's item motion and the undo bar rises with what was done.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TriageCardView(
     card: TriageCard, live: Boolean, reply: String, onReply: (String) -> Unit, onChoice: (TriageChoice) -> Unit,
     modifier: Modifier = Modifier,
+    /** "Mark read in WhatsApp" on a one-message chat while its notification offers it (slice 2b); null hides it. */
+    markLabel: String? = null,
+    onMark: () -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
     val rules = TriageReplyRules
@@ -103,7 +112,11 @@ internal fun TriageCardView(
                 }
             }
         }
-        Row(Modifier.padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        FlowRow(
+            Modifier.padding(top = MekaSpace.m),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
             val sendable = rules.cleanReply(reply)
             val label = rules.label(primary)
             TriagePill(label, filled = true, spoken = when (primary) {
@@ -125,6 +138,9 @@ internal fun TriageCardView(
             rules.secondary(card)?.let { quiet ->
                 TriagePill(quiet, filled = false, quiet = true, spoken = "$quiet: ${rules.who(card)}") { haptics.tick(); onChoice(TriageChoice.NotNow) }
             }
+            markLabel?.let { mark ->
+                TriagePill(mark, filled = false, spoken = "$mark: ${rules.who(card)}") { haptics.light(); onMark() }
+            }
         }
     }
 }
@@ -142,9 +158,24 @@ internal fun TriageCardView(
 internal fun TriageChatView(
     chat: TriageChat, markable: Boolean, onFinish: (ChatFinishTap) -> Unit, cardFor: @Composable (TriageCard, Modifier) -> Unit,
     modifier: Modifier = Modifier,
+    /** "Clear this chat from the shade as it comes" (slice 2b): on, off, or null when not offered (family, always-notify). */
+    arrival: Boolean? = null,
+    onArrival: (Boolean) -> Unit = {},
+    /** The last message under Show all stayed on screen [ChatShadeRules.READ_DWELL_MS]: read to the end (slice 2b). */
+    onReadToEnd: () -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
     var open by rememberSaveable(chat.key) { mutableStateOf(false) }
+    // Read to the end: once per chat while it's open, when its newest message has been on screen for a moment.
+    var lastShown by remember(chat.key, chat.cards.size) { mutableStateOf(false) }
+    var readToEnd by rememberSaveable(chat.key, chat.cards.size) { mutableStateOf(false) }
+    LaunchedEffect(open, lastShown, readToEnd) {
+        if (open && lastShown && !readToEnd) {
+            delay(ChatShadeRules.READ_DWELL_MS)
+            readToEnd = true
+            onReadToEnd()
+        }
+    }
     Column(modifier.fillMaxWidth().testTag("triage-chat-${chat.key}")) {
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
@@ -175,7 +206,17 @@ internal fun TriageChatView(
         }
         AnimatedVisibility(open, enter = unfold(), exit = fold()) {
             Column(Modifier.padding(start = MekaSpace.m, top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                chat.cards.forEach { card -> cardFor(card, Modifier) }
+                chat.cards.forEachIndexed { i, card ->
+                    val last = i == chat.cards.lastIndex
+                    cardFor(card, if (!last) Modifier else Modifier.onGloballyPositioned { c ->
+                        // Mostly on screen (the list clips what has scrolled away).
+                        lastShown = c.size.height > 0 && c.boundsInWindow().height >= c.size.height * 0.8f
+                    })
+                }
+                arrival?.let { on ->
+                    val label = if (on) ChatShadeRules.ARRIVAL_OFF else ChatShadeRules.ARRIVAL_ON
+                    TriagePill(label, filled = false, quiet = true, spoken = "$label: ${chat.title}") { haptics.tick(); onArrival(!on) }
+                }
             }
         }
     }

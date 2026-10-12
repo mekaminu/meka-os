@@ -49,6 +49,11 @@ data class TriageSettings(
     val names: List<String> = MessageTriageRules.DEFAULT_NAMES,
     /** "Mark read when I finish a card" (messages grouped per chat, slice 2): Done also fires Mark as read. Off by default. */
     val markReadOnDone: Boolean = false,
+    /**
+     * Chats whose notifications leave the shade as soon as MEKA has each message (messages grouped per chat, slice 2b):
+     * [TriageChatRules.key] to the chat's name as shown. Off for every chat by default; never for family or always-notify.
+     */
+    val clearOnArrival: Map<String, String> = emptyMap(),
 ) {
     private val modeByKey = groupModes.mapKeys { People.key(it.key) }
     private val privateKeys = neverToAi.map(People::key).toSet()

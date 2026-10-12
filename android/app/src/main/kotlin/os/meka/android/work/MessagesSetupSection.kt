@@ -146,6 +146,21 @@ internal fun MessagesSetupSection(core: MekaCore, store: CaptureStore, listening
                 spoken = ChatShadeRules.SETTING_TITLE) { haptics.tick(); store.setMarkReadOnDone(!settings.markReadOnDone) }
         }
 
+        // Slice 2b: chats cleared from the shade as they come (switched on a chat's card under Show all).
+        if (settings.clearOnArrival.isNotEmpty()) {
+            Text(ChatShadeRules.ARRIVAL_SETTING_TITLE, style = MekaType.itemMeta, color = Meka.colors.textPrimary,
+                modifier = Modifier.padding(top = MekaSpace.m))
+            Text(ChatShadeRules.ARRIVAL_SETTING_LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
+            settings.clearOnArrival.entries.sortedBy { it.value }.forEach { (key, title) ->
+                Row(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                    SettingChip("Stop", false, spoken = "Stop clearing $title from the shade") {
+                        haptics.tick(); store.setClearOnArrival(settings.clearOnArrival - key)
+                    }
+                }
+            }
+        }
+
         Text("Privacy and cost", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
         (MessagesSetupRules.PRIVACY + MessagesSetupRules.COST).forEach { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         Text("What MEKA can't see", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))

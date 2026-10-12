@@ -44,6 +44,7 @@ import os.meka.core.domain.DecisionCard
 import os.meka.core.domain.RequestCard
 import os.meka.core.domain.SchoolCover
 import os.meka.core.domain.TriageCard
+import os.meka.core.domain.CardFinish
 import os.meka.core.domain.ChatFinishTap
 import os.meka.core.domain.ChatShadeRules
 import os.meka.core.domain.TriageChat
@@ -132,13 +133,20 @@ internal class DecisionMoves(
     val onRequest: (RequestCard, RequestChoice) -> Unit = { _, _ -> },
     /** The task Change just made, open over the screen ([RequestChangePane]); null when none. */
     val changed: MutableState<RequestChange?> = mutableStateOf(null),
-    /** Send · Open chat · Edit · Not now · Seen on a triaged message (V1, messages slice 3). */
-    val onTriage: (TriageCard, TriageChoice) -> Unit = { _, _ -> },
+    /**
+     * Send · Open chat · Edit · Not now · Seen on a triaged message (V1, messages slice 3). [single]: the card is its
+     * chat's only one, so Send and Seen also clear its notification from the shade (messages grouped per chat, slice 2b).
+     */
+    val onTriage: (TriageCard, TriageChoice, Boolean) -> Unit = { _, _, _ -> },
     /**
      * Done, Mark read or Open … to mark read on a chat's card (messages grouped per chat, slices 1–2): every message in
      * it seen on both devices, the notification's own Mark as read on Meka's tap, then its notifications cleared.
      */
     val onTriageChat: (TriageChat, ChatFinishTap) -> Unit = { _, _ -> },
+    /** "Clear this chat from the shade as it comes" switched on a chat's card (slice 2b). */
+    val onChatArrival: (TriageChat, Boolean) -> Unit = { _, _ -> },
+    /** The chat read to its last message under Show all (slice 2b): its notifications leave the shade, nothing else. */
+    val onChatReadToEnd: (TriageChat) -> Unit = {},
     /** "Send all 3": each easy reply's draft, as its card shows it, on Meka's one tap. */
     val onSendAll: (List<TriageCard>) -> Unit = {},
     /** The undo bar, for the group digest's Caught up and group switches (slice 4). */
@@ -206,32 +214,41 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 }
                 Unit
             }
-        }, changed = changed, onTriage = { card, choice ->
+        }, changed = changed, onTriage = { card, choice, single ->
             val rules = TriageReplyRules
             scope.launch {
-                when (choice) {
+                // The keys first: Send's reply re-posts the notification and Seen may follow a removal.
+                val keys = if (single) LiveReplies.keysFor(listOf(card.id)) else emptySet()
+                val finish = when (choice) {
                     // Meka's tap is the approval (Level 3): the words on the card go through the notification's own Reply.
                     is TriageChoice.Send -> if (LiveReplies.send(context, card.id, choice.reply)) {
                         runCatching { core.sentTriage(card.id) }
                         undo.show(rules.sentLine(card), null)
+                        CardFinish.SENT
                     } else {
                         // The notification went meanwhile: the reply copied, the chat opened; Meka sends it there.
                         LiveReplies.open(context, card.id, card.app, choice.reply)
                         runCatching { core.seenTriage(card.id) }
                         undo.show(TriageReplyRules.SEND_FAILED_LINE, null)
+                        CardFinish.OPENED
                     }
                     TriageChoice.OpenChat -> {
                         LiveReplies.open(context, card.id, card.app, card.draft)
                         runCatching { core.seenTriage(card.id) }
                         undo.show(rules.openChatLine(card, rules.appName(card.app)), null)
+                        CardFinish.OPENED
                     }
-                    TriageChoice.NotNow -> if (runCatching { core.dismissTriage(card.id) }.getOrDefault(false)) {
-                        undo.show(rules.notNowLine(card), null)
+                    TriageChoice.NotNow -> {
+                        if (runCatching { core.dismissTriage(card.id) }.getOrDefault(false)) undo.show(rules.notNowLine(card), null)
+                        CardFinish.NOT_NOW
                     }
-                    TriageChoice.Seen -> if (runCatching { core.seenTriage(card.id) }.getOrDefault(false)) {
-                        undo.show(rules.seenLine(card), null)
+                    TriageChoice.Seen -> {
+                        if (runCatching { core.seenTriage(card.id) }.getOrDefault(false)) undo.show(rules.seenLine(card), null)
+                        CardFinish.SEEN
                     }
                 }
+                // A one-message card finished: its notification leaves the shade too (hidden only, after the reply went).
+                if (single && ChatShadeRules.clearsAfter(finish)) os.meka.android.work.WorkCaptureService.clear(keys)
                 Unit
             }
         }, onTriageChat = { chat, tap ->
@@ -251,6 +268,14 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 if (seen > 0 || marked || finish.openChat) undo.show(ChatShadeRules.line(chat, finish, marked), null)
                 Unit
             }
+        }, onChatArrival = { chat, on ->
+            val store = (context as? MekaApplication)?.captures
+            if (store != null) {
+                store.setClearOnArrival(ChatShadeRules.setClearOnArrival(store.triageSettings.value.clearOnArrival, chat, on))
+                undo.show(ChatShadeRules.arrivalLine(chat.title, on), null)
+            }
+        }, onChatReadToEnd = { chat ->
+            if (ChatShadeRules.readToEndClears(chat)) os.meka.android.work.WorkCaptureService.clear(LiveReplies.keysFor(chat.ids))
         }, onSendAll = { cards ->
             scope.launch {
                 var sent = 0
@@ -309,6 +334,8 @@ internal fun NeedsYouColumn(
     // Busy groups' chatter, kept on this phone (V1, messages slice 4): open at the top from 12:30 and 18:30, else a line.
     val captures = (LocalContext.current.applicationContext as MekaApplication).captures
     val digest = rememberGroupDigest(captures, core)
+    val triageSettings by captures.triageSettings.collectAsState()
+    val peopleLists by captures.lists.collectAsState()
     val goals by core.goalsView.collectAsState()
     val lists by core.listsView.collectAsState()
     val meanwhile = remember(goals, lists) { NeedsYouMeanwhileRules.build(goals, lists) }
@@ -362,11 +389,23 @@ internal fun NeedsYouColumn(
         chats.forEachIndexed { i, chat ->
             item(key = "triage-chat-${chat.key}") {
                 val cardFor: @Composable (TriageCard, Modifier) -> Unit = { card, m ->
-                    TriageCardView(card, card.id in live, edits[card.id] ?: card.draft.orEmpty(), { edits[card.id] = it }, { moves.onTriage(card, it) }, m)
+                    TriageCardView(card, card.id in live, edits[card.id] ?: card.draft.orEmpty(), { edits[card.id] = it }, { moves.onTriage(card, it, false) }, m)
                 }
                 val m = Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + i, play))
-                if (chat.single) cardFor(chat.cards.single(), m)
-                else TriageChatView(chat, ChatShadeRules.markable(chat, markable), { tap -> moves.onTriageChat(chat, tap) }, cardFor, m)
+                val chatMarkable = ChatShadeRules.markable(chat, markable)
+                if (chat.single) {
+                    // One message (slice 2b): its own Mark read while the notification offers it; Send and Seen clear it.
+                    val card = chat.cards.single()
+                    TriageCardView(card, card.id in live, edits[card.id] ?: card.draft.orEmpty(), { edits[card.id] = it },
+                        { moves.onTriage(card, it, true) }, m,
+                        markLabel = ChatShadeRules.singleMarkButton(chat.app, chatMarkable),
+                        onMark = { moves.onTriageChat(chat, ChatFinishTap.MARK_READ) })
+                } else {
+                    val arrival = if (ChatShadeRules.canClearOnArrival(chat, peopleLists)) chat.key in triageSettings.clearOnArrival else null
+                    TriageChatView(chat, chatMarkable, { tap -> moves.onTriageChat(chat, tap) }, cardFor, m,
+                        arrival = arrival, onArrival = { on -> moves.onChatArrival(chat, on) },
+                        onReadToEnd = { moves.onChatReadToEnd(chat) })
+                }
             }
         }
         // School days off on office days, a week ahead (school rhythm, slice 1): soonest first, above the requests.

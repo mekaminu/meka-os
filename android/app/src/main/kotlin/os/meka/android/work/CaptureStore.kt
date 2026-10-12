@@ -143,6 +143,12 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
         save()
     }
 
+    /** "Clear from the shade as soon as MEKA has it" for chats (messages grouped per chat, slice 2b; off for every chat). */
+    fun setClearOnArrival(chats: Map<String, String>) = synchronized(lock) {
+        _triageSettings.value = _triageSettings.value.copy(clearOnArrival = chats)
+        save()
+    }
+
     /** Caught up with [groupKeys] now: their cards leave until something new comes. */
     fun caughtUp(groupKeys: Collection<String>) = synchronized(lock) {
         if (groupKeys.isEmpty()) return@synchronized
@@ -189,6 +195,7 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
             groupModes = json.optJSONObject("groupModes")?.let { o -> o.keys().asSequence().associateWith { GroupMode.of(o.optString(it)) } }.orEmpty(),
             neverToAi = json.optJSONArray("neverToAi")?.let { a -> (0 until a.length()).mapTo(LinkedHashSet()) { a.getString(it) } }.orEmpty(),
             markReadOnDone = json.optBoolean("markReadOnDone", false),
+            clearOnArrival = json.optJSONObject("clearOnArrival")?.let { o -> o.keys().asSequence().associateWith { o.optString(it) } }.orEmpty(),
         )
         _digestSeen.value = GroupDigestRules.caughtUp(
             json.optJSONObject("digestSeen")?.let { o -> o.keys().asSequence().associateWith { o.optLong(it) } }.orEmpty(),
@@ -212,6 +219,7 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
             .put("groupModes", JSONObject().also { o -> _triageSettings.value.groupModes.forEach { (g, m) -> o.put(g, m.wire) } })
             .put("neverToAi", JSONArray(_triageSettings.value.neverToAi.toList()))
             .put("markReadOnDone", _triageSettings.value.markReadOnDone)
+            .put("clearOnArrival", JSONObject().also { o -> _triageSettings.value.clearOnArrival.forEach { (k, t) -> o.put(k, t) } })
             .put("digestSeen", JSONObject().also { o -> _digestSeen.value.forEach { (g, at) -> o.put(g, at) } })
         val sealed = seal(json.toString().toByteArray(Charsets.UTF_8))
         val out = file.startWrite()
