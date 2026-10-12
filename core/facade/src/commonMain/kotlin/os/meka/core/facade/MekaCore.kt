@@ -3155,7 +3155,9 @@ class MekaCore(
                 // Goals, properly, slice 8: each open goal with its progress and next step, so "how are my goals?" has an answer.
                 os.meka.core.domain.GoalAskRules.askLines(goals.view(tasks.all())),
                 // Bin days, slice 2: each bin and the coming collections, so "which bin is it this week?" has an answer.
-                os.meka.core.domain.BinRules.askLines(bins.items(), cal.epochDayOf(nowMs()), bankHolidays.calendar()))
+                os.meka.core.domain.BinRules.askLines(bins.items(), cal.epochDayOf(nowMs()), bankHolidays.calendar()),
+                // Car on autopilot, slice 3: the DVLA's answer and the car's dates, so "is the car taxed?" has an answer.
+                os.meka.core.domain.CarAskRules.askLines(os.meka.core.domain.CarRules.view(car.registration(), renewals.items(), carCheck(), cal.epochDayOf(nowMs()), cal), cal.epochDayOf(nowMs())))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)

@@ -259,3 +259,33 @@ fun Renewals.addCarDate(presetId: String, today: Long, registration: String?, ch
         subject = registration?.let(CarRules::display), leadDays = CarRules.MONTH_DAYS,
     )
 }
+
+/**
+ * Car on autopilot, slice 3: the car as MEKA describes it to the model (Ask's `car` lines), so "is the car taxed?",
+ * "when's the MOT?" and "any advisories?" have an answer. A head line ("Car · AB12 CDE · 2 of 4 on the radar"), the
+ * DVLA's answer as the Car row shows it (or that there is none yet), the MOT history, then each of the four dates with
+ * what the radar has ("MOT · On the radar · due Mon 9 Nov · the DVLA says Mon 2 Nov") or "not on the radar". Meka's
+ * own registration and radar, and the DVLA's structured fields (dates, a status, a make) in MEKA's words, so never
+ * untrusted. Nothing before a registration is typed or a date is tracked.
+ */
+object CarAskRules {
+    /** Head, DVLA, history and the four dates. */
+    const val ASK_LINES = 3 + 4
+
+    const val NO_ANSWER = "DVLA · no answer yet (the lookup waits for the DVLA keys) · the dates below are as Meka set them"
+
+    fun askLines(view: CarView, today: Long): List<String> {
+        if (view.registration == null && view.trackedCount == 0) return emptyList()
+        val head = "Car · " + (view.registration ?: "registration not typed") + " · " + when (val n = view.trackedCount) {
+            0 -> "none of its dates on the radar"
+            view.rows.size -> "all ${view.rows.size} dates on the radar"
+            else -> "$n of ${view.rows.size} dates on the radar"
+        }
+        val dvla = view.dvlaLine ?: NO_ANSWER.takeIf { view.registration != null }
+        val rows = view.rows.map { row ->
+            if (row.tracked) "${row.title} · ${row.line}"
+            else "${row.title} · not on the radar" + (row.dvlaDay?.let { " · the DVLA says due ${CarCheckRules.dayLabel(it, today)}" } ?: "")
+        }
+        return (listOfNotNull(head, dvla, view.historyLine) + rows).take(ASK_LINES)
+    }
+}

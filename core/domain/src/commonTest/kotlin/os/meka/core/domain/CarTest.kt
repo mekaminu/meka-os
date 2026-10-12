@@ -148,4 +148,40 @@ class CarTest {
         assertEquals("MOT history · failed 3 Nov 2025", CarCheckRules.historyLine(untaxed))
         assertEquals("Tue 2 Nov 2027", CarCheckRules.dayLabel(CivilDate.toEpochDay(2027, 11, 2), today()))
     }
+
+    @Test
+    fun askAndTalkHearTheCarTheDvlasAnswerAndEachDate() {
+        at(2026, 10, 12)
+        val cal = LocalCalendar.UTC
+        // Nothing typed, nothing tracked: no lines.
+        assertEquals(emptyList(), CarAskRules.askLines(CarRules.view(null, r.items(), null, today(), cal), today()))
+        // A registration but no DVLA answer yet: says so; untracked dates are "not on the radar".
+        val mot = r.addCarDate("mot", today(), "AB12CDE")
+        r.setDue(mot, CivilDate.toEpochDay(2026, 11, 5))
+        assertEquals(listOf(
+            "Car · AB12 CDE · 1 of 4 dates on the radar",
+            CarAskRules.NO_ANSWER,
+            "MOT · " + CarRules.view("AB12CDE", r.items()).rows[0].line,
+            "Car tax · not on the radar",
+            "Car insurance · not on the radar",
+            "Car service · not on the radar",
+        ), CarAskRules.askLines(CarRules.view("AB12CDE", r.items(), null, today(), cal), today()))
+        // With the DVLA's answer: its line, the history, the differing MOT day and the tax day for an untracked date.
+        val check = CarCheck(
+            "AB12CDE", found = true, make = "FORD", motDueDay = CivilDate.toEpochDay(2026, 11, 2), taxStatus = "Taxed",
+            taxDueDay = CivilDate.toEpochDay(2026, 12, 1), lastTestDay = CivilDate.toEpochDay(2025, 11, 3), lastPassed = true,
+            advisories = 2, checkedMs = world.clock.nowMs,
+        )
+        val lines = CarAskRules.askLines(CarRules.view("AB12CDE", r.items(), check, today(), cal), today())
+        assertEquals("DVLA · Ford · MOT due Mon 2 Nov · taxed until Tue 1 Dec · checked today", lines[1])
+        assertEquals("MOT history · passed 3 Nov 2025 · 2 advisories", lines[2])
+        assertTrue(lines[3].startsWith("MOT · On the radar") && lines[3].endsWith("· the DVLA says Mon 2 Nov"))
+        assertEquals("Car tax · not on the radar · the DVLA says due Tue 1 Dec", lines[4])
+        assertEquals(CarAskRules.ASK_LINES, lines.size)
+        // A date tracked but no registration: still told, without a DVLA line.
+        r.setDue(mot, CivilDate.toEpochDay(2026, 11, 2))
+        val noReg = CarAskRules.askLines(CarRules.view(null, r.items(), check, today(), cal), today())
+        assertEquals("Car · registration not typed · 1 of 4 dates on the radar", noReg.first())
+        assertTrue(noReg.none { it.startsWith("DVLA") })
+    }
 }

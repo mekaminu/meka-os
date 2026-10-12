@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -187,7 +187,8 @@ object AskRules {
                 queue: List<String> = emptyList(), leave: List<String> = emptyList(), facts: List<String> = emptyList(),
                 protected: List<String> = emptyList(), errands: List<String> = emptyList(),
                 appointments: List<String> = emptyList(), checklists: List<String> = emptyList(),
-                goals: List<String> = emptyList(), bins: List<String> = emptyList()): AskContext {
+                goals: List<String> = emptyList(), bins: List<String> = emptyList(),
+                car: List<String> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -262,7 +263,9 @@ object AskRules {
         val goalLines = goals.take(GoalAskRules.ASK_GOALS + 1).map { AskItem("", AskItemKind.GOALS, line(it)) }
         // Bin days (slice 2, [BinRules.askLines]): Meka's own typed bins in MEKA's words, never untrusted.
         val binLines = bins.take(1 + BinRules.ASK_BINS + BinRules.ASK_DAYS).map { AskItem("", AskItemKind.BINS, line(it)) }
-        val tail = listOfNotNull(shop, dinners, evening) + shield + errandLines + listLines + goalLines + binLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
+        // Car on autopilot (slice 3, [CarAskRules.askLines]): the registration, the DVLA's answer and the four dates, never untrusted.
+        val carLines = car.take(CarAskRules.ASK_LINES).map { AskItem("", AskItemKind.CAR, line(it)) }
+        val tail = listOfNotNull(shop, dinners, evening) + shield + errandLines + listLines + goalLines + binLines + carLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
         // Today's own lines keep room for at least [TODAY_ROOM] (the tail's last lines, the forecast's, go first), so a
         // full tail never pushes the context past [MAX_ITEMS].
         val tailKept = tail.take(MAX_ITEMS - minOf(items.size, TODAY_ROOM))

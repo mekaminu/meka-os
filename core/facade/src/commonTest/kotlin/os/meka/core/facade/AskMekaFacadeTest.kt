@@ -28,6 +28,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /** Ask MEKA through the facade (build plan V1, AI layer slice 3): handles stay here, cards do nothing until tapped. */
@@ -879,6 +880,23 @@ class AskMekaFacadeTest {
             "Collection · Tue 13 Oct (next week) · Black bin · out the evening before",
             "Collection · Tue 27 Oct · Black bin · out the evening before",
         ), ctx.items.filter { it.kind == AskItemKind.BINS }.map { it.line })
+        assertFalse(ctx.untrusted)
+    }
+
+    @Test
+    fun askHearsTheCarAndItsDates() = runTest {
+        val c = core()
+        c.askMeka("When's the MOT?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.CAR })
+        assertTrue(c.setCarRegistration("ab12 cde"))
+        assertNotNull(c.addCarDate("mot"))
+        c.askMeka("When's the MOT?")
+        val ctx = server.asked.last().second
+        val car = ctx.items.filter { it.kind == AskItemKind.CAR }.map { it.line }
+        assertEquals("Car · AB12 CDE · 1 of 4 dates on the radar", car.first())
+        assertEquals(os.meka.core.domain.CarAskRules.NO_ANSWER, car[1])
+        assertTrue(car[2].startsWith("MOT · On the radar"))
+        assertEquals("Car tax · not on the radar", car[3])
         assertFalse(ctx.untrusted)
     }
 }
