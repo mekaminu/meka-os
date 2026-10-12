@@ -57,4 +57,15 @@ object UpNextWhyRules {
     }
 
     const val MONTH_DAYS = 30L
+
+    /** Up next offers "Break it down" once a task has been carried over this many days (Fold review 2026-10-12 17:56, item 5). */
+    const val BREAK_DOWN_DAYS = 2L
+
+    /**
+     * Whether Up next offers "Break it down" for [t]: a one-off open task made [BREAK_DOWN_DAYS]+ days before [today]
+     * (a local epoch day; [dayOf] reads one) that has no checklist yet. A repeating task's steps are a routine, so never.
+     */
+    fun offersBreakDown(t: Task, today: Long, dayOf: (Long) -> Long): Boolean =
+        !t.isRepeating && !t.lifecycle.isTerminal && t.checklist.isEmpty() && t.createdAtMs > 0 &&
+            today - dayOf(t.createdAtMs) >= BREAK_DOWN_DAYS
 }

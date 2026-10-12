@@ -49,6 +49,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
@@ -335,6 +337,20 @@ private fun TemplateLink(label: String, lit: Boolean, onClick: () -> Unit) {
     )
 }
 
+/**
+ * "Break it down" from Up next (Fold review 2026-10-12 17:56, item 5): the task whose checklist field should take the
+ * focus when its detail shows. Asked for just before the detail opens; taken (and cleared) by that task's field.
+ */
+internal object StepFocus {
+    var pending by mutableStateOf<String?>(null)
+        private set
+
+    fun request(taskId: String) { pending = taskId }
+
+    /** True once for [taskId]: the request is cleared as it is taken. */
+    fun take(taskId: String): Boolean = (pending == taskId).also { if (it) pending = null }
+}
+
 @Composable
 private fun AddItemField(task: Task, actions: TodayActions) {
     // Not saveable: leaving (an unfold included) adds what was typed, so it mustn't come back to be added twice.
@@ -344,6 +360,15 @@ private fun AddItemField(task: Task, actions: TodayActions) {
     // pressed ([TextAutosave]: typing is never lost). Reads this task's own field, not the next task's.
     val add by rememberUpdatedState(actions.addStep)
     DisposableEffect(task.id) { onDispose { TextAutosave.pendingAdd(textState.value)?.let { add(task.id, it) } } }
+    // Break it down: the field takes the focus once the detail has opened (the keyboard rises and the focused field
+    // scrolls itself into view).
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(task.id, StepFocus.pending) {
+        if (StepFocus.pending == task.id) {
+            delay(MekaChoreography.checkDrawMs.toLong())
+            if (StepFocus.take(task.id)) runCatching { focus.requestFocus() }
+        }
+    }
     Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = MekaSpace.xs), contentAlignment = Alignment.CenterStart) {
         if (text.isEmpty()) Text(ChecklistRules.ADD_HINT, style = MekaType.body, color = Meka.colors.textTertiary)
         BasicTextField(
@@ -356,7 +381,7 @@ private fun AddItemField(task: Task, actions: TodayActions) {
             cursorBrush = SolidColor(Meka.colors.accent),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { actions.addStep(task.id, text); text = "" } }),
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Add checklist items" },
+            modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = "Add checklist items" },
         )
     }
 }

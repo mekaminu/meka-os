@@ -325,12 +325,16 @@ fun TodayRoute(
             runCatching { core.moveLater(id) }.getOrNull()?.let { mv -> eventUndo.show(mv.line) { core.undoMoveLater(mv) } }
         }
     }
+    // "Break it down" on a task carried over 2+ days (Fold review 2026-10-12 17:56, item 5): its detail opens with the
+    // checklist's add field focused, ready for the steps.
+    val breakDown: (String) -> Unit = { id -> StepFocus.request(id); actions.select(id) }
     val nowHandlers = NowHandlers(
         complete = actions.complete, tomorrow = actions.snooze, openTask = actions.select,
         openEvent = { eventOpen = it }, openNeedsYou = null, // Needs you is listed just above it on the cover screen
         went = { id -> scope.launch { runCatching { core.sessionWent(id, null) } } },
         didntGo = { id -> scope.launch { runCatching { core.sessionMissed(id) } } },
         later = moveLater,
+        breakDown = breakDown,
     )
     // The mic sits at the capture bar's end on every screen (Fold review 2026-10-09 07:26, item 5), not on a card:
     // Ask, already listening.
@@ -339,6 +343,7 @@ fun TodayRoute(
     val upNextHandlers = NowHandlers(
         complete = actions.complete, tomorrow = actions.snooze, openTask = actions.select,
         openEvent = { eventOpen = it }, openNeedsYou = null, later = moveLater,
+        breakDown = breakDown,
     )
 
     // Insets are applied once, by the app shell.

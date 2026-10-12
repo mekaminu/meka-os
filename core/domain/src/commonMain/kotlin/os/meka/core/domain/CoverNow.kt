@@ -49,6 +49,12 @@ enum class NowAction {
      * stretch from now.
      */
     LATER,
+
+    /**
+     * "Break it down" on an Up next task carried over [UpNextWhyRules.BREAK_DOWN_DAYS]+ days with no checklist yet
+     * (Fold review 2026-10-12 17:56, item 5): opens the task with its checklist's add field ready to type the steps.
+     */
+    BREAK_DOWN,
 }
 
 /**
@@ -217,7 +223,8 @@ object CoverNowRules {
                     running != null -> "Then: ${running.title} until ${hhmm(running.endAtMs)}"
                     else -> null
                 }
-                taskView(t, line, thenLine, thenEvent, needs, today.upNextLate(nowMs), today.upNextLaterMs)
+                taskView(t, line, thenLine, thenEvent, needs, today.upNextLate(nowMs), today.upNextLaterMs,
+                    breakDown = UpNextWhyRules.offersBreakDown(t, cal.epochDayOf(nowMs), cal::epochDayOf))
             }
             NowKind.CLEAR -> {
                 val left = tl.anytime.size
@@ -245,6 +252,7 @@ object CoverNowRules {
         return taskView(
             t, taskLine(t, today.timeline, nowMs, cal, weekGoals), thenLine = null, thenEvent = null, needs = null,
             late = today.upNextLate(nowMs), laterAtMs = today.upNextLaterMs,
+            breakDown = UpNextWhyRules.offersBreakDown(t, cal.epochDayOf(nowMs), cal::epochDayOf),
         )
     }
 
@@ -264,17 +272,24 @@ object CoverNowRules {
         }
     }
 
+    /** The chip's words (Fold review 2026-10-12 17:56, item 5). */
+    const val BREAK_DOWN_LABEL = "Break it down"
+
     /**
      * Done · Tomorrow · Open; a late planned task (lit) offers Done · Move to later · Tomorrow instead (the card itself
-     * opens it), or Done · Tomorrow · Open when today has no room left.
+     * opens it), or Done · Tomorrow · Open when today has no room left. A task carried over 2+ days with no checklist
+     * ([breakDown]) offers Done · Break it down · Tomorrow (the card itself opens it).
      */
     private fun taskView(
         t: Task, line: String, thenLine: String?, thenEvent: CalendarEvent?, needs: String?,
-        late: Boolean = false, laterAtMs: Long? = null,
+        late: Boolean = false, laterAtMs: Long? = null, breakDown: Boolean = false,
     ): NowView {
         val later = laterAtMs.takeIf { late }
-        val actions = if (later != null) listOf(NowAction.DONE, NowAction.LATER, NowAction.TOMORROW)
-        else listOf(NowAction.DONE, NowAction.TOMORROW, NowAction.OPEN_TASK)
+        val actions = when {
+            later != null -> listOf(NowAction.DONE, NowAction.LATER, NowAction.TOMORROW)
+            breakDown -> listOf(NowAction.DONE, NowAction.BREAK_DOWN, NowAction.TOMORROW)
+            else -> listOf(NowAction.DONE, NowAction.TOMORROW, NowAction.OPEN_TASK)
+        }
         return NowView(
             kind = NowKind.TASK, label = UP_NEXT_LABEL, lit = late, title = TaskTitleRules.display(t.title), line = line, event = null, task = t,
             join = null, mapsQuery = null, actions = actions,

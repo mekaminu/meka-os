@@ -13,7 +13,7 @@ struct NeedsYouMeanwhileView: View {
     var firstIndex: Int = 2
 
     var body: some View {
-        let m = NeedsYouMeanwhileRules.shared.build(goals: model.goals, lists: model.lists)
+        let m = NeedsYouMeanwhileRules.shared.build(goals: model.goals, lists: model.lists, comingUp: model.today?.comingUp ?? [])
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if !m.habits.isEmpty {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -22,13 +22,21 @@ struct NeedsYouMeanwhileView: View {
                 }
                 .staggeredAppear(firstIndex)
             }
+            if !m.comingUp.isEmpty {
+                // Coming up (Fold review 2026-10-12 17:56, item 3): the next two reminders; a click opens the task.
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    label(NeedsYouMeanwhileRules.shared.COMING_LABEL, nil)
+                    ForEach(m.comingUp, id: \.id) { l in lineRow(l, task: true) }
+                }
+                .staggeredAppear(firstIndex + (m.habits.isEmpty ? 0 : 1))
+            }
             if !m.waiting.isEmpty {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     label(NeedsYouMeanwhileRules.shared.WAITING_LABEL, nil)
                     ForEach(m.waiting, id: \.id) { l in lineRow(l) }
                     if let more = m.waitingMore { moreRow(more) }
                 }
-                .staggeredAppear(firstIndex + (m.habits.isEmpty ? 0 : 1))
+                .staggeredAppear(firstIndex + (m.habits.isEmpty ? 0 : 1) + (m.comingUp.isEmpty ? 0 : 1))
             }
             if !m.renewals.isEmpty {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -74,8 +82,15 @@ struct NeedsYouMeanwhileView: View {
         .accessibilityLabel(NeedsYouMeanwhileRules.shared.tickLabel(h: h))
     }
 
-    private func lineRow(_ l: MeanwhileLine) -> some View {
-        Button { model.go(to: .lists, reduced: reduceMotion) } label: {
+    private func lineRow(_ l: MeanwhileLine, task: Bool = false) -> some View {
+        Button {
+            if task {
+                model.go(to: .today, reduced: reduceMotion)
+                model.select(l.id, reduced: reduceMotion)
+            } else {
+                model.go(to: .lists, reduced: reduceMotion)
+            }
+        } label: {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(l.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(2)
                 Text(l.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
@@ -85,7 +100,7 @@ struct NeedsYouMeanwhileView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(MekaPressStyle())
-        .accessibilityHint("Opens Lists")
+        .accessibilityHint(task ? "Opens the task" : "Opens Lists")
     }
 
     private func moreRow(_ text: String) -> some View {

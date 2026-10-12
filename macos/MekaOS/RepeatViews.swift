@@ -50,6 +50,7 @@ struct StepsList: View {
     let palette: MekaPalette
     @State private var newStep = ""
     @State private var shopping = false
+    @FocusState private var addFocused: Bool
 
     private func addPending(to id: String) {
         if let step = TextAutosave.shared.pendingAdd(typed: newStep) { model.addStep(id, step) }
@@ -114,6 +115,7 @@ struct StepsList: View {
                 .textFieldStyle(.plain)
                 .font(MekaType.body)
                 .lineLimit(1...6)
+                .focused($addFocused)
                 .onSubmit { model.addStep(task.id, newStep); newStep = "" }
                 // A paste with several lines (or a new line typed) adds them all at once, each line an item.
                 .onChange(of: newStep) { _, typed in
@@ -123,6 +125,13 @@ struct StepsList: View {
                 // Return had been pressed (TextAutosave: typing is never lost).
                 .onChange(of: task.id) { oldId, _ in addPending(to: oldId) }
                 .onDisappear { addPending(to: task.id) }
+                // Break it down: the field takes the focus once the task's detail shows.
+                .task(id: "\(task.id)|\(model.breakDownTaskID ?? "")") {
+                    guard model.breakDownTaskID == task.id else { return }
+                    model.breakDownTaskID = nil
+                    try? await Task.sleep(for: .milliseconds(250))
+                    addFocused = true
+                }
             ChecklistTemplatesBar(task: task, empty: toTick.isEmpty && ticked.isEmpty, palette: palette)
         }
         .sheet(isPresented: $shopping) { ShopModeSheet(source: .checklist(task.id), palette: palette) }

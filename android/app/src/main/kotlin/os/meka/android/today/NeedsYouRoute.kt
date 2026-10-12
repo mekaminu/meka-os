@@ -155,6 +155,8 @@ internal class DecisionMoves(
     val undoLine: (String, (suspend () -> Unit)?) -> Unit = { _, _ -> },
     /** I'll work from home · Covered on a school day off's cover question (school rhythm, slice 1). */
     val onSchoolCover: (SchoolCover, Boolean) -> Unit = { _, _ -> },
+    /** Opens a task (a reminder under Coming up, Fold review 2026-10-12 17:56 item 3). */
+    val openTask: (String) -> Unit = {},
 ) {
     val setAside: List<String> get() = aside.value
 }
@@ -305,7 +307,7 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                     ?.let { done -> undo.show(done.line) { core.undoSchoolCover(done) } }
                 Unit
             }
-        })
+        }, openTask = { latestOpenTask(it) })
     }
 }
 
@@ -359,7 +361,9 @@ internal fun NeedsYouColumn(
     val peopleLists by captures.lists.collectAsState()
     val goals by core.goalsView.collectAsState()
     val lists by core.listsView.collectAsState()
-    val meanwhile = remember(goals, lists) { NeedsYouMeanwhileRules.build(goals, lists) }
+    // Coming up (Fold review 2026-10-12 17:56, item 3): the next two reminders, worked out by the core from every task.
+    val comingUp = core.today.collectAsState().value.comingUp
+    val meanwhile = remember(goals, lists, comingUp) { NeedsYouMeanwhileRules.build(goals, lists, comingUp) }
     // Messages still waiting turn "Nothing needs you" into "Nothing to decide · 9 messages to catch up on".
     val afterWork by core.afterWork.collectAsState()
     val haptics = rememberMekaHaptics()
@@ -521,7 +525,7 @@ internal fun NeedsYouColumn(
             }
             // Then what's coming for Meka instead of a blank page: today's habits (ticked inline), Waiting on and the
             // next renewals (NeedsYouMeanwhile; Fold reviews 2026-10-09, 00:10 item 6 and 07:26 item 10).
-            meanwhileItems(meanwhile, play, firstIndex = 2, tick = tickHabit, open = moves.openLists)
+            meanwhileItems(meanwhile, play, firstIndex = 2, tick = tickHabit, open = moves.openLists, openTask = moves.openTask)
         } else if (cards.isNotEmpty()) {
             item(key = "stack") {
                 DecisionStackView(cards, moves.onMove, Modifier.animateItem().appear(rememberAppearance(1, play)))

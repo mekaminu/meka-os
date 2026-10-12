@@ -992,7 +992,7 @@ final class MekaCoreBridgeTests: XCTestCase {
 
     /// Under "Nothing needs you" (Fold reviews 2026-10-09): the core's habits / Waiting on / renewals reach Swift.
     func testNeedsYouMeanwhileReachesSwift() {
-        let m = NeedsYouMeanwhileRules.shared.build(goals: nil, lists: nil)
+        let m = NeedsYouMeanwhileRules.shared.build(goals: nil, lists: nil, comingUp: [])
         XCTAssertTrue(m.isEmpty)
         XCTAssertTrue(m.sections.isEmpty)
         XCTAssertNil(m.habitsLine)
@@ -1000,6 +1000,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NeedsYouMeanwhileRules.shared.WAITING_LABEL, "Waiting on")
         XCTAssertEqual(NeedsYouMeanwhileRules.shared.more(total: 5), "+2 more")
         XCTAssertNil(NeedsYouMeanwhileRules.shared.more(total: 3))
+        // Fold review 2026-10-12 17:56, slice 4: Coming up (the next two reminders) and Break it down.
+        let line = MeanwhileLine(id: "a", title: "Renew passport", meta: "Reminder · Today · 18:00")
+        let c = NeedsYouMeanwhileRules.shared.build(goals: nil, lists: nil, comingUp: [line, line, line])
+        XCTAssertEqual(c.comingUp.count, 2)
+        XCTAssertEqual(c.sections, [NeedsYouMeanwhileRules.shared.COMING_LABEL])
+        XCTAssertEqual(NeedsYouMeanwhileRules.shared.COMING_LABEL, "Coming up")
+        XCTAssertEqual(CoverNowRules.shared.BREAK_DOWN_LABEL, "Break it down")
+        XCTAssertNotEqual(NowAction.breakDown, NowAction.openTask)
     }
 
     /// Requests slice 4: what Add on a request card says reaches Swift, and answering a card that isn't there is a no-op.

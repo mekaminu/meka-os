@@ -276,6 +276,9 @@ final class CoreModel {
     private(set) var exportOutcome: String?
     private(set) var exportSaved = false
     var selectedID: String?
+    /// "Break it down" from Up next (Fold review 2026-10-12 17:56, item 5): the task whose checklist field takes the
+    /// focus when its detail shows; the field clears it as it takes it.
+    var breakDownTaskID: String?
     /// The global frame of the row a task was just opened from, until the detail grows out of it.
     var selectionOrigin: CGRect?
     /// The shell's current destination and which way the last switch moved (for the push transition).

@@ -36,12 +36,14 @@ import os.meka.core.domain.NeedsYouMeanwhile
 import os.meka.core.domain.NeedsYouMeanwhileRules
 
 /**
- * Under "Nothing needs you": today's habits (the tick ring draws its check as in Goals, light haptic), Waiting on and
- * the next renewals (a tap opens Lists). Each section staggers in after the empty line (the list's item motion), rows
- * glide with `animateItem`. Reduced motion: the appearance cross-fades.
+ * Under "Nothing needs you": today's habits (the tick ring draws its check as in Goals, light haptic), Coming up (the
+ * next two reminders; a tap opens the task), Waiting on and the next renewals (a tap opens Lists). Each section
+ * staggers in after the empty line (the list's item motion), rows glide with `animateItem`. Reduced motion: the
+ * appearance cross-fades.
  */
 internal fun LazyListScope.meanwhileItems(
     m: NeedsYouMeanwhile, play: Boolean, firstIndex: Int, tick: (HabitItem) -> Unit, open: () -> Unit,
+    openTask: (String) -> Unit = {},
 ) {
     var index = firstIndex
     if (m.habits.isNotEmpty()) {
@@ -51,6 +53,15 @@ internal fun LazyListScope.meanwhileItems(
         }
         items(m.habits, key = { "mw-h-${it.id}" }) { h ->
             MeanwhileHabit(h, { tick(h) }, Modifier.animateItem().appear(rememberAppearance(i, play)))
+        }
+    }
+    if (m.comingUp.isNotEmpty()) {
+        val i = index++
+        item(key = "mw-coming") {
+            MeanwhileLabel(NeedsYouMeanwhileRules.COMING_LABEL, null, Modifier.animateItem().appear(rememberAppearance(i, play)))
+        }
+        items(m.comingUp, key = { "mw-c-${it.id}" }) { l ->
+            MeanwhileRow(l, { openTask(l.id) }, Modifier.animateItem().appear(rememberAppearance(i, play)), "Open the task")
         }
     }
     if (m.waiting.isNotEmpty()) {
@@ -101,11 +112,11 @@ private fun MeanwhileHabit(h: HabitItem, tick: () -> Unit, modifier: Modifier) {
     }
 }
 
-/** Waiting on / a renewal: context, so body weight; a tap opens Lists. */
+/** Coming up / Waiting on / a renewal: context, so body weight; a tap opens the task or Lists. */
 @Composable
-private fun MeanwhileRow(l: MeanwhileLine, open: () -> Unit, modifier: Modifier) {
+private fun MeanwhileRow(l: MeanwhileLine, open: () -> Unit, modifier: Modifier, openLabel: String = "Open Lists") {
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClickLabel = "Open Lists") { open() }
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClickLabel = openLabel) { open() }
             .padding(vertical = MekaSpace.xs),
     ) {
         Text(l.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)

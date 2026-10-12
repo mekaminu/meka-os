@@ -56,6 +56,11 @@ internal class NowHandlers(
     val didntGo: (String) -> Unit = {},
     /** "Move to later" on a late planned task (by task id): re-planned to the first free stretch, with Undo. */
     val later: (String) -> Unit = {},
+    /**
+     * "Break it down" on a task carried over 2+ days (Fold review 2026-10-12 17:56, item 5): opens it with the
+     * checklist's add field focused ([StepFocus]).
+     */
+    val breakDown: (String) -> Unit = {},
 )
 
 /**
@@ -160,6 +165,7 @@ private fun NowChip(a: NowAction, v: NowView, handlers: NowHandlers) {
         NowAction.WENT -> "Went"
         NowAction.DIDNT_GO -> "Didn't go"
         NowAction.LATER -> os.meka.core.domain.LateTaskRules.MOVE_LATER
+        NowAction.BREAK_DOWN -> os.meka.core.domain.CoverNowRules.BREAK_DOWN_LABEL
     }
     Text(
         label, style = MekaType.caption,
@@ -178,6 +184,7 @@ private fun NowChip(a: NowAction, v: NowView, handlers: NowHandlers) {
                     NowAction.WENT -> v.session?.let { handlers.went(it.habitId) }
                     NowAction.DIDNT_GO -> v.session?.let { handlers.didntGo(it.habitId) }
                     NowAction.LATER -> v.task?.let { handlers.later(it.id) }
+                    NowAction.BREAK_DOWN -> v.task?.let { handlers.breakDown(it.id) }
                 }
             }
             .minTouch().padding(horizontal = MekaSpace.l),

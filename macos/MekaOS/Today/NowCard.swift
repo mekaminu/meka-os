@@ -115,6 +115,8 @@ struct NowCardFace: View {
             case NowAction.went: if let id = v.session?.habitId { model.sessionWent(id) }
             case NowAction.didntGo: if let id = v.session?.habitId { model.sessionMissed(id) }
             case NowAction.later: if let id = v.task?.id { model.moveLater(id) }
+            // Break it down (Fold review 2026-10-12 17:56, item 5): the task opens with its checklist field focused.
+            case NowAction.breakDown: if let id = v.task?.id { model.breakDownTaskID = id; openTask(id) }
             default: break
             }
         } label: {
@@ -136,6 +138,7 @@ struct NowCardFace: View {
         case NowAction.went: return "Went"
         case NowAction.didntGo: return "Didn't go"
         case NowAction.later: return LateTaskRules.shared.MOVE_LATER
+        case NowAction.breakDown: return CoverNowRules.shared.BREAK_DOWN_LABEL
         default: return "Open"
         }
     }
