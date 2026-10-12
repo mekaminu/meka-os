@@ -79,6 +79,7 @@ import os.meka.core.domain.DecisionStatus
 import os.meka.core.domain.DueState
 import os.meka.core.domain.ListRules
 import os.meka.core.domain.ListsView
+import os.meka.core.domain.PromiseItem
 import os.meka.core.domain.SomedayKind
 import os.meka.core.domain.Task
 import os.meka.core.domain.WaitingItem
@@ -88,11 +89,12 @@ import os.meka.android.designsystem.sharedPlace
 
 /** The lists, in the order of the tabs; [short] is the label when five don't fit (the closed Fold). */
 enum class ListTab(val label: String, val short: String = label) {
-    WAITING("Waiting for", "Waiting"), SOMEDAY("Someday"), DECISIONS("Decisions"), RENEWALS("Renewals"), SHOPPING("Shopping"),
+    WAITING("Promises", "Promises"), SOMEDAY("Someday"), DECISIONS("Decisions"), RENEWALS("Renewals"), SHOPPING("Shopping"),
 }
 
 /**
- * LISTS (build plan M1): Waiting for (chase dates), Someday (kinds), Decisions (review dates) and Renewals (the
+ * LISTS (build plan M1): Promises both ways (People, slice 1: what you promised, with a by-day, then what you're
+ * waiting for, with chase dates), Someday (kinds), Decisions (review dates) and Renewals (the
  * renewals and bills radar, see RenewalsSection.kt) and Shopping (the shared shopping list, ShoppingSection.kt). One screen with five tabs; the lit tab pill springs across. Tapping a row unfolds its actions in place; "Got it" and "Do it now" make the
  * row leave like a completion (light haptic). Due chases and reviews are lit in the accent colour. Nothing is chased,
  * decided or promoted for you. Reduced motion: cross-fades only.
@@ -149,7 +151,10 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
         }
         item(key = "add-${tab.name}") {
             when (tab) {
-                ListTab.WAITING -> AddWaiting { title, who, days -> act { core.addWaiting(title, who, days) } }
+                ListTab.WAITING -> AddWaiting(
+                    addWaiting = { title, who, days -> act { core.addWaiting(title, who, days) } },
+                    addPromise = { title, to, days -> act { core.addPromise(title, to, days) } },
+                )
                 ListTab.SOMEDAY -> AddSomeday { title, kind -> act { core.addSomeday(title, kind) } }
                 ListTab.DECISIONS -> AddDecision { s, why, days -> act { core.recordDecision(s, why, days) } }
                 ListTab.RENEWALS -> AddRenewal(core.todayEpochDay()) { n -> act { core.addRenewal(n.title, n.kind, n.dueDay, n.repeat, n.cost, n.cancelByDaysBefore) } }
@@ -163,7 +168,26 @@ private fun LazyListScope.waiting(
     view: ListsView, open: String?, toggle: (String) -> Unit, core: MekaCore,
     act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit,
 ) {
-    if (view.waiting.isEmpty()) empty("waiting", "Nothing you're waiting on. Add a reply, a parcel or a refund below and MEKA tells you when to chase it.")
+    if (view.waiting.isEmpty() && view.promised.isEmpty()) {
+        empty("waiting", "Nothing promised either way. Add what you told someone you'd do, or a reply, a parcel or a refund you're waiting on, and MEKA tells you when it's due.")
+        return
+    }
+    if (view.promised.isNotEmpty()) {
+        item(key = "label-promised") { SectionLabel("You promised", Modifier.animateItem().padding(top = MekaSpace.xs)) }
+        items(view.promised, key = { "p-${it.id}" }) { p: PromiseItem ->
+            ListRow(p.title, p.meta, p.state, open == p.id, { toggle(p.id) }, Modifier.animateItem()) {
+                p.notes?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
+                Actions {
+                    Action("Kept") { leave { core.keptPromise(p.id) } }
+                    Action("Delete", critical = true) { leave { core.deletePromise(p.id) } }
+                }
+                Choices("Change the day", ListRules.PROMISE_CHOICES) { days -> act { core.setPromiseBy(p.id, days) } }
+            }
+        }
+    }
+    if (view.waiting.isNotEmpty() && view.promised.isNotEmpty()) {
+        item(key = "label-waiting") { SectionLabel("Waiting for", Modifier.animateItem().padding(top = MekaSpace.m)) }
+    }
     items(view.waiting, key = { "w-${it.id}" }) { w ->
         ListRow(w.title, w.meta, w.state, open == w.id, { toggle(w.id) }, Modifier.animateItem()) {
             w.notes?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
@@ -246,14 +270,14 @@ private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: 
         Row(Modifier.fillMaxWidth()) {
             tabs.forEach { t ->
                 val count = when (t) {
-                    ListTab.WAITING -> view.waiting.size
+                    ListTab.WAITING -> view.promisesBothWays
                     ListTab.SOMEDAY -> view.somedayCount
                     ListTab.DECISIONS -> view.decisions.size
                     ListTab.RENEWALS -> view.renewals.count
                     ListTab.SHOPPING -> view.shopping.count
                 }
                 val due = when (t) {
-                    ListTab.WAITING -> view.chaseDue; ListTab.DECISIONS -> view.reviewsDue; ListTab.RENEWALS -> view.renewalsDue; else -> 0
+                    ListTab.WAITING -> view.chaseDue + view.promisesDue; ListTab.DECISIONS -> view.reviewsDue; ListTab.RENEWALS -> view.renewalsDue; else -> 0
                 }
                 val color by animateColorAsState(
                     if (t == current) Meka.colors.textPrimary else Meka.colors.textTertiary, MekaMotion.appear(Meka.reducedMotion), label = "tab",
@@ -386,20 +410,38 @@ internal fun Field(hint: String, modifier: Modifier = Modifier, value: String? =
     }
 }
 
-/** Add to Waiting for: what, then (once typing) from whom and when to chase. */
+/**
+ * Add to Promises: first which way ("Waiting for" or "I promised"), then what, then (once typing) who and when —
+ * a chase date for waiting, a by-day for a promise. The chosen way's chip is lit; switching keeps what's typed.
+ */
 @Composable
-private fun AddWaiting(add: (String, String?, Int?) -> Unit) {
+private fun AddWaiting(addWaiting: (String, String?, Int?) -> Unit, addPromise: (String, String?, Int?) -> Unit) {
+    var promise by rememberSaveable { mutableStateOf(false) }
     var title by rememberSaveable { mutableStateOf("") }
     var who by rememberSaveable { mutableStateOf("") }
     var chase by rememberSaveable { mutableStateOf<Int?>(ListRules.DEFAULT_CHASE_DAYS) }
-    val submit = { if (title.isNotBlank()) { add(title, who.ifBlank { null }, chase); title = ""; who = ""; chase = ListRules.DEFAULT_CHASE_DAYS } }
+    var byDays by rememberSaveable { mutableStateOf<Int?>(null) }
+    val submit = {
+        if (title.isNotBlank()) {
+            if (promise) addPromise(title, who.ifBlank { null }, byDays) else addWaiting(title, who.ifBlank { null }, chase)
+            title = ""; who = ""; chase = ListRules.DEFAULT_CHASE_DAYS; byDays = null
+        }
+    }
     Column(Modifier.padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Field("Waiting for…", value = title, onValue = { title = it }) { submit() }
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Chip("Waiting for", !promise) { promise = false }
+            Chip("I promised", promise) { promise = true }
+        }
+        Field(if (promise) "I promised to…" else "Waiting for…", value = title, onValue = { title = it }) { submit() }
         AnimatedVisibility(title.isNotBlank(), enter = unfold(), exit = fold()) {
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field("From whom (optional)", value = who, onValue = { who = it }) { submit() }
+                Field(if (promise) "To whom (optional)" else "From whom (optional)", value = who, onValue = { who = it }) { submit() }
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    ListRules.CHASE_CHOICES.forEach { c -> Chip(if (c.days == null) c.label else "Chase ${c.label.lowercase()}", chase == c.days) { chase = c.days } }
+                    if (promise) {
+                        ListRules.PROMISE_CHOICES.forEach { c -> Chip(c.label, byDays == c.days) { byDays = c.days } }
+                    } else {
+                        ListRules.CHASE_CHOICES.forEach { c -> Chip(if (c.days == null) c.label else "Chase ${c.label.lowercase()}", chase == c.days) { chase = c.days } }
+                    }
                 }
                 Action("Add") { submit() }
             }

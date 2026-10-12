@@ -998,6 +998,18 @@ final class CoreModel {
     func received(_ id: String) { MekaHaptics.light(); run { try await $0.received(id: id) } }
     func deleteWaiting(_ id: String) { run { try await $0.deleteWaiting(id: id) } }
 
+    // Promised (People, slice 1): only Strings and Ints cross to the core; nothing is sent to anyone.
+    func addPromise(_ title: String, to: String?, byInDays: Int?) {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        let w = to?.trimmingCharacters(in: .whitespacesAndNewlines)
+        run { _ = try await $0.addPromise(title: t, to: (w?.isEmpty ?? true) ? nil : w, byInDays: Self.k(byInDays)) }
+    }
+
+    func setPromiseBy(_ id: String, days: Int?) { run { try await $0.setPromiseBy(id: id, days: Self.k(days)) } }
+    func keptPromise(_ id: String) { MekaHaptics.light(); run { try await $0.keptPromise(id: id) } }
+    func deletePromise(_ id: String) { run { try await $0.deletePromise(id: id) } }
+
     // Shopping (family sharing, slice 1): only Strings cross to the core.
     func addShopping(_ text: String) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)

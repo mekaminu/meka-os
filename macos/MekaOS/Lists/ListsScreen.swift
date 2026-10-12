@@ -7,7 +7,7 @@ enum ListTab: Int, CaseIterable, Identifiable {
     var id: Int { rawValue }
     var label: String {
         switch self {
-        case .waiting: "Waiting for"
+        case .waiting: "Promises"
         case .someday: "Someday"
         case .decisions: "Decisions"
         case .renewals: "Renewals"
@@ -16,7 +16,8 @@ enum ListTab: Int, CaseIterable, Identifiable {
     }
 }
 
-/// LISTS on the Mac (build plan M1): Waiting for (chase dates), Someday (kinds), Decisions (review dates), Renewals
+/// LISTS on the Mac (build plan M1): Promises both ways (People, slice 1: what you promised, with a by-day, then what
+/// you're waiting for, with chase dates), Someday (kinds), Decisions (review dates), Renewals
 /// (the renewals and bills radar, `RenewalsSection.swift`) and Shopping (the shared list, `ShoppingSection.swift`), synced
 /// with the Fold. A segmented control switches lists; clicking a row unfolds its actions (date presets are menus, as
 /// rule 7 allows). "Got it" and "Do it now" make the row leave like a completion. Due chases and reviews are lit in the
@@ -105,13 +106,13 @@ struct ListsScreen: View {
         let renewalIDs: [String] = l.renewals.all.map { "\($0.id)|\($0.dueDay)" }
         let shopping: [ShoppingItem] = l.shopping.toBuy + l.shopping.got
         let shoppingIDs: [String] = shopping.map { "\($0.id)|\($0.got)" }
-        return l.waiting.map(\.id) + l.someday.flatMap { $0.items.map(\.id) } + l.decisions.map(\.id) + renewalIDs + shoppingIDs
+        return l.promised.map(\.id) + l.waiting.map(\.id) + l.someday.flatMap { $0.items.map(\.id) } + l.decisions.map(\.id) + renewalIDs + shoppingIDs
     }
 
     private func tabLabel(_ t: ListTab) -> String {
         guard let l = model.lists else { return t.label }
         let n: Int32 = switch t {
-        case .waiting: Int32(l.waiting.count)
+        case .waiting: l.promisesBothWays
         case .someday: l.somedayCount
         case .decisions: Int32(l.decisions.count)
         case .renewals: l.renewals.count
@@ -126,9 +127,23 @@ struct ListsScreen: View {
 
     @ViewBuilder private var waiting: some View {
         let items = model.lists?.waiting ?? []
-        if items.isEmpty {
-            EmptyLine(text: "Nothing you're waiting on. Add a reply, a parcel or a refund below and MEKA tells you when to chase it.", palette: palette)
+        let promised = model.lists?.promised ?? []
+        if items.isEmpty && promised.isEmpty {
+            EmptyLine(text: "Nothing promised either way. Add what you told someone you'd do, or a reply, a parcel or a refund you're waiting on, and MEKA tells you when it's due.", palette: palette)
         }
+        if !promised.isEmpty { sectionLabel("You promised").padding(.top, MekaSpace.xs) }
+        ForEach(promised, id: \.id) { p in
+            ListRowView(title: p.title, meta: p.meta, due: p.state == .due, expanded: open == p.id, palette: palette, toggle: { toggle(p.id) }) {
+                if let notes = p.notes { Text(notes).font(MekaType.body).foregroundStyle(palette.textSecondary) }
+                HStack(spacing: MekaSpace.l) {
+                    Button("Kept") { open = nil; model.keptPromise(p.id) }
+                    DayMenu(title: "Change the day", choices: ListRules.shared.PROMISE_CHOICES) { model.setPromiseBy(p.id, days: $0) }
+                    Button("Delete", role: .destructive) { open = nil; model.deletePromise(p.id) }
+                }
+                .rowActions(palette)
+            }
+        }
+        if !promised.isEmpty && !items.isEmpty { sectionLabel("Waiting for").padding(.top, MekaSpace.m) }
         ForEach(items, id: \.id) { w in
             ListRowView(title: w.title, meta: w.meta, due: w.state == .due, expanded: open == w.id, palette: palette, toggle: { toggle(w.id) }) {
                 if let notes = w.notes { Text(notes).font(MekaType.body).foregroundStyle(palette.textSecondary) }
@@ -141,6 +156,12 @@ struct ListsScreen: View {
                 .rowActions(palette)
             }
         }
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+            .foregroundStyle(palette.textTertiary)
     }
 
     // MARK: Someday
@@ -272,23 +293,43 @@ private struct ReplaceField: View {
     }
 }
 
+/// Add to Promises: which way ("Waiting for" or "I promised"), then what, then who and when (a chase date or a by-day).
 private struct AddWaitingRow: View {
     @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
+    @State private var promise = false
     @State private var title = ""
     @State private var who = ""
     @State private var chase: Int? = Int(ListRules.shared.DEFAULT_CHASE_DAYS)
+    @State private var by: Int? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            TextField("Waiting for…", text: $title).textFieldStyle(.roundedBorder).onSubmit(add)
+            Picker("Way", selection: Binding(get: { promise }, set: { new in
+                withAnimation(MekaMotion.appear(reduced: reduceMotion)) { promise = new }
+            })) {
+                Text("Waiting for").tag(false)
+                Text("I promised").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            TextField(promise ? "I promised to…" : "Waiting for…", text: $title).textFieldStyle(.roundedBorder).onSubmit(add)
             if !title.isEmpty {
                 HStack(spacing: MekaSpace.m) {
-                    TextField("From whom (optional)", text: $who).textFieldStyle(.roundedBorder).onSubmit(add)
-                    Picker("Chase", selection: $chase) {
-                        ForEach(ListRules.shared.CHASE_CHOICES, id: \.label) { c in Text(c.label).tag(c.days?.intValue) }
+                    TextField(promise ? "To whom (optional)" : "From whom (optional)", text: $who).textFieldStyle(.roundedBorder).onSubmit(add)
+                    if promise {
+                        Picker("By", selection: $by) {
+                            ForEach(ListRules.shared.PROMISE_CHOICES, id: \.label) { c in Text(c.label).tag(c.days?.intValue) }
+                        }
+                        .fixedSize()
+                    } else {
+                        Picker("Chase", selection: $chase) {
+                            ForEach(ListRules.shared.CHASE_CHOICES, id: \.label) { c in Text(c.label).tag(c.days?.intValue) }
+                        }
+                        .fixedSize()
                     }
-                    .fixedSize()
                     Button("Add", action: add).keyboardShortcut(.defaultAction)
                 }
                 .transition(.opacity)
@@ -297,8 +338,12 @@ private struct AddWaitingRow: View {
     }
 
     private func add() {
-        model.addWaiting(title, who: who, chaseInDays: chase)
-        title = ""; who = ""; chase = Int(ListRules.shared.DEFAULT_CHASE_DAYS)
+        if promise {
+            model.addPromise(title, to: who, byInDays: by)
+        } else {
+            model.addWaiting(title, who: who, chaseInDays: chase)
+        }
+        title = ""; who = ""; chase = Int(ListRules.shared.DEFAULT_CHASE_DAYS); by = nil
     }
 }
 

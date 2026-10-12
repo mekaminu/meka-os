@@ -9,6 +9,8 @@ import os.meka.core.sync.fv
  * Lists (build plan M1): Waiting for (with chase dates), Someday (with kinds) and Decisions (with review dates).
  *
  * - Waiting for is a `commitment` with direction OWED_TO_ME (ADR-008). Its chase date is `followUpAtMs`.
+ * - Promised (People, slice 1) is the other side of the same table: a `commitment` with direction OWED_BY_ME, lifecycle
+ *   ACTIVE, the person in `counterpartyLabel` and the day it's promised by in `dueAtMs`. "Kept" makes it DONE.
  * - Someday is a Task with lifecycle SOMEDAY and a [SomedayKind]; it never consumes planning capacity.
  * - A Decision is a `decision` entity; its review date is `reviewAtMs`.
  *
@@ -32,6 +34,22 @@ data class WaitingItem(
     val chaseDay: Long?,
     val state: DueState,
     /** "Ada · since Mon 5 Oct · chase Thu 8 Oct", "Ada · chase today", "Ada · chase was due Mon 5 Oct". */
+    val meta: String,
+    val hasConflict: Boolean,
+)
+
+/** Something Meka promised someone (People, slice 1): "Fix Jeanette's bike" · "Jeanette · by Thu 15 Oct". */
+data class PromiseItem(
+    val id: String,
+    val title: String,
+    /** Who it was promised to ("Jeanette", "Rex's coach"); null when not said. */
+    val to: String?,
+    val notes: String?,
+    val sinceMs: Long,
+    /** Local epoch day it's promised by; null for no date. */
+    val byDay: Long?,
+    val state: DueState,
+    /** "Jeanette · by Thu 15 Oct", "Jeanette · due today", "was due Mon 12 Oct", "Jeanette · since Mon 5 Oct". */
     val meta: String,
     val hasConflict: Boolean,
 )
@@ -67,14 +85,21 @@ data class ListsView(
     val renewals: RenewalsView = RenewalsView.EMPTY,
     /** The shared shopping list (family sharing, slice 1): to buy in the order added, then what was got this week. */
     val shopping: ShoppingView = ShoppingView.EMPTY,
+    /** Open promises Meka made (People, slice 1): due first (oldest day first), then by day, then undated (newest first). */
+    val promised: List<PromiseItem> = emptyList(),
 ) {
     val chaseDue: Int get() = waiting.count { it.state == DueState.DUE }
+    val promisesDue: Int get() = promised.count { it.state == DueState.DUE }
     val reviewsDue: Int get() = decisions.count { it.state == DueState.DUE }
     val renewalsDue: Int get() = renewals.dueCount
-    val dueCount: Int get() = chaseDue + reviewsDue + renewalsDue
+    val dueCount: Int get() = promisesDue + chaseDue + reviewsDue + renewalsDue
 
-    /** "2 to chase · 1 decision to review · 1 renewal due"; null when nothing is due. */
+    /** Promised and waiting for together: what the Waiting for tab counts. */
+    val promisesBothWays: Int get() = promised.size + waiting.size
+
+    /** "1 promise due · 2 to chase · 1 decision to review · 1 renewal due"; null when nothing is due. */
     val dueLine: String? get() = listOfNotNull(
+        promisesDue.takeIf { it > 0 }?.let { if (it == 1) "1 promise due" else "$it promises due" },
         chaseDue.takeIf { it > 0 }?.let { "$it to chase" },
         reviewsDue.takeIf { it > 0 }?.let { "$it ${if (it == 1) "decision" else "decisions"} to review" },
         renewals.dueLine,
@@ -101,6 +126,12 @@ object ListRules {
     )
 
     const val DEFAULT_CHASE_DAYS = 3
+
+    /** "By when" presets for a promise; none by default (most promises have no date). */
+    val PROMISE_CHOICES = listOf(
+        DayChoice("By today", 0), DayChoice("By tomorrow", 1), DayChoice("Within 3 days", 3), DayChoice("Within a week", 7),
+        DayChoice("Within 2 weeks", 14), DayChoice("No date", null),
+    )
 
     /** Kinds in the order the Someday list groups them (and the pickers offer them). */
     val SOMEDAY_KINDS: List<SomedayKind> = enumValues<SomedayKind>().toList()
@@ -141,6 +172,18 @@ object ListRules {
                 if (sinceDay < today) parts += "since ${CivilDate.shortLabel(sinceDay)}"
                 parts += "chase ${dayWord(chaseDay, today)}"
             }
+        }
+        return parts.joinToString(" · ")
+    }
+
+    fun promiseMeta(to: String?, sinceDay: Long, byDay: Long?, today: Long): String {
+        val parts = mutableListOf<String>()
+        to?.takeIf { it.isNotBlank() }?.let { parts += it }
+        parts += when {
+            byDay == null -> if (sinceDay < today) "since ${CivilDate.shortLabel(sinceDay)}" else "since today"
+            byDay < today -> "was due ${CivilDate.shortLabel(byDay)}"
+            byDay == today -> "due today"
+            else -> "by ${dayWord(byDay, today)}"
         }
         return parts.joinToString(" · ")
     }
@@ -225,6 +268,58 @@ class Lists(
 
     fun deleteWaiting(id: String) {
         requireWaiting(id)
+        replica.commitLocal(EntityTypes.COMMITMENT, id, mapOf(ActionableFields.DELETED to true.fv()))
+    }
+
+    // ---- Promised (People, slice 1) ----
+
+    /** Something Meka promised [to] someone, by [byInDays] from today (null: no date). Nothing is sent to anyone. */
+    fun addPromise(title: String, to: String? = null, byInDays: Int? = null): String {
+        val t = cleanTitle(title, "Say what you promised")
+        checkDays(byInDays)
+        val id = ids()
+        val fields = linkedMapOf<String, FieldValue>(
+            ActionableFields.TITLE to t.fv(),
+            CommitmentFields.DIRECTION to CommitmentDirection.OWED_BY_ME.name.fv(),
+            ActionableFields.LIFECYCLE to Lifecycle.ACTIVE.name.fv(),
+            ActionableFields.CREATED_AT to nowMs().fv(),
+            ActionableFields.VISIBILITY to Visibility.PRIVATE.name.fv(),
+            ActionableFields.PROVENANCE_SOURCE to "user".fv(),
+            ActionableFields.PROVENANCE_TRUST to Trust.TRUSTED_USER.name.fv(),
+        )
+        to?.trim()?.takeIf { it.isNotEmpty() }?.let { fields[CommitmentFields.COUNTERPARTY_LABEL] = it.take(MAX_TITLE).fv() }
+        if (byInDays != null) fields[ActionableFields.DUE_AT] = daysFromToday(byInDays)
+        replica.commitLocal(EntityTypes.COMMITMENT, id, fields)
+        return id
+    }
+
+    /** Sets the day it's promised by, [days] from today, or clears it. */
+    fun setPromiseBy(id: String, days: Int?) {
+        requirePromise(id)
+        checkDays(days)
+        replica.commitLocal(EntityTypes.COMMITMENT, id, mapOf(ActionableFields.DUE_AT to daysFromToday(days)))
+    }
+
+    /** "Kept": done. Terminal, so it wins over a date moved concurrently on another device. */
+    fun kept(id: String) {
+        requirePromise(id)
+        replica.commitLocal(
+            EntityTypes.COMMITMENT, id,
+            mapOf(ActionableFields.LIFECYCLE to Lifecycle.DONE.name.fv(), ActionableFields.COMPLETED_AT to nowMs().fv()),
+        )
+    }
+
+    fun editPromise(id: String, title: String? = null, to: String? = null, notes: String? = null) {
+        requirePromise(id)
+        val changes = linkedMapOf<String, FieldValue>()
+        title?.let { changes[ActionableFields.TITLE] = cleanTitle(it, "Say what you promised").fv() }
+        to?.let { w -> changes[CommitmentFields.COUNTERPARTY_LABEL] = w.trim().takeIf { it.isNotEmpty() }?.take(MAX_TITLE)?.fv() ?: FieldValue.Null }
+        notes?.let { n -> changes[ActionableFields.NOTES] = n.takeIf { it.isNotBlank() }?.fv() ?: FieldValue.Null }
+        if (changes.isNotEmpty()) replica.commitLocal(EntityTypes.COMMITMENT, id, changes)
+    }
+
+    fun deletePromise(id: String) {
+        requirePromise(id)
         replica.commitLocal(EntityTypes.COMMITMENT, id, mapOf(ActionableFields.DELETED to true.fv()))
     }
 
@@ -377,6 +472,35 @@ class Lists(
             )
     }
 
+    fun promisedItems(): List<PromiseItem> {
+        val today = today()
+        return replica.entities(EntityTypes.COMMITMENT)
+            .filter { it[CommitmentFields.DIRECTION].textOrNull == CommitmentDirection.OWED_BY_ME.name }
+            .filter { lifecycleOf(it)?.isTerminal != true }
+            .map { s ->
+                val since = s[ActionableFields.CREATED_AT].longOrNull ?: 0L
+                val by = s[ActionableFields.DUE_AT].longOrNull?.let(calendar::epochDayOf)
+                val to = s[CommitmentFields.COUNTERPARTY_LABEL].textOrNull
+                PromiseItem(
+                    id = s.ref.entityId,
+                    title = s[ActionableFields.TITLE].textOrNull ?: "",
+                    to = to,
+                    notes = s[ActionableFields.NOTES].textOrNull,
+                    sinceMs = since,
+                    byDay = by,
+                    state = ListRules.dueState(by, today),
+                    meta = ListRules.promiseMeta(to, calendar.epochDayOf(since), by, today),
+                    hasConflict = replica.conflictsFor(EntityTypes.COMMITMENT, s.ref.entityId).isNotEmpty(),
+                )
+            }
+            .sortedWith(
+                compareBy<PromiseItem> { if (it.state == DueState.DUE) 0 else if (it.byDay != null) 1 else 2 }
+                    .thenBy { it.byDay ?: Long.MAX_VALUE }
+                    .thenByDescending { it.sinceMs }
+                    .thenBy { it.id },
+            )
+    }
+
     fun somedayGroups(tasks: List<Task>): List<SomedayGroup> =
         tasks.filter { it.lifecycle == Lifecycle.SOMEDAY }
             .groupBy { it.somedayKind ?: SomedayKind.IDEA }
@@ -417,7 +541,7 @@ class Lists(
 
     /** The whole Lists screen. [tasks] is the already-loaded task list (Someday lives there). */
     fun view(tasks: List<Task>, renewals: RenewalsView = RenewalsView.EMPTY, shopping: ShoppingView = ShoppingView.EMPTY): ListsView =
-        ListsView(waitingItems(), somedayGroups(tasks), decisionItems(), renewals, shopping)
+        ListsView(waitingItems(), somedayGroups(tasks), decisionItems(), renewals, shopping, promisedItems())
 
     // ---- Helpers ----
 
@@ -438,6 +562,13 @@ class Lists(
         val s = replica.entity(EntityTypes.COMMITMENT, id)
         if (s == null || s.deleted || s[CommitmentFields.DIRECTION].textOrNull != CommitmentDirection.OWED_TO_ME.name) {
             throw ValidationException("That item isn't in Waiting for")
+        }
+    }
+
+    private fun requirePromise(id: String) {
+        val s = replica.entity(EntityTypes.COMMITMENT, id)
+        if (s == null || s.deleted || s[CommitmentFields.DIRECTION].textOrNull != CommitmentDirection.OWED_BY_ME.name) {
+            throw ValidationException("That isn't one of your promises")
         }
     }
 

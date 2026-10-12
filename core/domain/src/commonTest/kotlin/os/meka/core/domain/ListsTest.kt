@@ -184,4 +184,104 @@ class ListsTest {
         l.deleteWaiting(w)
         assertTrue(l.waitingItems().isEmpty())
     }
+
+    // ---- Promised (People, slice 1) ----
+
+    @Test
+    fun aPromiseHasABeforeDayComesDueAndKeptRemovesIt() {
+        val id = l.addPromise("  Fix the bike ", to = "Rex", byInDays = 2)
+        val p = l.promisedItems().single()
+        assertEquals(id, p.id)
+        assertEquals("Fix the bike", p.title)
+        assertEquals("Rex", p.to)
+        assertEquals("Rex · by ${CivilDate.shortLabel(today() + 2)}", p.meta)
+        assertEquals(DueState.LATER, p.state)
+        // A promise is not something you're waiting for, and doesn't count as one.
+        assertTrue(l.waitingItems().isEmpty())
+        assertNull(l.view(d.tasks.all()).dueLine)
+
+        world.clock.advance(day)
+        assertEquals("Rex · by tomorrow", l.promisedItems().single().meta)
+        world.clock.advance(day)
+        assertEquals("Rex · due today", l.promisedItems().single().meta)
+        assertEquals(DueState.DUE, l.promisedItems().single().state)
+        assertEquals("1 promise due", l.view(d.tasks.all()).dueLine)
+        world.clock.advance(day)
+        assertEquals("Rex · was due ${CivilDate.shortLabel(today() - 1)}", l.promisedItems().single().meta)
+
+        l.kept(id)
+        assertTrue(l.promisedItems().isEmpty())
+        assertFailsWith<ValidationException> { l.received(id) } // not a waiting-for item
+    }
+
+    @Test
+    fun promisesSortDueFirstAndUndatedOnesSaySinceWhen() {
+        val a = l.addPromise("Call Mum back", to = "Mum")
+        world.clock.advance(day)
+        val b = l.addPromise("Send the photos", to = "Jeanette", byInDays = 3)
+        val c = l.addPromise("Return the drill", byInDays = 0)
+        assertEquals(listOf(c, b, a), l.promisedItems().map { it.id })
+        assertEquals("Mum · since ${CivilDate.shortLabel(today() - 1)}", l.promisedItems().last().meta)
+        assertEquals("due today", l.promisedItems().first().meta)
+        l.setPromiseBy(a, 1)
+        assertEquals(today() + 1, l.promisedItems().first { it.id == a }.byDay)
+        l.setPromiseBy(a, null)
+        assertNull(l.promisedItems().first { it.id == a }.byDay)
+        l.editPromise(b, to = "", notes = "the beach ones")
+        assertNull(l.promisedItems().first { it.id == b }.to)
+        assertEquals("the beach ones", l.promisedItems().first { it.id == b }.notes)
+        l.deletePromise(c)
+        assertEquals(listOf(b, a), l.promisedItems().map { it.id })
+    }
+
+    @Test
+    fun dueLineCountsPromisesFirstAndTheTabCountsBothWays() {
+        l.addPromise("A", byInDays = 0)
+        l.addPromise("B", byInDays = 0)
+        l.addWaiting("C", chaseInDays = 0)
+        val v = l.view(d.tasks.all())
+        assertEquals("2 promises due · 1 to chase", v.dueLine)
+        assertEquals(3, v.dueCount)
+        assertEquals(3, v.promisesBothWays)
+    }
+
+    @Test
+    fun aDateMovedOnOneDeviceAndKeptOnAnotherEndsKeptAndSyncs() {
+        val mac = world.device("mac")
+        val ml = lists(mac)
+        val id = l.addPromise("Book the boys' haircuts", to = "Jeanette", byInDays = 1)
+        d.sync(); mac.sync()
+        assertEquals(listOf("Book the boys' haircuts"), ml.view(mac.tasks.all()).promised.map { it.title })
+        d.goOffline(); mac.goOffline()
+        l.setPromiseBy(id, 7)
+        ml.kept(id)
+        d.goOnline(); mac.goOnline()
+        d.syncWithRetry(); mac.syncWithRetry(); d.syncWithRetry()
+        assertTrue(l.promisedItems().isEmpty())
+        assertTrue(ml.promisedItems().isEmpty())
+    }
+
+    @Test
+    fun aDuePromiseIsADigestNotice() {
+        l.addPromise("Fix the shed door", to = "Jeanette", byInDays = 0)
+        l.addPromise("Later one", byInDays = 5)
+        val ns = NoticeSources.collect(
+            l.view(d.tasks.all()), FastingView.EMPTY, ShutdownView.EMPTY.copy(doneToday = true), Today(emptyList(), null, emptyList(), emptyList()),
+            world.clock.nowMs, LocalCalendar.UTC,
+        ).filter { it.source == NoticeSource.PROMISE }
+        val n = ns.single()
+        assertEquals("Promised: Fix the shed door", n.title)
+        assertEquals("Jeanette · due today", n.text)
+        assertEquals(NoticeTier.DIGEST, n.tier)
+        assertEquals(NoticeTarget.LISTS, n.target)
+    }
+
+    @Test
+    fun promiseValidation() {
+        assertFailsWith<ValidationException> { l.addPromise("  ") }
+        assertFailsWith<ValidationException> { l.addPromise("x", byInDays = -1) }
+        val w = l.addWaiting("A parcel")
+        assertFailsWith<ValidationException> { l.kept(w) } // a waiting-for item isn't a promise
+        assertFailsWith<ValidationException> { l.setPromiseBy("nope", 1) }
+    }
 }

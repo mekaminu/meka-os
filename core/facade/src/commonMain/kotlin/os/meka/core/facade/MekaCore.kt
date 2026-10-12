@@ -1533,6 +1533,14 @@ class MekaCore(
     suspend fun editWaiting(id: String, title: String?, who: String?, notes: String?) = onCore { lists.editWaiting(id, title, who, notes) }
     suspend fun deleteWaiting(id: String) = onCore { lists.deleteWaiting(id) }
 
+    /** People, slice 1: something you promised [to] someone, by [byInDays] from today (null: no date). Nothing is sent. */
+    suspend fun addPromise(title: String, to: String?, byInDays: Int?): String = onCore { lists.addPromise(title, to, byInDays) }
+    suspend fun setPromiseBy(id: String, days: Int?) = onCore { lists.setPromiseBy(id, days) }
+    /** "Kept": the promise is done; it leaves the list. */
+    suspend fun keptPromise(id: String) = onCore { lists.kept(id) }
+    suspend fun editPromise(id: String, title: String?, to: String?, notes: String?) = onCore { lists.editPromise(id, title, to, notes) }
+    suspend fun deletePromise(id: String) = onCore { lists.deletePromise(id) }
+
     suspend fun addSomeday(title: String, kind: SomedayKind): String = onCore { lists.addSomeday(title, kind) }
     /** Moves an open, non-repeating task to Someday (out of Today and the planner). */
     suspend fun moveToSomeday(taskId: String, kind: SomedayKind) = onCore { lists.moveToSomeday(taskId, kind); followBlocks(listOf(taskId)); Unit }

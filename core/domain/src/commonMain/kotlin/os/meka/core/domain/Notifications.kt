@@ -150,6 +150,8 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     LIFE_ADMIN("Life admin hour", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
+    /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jeanette · due today"). */
+    PROMISE("Promises you made", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
     OVERDUE("Overdue tasks", NoticeTier.DIGEST),
     /** Rain or snow due at today's plans you go out for (Weather): "Light rain at 17:30 — Training at SG18". */
@@ -561,6 +563,7 @@ object Governor {
         NoticeSource.LIFE_ADMIN -> "your life admin hour"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
+        NoticeSource.PROMISE -> if (n == 1) "a promise due" else "$n promises due"
         NoticeSource.REVIEW -> plural(n, "decision") + " to review"
         NoticeSource.OVERDUE -> plural(n, "overdue task")
         NoticeSource.WEATHER -> "rain on " + plural(n, "plan")
@@ -662,6 +665,12 @@ object NoticeSources {
             out += Notice(
                 key = "chase:${w.id}:${w.chaseDay}", source = NoticeSource.CHASE, tier = NoticeTier.DIGEST,
                 title = "Chase: ${w.title}", text = w.who.orEmpty(), atMs = todayStart, target = NoticeTarget.LISTS,
+            )
+        }
+        for (p in lists.promised.filter { it.state == DueState.DUE }) {
+            out += Notice(
+                key = "promise:${p.id}:${p.byDay}", source = NoticeSource.PROMISE, tier = NoticeTier.DIGEST,
+                title = "Promised: ${p.title}", text = p.meta, atMs = todayStart, target = NoticeTarget.LISTS,
             )
         }
         for (d in lists.decisions.filter { it.state == DueState.DUE }) {

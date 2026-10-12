@@ -307,15 +307,18 @@ class WeeklyReview(
         val weekFasts = fasts.filter { inWeek(it.endedAtMs) }
 
         // Lists: what closed in the week.
-        val received = replica.entities(EntityTypes.COMMITMENT).count { s ->
+        val closed = replica.entities(EntityTypes.COMMITMENT).filter { s ->
             !s.deleted && lifecycle(s) == Lifecycle.DONE && inWeek(s[ActionableFields.COMPLETED_AT].longOrNull)
         }
+        val keptPromises = closed.count { it[CommitmentFields.DIRECTION].textOrNull == CommitmentDirection.OWED_BY_ME.name }
+        val received = closed.size - keptPromises
         val decided = replica.entities(EntityTypes.DECISION).count { s ->
             !s.deleted && inWeek(s[DecisionFields.DECIDED_AT].longOrNull ?: s[ActionableFields.CREATED_AT].longOrNull)
         }
         val renewed = replica.entities(EntityTypes.OBLIGATION).count { s -> !s.deleted && inWeek(s[ObligationFields.LAST_DONE_AT].longOrNull) }
         val listsLines = listOfNotNull(
             received.takeIf { it > 0 }?.let { if (it == 1) "1 thing you were waiting for arrived" else "$it things you were waiting for arrived" },
+            keptPromises.takeIf { it > 0 }?.let { if (it == 1) "1 promise kept" else "$it promises kept" },
             decided.takeIf { it > 0 }?.let { ShutdownRules.count(it, "decision") + " made" },
             renewed.takeIf { it > 0 }?.let { (if (it == 1) "1 renewal or bill" else "$it renewals and bills") + " dealt with" },
         )
@@ -407,12 +410,17 @@ class WeeklyReview(
         val chases = replica.entities(EntityTypes.COMMITMENT).count { s ->
             !s.deleted && lifecycle(s)?.isTerminal != true && inWeek(s[CommitmentFields.FOLLOW_UP_AT].longOrNull)
         }
+        val promisesDue = replica.entities(EntityTypes.COMMITMENT).count { s ->
+            !s.deleted && lifecycle(s)?.isTerminal != true &&
+                s[CommitmentFields.DIRECTION].textOrNull == CommitmentDirection.OWED_BY_ME.name && inWeek(s[ActionableFields.DUE_AT].longOrNull)
+        }
         val parts = listOfNotNull(
             eventCount.takeIf { it > 0 }?.let { ShutdownRules.count(it, "event") },
             tasks.takeIf { it > 0 }?.let { ShutdownRules.count(it, "task") + " planned or due" },
             renewals.takeIf { it > 0 }?.let { (if (it == 1) "1 renewal or bill" else "$it renewals and bills") + " due" },
             reviews.takeIf { it > 0 }?.let { ShutdownRules.count(it, "decision") + " to review" },
             chases.takeIf { it > 0 }?.let { "$it to chase" },
+            promisesDue.takeIf { it > 0 }?.let { if (it == 1) "1 promise due" else "$it promises due" },
         )
         return parts.ifEmpty { listOf("Nothing in the diary yet") }
     }

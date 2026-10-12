@@ -127,6 +127,28 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(ListRules.shared.CHASE_CHOICES.last?.days, nil)
     }
 
+    func testPromisesReachSwift() async throws {
+        // People, slice 1: a promise made through the facade (only Strings and an Int cross), due today, shows in the
+        // Promises tab beside Waiting for; Kept clears it.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "promises-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let id = try await core.addPromise(title: "Fix the bike", to: "Rex", byInDays: KotlinInt(int: 0))
+        _ = try await core.addWaiting(title: "Refund", who: "Shop", chaseInDays: nil)
+        let lists = core.listsView.value
+        XCTAssertEqual(lists.promised.map(\.meta), ["Rex · due today"])
+        XCTAssertEqual(lists.promised.first?.state, .due)
+        XCTAssertEqual(lists.promisesBothWays, 2)
+        XCTAssertEqual(lists.dueLine, "1 promise due")
+        XCTAssertEqual(ListRules.shared.PROMISE_CHOICES.first?.label, "By today")
+        XCTAssertEqual(NoticeSource.promise.label, "Promises you made")
+        try await core.keptPromise(id: id)
+        XCTAssertTrue(core.listsView.value.promised.isEmpty)
+        XCTAssertEqual(core.listsView.value.waiting.count, 1)
+    }
+
     func testRenewalsThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
