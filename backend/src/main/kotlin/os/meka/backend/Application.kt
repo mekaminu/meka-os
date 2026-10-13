@@ -1167,6 +1167,7 @@ object Migrations {
         22 to "/db/V22__mail_tidy.sql",
         23 to "/db/V23__mail_sender.sql",
         24 to "/db/V24__mail_preview.sql",
+        25 to "/db/V25__mail_backlog.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

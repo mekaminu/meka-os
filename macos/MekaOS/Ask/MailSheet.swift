@@ -109,6 +109,7 @@ struct MailSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map(\.title) ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map(\.sortedLine) ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map(\.tidyLine) ?? [])
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.backlog?.line ?? "" } ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.tidies.map { $0.state ?? "" } } ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.autopilot?.line)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.senders.map { $0.state ?? "" } } ?? [])
@@ -314,6 +315,23 @@ private struct MailAccountRowView: View {
                     .font(MekaType.caption)
                     .foregroundStyle(palette.accent)
                 }
+            }
+            // Slice 8a: the backlog clean-up's plan for the older mail already in the inbox (nothing moves yet).
+            if let b = row.backlog {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(b.title).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Text(b.line).font(MekaType.caption)
+                        .foregroundStyle(b.ready ? palette.textPrimary : palette.textTertiary)
+                        .contentTransition(.opacity)
+                    if let detail = b.detail {
+                        Text(detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text(b.note).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+                .padding(.top, MekaSpace.xs)
+                .accessibilityElement(children: .combine)
+                .transition(.opacity)
             }
             HStack(spacing: MekaSpace.xs) {
                 ForEach(MailAccountRules.shared.LABELS, id: \.name) { label in

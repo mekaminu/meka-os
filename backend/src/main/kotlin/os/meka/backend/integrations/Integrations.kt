@@ -5,6 +5,9 @@ import os.meka.backend.Secrets
 import os.meka.core.domain.BankHoliday
 import os.meka.core.domain.MailSortFacts
 import os.meka.core.domain.MailSortRules
+import os.meka.core.domain.MailBacklogFacts
+import os.meka.core.domain.MailBacklogKind
+import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailTidyFacts
 import os.meka.core.domain.MailTidyRules
 import os.meka.core.domain.MailAutopilotRules
@@ -445,8 +448,64 @@ class Integrations(
         runCatching { mailSenders(a, m, token, ms) }
         // Slice 3b: Autopilot (only once it's on and the dry-run day is over); a failure there never fails the check.
         runCatching { autopilot(a, m, token, ms) }
+        // Slice 8a: the backlog clean-up's plan (read-only: nothing in the mailbox moves).
+        runCatching { backlog(a, m, token, ms) }
         // Slice 6a: the emails that need Meka, as cards in Needs you.
         runCatching { publishMailNeeds(a, ms) }
+    }
+
+    /**
+     * Inbox autopilot, slice 8a: the backlog clean-up's plan, once per account. The mail already in the inbox from before
+     * Autopilot's start (the account's dry-run day's end, or now if sooner) is listed a page a check and its headers read
+     * [BACKLOG_HEADERS_PER_CHECK] a check (Gmail; Outlook's pages carry them); each email is planned by
+     * [MailBacklogRules.plan] and kept as ids, sender and date. Once all are read, the threads Meka wrote in are taken
+     * out (kept) and the plan is ready. Each check publishes the counts as the account's `mail_backlog` entity. Nothing
+     * in the mailbox changes: applying the plan waits for Approve (slice 8b).
+     */
+    internal fun backlog(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val nowMs = now()
+        val scan = ms.backlogScan(a.id) ?: BacklogScan(
+            beforeMs = minOf(nowMs, (a.grantedAtMs ?: nowMs) + MailAutopilotRules.DRY_RUN_MS), startedMs = nowMs,
+            nextPage = null, listed = false, readyMs = null,
+        )
+        var s = scan
+        val keep = keepAddresses(a.householdId)
+        fun planned(h: MailHeader): BacklogItem {
+            val sorted = MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId))
+            val kind = MailBacklogRules.plan(MailBacklogFacts(h.fromAddress, h.inInbox, sorted, h.receivedAtMs, keep), nowMs)
+            return BacklogItem(h.id, h.threadId, h.fromAddress, h.fromName, h.receivedAtMs, kind)
+        }
+        if (s.readyMs == null) {
+            if (!s.listed && ms.backlogPending(a.id, BACKLOG_LIST_BELOW).size < BACKLOG_LIST_BELOW) {
+                val page = m.backlog(token, s.beforeMs, s.nextPage) ?: return
+                ms.addBacklogIds(a.id, page.ids)
+                ms.putBacklog(a.id, page.headers.map(::planned))
+                s = s.copy(nextPage = page.next, listed = page.next == null)
+            }
+            val read = ms.backlogPending(a.id, BACKLOG_HEADERS_PER_CHECK).mapNotNull { id ->
+                val h = m.header(token, id)
+                // Gone, or out of the inbox since it was listed: not the backlog's any more.
+                if (h == null || !h.inInbox) { ms.removeBacklog(a.id, id); null } else planned(h)
+            }
+            ms.putBacklog(a.id, read)
+            if (s.listed && ms.backlogPending(a.id, 1).isEmpty()) {
+                // Every older email read: the threads he wrote in are kept. Can't tell (the provider failed): try next check.
+                val items = ms.backlogItems(a.id)
+                val oldest = items.minOfOrNull { it.receivedAtMs } ?: s.beforeMs
+                val replied = runCatching { m.repliedThreads(token, oldest) }.getOrNull()
+                if (replied != null) {
+                    ms.putBacklog(a.id, items.filter { it.kind != MailBacklogKind.KEEP && it.threadId != null && it.threadId in replied }
+                        .map { it.copy(kind = MailBacklogKind.KEEP) })
+                    s = s.copy(readyMs = nowMs)
+                }
+            }
+            ms.setBacklogScan(a.id, s)
+        }
+        val items = ms.backlogItems(a.id)
+        val counts = items.groupingBy { it.kind }.eachCount()
+        val top = MailBacklogRules.topSenders(items.filter { it.kind != MailBacklogKind.KEEP && it.kind != MailBacklogKind.JUNK }.map { it.fromName to it.fromAddress })
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        writeMail(a, MailBacklogRules.entityId(a.id), MailBacklogRules.fields(account, s.startedMs, items.size, counts, top, s.readyMs), EntityTypes.MAIL_BACKLOG)
     }
 
     /**
@@ -1308,6 +1367,9 @@ class Integrations(
         const val AI_BATCH = 25
         /** Gmail headers read per 5-minute check (one call each; Gmail allows far more): a big first listing fills in over a few checks. */
         const val HEADERS_PER_CHECK = 300
+        /** Slice 8a: backlog headers read per check (Gmail), and the next page is listed only while fewer than this wait. */
+        const val BACKLOG_HEADERS_PER_CHECK = 300
+        const val BACKLOG_LIST_BELOW = 500
         const val WINDOW_AHEAD_MS = 30 * 24 * 3_600_000L
         private const val MAX_TEXT = 500
         private const val MAX_NOTES = 2_000

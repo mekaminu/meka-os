@@ -3913,7 +3913,7 @@ class MekaCore(
         return onCore {
             os.meka.core.domain.MailAccountRules.view(
                 list, nowMs(), signIns.all(), mailAutopilotSetting(), autonomy.paused(), activity.mailTidyBatches(), ZoneCalendar(timeZone),
-                activity.mailSenders(),
+                activity.mailSenders(), activity.mailBacklogs(),
             )
         }
     }

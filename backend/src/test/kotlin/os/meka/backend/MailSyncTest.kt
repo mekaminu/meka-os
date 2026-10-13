@@ -39,6 +39,11 @@ import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailTidyBatchFields
 import os.meka.backend.integrations.EntityReader
 import os.meka.backend.integrations.MailMoved
+import os.meka.backend.integrations.MailBacklogPage
+import os.meka.backend.integrations.BacklogScan
+import os.meka.backend.integrations.BacklogItem
+import os.meka.core.domain.MailBacklogKind
+import os.meka.core.domain.MailBacklogRules
 import os.meka.backend.integrations.HttpOneClickUnsubscriber
 import os.meka.backend.integrations.OneClickUnsubscriber
 import os.meka.backend.integrations.UnsubscribeMessage
@@ -207,6 +212,15 @@ class MailSyncTest {
             sent += mail; return true
         }
         override fun listHeaders(accessToken: String, id: String): Pair<String?, Boolean>? { headerReads += id; return outlookHeaders[id] }
+
+        // Slice 8a: the backlog's pages (by page token; null: can't list), and what was asked.
+        var backlogPages: Map<String?, MailBacklogPage>? = null
+        val backlogAsked = mutableListOf<Pair<Long, String?>>()
+        override fun backlog(accessToken: String, beforeMs: Long, page: String?): MailBacklogPage? {
+            val pages = backlogPages ?: return null
+            backlogAsked += beforeMs to page
+            return pages[page]
+        }
 
         // Slice 6b-2a: replies sent.
         val replies = mutableListOf<Pair<String, String>>()
@@ -1005,6 +1019,84 @@ class MailSyncTest {
         assertTrue(UnsubscribeMessage.rfc822(UnsubscribeMailto("a@b.example", "désabonner", "x")).contains("Subject: =?UTF-8?B?"))
     }
 
+    // ---- Slice 8a: the backlog clean-up's plan ----
+
+    private fun backlogs(ops: InMemoryServerOpStore) = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_BACKLOG)
+
+    @Test
+    fun theBacklogIsPlannedAPageAtATimeAndNothingMoves() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["n1"] = msg("n1", 45, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.mailbox["r1"] = msg("r1", 40, "auto-confirm@shop.example").copy(subject = "Your order has shipped")
+        gmail.mailbox["p1"] = msg("p1", 50) // a person: kept
+        gmail.mailbox["n2"] = msg("n2", 10, "editor@weekly.example").copy(listId = "<weekly.example>") // too recent: kept
+        gmail.mailbox["b1"] = msg("b1", 60, "alerts@barclays.co.uk").copy(listId = "<alerts.barclays.co.uk>") // a bank: kept
+        gmail.mailbox["t1"] = msg("t1", 45, "editor@weekly.example").copy(listId = "<weekly.example>") // his thread: kept
+        gmail.mailbox["a1"] = msg("a1", 45, "editor@weekly.example").copy(listId = "<weekly.example>", inInbox = false) // archived since
+        gmail.sentThreads += "t-t1"
+        gmail.backlogPages = mapOf(
+            null to MailBacklogPage(ids = listOf("n1", "r1", "p1"), next = "pg2"),
+            "pg2" to MailBacklogPage(ids = listOf("n2", "b1", "t1", "a1", "gone"), next = null),
+        )
+        gmail.nextRound = { MailChanges(cursor = "h1") }
+        val id = connect(i)
+        i.syncAccount(id)
+        // The first check: one page listed (before now: the dry-run day hasn't ended) and its headers read.
+        assertEquals(listOf(now to null as String?), gmail.backlogAsked)
+        val entityId = MailBacklogRules.entityId(id)
+        val first = MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!
+        assertFalse(first.ready)
+        assertEquals(3, first.scanned)
+        assertEquals("Personal", first.account)
+        // The second: the rest, then his threads taken out: the plan is ready.
+        now += 300_000
+        i.syncAccount(id)
+        assertEquals(listOf(null, "pg2"), gmail.backlogAsked.map { it.second })
+        val b = MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!
+        assertTrue(b.ready)
+        assertEquals(6, b.scanned)
+        assertEquals(mapOf(MailBacklogKind.NEWSLETTER to 1, MailBacklogKind.RECEIPT to 1, MailBacklogKind.KEEP to 4), b.counts)
+        assertEquals("shop.example 1 · weekly.example 1", b.top)
+        assertEquals("Archive 2 · keep 4 that may need you", MailBacklogRules.row(b).line)
+        // Nothing moved, and the next check lists nothing more.
+        assertTrue(gmail.tidyCalls.isEmpty())
+        assertTrue(gmail.mailbox.values.filter { it.id != "a1" }.all { it.inInbox })
+        now += 300_000
+        i.syncAccount(id)
+        assertEquals(2, gmail.backlogAsked.size)
+        // Disconnect forgets the scan.
+        assertNotNull(ms.backlogScan(id))
+        ms.forget(id)
+        assertNull(ms.backlogScan(id))
+    }
+
+    @Test
+    fun theBacklogWaitsWhenItCantTellWhichThreadsAreHis() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["n1"] = msg("n1", 45, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.backlogPages = mapOf(null to MailBacklogPage(ids = listOf("n1"), next = null))
+        gmail.nextRound = { MailChanges(cursor = "h1") }
+        gmail.repliedFails = true
+        val id = connect(i)
+        i.syncAccount(id)
+        val entityId = MailBacklogRules.entityId(id)
+        assertFalse(MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!.ready)
+        gmail.repliedFails = false
+        now += 300_000
+        i.syncAccount(id)
+        val b = MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!
+        assertTrue(b.ready)
+        assertEquals(mapOf(MailBacklogKind.NEWSLETTER to 1), b.counts)
+        // A provider that can't list its backlog publishes nothing.
+        val (other, _, j) = world(InMemoryMailStore(), ops = InMemoryServerOpStore())
+        assertNull(other.backlogPages)
+        j.syncAccount(connect(j))
+    }
+
     // ---- On real Postgres (MEKA_TEST_DB_URL, CI); skipped when unset ----
 
     @Test
@@ -1015,7 +1107,7 @@ class MailSyncTest {
             password = System.getenv("MEKA_TEST_DB_PASSWORD") ?: "postgres"; maximumPoolSize = 4
         }).use { ds ->
             Migrations.apply(ds)
-            ds.connection.use { c -> c.createStatement().execute("TRUNCATE op_log, device, household, integration_account, mail_message, mail_sync, mail_tidy_item, mail_never_tidy, mail_sender CASCADE") }
+            ds.connection.use { c -> c.createStatement().execute("TRUNCATE op_log, device, household, integration_account, mail_message, mail_sync, mail_tidy_item, mail_never_tidy, mail_sender, mail_backlog_scan, mail_backlog_item CASCADE") }
             PostgresDeviceRegistry(ds).enrol("hh-m", "android0123456789ab", "Fold")
             val ops = PostgresOpStore(ds)
             val accounts = PostgresIntegrationStore(ops)
@@ -1086,8 +1178,27 @@ class MailSyncTest {
             ms.prune(acc, now)
             assertTrue(ms.messages(acc).isEmpty())
             ms.apply("hh-m", acc, MailChanges(fetch = listOf("x"), cursor = "h3"))
+            // Slice 8a: the backlog scan's progress and its planned emails.
+            assertNull(ms.backlogScan(acc))
+            ms.setBacklogScan(acc, BacklogScan(now, now, "pg2", false, null))
+            assertEquals(BacklogScan(now, now, "pg2", false, null), ms.backlogScan(acc))
+            ms.setBacklogScan(acc, BacklogScan(now, now, null, true, now + 1))
+            assertEquals(now + 1, ms.backlogScan(acc)?.readyMs)
+            ms.addBacklogIds(acc, listOf("b1", "b2", "b1"))
+            assertEquals(listOf("b1", "b2"), ms.backlogPending(acc, 10))
+            val planned = BacklogItem("b1", "t1", "news@x.example", "X News", now - 40 * day, MailBacklogKind.NEWSLETTER)
+            ms.putBacklog(acc, listOf(planned))
+            ms.addBacklogIds(acc, listOf("b1"))
+            assertEquals(listOf("b2"), ms.backlogPending(acc, 10))
+            assertEquals(listOf(planned), ms.backlogItems(acc))
+            ms.putBacklog(acc, listOf(planned.copy(kind = MailBacklogKind.KEEP)))
+            assertEquals(MailBacklogKind.KEEP, ms.backlogItems(acc).single().kind)
+            ms.removeBacklog(acc, "b2")
+            assertTrue(ms.backlogPending(acc, 10).isEmpty())
             ms.forget(acc)
             assertNull(ms.cursor(acc))
+            assertNull(ms.backlogScan(acc))
+            assertTrue(ms.backlogItems(acc).isEmpty())
             assertTrue(ms.tidied(acc, "mt1").isEmpty() && ms.neverTidied(acc).isEmpty() && ms.senders(acc, 10).isEmpty())
             assertEquals(0, ms.pendingCount(acc))
         }

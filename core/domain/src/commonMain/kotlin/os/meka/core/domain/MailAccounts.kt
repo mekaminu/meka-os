@@ -76,6 +76,8 @@ data class MailAccountRow(
     val senders: List<MailSenderRow> = emptyList(),
     /** Slice 5a: "8 senders · tap Unsubscribe and Navilife does it for you", or null with none. */
     val sendersLine: String? = null,
+    /** Slice 8a: the backlog clean-up's plan for this account (nothing moves yet), or null before the server started it. */
+    val backlog: MailBacklogRow? = null,
 )
 
 /** One "Connect …" button. */
@@ -195,6 +197,7 @@ object MailAccountRules {
         accounts: List<MailAccountFacts>, nowMs: Long, signIns: List<SignIn>,
         autopilot: MailAutopilotSetting, paused: Boolean, batches: List<MailTidyBatch>, cal: LocalCalendar,
         senders: List<MailSender> = emptyList(),
+        backlogs: List<MailBacklog> = emptyList(),
     ): MailAccountsView {
         val base = view(accounts, nowMs, signIns)
         val facts = accounts.filter { MailProviders.isMail(it.provider) }
@@ -205,6 +208,7 @@ object MailAccountRules {
                 tidyLine = MailAutopilotPanelRules.accountLine(autopilot, paused, a?.wouldTidy, MailAutopilotPanelRules.todays(mine, r.label.label, nowMs, cal)),
                 tidies = MailAutopilotPanelRules.rows(mine, nowMs, cal),
                 senders = MailSenderPanelRules.rows(senders, r.label.label, nowMs, cal),
+                backlog = MailBacklogRules.rowFor(backlogs, r.label.label),
             ).let { it.copy(sendersLine = MailSenderPanelRules.header(it.senders)) }
         }
         return base.copy(rows = rows, autopilot = if (rows.isEmpty()) null else MailAutopilotPanelRules.panel(autopilot, paused))

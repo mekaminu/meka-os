@@ -1,6 +1,7 @@
 package os.meka.backend.integrations
 
 import os.meka.backend.PostgresOpStore
+import os.meka.core.domain.MailBacklogKind
 import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.MailSorted
 import os.meka.core.domain.MailTidy
@@ -65,7 +66,27 @@ interface MailStore {
 
     /** Slice 6a: the kept previews of these emails (id → preview; those without one left out). */
     fun previews(accountId: String, ids: Collection<String>): Map<String, String>
+
+    /** Slice 8a: the backlog scan's progress, or null before it started. */
+    fun backlogScan(accountId: String): BacklogScan?
+    fun setBacklogScan(accountId: String, scan: BacklogScan)
+    /** Slice 8a: listed ids whose headers still have to be read (Gmail), kept pending. */
+    fun addBacklogIds(accountId: String, ids: Collection<String>)
+    fun backlogPending(accountId: String, limit: Int): List<String>
+    /** Slice 8a: planned emails (a pending one becomes planned). */
+    fun putBacklog(accountId: String, items: Collection<BacklogItem>)
+    fun removeBacklog(accountId: String, id: String)
+    /** Slice 8a: every planned email of the account's backlog. */
+    fun backlogItems(accountId: String): List<BacklogItem>
 }
+
+/** Slice 8a: where the backlog scan has got to: mail received before [beforeMs]; [nextPage] continues the listing. */
+data class BacklogScan(val beforeMs: Long, val startedMs: Long, val nextPage: String?, val listed: Boolean, val readyMs: Long?)
+
+/** Slice 8a: one older email and its plan (ids, sender and date only). */
+data class BacklogItem(
+    val id: String, val threadId: String?, val fromAddress: String?, val fromName: String?, val receivedAtMs: Long, val kind: MailBacklogKind,
+)
 
 /** Slice 5c: a sender's emails in the window, and how many of them were opened. */
 data class SenderOpens(val total: Int, val opened: Int)
@@ -97,6 +118,8 @@ class InMemoryMailStore : MailStore {
     private val tidies = mutableMapOf<Pair<String, String>, List<MailMoved>>()
     private val never = mutableMapOf<String, MutableSet<String>>()
     private val senders = mutableMapOf<String, LinkedHashMap<String, MailSenderRecord>>()
+    private val scans = mutableMapOf<String, BacklogScan>()
+    private val backlog = mutableMapOf<String, LinkedHashMap<String, BacklogItem?>>()
 
     private fun of(accountId: String) = rows.getOrPut(accountId) { LinkedHashMap() }
 
@@ -117,7 +140,16 @@ class InMemoryMailStore : MailStore {
     @Synchronized override fun forget(accountId: String) {
         rows.remove(accountId); cursors.remove(accountId); sorts.remove(accountId)
         tidies.keys.removeIf { it.first == accountId }; never.remove(accountId); senders.remove(accountId)
+        scans.remove(accountId); backlog.remove(accountId)
     }
+    private fun backlogOf(accountId: String) = backlog.getOrPut(accountId) { LinkedHashMap() }
+    @Synchronized override fun backlogScan(accountId: String) = scans[accountId]
+    @Synchronized override fun setBacklogScan(accountId: String, scan: BacklogScan) { scans[accountId] = scan }
+    @Synchronized override fun addBacklogIds(accountId: String, ids: Collection<String>) { val b = backlogOf(accountId); ids.forEach { b.putIfAbsent(it, null) } }
+    @Synchronized override fun backlogPending(accountId: String, limit: Int) = backlogOf(accountId).filterValues { it == null }.keys.take(limit)
+    @Synchronized override fun putBacklog(accountId: String, items: Collection<BacklogItem>) { val b = backlogOf(accountId); items.forEach { b[it.id] = it } }
+    @Synchronized override fun removeBacklog(accountId: String, id: String) { backlogOf(accountId).remove(id) }
+    @Synchronized override fun backlogItems(accountId: String) = backlogOf(accountId).values.filterNotNull()
     @Synchronized override fun messages(accountId: String) = of(accountId).values.filterNotNull().sortedByDescending { it.receivedAtMs }
     @Synchronized override fun pendingCount(accountId: String) = of(accountId).values.count { it == null }
     @Synchronized override fun unsorted(accountId: String, limit: Int): List<MailHeader> {
@@ -258,6 +290,8 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
             c.prepareStatement("DELETE FROM mail_tidy_item WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
             c.prepareStatement("DELETE FROM mail_never_tidy WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
             c.prepareStatement("DELETE FROM mail_sender WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
+            c.prepareStatement("DELETE FROM mail_backlog_scan WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
+            c.prepareStatement("DELETE FROM mail_backlog_item WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
             Unit
         }
     }
@@ -469,6 +503,89 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
         ).use { st ->
             st.setString(1, accountId); st.setLong(2, sinceMs)
             st.executeQuery().use { rs -> buildMap { while (rs.next()) put(rs.getString(1), SenderOpens(rs.getInt(2), rs.getInt(3))) } }
+        }
+    }
+
+    override fun backlogScan(accountId: String): BacklogScan? = c { c ->
+        c.prepareStatement("SELECT before_ms, started_ms, next_page, listed, ready_ms FROM mail_backlog_scan WHERE account_id = ?").use { st ->
+            st.setString(1, accountId)
+            st.executeQuery().use { rs ->
+                if (!rs.next()) null
+                else BacklogScan(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getBoolean(4), rs.getLong(5).takeIf { !rs.wasNull() })
+            }
+        }
+    }
+
+    override fun setBacklogScan(accountId: String, scan: BacklogScan) = c { c ->
+        c.prepareStatement(
+            """INSERT INTO mail_backlog_scan(account_id, before_ms, started_ms, next_page, listed, ready_ms) VALUES (?,?,?,?,?,?)
+               ON CONFLICT (account_id) DO UPDATE SET before_ms = EXCLUDED.before_ms, started_ms = EXCLUDED.started_ms,
+                 next_page = EXCLUDED.next_page, listed = EXCLUDED.listed, ready_ms = EXCLUDED.ready_ms, updated_at = now()""",
+        ).use { st ->
+            st.setString(1, accountId); st.setLong(2, scan.beforeMs); st.setLong(3, scan.startedMs); st.setString(4, scan.nextPage)
+            st.setBoolean(5, scan.listed)
+            if (scan.readyMs == null) st.setNull(6, java.sql.Types.BIGINT) else st.setLong(6, scan.readyMs)
+            st.executeUpdate()
+        }
+        Unit
+    }
+
+    override fun addBacklogIds(accountId: String, ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        c { c ->
+            c.prepareStatement("INSERT INTO mail_backlog_item(account_id, message_id) VALUES (?,?) ON CONFLICT DO NOTHING").use { st ->
+                ids.toSet().forEach { id -> st.setString(1, accountId); st.setString(2, id); st.addBatch() }
+                st.executeBatch()
+            }
+            Unit
+        }
+    }
+
+    override fun backlogPending(accountId: String, limit: Int): List<String> = c { c ->
+        c.prepareStatement("SELECT message_id FROM mail_backlog_item WHERE account_id = ? AND kind IS NULL ORDER BY created_at, message_id LIMIT ?").use { st ->
+            st.setString(1, accountId); st.setInt(2, limit)
+            st.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
+        }
+    }
+
+    override fun putBacklog(accountId: String, items: Collection<BacklogItem>) {
+        if (items.isEmpty()) return
+        c { c ->
+            c.prepareStatement(
+                """INSERT INTO mail_backlog_item(account_id, message_id, thread_id, from_address, from_name, received_at_ms, kind)
+                   VALUES (?,?,?,?,?,?,?)
+                   ON CONFLICT (account_id, message_id) DO UPDATE SET thread_id = EXCLUDED.thread_id, from_address = EXCLUDED.from_address,
+                     from_name = EXCLUDED.from_name, received_at_ms = EXCLUDED.received_at_ms, kind = EXCLUDED.kind""",
+            ).use { st ->
+                items.forEach { b ->
+                    st.setString(1, accountId); st.setString(2, b.id); st.setString(3, b.threadId); st.setString(4, b.fromAddress)
+                    st.setString(5, b.fromName); st.setLong(6, b.receivedAtMs); st.setString(7, b.kind.name); st.addBatch()
+                }
+                st.executeBatch()
+            }
+            Unit
+        }
+    }
+
+    override fun removeBacklog(accountId: String, id: String) = c { c ->
+        c.prepareStatement("DELETE FROM mail_backlog_item WHERE account_id = ? AND message_id = ?").use { st ->
+            st.setString(1, accountId); st.setString(2, id); st.executeUpdate()
+        }
+        Unit
+    }
+
+    override fun backlogItems(accountId: String): List<BacklogItem> = c { c ->
+        c.prepareStatement(
+            "SELECT message_id, thread_id, from_address, from_name, received_at_ms, kind FROM mail_backlog_item WHERE account_id = ? AND kind IS NOT NULL ORDER BY message_id",
+        ).use { st ->
+            st.setString(1, accountId)
+            st.executeQuery().use { rs ->
+                buildList {
+                    while (rs.next()) MailBacklogKind.of(rs.getString(6))?.let { k ->
+                        add(BacklogItem(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getLong(5), k))
+                    }
+                }
+            }
         }
     }
 

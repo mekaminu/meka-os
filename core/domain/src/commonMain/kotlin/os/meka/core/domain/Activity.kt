@@ -586,6 +586,10 @@ class ActivityLog(
     fun mailTidyBatches(): List<MailTidyBatch> = replica.entities(EntityTypes.MAIL_TIDY)
         .mapNotNull { s -> MailAutopilotRules.readBatch(s.ref.entityId, s.fields) }
 
+    /** Slice 8a: each account's backlog clean-up plan, as the server published it. */
+    fun mailBacklogs(): List<MailBacklog> = replica.entities(EntityTypes.MAIL_BACKLOG)
+        .mapNotNull { s -> MailBacklogRules.read(s.ref.entityId, s.fields) }
+
     private fun calendarEdits(): List<ActivityItem> {
         val now = nowMs()
         return replica.entities(EntityTypes.EVENT_EDIT)

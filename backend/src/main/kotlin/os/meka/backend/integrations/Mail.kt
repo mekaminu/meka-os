@@ -87,7 +87,17 @@ interface MailProvider {
      * [MailReplyResult.GONE] when the email no longer exists. Never retried by itself: a failure goes back to him.
      */
     fun reply(accessToken: String, id: String, text: String): MailReplyResult = MailReplyResult.FAILED
+
+    /**
+     * Slice 8a, the backlog clean-up: one page of the mail still in the inbox that arrived before [beforeMs], continuing
+     * from [page] (null: the first). Gmail hands back ids ([MailBacklogPage.ids], headers read later with [header]);
+     * Outlook whole headers. Null when this provider can't list it (nothing is planned).
+     */
+    fun backlog(accessToken: String, beforeMs: Long, page: String?): MailBacklogPage? = null
 }
+
+/** Slice 8a: one page of the inbox's older mail; [next] null once the listing is done. */
+data class MailBacklogPage(val ids: List<String> = emptyList(), val headers: List<MailHeader> = emptyList(), val next: String?)
 
 enum class MailReplyResult { SENT, GONE, FAILED }
 
@@ -361,6 +371,15 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         return if (sent.status in 200..299) MailReplyResult.SENT else MailReplyResult.FAILED
     }
 
+    /** Slice 8a: `in:inbox before:<seconds>`, 500 ids a page (Gmail's own search; nothing but ids comes back). */
+    override fun backlog(accessToken: String, beforeMs: Long, page: String?): MailBacklogPage {
+        val q = mutableMapOf("q" to "in:inbox before:${beforeMs / 1000}", "maxResults" to "500")
+        page?.let { q["pageToken"] = it }
+        val body = http.call("GET", "$API/messages?" + Http.query(q), accessToken).body ?: error("Gmail answered without a body")
+        val ids = (body["messages"] as? JsonArray)?.mapNotNull { m -> (m as? JsonObject)?.get("id").str() }.orEmpty()
+        return MailBacklogPage(ids = ids, next = body["nextPageToken"].str())
+    }
+
     companion object {
         private const val DAY_MS = 86_400_000L
         /** 500 ids a page: up to 10,000 messages in the first listing. */
@@ -527,6 +546,16 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
             a.status == 404 -> MailReplyResult.GONE
             else -> MailReplyResult.FAILED
         }
+    }
+
+    /** Slice 8a: the Inbox's messages received before [beforeMs], 100 whole headers a page (oldest last). */
+    override fun backlog(accessToken: String, beforeMs: Long, page: String?): MailBacklogPage {
+        val url = page ?: ("$GRAPH/me/mailFolders/inbox/messages?\$top=100" +
+            "&\$select=" + Http.enc("from,subject,receivedDateTime,isRead,conversationId") +
+            "&\$filter=" + Http.enc("receivedDateTime lt " + graphTime(beforeMs)) +
+            "&\$orderby=" + Http.enc("receivedDateTime desc"))
+        val body = http.call("GET", url, accessToken).body ?: error("Outlook answered without a body")
+        return MailBacklogPage(headers = GraphDelta.read(body).headers, next = body["@odata.nextLink"].str())
     }
 
     private companion object {

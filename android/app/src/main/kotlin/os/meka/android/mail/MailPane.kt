@@ -282,6 +282,24 @@ private fun MailAccountCard(
                     modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); allSenders = !allSenders }.minTouch())
             }
         }
+        // Slice 8a: the backlog clean-up's plan (the older mail already in the inbox); unfolds once the server starts it,
+        // and its line cross-fades as the scan counts up. Nothing moves yet.
+        AnimatedVisibility(
+            row.backlog != null,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            row.backlog?.let { b ->
+                Column(Modifier.padding(top = MekaSpace.xs).semantics(mergeDescendants = true) {}) {
+                    Text(b.title, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    Crossfade(b.line, animationSpec = MekaMotion.appear(reduced), label = "mail-backlog") {
+                        Text(it, style = MekaType.caption, color = if (b.ready) Meka.colors.textPrimary else Meka.colors.textTertiary)
+                    }
+                    b.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                    Text(b.note, style = MekaType.caption, color = Meka.colors.textTertiary)
+                }
+            }
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.xs),
