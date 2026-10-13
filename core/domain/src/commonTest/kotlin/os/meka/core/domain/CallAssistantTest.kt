@@ -182,7 +182,7 @@ class CallAssistantTest {
 
     @Test
     fun outsideWorkTheGreetingAndTitleDontSayAtWork() {
-        assertTrue(CallAssistantScript.greeting(atWork = false).startsWith("Hi, you've reached Meka's automated assistant. Meka can't take your call right now"))
+        assertTrue(CallAssistantScript.greeting(atWork = false).startsWith("Hi, this is Navilife, Meka's automated assistant. Meka can't take your call right now"))
         assertFalse("at work" in CallAssistantScript.greeting(atWork = false))
         assertFalse("after work" in CallAssistantScript.thanks(atWork = false))
         assertEquals(CallAssistantScript.GREETING, CallAssistantScript.greeting(atWork = true))
@@ -204,8 +204,8 @@ class CallAssistantTest {
         syncAll()
         val away = HeldMessages(m.replica) { world.clock.nowMs }.summary()
         assertTrue(away.people.single().items.single().away)
-        assertEquals("Messages MEKA took", away.title)
-        assertEquals("Messages MEKA took", AfterWorkNudge.text(away)!!.title)
+        assertEquals("Messages Navilife took", away.title)
+        assertEquals("Messages Navilife took", AfterWorkNudge.text(away)!!.title)
 
         // One held at work as well: back to "While you were at work".
         leave("CA10", "+447700900888", t0 + 10 * hour)

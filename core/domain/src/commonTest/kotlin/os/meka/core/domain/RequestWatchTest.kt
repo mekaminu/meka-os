@@ -41,7 +41,7 @@ class RequestWatchTest {
         )
         assertEquals("Add someone to watch for requests", RequestWatchRules.statusLine(PeopleLists(), RequestWatch(), listening = true))
         assertEquals("Needs notification access to read requests", RequestWatchRules.statusLine(lists, w, listening = false))
-        assertEquals("Voice notes only until MEKA's AI is on", RequestWatchRules.statusLine(lists, w, listening = true, aiOn = false))
+        assertEquals("Voice notes only until Navilife's AI is on", RequestWatchRules.statusLine(lists, w, listening = true, aiOn = false))
         assertEquals("1:1 chats only", RequestWatchRules.groupsLine(w))
         assertEquals("1:1 chats and Family, football dads", RequestWatchRules.groupsLine(w.copy(groups = setOf("football dads", "Family"))))
     }

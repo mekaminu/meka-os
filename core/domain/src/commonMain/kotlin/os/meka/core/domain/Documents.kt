@@ -85,10 +85,10 @@ object DocumentRules {
     val STAGES = listOf(30, 7, 0)
 
     const val ADD_HINT = "Add… (Passport expires 3 Mar 2029, Rex passport 20 May 2027, Railcard 05/2027)"
-    const val EMPTY_LINE = "No documents yet. Type each one with the date it runs out; MEKA reminds you in time to renew."
-    const val NOT_READ = "MEKA couldn't read that. Try \"Passport expires 3 Mar 2029\" or \"Railcard 05/2027\"."
-    const val BAD_DATE = "MEKA couldn't read that date. Try \"3 Mar 2029\" or \"05/2029\"."
-    const val NOTE = "Names and dates only: MEKA keeps no document numbers. Copies of the documents themselves, encrypted on this device first, come later."
+    const val EMPTY_LINE = "No documents yet. Type each one with the date it runs out; Navilife reminds you in time to renew."
+    const val NOT_READ = "Navilife couldn't read that. Try \"Passport expires 3 Mar 2029\" or \"Railcard 05/2027\"."
+    const val BAD_DATE = "Navilife couldn't read that date. Try \"3 Mar 2029\" or \"05/2029\"."
+    const val NOTE = "Names and dates only: Navilife keeps no document numbers. Copies of the documents themselves, encrypted on this device first, come later."
 
     private val KIND_WORDS: Map<String, DocKind> = buildMap {
         listOf("passport", "passports").forEach { put(it, DocKind.PASSPORT) }
@@ -290,7 +290,7 @@ object DocumentRules {
         val tail = when {
             e2 < today -> "it has run out: renew it"
             opens <= today -> "renew it now"
-            else -> "MEKA reminds you from ${dateLabel(opens)}"
+            else -> "Navilife reminds you from ${dateLabel(opens)}"
         }
         return "$verb ${e.title} · expires ${dateLabel(e2)} · $tail"
     }

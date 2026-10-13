@@ -205,7 +205,7 @@ object AddEventRules {
             problem = problem,
             canAdd = account != null && draft.title.isNotBlank() && problem == null,
             addLabel = "Add to ${account?.let { CalendarEditRules.providerName(it.provider) } ?: "your calendar"}",
-            notesNote = if (account?.provider == "microsoft") "Outlook keeps these notes; MEKA can't change them later" else null,
+            notesNote = if (account?.provider == "microsoft") "Outlook keeps these notes; Navilife can't change them later" else null,
             typedLine = form.typed?.let(EventTypingRules::titleLine),
             keepWordsLabel = form.typed?.let(EventTypingRules::keepLabel),
         )

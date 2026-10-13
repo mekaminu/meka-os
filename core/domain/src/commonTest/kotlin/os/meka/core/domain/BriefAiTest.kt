@@ -67,6 +67,6 @@ class BriefAiTest {
     @Test
     fun theBriefCountsOnItsOwnInActivity() {
         assertEquals(AiTodayRules.Group.BRIEF, AiTodayRules.groupOf("ask.brief"))
-        assertEquals("MEKA's AI today · Ask 1 · Brief 1 · under 1¢", AiTodayRules.line(listOf(AiDayUse("ask", 1, 100), AiDayUse("ask.brief", 1, 200))))
+        assertEquals("Navilife's AI today · Ask 1 · Brief 1 · under 1¢", AiTodayRules.line(listOf(AiDayUse("ask", 1, 100), AiDayUse("ask.brief", 1, 200))))
     }
 }

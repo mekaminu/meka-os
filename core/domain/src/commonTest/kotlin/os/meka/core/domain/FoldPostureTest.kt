@@ -97,7 +97,7 @@ class FoldPostureTest {
     @Test
     fun talkOpensTheBedsideClockOnlyOnTheFold() {
         assertEquals(TalkPlace.BEDSIDE, TalkOpenRules.request("bedside clock", TalkOpenRules.FOLD))
-        assertEquals(TalkPlace.BEDSIDE, TalkOpenRules.request("ok MEKA, open the bedside clock please", TalkOpenRules.FOLD))
+        assertEquals(TalkPlace.BEDSIDE, TalkOpenRules.request("ok Navilife, open the bedside clock please", TalkOpenRules.FOLD))
         assertEquals(TalkPlace.BEDSIDE, TalkOpenRules.request("show me the night clock", TalkOpenRules.FOLD))
         assertEquals(TalkPlace.PLAN, TalkOpenRules.request("plan my day", TalkOpenRules.FOLD))
         assertNull(TalkOpenRules.request("bedside clock"))
@@ -130,8 +130,8 @@ class FoldPostureTest {
         val cal = LocalCalendar.UTC
         val at = CivilDate.toEpochDay(2026, 10, 12) * CivilDate.DAY_MS + (18 * 60 + 20) * 60_000L
         assertNull(r.line(emptyList(), 0, null, cal))
-        assertEquals("Not sent to MEKA's server yet", r.line(log, 0, null, cal))
-        assertEquals("Sent to MEKA's server Mon 12 Oct 18:20", r.line(log, 100_000, at, cal))
-        assertEquals("Sent to MEKA's server Mon 12 Oct 18:20 · the newest changes go shortly", r.line(log, 50_000, at, cal))
+        assertEquals("Not sent to Navilife's server yet", r.line(log, 0, null, cal))
+        assertEquals("Sent to Navilife's server Mon 12 Oct 18:20", r.line(log, 100_000, at, cal))
+        assertEquals("Sent to Navilife's server Mon 12 Oct 18:20 · the newest changes go shortly", r.line(log, 50_000, at, cal))
     }
 }

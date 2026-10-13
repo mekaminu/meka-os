@@ -98,7 +98,7 @@ class GoalBreakdownFacadeTest {
         // A proposal that repeats the goal's own milestone isn't new.
         c.addGoalMilestone(g, "Read 12 books")
         assertEquals(GoalBreakdownRules.NOTHING_LINE, assertIs<BreakdownOutcome.NothingNew>(c.breakDownGoal(g)).line)
-        server.reply = GoalBreakdownCodec.Response("off", reason = "MEKA's AI is off")
+        server.reply = GoalBreakdownCodec.Response("off", reason = "Navilife's AI is off")
         assertIs<BreakdownOutcome.Unavailable>(c.breakDownGoal(g))
         server.down = true
         assertIs<BreakdownOutcome.Unavailable>(c.breakDownGoal(g))

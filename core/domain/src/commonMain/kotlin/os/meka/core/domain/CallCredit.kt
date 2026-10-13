@@ -154,7 +154,7 @@ object CallCreditRules {
     /** Why a paused assistant is paused, in a few words. */
     private fun pausedWhy(c: CallCredit): String = when (c.reason) {
         CallCreditPause.SUSPENDED -> "Twilio has suspended the account"
-        CallCreditPause.UNREADABLE -> "MEKA couldn't read the Twilio balance for a day"
+        CallCreditPause.UNREADABLE -> "Navilife couldn't read the Twilio balance for a day"
         else -> left(c)?.let { "Out of credit · $it" } ?: "Out of credit"
     }
 

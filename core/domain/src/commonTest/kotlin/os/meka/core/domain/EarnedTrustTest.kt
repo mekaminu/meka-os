@@ -63,9 +63,9 @@ class EarnedTrustTest {
 
     @Test
     fun linesReadWell() {
-        assertEquals("MEKA will add tasks without asking. Undo any one to go back to asking.", TrustRules.answerLine(TrustKind.ADD_TASK, true))
-        assertEquals("MEKA will keep asking before it adds to the shopping list.", TrustRules.answerLine(TrustKind.ADD_SHOPPING, false))
-        assertEquals("Undone. MEKA will ask before it ticks off tasks again.", TrustRules.autoUndoneLine(TrustKind.COMPLETE_TASK, UndoOutcome.UNDONE))
+        assertEquals("Navilife will add tasks without asking. Undo any one to go back to asking.", TrustRules.answerLine(TrustKind.ADD_TASK, true))
+        assertEquals("Navilife will keep asking before it adds to the shopping list.", TrustRules.answerLine(TrustKind.ADD_SHOPPING, false))
+        assertEquals("Undone. Navilife will ask before it ticks off tasks again.", TrustRules.autoUndoneLine(TrustKind.COMPLETE_TASK, UndoOutcome.UNDONE))
         assertEquals("Added “Milk” · done for you", TrustRules.autoLine("Added “Milk”"))
         assertEquals("You said “just do it” for “Keep a win” after 5 in a row", TrustRules.why(TrustKind.ADD_WIN))
     }

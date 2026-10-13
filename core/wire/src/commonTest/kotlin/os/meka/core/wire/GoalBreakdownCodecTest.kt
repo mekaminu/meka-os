@@ -33,7 +33,7 @@ class GoalBreakdownCodecTest {
     fun aResponseRoundTrips() {
         val r = GoalBreakdownCodec.Response("answered", listOf("Run 10k", "Run 15k"), listOf("Book a gait analysis"))
         assertEquals(r, GoalBreakdownCodec.decodeResponse(GoalBreakdownCodec.encodeResponse(r)))
-        val off = GoalBreakdownCodec.Response("off", reason = "MEKA's AI is off")
+        val off = GoalBreakdownCodec.Response("off", reason = "Navilife's AI is off")
         assertEquals(off, GoalBreakdownCodec.decodeResponse(GoalBreakdownCodec.encodeResponse(off)))
     }
 

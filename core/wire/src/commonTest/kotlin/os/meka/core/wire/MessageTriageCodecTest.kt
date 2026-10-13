@@ -38,7 +38,7 @@ class MessageTriageCodecTest {
             proposals = listOf(MessageRequestCodec.Proposal("task", "Pay Tunde for the tickets", words = "by Friday")),
         )
         assertEquals(action, MessageTriageCodec.decodeResponse(MessageTriageCodec.encodeResponse(action)))
-        val off = MessageTriageCodec.Response("off", reason = "MEKA's AI isn't set up")
+        val off = MessageTriageCodec.Response("off", reason = "Navilife's AI isn't set up")
         assertEquals(off, MessageTriageCodec.decodeResponse(MessageTriageCodec.encodeResponse(off)))
         // A lane MEKA doesn't know reads as none.
         assertNull(MessageTriageCodec.decodeResponse("""{"w":${WireCodec.VERSION},"state":"answered","lane":"send"}""").lane)

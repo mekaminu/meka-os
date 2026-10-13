@@ -32,9 +32,9 @@ object NotifyAskRules {
         } else {
             add(
                 when {
-                    !health.allowed -> "Notifications on this phone · off for MEKA (Android's permission or the app's switch) · nothing can reach Meka until he turns them on"
-                    health.phoneOff -> "Notifications on this phone · set to Off in MEKA's Notifications (This phone) · nothing posts here"
-                    else -> "Notifications on this phone · on for MEKA"
+                    !health.allowed -> "Notifications on this phone · off for Navilife (Android's permission or the app's switch) · nothing can reach Meka until he turns them on"
+                    health.phoneOff -> "Notifications on this phone · set to Off in Navilife's Notifications (This phone) · nothing posts here"
+                    else -> "Notifications on this phone · on for Navilife"
                 },
             )
             val off = health.channels.filter { !it.on }
@@ -56,11 +56,11 @@ object NotifyAskRules {
      */
     fun localAnswer(health: NotificationHealth?, settings: NotificationSettings, nowMs: Long, cal: LocalCalendar): String? {
         health ?: return null
-        if (!health.allowed) return "Notifications are off for MEKA on this phone, so nothing can reach you. Turn them on in Settings → Notifications (or Health's Turn on)."
-        if (health.phoneOff) return "This phone is set to Off in MEKA's Notifications, so MEKA posts nothing here. Pick Everything or Digests only under This phone."
+        if (!health.allowed) return "Notifications are off for Navilife on this phone, so nothing can reach you. Turn them on in Settings → Notifications (or Health's Turn on)."
+        if (health.phoneOff) return "This phone is set to Off in Navilife's Notifications, so Navilife posts nothing here. Pick Everything or Digests only under This phone."
         val off = health.channels.filter { !it.on }
         if (off.isNotEmpty() && off.size == health.channels.size) {
-            return "Every MEKA category is switched off in Android's settings, so nothing shows. Open Settings → Apps → MEKA → Notifications and turn the categories back on."
+            return "Every Navilife category is switched off in Android's settings, so nothing shows. Open Settings → Apps → Navilife → Notifications and turn the categories back on."
         }
         val failed = health.trace.firstOrNull { it.kind != NotifyTraceKind.PUSH && it.kind != NotifyTraceKind.STARTED && it.kind != NotifyTraceKind.TEST }
             ?.takeIf { it.kind == NotifyTraceKind.FAILED }
@@ -86,7 +86,7 @@ object NotifyAskRules {
     }
 
     private fun lastSentSentence(health: NotificationHealth, nowMs: Long, cal: LocalCalendar): String {
-        val last = lastPostMs(health) ?: return "MEKA hasn't sent a notification from this phone yet."
+        val last = lastPostMs(health) ?: return "Navilife hasn't sent a notification from this phone yet."
         return "The last one went ${at(last, nowMs, cal)}${lastChannel(health)?.let { ", on $it" }.orEmpty()}."
     }
 

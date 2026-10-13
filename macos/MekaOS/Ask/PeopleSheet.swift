@@ -42,7 +42,7 @@ struct PeopleSheet: View {
                 .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
             }
             .frame(maxHeight: 400)
-            Text("Promises are made in Lists → Promises, birthdays in Gifts. Last contact comes from the messages MEKA has already seen; nothing new is read.")
+            Text("Promises are made in Lists → Promises, birthdays in Gifts. Last contact comes from the messages Navilife has already seen; nothing new is read.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {

@@ -35,7 +35,7 @@ struct ActivitySheet: View {
                     .transition(.opacity)
             }
             if let view = model.activity, !view.isEmpty {
-                Text("What MEKA did and why. \(view.weekLine).")
+                Text("What Navilife did and why. \(view.weekLine).")
                     .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     .staggeredAppear(0)
                 if let note = model.activityNote {

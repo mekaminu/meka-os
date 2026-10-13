@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Meka</string>
-    <string name="work_capture_label">MEKA work mode: holds messages and missed calls for after work</string>
+    <string name="app_name">Navilife</string>
+    <string name="work_capture_label">Navilife work mode: holds messages and missed calls for after work</string>
     <string name="capture_label">Capture</string>
-    <string name="bedside_dream_label">MEKA bedside clock</string>
-    <string name="capture_in_meka">Capture in MEKA</string>
+    <string name="bedside_dream_label">Navilife bedside clock</string>
+    <string name="capture_in_meka">Capture in Navilife</string>
     <string name="capture_hint">Capture anything…</string>
     <string name="capture_speak">Speak to capture</string>
     <string name="capture_widget_description">Capture a task or a thought from your home screen</string>
@@ -15,8 +15,8 @@
     <string name="widget_needs_you_description">How many decisions wait for you, and the first of them</string>
     <string name="widget_fast_label">Fast</string>
     <!-- Talk widget (Talk without tapping the mic, slice 2); the label is the core's TalkStartRules.WIDGET_LABEL. -->
-    <string name="widget_talk_label">Talk to MEKA</string>
-    <string name="widget_talk_description">One tap opens MEKA listening</string>
+    <string name="widget_talk_label">Talk to Navilife</string>
+    <string name="widget_talk_description">One tap opens Navilife listening</string>
     <string name="widget_brief_label">Hear the brief</string>
     <string name="widget_brief_description">One tap opens the morning brief and reads it aloud</string>
     <string name="widget_fast_description">A running fast\'s timer and progress, or your eating window</string>

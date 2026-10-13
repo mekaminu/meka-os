@@ -103,9 +103,9 @@ object GiftRules {
 
     const val ADD_HINT = "Add… (Mum's birthday 3 Nov, Wedding anniversary 20 Aug 2015)"
     const val IDEA_HINT = "Add a gift idea…"
-    const val EMPTY_LINE = "Nothing entered yet. Type each birthday or anniversary once; MEKA reminds you two weeks ahead and on the day to order."
-    const val NOT_READ = "MEKA couldn't read that. Try \"Mum's birthday 3 Nov\" or \"Wedding anniversary 20 Aug 2015\"."
-    const val NOTE = "Two weeks before, a heads-up with your ideas; on the order-by day, a reminder to order. Delivery is 3 days unless you type \"delivery 5 days\". MEKA never orders anything."
+    const val EMPTY_LINE = "Nothing entered yet. Type each birthday or anniversary once; Navilife reminds you two weeks ahead and on the day to order."
+    const val NOT_READ = "Navilife couldn't read that. Try \"Mum's birthday 3 Nov\" or \"Wedding anniversary 20 Aug 2015\"."
+    const val NOTE = "Two weeks before, a heads-up with your ideas; on the order-by day, a reminder to order. Delivery is 3 days unless you type \"delivery 5 days\". Navilife never orders anything."
 
     private val BIRTHDAY_WORDS = setOf("birthday", "birthdays", "bday", "b'day", "b’day", "born", "dob")
     private val ANNIVERSARY_WORDS = setOf("anniversary", "anniversaries", "anniv", "wedding", "married")

@@ -68,7 +68,7 @@ object TalkRules {
     const val NOT_HEARD_CARD = "That one couldn't be done any more."
 
     /** Words that carry no meaning on their own and are ignored around the rest. */
-    private val FILLERS = setOf("meka", "hey", "um", "umm", "uh", "er", "erm", "oh", "well", "so", "right", "then", "just", "and")
+    private val FILLERS = setOf("meka", "navilife", "hey", "um", "umm", "uh", "er", "erm", "oh", "well", "so", "right", "then", "just", "and")
 
     private val ENDINGS = phrases(
         "that's all", "thats all", "that is all", "that's it", "thats it", "that is it", "that's everything",
@@ -107,8 +107,25 @@ object TalkRules {
 
     /** Lower case words without punctuation; "That's all, thanks!" → [that's, all, thanks]. */
     fun words(utterance: String): List<String> =
-        utterance.lowercase().replace('’', '\'').replace(Regex("""[^a-z0-9' ]"""), " ")
-            .split(' ').map { it.trim('\'') }.filter { it.isNotEmpty() }
+        joinName(
+            utterance.lowercase().replace('’', '\'').replace(Regex("""[^a-z0-9' ]"""), " ")
+                .split(' ').map { it.trim('\'') }.filter { it.isNotEmpty() },
+        )
+
+    /**
+     * The app's name heard as two words ("navi life", "navy life", "Navi-Life") becomes one, "navilife", so every
+     * voice rule can drop it like "meka" (the rename to Navilife, 2026-10-13: both names keep working).
+     */
+    private fun joinName(ws: List<String>): List<String> {
+        if (ws.none { it == "navi" || it == "navy" }) return ws
+        val out = ArrayList<String>(ws.size)
+        var i = 0
+        while (i < ws.size) {
+            if ((ws[i] == "navi" || ws[i] == "navy") && ws.getOrNull(i + 1) == "life") { out += "navilife"; i += 2; continue }
+            out += ws[i]; i++
+        }
+        return out
+    }
 
     /** Whether [ws] is made up entirely of [vocabulary] phrases (fillers allowed), and returns the phrases used. */
     private fun cover(ws: List<String>, vocabulary: List<List<String>>): List<List<String>>? {
@@ -516,12 +533,12 @@ data class VoiceCandidate(val name: String, val language: String, val quality: I
  */
 enum class TalkProblem(val line: String, val macLine: String) {
     NO_PERMISSION(
-        "MEKA needs the microphone to hear you. Allow it when asked, or in Settings → Apps → Meka → Permissions.",
-        "MEKA needs the microphone and speech recognition to hear you. Allow both in System Settings → Privacy & Security.",
+        "Navilife needs the microphone to hear you. Allow it when asked, or in Settings → Apps → Meka → Permissions.",
+        "Navilife needs the microphone and speech recognition to hear you. Allow both in System Settings → Privacy & Security.",
     ),
     NO_ON_DEVICE(
-        "This phone can't recognise speech on the device, so MEKA won't listen: nothing is sent away to be transcribed.",
-        "This Mac can't recognise English on the device yet, so MEKA won't listen: nothing is sent away to be transcribed. " +
+        "This phone can't recognise speech on the device, so Navilife won't listen: nothing is sent away to be transcribed.",
+        "This Mac can't recognise English on the device yet, so Navilife won't listen: nothing is sent away to be transcribed. " +
             "Turning on Dictation in System Settings → Keyboard fetches it.",
     ),
     LANGUAGE_MISSING(

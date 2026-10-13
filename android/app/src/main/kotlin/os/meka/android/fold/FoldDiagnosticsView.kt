@@ -40,7 +40,7 @@ fun FoldPostureLines(modifier: Modifier = Modifier, withLog: Boolean = false) {
     val context = LocalContext.current.applicationContext
     val reading by FoldDiagnostics.reading.collectAsState()
     val reduced = Meka.reducedMotion
-    val line = reading?.let { FoldPostureRules.line(it) } ?: "Fold: open MEKA to read the hinge"
+    val line = reading?.let { FoldPostureRules.line(it) } ?: "Fold: open Navilife to read the hinge"
     Column(modifier.animateContentSize(MekaMotion.expand(reduced))) {
         AnimatedContent(
             targetState = line,

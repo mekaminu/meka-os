@@ -89,7 +89,7 @@ object QueueRules {
     const val DONE_SHOWN = 5
     private const val DAY_MS = 86_400_000L
 
-    const val EMPTY_SUMMARY = "Nothing saved yet. Share a link to MEKA and choose For the train."
+    const val EMPTY_SUMMARY = "Nothing saved yet. Share a link to Navilife and choose For the train."
     const val HINT = "Paste a link to save for the train…"
     const val NO_LINK = "That has no link in it. Paste or share a web link (https://…)."
     const val ALREADY = "Already in your train queue"
@@ -197,7 +197,7 @@ object QueueRules {
         val articles = waiting.count { it.kind == QueueKind.ARTICLE }
         val podcasts = waiting.count { it.kind == QueueKind.PODCAST }
         val summary = countLine(articles, podcasts)?.let { "$it for the train" }
-            ?: if (done.isNotEmpty()) "All caught up. Share a link to MEKA to save the next one." else EMPTY_SUMMARY
+            ?: if (done.isNotEmpty()) "All caught up. Share a link to Navilife to save the next one." else EMPTY_SUMMARY
         return QueueView(waiting.map(::row), done.map(::row), summary, articles, podcasts)
     }
 

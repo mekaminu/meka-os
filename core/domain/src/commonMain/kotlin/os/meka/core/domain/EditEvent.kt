@@ -20,7 +20,7 @@ object EditEventRules {
     private const val MINUTE_MS = 60_000L
 
     /** Why the When rows aren't offered. */
-    const val TIME_NOTE = "Its time can't be changed from MEKA once it's started (or when it runs over a day)"
+    const val TIME_NOTE = "Its time can't be changed from Navilife once it's started (or when it runs over a day)"
 
     /** Whether MEKA offers changing [e]'s time: not started yet, and a timed event no longer than a day. */
     fun timeEditable(e: CalendarEvent, nowMs: Long, calendar: LocalCalendar): Boolean =

@@ -98,7 +98,7 @@ fun PeoplePane(core: MekaCore, onClose: () -> Unit) {
         }
         item(key = "note") {
             Text(
-                "Promises are made in Lists → Promises, birthdays in Gifts, and Family, Always notify and Watch for requests in Work mode → People (those lists stay on this phone). Last contact comes from the messages MEKA has already seen; nothing new is read.",
+                "Promises are made in Lists → Promises, birthdays in Gifts, and Family, Always notify and Watch for requests in Work mode → People (those lists stay on this phone). Last contact comes from the messages Navilife has already seen; nothing new is read.",
                 style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l),
             )

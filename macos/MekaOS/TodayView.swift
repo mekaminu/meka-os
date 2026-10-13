@@ -926,8 +926,8 @@ private struct CaptureField: View {
                 VoiceOrbView(phase: .ended, level: 0, palette: palette, size: 30)
             }
             .buttonStyle(MekaPressStyle())
-            .help("Talk to MEKA (⌥Space)")
-            .accessibilityLabel("Talk to MEKA")
+            .help("Talk to Navilife (⌥Space)")
+            .accessibilityLabel("Talk to Navilife")
         }
         .padding(.leading, MekaSpace.l)
         .padding(.trailing, MekaSpace.xs)
@@ -1277,7 +1277,7 @@ private struct CalendarOnTodayRow: View {
                             let max = Int(CalendarRules.shared.MAX_NAME)
                             if text.count > max { text = String(text.prefix(max)) }
                         }
-                    Text("Only in MEKA: the calendar keeps its own name. Empty goes back to \(choice.defaultLabel).")
+                    Text("Only in Navilife: the calendar keeps its own name. Empty goes back to \(choice.defaultLabel).")
                         .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))

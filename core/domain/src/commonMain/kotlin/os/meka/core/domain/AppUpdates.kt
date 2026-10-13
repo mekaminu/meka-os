@@ -14,7 +14,7 @@ object AppUpdateRules {
     fun offer(latest: Build?, installedCode: Long, laterCode: Long?): Build? =
         latest?.takeIf { it.versionCode > installedCode && it.versionCode != laterCode }
 
-    const val TITLE = "MEKA update ready"
+    const val TITLE = "Navilife update ready"
 
     /**
      * The quiet "MEKA update ready" notification (hands-free phone updates): at most once per build. It is posted
@@ -29,13 +29,13 @@ object AppUpdateRules {
         if (offered != null && (toldCode == null || offered.versionCode > toldCode)) offered.versionCode else toldCode
 
     /** The notification's line: "Build 412 · 24.3 MB · open MEKA to install". */
-    fun notificationLine(b: Build): String = "${line(b)} · open MEKA to install"
+    fun notificationLine(b: Build): String = "${line(b)} · open Navilife to install"
 
     /** "Build 412 · 24.3 MB". */
     fun line(b: Build): String = "Build ${b.versionCode} · ${sizeLabel(b.sizeBytes)}"
 
     /** "MEKA 0.1.412 · build 412 · 24.3 MB" (what the Mac shows before publishing). */
-    fun summary(b: Build): String = "MEKA ${b.versionName} · build ${b.versionCode} · ${sizeLabel(b.sizeBytes)}"
+    fun summary(b: Build): String = "Navilife ${b.versionName} · build ${b.versionCode} · ${sizeLabel(b.sizeBytes)}"
 
     /**
      * Appearance's build line (Meka, 2026-10-08, so we can tell whether the phone has the motion builds):
@@ -43,7 +43,7 @@ object AppUpdateRules {
      * published build isn't known yet ([latestCode] null: offline, or not checked).
      */
     fun versionLine(versionName: String, versionCode: Long, latestCode: Long?): String {
-        val head = "MEKA $versionName · build $versionCode"
+        val head = "Navilife $versionName · build $versionCode"
         return when {
             latestCode == null -> head
             latestCode > versionCode -> "$head · update ready (build $latestCode)"
@@ -63,7 +63,7 @@ object AppUpdateRules {
 
     /** Activity's why for [installedSummary]: "From build 470 (24.9 MB) · 6.7 MB smaller", else the plain fact. */
     fun installedWhy(sizeBytes: Long, previousCode: Long?, previousSize: Long?): String {
-        if (previousCode == null) return "MEKA takes ${sizeLabel(sizeBytes)} on this phone"
+        if (previousCode == null) return "Navilife takes ${sizeLabel(sizeBytes)} on this phone"
         val from = "From build $previousCode" + (previousSize?.takeIf { it > 0 }?.let { " (${sizeLabel(it)})" } ?: "")
         val change = previousSize?.takeIf { it > 0 }?.let { prev ->
             val d = sizeBytes - prev
@@ -90,10 +90,17 @@ object AppUpdateRules {
     fun shouldRecordInstall(versionCode: Long, recordedCode: Long?): Boolean = recordedCode == null || versionCode > recordedCode
 
     /**
-     * The app icon MEKA currently ships (app icon → option B, Meka 2026-10-12 20:36). When it changes, the first run of
-     * an updated build says so once in Activity, since launchers often keep the old icon until they restart.
+     * The app icon MEKA currently ships (the rename to Navilife, Meka 2026-10-13: logo N3·2, the compass dial; was
+     * "hands-m"). When it changes, the first run of an updated build says so once in Activity, since launchers often
+     * keep the old icon until they restart.
      */
-    const val ICON = "hands-m"
+    const val ICON = "navilife-n3-2"
+
+    /** The app's name as a person sees it (the rename, 2026-10-13); the code name stays `meka`. */
+    const val APP_NAME = "Navilife"
+
+    /** The tagline, for About and the splash. */
+    const val TAGLINE = "Navilife — calm in the chaos."
 
     /**
      * True when Activity should say the icon changed: an update (the phone had recorded an earlier build, so not a
@@ -103,9 +110,10 @@ object AppUpdateRules {
 
     fun iconActivityId(icon: String = ICON): String = "u" + ActivityRules.fnv64("app-icon:$icon")
 
-    const val ICON_SUMMARY = "MEKA has a new icon: the Hands M"
-    const val ICON_WHY = "The watch's two hands at ten past ten make the M. If the home screen still shows the old " +
-        "icon, restart the phone (or the launcher) and it will catch up."
+    const val ICON_SUMMARY = "Now called Navilife"
+    const val ICON_WHY = "Calm in the chaos: a new name and a new icon, the compass dial. Your data and settings are " +
+        "as they were, and \"MEKA\" still works when you talk to it. If the home screen still shows the old icon, " +
+        "restart the phone (or the launcher) and it will catch up."
 
     /** One Activity entry per build. */
     fun installedActivityId(versionCode: Long): String = "u" + ActivityRules.fnv64("update-installed:$versionCode")
@@ -247,8 +255,8 @@ object UpdateFailureRules {
         else -> when (f.status) {
             STATUS_FAILURE_CONFLICT, STATUS_FAILURE_INCOMPATIBLE ->
                 if (f.message?.contains("signature", ignoreCase = true) == true || f.status == STATUS_FAILURE_INCOMPATIBLE)
-                    "Android refused it: it isn't signed like the MEKA you have (it must carry the debug key of the Mac that installed MEKA)."
-                else "Android refused it: it conflicts with the MEKA you have."
+                    "Android refused it: it isn't signed like the Navilife you have (it must carry the debug key of the Mac that installed Navilife)."
+                else "Android refused it: it conflicts with the Navilife you have."
             STATUS_FAILURE_STORAGE -> "Not enough space on the phone for the update."
             STATUS_FAILURE_BLOCKED -> "Android blocked the install."
             STATUS_FAILURE_INVALID -> "Android said the downloaded file isn't a valid app. Try again."

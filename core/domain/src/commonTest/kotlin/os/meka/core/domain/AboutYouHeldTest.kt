@@ -54,11 +54,11 @@ class AboutYouHeldTest {
         assertNull(AboutYouRules.healthRow(null, now, cal))
         assertEquals(HealthState.WARN, AboutYouRules.healthRow(AboutYouHeld(false, now, now), now, cal)!!.state)
         val fold = AboutYouRules.healthRow(AboutYouHeld(true, now, null), now + 7_200_000, cal)!!
-        assertEquals("On the Fold since 09:00 · not on the Mac yet · open MEKA on the Mac", fold.line)
+        assertEquals("On the Fold since 09:00 · not on the Mac yet · open Navilife on the Mac", fold.line)
         assertEquals(HealthState.WARN, fold.state)
-        assertEquals("On the Mac since 09:00 · not on the Fold yet · open MEKA on the Fold",
+        assertEquals("On the Mac since 09:00 · not on the Fold yet · open Navilife on the Fold",
             AboutYouRules.healthRow(AboutYouHeld(true, null, now), now + 7_200_000, cal)!!.line)
-        assertEquals("On the Fold · not on the Mac yet · open MEKA on the Mac", AboutYouRules.healthRow(AboutYouHeld(true, now, null), now, cal)!!.line)
+        assertEquals("On the Fold · not on the Mac yet · open Navilife on the Mac", AboutYouRules.healthRow(AboutYouHeld(true, now, null), now, cal)!!.line)
         assertEquals(HealthState.UNKNOWN, AboutYouRules.healthRow(AboutYouHeld(true, null, null), now, cal)!!.state)
         val both = AboutYouRules.healthRow(AboutYouHeld(true, 1L, 2L), now, cal)!!
         assertEquals(HealthState.OK, both.state)

@@ -209,8 +209,8 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         Spacer(Modifier.height(MekaSpace.m))
         Label("While you're at work", 3)
         Text(
-            if (listening) "MEKA is holding WhatsApp, texts and missed calls for after work."
-            else "Give MEKA notification access so it can hold WhatsApp, texts and missed calls for after work.",
+            if (listening) "Navilife is holding WhatsApp, texts and missed calls for after work."
+            else "Give Navilife notification access so it can hold WhatsApp, texts and missed calls for after work.",
             style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(3)),
         )
         if (!listening) {
@@ -227,7 +227,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         }
         Text(
             "\"Urgent\" or \"emergency\" in a message, or anyone on your always-notify list, alerts you straight away. " +
-                "MEKA never replies and never marks anything read. What it holds stays on this phone.",
+                "Navilife never replies and never marks anything read. What it holds stays on this phone.",
             style = MekaType.caption, color = Meka.colors.textTertiary,
         )
 
@@ -247,13 +247,13 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
             enter = if (Meka.reducedMotion) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
             exit = if (Meka.reducedMotion) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
-            PillButton("Let MEKA screen calls", filled = true) {
+            PillButton("Let Navilife screen calls", filled = true) {
                 MekaCallScreeningService.roleRequest(context)?.let { runCatching { askScreening.launch(it) } }
             }
         }
         Text(
             "At work, family, your always-notify list and anyone who calls twice within 3 minutes ring. Other calls are " +
-                "declined, and your network's \"forward when busy\" sends them to MEKA's assistant " +
+                "declined, and your network's \"forward when busy\" sends them to Navilife's assistant " +
                 "(${CallScreeningRules.ASSISTANT_NUMBER}), which takes a message. Declined calls still show as missed calls.",
             style = MekaType.caption, color = Meka.colors.textTertiary,
         )
@@ -322,7 +322,7 @@ fun AfterWorkPane(
         }
         Spacer(Modifier.height(MekaSpace.m))
         if (!summary.isEmpty) PillButton("Done", filled = true) { haptics.light(); onDone() }
-        Text("Done clears MEKA's copy on the Fold and the Mac. WhatsApp and Messages are untouched.", style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text("Done clears Navilife's copy on the Fold and the Mac. WhatsApp and Messages are untouched.", style = MekaType.caption, color = Meka.colors.textTertiary)
         if (summary.people.any { p -> p.items.any { it.hasAudio } }) {
             Text(privacy, style = MekaType.caption, color = Meka.colors.textTertiary)
         }

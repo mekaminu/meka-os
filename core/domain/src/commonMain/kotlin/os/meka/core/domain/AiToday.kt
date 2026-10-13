@@ -12,7 +12,7 @@ data class AiDayUse(val feature: String, val calls: Long, val microUsd: Long)
  * day cost at list price. Nothing asked today → no line.
  */
 object AiTodayRules {
-    const val PREFIX = "MEKA's AI today"
+    const val PREFIX = "Navilife's AI today"
 
     /** The groups, in the order they are said, and the server's feature names they gather. */
     enum class Group(val label: String) { TALK("Talk"), ASK("Ask"), BRIEF("Brief"), MESSAGES("Messages"), CALLS("Calls"), MAIL("Mail"), OTHER("Other") }

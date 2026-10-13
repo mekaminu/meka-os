@@ -57,7 +57,7 @@ class PlanToCalendarTest {
         val off = PlanCalendarRules.setting(false, listOf(google), null)
         assertTrue(off.available)
         assertEquals("Also add the blocks to Google", off.label)
-        assertEquals("Apply plans the tasks in MEKA only", off.line)
+        assertEquals("Apply plans the tasks in Navilife only", off.line)
         assertNull(off.accountLabel)
 
         fs.set(true)
@@ -81,7 +81,7 @@ class PlanToCalendarTest {
     @Test
     fun aBlockIsAnOrdinaryAddCarryingItsTaskAndDoesntBecomeAddEventsDefault() {
         val d = PlanCalendarRules.draft(report)
-        assertEquals(EventDraft("Write report", at(11), at(11, 30), false, notes = "Planned with MEKA"), d)
+        assertEquals(EventDraft("Write report", at(11), at(11, 30), false, notes = "Planned with Navilife"), d)
         val id = made(eFold.add("google", "meka@gmail.com", d, forTask = "t1"))
         val edit = eFold.edit(id)!!
         assertEquals("t1", edit.forTask)
@@ -183,7 +183,7 @@ class PlanToCalendarTest {
         assertEquals(BlockStep.None, PlanCalendarRules.follow(null, gone, true))
         // Planned again (Undo after Delete, or a new time): it comes back with its length, only with the setting on.
         assertEquals(
-            BlockStep.Add("google", "meka@gmail.com", EventDraft("Write report", at(16), at(16, 30), false, notes = "Planned with MEKA")),
+            BlockStep.Add("google", "meka@gmail.com", EventDraft("Write report", at(16), at(16, 30), false, notes = "Planned with Navilife")),
             PlanCalendarRules.follow(planned(at(16)), gone, true),
         )
         assertEquals(BlockStep.None, PlanCalendarRules.follow(planned(at(16)), gone, false))

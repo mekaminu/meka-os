@@ -56,8 +56,8 @@ struct AskMekaSection: View {
                         VoiceOrbView(phase: .ended, level: 0, palette: palette, size: 30)
                     }
                     .buttonStyle(MekaPressStyle())
-                    .help("Talk to MEKA (⌥Space)")
-                    .accessibilityLabel(talk.active ? "Stop talking to MEKA" : "Talk to MEKA")
+                    .help("Talk to Navilife (⌥Space)")
+                    .accessibilityLabel(talk.active ? "Stop talking to Navilife" : "Talk to Navilife")
                 }
             }
             .padding(.leading, MekaSpace.l)
@@ -72,7 +72,7 @@ struct AskMekaSection: View {
             // The spend lives in Settings → MEKA's AI (Fold review 2026-10-12, item 7); here only when it needs a look,
             // since it's why Return searches instead of asking.
             if let ai = model.aiStatus, ai.lit {
-                Text("MEKA's AI · " + ai.line)
+                Text("Navilife's AI · " + ai.line)
                     .font(MekaType.caption)
                     .foregroundStyle(palette.accent)
                     .contentTransition(.opacity)
@@ -210,7 +210,7 @@ struct AskMekaSection: View {
                                     .background(Capsule().fill(palette.surfaceRaised))
                             }
                             .buttonStyle(MekaPressStyle())
-                            .accessibilityHint("Asks MEKA")
+                            .accessibilityHint("Asks Navilife")
                         }
                     }
                 }
@@ -351,7 +351,7 @@ private struct TalkPanel: View {
             .buttonStyle(MekaPressStyle())
             // Resting after "Too noisy — click to talk": a click starts listening as the mic does.
             .disabled(!talk.active && talk.problem != .tooNoisy)
-            .accessibilityLabel("MEKA, \(TalkOrb.shared.label(phase: talk.phase, mac: true, talkOver: talk.talkOver))")
+            .accessibilityLabel("Navilife, \(TalkOrb.shared.label(phase: talk.phase, mac: true, talkOver: talk.talkOver))")
             Text(line)
                 .font(MekaType.caption)
                 .foregroundStyle(talk.problem != nil ? palette.accent : palette.textTertiary)

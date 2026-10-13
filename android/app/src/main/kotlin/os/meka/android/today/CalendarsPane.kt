@@ -272,7 +272,7 @@ private fun CalendarNameField(c: CalendarChoice, onDone: (String) -> Unit) {
                 modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = "Name for ${c.defaultLabel}" },
             )
         }
-        Text("Only in MEKA: the calendar keeps its name in ${c.detail?.substringBefore(" · ") ?: "its app"}. Empty goes back to ${c.defaultLabel}.",
+        Text("Only in Navilife: the calendar keeps its name in ${c.detail?.substringBefore(" · ") ?: "its app"}. Empty goes back to ${c.defaultLabel}.",
             style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }

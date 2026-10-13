@@ -199,12 +199,12 @@ object ReviewRules {
      * the activity log, approvals and the assistant layer (V1).
      */
     val NORTH_STAR_PENDING: List<NorthStarMetric> = listOf(
-        NorthStarMetric("handled", "Handled without you", null, "Counted once MEKA acts for you"),
+        NorthStarMetric("handled", "Handled without you", null, "Counted once Navilife acts for you"),
         NorthStarMetric(PreventedMissRules.KEY, PreventedMissRules.LABEL, null, PreventedMissRules.PENDING_LINE),
-        NorthStarMetric("interruptions", "Interruptions", null, "Counted once MEKA can notify you on a device"),
-        NorthStarMetric("approval", "Approval rate", null, "Counted once MEKA asks you to approve things"),
+        NorthStarMetric("interruptions", "Interruptions", null, "Counted once Navilife can notify you on a device"),
+        NorthStarMetric("approval", "Approval rate", null, "Counted once Navilife asks you to approve things"),
         NorthStarMetric("false-positive", "Not relevant", null, "Suggestions you dismissed; counted with the assistant"),
-        NorthStarMetric("time", "Time returned", null, "An estimate, once MEKA acts for you"),
+        NorthStarMetric("time", "Time returned", null, "An estimate, once Navilife acts for you"),
     )
 }
 

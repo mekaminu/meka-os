@@ -59,7 +59,7 @@ class EarnedTrustFacadeTest {
             if (i < TrustRules.STREAK - 1) assertNull(done.offer) else {
                 val offer = assertNotNull(done.offer)
                 assertEquals("add_task", offer.kindKey)
-                assertEquals("MEKA will add tasks without asking. Undo any one to go back to asking.", c.answerTrustOffer(offer.kindKey, yes = true))
+                assertEquals("Navilife will add tasks without asking. Undo any one to go back to asking.", c.answerTrustOffer(offer.kindKey, yes = true))
             }
         }
         addTask("Milk")
@@ -72,7 +72,7 @@ class EarnedTrustFacadeTest {
         assertTrue(row.canUndo)
         assertTrue(row.why.contains("just do it"), row.why)
 
-        assertEquals("Undone. MEKA will ask before it adds tasks again.", c.undoAutoAsk(did.activityId))
+        assertEquals("Undone. Navilife will ask before it adds tasks again.", c.undoAutoAsk(did.activityId))
         assertTrue("Milk" !in c.titles())
         // Back to asking first.
         addTask("Bread")

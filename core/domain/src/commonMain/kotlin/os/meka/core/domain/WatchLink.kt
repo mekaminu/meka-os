@@ -38,15 +38,15 @@ object WatchLinkRules {
     const val CODE_MINUTES = 10
     const val CODE_MS = CODE_MINUTES * 60_000L
 
-    const val HOW = "Open MEKA on the watch: it shows an 8-digit code. Type it here within 10 minutes."
+    const val HOW = "Open Navilife on the watch: it shows an 8-digit code. Type it here within 10 minutes."
     const val NOT_CONNECTED = "Connect this device to your server first."
-    const val NO_KEY = "This device's key isn't registered with MEKA's server yet · try again in a minute"
-    const val NO_ROUTE = "MEKA's server can't link watches yet · it arrives with the next deploy"
-    const val OFFLINE = "Couldn't reach MEKA's server · try again"
+    const val NO_KEY = "This device's key isn't registered with Navilife's server yet · try again in a minute"
+    const val NO_ROUTE = "Navilife's server can't link watches yet · it arrives with the next deploy"
+    const val OFFLINE = "Couldn't reach Navilife's server · try again"
     const val NOT_A_CODE = "The code is 8 digits, as the watch shows it"
     const val WRONG_CODE = "That code doesn't match a watch waiting to link · check the watch and type it again"
     const val TOO_MANY = "Too many wrong codes · wait 10 minutes and try again"
-    const val UNLINKED_BEFORE = "That watch was unlinked before · clear MEKA's storage on the watch and open it again"
+    const val UNLINKED_BEFORE = "That watch was unlinked before · clear Navilife's storage on the watch and open it again"
 
     /** "1234 5678", "1234-5678" or " 12345678 " → "12345678"; null when it isn't 8 digits. */
     fun normaliseCode(raw: String): String? {
@@ -100,7 +100,7 @@ object WatchLinkRules {
         val expired = leftMs <= 0
         val minutes = ((leftMs + 59_999) / 60_000).coerceAtLeast(0)
         return WatchCodeScreen(
-            title = "Link to MEKA",
+            title = "Link to Navilife",
             code = showCode(code),
             line = if (expired) "That code ran out" else "On your phone: Ask → More → Watch",
             left = when {

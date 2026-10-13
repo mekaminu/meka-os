@@ -35,10 +35,10 @@ class AutonomyTest {
         assertEquals(listOf(AutonomyRules.LISTS_LABEL, AutonomyRules.LOCKED_LABEL), v.sections.map { it.label })
         assertEquals(TrustKind.entries.map { it.key }, v.sections[0].rows.map { it.key })
         assertTrue(v.sections[1].rows.all { it.locked && it.action == null })
-        assertEquals("MEKA does 1 thing on its own · each with Undo and in Activity", v.summary)
+        assertEquals("Navilife does 1 thing on its own · each with Undo and in Activity", v.summary)
         assertEquals(AutonomyRules.PAUSE, v.pauseButton)
         val two = mapOf(TrustKind.ADD_SHOPPING to TrustRules.answered(true), TrustKind.ADD_TASK to TrustRules.answered(true))
-        assertEquals("MEKA does 2 things on its own · each with Undo and in Activity", AutonomyRules.summary(two, AutonomySetting(false, null), cal, now))
+        assertEquals("Navilife does 2 things on its own · each with Undo and in Activity", AutonomyRules.summary(two, AutonomySetting(false, null), cal, now))
         assertEquals(AutonomyRules.NONE_LINE, AutonomyRules.summary(emptyMap(), AutonomySetting(false, null), cal, now))
         assertEquals(AutonomyView.EMPTY.sections, AutonomyRules.sections(emptyMap(), false))
         // Locked rows never mention a level by number and fit a row.
@@ -47,10 +47,10 @@ class AutonomyTest {
 
     @Test
     fun pausedSaysSinceWhen() {
-        assertEquals("Paused since 17:15 · MEKA asks before everything", AutonomyRules.summary(emptyMap(), AutonomySetting(true, now), cal, now))
+        assertEquals("Paused since 17:15 · Navilife asks before everything", AutonomyRules.summary(emptyMap(), AutonomySetting(true, now), cal, now))
         val yesterday = now - 24 * 60 * 60_000L
-        assertEquals("Paused since Wed 7 Oct · MEKA asks before everything", AutonomyRules.summary(emptyMap(), AutonomySetting(true, yesterday), cal, now))
-        assertEquals("Paused · MEKA asks before everything", AutonomyRules.summary(emptyMap(), AutonomySetting(true, null), cal, now))
+        assertEquals("Paused since Wed 7 Oct · Navilife asks before everything", AutonomyRules.summary(emptyMap(), AutonomySetting(true, yesterday), cal, now))
+        assertEquals("Paused · Navilife asks before everything", AutonomyRules.summary(emptyMap(), AutonomySetting(true, null), cal, now))
         assertEquals(AutonomyRules.RESUME, AutonomyRules.view(emptyMap(), AutonomySetting(true, now), cal, now).pauseButton)
     }
 
@@ -73,9 +73,9 @@ class AutonomyTest {
         trust.answer(TrustKind.ADD_TASK, yes = true)
         assertTrue(trust.reset(TrustKind.ADD_TASK)!!.trusted)
         assertEquals(TrustState(), trust.state(TrustKind.ADD_TASK))
-        assertEquals("MEKA will ask before it adds tasks again.", AutonomyRules.resetLine(TrustKind.ADD_TASK, TrustRules.answered(true)))
-        assertEquals("MEKA will ask before it adds to the shopping list again.", AutonomyRules.resetLine(TrustKind.ADD_SHOPPING, TrustRules.answered(true)))
-        assertEquals("MEKA may offer again after 5 yeses in a row.", AutonomyRules.resetLine(TrustKind.ADD_WIN, TrustRules.answered(false)))
+        assertEquals("Navilife will ask before it adds tasks again.", AutonomyRules.resetLine(TrustKind.ADD_TASK, TrustRules.answered(true)))
+        assertEquals("Navilife will ask before it adds to the shopping list again.", AutonomyRules.resetLine(TrustKind.ADD_SHOPPING, TrustRules.answered(true)))
+        assertEquals("Navilife may offer again after 5 yeses in a row.", AutonomyRules.resetLine(TrustKind.ADD_WIN, TrustRules.answered(false)))
         assertNull(AutonomyRules.resetLine(TrustKind.ADD_WIN, TrustState(streak = 2)))
     }
 }

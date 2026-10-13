@@ -215,7 +215,7 @@ struct EventDetailSheet: View {
                         }
                     }
                     .fixedSize()
-                    .help("How long it takes to get there; MEKA says when to leave")
+                    .help("How long it takes to get there; Navilife says when to leave")
                 }
             }
             .controlSize(.small)
@@ -296,8 +296,8 @@ struct EventDetailSheet: View {
                 }
 
                 Text(d.editable
-                     ? "Edit and Delete change the event in your calendar too. Prep tasks, reminders and hiding stay in MEKA."
-                     : "Change the event itself in your calendar. Prep tasks, reminders and hiding stay in MEKA.")
+                     ? "Edit and Delete change the event in your calendar too. Prep tasks, reminders and hiding stay in Navilife."
+                     : "Change the event itself in your calendar. Prep tasks, reminders and hiding stay in Navilife.")
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .staggeredAppear(5)
             }

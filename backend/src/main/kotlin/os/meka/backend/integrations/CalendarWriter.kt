@@ -144,8 +144,8 @@ class CalendarWriter internal constructor(
         val name = CalendarEditRules.providerName(e.provider)
         val a = store.accounts(householdId).firstOrNull { it.provider == e.provider && it.email.equals(e.account, ignoreCase = true) }
         val refusal = when {
-            e.provider !in CalendarEditRules.WRITABLE || integrations.provider(e.provider) == null -> "MEKA can't change this calendar"
-            a == null -> "${e.account} isn't connected to MEKA any more"
+            e.provider !in CalendarEditRules.WRITABLE || integrations.provider(e.provider) == null -> "Navilife can't change this calendar"
+            a == null -> "${e.account} isn't connected to Navilife any more"
             !a.canEdit -> "Editing isn't allowed for ${a.email} · Allow editing in Calendars"
             else -> null
         }
@@ -185,7 +185,7 @@ class CalendarWriter internal constructor(
             p.createEvent(integrations.accessToken(a, editing = true), d, idemKey(e.id))
             return Outcome(EventEditStatus.DONE)
         }
-        val base = e.base ?: return Outcome(EventEditStatus.REFUSED, "MEKA didn't know what it was before")
+        val base = e.base ?: return Outcome(EventEditStatus.REFUSED, "Navilife didn't know what it was before")
         val row = e.eventId?.let { store.mirror(householdId, a.id)[it] }
             ?: return Outcome(EventEditStatus.REFUSED, "It isn't in $name any more")
         // Mirrored before the provider's ids were kept: the next calendar poll fills it in.
@@ -195,7 +195,7 @@ class CalendarWriter internal constructor(
             ?: return if (e.kind == EventEditKind.DELETE) Outcome(EventEditStatus.DONE, "It was already gone")
             else Outcome(EventEditStatus.REFUSED, "It was deleted in $name meanwhile")
         if (!theirs.organisedByMe) {
-            return Outcome(EventEditStatus.REFUSED, "Someone else organises it · MEKA only changes your own events", guests = theirs.guests)
+            return Outcome(EventEditStatus.REFUSED, "Someone else organises it · Navilife only changes your own events", guests = theirs.guests)
         }
         if (CalendarEditRules.clashes(e.kind, e.changes, base, theirs.event)) {
             return Outcome(EventEditStatus.CLASH, theirs = theirs.event, guests = theirs.guests)

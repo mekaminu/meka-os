@@ -129,8 +129,8 @@ object SignInRules {
             return SignInLine(
                 text = "$p sign-in expired · ${stops(expired.provider)} · Reconnect",
                 detail = "${expired.account} needs signing in again. " +
-                    (if (mail) "Until then MEKA can't read or tidy that mailbox; nothing in it changes."
-                    else "Until then MEKA shows the events it had and can't add or change any.") +
+                    (if (mail) "Until then Navilife can't read or tidy that mailbox; nothing in it changes."
+                    else "Until then Navilife shows the events it had and can't add or change any.") +
                     if (runsOutWeekly(expired.provider)) " " + PRODUCTION_HINT else "",
                 critical = true, provider = expired.provider, account = expired.account, editing = expired.canEdit,
                 spoken = "$p sign-in expired for ${expired.account}. ${stops(expired.provider).replaceFirstChar { it.uppercase() }}. Double tap to reconnect.",
@@ -142,15 +142,15 @@ object SignInRules {
         val whenText = whenLabel(until, nowMs, cal)
         return SignInLine(
             text = "$p sign-in ends $whenText · Reconnect",
-            detail = "Google lets MEKA's sign-in last 7 days while its Google app is in testing. Reconnecting now keeps " +
-                (if (MailProviders.isMail(ending.provider)) "MEKA reading ${ending.account}" else "${ending.account}'s calendars updating") +
+            detail = "Google lets Navilife's sign-in last 7 days while its Google app is in testing. Reconnecting now keeps " +
+                (if (MailProviders.isMail(ending.provider)) "Navilife reading ${ending.account}" else "${ending.account}'s calendars updating") +
                 " for another 7 days. $PRODUCTION_HINT",
             critical = false, provider = ending.provider, account = ending.account, editing = ending.canEdit,
             spoken = "$p sign-in for ${ending.account} ends $whenText. Double tap to reconnect.",
         )
     }
 
-    const val PRODUCTION_HINT = "Publishing MEKA's Google app (Needs Meka #17) stops the weekly sign-ins."
+    const val PRODUCTION_HINT = "Publishing Navilife's Google app (Needs Meka #17) stops the weekly sign-ins."
 
     /**
      * Heads-ups ([NoticeSource.SIGN_IN]): one when a Google sign-in enters its last day ("Google sign-in ends tomorrow
@@ -164,14 +164,14 @@ object SignInRules {
             SignInState.ENDING -> if (until <= nowMs) null else Notice(
                 key = "signin:${s.provider}:${s.account}:ending:$until", source = NoticeSource.SIGN_IN, tier = NoticeTier.HEADS_UP,
                 title = "$p sign-in ends ${whenLabel(until, nowMs, cal)}",
-                text = if (MailProviders.isMail(s.provider)) "Reconnect from Today to keep MEKA reading ${s.account}"
+                text = if (MailProviders.isMail(s.provider)) "Reconnect from Today to keep Navilife reading ${s.account}"
                 else "Reconnect from Today to keep ${s.account}'s calendars updating",
                 atMs = until - WARN_BEFORE_MS, target = NoticeTarget.TODAY, expiresAtMs = until,
             )
             SignInState.EXPIRED -> Notice(
                 key = "signin:${s.provider}:${s.account}:expired:$until", source = NoticeSource.SIGN_IN, tier = NoticeTier.HEADS_UP,
                 title = "Reconnect $p",
-                text = if (MailProviders.isMail(s.provider)) "MEKA stopped reading ${s.account} · Reconnect from Today"
+                text = if (MailProviders.isMail(s.provider)) "Navilife stopped reading ${s.account} · Reconnect from Today"
                 else "${s.account}'s calendars stopped updating · Reconnect from Today",
                 atMs = until, target = NoticeTarget.TODAY, expiresAtMs = until + EXPIRED_NOTICE_STALE_MS,
             )

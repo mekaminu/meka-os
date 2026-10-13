@@ -155,7 +155,7 @@ class AskMekaTest {
 
     @Test
     fun unavailableAndDoneLines() {
-        assertEquals("MEKA's AI is off", AskRules.unavailableLine("off", "whatever"))
+        assertEquals("Navilife's AI is off", AskRules.unavailableLine("off", "whatever"))
         assertEquals("This month's AI budget is used up · back on the 1st", AskRules.unavailableLine("over", null))
         assertEquals("Couldn't ask: Anthropic is busy", AskRules.unavailableLine("failed", " Anthropic is busy "))
         assertEquals("Couldn't ask just now", AskRules.unavailableLine("failed", null))

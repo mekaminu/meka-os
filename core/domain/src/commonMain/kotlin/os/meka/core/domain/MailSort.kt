@@ -41,10 +41,10 @@ enum class MailSortReason(val line: String) {
     PERSON("A person writing to you"),
     NO_SENDER("No sender to go by"),
     /** Slice 2b: MEKA's AI read the sender and subject of an unsure one. */
-    AI_NEEDS_YOU("MEKA's AI read the sender and subject · it needs you"),
-    AI_FYI("MEKA's AI read the sender and subject · just so you know"),
+    AI_NEEDS_YOU("Navilife's AI read the sender and subject · it needs you"),
+    AI_FYI("Navilife's AI read the sender and subject · just so you know"),
     /** The AI was asked but gave no clear answer: kept as Needs you (the safe side), not asked again. */
-    AI_UNCLEAR("MEKA's AI couldn't tell · kept for you");
+    AI_UNCLEAR("Navilife's AI couldn't tell · kept for you");
 
     companion object {
         fun of(stored: String?): MailSortReason? = entries.firstOrNull { it.name == stored }

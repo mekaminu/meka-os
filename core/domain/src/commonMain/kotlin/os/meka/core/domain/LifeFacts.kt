@@ -93,16 +93,16 @@ object FactRules {
     const val MAX_FACTS = 200
 
     const val HINT = "Add a fact… (Car reg: AB12 CDE)"
-    const val EMPTY_SUMMARY = "Nothing yet. Add the things you look up: the car's reg, the GP, shoe sizes, the energy supplier. MEKA answers from them."
+    const val EMPTY_SUMMARY = "Nothing yet. Add the things you look up: the car's reg, the GP, shoe sizes, the energy supplier. Navilife answers from them."
     const val NOT_READ = "Type the name, a colon, then the fact: “Car reg: AB12 CDE”."
-    const val REFUSED_SECRET = "MEKA keeps passwords and PINs off this page. Write where they're kept instead: “Passwords: in the family password manager”."
-    const val REFUSED_BANK = "MEKA keeps card and bank numbers and sort codes off this page. Keep the bank's name instead: “Bank: Monzo”."
-    const val REFUSED_ID = "MEKA doesn't keep passport, National Insurance, driving licence or NHS numbers. Write where the document is: “Passports: study desk, top drawer”."
+    const val REFUSED_SECRET = "Navilife keeps passwords and PINs off this page. Write where they're kept instead: “Passwords: in the family password manager”."
+    const val REFUSED_BANK = "Navilife keeps card and bank numbers and sort codes off this page. Keep the bank's name instead: “Bank: Monzo”."
+    const val REFUSED_ID = "Navilife doesn't keep passport, National Insurance, driving licence or NHS numbers. Write where the document is: “Passports: study desk, top drawer”."
     const val FULL = "The page is full. Remove a fact first."
-    const val NOTE = "Kept in your own MEKA data only. MEKA's AI sees a fact only when a question needs it, never one kept from AI. Passwords and card, bank or ID numbers never go here."
+    const val NOTE = "Kept in your own Navilife data only. Navilife's AI sees a fact only when a question needs it, never one kept from AI. Passwords and card, bank or ID numbers never go here."
     const val KEPT_LINE = "Kept from AI"
     const val KEEP_BUTTON = "Keep from AI"
-    const val USE_BUTTON = "Let MEKA use it"
+    const val USE_BUTTON = "Let Navilife use it"
     /** The row's button that puts the fact on the clipboard (filling forms, slice 3). */
     const val COPY_BUTTON = "Copy"
     /** How much of the fact the "Copied …" line shows before "…". */
@@ -213,7 +213,7 @@ object FactRules {
         val kept = facts.count { it.aiOff }
         val summary = listOfNotNull(
             if (n == 1) "1 fact" else "$n facts",
-            if (kept == 0) "MEKA answers from them" else "MEKA answers from ${n - kept}",
+            if (kept == 0) "Navilife answers from them" else "Navilife answers from ${n - kept}",
             "$kept kept from AI".takeIf { kept > 0 },
         ).joinToString(" · ")
         return FactsView(groups, summary, n)
@@ -250,7 +250,7 @@ object FactAskRules {
     /** Most sent when Meka asks what MEKA knows about him. */
     const val ASK_ALL = 20
 
-    private val ASKS_ALL = Regex("what (do|does) (you|meka) know|about me\\b|my facts|facts page|what have i told you", RegexOption.IGNORE_CASE)
+    private val ASKS_ALL = Regex("what (do|does) (you|meka|navilife|navi life|navy life) know|about me\\b|my facts|facts page|what have i told you", RegexOption.IGNORE_CASE)
     /** Words too common to tie a fact to a question. */
     private val STOP = setOf("my", "our", "the", "a", "an", "of", "for", "is", "and", "to", "in", "on", "at", "name", "number", "no", "what", "who", "whats", "which", "where", "when")
 
@@ -288,7 +288,7 @@ object FactAskRules {
         return listOf(head) + chosen.map { "Fact · ${it.group.label} · ${it.label}: ${it.value.replace(Regex("\\s+"), " ")}" }
     }
     /** Where a card puts the fact, in its words. */
-    const val PAGE = "What MEKA knows"
+    const val PAGE = "What Navilife knows"
 
     /**
      * The fact a model's `add_fact` would keep (slice 2: "remember that my shoe size is 10" → `{"title":"Shoe size: 10"}`),

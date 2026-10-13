@@ -52,7 +52,7 @@ data class PlanApplied(
 
 object PlanCalendarRules {
     /** Written as each block's notes, so it reads as MEKA's in Google. */
-    const val NOTE = "Planned with MEKA"
+    const val NOTE = "Planned with Navilife"
 
     /** The account the blocks go to: Add event's remembered one while it can edit, else the first that can. */
     fun target(accounts: List<EditAccount>, lastUsedKey: String?): EditAccount? =
@@ -67,7 +67,7 @@ object PlanCalendarRules {
             accountLabel = target.label.takeIf { on },
             label = "Also add the blocks to $p",
             line = if (on) "Apply adds each task's block to ${target.email} too, so the time shows as busy"
-            else "Apply plans the tasks in MEKA only",
+            else "Apply plans the tasks in Navilife only",
         )
     }
 

@@ -1,152 +1,108 @@
 #!/usr/bin/env python3
-"""MEKA's app icon: option B, "Hands M" (Meka, 2026-10-12 20:36: option A, the Bezel M, "looks weird").
+"""Navilife's app icon: logo N3·2 (Meka, 2026-10-13 12:09; the rename from MEKA, replacing the Hands M).
 
-No rim: the watch's two hands at ten past ten are the M's middle V, meeting at the pivot (a brass pin with a hole),
-and two stems drop from the hands' tips to finish the letter. It reads as MEKA and still belongs to the watch face
-Today draws. The geometry is option B's in tools/make-icon-options.py (docs/design/icons/option-b.svg), refined for
-small sizes: the stems and hands are heavier so the M holds at 48 px and in the themed (monochrome) icon, and each
-hand has a short tail under the pin so the pivot's hole is cut cleanly through both. Drawn from one outline so
-every output matches:
-  * the Fold's adaptive icon (vector drawables: foreground, monochrome, background) in android/app/src/main/res,
-    and the same for the Galaxy Watch in wear/app/src/main/res (its tile and complication use these too)
-  * the status-bar glyph ic_stat_meka (a heavier single-colour M without the hole) in android/app/src/main/res
+A black dial with a soft brass glow, a thick brass ring, a bright N at 12 and three cardinal ticks; the two-tone brass
+minute hand is the compass needle pointing just east of north, a short dark hour hand sits at about 10, a thin glowing
+seconds hand and a brass cap. The drawing is `v2` in tools/make-navilife-icon-n3-variants.py (on top of the helpers in
+tools/make-navilife-icon-options.py) and is reused here, never redrawn by hand, so every output matches the picked
+option (docs/design/icons/navilife/option-n3-2.png):
+  * the Fold's adaptive icon in android/app/src/main/res: ic_launcher_foreground (the dial without its black, inside
+    the 66 dp safe zone, PNG per density), ic_launcher_monochrome (the same shapes in white, for One UI's themed
+    icons), ic_launcher_background (black with the brass glow, a vector), and the same for the Galaxy Watch in
+    wear/app/src/main/res (its tile preview and complication use these too)
+  * the status-bar glyph ic_stat_meka: a single-colour compass dial (ring, needle and cap) that holds at 24 dp
   * the Mac's AppIcon.appiconset (PNGs at every size macOS asks for) in macos/MekaOS/Assets.xcassets
   * docs/design/icons/app-icon-512.png, a 512 px square for anywhere a flat icon is wanted
-Colours are the design tokens' dark theme: accent #C9B37E on true black with a faint brass glow. Today's living
-watch face is unchanged.
 
-Run from the repo root: python3 tools/make-app-icon.py   (needs Pillow; the outputs are committed)
+Run from the repo root: python3 tools/make-app-icon.py   (needs Pillow and DejaVu fonts; the outputs are committed)
 """
 import json
 import math
 import os
 
-BRASS = "#C9B37E"
-BRASS_RGB = (0xC9, 0xB3, 0x7E)
+from PIL import Image, ImageDraw
 
-# Icon units: the 108-unit adaptive-icon viewport, y down, angles clockwise from 12 o'clock.
-C = 54.0
-PIVOT = (54.0, 63.0)       # where the hands meet: the M's middle point
-SPREAD, LENGTH = 38.0, 26.0  # ten past ten: each hand 38° either side of 12
-BASE_Y = 71.0              # where the stems stop
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-class Weight:
-    def __init__(self, stem, hand_base, hand_tip, hand_tail, pin, hole):
-        self.stem, self.hand_base, self.hand_tip, self.hand_tail, self.pin, self.hole = (
-            stem, hand_base, hand_tip, hand_tail, pin, hole)
+def n3_drawing():
+    """The N3 variants' namespace (v1–v4 and their helpers) without running the sheet they also draw."""
+    ns = {"__name__": "n3"}
+    cwd = os.getcwd()
+    os.chdir(ROOT)
+    try:
+        src = open("tools/make-navilife-icon-n3-variants.py").read().split("\nopts = [")[0]
+        exec(src, ns)
+    finally:
+        os.chdir(cwd)
+    return ns
 
 
-ICON = Weight(stem=2.6, hand_base=5.2, hand_tip=2.4, hand_tail=1.2, pin=3.2, hole=1.05)
-# The status bar shows the glyph at 24 dp: heavier still, and no hole (it would be under a pixel).
-GLYPH = Weight(stem=3.6, hand_base=6.6, hand_tip=3.4, hand_tail=1.0, pin=3.8, hole=0.0)
+N3 = n3_drawing()
+S = N3["S"]                    # the drawing's canvas (1024 px)
+RING_OUTER = 400               # v2's ring: radius 400, drawn inwards
+BG = N3["BG"]
 
 
-def at(p, deg, r):
-    a = math.radians(deg)
-    return (p[0] + r * math.sin(a), p[1] - r * math.cos(a))
+def draw_v2(transparent, mono=None):
+    """v2 at 1024 px. [transparent]: no black dial and no glow (a launcher layer); [mono]: one colour."""
+    original = N3["base"]
+    if transparent:
+        N3["base"] = lambda glow=True: Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    try:
+        return N3["v2"](mono)
+    finally:
+        N3["base"] = original
 
 
-def tips():
-    return at(PIVOT, -SPREAD, LENGTH), at(PIVOT, SPREAD, LENGTH)
+def monochrome_layer():
+    """White shapes on transparent: drawn in white on the black dial, then the brightness becomes the alpha."""
+    im = draw_v2(transparent=False, mono=(255, 255, 255))
+    alpha = im.convert("L").point(lambda v: 0 if v <= BG[0] else min(255, int((v - BG[0]) * 255 / (255 - BG[0]))))
+    out = Image.new("RGBA", im.size, (255, 255, 255, 0))
+    out.putalpha(alpha)
+    return out
 
 
-def stems():
-    return [(t, (t[0], BASE_Y)) for t in tips()]
+# ---- Android: the 108 dp adaptive icon. The ring's outer edge sits at 32 dp from the centre, inside the 33 dp
+# safe zone every launcher mask keeps.
+
+SAFE_DP, ART_RADIUS_DP, ICON_DP = 33.0, 32.0, 108
+DENSITIES = {"mdpi": 1.0, "hdpi": 1.5, "xhdpi": 2.0, "xxhdpi": 3.0, "xxxhdpi": 4.0}
 
 
-def hand(deg, w):
-    """A tapered hand from a short tail behind the pivot to its tip (four corners)."""
-    a = math.radians(deg)
-    d = (math.sin(a), -math.cos(a))
-    n = (math.cos(a), math.sin(a))
-
-    def p(along, half):
-        return (PIVOT[0] + d[0] * along + n[0] * half, PIVOT[1] + d[1] * along + n[1] * half)
-
-    return [p(-w.hand_tail, w.hand_base / 2), p(LENGTH, w.hand_tip / 2), p(LENGTH, -w.hand_tip / 2),
-            p(-w.hand_tail, -w.hand_base / 2)]
-
-
-def hands(w):
-    return [hand(-SPREAD, w), hand(SPREAD, w)]
-
-
-# ---- Android: 108 dp adaptive icon (the art sits well inside the 66 dp safe zone).
-
-def f(v):
-    return f"{v:.2f}".rstrip("0").rstrip(".")
-
-
-def circle_path(cx, cy, r):
-    return (f"M{f(cx - r)},{f(cy)}a{f(r)},{f(r)} 0,1 1,{f(2 * r)},0"
-            f"a{f(r)},{f(r)} 0,1 1,{f(-2 * r)},0Z")
-
-
-def poly_path(points):
-    return "M" + "L".join(f"{f(x)},{f(y)}" for x, y in points) + "Z"
-
-
-def art_paths(colour, w):
-    stem_d = "".join(f"M{f(a[0])},{f(a[1])}L{f(b[0])},{f(b[1])}" for a, b in stems())
-    paths = [f'<path android:strokeColor="{colour}" android:strokeWidth="{f(w.stem)}" '
-             f'android:strokeLineCap="round" android:pathData="{stem_d}" />']
-    if w.hole > 0:
-        # The hands and the pin, each with the pivot's hole cut through (even-odd: the hole sits inside all three).
-        hole = circle_path(PIVOT[0], PIVOT[1], w.hole)
-        for h in hands(w):
-            paths.append(f'<path android:fillColor="{colour}" android:fillType="evenOdd" '
-                         f'android:pathData="{poly_path(h)}{hole}" />')
-        paths.append(f'<path android:fillColor="{colour}" android:fillType="evenOdd" '
-                     f'android:pathData="{circle_path(PIVOT[0], PIVOT[1], w.pin)}{hole}" />')
-    else:
-        # One path per shape: the two hands wind opposite ways, so in one path their overlap would cancel out.
-        for d in [poly_path(h) for h in hands(w)] + [circle_path(PIVOT[0], PIVOT[1], w.pin)]:
-            paths.append(f'<path android:fillColor="{colour}" android:pathData="{d}" />')
-    return paths
-
-
-def android_foreground(colour):
-    return ("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-            "<!-- Generated by tools/make-app-icon.py: MEKA's Hands M. Edit the script, not this file. -->\n"
-            "<vector xmlns:android=\"http://schemas.android.com/apk/res/android\"\n"
-            "    android:width=\"108dp\" android:height=\"108dp\" android:viewportWidth=\"108\" "
-            "android:viewportHeight=\"108\">\n" + "\n".join("    " + p for p in art_paths(colour, ICON)) + "\n</vector>\n")
-
-
-def android_glyph():
-    """The status-bar icon: 24 dp, white (Android tints it), the art centred in a 36-unit window."""
-    xs = [p[0] for h in hands(GLYPH) for p in h] + [t[0] for t in tips()]
-    left, right = min(xs) - GLYPH.stem / 2, max(xs) + GLYPH.stem / 2
-    top = min(t[1] for t in tips()) - GLYPH.stem / 2
-    bottom = BASE_Y + GLYPH.stem / 2
-    span = 36.0
-    tx, ty = span / 2 - (left + right) / 2, span / 2 - (top + bottom) / 2
-    body = "\n".join("        " + p for p in art_paths("#FFFFFFFF", GLYPH))
-    return ("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-            "<!-- Generated by tools/make-app-icon.py: MEKA's Hands M as the status-bar glyph. Edit the script. -->\n"
-            "<vector xmlns:android=\"http://schemas.android.com/apk/res/android\"\n"
-            f"    android:width=\"24dp\" android:height=\"24dp\" android:viewportWidth=\"{f(span)}\" "
-            f"android:viewportHeight=\"{f(span)}\">\n"
-            f"    <group android:translateX=\"{f(tx)}\" android:translateY=\"{f(ty)}\">\n{body}\n    </group>\n</vector>\n")
+def layer_png(art, density):
+    side = int(round(ICON_DP * density))
+    art_side = int(round(S * ART_RADIUS_DP / RING_OUTER * density))
+    small = art.resize((art_side, art_side), Image.LANCZOS)
+    out = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    off = (side - art_side) // 2
+    out.alpha_composite(small, (off, off))
+    # Resampling can leave a faint fringe a pixel past the ring: clear anything outside the safe zone.
+    clip = Image.new("L", (side, side), 0)
+    r = SAFE_DP * density - 1  # pixel centres, so a pixel the ellipse touches stays inside
+    ImageDraw.Draw(clip).ellipse((side / 2 - r, side / 2 - r, side / 2 + r, side / 2 + r), fill=255)
+    alpha = Image.composite(out.getchannel("A"), clip, clip)
+    out.putalpha(alpha)
+    return out
 
 
 ANDROID_BACKGROUND = """<?xml version="1.0" encoding="utf-8"?>
-<!-- Generated by tools/make-app-icon.py: black with a faint brass glow behind the M. -->
+<!-- Generated by tools/make-app-icon.py: Navilife's black dial with a soft brass glow (logo N3·2). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
     <path android:pathData="M0,0h108v108h-108z">
         <aapt:attr name="android:fillColor">
-            <gradient android:type="radial" android:centerX="54" android:centerY="54" android:gradientRadius="62"
-                android:startColor="#1C1A14" android:endColor="#000000" />
+            <gradient android:type="radial" android:centerX="54" android:centerY="54" android:gradientRadius="40"
+                android:startColor="#2A2416" android:endColor="#080808" />
         </aapt:attr>
     </path>
 </vector>
 """
 
 ANDROID_ADAPTIVE = """<?xml version="1.0" encoding="utf-8"?>
-<!-- Generated by tools/make-app-icon.py. -->
+<!-- Generated by tools/make-app-icon.py: Navilife's logo N3·2. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
     <foreground android:drawable="@drawable/ic_launcher_foreground" />
@@ -155,84 +111,89 @@ ANDROID_ADAPTIVE = """<?xml version="1.0" encoding="utf-8"?>
 """
 
 
-# ---- Mac: a 1024 px squircle (Apple's template: an 824 px body inset 100 px).
+def f(v):
+    return f"{v:.2f}".rstrip("0").rstrip(".")
 
-def mac_icon(size_px=1024, ss=4):
-    from PIL import Image, ImageDraw
-    S = size_px * ss
-    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    k = S / 1024
-    body = (100 * k, 100 * k, 924 * k, 924 * k)
-    # Body: black with a faint brass centre (a radial blend drawn as rings).
-    mask = Image.new("L", (S, S), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(body, radius=185.4 * k, fill=255)
-    bg = Image.new("RGBA", (S, S), (0, 0, 0, 255))
-    g = ImageDraw.Draw(bg)
-    steps = 64
-    for i in range(steps, 0, -1):
-        r = 520 * k * i / steps
-        mix = (1 - i / steps) ** 1.6
-        col = tuple(int(c * mix) for c in (0x1C, 0x1A, 0x14))
-        g.ellipse((S / 2 - r, S / 2 - r, S / 2 + r, S / 2 + r), fill=col + (255,))
-    img.paste(bg, (0, 0), mask)
+
+def glyph():
+    """The status-bar icon: 24 dp, white (Android tints it): the dial's ring, the needle pointing just east of north,
+    the short hour hand at about 10 and the cap. Heavier than the launcher art so it holds at 24 px."""
+    c, ring_r, ring_w = 12.0, 10.0, 1.8
+
+    def at(deg, r):
+        a = math.radians(deg)
+        return c + r * math.sin(a), c - r * math.cos(a)
+
+    def blade(deg, length, half):
+        tip, l, r = at(deg, length), at(deg - 90, half), at(deg + 90, half)
+        return f"M{f(tip[0])},{f(tip[1])}L{f(l[0])},{f(l[1])}L{f(c)},{f(c)}L{f(r[0])},{f(r[1])}Z"
+
+    ring = (f"M{f(c - ring_r)},{f(c)}a{f(ring_r)},{f(ring_r)} 0,1 1,{f(2 * ring_r)},0"
+            f"a{f(ring_r)},{f(ring_r)} 0,1 1,{f(-2 * ring_r)},0Z")
+    cap = f"M{f(c - 1.6)},{f(c)}a1.6,1.6 0,1 1,3.2,0a1.6,1.6 0,1 1,-3.2,0Z"
+    return ("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+            "<!-- Generated by tools/make-app-icon.py: Navilife's compass dial as the status-bar glyph. Edit the script. -->\n"
+            "<vector xmlns:android=\"http://schemas.android.com/apk/res/android\"\n"
+            "    android:width=\"24dp\" android:height=\"24dp\" android:viewportWidth=\"24\" android:viewportHeight=\"24\">\n"
+            f"    <path android:strokeColor=\"#FFFFFFFF\" android:strokeWidth=\"{f(ring_w)}\" android:pathData=\"{ring}\" />\n"
+            f"    <path android:fillColor=\"#FFFFFFFF\" android:pathData=\"{blade(18, 7.6, 1.9)}\" />\n"
+            f"    <path android:fillColor=\"#FFFFFFFF\" android:pathData=\"{blade(300, 5.0, 1.5)}\" />\n"
+            f"    <path android:fillColor=\"#FFFFFFFF\" android:pathData=\"{cap}\" />\n"
+            "</vector>\n")
+
+
+# ---- Mac: a 1024 px squircle (Apple's template: an 824 px body inset 100 px) holding the whole dial.
+
+def mac_icon(full):
+    size = 1024
+    body = (100, 100, 924, 924)
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(body, radius=185.4, fill=255)
+    dial = full.resize((824, 824), Image.LANCZOS)
+    layer = Image.new("RGBA", (size, size), BG + (255,))
+    layer.alpha_composite(dial, (100, 100))
+    img.paste(layer, (0, 0), mask)
     # Hairline edge so the black body reads on a dark Dock.
-    ImageDraw.Draw(img).rounded_rectangle(body, radius=185.4 * k, outline=(0x26, 0x26, 0x2B, 255),
-                                          width=max(1, int(3 * k)))
-    # The art at the adaptive icon's scale: the 72 visible units of the 108 fill the 824 px body.
-    u = 824 * k / 72
-    t = lambda pt: (S / 2 + (pt[0] - C) * u, S / 2 + (pt[1] - C) * u)
-    ink = Image.new("L", (S, S), 0)
-    d = ImageDraw.Draw(ink)
-
-    def disc(p, r, fill=255):
-        d.ellipse((p[0] - r, p[1] - r, p[0] + r, p[1] + r), fill=fill)
-
-    for a, b in stems():
-        d.line([t(a), t(b)], fill=255, width=int(round(ICON.stem * u)))
-        disc(t(a), ICON.stem * u / 2)
-        disc(t(b), ICON.stem * u / 2)
-    for h in hands(ICON):
-        d.polygon([t(p) for p in h], fill=255)
-    pivot = t(PIVOT)
-    disc(pivot, ICON.pin * u)
-    disc(pivot, ICON.hole * u, 0)
-    img.paste(Image.new("RGBA", (S, S), BRASS_RGB + (255,)), (0, 0), ink)
-    return img.resize((size_px, size_px), Image.LANCZOS)
+    ImageDraw.Draw(img).rounded_rectangle(body, radius=185.4, outline=(0x26, 0x26, 0x2B, 255), width=3)
+    return img
 
 
 MAC_SIZES = [(16, 1), (16, 2), (32, 1), (32, 2), (128, 1), (128, 2), (256, 1), (256, 2), (512, 1), (512, 2)]
 
 
 def main():
-    from PIL import Image
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    files = {
-        "drawable/ic_launcher_foreground.xml": android_foreground(BRASS),
-        # Themed icons: the launcher tints this one shape, so it's the same M in a single colour.
-        "drawable/ic_launcher_monochrome.xml": android_foreground("#FFFFFFFF"),
-        "drawable/ic_launcher_background.xml": ANDROID_BACKGROUND,
-        "mipmap-anydpi/ic_launcher.xml": ANDROID_ADAPTIVE,
-        "mipmap-anydpi/ic_launcher_round.xml": ANDROID_ADAPTIVE,
-    }
-    # The phone and the Galaxy Watch (Galaxy Watch, slice 2) carry the same icon.
-    for app in ("android/app", "wear/app"):
-        res = os.path.join(root, app, "src/main/res")
-        for sub in ("drawable", "mipmap-anydpi"):
-            os.makedirs(os.path.join(res, sub), exist_ok=True)
-        for rel, text in files.items():
-            with open(os.path.join(res, rel), "w") as fh:
-                fh.write(text)
-    with open(os.path.join(root, "android/app/src/main/res/drawable/ic_stat_meka.xml"), "w") as fh:
-        fh.write(android_glyph())
+    colour = draw_v2(transparent=True)
+    mono = monochrome_layer()
+    full = draw_v2(transparent=False)
 
-    iconset = os.path.join(root, "macos/MekaOS/Assets.xcassets/AppIcon.appiconset")
+    for app in ("android/app", "wear/app"):
+        res = os.path.join(ROOT, app, "src/main/res")
+        for old in ("drawable/ic_launcher_foreground.xml", "drawable/ic_launcher_monochrome.xml"):
+            p = os.path.join(res, old)
+            if os.path.exists(p):
+                os.remove(p)
+        for name, art in (("ic_launcher_foreground", colour), ("ic_launcher_monochrome", mono)):
+            for dens, k in DENSITIES.items():
+                d = os.path.join(res, f"drawable-{dens}")
+                os.makedirs(d, exist_ok=True)
+                layer_png(art, k).save(os.path.join(d, f"{name}.png"), optimize=True)
+        os.makedirs(os.path.join(res, "mipmap-anydpi"), exist_ok=True)
+        with open(os.path.join(res, "drawable/ic_launcher_background.xml"), "w") as fh:
+            fh.write(ANDROID_BACKGROUND)
+        for name in ("ic_launcher", "ic_launcher_round"):
+            with open(os.path.join(res, f"mipmap-anydpi/{name}.xml"), "w") as fh:
+                fh.write(ANDROID_ADAPTIVE)
+    with open(os.path.join(ROOT, "android/app/src/main/res/drawable/ic_stat_meka.xml"), "w") as fh:
+        fh.write(glyph())
+
+    iconset = os.path.join(ROOT, "macos/MekaOS/Assets.xcassets/AppIcon.appiconset")
     os.makedirs(iconset, exist_ok=True)
-    with open(os.path.join(root, "macos/MekaOS/Assets.xcassets/Contents.json"), "w") as fh:
+    with open(os.path.join(ROOT, "macos/MekaOS/Assets.xcassets/Contents.json"), "w") as fh:
         json.dump({"info": {"author": "xcode", "version": 1}}, fh, indent=2)
         fh.write("\n")
-    master = mac_icon(1024)
-    master.crop((100, 100, 924, 924)).resize((512, 512), Image.LANCZOS).save(
-        os.path.join(root, "docs/design/icons/app-icon-512.png"), optimize=True)
+    master = mac_icon(full)
+    full.resize((512, 512), Image.LANCZOS).save(os.path.join(ROOT, "docs/design/icons/app-icon-512.png"), optimize=True)
     images = []
     for pt, scale in MAC_SIZES:
         px = pt * scale

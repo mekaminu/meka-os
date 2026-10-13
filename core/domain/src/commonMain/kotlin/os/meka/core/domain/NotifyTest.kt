@@ -62,10 +62,10 @@ object NotifyTestRules {
     /** How long the push half waits before saying it didn't arrive. */
     const val PUSH_WAIT_MS = 60_000L
 
-    const val LOCAL_TITLE = "MEKA test · from this phone"
-    const val LOCAL_TEXT = "If you can see this, MEKA can reach you on this phone."
-    const val PUSH_TITLE = "MEKA test · from MEKA's server"
-    const val PUSH_TEXT = "Push works: MEKA's server reached this phone."
+    const val LOCAL_TITLE = "Navilife test · from this phone"
+    const val LOCAL_TEXT = "If you can see this, Navilife can reach you on this phone."
+    const val PUSH_TITLE = "Navilife test · from Navilife's server"
+    const val PUSH_TEXT = "Push works: Navilife's server reached this phone."
 
     fun view(r: NotifyTestRun, nowMs: Long): NotifyTestView {
         val localLine = when (r.localShown) {
@@ -83,22 +83,22 @@ object NotifyTestRules {
         val pushLine = when {
             r.pushArrivedAtMs != null -> {
                 val secs = ((r.pushArrivedAtMs - r.startedAtMs) / 1000).coerceAtLeast(0)
-                "From MEKA's server · arrived in ${if (secs < 1) "under a second" else "$secs s"} ✓"
+                "From Navilife's server · arrived in ${if (secs < 1) "under a second" else "$secs s"} ✓"
             }
-            r.push == null -> "From MEKA's server · asking…"
-            r.push == PushTestResult.SENT -> if (waitedOut) "From MEKA's server · sent, but didn't arrive within a minute" else "From MEKA's server · sent · waiting…"
-            r.push == PushTestResult.OFF -> "From MEKA's server · push isn't set up on the server"
-            r.push == PushTestResult.NO_ADDRESS -> "From MEKA's server · this phone hasn't registered for push"
-            r.push == PushTestResult.GONE -> "From MEKA's server · its address for this phone was out of date"
-            r.push == PushTestResult.UNREACHABLE -> "From MEKA's server · couldn't reach the server"
-            else -> "From MEKA's server · Firebase didn't take it"
+            r.push == null -> "From Navilife's server · asking…"
+            r.push == PushTestResult.SENT -> if (waitedOut) "From Navilife's server · sent, but didn't arrive within a minute" else "From Navilife's server · sent · waiting…"
+            r.push == PushTestResult.OFF -> "From Navilife's server · push isn't set up on the server"
+            r.push == PushTestResult.NO_ADDRESS -> "From Navilife's server · this phone hasn't registered for push"
+            r.push == PushTestResult.GONE -> "From Navilife's server · its address for this phone was out of date"
+            r.push == PushTestResult.UNREACHABLE -> "From Navilife's server · couldn't reach the server"
+            else -> "From Navilife's server · Firebase didn't take it"
         }
         val hint = when {
             r.localShown == false ->
-                "Turn on notifications for MEKA and its Heads-ups category (Settings → Apps → MEKA → Notifications), and check Do not disturb is off."
+                "Turn on notifications for Navilife and its Heads-ups category (Settings → Apps → Navilife → Notifications), and check Do not disturb is off."
             pushOk == false -> when (r.push) {
-                PushTestResult.SENT -> "Check MEKA's battery is Unrestricted (Settings → Apps → MEKA → Battery) and that the phone has data; then try again."
-                PushTestResult.NO_ADDRESS, PushTestResult.GONE -> "Close MEKA and open it again so it registers for push, then try again."
+                PushTestResult.SENT -> "Check Navilife's battery is Unrestricted (Settings → Apps → Navilife → Battery) and that the phone has data; then try again."
+                PushTestResult.NO_ADDRESS, PushTestResult.GONE -> "Close Navilife and open it again so it registers for push, then try again."
                 PushTestResult.UNREACHABLE -> "Check the phone is online, then try again."
                 PushTestResult.OFF -> "Changes still arrive within 15 minutes; push needs the server's Firebase key."
                 else -> "Try again in a few minutes."

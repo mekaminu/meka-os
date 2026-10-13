@@ -35,7 +35,7 @@ class SpeechCodecTest {
     fun responsesAndTheVoicesListRoundTrip() {
         val spoken = SpeechCodec.Response(SpeechCodec.Response.SPOKEN, "SUQzBAAAAAAA", "mp3", "Amy", "generative")
         assertEquals(spoken, SpeechCodec.decodeResponse(SpeechCodec.encodeResponse(spoken)))
-        val over = SpeechCodec.Response(SpeechCodec.Response.OVER, reason = "This month's voice is used up; MEKA's own voice speaks until the 1st")
+        val over = SpeechCodec.Response(SpeechCodec.Response.OVER, reason = "This month's voice is used up; Navilife's own voice speaks until the 1st")
         assertEquals(over, SpeechCodec.decodeResponse(SpeechCodec.encodeResponse(over)))
         assertNull(SpeechCodec.decodeResponse(SpeechCodec.encodeResponse(over)).audio)
 
@@ -45,7 +45,7 @@ class SpeechCodecTest {
             defaultVoice = "Amy", month = "2026-10", usedChars = 4_210, capChars = 1_000_000,
         )
         assertEquals(voices, SpeechCodec.decodeVoices(SpeechCodec.encodeVoices(voices)))
-        val off = SpeechCodec.Voices(SpeechCodec.Voices.OFF, reason = "MEKA's voice isn't set up on this server")
+        val off = SpeechCodec.Voices(SpeechCodec.Voices.OFF, reason = "Navilife's voice isn't set up on this server")
         assertEquals(off, SpeechCodec.decodeVoices(SpeechCodec.encodeVoices(off)))
         // A voice that isn't a plain name is dropped rather than shown.
         val odd = """{"w":1,"state":"on","voices":[{"id":"Amy","gender":"Female","engine":"neural"},{"id":"<b>","gender":"","engine":""}],"usedChars":0,"capChars":1}"""

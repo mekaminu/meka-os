@@ -39,14 +39,14 @@ class TalkStartTest {
         assertEquals("Open default apps", side.action)
         // Another phone: Android's own menu names, one step.
         val pixel = TalkStartRules.setup(mac = false, assistantHeld = false, samsung = false).sections[0]
-        assertEquals(listOf("Settings → Apps → Default apps → Digital assistant app → MEKA."), pixel.steps)
+        assertEquals(listOf("Settings → Apps → Default apps → Digital assistant app → Navilife."), pixel.steps)
     }
 
     @Test
     fun onceTheAssistantTheSideButtonIsLitAndNeedsNoButton() {
         val side = TalkStartRules.setup(mac = false, assistantHeld = true, samsung = true).sections[0]
         assertTrue(side.lit)
-        assertTrue(side.status.startsWith("MEKA is this phone's digital assistant"))
+        assertTrue(side.status.startsWith("Navilife is this phone's digital assistant"))
         assertNull(side.action)
         assertTrue(side.steps.single().contains("Bixby"))
         assertTrue(TalkStartRules.setup(mac = false, assistantHeld = true, samsung = false).sections[0].steps.isEmpty())
@@ -78,7 +78,7 @@ class TalkStartTest {
         assertEquals(TalkStart.WIDGET, TalkStartRules.fromOpen("talk:WIDGET"))
         val v = TalkStartRules.setup(mac = false, assistantHeld = true, samsung = true)
         val home = v.sections.single { it.label == "Home screen" }
-        assertTrue(home.steps.single().endsWith("Widgets → MEKA → Talk to MEKA."))
+        assertTrue(home.steps.single().endsWith("Widgets → Navilife → Talk to Navilife."))
         val phones = v.sections.single { it.label == "Headphones and the car" }
         assertTrue(phones.status.contains("Bluetooth headphones"))
         assertTrue(phones.steps.any { it.contains("notification never starts listening") })
@@ -152,7 +152,7 @@ class TalkOnOpenTest {
     @Test
     fun theTalkPaneSectionHasItsSwitchAndLightsWhenOn() {
         val off = TalkOnOpenRules.section(on = false)
-        assertEquals("When I open MEKA", off.label)
+        assertEquals("When I open Navilife", off.label)
         assertFalse(off.lit)
         assertEquals("Turn on", off.action)
         assertTrue(off.status.startsWith("Off"))
@@ -163,7 +163,7 @@ class TalkOnOpenTest {
         assertEquals("Turn off", on.action)
         assertTrue(on.status.startsWith("On"))
         // The shared setup is unchanged; the Fold adds this section itself.
-        assertFalse(TalkStartRules.setup(mac = false).sections.any { it.label == "When I open MEKA" })
+        assertFalse(TalkStartRules.setup(mac = false).sections.any { it.label == "When I open Navilife" })
     }
 
     @Test
@@ -234,7 +234,7 @@ class TalkOnOpenTest {
         assertEquals(1, off.steps.size)
 
         val sheet = TalkAnywhereRules.macSetup(anywhere = true, taken = false, listenOnOpen = false, talkOver = true)
-        assertEquals(listOf("On the Mac", "From any app", "When I open MEKA", "Talk over MEKA", "Safety"), sheet.sections.map { it.label })
+        assertEquals(listOf("On the Mac", "From any app", "When I open Navilife", "Talk over Navilife", "Safety"), sheet.sections.map { it.label })
         assertTrue("in any app" in sheet.sections[0].status)
         assertEquals(TalkStartRules.setup(mac = true).title, sheet.title)
         assertTrue(sheet.sections[3].lit)

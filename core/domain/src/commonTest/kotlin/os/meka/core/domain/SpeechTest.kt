@@ -79,16 +79,16 @@ class SpeechTest {
     @Test
     fun activitySaysTheMonthsVoiceCharacters() {
         assertEquals(
-            "MEKA's voice · Amy · 12,400 of 1,000,000 characters in October",
+            "Navilife's voice · Amy · 12,400 of 1,000,000 characters in October",
             SpeechRules.usageLine("on", "2026-10", 12_400, 1_000_000, "Amy", deviceChosen = false),
         )
-        assertEquals("MEKA's voice · 0 of 1,000,000 characters in January", SpeechRules.usageLine("on", "2027-01", 0, 1_000_000, null, false))
+        assertEquals("Navilife's voice · 0 of 1,000,000 characters in January", SpeechRules.usageLine("on", "2027-01", 0, 1_000_000, null, false))
         // Used up: the device speaks until the 1st (December rolls over to January).
         assertEquals(
-            "MEKA's voice · December's 1,000,000 characters are used; the device's own voice speaks until 1 Jan",
+            "Navilife's voice · December's 1,000,000 characters are used; the device's own voice speaks until 1 Jan",
             SpeechRules.usageLine("on", "2026-12", 1_000_250, 1_000_000, "Amy", false),
         )
-        assertEquals("MEKA's voice · the device's own voice, nothing is sent", SpeechRules.usageLine("on", "2026-10", 5, 10, "Amy", deviceChosen = true))
+        assertEquals("Navilife's voice · the device's own voice, nothing is sent", SpeechRules.usageLine("on", "2026-10", 5, 10, "Amy", deviceChosen = true))
         // Not on here, or an answer without a month: no line.
         assertNull(SpeechRules.usageLine("off", "2026-10", 0, 1_000_000, null, false))
         assertNull(SpeechRules.usageLine("failed", "2026-10", 9, 1_000_000, null, false))
@@ -106,9 +106,9 @@ class SpeechTest {
 
     @Test
     fun thePickerListsMekasVoicesFirstWithTheDefaultMarkedThenTheDevicesOwn() {
-        val v = VoicePickerRules.view(SpeechRules.ON, polly, "Amy", chosen = null, usageLine = "MEKA's voice · Amy · 12 of 1,000,000 characters in October", mac = false)
+        val v = VoicePickerRules.view(SpeechRules.ON, polly, "Amy", chosen = null, usageLine = "Navilife's voice · Amy · 12 of 1,000,000 characters in October", mac = false)
         assertEquals(listOf("Amy", "Emma", "Brian", "Arthur", "device"), v.choices.map { it.id })
-        assertEquals("British · female · most natural · MEKA's default", v.choices[0].detail)
+        assertEquals("British · female · most natural · Navilife's default", v.choices[0].detail)
         assertEquals("British · male · natural", v.choices[2].detail)
         assertEquals("This phone's own voice", v.choices.last().label)
         assertEquals("This Mac's own voice", VoicePickerRules.view(SpeechRules.ON, polly, "Amy", null, null, mac = true).choices.last().label)
@@ -135,15 +135,15 @@ class SpeechTest {
         val off = VoicePickerRules.view(SpeechRules.OFF, emptyList(), null, null, null, mac = false)
         assertEquals(listOf("device"), off.choices.map { it.id })
         assertTrue(off.choices.single().selected)
-        assertEquals("MEKA's voices aren't switched on for this server, so the phone's own voice speaks.", off.statusLine)
+        assertEquals("Navilife's voices aren't switched on for this server, so the phone's own voice speaks.", off.statusLine)
         // Unreachable with Brian chosen: Brian stays listed and lit, with nothing to sample.
         val failed = VoicePickerRules.view(SpeechRules.FAILED, emptyList(), null, "Brian", null, mac = true)
         assertEquals(listOf("Brian", "device"), failed.choices.map { it.id })
         assertTrue(failed.choices[0].selected && !failed.choices[0].sample)
         assertFalse(failed.choices[1].selected)
-        assertEquals("Couldn't reach MEKA's voices just now, so the Mac's own voice speaks. Try again in a moment.", failed.statusLine)
+        assertEquals("Couldn't reach Navilife's voices just now, so the Mac's own voice speaks. Try again in a moment.", failed.statusLine)
         // Not connected; and still loading says nothing yet.
-        assertTrue(VoicePickerRules.view(null, emptyList(), null, null, null, mac = false, connected = false).statusLine!!.startsWith("MEKA's voices come from your MEKA server."))
+        assertTrue(VoicePickerRules.view(null, emptyList(), null, null, null, mac = false, connected = false).statusLine!!.startsWith("Navilife's voices come from your Navilife server."))
         assertNull(VoicePickerRules.view(null, emptyList(), null, null, null, mac = false, loaded = false).statusLine)
     }
 
@@ -186,7 +186,7 @@ class SpeechTest {
     fun activityShowsHowQuicklyMekasVoiceAnsweredNewestFirst() {
         assertNull(SpeechRules.timingLine(emptyList()))
         val spoken = SpeechTiming.Outcome.SPOKEN
-        assertEquals("Time to MEKA's voice · 1.8 s", SpeechRules.timingLine(listOf(SpeechTiming(1, 1_834, spoken))))
+        assertEquals("Time to Navilife's voice · 1.8 s", SpeechRules.timingLine(listOf(SpeechTiming(1, 1_834, spoken))))
         val line = SpeechRules.timingLine(
             listOf(
                 SpeechTiming(1, 900, spoken),
@@ -196,11 +196,11 @@ class SpeechTest {
                 SpeechTiming(5, 1_250, spoken),
             ),
         )
-        assertEquals("Time to MEKA's voice · 1.3 s · no answer · 2.4 s · late · 0.9 s · middle 1.3 s", line)
+        assertEquals("Time to Navilife's voice · 1.3 s · no answer · 2.4 s · late · 0.9 s · middle 1.3 s", line)
         // Only the last ten.
         val many = (1..14).map { SpeechTiming(it.toLong(), it * 100L, spoken) }
         val ten = SpeechRules.timingLine(many)!!
-        assertTrue(ten.startsWith("Time to MEKA's voice · 1.4 s · 1.3 s"))
+        assertTrue(ten.startsWith("Time to Navilife's voice · 1.4 s · 1.3 s"))
         assertFalse(" 0.4 s" in ten)
         assertEquals("0.1 s", SpeechRules.seconds(10))
         assertEquals("12.0 s", SpeechRules.seconds(11_960))

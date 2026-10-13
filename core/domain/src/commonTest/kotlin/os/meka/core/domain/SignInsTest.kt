@@ -117,8 +117,8 @@ class SignInsTest {
         val ending = SignIn(MailProviders.GMAIL, "alex@example.com", SignInState.ENDING, ends)
         val l2 = SignInRules.line(listOf(ending), now, cal)!!
         assertTrue(l2.text.startsWith("Gmail sign-in ends "))
-        assertTrue(l2.detail.contains("keeps MEKA reading alex@example.com"))
+        assertTrue(l2.detail.contains("keeps Navilife reading alex@example.com"))
         val notices = SignInRules.notices(listOf(ending, expired), now, cal)
-        assertEquals(listOf("Reconnect from Today to keep MEKA reading alex@example.com", "MEKA stopped reading alex@example.net · Reconnect from Today"), notices.map { it.text })
+        assertEquals(listOf("Reconnect from Today to keep Navilife reading alex@example.com", "Navilife stopped reading alex@example.net · Reconnect from Today"), notices.map { it.text })
     }
 }

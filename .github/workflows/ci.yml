@@ -67,6 +67,8 @@ jobs:
         run: node design/rhythm-check.mjs --self-test && node design/rhythm-check.mjs
       - name: Type from MekaType tokens only on every screen (ADR-012, Calm Today)
         run: node design/type-check.mjs --self-test && node design/type-check.mjs
+      - name: The app is called Navilife (no user-visible MEKA left)
+        run: python3 tools/check-app-name.py --self-test && python3 tools/check-app-name.py
       - name: Infra typecheck, invariant tests, synth (no credentials)
         working-directory: infra
         run: npm ci && npx tsc --noEmit && npx jest && npx cdk synth --quiet

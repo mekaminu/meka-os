@@ -114,21 +114,21 @@ object BargeInRules {
         return TalkOrb.dbfs((kotlin.math.sqrt(sum / n) / 32768.0).toFloat())
     }
 
-    const val LABEL = "Talk over MEKA"
+    const val LABEL = "Talk over Navilife"
     const val TURN_ON = "Turn on"
     const val TURN_OFF = "Turn off"
 
     /** The Talk pane's section with its switch; lit while on. The Fold's and the Mac's ([mac]: "click"). */
     fun section(on: Boolean, mac: Boolean = false): TalkSetupSection = TalkSetupSection(
         LABEL,
-        if (on) "On: start talking while MEKA speaks and it stops and listens. ${if (mac) "Clicking" else "Tapping"} the orb still works."
-        else "Off: ${if (mac) "click" else "tap"} the orb to stop MEKA while it speaks.",
+        if (on) "On: start talking while Navilife speaks and it stops and listens. ${if (mac) "Clicking" else "Tapping"} the orb still works."
+        else "Off: ${if (mac) "click" else "tap"} the orb to stop Navilife while it speaks.",
         lit = on,
         steps = listOf(
-            "While MEKA speaks it watches only how loud the microphone is: no words, no recording, nothing kept.",
+            "While Navilife speaks it watches only how loud the microphone is: no words, no recording, nothing kept.",
             if (mac) "Headphones work best. On the Mac's speakers, speak up a little." else
                 "Headphones work best. On the phone's speaker, speak up a little.",
-            "Your first word or two stop MEKA, so say the rest after it stops.",
+            "Your first word or two stop Navilife, so say the rest after it stops.",
         ),
         action = if (on) TURN_OFF else TURN_ON,
     )

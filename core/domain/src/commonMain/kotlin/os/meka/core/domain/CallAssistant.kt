@@ -15,7 +15,7 @@ import os.meka.core.sync.fv
  */
 object CallAssistantScript {
     /** Meka's greeting (approved 2026-10-07), saying it is an automated assistant as the build plan requires. */
-    const val GREETING = "Hi, you've reached Meka's automated assistant. Meka is at work right now and will call you back. " +
+    const val GREETING = "Hi, this is Navilife, Meka's automated assistant. Meka is at work right now and will call you back. " +
         "Can I take a message, and is it urgent?"
     const val RECORD_PROMPT = "Please leave your message after the tone, then press the hash key or just hang up."
     const val URGENT_QUESTION = "Is it urgent? Press 1 or say yes if it is. Press 2 or say no if it can wait."
@@ -31,7 +31,7 @@ object CallAssistantScript {
      * Outside work hours (call assistant polish 6, Meka heard the at-work greeting at 20:50): calls only reach the
      * assistant then when Meka declines one, so it doesn't say he is at work.
      */
-    const val GREETING_AWAY = "Hi, you've reached Meka's automated assistant. Meka can't take your call right now and will call you back. " +
+    const val GREETING_AWAY = "Hi, this is Navilife, Meka's automated assistant. Meka can't take your call right now and will call you back. " +
         "Can I take a message, and is it urgent?"
     const val THANKS_AWAY = "Thank you. Meka will get your message and call you back. Goodbye."
 
@@ -217,7 +217,7 @@ object VoiceRecordingRules {
     const val STOP = "■ Stop"
     const val LOADING = "Loading…"
     const val FAILED = "Couldn't play this message"
-    const val PRIVACY = "Recordings are kept encrypted on MEKA's server for 30 days, and deleted when you tap Done."
+    const val PRIVACY = "Recordings are kept encrypted on Navilife's server for 30 days, and deleted when you tap Done."
 
     /** "Keep callers' recordings" (Work → Call assistant): how long, in days, unless Meka picks otherwise. */
     const val DEFAULT_KEEP_DAYS = 30
@@ -247,12 +247,12 @@ object VoiceRecordingRules {
     /** The line under the chips; cross-fades as the choice changes. */
     fun settingLine(days: Int): String =
         if (days == 0) "Not kept · you'll have the words; each recording is deleted once it has been transcribed"
-        else "Kept $days days · encrypted on MEKA's server, deleted sooner when you tap Done"
+        else "Kept $days days · encrypted on Navilife's server, deleted sooner when you tap Done"
 
     /** The note under the after-work summary when something in it can be played. */
     fun privacy(days: Int): String =
-        if (days == 0) "Recordings aren't kept: MEKA's server deletes each one once it has been transcribed."
-        else "Recordings are kept encrypted on MEKA's server for $days days, and deleted when you tap Done."
+        if (days == 0) "Recordings aren't kept: Navilife's server deletes each one once it has been transcribed."
+        else "Recordings are kept encrypted on Navilife's server for $days days, and deleted when you tap Done."
 
     /**
      * The server's sweep (hourly, and when the choice changes): recordings stored before this are deleted. "Don't

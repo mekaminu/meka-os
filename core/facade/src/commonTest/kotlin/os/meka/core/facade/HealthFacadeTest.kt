@@ -74,7 +74,7 @@ class HealthFacadeTest {
         // Today's open within the quarter hour re-reads only this device: the notification access just went.
         val again = c.refreshHealth(fold.copy(notificationAccess = false), force = false)
         assertEquals(1, server.healthAsked)
-        assertEquals("Messages capture · MEKA can't see notifications · messages aren't captured", again.todayLine)
+        assertEquals("Messages capture · Navilife can't see notifications · messages aren't captured", again.todayLine)
         now += 16 * 60_000L
         c.refreshHealth(fold, force = false)
         assertEquals(2, server.healthAsked)

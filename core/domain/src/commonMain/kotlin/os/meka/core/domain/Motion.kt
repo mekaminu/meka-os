@@ -57,11 +57,11 @@ object MotionRules {
         if (stored != null || !systemOff || RETIRED_CARD) return null
         return if (mac) MotionCard(
             "Reduce Motion is on",
-            "So MEKA is keeping still. Turn on MEKA's own motion? Change it any time in Ask → Appearance.",
+            "So Navilife is keeping still. Turn on Navilife's own motion? Change it any time in Ask → Appearance.",
             "Turn on motion", "Keep it still",
         ) else MotionCard(
             "Your phone's animations are off",
-            "So MEKA is keeping still. Turn on MEKA's own motion? Change it any time in Ask → More → Appearance.",
+            "So Navilife is keeping still. Turn on Navilife's own motion? Change it any time in Ask → More → Appearance.",
             "Turn on motion", "Keep it still",
         )
     }
@@ -98,7 +98,7 @@ object MotionCheckRules {
     fun phone(stored: MotionChoice?, animatorScale: Float?, powerSave: Boolean): MotionCheck {
         val systemOff = animatorScale == 0f
         val rows = listOf(
-            MotionCheckRow("MEKA Motion", stored?.label ?: "Not chosen"),
+            MotionCheckRow("Navilife Motion", stored?.label ?: "Not chosen"),
             MotionCheckRow("Phone's animation scale", scaleLabel(animatorScale)),
             MotionCheckRow("Power saving", if (powerSave) "On" else "Off"),
         )
@@ -108,7 +108,7 @@ object MotionCheckRules {
     /** The Mac's check: [reduceMotion] is Accessibility → Reduce Motion, [lowPower] is Low Power Mode. */
     fun mac(stored: MotionChoice?, reduceMotion: Boolean, lowPower: Boolean): MotionCheck {
         val rows = listOf(
-            MotionCheckRow("MEKA Motion", stored?.label ?: "Not chosen"),
+            MotionCheckRow("Navilife Motion", stored?.label ?: "Not chosen"),
             MotionCheckRow("Reduce Motion", if (reduceMotion) "On" else "Off"),
             MotionCheckRow("Low Power Mode", if (lowPower) "On" else "Off"),
         )
@@ -129,7 +129,7 @@ object MotionCheckRules {
         val tap = if (mac) "click" else "tap"
         val effective = MotionRules.effective(stored, systemOff)
         if (effective == MotionChoice.OFF) {
-            return MotionCheck(rows, "Animations off because MEKA's Motion is Off — $tap to turn them on", on = false, fix = MotionChoice.EXPRESSIVE)
+            return MotionCheck(rows, "Animations off because Navilife's Motion is Off — $tap to turn them on", on = false, fix = MotionChoice.EXPRESSIVE)
         }
         val despite = when {
             systemOff && mac -> " · playing even with Reduce Motion on"

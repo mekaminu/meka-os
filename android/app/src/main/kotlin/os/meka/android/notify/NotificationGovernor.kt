@@ -339,8 +339,8 @@ object NotifyRouting {
     fun windowMs(precision: NoticePrecision): Long = if (precision == NoticePrecision.CLOCK) 5 * 60_000L else 10 * 60_000L
 
     fun publicTitle(tier: NoticeTier): String = when (tier) {
-        NoticeTier.CRITICAL, NoticeTier.ACTION -> "MEKA · needs you"
-        else -> "MEKA · a heads-up"
+        NoticeTier.CRITICAL, NoticeTier.ACTION -> "Navilife · needs you"
+        else -> "Navilife · a heads-up"
     }
 
     /** How long the "Went · 2 of 3 this week · Undo" note stays in the shade. */

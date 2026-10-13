@@ -31,7 +31,7 @@ class NotifyTraceTest {
         assertEquals("nothing due · next look 21:41", quiet.detail)
         val off = NotifyTrace.look(now, false, 0, false, emptyList(), null, cal)
         assertEquals(NotifyTraceKind.BLOCKED, off.kind)
-        assertEquals("notifications are off for MEKA", off.detail)
+        assertEquals("notifications are off for Navilife", off.detail)
     }
 
     @Test
@@ -112,14 +112,14 @@ class NotifyTraceTest {
 
         val off = NotifyTrace.healthRow(NotificationHealth(false, channels, emptyList()), now, cal)!!
         assertEquals(HealthState.BAD to HealthFix.NOTIFICATIONS_ON, off.state to off.fix)
-        assertEquals("Off for MEKA · nothing can reach you", off.line)
+        assertEquals("Off for Navilife · nothing can reach you", off.line)
 
         val allOff = NotifyTrace.healthRow(NotificationHealth(true, channels.map { it.copy(on = false) }, emptyList()), now, cal)!!
         assertEquals(HealthState.BAD, allOff.state)
 
         val never = NotifyTrace.healthRow(NotificationHealth(true, channels, emptyList()), now, cal)!!
         assertEquals(HealthState.WARN, never.state)
-        assertEquals("On · MEKA hasn't looked for anything to send yet", never.line)
+        assertEquals("On · Navilife hasn't looked for anything to send yet", never.line)
 
         val looked = listOf(NotifyTraceEntry(now - 5 * HealthRules.MIN, NotifyTraceKind.LOOKED, "nothing due"))
         val quiet = NotifyTrace.healthRow(NotificationHealth(true, channels, looked), now, cal)!!

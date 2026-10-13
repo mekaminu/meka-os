@@ -288,7 +288,7 @@ class MekaApplication : Application() {
             is os.meka.core.facade.RecoveryEnrolment.Result.Enrolled -> {
                 // Ops carry the household and device id this core was made with, so they must be the ones enrolled.
                 if (r.householdId != identity.householdId() || r.deviceId != identity.deviceId()) {
-                    return "This phone can't join that household · reinstall MEKA and try again"
+                    return "This phone can't join that household · reinstall Navilife and try again"
                 }
                 identity.saveEnrolment(url, r.secret)
                 core.connect(Enrolment.transport(http, url, r.secret, deviceKey))

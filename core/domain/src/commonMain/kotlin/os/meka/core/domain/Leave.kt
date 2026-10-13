@@ -117,7 +117,7 @@ object LeaveRules {
 
     const val ADD_HINT = "Add… (27–30 Oct, Spain 18 Dec – 4 Jan, Fri 13 Nov)"
     const val EMPTY_LINE = "Nothing booked yet. Type each stretch of leave once; only work days count."
-    const val NOT_READ = "MEKA couldn't read a date in that. Try \"27–30 Oct\" or \"Fri 13 Nov\" (add the year for leave already taken)."
+    const val NOT_READ = "Navilife couldn't read a date in that. Try \"27–30 Oct\" or \"Fri 13 Nov\" (add the year for leave already taken)."
     const val NOTE = "Booked leave is a day off on both apps: no work band, no commute, and the brief says “Annual leave · no work”."
 
     private val genericTitle = setOf("", "leave", "annual leave", "a/l", "al", "off", "day off", "days off", "holiday", "holidays", "booked", "book", "leave booked")

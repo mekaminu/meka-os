@@ -48,7 +48,7 @@ data class WatchComplicationView(
 object WatchTileRules {
     const val TITLE_MAX = 40
     const val UNLINKED_LABEL = "LINK THIS WATCH"
-    const val UNLINKED_TITLE = "Open MEKA"
+    const val UNLINKED_TITLE = "Open Navilife"
     const val UNLINKED_LINE = "It shows a code to type on your phone"
     const val PRESS_PREFIX = "press:"
     /** The tile's id for "open MEKA" (any tap that isn't the button). */
@@ -86,7 +86,7 @@ object WatchTileRules {
             return WatchTileView(
                 label = UNLINKED_LABEL, lit = true, title = UNLINKED_TITLE, line = UNLINKED_LINE,
                 button = null, buttonId = null, fastLine = null, fastReached = false,
-                spoken = "This watch isn't linked to MEKA yet. Open MEKA to link it.",
+                spoken = "This watch isn't linked to Navilife yet. Open Navilife to link it.",
             )
         }
         val button = home.buttons.firstOrNull { it.primary }
@@ -122,7 +122,7 @@ object WatchTileRules {
      * reading "Link".
      */
     fun complication(home: WatchHomeView?, done: Int, left: Int): WatchComplicationView {
-        if (home == null) return WatchComplicationView("Link", "MEKA", 0f, false, "MEKA isn't linked on this watch yet")
+        if (home == null) return WatchComplicationView("Link", "Navilife", 0f, false, "Navilife isn't linked on this watch yet")
         val f = home.fast
         if (f.running) {
             return WatchComplicationView(

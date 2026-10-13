@@ -46,7 +46,7 @@ class AboutYouFacadeTest {
         assertEquals("Alex", v.rows.first { it.field == AboutField.PARTNER_NAME }.value)
         assertEquals("Hilltown", v.rows.first { it.field == AboutField.HOME }.value)
         assertEquals(FootballRules.CHILDREN.entries.sortedBy { it.key }.map { it.value }, v.children.map { it.name })
-        assertTrue(v.summary.startsWith("MEKA filled this in today"))
+        assertTrue(v.summary.startsWith("Navilife filled this in today"))
         fold.syncNow(); mac.syncNow()
         assertEquals("Alex", mac.aboutYouView.value.rows.first { it.field == AboutField.PARTNER_NAME }.value)
 
@@ -96,7 +96,7 @@ class AboutYouFacadeTest {
         fold.syncNow()
         val one = assertNotNull(fold.refreshHealth(DeviceHealth(mac = false)).rows.firstOrNull { it.key == AboutYouRules.HEALTH_KEY })
         assertEquals(HealthState.WARN, one.state)
-        assertEquals("On the Fold · not on the Mac yet · open MEKA on the Mac", one.line)
+        assertEquals("On the Fold · not on the Mac yet · open Navilife on the Mac", one.line)
         fold.syncNow(); mac.syncNow(); mac.syncNow(); fold.syncNow()
         val both = assertNotNull(fold.refreshHealth(DeviceHealth(mac = false)).rows.firstOrNull { it.key == AboutYouRules.HEALTH_KEY })
         assertEquals(HealthState.OK, both.state)

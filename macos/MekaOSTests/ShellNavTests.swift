@@ -61,12 +61,12 @@ final class ShellNavTests: XCTestCase {
     func testAskIsALifeGridDailyAndOneSettingsRow() {
         // Fold review 2026-10-12, item 7: the same parts as the Fold's.
         XCTAssertEqual(ShellNav.lifeTiles().map(\.label),
-                       ["Lists", "Goals and habits", "People", "Dinners", "Bins", "Date night", "School", "Appointments", "Annual leave", "Gifts", "Trips", "Errands", "Emergency card", "What MEKA knows"])
+                       ["Lists", "Goals and habits", "People", "Dinners", "Bins", "Date night", "School", "Appointments", "Annual leave", "Gifts", "Trips", "Errands", "Emergency card", "What Navilife knows"])
         XCTAssertEqual(ShellNav.lifeTiles().compactMap(\.tile), LifeTileRules.shared.ORDER)
         XCTAssertTrue(ShellNav.lifeTiles().allSatisfy { $0.symbol != nil })
         XCTAssertEqual(ShellNav.daily().map(\.label), ["Morning brief", "Week ahead", "News", "Shut down the day", "Train queue", "Life admin hour", "Review"])
         XCTAssertEqual(ShellNav.settings(connected: true).map(\.label),
-                       ["About you", "Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Mail", "Family", "Watch", "Recovery key", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"])
+                       ["About you", "Work mode", "Protected time", "Notifications", "Appearance", "Navilife's voice", "Talk", "Calendars", "Mail", "Family", "Watch", "Recovery key", "What Navilife may do", "Navilife's AI", "Activity", "Setup", "Health", "Vault", "Your data"])
         XCTAssertFalse(ShellNav.settings(connected: false).contains(.watch))
         XCTAssertFalse(ShellNav.settings(connected: false).contains(.recovery))
         XCTAssertEqual(MoreItem.allCases.filter { !ShellNav.opens($0) }, [.ai])
@@ -94,7 +94,7 @@ final class ShellNavTests: XCTestCase {
     @MainActor
     func testHealthSaysItsSummaryAndIsLit() {
         // Reliability first, item 3.
-        XCTAssertEqual(ShellNav.moreLine(.health, listsDue: 0), "Is everything MEKA needs working?")
+        XCTAssertEqual(ShellNav.moreLine(.health, listsDue: 0), "Is everything Navilife needs working?")
         XCTAssertEqual(ShellNav.moreLine(.health, listsDue: 0, health: "2 things need a look"), "2 things need a look")
         XCTAssertTrue(ShellNav.moreLit(.health, listsDue: 0, healthAttention: 1))
         XCTAssertFalse(ShellNav.moreLit(.health, listsDue: 2))
@@ -104,7 +104,7 @@ final class ShellNavTests: XCTestCase {
     @MainActor
     func testSetupSaysWhatIsLeftAndIsLit() {
         // Setup checklist (Meka approved 2026-10-09).
-        XCTAssertEqual(ShellNav.moreLine(.setup, listsDue: 0), "Everything MEKA can do, and what's left to set up")
+        XCTAssertEqual(ShellNav.moreLine(.setup, listsDue: 0), "Everything Navilife can do, and what's left to set up")
         XCTAssertEqual(ShellNav.moreLine(.setup, listsDue: 0, setup: "3 steps left · 12 of 15 done"), "3 steps left · 12 of 15 done")
         XCTAssertTrue(ShellNav.moreLit(.setup, listsDue: 0, setupLeft: 3))
         XCTAssertFalse(ShellNav.moreLit(.setup, listsDue: 0, healthAttention: 2))

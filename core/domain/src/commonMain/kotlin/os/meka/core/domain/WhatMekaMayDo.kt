@@ -66,14 +66,14 @@ object AutonomyRules {
     const val PAUSE = "Pause"
     const val RESUME = "Resume"
     const val ASK_FIRST = "Ask first"
-    const val OFFER_AGAIN = "Let MEKA offer again"
+    const val OFFER_AGAIN = "Let Navilife offer again"
 
-    const val PAUSE_TITLE = "Pause everything MEKA does on its own"
-    const val PAUSE_LINE = "Everything waits for your tap until you resume. What you've trusted MEKA with is kept."
-    const val NONE_LINE = "MEKA asks before everything it does for you"
+    const val PAUSE_TITLE = "Pause everything Navilife does on its own"
+    const val PAUSE_LINE = "Everything waits for your tap until you resume. What you've trusted Navilife with is kept."
+    const val NONE_LINE = "Navilife asks before everything it does for you"
     const val LISTS_LABEL = "Your lists"
     const val LOCKED_LABEL = "Always asks · can't be changed"
-    const val NOTE = "MEKA only offers to do something on its own after you've said yes to five of the same card in a row, " +
+    const val NOTE = "Navilife only offers to do something on its own after you've said yes to five of the same card in a row, " +
         "and only for your own lists. Everything it does on its own shows with Undo and in Activity; undoing one puts " +
         "that kind back to asking."
 
@@ -122,9 +122,9 @@ object AutonomyRules {
         locked(MESSAGES, "Messages", "Never sent on their own · you tap Send each time, family included"),
         locked(EMAIL, "Email", "Never sent on its own · you approve each reply"),
         locked(MONEY, "Money and payments", "Never on its own · your fingerprint each time"),
-        locked(TRADING, "Trading", "MEKA holds no trading logins · approvals only, with your fingerprint"),
+        locked(TRADING, "Trading", "Navilife holds no trading logins · approvals only, with your fingerprint"),
         locked(DOCUMENTS, "Sharing documents", "Only on your tap · your fingerprint each time"),
-        locked(OTHERS, "Other people's words", "An invitation, a message or a shared link never lets MEKA do more · it asks"),
+        locked(OTHERS, "Other people's words", "An invitation, a message or a shared link never lets Navilife do more · it asks"),
         locked(THE_REST, "Everything else Ask and Talk offer", "Moving tasks, alarms, fasts, your calendar, leave · always a card you tap"),
     )
 
@@ -143,12 +143,12 @@ object AutonomyRules {
                 val time = LocalClock.formatMinute(cal.minuteOfDay(at))
                 if (day == cal.epochDayOf(nowMs)) " since $time" else " since ${CivilDate.shortLabel(day)}"
             }.orEmpty()
-            return "Paused$since · MEKA asks before everything"
+            return "Paused$since · Navilife asks before everything"
         }
         return when (trusted) {
             0 -> NONE_LINE
-            1 -> "MEKA does 1 thing on its own · each with Undo and in Activity"
-            else -> "MEKA does $trusted things on its own · each with Undo and in Activity"
+            1 -> "Navilife does 1 thing on its own · each with Undo and in Activity"
+            else -> "Navilife does $trusted things on its own · each with Undo and in Activity"
         }
     }
 
@@ -161,12 +161,12 @@ object AutonomyRules {
 
     /** The undo bar's line after Pause / Resume. */
     fun pausedLine(paused: Boolean): String =
-        if (paused) "Paused · MEKA asks before everything" else "Resumed · MEKA does what you've trusted it with again"
+        if (paused) "Paused · Navilife asks before everything" else "Resumed · Navilife does what you've trusted it with again"
 
     /** The undo bar's line after a row's action, or null when [k]'s row offers none. */
     fun resetLine(k: TrustKind, before: TrustState): String? = when {
-        before.trusted -> "MEKA will ask before it ${k.plural.replaceFirst(" ", "s ")} again."
-        before.declined -> "MEKA may offer again after ${TrustRules.STREAK} yeses in a row."
+        before.trusted -> "Navilife will ask before it ${k.plural.replaceFirst(" ", "s ")} again."
+        before.declined -> "Navilife may offer again after ${TrustRules.STREAK} yeses in a row."
         else -> null
     }
 }

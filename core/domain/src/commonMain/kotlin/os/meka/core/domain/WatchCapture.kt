@@ -83,7 +83,7 @@ object WatchCaptureRules {
     fun failLine(f: WatchListenFailure): String = when (f) {
         WatchListenFailure.NO_RECOGNISER -> "This watch can't listen on its own · capture on your phone"
         WatchListenFailure.NO_LANGUAGE -> "English speech isn't on this watch yet · add it in the watch's settings"
-        WatchListenFailure.NO_MIC -> "MEKA needs the microphone to listen · allow it, then tap Capture"
+        WatchListenFailure.NO_MIC -> "Navilife needs the microphone to listen · allow it, then tap Capture"
         WatchListenFailure.NOT_HEARD -> "Didn't catch that · tap Capture to try again"
         WatchListenFailure.FAILED -> "Couldn't listen just now · try again"
     }

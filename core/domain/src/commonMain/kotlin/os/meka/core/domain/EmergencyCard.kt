@@ -83,8 +83,8 @@ object EmergencyRules {
 
     const val EMPTY_SUMMARY = "Empty. Add who to call, where important documents are and key accounts by name; Jeanette sees it on her family page."
     const val NOT_READ = "Type a name, then a colon and the details: “GP: Dr Patel, 01767 123456”."
-    const val REFUSED_SECRET = "MEKA keeps passwords and PINs off the card. Write where they're kept instead: “Passwords: in the family password manager”."
-    const val REFUSED_NUMBER = "MEKA keeps card, account and policy numbers off the card. Write the name and where the paperwork is: “Home insurance: Aviva, policy in the blue folder”."
+    const val REFUSED_SECRET = "Navilife keeps passwords and PINs off the card. Write where they're kept instead: “Passwords: in the family password manager”."
+    const val REFUSED_NUMBER = "Navilife keeps card, account and policy numbers off the card. Write the name and where the paperwork is: “Home insurance: Aviva, policy in the blue folder”."
     const val FULL = "The card is full. Remove a line first."
     const val SHARED = "Jeanette sees this card on her family page, read-only. Passwords, PINs and card or account numbers never go on it."
 

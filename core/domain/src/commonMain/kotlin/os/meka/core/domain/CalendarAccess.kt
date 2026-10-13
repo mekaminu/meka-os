@@ -18,8 +18,8 @@ object CalendarAccessRules {
     fun line(provider: String, canEdit: Boolean, needsReconnect: Boolean = false): String? = when {
         !offersEditing(provider) -> null
         needsReconnect -> null // the reconnect line says enough
-        canEdit -> "Editing allowed · events you add or change in MEKA go to ${providerName(provider)}"
-        else -> "Read-only · MEKA only reads this calendar"
+        canEdit -> "Editing allowed · events you add or change in Navilife go to ${providerName(provider)}"
+        else -> "Read-only · Navilife only reads this calendar"
     }
 
     /** The account's action: allow editing (asks the provider), stop editing (at once), or none for feeds. */
@@ -39,10 +39,10 @@ object CalendarAccessRules {
 
     /** What the browser hand-off says before the provider's page opens (so the permission screen isn't a surprise). */
     fun allowNote(provider: String): String =
-        "${providerName(provider)} will ask to let MEKA see, add, change and delete events. Keep it ticked to allow editing."
+        "${providerName(provider)} will ask to let Navilife see, add, change and delete events. Keep it ticked to allow editing."
 
     /** After Stop editing. */
-    fun stoppedLine(provider: String): String = "Editing off · MEKA only reads ${providerName(provider)} now"
+    fun stoppedLine(provider: String): String = "Editing off · Navilife only reads ${providerName(provider)} now"
 
     fun providerName(provider: String): String = when (provider) {
         "google" -> "Google"

@@ -207,8 +207,8 @@ final class FloatingTickerPanel: NSPanel {
         hasShadow = true
         isReleasedWhenClosed = false
         becomesKeyOnlyIfNeeded = true
-        title = "MEKA news ticker"
-        setAccessibilityLabel("MEKA news ticker")
+        title = "Navilife news ticker"
+        setAccessibilityLabel("Navilife news ticker")
     }
 
     override var canBecomeKey: Bool { false }

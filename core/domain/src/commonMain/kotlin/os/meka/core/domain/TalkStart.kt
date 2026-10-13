@@ -38,7 +38,7 @@ object TalkStartRules {
     const val ACTION_VOICE_COMMAND = "android.intent.action.VOICE_COMMAND"
     const val TITLE = "Talk"
     const val SAFETY =
-        "Anyone near the phone can talk to MEKA once it's listening, so nothing is sent, deleted or paid without a " +
+        "Anyone near the phone can talk to Navilife once it's listening, so nothing is sent, deleted or paid without a " +
             "spoken or tapped yes, and every change has Undo."
     const val MAC_SAFETY =
         "Nothing is sent, deleted or paid without a spoken or clicked yes, and every change has Undo."
@@ -88,10 +88,10 @@ object TalkStartRules {
         ?: if (fromLauncher && listenOnOpen && micAllowed) TalkStart.OPEN else null
 
     /** The home screen's Talk widget: its one line and the description the launcher's widget list shows. */
-    const val WIDGET_LABEL = "Talk to MEKA"
+    const val WIDGET_LABEL = "Talk to Navilife"
 
     /** The bedside clock's and the now card's mic, as a screen reader says it. */
-    const val MIC_LABEL = "Talk to MEKA"
+    const val MIC_LABEL = "Talk to Navilife"
 
     /** The pane that springs up over the bedside clock: its back line and title. */
     const val BEDSIDE_BACK = "‹ Clock"
@@ -112,13 +112,13 @@ object TalkStartRules {
         if (mac) {
             return TalkSetupView(
                 TITLE,
-                "Start talking to MEKA without reaching for the mic.",
+                "Start talking to Navilife without reaching for the mic.",
                 listOf(
                     TalkSetupSection(
                         "On the Mac",
-                        "Press ⌥Space while MEKA is in front, or click the mic beside Ask's field.",
+                        "Press ⌥Space while Navilife is in front, or click the mic beside Ask's field.",
                         lit = false,
-                        steps = listOf("Talk to MEKA is also in the Edit menu."),
+                        steps = listOf("Talk to Navilife is also in the Edit menu."),
                         action = null,
                     ),
                     TalkSetupSection("Safety", MAC_SAFETY, lit = false, steps = emptyList(), action = null),
@@ -128,7 +128,7 @@ object TalkStartRules {
         val side = if (assistantHeld) {
             TalkSetupSection(
                 "Side button",
-                "MEKA is this phone's digital assistant: press and hold the side key and MEKA opens listening.",
+                "Navilife is this phone's digital assistant: press and hold the side key and Navilife opens listening.",
                 lit = true,
                 steps = if (samsung) listOf("If holding the side key still wakes Bixby: Settings → Advanced features → Side button → Press and hold → Digital assistant.")
                 else emptyList(),
@@ -140,43 +140,43 @@ object TalkStartRules {
                 "Not set up yet: holding the side key opens another assistant.",
                 lit = false,
                 steps = if (samsung) listOf(
-                    "Settings → Apps → Choose default apps → Digital assistant app → Device assistance app → MEKA.",
+                    "Settings → Apps → Choose default apps → Digital assistant app → Device assistance app → Navilife.",
                     "Then Settings → Advanced features → Side button → Press and hold → Digital assistant.",
                 ) else listOf(
-                    "Settings → Apps → Default apps → Digital assistant app → MEKA.",
+                    "Settings → Apps → Default apps → Digital assistant app → Navilife.",
                 ),
                 action = "Open default apps",
             )
         }
         return TalkSetupView(
             TITLE,
-            "Start talking to MEKA without reaching for the mic.",
+            "Start talking to Navilife without reaching for the mic.",
             listOf(
                 side,
                 TalkSetupSection(
                     "Headphones and the car",
-                    "Hold the button on your headphones and MEKA opens listening. With Bluetooth headphones on, or in " +
-                        "the car, opening MEKA starts listening too.",
+                    "Hold the button on your headphones and Navilife opens listening. With Bluetooth headphones on, or in " +
+                        "the car, opening Navilife starts listening too.",
                     lit = false,
                     steps = listOf(
-                        "The first time, Android may ask which app should answer: choose MEKA, Always.",
-                        "Opening MEKA from a notification never starts listening.",
+                        "The first time, Android may ask which app should answer: choose Navilife, Always.",
+                        "Opening Navilife from a notification never starts listening.",
                     ),
                     action = null,
                 ),
                 TalkSetupSection(
                     "Home screen",
-                    "Add the Talk widget: one tap opens MEKA listening.",
+                    "Add the Talk widget: one tap opens Navilife listening.",
                     lit = false,
-                    steps = listOf("Hold an empty spot on the home screen → Widgets → MEKA → $WIDGET_LABEL."),
+                    steps = listOf("Hold an empty spot on the home screen → Widgets → Navilife → $WIDGET_LABEL."),
                     action = null,
                 ),
                 TalkSetupSection(
                     "Bedside and the cover screen",
                     "Tap the mic on the bedside clock (the phone half folded on a table) or on the closed phone's now " +
-                        "card, and MEKA starts listening.",
+                        "card, and Navilife starts listening.",
                     lit = false,
-                    steps = listOf("At the bedside MEKA answers over the clock; Back returns to the clock."),
+                    steps = listOf("At the bedside Navilife answers over the clock; Back returns to the clock."),
                     action = null,
                 ),
                 TalkSetupSection("Safety", SAFETY, lit = false, steps = emptyList(), action = null),
@@ -207,7 +207,7 @@ object TalkOnOpenRules {
     /** Below this the room reads as silent (a dead or muted microphone gives all zeros). */
     const val FLOOR_DB = 20.0
 
-    const val LABEL = "When I open MEKA"
+    const val LABEL = "When I open Navilife"
     const val TURN_ON = "Turn on"
     const val TURN_OFF = "Turn off"
 
@@ -271,18 +271,18 @@ object TalkOnOpenRules {
     fun section(on: Boolean, mac: Boolean = false): TalkSetupSection = TalkSetupSection(
         LABEL,
         when {
-            on && mac -> "On: launching MEKA, or clicking it in the Dock while it's in the background, listens for a " +
+            on && mac -> "On: launching Navilife, or clicking it in the Dock while it's in the background, listens for a " +
                 "few seconds, so you can just talk."
-            on -> "On: opening MEKA from the home screen listens for a few seconds, so you can just talk."
-            else -> "Off: opening MEKA shows Today and waits for you."
+            on -> "On: opening Navilife from the home screen listens for a few seconds, so you can just talk."
+            else -> "Off: opening Navilife shows Today and waits for you."
         },
         lit = on,
         steps = listOf(
             "It checks the room first: if it's noisy it says “${if (mac) TalkProblem.TOO_NOISY.macLine else TalkProblem.TOO_NOISY.line}” instead of listening.",
             "A quiet chime marks listening. Say nothing for 6 seconds and Today comes back.",
-            if (mac) "Opening MEKA from a notification or a link never starts listening, and it never asks for the " +
+            if (mac) "Opening Navilife from a notification or a link never starts listening, and it never asks for the " +
                 "microphone: allow it once by clicking the mic."
-            else "Opening MEKA from a notification never starts listening.",
+            else "Opening Navilife from a notification never starts listening.",
         ),
         action = if (on) TURN_OFF else TURN_ON,
     )
@@ -307,9 +307,9 @@ object TalkAnywhereRules {
     fun section(on: Boolean, taken: Boolean): TalkSetupSection = TalkSetupSection(
         LABEL,
         when {
-            on && taken -> "Another app already uses ⌥Space, so it starts MEKA only while MEKA is in front."
-            on -> "On: press ⌥Space in any app and MEKA comes forward listening. Press it again to finish."
-            else -> "Off: ⌥Space starts MEKA only while MEKA is in front."
+            on && taken -> "Another app already uses ⌥Space, so it starts Navilife only while Navilife is in front."
+            on -> "On: press ⌥Space in any app and Navilife comes forward listening. Press it again to finish."
+            else -> "Off: ⌥Space starts Navilife only while Navilife is in front."
         },
         lit = on && !taken,
         steps = listOfNotNull(
@@ -322,7 +322,7 @@ object TalkAnywhereRules {
     /** "On the Mac"'s line, as the shortcut works now. */
     fun onTheMacLine(on: Boolean, taken: Boolean): String =
         if (on && !taken) "Press ⌥Space in any app, or click the mic beside Ask's field."
-        else "Press ⌥Space while MEKA is in front, or click the mic beside Ask's field."
+        else "Press ⌥Space while Navilife is in front, or click the mic beside Ask's field."
 
     /**
      * The Mac's whole Talk sheet in order: On the Mac (its line following the shortcut), From any app, When I open

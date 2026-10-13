@@ -35,7 +35,7 @@ class NotifyAskTest {
     @Test
     fun theLinesSayWhatStandsAndWhatHappened() {
         val lines = NotifyAskRules.askLines(healthy, settings, now, cal)
-        assertEquals("Notifications on this phone · on for MEKA", lines[0])
+        assertEquals("Notifications on this phone · on for Navilife", lines[0])
         assertEquals("Last notification · sent today at 20:11 on Heads-ups", lines[1])
         assertEquals("Digests · Most things wait for the digests at 12:30 and 18:00, so quiet in between is normal. Decisions and urgent things come at once.", lines[2])
         assertEquals("Quiet hours · 22:00–07:00", lines[3])
@@ -45,7 +45,7 @@ class NotifyAskTest {
         val off = NotifyAskRules.askLines(healthy.copy(channels = healthy.channels.map { it.copy(on = it.id != "meka_digest") }), settings, now, cal)
         assertEquals("Categories off in Android's settings: Digests", off[1])
         val blocked = NotifyAskRules.askLines(healthy.copy(allowed = false), settings, now, cal)
-        assertTrue(blocked[0].startsWith("Notifications on this phone · off for MEKA"))
+        assertTrue(blocked[0].startsWith("Notifications on this phone · off for Navilife"))
         // At night it says it's quiet now.
         val night = day * CivilDate.DAY_MS + 23 * HealthRules.HOUR
         assertEquals("Quiet hours · 22:00–07:00 · quiet now until 07:00 (only urgent things come)", NotifyAskRules.askLines(healthy, settings, night, cal)[3])
@@ -64,9 +64,9 @@ class NotifyAskTest {
 
     @Test
     fun withoutTheAiThePhoneAnswersItself() {
-        assertTrue(NotifyAskRules.localAnswer(healthy.copy(allowed = false), settings, now, cal)!!.startsWith("Notifications are off for MEKA on this phone"))
+        assertTrue(NotifyAskRules.localAnswer(healthy.copy(allowed = false), settings, now, cal)!!.startsWith("Notifications are off for Navilife on this phone"))
         assertTrue(NotifyAskRules.localAnswer(healthy.copy(phoneOff = true), settings, now, cal)!!.startsWith("This phone is set to Off"))
-        assertTrue(NotifyAskRules.localAnswer(healthy.copy(channels = healthy.channels.map { it.copy(on = false) }), settings, now, cal)!!.startsWith("Every MEKA category is switched off"))
+        assertTrue(NotifyAskRules.localAnswer(healthy.copy(channels = healthy.channels.map { it.copy(on = false) }), settings, now, cal)!!.startsWith("Every Navilife category is switched off"))
         assertEquals(
             "The last one went today at 20:11, on Heads-ups. Most things wait for the digests at 12:30 and 18:00, so quiet in between is normal. Decisions and urgent things come at once.",
             NotifyAskRules.localAnswer(healthy, settings, now, cal),
@@ -76,7 +76,7 @@ class NotifyAskTest {
         val never = NotificationHealth(allowed = true, channels = emptyList(), trace = emptyList())
         val night = day * CivilDate.DAY_MS + 23 * HealthRules.HOUR
         assertEquals(
-            "MEKA hasn't sent a notification from this phone yet. It's quiet hours until 07:00, so only urgent things come now. Most things wait for the digests at 12:30 and 18:00, so quiet in between is normal. Decisions and urgent things come at once.",
+            "Navilife hasn't sent a notification from this phone yet. It's quiet hours until 07:00, so only urgent things come now. Most things wait for the digests at 12:30 and 18:00, so quiet in between is normal. Decisions and urgent things come at once.",
             NotifyAskRules.localAnswer(never, settings, night, cal),
         )
     }

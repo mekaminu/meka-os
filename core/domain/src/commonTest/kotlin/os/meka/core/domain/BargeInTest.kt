@@ -123,7 +123,7 @@ class BargeInTest {
     fun theSettingsWordsAndTheOrbsLine() {
         assertTrue(BargeInRules.DEFAULT_ON)
         val on = BargeInRules.section(on = true)
-        assertEquals("Talk over MEKA", on.label)
+        assertEquals("Talk over Navilife", on.label)
         assertTrue(on.lit)
         assertEquals("Turn off", on.action)
         assertTrue("Tapping the orb" in on.status)

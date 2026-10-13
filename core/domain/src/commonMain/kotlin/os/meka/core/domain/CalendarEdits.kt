@@ -377,7 +377,7 @@ class CalendarEdits(
 
     /** Adds an event to [account]'s main calendar; [forTask] when it is a task's block from Plan my day. */
     fun add(provider: String, account: String, draft: EventDraft, forTask: String? = null): EventEditResult {
-        if (provider !in CalendarEditRules.WRITABLE) return EventEditResult.Refused("MEKA can't add events there")
+        if (provider !in CalendarEditRules.WRITABLE) return EventEditResult.Refused("Navilife can't add events there")
         if (!canEdit(provider, account)) return refusedNotAllowed(provider, account)
         val d = CalendarEditRules.clean(draft)
         CalendarEditRules.problem(d, nowMs())?.let { return EventEditResult.Refused(it) }
@@ -431,7 +431,7 @@ class CalendarEdits(
     fun keepMine(clashId: String): EventEditResult {
         val e = edit(clashId) ?: return EventEditResult.Refused("That change isn't there any more")
         if (!e.needsChoice) return EventEditResult.Refused("Already chosen")
-        val theirs = e.theirs ?: return EventEditResult.Refused("MEKA didn't get their version · change it again")
+        val theirs = e.theirs ?: return EventEditResult.Refused("Navilife didn't get their version · change it again")
         if (!canEdit(e.provider, e.account)) return refusedNotAllowed(e.provider, e.account)
         val newId = when (e.kind) {
             EventEditKind.ADD -> return EventEditResult.Refused("Already chosen")
@@ -469,7 +469,7 @@ class CalendarEdits(
 
     private fun guard(event: CalendarEvent): EventEditResult? {
         if (event.provider !in CalendarEditRules.WRITABLE || event.isFixture || event.account == null) {
-            return EventEditResult.Refused("MEKA can't change this calendar")
+            return EventEditResult.Refused("Navilife can't change this calendar")
         }
         if (!canEdit(event.provider, event.account)) return refusedNotAllowed(event.provider, event.account)
         // Added in MEKA and not in the mirror yet (slice 2c-ii): there's no event in the provider to change.

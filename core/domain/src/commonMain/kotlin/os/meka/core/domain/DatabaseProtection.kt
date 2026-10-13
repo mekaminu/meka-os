@@ -78,18 +78,18 @@ object DatabaseProtectionRules {
     /** Your data's line about the database on this Mac. */
     fun macLine(protection: DatabaseProtection): String = when (protection) {
         DatabaseProtection.ENCRYPTED ->
-            "MEKA's database on this Mac is encrypted (SQLCipher, AES-256) with a key only this Mac's Secure Enclave can unseal."
+            "Navilife's database on this Mac is encrypted (SQLCipher, AES-256) with a key only this Mac's Secure Enclave can unseal."
         DatabaseProtection.NO_ENCLAVE ->
-            "MEKA's database on this Mac isn't encrypted by MEKA: this Mac has no Secure Enclave key for it. FileVault protects it while the Mac is off."
+            "Navilife's database on this Mac isn't encrypted by Navilife: this Mac has no Secure Enclave key for it. FileVault protects it while the Mac is off."
         DatabaseProtection.NOT_YET ->
-            "MEKA's database on this Mac isn't encrypted yet: it didn't finish this time and MEKA tries again next launch. FileVault protects it meanwhile."
+            "Navilife's database on this Mac isn't encrypted yet: it didn't finish this time and Navilife tries again next launch. FileVault protects it meanwhile."
     }
 
     /** Your data's line about the database on the phone (always encrypted, ADR-002). */
     const val PHONE_LINE: String =
-        "MEKA's database on this phone is encrypted (SQLCipher, AES-256) with a key Android's Keystore holds."
+        "Navilife's database on this phone is encrypted (SQLCipher, AES-256) with a key Android's Keystore holds."
 
     /** The one-time note after a file was set aside. */
     fun setAsideLine(asideName: String): String =
-        "MEKA couldn't open its old database on this Mac, so it kept it aside as $asideName and is syncing afresh."
+        "Navilife couldn't open its old database on this Mac, so it kept it aside as $asideName and is syncing afresh."
 }

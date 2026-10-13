@@ -18,14 +18,14 @@ class AiTodayTest {
                 AiDayUse("mail.sort", 2, 1_000),
             ),
         )
-        assertEquals("MEKA's AI today · Talk 6 · Ask 2 · Messages 4 · Calls 1 · Mail 2 · Other 1 · 3¢", line)
+        assertEquals("Navilife's AI today · Talk 6 · Ask 2 · Messages 4 · Calls 1 · Mail 2 · Other 1 · 3¢", line)
     }
 
     @Test
     fun nothingAskedTodayIsNoLine() {
         assertNull(AiTodayRules.line(emptyList()))
         assertNull(AiTodayRules.line(listOf(AiDayUse("ask.talk", 0, 0))))
-        assertEquals("MEKA's AI today · Talk 1 · under 1¢", AiTodayRules.line(listOf(AiDayUse("ask.talk", 1, 1_800))))
+        assertEquals("Navilife's AI today · Talk 1 · under 1¢", AiTodayRules.line(listOf(AiDayUse("ask.talk", 1, 1_800))))
     }
 
     @Test

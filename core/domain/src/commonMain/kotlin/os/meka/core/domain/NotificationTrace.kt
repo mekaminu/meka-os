@@ -111,8 +111,8 @@ object NotifyTrace {
         phoneOff: Boolean = false,
     ): NotifyTraceEntry {
         val next = nextLookMs?.let { " · next look ${LocalClock.formatMinute(cal.minuteOfDay(it))}" }.orEmpty()
-        if (!allowed) return NotifyTraceEntry(atMs, NotifyTraceKind.BLOCKED, "notifications are off for MEKA$next")
-        if (phoneOff) return NotifyTraceEntry(atMs, NotifyTraceKind.BLOCKED, "this phone is set to Off in MEKA's Notifications$next")
+        if (!allowed) return NotifyTraceEntry(atMs, NotifyTraceKind.BLOCKED, "notifications are off for Navilife$next")
+        if (phoneOff) return NotifyTraceEntry(atMs, NotifyTraceKind.BLOCKED, "this phone is set to Off in Navilife's Notifications$next")
         if (posted == 0 && !digest) return NotifyTraceEntry(atMs, NotifyTraceKind.LOOKED, "nothing due$next")
         val what = buildList {
             if (posted > 0) add("$posted ${if (posted == 1) "notice" else "notices"}")
@@ -138,7 +138,7 @@ object NotifyTrace {
             NotifyTraceKind.BLOCKED -> "Blocked · ${e.detail}"
             NotifyTraceKind.FAILED -> "Failed · ${e.detail}"
             NotifyTraceKind.PUSH -> "Push arrived${if (e.detail.isBlank()) "" else " · ${e.detail}"}"
-            NotifyTraceKind.STARTED -> "MEKA started${if (e.detail.isBlank()) "" else " · ${e.detail}"}"
+            NotifyTraceKind.STARTED -> "Navilife started${if (e.detail.isBlank()) "" else " · ${e.detail}"}"
             NotifyTraceKind.TEST -> "Test · ${e.detail}"
         }
         return "$at · $what"
@@ -173,14 +173,14 @@ object NotifyTrace {
         val title = "Notifications"
         if (n.mac) return MacNotifyRules.healthRow(n, nowMs, cal)
         if (!n.allowed) {
-            return HealthRow("notifications", title, "Off for MEKA · nothing can reach you", HealthState.BAD, HealthFix.NOTIFICATIONS_ON, "Turn on")
+            return HealthRow("notifications", title, "Off for Navilife · nothing can reach you", HealthState.BAD, HealthFix.NOTIFICATIONS_ON, "Turn on")
         }
         if (n.phoneOff) {
-            return HealthRow("notifications", title, "This phone is set to Off in MEKA's Notifications · nothing posts here", HealthState.BAD)
+            return HealthRow("notifications", title, "This phone is set to Off in Navilife's Notifications · nothing posts here", HealthState.BAD)
         }
         val off = n.channels.filter { !it.on }
         if (n.channels.isNotEmpty() && off.size == n.channels.size) {
-            return HealthRow("notifications", title, "Every MEKA category is off in Android's settings", HealthState.BAD, HealthFix.NOTIFICATIONS_ON, "Open")
+            return HealthRow("notifications", title, "Every Navilife category is off in Android's settings", HealthState.BAD, HealthFix.NOTIFICATIONS_ON, "Open")
         }
         val lastLook = n.trace.firstOrNull { it.kind == NotifyTraceKind.POSTED || it.kind == NotifyTraceKind.LOOKED || it.kind == NotifyTraceKind.BLOCKED || it.kind == NotifyTraceKind.FAILED }
         if (lastLook?.kind == NotifyTraceKind.FAILED) {
@@ -193,7 +193,7 @@ object NotifyTrace {
             return HealthRow("notifications", title, "Off in Android's settings: ${off.joinToString(", ") { it.name }} · $posted", HealthState.WARN, HealthFix.NOTIFICATIONS_ON, "Open")
         }
         if (lastLook == null) {
-            return HealthRow("notifications", title, "On · MEKA hasn't looked for anything to send yet", HealthState.WARN)
+            return HealthRow("notifications", title, "On · Navilife hasn't looked for anything to send yet", HealthState.WARN)
         }
         return HealthRow("notifications", title, "On · $posted · last looked ${HealthRules.at(lastLook.atMs, nowMs, cal)}", HealthState.OK)
     }
@@ -219,10 +219,10 @@ object MacNotifyRules {
     fun healthRow(n: NotificationHealth, nowMs: Long, cal: LocalCalendar): HealthRow {
         val title = "Notifications"
         if (!n.allowed) {
-            return HealthRow("notifications", title, "Off for MEKA in System Settings · nothing can reach this Mac", HealthState.BAD, HealthFix.NOTIFICATIONS_ON, "Turn on")
+            return HealthRow("notifications", title, "Off for Navilife in System Settings · nothing can reach this Mac", HealthState.BAD, HealthFix.NOTIFICATIONS_ON, "Turn on")
         }
         if (n.phoneOff) {
-            return HealthRow("notifications", title, "This Mac is set to Off in MEKA's Notifications · nothing posts here", HealthState.BAD)
+            return HealthRow("notifications", title, "This Mac is set to Off in Navilife's Notifications · nothing posts here", HealthState.BAD)
         }
         val last = n.trace.firstOrNull { it.kind == NotifyTraceKind.POSTED }?.atMs
         val posted = last?.let { "last sent ${HealthRules.at(it, nowMs, cal)}" } ?: "none sent yet"
@@ -231,13 +231,13 @@ object MacNotifyRules {
 
     /** The red line at the top of the Mac's Notifications sheet when nothing can reach this Mac; null when it can. */
     fun offLine(allowed: Boolean, macOff: Boolean): String? = when {
-        !allowed -> "Notifications are off for MEKA in System Settings, so nothing can reach this Mac."
-        macOff -> "This Mac is set to Off below, so MEKA posts nothing here."
+        !allowed -> "Notifications are off for Navilife in System Settings, so nothing can reach this Mac."
+        macOff -> "This Mac is set to Off below, so Navilife posts nothing here."
         else -> null
     }
 
-    const val TEST_TITLE = "MEKA test · from this Mac"
-    const val TEST_TEXT = "If you can see this, MEKA can reach you on this Mac."
+    const val TEST_TITLE = "Navilife test · from this Mac"
+    const val TEST_TEXT = "If you can see this, Navilife can reach you on this Mac."
 
     /** Send a test on the Mac while macOS is being asked. */
     fun testSending(): NotifyTestView = NotifyTestView("On this Mac · sending…", null, "", null, null, false)
@@ -249,7 +249,7 @@ object MacNotifyRules {
         pushLine = "",
         pushOk = null,
         hint = if (shown) null else
-            "Turn on notifications for MEKA in System Settings → Notifications → MEKA (Banners or Alerts), and check a Focus isn't on.",
+            "Turn on notifications for Navilife in System Settings → Notifications → Navilife (Banners or Alerts), and check a Focus isn't on.",
         done = true,
     )
 }

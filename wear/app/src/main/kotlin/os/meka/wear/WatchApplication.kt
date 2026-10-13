@@ -175,6 +175,6 @@ class WatchApplication : Application() {
         const val POLL_MS = 3_000L
         const val SURFACE_SETTLE_MS = 1_000L
         const val DB_NAME = "meka.db"
-        const val BUSY = "MEKA's server is busy linking · try again in a minute"
+        const val BUSY = "Navilife's server is busy linking · try again in a minute"
     }
 }

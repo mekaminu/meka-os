@@ -115,7 +115,7 @@ class CaptureActivity : ComponentActivity() {
                     handle = { text, subject -> core.handleThis(text, subject) },
                     // What MEKA knows, slice 4: a shared form's fields answered from the facts page, on the phone only.
                     formAnswers = { text, subject -> core.formAnswers(text, subject) },
-                    copy = { text -> os.meka.android.work.LiveReplies.copyText(this@CaptureActivity, text, "MEKA fact") },
+                    copy = { text -> os.meka.android.work.LiveReplies.copyText(this@CaptureActivity, text, "Navilife fact") },
                     answer = { card, add ->
                         // A reply card's Copy reply: the draft goes on the clipboard; Meka sends it himself.
                         if (add) core.acceptRequest(card.id)?.let { done ->
@@ -190,7 +190,7 @@ private fun CaptureSheet(
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true) // on-device speech; nothing leaves the phone
-            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say it and MEKA will keep it")
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say it and Navilife will keep it")
         try { listen.launch(i) } catch (_: ActivityNotFoundException) { voiceMissing = true }
     }
 
@@ -360,7 +360,7 @@ private fun CaptureSheet(
                                 "✦ " + HandleThisRules.ACTION, style = MekaType.itemMeta, color = Meka.colors.accent,
                                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                                     .clickable(role = Role.Button) { handleIt() }
-                                    .semantics { contentDescription = "Handle this: MEKA reads it and offers what to add" }
+                                    .semantics { contentDescription = "Handle this: Navilife reads it and offers what to add" }
                                     .padding(vertical = MekaSpace.xs),
                             )
                         }

@@ -173,7 +173,7 @@ struct SetupTodayCard: View {
         VStack(alignment: .leading, spacing: 0) {
             if shown, let line = model.setup?.todayLine {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text("SET UP MEKA")
+                    Text("SET UP Navilife")
                         .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                         .foregroundStyle(palette.textTertiary)
                     Text(line).font(MekaType.body).foregroundStyle(palette.textPrimary)

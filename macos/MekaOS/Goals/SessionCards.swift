@@ -70,7 +70,7 @@ private struct SessionCardView: View {
                 // The workout app ("Open Hevy ↗"): its link opens in the app that claims it, else the browser.
                 if let label = card.openLabel, let link = card.appLink, let url = URL(string: link) {
                     Button("\(label) ↗") { MekaHaptics.light(); openURL(url) }
-                        .accessibilityHint("Opens \(card.appName ?? "the app") outside MEKA")
+                        .accessibilityHint("Opens \(card.appName ?? "the app") outside Navilife")
                 }
             }
             .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)

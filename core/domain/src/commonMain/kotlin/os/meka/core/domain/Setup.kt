@@ -90,7 +90,7 @@ object SetupRules {
     const val ON_THE_FOLD = "On the Fold"
     const val TRAVEL_KEY = "travel"
     const val TRAVEL_TITLE = "Travel times"
-    const val TRAVEL_ADD_KEY = "Add the Google key · save it on MEKA's server as meka-os-dev/maps/google (steps on the build board)"
+    const val TRAVEL_ADD_KEY = "Add the Google key · save it on Navilife's server as meka-os-dev/maps/google (steps on the build board)"
     private const val COULDNT = "Couldn't check"
 
     fun view(f: SetupFacts): SetupView = view(f, null)
@@ -114,10 +114,10 @@ object SetupRules {
             SetupSection("Calendars", calendars(f)),
             SetupSection("Call assistant", calls(f)),
             SetupSection("Messages", messages(f)),
-            SetupSection("MEKA's voice", voice(f)),
+            SetupSection("Navilife's voice", voice(f)),
             SetupSection("Weather and travel", listOfNotNull(commute?.let(::commuteStep)) + places(f)),
             // Inbox autopilot, slice 1b: the facade puts MailAccountRules.setupStep in place of this one (same key).
-            SetupSection("Mail", listOf(SetupStep(MailAccountRules.SETUP_KEY, MailAccountRules.SETUP_TITLE, "Connect this device to MEKA's server first", SetupState.LATER))),
+            SetupSection("Mail", listOf(SetupStep(MailAccountRules.SETUP_KEY, MailAccountRules.SETUP_TITLE, "Connect this device to Navilife's server first", SetupState.LATER))),
             SetupSection(if (f.device.mac) "This Mac" else "This phone", device(f) + listOfNotNull(screenSaver?.takeIf { !f.device.mac }?.let { BedsideDreamRules.setupStep(it.isMeka) })),
             SetupSection("Your devices", listOfNotNull(mac(f), recovery?.let { recoveryStep(f.connected, it.status) })),
         )
@@ -178,9 +178,9 @@ object SetupRules {
             calendars.isEmpty() -> SetupStep("calendar.editing", "Calendar editing", "After connecting a calendar", SetupState.LATER)
             f.signIns.any { isCalendar(it.provider) && it.canEdit } -> {
                 val who = f.signIns.filter { isCalendar(it.provider) && it.canEdit }.map { CalendarAccountRules.providerLabel(it.provider) }.distinct()
-                SetupStep("calendar.editing", "Calendar editing", "Allowed on ${who.joinToString(" and ")} · add and move events from MEKA", SetupState.DONE)
+                SetupStep("calendar.editing", "Calendar editing", "Allowed on ${who.joinToString(" and ")} · add and move events from Navilife", SetupState.DONE)
             }
-            else -> SetupStep("calendar.editing", "Calendar editing", "Let MEKA add, move and delete events for you", SetupState.TODO, SetupFix.CALENDARS, "Allow")
+            else -> SetupStep("calendar.editing", "Calendar editing", "Let Navilife add, move and delete events for you", SetupState.TODO, SetupFix.CALENDARS, "Allow")
         }
         return listOf(account("google", "calendar.google", "Google calendar"), account("microsoft", "calendar.outlook", "Outlook calendar"), editing)
     }
@@ -188,18 +188,18 @@ object SetupRules {
     private fun calls(f: SetupFacts): List<SetupStep> {
         val number = CallScreeningRules.ASSISTANT_NUMBER
         val service = when (f.server?.calls) {
-            null -> SetupStep("calls.number", "MEKA's number", COULDNT, SetupState.UNKNOWN)
-            true -> SetupStep("calls.number", "MEKA's number", "$number takes messages for you", SetupState.DONE)
-            false -> SetupStep("calls.number", "MEKA's number", "The phone service isn't set up on MEKA's server yet", SetupState.LATER)
+            null -> SetupStep("calls.number", "Navilife's number", COULDNT, SetupState.UNKNOWN)
+            true -> SetupStep("calls.number", "Navilife's number", "$number takes messages for you", SetupState.DONE)
+            false -> SetupStep("calls.number", "Navilife's number", "The phone service isn't set up on Navilife's server yet", SetupState.LATER)
         }
         val on = if (f.callAssistantOn) SetupStep("calls.on", "Call assistant", "On · it answers calls you decline", SetupState.DONE)
         else SetupStep("calls.on", "Call assistant", "Switch it on in Work mode", SetupState.TODO, SetupFix.WORK, "Work mode")
         val role = when (f.device.callRoleHeld) {
             null -> SetupStep("calls.role", "Call screening", ON_THE_FOLD, SetupState.ELSEWHERE)
-            true -> SetupStep("calls.role", "Call screening", "MEKA screens calls on this phone", SetupState.DONE)
-            false -> SetupStep("calls.role", "Call screening", "Let MEKA screen calls (Android allows one app)", SetupState.TODO, SetupFix.CALL_ROLE, "Allow")
+            true -> SetupStep("calls.role", "Call screening", "Navilife screens calls on this phone", SetupState.DONE)
+            false -> SetupStep("calls.role", "Call screening", "Let Navilife screen calls (Android allows one app)", SetupState.TODO, SetupFix.CALL_ROLE, "Allow")
         }
-        val forwarding = if (f.voiceMessageSeen) SetupStep("calls.forwarding", "Forwarding", "Working · a caller's message has reached MEKA", SetupState.DONE)
+        val forwarding = if (f.voiceMessageSeen) SetupStep("calls.forwarding", "Forwarding", "Working · a caller's message has reached Navilife", SetupState.DONE)
         else SetupStep("calls.forwarding", "Forwarding", "Set your network's “forward when busy” to $number, then ring yourself and decline", SetupState.TODO)
         return listOf(service, on, role, forwarding, family(f))
     }
@@ -220,19 +220,19 @@ object SetupRules {
     private fun messages(f: SetupFacts): List<SetupStep> {
         val access = when (f.device.notificationAccess) {
             null -> SetupStep("messages.access", "WhatsApp and texts", ON_THE_FOLD, SetupState.ELSEWHERE)
-            true -> SetupStep("messages.access", "WhatsApp and texts", "MEKA reads them as they arrive", SetupState.DONE)
-            false -> SetupStep("messages.access", "WhatsApp and texts", "Give MEKA notification access so it can read them", SetupState.TODO, SetupFix.NOTIFICATION_ACCESS, "Allow")
+            true -> SetupStep("messages.access", "WhatsApp and texts", "Navilife reads them as they arrive", SetupState.DONE)
+            false -> SetupStep("messages.access", "WhatsApp and texts", "Give Navilife notification access so it can read them", SetupState.TODO, SetupFix.NOTIFICATION_ACCESS, "Allow")
         }
         val ai = when {
-            f.ai == null || f.ai == AskRules.STATUS_UNKNOWN -> SetupStep("messages.ai", "MEKA's AI", COULDNT, SetupState.UNKNOWN)
-            f.ai.canAsk -> SetupStep("messages.ai", "MEKA's AI", "On · drafts replies and spots requests", SetupState.DONE)
-            else -> SetupStep("messages.ai", "MEKA's AI", f.ai.line, SetupState.LATER)
+            f.ai == null || f.ai == AskRules.STATUS_UNKNOWN -> SetupStep("messages.ai", "Navilife's AI", COULDNT, SetupState.UNKNOWN)
+            f.ai.canAsk -> SetupStep("messages.ai", "Navilife's AI", "On · drafts replies and spots requests", SetupState.DONE)
+            else -> SetupStep("messages.ai", "Navilife's AI", f.ai.line, SetupState.LATER)
         }
         val watch = f.device.watch
         val watched = when {
             watch == null -> SetupStep("messages.watch", "Requests from", ON_THE_FOLD, SetupState.ELSEWHERE)
             watch.people.isEmpty() && watch.groups.isEmpty() ->
-                SetupStep("messages.watch", "Requests from", "Pick who MEKA reads for requests (Work mode → People)", SetupState.TODO, SetupFix.WORK, "Pick")
+                SetupStep("messages.watch", "Requests from", "Pick who Navilife reads for requests (Work mode → People)", SetupState.TODO, SetupFix.WORK, "Pick")
             else -> {
                 val names = (watch.people.sorted() + watch.groups.sorted())
                 SetupStep("messages.watch", "Requests from", "Watching " + names.take(2).joinToString(" and ") + if (names.size > 2) " and ${names.size - 2} more" else "", SetupState.DONE)
@@ -245,13 +245,13 @@ object SetupRules {
         val natural = when (f.server?.speech) {
             null -> SetupStep("voice.natural", "Natural voice", COULDNT, SetupState.UNKNOWN)
             true -> SetupStep("voice.natural", "Natural voice", "On · Amazon Polly", SetupState.DONE)
-            false -> SetupStep("voice.natural", "Natural voice", "Not set up on MEKA's server · the device's own voice speaks", SetupState.LATER)
+            false -> SetupStep("voice.natural", "Natural voice", "Not set up on Navilife's server · the device's own voice speaks", SetupState.LATER)
         }
         val chosen = f.voiceChosen
         val picked = when {
             chosen == MekaVoiceRules.DEVICE -> SetupStep("voice.picked", "Pick a voice", "The device's own voice", SetupState.DONE)
             chosen != null -> SetupStep("voice.picked", "Pick a voice", "Speaking as $chosen", SetupState.DONE)
-            else -> SetupStep("voice.picked", "Pick a voice", "MEKA's default for now · hear the others and pick one", SetupState.TODO, SetupFix.VOICE, "Choose")
+            else -> SetupStep("voice.picked", "Pick a voice", "Navilife's default for now · hear the others and pick one", SetupState.TODO, SetupFix.VOICE, "Choose")
         }
         return listOf(natural, picked)
     }
@@ -263,7 +263,7 @@ object SetupRules {
         if (c.chosen) SetupStep(COMMUTE_KEY, CommuteRules.TITLE, CommuteRules.timesLine(c.toWorkMin, c.homeMin) + " · the wake alarm counts it", SetupState.DONE)
         else SetupStep(
             COMMUTE_KEY, CommuteRules.TITLE,
-            "About ${CommuteRules.label(c.toWorkMin)} each way, MEKA's guess · door to door on office days · tap yours in Work mode → Commute",
+            "About ${CommuteRules.label(c.toWorkMin)} each way, Navilife's guess · door to door on office days · tap yours in Work mode → Commute",
             SetupState.TODO, SetupFix.WORK, "Set",
         )
 
@@ -272,19 +272,19 @@ object SetupRules {
         val weather = when {
             accounts == null -> SetupStep("weather", "Weather", COULDNT, SetupState.UNKNOWN)
             accounts.any { it.provider == "weather" } -> SetupStep("weather", "Weather", "Home ${f.homePlace} · work ${f.workPlace} · change in Calendars", SetupState.DONE)
-            else -> SetupStep("weather", "Weather", "Not fetched yet · it starts with MEKA's server", SetupState.LATER)
+            else -> SetupStep("weather", "Weather", "Not fetched yet · it starts with Navilife's server", SetupState.LATER)
         }
         val lines = when {
             accounts == null -> SetupStep("trains.status", "Train lines", COULDNT, SetupState.UNKNOWN)
             accounts.any { it.provider == "lines" } -> SetupStep("trains.status", "Train lines", "Thameslink, Great Northern and the Elizabeth line from TfL", SetupState.DONE)
-            else -> SetupStep("trains.status", "Train lines", "Not fetched yet · it starts with MEKA's server", SetupState.LATER)
+            else -> SetupStep("trains.status", "Train lines", "Not fetched yet · it starts with Navilife's server", SetupState.LATER)
         }
         val live = SetupStep("trains.live", "Live departures", "Need a free National Rail data key (on the build board for you)", SetupState.LATER)
         // Weekend football, slice 2b: drive times with traffic once the server has its Google key.
         val travel = accounts?.firstOrNull { it.provider == TravelRules.PROVIDER }
         val drive = when {
             accounts == null -> SetupStep(TRAVEL_KEY, TRAVEL_TITLE, COULDNT, SetupState.UNKNOWN)
-            travel == null -> SetupStep(TRAVEL_KEY, TRAVEL_TITLE, "Not on MEKA's server yet · football keeps the time you set last", SetupState.LATER)
+            travel == null -> SetupStep(TRAVEL_KEY, TRAVEL_TITLE, "Not on Navilife's server yet · football keeps the time you set last", SetupState.LATER)
             travel.status == TravelRules.STATUS_OFF -> SetupStep(TRAVEL_KEY, TRAVEL_TITLE, TRAVEL_ADD_KEY, SetupState.TODO)
             else -> SetupStep(TRAVEL_KEY, TRAVEL_TITLE, "Drive times to football with traffic, from Google", SetupState.DONE)
         }
@@ -293,18 +293,18 @@ object SetupRules {
 
     private fun device(f: SetupFacts): List<SetupStep> = buildList {
         add(
-            if (f.connected) SetupStep("device.connected", "Connected", "Syncing with MEKA's server", SetupState.DONE)
-            else SetupStep("device.connected", "Connected", "Connect this device to MEKA's server", SetupState.TODO),
+            if (f.connected) SetupStep("device.connected", "Connected", "Syncing with Navilife's server", SetupState.DONE)
+            else SetupStep("device.connected", "Connected", "Connect this device to Navilife's server", SetupState.TODO),
         )
         when (f.device.notificationsAllowed) {
             null -> add(SetupStep("device.notifications", "Notifications", COULDNT, SetupState.UNKNOWN))
             true -> add(SetupStep("device.notifications", "Notifications", "Allowed", SetupState.DONE))
-            false -> add(SetupStep("device.notifications", "Notifications", "Let MEKA tell you when something needs you", SetupState.TODO, SetupFix.NOTIFICATIONS, "Allow"))
+            false -> add(SetupStep("device.notifications", "Notifications", "Let Navilife tell you when something needs you", SetupState.TODO, SetupFix.NOTIFICATIONS, "Allow"))
         }
         if (!f.device.mac) when (f.device.batteryExempt) {
             null -> Unit
             true -> add(SetupStep("device.battery", "Battery", "Allowed to run in the background", SetupState.DONE))
-            false -> add(SetupStep("device.battery", "Battery", "Samsung may put MEKA to sleep", SetupState.TODO, SetupFix.BATTERY, "Keep MEKA awake"))
+            false -> add(SetupStep("device.battery", "Battery", "Samsung may put Navilife to sleep", SetupState.TODO, SetupFix.BATTERY, "Keep Navilife awake"))
         }
     }
 
@@ -326,7 +326,7 @@ object SetupRules {
         if (f.device.mac) return SetupStep("mac", "Mac", "This Mac", SetupState.DONE)
         return when (val macs = f.server?.macs) {
             null -> SetupStep("mac", "Mac", COULDNT, SetupState.UNKNOWN)
-            0 -> SetupStep("mac", "Mac", "Install MEKA on your Mac (tools/install-mac.sh) and connect it", SetupState.TODO)
+            0 -> SetupStep("mac", "Mac", "Install Navilife on your Mac (tools/install-mac.sh) and connect it", SetupState.TODO)
             else -> SetupStep("mac", "Mac", if (macs == 1) "Connected" else "$macs Macs connected", SetupState.DONE)
         }
     }

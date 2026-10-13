@@ -65,7 +65,7 @@ class MessageSendActivity : Activity() {
             val open = Intent(Intent.ACTION_VIEW, Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             if (runCatching { startActivity(open) }.isSuccess) return
         }
-        LiveReplies.copyText(this, text, "MEKA message")
+        LiveReplies.copyText(this, text, "Navilife message")
         packageManager.getLaunchIntentForPackage("com.whatsapp")?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             ?.let { runCatching { startActivity(it) } }
     }

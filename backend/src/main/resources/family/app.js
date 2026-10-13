@@ -228,7 +228,7 @@
     $("loading").hidden = true;
     $("notice").hidden = true;
     $("list").hidden = false;
-    if (v.name) $("who").textContent = "MEKA · shared with " + v.name;
+    if (v.name) $("who").textContent = "Navilife · shared with " + v.name;
     setLine(v.line || "");
     fill($("to-buy"), v.toBuy || [], false);
     fill($("got"), v.got || [], true);
@@ -300,7 +300,7 @@
   async function call(path, payload) {
     const r = await post(path, payload, me.keys, me.id);
     if (r.status === 200 && r.data) { show(r.data); return true; }
-    if (!refused(r.status, r.data)) setLine("Couldn't reach MEKA. Try again in a moment.");
+    if (!refused(r.status, r.data)) setLine("Couldn't reach Navilife. Try again in a moment.");
     return false;
   }
 
@@ -310,7 +310,7 @@
     const why = r.data && r.data.error;
     if (why === "full") { $("dinners-line").textContent = "That's a lot of favourites. Ask Meka to remove a few first."; return false; }
     if (why === "text") { $("dinners-line").textContent = "Type the dinner's name, then a colon and its ingredients: “Chilli: mince, beans, rice”."; return false; }
-    if (!refused(r.status, r.data)) $("dinners-line").textContent = "Couldn't reach MEKA. Try again in a moment.";
+    if (!refused(r.status, r.data)) $("dinners-line").textContent = "Couldn't reach Navilife. Try again in a moment.";
     return false;
   }
 
@@ -339,7 +339,7 @@
     } catch (_) {
       li.classList.remove("leaving");
       r.classList.remove("done", "drawing");
-      setLine("Couldn't reach MEKA. Try again in a moment.");
+      setLine("Couldn't reach Navilife. Try again in a moment.");
     } finally { busy = false; }
   }
 
@@ -353,7 +353,7 @@
     try {
       if (await call("/family/v1/shopping/add", { text })) { input.value = ""; haptic(12); }
     } catch (_) {
-      setLine("Couldn't reach MEKA. Your words are still in the box.");
+      setLine("Couldn't reach Navilife. Your words are still in the box.");
     } finally { busy = false; $("add-go").disabled = false; }
   }
 
@@ -367,7 +367,7 @@
     try {
       if (await callMeals("/family/v1/meals/add", { text })) { input.value = ""; haptic(12); }
     } catch (_) {
-      $("dinners-line").textContent = "Couldn't reach MEKA. Your words are still in the box.";
+      $("dinners-line").textContent = "Couldn't reach Navilife. Your words are still in the box.";
     } finally { busy = false; $("meal-go").disabled = false; }
   }
 
@@ -403,7 +403,7 @@
       }
       await refresh();
     } catch (_) {
-      notice("Couldn't reach MEKA. Check your connection and reload.", true);
+      notice("Couldn't reach Navilife. Check your connection and reload.", true);
     }
   }
 

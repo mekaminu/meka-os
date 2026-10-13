@@ -52,13 +52,13 @@ class SetupTest {
         assertNull(v.todayLine)
         assertFalse(SetupRules.cardShown(v, hiddenOnDay = null, today = day))
         assertEquals("Connected · meka@gmail.com", v.step("calendar.google").line)
-        assertEquals("Allowed on Google · add and move events from MEKA", v.step("calendar.editing").line)
+        assertEquals("Allowed on Google · add and move events from Navilife", v.step("calendar.editing").line)
         assertEquals("Jeanette always ring", v.step("calls.family").line)
         assertEquals("Speaking as Amy", v.step("voice.picked").line)
         assertEquals("Home Biggleswade · work Canary Wharf · change in Calendars", v.step("weather").line)
         assertEquals("Connected", v.step("mac").line)
         assertEquals(
-            listOf("Calendars", "Call assistant", "Messages", "MEKA's voice", "Weather and travel", "Mail", "This phone", "Your devices"),
+            listOf("Calendars", "Call assistant", "Messages", "Navilife's voice", "Weather and travel", "Mail", "This phone", "Your devices"),
             v.sections.map { it.title },
         )
     }
@@ -86,7 +86,7 @@ class SetupTest {
         check("messages.watch", SetupFix.WORK, "Pick")
         check("voice.picked", SetupFix.VOICE, "Choose")
         check("device.notifications", SetupFix.NOTIFICATIONS, "Allow")
-        check("device.battery", SetupFix.BATTERY, "Keep MEKA awake")
+        check("device.battery", SetupFix.BATTERY, "Keep Navilife awake")
         check("mac", null, null)
         assertEquals("Set your network's “forward when busy” to 01767 667246, then ring yourself and decline", v.step("calls.forwarding").line)
         assertEquals(11, v.toDo)
@@ -189,7 +189,7 @@ class SetupTest {
         assertEquals(SetupState.TODO, step.state)
         assertEquals(SetupFix.WORK, step.fix)
         assertEquals("Set", step.fixLabel)
-        assertTrue(step.line.startsWith("About 1 h 20 each way, MEKA's guess"))
+        assertTrue(step.line.startsWith("About 1 h 20 each way, Navilife's guess"))
         assertEquals("1 step left · Commute", guess.todayLine)
         // Set on either app (the default's own 1 h 20 tapped counts): ticked with his times.
         val same = SetupRules.view(facts(), null, null, CommuteSetting(80, 80, chosen = true)).step(SetupRules.COMMUTE_KEY)

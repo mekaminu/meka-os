@@ -23,15 +23,15 @@ object RequestWatchRules {
     const val SEEN_RETENTION_MS = 7 * 24 * 60 * 60_000L
 
     const val TITLE = "Watch for requests from"
-    const val HINT = "When someone here asks you to do something, MEKA turns it into a card in Needs you: " +
+    const val HINT = "When someone here asks you to do something, Navilife turns it into a card in Needs you: " +
         "Add · Change · Not a task. Family is always watched. All day, not only at work."
     const val NOTIFY_HINT = "A request waits for the midday or evening digest. \"Straight away\" makes that person's " +
         "requests notify as they arrive, on the phone and the Mac (quiet hours still hold)."
     const val GROUPS_HINT = "Group chats are skipped unless you name one here (as it's called in WhatsApp)."
-    const val LIMITS = "MEKA only sees what Android's notification shows: very long messages may be cut, voice notes " +
+    const val LIMITS = "Navilife only sees what Android's notification shows: very long messages may be cut, voice notes " +
         "and photos can't be read (you get a reminder to listen instead), and a message you read first on another " +
-        "device may never notify. Only the message, the sender's name and its time go to MEKA's AI; nothing is kept " +
-        "on the server. MEKA never replies and never marks anything read."
+        "device may never notify. Only the message, the sender's name and its time go to Navilife's AI; nothing is kept " +
+        "on the server. Navilife never replies and never marks anything read."
 
     /** A typed or picked name: one line, spaces collapsed, at most [MAX_NAME] characters; null when empty. */
     fun clean(name: String?): String? {
@@ -74,7 +74,7 @@ object RequestWatchRules {
         return when {
             names.isEmpty() -> "Add someone to watch for requests"
             !listening -> "Needs notification access to read requests"
-            !aiOn -> "Voice notes only until MEKA's AI is on"
+            !aiOn -> "Voice notes only until Navilife's AI is on"
             else -> "Reading requests from ${joinNames(names)} · all day"
         }
     }

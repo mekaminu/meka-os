@@ -85,7 +85,7 @@ struct WorkSheet: View {
             }
             .toggleStyle(.switch)
             .staggeredAppear(3)
-            Text("Family, the always-notify list and anyone calling twice within 3 minutes ring; other calls are declined and the network's \"forward when busy\" sends them to MEKA's assistant (\(CallScreeningRules.shared.ASSISTANT_NUMBER)), which takes a message. The Fold asks once for permission to screen calls.")
+            Text("Family, the always-notify list and anyone calling twice within 3 minutes ring; other calls are declined and the network's \"forward when busy\" sends them to Navilife's assistant (\(CallScreeningRules.shared.ASSISTANT_NUMBER)), which takes a message. The Fold asks once for permission to screen calls.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .staggeredAppear(3)
@@ -95,7 +95,7 @@ struct WorkSheet: View {
             keepRecordings.staggeredAppear(3)
             spam.staggeredAppear(3)
 
-            Text("During work your Fold holds WhatsApp, texts and missed calls and shows them after, grouped by person, urgent first. \"Urgent\" or \"emergency\" alerts you straight away. The summary shows here too, in Needs you. MEKA never replies or marks anything read.")
+            Text("During work your Fold holds WhatsApp, texts and missed calls and shows them after, grouped by person, urgent first. \"Urgent\" or \"emergency\" alerts you straight away. The summary shows here too, in Needs you. Navilife never replies or marks anything read.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, MekaSpace.xs)

@@ -658,7 +658,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Reporting what posted (even nothing) starts the review's Interruptions count.
         try await core.notificationsPosted(posted: off.post)
         let interruptions = core.reviewView.value.northStar.first { $0.key == "interruptions" }
-        XCTAssertNotEqual(interruptions?.line, "Counted once MEKA can notify you on a device")
+        XCTAssertNotEqual(interruptions?.line, "Counted once Navilife can notify you on a device")
         XCTAssertEqual(NotifyRules.shared.deviceFromName(name: "DIGESTS", fallback: .off), .digests)
         XCTAssertEqual(NotifyRules.shared.deviceFromName(name: nil, fallback: .off), .off)
         XCTAssertEqual(Int(NotifyRules.shared.deviceCount), 3)
@@ -912,7 +912,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MekaVoiceRules.shared.normalize(name: " device "), MekaVoiceRules.shared.DEVICE)
         XCTAssertEqual(SpeechRules.shared.usageLine(state: "on", month: "2026-10", usedChars: 12400, capChars: 1000000,
                                                     voice: "Amy", deviceChosen: false),
-                       "MEKA's voice · Amy · 12,400 of 1,000,000 characters in October")
+                       "Navilife's voice · Amy · 12,400 of 1,000,000 characters in October")
         XCTAssertNil(SpeechRules.shared.usageLine(state: "off", month: nil, usedChars: 0, capChars: 0, voice: nil, deviceChosen: false))
     }
 
@@ -924,7 +924,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(v.choices.map(\.id), ["Amy", "Brian", "device"])
         XCTAssertEqual(v.choices.filter(\.selected).map(\.id), ["Brian"])
         XCTAssertEqual(v.choices.last?.label, "This Mac's own voice")
-        XCTAssertEqual(v.choices.first?.detail, "British · female · most natural · MEKA's default")
+        XCTAssertEqual(v.choices.first?.detail, "British · female · most natural · Navilife's default")
         XCTAssertTrue(v.help.contains("Manage Voices"))
         XCTAssertTrue(VoicePickerRules.shared.SAMPLE.hasPrefix("Good morning, Meka."))
     }
@@ -964,7 +964,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testTalkAnywhereReachesSwift() {
         XCTAssertTrue(TalkAnywhereRules.shared.DEFAULT_ON)
         let v = TalkAnywhereRules.shared.macSetup(anywhere: true, taken: false, listenOnOpen: false, talkOver: true)
-        XCTAssertEqual(v.sections.map(\.label), ["On the Mac", "From any app", "When I open MEKA", "Talk over MEKA", "Safety"])
+        XCTAssertEqual(v.sections.map(\.label), ["On the Mac", "From any app", "When I open Navilife", "Talk over Navilife", "Safety"])
         XCTAssertTrue(v.sections[0].status.contains("in any app"))
         XCTAssertEqual(v.sections[1].action, "Turn off")
         XCTAssertTrue(v.sections[1].lit)
@@ -990,7 +990,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         }
         XCTAssertEqual(stoppedAt, 1_000 + BargeInRules.shared.SPEAKER.sustainMs)
         let section = BargeInRules.shared.section(on: false, mac: true)
-        XCTAssertEqual(section.label, "Talk over MEKA")
+        XCTAssertEqual(section.label, "Talk over Navilife")
         XCTAssertEqual(section.action, "Turn on")
     }
 
@@ -1245,7 +1245,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let rules = AiTodayRules.shared
         XCTAssertNil(rules.line(today: []))
         let today = [AiDayUse(feature: "ask", calls: 2, microUsd: 6_000), AiDayUse(feature: "ask.talk", calls: 6, microUsd: 12_000)]
-        XCTAssertEqual(rules.line(today: today), "MEKA's AI today · Talk 6 · Ask 2 · 2¢")
+        XCTAssertEqual(rules.line(today: today), "Navilife's AI today · Talk 6 · Ask 2 · 2¢")
         XCTAssertEqual(rules.cost(microUsd: 1_200_000), "$1.20")
     }
 
@@ -1295,7 +1295,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let rules = SessionRules.shared
         XCTAssertTrue(rules.isGymLike(title: "gym"))
         XCTAssertFalse(rules.isGymLike(title: "Gymnastics"))
-        XCTAssertEqual(rules.bookOfferLabel(title: "gym"), "Let MEKA book “gym”")
+        XCTAssertEqual(rules.bookOfferLabel(title: "gym"), "Let Navilife book “gym”")
         XCTAssertEqual(rules.bookedMinutes(minutes: 15), 60)
         XCTAssertFalse(rules.BOOK_OFFER_CAPTION.isEmpty)
     }
@@ -1384,8 +1384,8 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testMotionCheckReachesSwift() {
         // Only MEKA's own Off stills it (Reduce Motion no longer does; core MotionCheckTest.macCheck).
         let off = MotionCheckRules.shared.mac(stored: .off, reduceMotion: true, lowPower: false)
-        XCTAssertEqual(off.rows.map(\.label), ["MEKA Motion", "Reduce Motion", "Low Power Mode"])
-        XCTAssertEqual(off.result, "Animations off because MEKA's Motion is Off — click to turn them on")
+        XCTAssertEqual(off.rows.map(\.label), ["Navilife Motion", "Reduce Motion", "Low Power Mode"])
+        XCTAssertEqual(off.result, "Animations off because Navilife's Motion is Off — click to turn them on")
         XCTAssertEqual(off.fix?.id, "expressive")
         XCTAssertEqual(MotionCheckRules.shared.mac(stored: nil, reduceMotion: true, lowPower: false).result,
                        "Animations on · Expressive · playing even with Reduce Motion on")
@@ -1393,7 +1393,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(on.result, "Animations on · Expressive")
         XCTAssertNil(on.fix)
         XCTAssertEqual(MotionCheckRules.shared.PLAY_OPENING, "Play the opening")
-        XCTAssertEqual(AppUpdateRules.shared.versionLine(versionName: "0.1.0", versionCode: 1, latestCode: nil), "MEKA 0.1.0 · build 1")
+        XCTAssertEqual(AppUpdateRules.shared.versionLine(versionName: "0.1.0", versionCode: 1, latestCode: nil), "Navilife 0.1.0 · build 1")
     }
 
     /// The task detail's When row (Fold review 2026-10-08, item 8): labels, steps and the undo line reach Swift.
@@ -1416,7 +1416,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CalendarAccessRules.shared.action(provider: "google", canEdit: false, needsReconnect: false), .allowEditing)
         XCTAssertEqual(CalendarAccessRules.shared.action(provider: "microsoft", canEdit: true, needsReconnect: false)?.label, "Stop editing")
         XCTAssertNil(CalendarAccessRules.shared.action(provider: "fixtures", canEdit: false, needsReconnect: false))
-        XCTAssertEqual(CalendarAccessRules.shared.line(provider: "google", canEdit: false, needsReconnect: false), "Read-only · MEKA only reads this calendar")
+        XCTAssertEqual(CalendarAccessRules.shared.line(provider: "google", canEdit: false, needsReconnect: false), "Read-only · Navilife only reads this calendar")
         XCTAssertTrue(CalendarAccessRules.shared.reconnectAsksEditing(canEdit: true))
         let a = ConnectedAccount(provider: "google", email: "me@gmail.com", status: "ok", lastSyncAtMs: nil, canEdit: true, title: "Personal", eventsLine: nil)
         XCTAssertEqual(a.editingAction, .stopEditing)
@@ -1918,7 +1918,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testAddFactFromAskReachesSwift() {
         // "Remember that my shoe size is 10" in Ask and Talk (What MEKA knows, slice 2): the card's words reach the Mac.
         let card = AskRules.shared.cardOf(p: AskProposalAddFact(label: "Shoe size", value: "10", factId: nil), today: 0)
-        XCTAssertEqual(card.line, "Keep on What MEKA knows · Shoe size: 10")
+        XCTAssertEqual(card.line, "Keep on What Navilife knows · Shoe size: 10")
         XCTAssertEqual(card.button, "Keep")
         XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "remembered Shoe size as 10")
         let update = AskRules.shared.cardOf(p: AskProposalAddFact(label: "GP", value: "Dr Shah", factId: "f1"), today: 0)
@@ -2179,7 +2179,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(FactAskRules.shared.askLines(facts: [fact], question: "what's the car's reg?"),
                        ["Facts · 1 kept · all below", "Fact · Car · Car reg: AB12 CDE"])
         let view = rules.view(facts: [fact])
-        XCTAssertEqual(view.summary, "1 fact · MEKA answers from them")
+        XCTAssertEqual(view.summary, "1 fact · Navilife answers from them")
         XCTAssertEqual(view.groups.map(\.label), ["Car"])
         XCTAssertEqual(view.groups.first?.rows.first?.aiButton, rules.KEEP_BUTTON)
         XCTAssertEqual(FactsView.companion.EMPTY.summary, rules.EMPTY_SUMMARY)
@@ -2654,8 +2654,8 @@ final class MekaCoreBridgeTests: XCTestCase {
                                   state: .bad, fix: .reconnect, fixLabel: "Reconnect", provider: "google", account: "meka@gmail.com", editing: true)
         XCTAssertTrue(reconnect.needsLook)
         XCTAssertEqual(reconnect.fix, .reconnect)
-        let battery = HealthRow(key: "battery", title: "Battery", line: "Samsung may put MEKA to sleep",
-                                state: .warn, fix: .battery, fixLabel: "Keep MEKA awake", provider: nil, account: nil, editing: false)
+        let battery = HealthRow(key: "battery", title: "Battery", line: "Samsung may put Navilife to sleep",
+                                state: .warn, fix: .battery, fixLabel: "Keep Navilife awake", provider: nil, account: nil, editing: false)
         XCTAssertTrue(battery.needsLook)
         XCTAssertEqual(HealthRules.shared.TODAY_REFRESH_MS, 15 * 60_000)
     }
@@ -2688,7 +2688,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let shown = MacNotifyRules.shared.testView(shown: true)
         XCTAssertEqual(shown.localLine, "On this Mac · arrived ✓")
         XCTAssertEqual(shown.localOk?.boolValue, true)
-        XCTAssertEqual(MacNotifyRules.shared.TEST_TITLE, "MEKA test · from this Mac")
+        XCTAssertEqual(MacNotifyRules.shared.TEST_TITLE, "Navilife test · from this Mac")
     }
 
     func testMailAccountsReachSwift() async throws {

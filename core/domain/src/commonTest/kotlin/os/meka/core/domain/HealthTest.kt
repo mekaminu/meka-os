@@ -76,7 +76,7 @@ class HealthTest {
         listOf("push", "calendar:", "calls", "ai", "voice").forEach { assertEquals(HealthState.UNKNOWN, v.row(it).state, it) }
         assertEquals(1, v.attention)
         assertTrue(v.critical)
-        assertEquals("MEKA's server · Can't reach it right now · last synced 14:03", v.todayLine)
+        assertEquals("Navilife's server · Can't reach it right now · last synced 14:03", v.todayLine)
         // Not connected at all.
         assertEquals("This device isn't connected yet", HealthRules.view(facts(connected = false), cal).row("server").line)
         // Failing (signed out) and offline with changes waiting.
@@ -149,7 +149,7 @@ class HealthTest {
         val off = HealthRules.view(facts(device = fold.copy(notificationAccess = false)), cal)
         assertEquals(HealthFix.NOTIFICATION_ACCESS to HealthState.BAD, off.row("messages").fix to off.row("messages").state)
         assertTrue(off.critical)
-        assertEquals("Messages capture · MEKA can't see notifications · messages aren't captured", off.todayLine)
+        assertEquals("Messages capture · Navilife can't see notifications · messages aren't captured", off.todayLine)
         val quiet = HealthRules.view(facts(device = fold.copy(lastNotificationMs = now - 13 * HealthRules.HOUR)), cal).row("messages")
         assertEquals("Nothing read since 01:05 · Android may have stopped it" to HealthState.WARN, quiet.line to quiet.state)
         assertEquals("Listening · nothing read yet", HealthRules.view(facts(device = fold.copy(lastNotificationMs = null)), cal).row("messages").line)
@@ -203,8 +203,8 @@ class HealthTest {
         val v = HealthRules.view(facts(device = fold.copy(notificationAccess = false, batteryExempt = false), server = server.copy(speech = false)), cal)
         assertEquals(3, v.attention)
         assertEquals("3 things need a look", v.summary)
-        assertEquals("MEKA health · 2 things need a look", v.todayLine)
-        assertEquals("Working, as far as MEKA can tell", HealthRules.view(facts(ai = null), cal).summary)
+        assertEquals("Navilife health · 2 things need a look", v.todayLine)
+        assertEquals("Working, as far as Navilife can tell", HealthRules.view(facts(ai = null), cal).summary)
     }
 
     @Test

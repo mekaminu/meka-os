@@ -48,7 +48,7 @@ class InterruptionsTest {
         val zero = InterruptionWeek(0, 0, 0, null)
         val never = InterruptionRules.metric(monday, null, zero)
         assertNull(never.value)
-        assertEquals("Counted once MEKA can notify you on a device", never.line)
+        assertEquals("Counted once Navilife can notify you on a device", never.line)
         val later = InterruptionRules.metric(monday - 7, monday + 1, zero)
         assertNull(later.value)
         assertEquals("Counted from ${CivilDate.shortLabel(monday + 1)}", later.line)

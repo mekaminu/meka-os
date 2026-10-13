@@ -24,7 +24,7 @@ object ReadOutRules {
 
     /** Words around the request that change nothing ("can you read me the news please"). */
     private val DROP = setOf(
-        "please", "meka", "hey", "can", "could", "would", "will", "you", "me", "us", "now", "then", "so", "just", "um",
+        "please", "meka", "navilife", "hey", "can", "could", "would", "will", "you", "me", "us", "now", "then", "so", "just", "um",
         "umm", "uh", "er", "erm", "ok", "okay", "for", "out", "aloud", "loud", "again", "quickly",
     )
     /** Asking words before the thing ("read", "what's", "is there any", "tell me", "give me", "go through"). */

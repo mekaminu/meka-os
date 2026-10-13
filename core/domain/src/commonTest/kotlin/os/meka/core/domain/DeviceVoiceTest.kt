@@ -24,7 +24,7 @@ class DeviceVoiceTest {
         assertEquals("This phone's voices", v.title)
         assertEquals(listOf("", "en-gb-x-gba-local", "en-gb-x-rjs-local", "en-au-x-aua-local", "en-us-x-iol-local"), v.rows.map { it.id })
         assertEquals("Automatic", v.rows[0].label)
-        assertEquals("MEKA picks the best installed · now Voice GBA", v.rows[0].detail)
+        assertEquals("Navilife picks the best installed · now Voice GBA", v.rows[0].detail)
         assertTrue(v.rows[0].selected)
         assertEquals("Voice GBA", v.rows[1].label)
         assertEquals("Speech Services by Google · British · high quality", v.rows[1].detail)

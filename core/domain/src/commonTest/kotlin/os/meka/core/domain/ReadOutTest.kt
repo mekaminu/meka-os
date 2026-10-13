@@ -14,13 +14,24 @@ class ReadOutTest {
     fun theBriefAndTheHeadlinesAreAskedForTheWaysPeopleAsk() {
         listOf(
             "read my brief", "Read me my morning brief, please", "brief me", "what's in my morning brief?", "the brief",
-            "MEKA, read the briefing", "go through my brief",
+            "Navilife, read the briefing", "go through my brief",
         ).forEach { assertEquals(brief, ReadOutRules.request(it), it) }
         listOf(
             "read the headlines", "the headlines", "what's the news?", "any news?", "what's in the news today",
             "tell me the news", "give me the headlines", "read me the news headlines please", "News.", "top stories",
             "is there any news",
         ).forEach { assertEquals(headlines, ReadOutRules.request(it), it) }
+    }
+
+    @Test
+    fun bothNamesWorkWhenHeTalksToIt() {
+        // The rename to Navilife (2026-10-13): the new name, however speech hears it, and the old one change nothing.
+        listOf("MEKA, read the briefing", "Navilife, read my brief", "hey navi life read my brief", "Navy Life, read my brief",
+            "ok Navi-Life, read my brief").forEach { assertEquals(brief, ReadOutRules.request(it), it) }
+        assertEquals(listOf("navilife", "plan", "my", "day"), TalkRules.words("Navi life, plan my day"))
+        assertEquals(listOf("navy", "seals"), TalkRules.words("Navy SEALs"))
+        assertEquals(TalkPlace.PLAN, TalkOpenRules.request("ok navy life, plan my day please"))
+        assertEquals(TalkPlace.PLAN, TalkOpenRules.request("ok MEKA, plan my day please"))
     }
 
     @Test

@@ -250,7 +250,7 @@ class NewsWidgetTest {
         assertTrue(v.isEmpty)
         assertEquals("No news yet", v.emptyTitle)
         assertEquals(Long.MAX_VALUE, v.nextChangeMs)
-        assertEquals("News. No news yet. Choose topics in MEKA · Ask › More › News", NewsWidgetRules.spoken(v))
+        assertEquals("News. No news yet. Choose topics in Navilife · Ask › More › News", NewsWidgetRules.spoken(v))
     }
 
     @Test
@@ -338,7 +338,7 @@ class DeskNewsWidgetTest {
         val v = DeskNewsWidgetRules.view(TickerRules.ticker(NewsPlace.EMPTY))
         assertTrue(v.isEmpty)
         assertEquals("No news yet", v.emptyTitle)
-        assertEquals("Choose topics in MEKA · Ask › More › News", v.emptyLine)
+        assertEquals("Choose topics in Navilife · Ask › More › News", v.emptyLine)
         assertEquals(30 * 60_000L, DeskNewsWidgetRules.REFRESH_MS)
     }
 }

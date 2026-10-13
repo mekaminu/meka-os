@@ -81,7 +81,7 @@ class AddEventTest {
         val o = AddEventRules.view(form(last = outlook.key).withTitle("Lunch"), accounts, now, bst)
         assertEquals("Add to Outlook", o.addLabel)
         assertEquals(listOf(false, true), o.accounts.map { it.selected })
-        assertEquals("Outlook keeps these notes; MEKA can't change them later", o.notesNote)
+        assertEquals("Outlook keeps these notes; Navilife can't change them later", o.notesNote)
         assertNull(AddEventRules.view(form(), accounts, now, bst).notesNote)
     }
 
@@ -169,7 +169,7 @@ class AddEventTest {
             edit("done", EventEditKind.ADD, created = t - 90_000, status = EventEditStatus.DONE, statusAt = t - 60_000),
             edit("old", EventEditKind.ADD, created = t - 600_000, status = EventEditStatus.DONE, statusAt = t - 500_000),
             edit("refused", EventEditKind.DELETE, created = t - 3 * hour, status = EventEditStatus.REFUSED, statusAt = t - 3 * hour,
-                detail = "MEKA only changes your own events"),
+                detail = "Navilife only changes your own events"),
             edit("ancient", EventEditKind.ADD, created = t - 2 * day, status = EventEditStatus.FAILED, statusAt = t - 2 * day),
         )
         val all = EditLineRules.lines(edits, t)
@@ -185,7 +185,7 @@ class AddEventTest {
         assertEquals(listOf("done", "refused"), later.map { it.id })
         val refused = later[1]
         assertTrue(refused.needsMeka)
-        assertEquals("MEKA only changes your own events", refused.text)
+        assertEquals("Navilife only changes your own events", refused.text)
         // The done line goes after two minutes.
         assertEquals(listOf("refused"), EditLineRules.lines(edits.filter { it.id == "done" || it.id == "refused" }, t + 70_000).map { it.id })
     }

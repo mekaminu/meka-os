@@ -179,8 +179,8 @@ enum class UndoOutcome(val line: String) {
 object ActivityRules {
     const val DAYS_SHOWN = 30
     const val EMPTY_LINE =
-        "Nothing yet. When MEKA reminds you or sends a digest it shows here with why, as do the calendar edits you " +
-            "make in MEKA; once it does things for you, each one shows here too and can be undone."
+        "Nothing yet. When Navilife reminds you or sends a digest it shows here with why, as do the calendar edits you " +
+            "make in Navilife; once it does things for you, each one shows here too and can be undone."
 
     /** Entry id for a notice: one entry however many devices posted it (the key is stable per notice). */
     fun noticeId(key: String): String = "n" + fnv64("notice:$key")
@@ -204,7 +204,7 @@ object ActivityRules {
      */
     fun releaseSummary(publisher: String, b: AppUpdateRules.Build): Triple<String, String?, String> = Triple(
         "$publisher published build ${b.versionCode}",
-        "MEKA ${b.versionName} · ${AppUpdateRules.sizeLabel(b.sizeBytes)} · install it from Today on the Fold",
+        "Navilife ${b.versionName} · ${AppUpdateRules.sizeLabel(b.sizeBytes)} · install it from Today on the Fold",
         "Hands-free phone updates · after a green CI run on main",
     )
 
@@ -264,7 +264,7 @@ object ActivityRules {
             e.resends != null -> "Your choice after a clash"
             e.forTask != null && e.kind != EventEditKind.ADD -> "Keeps a task's block in step with the task"
             e.forTask != null -> "Plan my day · Apply, with “Also add the blocks” on"
-            else -> "Your edit in MEKA"
+            else -> "Your edit in Navilife"
         } + " · editing allowed for ${e.account}"
         return ActivityItem(
             id = calendarEditId(e.id),

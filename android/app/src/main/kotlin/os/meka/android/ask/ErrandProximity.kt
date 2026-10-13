@@ -216,7 +216,7 @@ object ErrandProximity {
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(
                 NotificationCompat.Builder(context, CHANNEL).setSmallIcon(android.R.drawable.ic_menu_mylocation)
-                    .setContentTitle("MEKA · errands nearby").build(),
+                    .setContentTitle("Navilife · errands nearby").build(),
             )
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setContentIntent(openIntent(context, key))

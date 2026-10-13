@@ -59,7 +59,7 @@ class BatteryCareTest {
         val view = BatteryCareRules.view(samsungExempt, beats, at(18), utc, null)
         assertEquals(BatteryCareStatus.STOPPED, view.status)
         assertTrue(view.critical)
-        assertEquals("MEKA was stopped 14:05–17:20, likely by Samsung's battery saver · Keep MEKA awake", view.line)
+        assertEquals("Navilife was stopped 14:05–17:20, likely by Samsung's battery saver · Keep Navilife awake", view.line)
         assertTrue(view.openSamsung)
         assertFalse(view.allowInAndroid)
         assertEquals(BatteryCareRules.SAMSUNG_STEPS, view.steps)
@@ -76,7 +76,7 @@ class BatteryCareTest {
         // Not exempt: the quieter line takes its place.
         val quieter = BatteryCareRules.view(samsung, beats, at(14), utc, dismissedEndMs = gap.endMs)
         assertEquals(BatteryCareStatus.NOT_EXEMPT, quieter.status)
-        assertEquals("Samsung may put MEKA to sleep · Keep MEKA awake", quieter.line)
+        assertEquals("Samsung may put Navilife to sleep · Keep Navilife awake", quieter.line)
         assertFalse(quieter.critical)
         assertTrue(quieter.allowInAndroid)
         // A newer stop shows again.
@@ -91,7 +91,7 @@ class BatteryCareTest {
     fun anotherPhoneGetsAndroidsWords() {
         val other = BatteryFacts(exempt = false, samsung = false)
         val view = BatteryCareRules.view(other, listOf(at(9)), at(9), utc, null)
-        assertEquals("Android may pause MEKA · Keep MEKA awake", view.line)
+        assertEquals("Android may pause Navilife · Keep Navilife awake", view.line)
         assertFalse(view.openSamsung)
         assertEquals(BatteryCareRules.ANDROID_STEPS, view.steps)
         assertEquals("09:05", BatteryCareRules.clock(545))

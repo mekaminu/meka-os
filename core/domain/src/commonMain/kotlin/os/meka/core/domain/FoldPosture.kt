@@ -221,9 +221,9 @@ object FoldPostureReportRules {
         val waiting = log.first().atMs > sentThroughMs
         val at = sentAtMs?.let { "${CivilDate.shortLabel(cal.epochDayOf(it))} ${LocalClock.formatMinute(cal.minuteOfDay(it))}" }
         return when {
-            at == null -> "Not sent to MEKA's server yet"
-            waiting -> "Sent to MEKA's server $at · the newest changes go shortly"
-            else -> "Sent to MEKA's server $at"
+            at == null -> "Not sent to Navilife's server yet"
+            waiting -> "Sent to Navilife's server $at · the newest changes go shortly"
+            else -> "Sent to Navilife's server $at"
         }
     }
 }

@@ -52,7 +52,7 @@ object InterruptionRules {
      */
     fun metric(weekStart: Long, since: Long?, week: InterruptionWeek): NorthStarMetric {
         val label = "Interruptions"
-        if (since == null) return NorthStarMetric(KEY, label, null, "Counted once MEKA can notify you on a device")
+        if (since == null) return NorthStarMetric(KEY, label, null, "Counted once Navilife can notify you on a device")
         if (since > weekStart + 6) return NorthStarMetric(KEY, label, null, "Counted from ${CivilDate.shortLabel(since)}")
         val parts = listOfNotNull(
             week.critical.takeIf { it > 0 }?.let { "$it critical" },

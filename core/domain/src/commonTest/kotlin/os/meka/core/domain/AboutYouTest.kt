@@ -100,7 +100,7 @@ class AboutYouTest {
         assertEquals("07700 900111", p.assistantNumber)
         assertEquals(listOf(AboutChild("Alex", 7)), p.children)
         assertEquals(now, p.seededAtMs)
-        assertTrue(s.view(LocalCalendar.UTC).summary.startsWith("MEKA filled this in today from what it already knew"))
+        assertTrue(s.view(LocalCalendar.UTC).summary.startsWith("Navilife filled this in today from what it already knew"))
         assertFalse(s.seedOnce(values.copy(partnerName = "Jo")))
         assertEquals("Sam", s.profile().partnerName)
 

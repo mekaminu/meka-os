@@ -158,11 +158,11 @@ class Integrations(
     fun callback(provider: String, state: String?, code: String?, error: String?): CallbackResult {
         if (state.isNullOrBlank()) return CallbackResult.Failed("The sign-in link was incomplete.")
         val pending = store.transaction { store.takeState(state) }
-            ?: return CallbackResult.Failed("This sign-in link has expired or was already used. Start again from MEKA OS.")
+            ?: return CallbackResult.Failed("This sign-in link has expired or was already used. Start again from Navilife.")
         // A mail sign-in comes back through its OAuth provider's callback (google, microsoft).
         val mailP = mail[pending.provider]
         if ((mailP?.oauth ?: pending.provider) != provider || now() - pending.createdAtMs > STATE_TTL_MS) {
-            return CallbackResult.Failed("This sign-in link has expired. Start again from MEKA OS.")
+            return CallbackResult.Failed("This sign-in link has expired. Start again from Navilife.")
         }
         if (error != null || code.isNullOrBlank()) return CallbackResult.Failed("Sign-in was cancelled.")
         if (mailP != null) return mailCallback(mailP, pending, code)
@@ -188,7 +188,7 @@ class Integrations(
         val refresh = tokens.refreshToken ?: return CallbackResult.Failed("The provider did not grant offline access. Try connecting again.")
         if (tokens.scope != null && m.requiredScopes.any { !grants(tokens.scope, it) }) {
             return CallbackResult.Failed(
-                "Mail access wasn't fully allowed. Connect again and keep every permission ticked: MEKA reads and tidies your mail and sends only when you tap Send.",
+                "Mail access wasn't fully allowed. Connect again and keep every permission ticked: Navilife reads and tidies your mail and sends only when you tap Send.",
             )
         }
         val email = m.accountEmail(tokens.accessToken).lowercase()

@@ -72,8 +72,8 @@ class MailAccountsTest {
     fun anEndedSignInSaysReconnect() {
         val r = MailAccountRules.view(listOf(gmail("alex@example.com", "PERSONAL", status = "needs_reconnect")), now).rows.single()
         assertTrue(r.needsReconnect)
-        assertEquals("Sign-in ended · Reconnect to keep MEKA reading it", r.line)
-        assertEquals("Couldn't reach it last time · MEKA tries again every few minutes", MailAccountRules.line("error", now, now))
+        assertEquals("Sign-in ended · Reconnect to keep Navilife reading it", r.line)
+        assertEquals("Couldn't reach it last time · Navilife tries again every few minutes", MailAccountRules.line("error", now, now))
         assertEquals("1 day ago", MailAccountRules.ago(now - 30 * 60 * min, now))
         assertEquals("3 days ago", MailAccountRules.ago(now - 3 * 24 * 60 * min, now))
         assertEquals("just now", MailAccountRules.ago(now + min, now))
@@ -88,11 +88,11 @@ class MailAccountsTest {
         val a = gmail("alex@example.com", "PERSONAL")
         val ending = SignIn(MailProviders.GMAIL, "Alex@Example.com", SignInState.ENDING, now + 5 * 60 * min + 10 * min)
         val row = MailAccountRules.view(listOf(a, outlook), now, listOf(ending)).rows[0]
-        assertEquals("Sign-in ends in 5 h · Reconnect to keep MEKA reading it", row.line)
+        assertEquals("Sign-in ends in 5 h · Reconnect to keep Navilife reading it", row.line)
         assertTrue(row.needsReconnect)
         assertTrue(row.ending)
         // Within the hour; and once it has passed, the server's own state decides (nothing ending any more).
-        assertEquals("Sign-in ends within the hour · Reconnect to keep MEKA reading it",
+        assertEquals("Sign-in ends within the hour · Reconnect to keep Navilife reading it",
             MailAccountRules.view(listOf(a), now, listOf(ending.copy(untilMs = now + 20 * min))).rows[0].line)
         val passed = MailAccountRules.view(listOf(a), now, listOf(ending.copy(untilMs = now - min))).rows[0]
         assertFalse(passed.ending)
@@ -100,7 +100,7 @@ class MailAccountsTest {
         // Another account's sign-in doesn't count; an ended one keeps its own line.
         assertFalse(MailAccountRules.view(listOf(a), now, listOf(ending.copy(account = "other@example.com"))).rows[0].ending)
         val ended = MailAccountRules.view(listOf(a.copy(status = "needs_reconnect")), now, listOf(ending)).rows[0]
-        assertEquals("Sign-in ended · Reconnect to keep MEKA reading it", ended.line)
+        assertEquals("Sign-in ended · Reconnect to keep Navilife reading it", ended.line)
         assertFalse(ended.ending)
     }
 
@@ -110,10 +110,10 @@ class MailAccountsTest {
         assertEquals(listOf("Outlook · Outlook"), v.rows.map { it.title })
         val row = MailAccountRules.view(listOf(gmail("alex@example.com", "PERSONAL")), now).rows[0]
         assertEquals(
-            "Disconnect Personal · Gmail (alex@example.com)? MEKA stops reading it and forgets the sign-in. Nothing in the mailbox changes.",
+            "Disconnect Personal · Gmail (alex@example.com)? Navilife stops reading it and forgets the sign-in. Nothing in the mailbox changes.",
             MailAccountRules.disconnectAsk(row),
         )
-        assertTrue(MailAccountRules.disconnectedLine(MailProviders.GMAIL, "alex@example.com").startsWith("Disconnected alex@example.com · MEKA asked Google"))
+        assertTrue(MailAccountRules.disconnectedLine(MailProviders.GMAIL, "alex@example.com").startsWith("Disconnected alex@example.com · Navilife asked Google"))
         assertTrue(MailAccountRules.disconnectedLine(MailProviders.OUTLOOK, "alex@example.net").contains("account.microsoft.com"))
     }
 

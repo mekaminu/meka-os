@@ -17,29 +17,29 @@ class NotifyTestTest {
         val start = NotifyTestRun(now)
         val going = NotifyTestRules.view(start, now)
         assertEquals("On this phone · sending…", going.localLine)
-        assertEquals("From MEKA's server · asking…", going.pushLine)
+        assertEquals("From Navilife's server · asking…", going.pushLine)
         assertFalse(going.done)
 
         val sent = start.copy(localShown = true, push = PushTestResult.SENT)
         val waiting = NotifyTestRules.view(sent, now + 2_000)
         assertEquals("On this phone · arrived ✓", waiting.localLine)
-        assertEquals("From MEKA's server · sent · waiting…", waiting.pushLine)
+        assertEquals("From Navilife's server · sent · waiting…", waiting.pushLine)
         assertNull(waiting.pushOk)
         assertFalse(waiting.done)
 
         val arrived = NotifyTestRules.view(sent.copy(pushArrivedAtMs = now + 2_400), now + 3_000)
-        assertEquals("From MEKA's server · arrived in 2 s ✓", arrived.pushLine)
+        assertEquals("From Navilife's server · arrived in 2 s ✓", arrived.pushLine)
         assertEquals(true, arrived.pushOk)
         assertNull(arrived.hint)
         assertTrue(arrived.done)
-        assertEquals("From MEKA's server · arrived in under a second ✓", NotifyTestRules.view(sent.copy(pushArrivedAtMs = now + 300), now + 400).pushLine)
+        assertEquals("From Navilife's server · arrived in under a second ✓", NotifyTestRules.view(sent.copy(pushArrivedAtMs = now + 300), now + 400).pushLine)
     }
 
     @Test
     fun aPushThatNeverComesSaysSoAfterAMinuteWithWhatToCheck() {
         val sent = NotifyTestRun(now, localShown = true, push = PushTestResult.SENT)
         val late = NotifyTestRules.view(sent, now + NotifyTestRules.PUSH_WAIT_MS)
-        assertEquals("From MEKA's server · sent, but didn't arrive within a minute", late.pushLine)
+        assertEquals("From Navilife's server · sent, but didn't arrive within a minute", late.pushLine)
         assertEquals(false, late.pushOk)
         assertTrue(late.hint!!.contains("Unrestricted"))
         assertTrue(late.done)
@@ -48,11 +48,11 @@ class NotifyTestTest {
     @Test
     fun eachServerAnswerHasItsOwnLineAndHint() {
         fun v(r: PushTestResult) = NotifyTestRules.view(NotifyTestRun(now, localShown = true, push = r), now + 1_000)
-        assertEquals("From MEKA's server · push isn't set up on the server", v(PushTestResult.OFF).pushLine)
-        assertEquals("From MEKA's server · this phone hasn't registered for push", v(PushTestResult.NO_ADDRESS).pushLine)
+        assertEquals("From Navilife's server · push isn't set up on the server", v(PushTestResult.OFF).pushLine)
+        assertEquals("From Navilife's server · this phone hasn't registered for push", v(PushTestResult.NO_ADDRESS).pushLine)
         assertTrue(v(PushTestResult.NO_ADDRESS).hint!!.contains("open it again"))
-        assertEquals("From MEKA's server · couldn't reach the server", v(PushTestResult.UNREACHABLE).pushLine)
-        assertEquals("From MEKA's server · Firebase didn't take it", v(PushTestResult.FAILED).pushLine)
+        assertEquals("From Navilife's server · couldn't reach the server", v(PushTestResult.UNREACHABLE).pushLine)
+        assertEquals("From Navilife's server · Firebase didn't take it", v(PushTestResult.FAILED).pushLine)
         PushTestResult.entries.filter { it != PushTestResult.SENT }.forEach { assertTrue(v(it).done, it.name) }
         // The wire's words; anything unknown is a failure, never fine.
         assertEquals(PushTestResult.SENT, PushTestResult.of("sent"))
@@ -109,6 +109,6 @@ class NotifyTestTest {
         assertTrue(row.line.startsWith("This phone is set to Off"))
         val look = NotifyTrace.look(now, allowed = true, posted = 0, digest = false, channelNames = emptyList(), nextLookMs = null, cal = cal, phoneOff = true)
         assertEquals(NotifyTraceKind.BLOCKED, look.kind)
-        assertEquals("this phone is set to Off in MEKA's Notifications", look.detail)
+        assertEquals("this phone is set to Off in Navilife's Notifications", look.detail)
     }
 }

@@ -30,7 +30,7 @@ struct AfterWorkSheet: View {
                 }
                 .frame(maxHeight: 460)
             }
-            Text("Done clears MEKA's copy here and on the Fold. WhatsApp and Messages are untouched.")
+            Text("Done clears Navilife's copy here and on the Fold. WhatsApp and Messages are untouched.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             if summary?.people.contains(where: { $0.items.contains(where: { $0.hasAudio }) }) == true {

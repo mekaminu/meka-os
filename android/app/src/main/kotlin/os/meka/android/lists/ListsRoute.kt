@@ -169,7 +169,7 @@ private fun LazyListScope.waiting(
     act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit,
 ) {
     if (view.waiting.isEmpty() && view.promised.isEmpty()) {
-        empty("waiting", "Nothing promised either way. Add what you told someone you'd do, or a reply, a parcel or a refund you're waiting on, and MEKA tells you when it's due.")
+        empty("waiting", "Nothing promised either way. Add what you told someone you'd do, or a reply, a parcel or a refund you're waiting on, and Navilife tells you when it's due.")
         return
     }
     if (view.promised.isNotEmpty()) {

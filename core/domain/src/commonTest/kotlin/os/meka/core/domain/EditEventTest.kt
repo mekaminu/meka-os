@@ -208,7 +208,7 @@ class EditEventTest {
         fold.sync()
         answer(otherId, mapOf(
             EventEditFields.STATUS to "REFUSED".fv(), EventEditFields.STATUS_AT to world.clock.nowMs.fv(),
-            EventEditFields.DETAIL to "Someone else organises it · MEKA only changes your own events".fv(), EventEditFields.GUESTS to 3L.fv(),
+            EventEditFields.DETAIL to "Someone else organises it · Navilife only changes your own events".fv(), EventEditFields.GUESTS to 3L.fv(),
         ))
         fold.sync()
         assertFalse(assertNotNull(EditEventRules.note("ev2", eFold.all(), world.clock.nowMs)).deleteAnyway)

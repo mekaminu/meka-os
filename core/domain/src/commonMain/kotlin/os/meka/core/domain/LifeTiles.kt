@@ -91,7 +91,7 @@ object LifeTileRules {
         LifeTile.TRIPS -> "No trips planned"
         LifeTile.ERRANDS -> "No errands waiting"
         LifeTile.EMERGENCY -> "Not filled in yet"
-        LifeTile.FACTS -> "Tell MEKA your car reg"
+        LifeTile.FACTS -> "Tell Navilife your car reg"
     }
 
     /**

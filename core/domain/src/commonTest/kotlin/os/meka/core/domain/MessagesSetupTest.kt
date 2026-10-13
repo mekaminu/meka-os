@@ -14,9 +14,9 @@ class MessagesSetupTest {
     @Test
     fun theStatusLineSaysWhatIsMissing() {
         val r = MessagesSetupRules
-        assertTrue(r.statusLine(listening = false, aiOn = true).startsWith("Give MEKA notification access"))
+        assertTrue(r.statusLine(listening = false, aiOn = true).startsWith("Give Navilife notification access"))
         assertTrue(r.statusLit(listening = false, aiOn = true))
-        assertTrue(r.statusLine(listening = true, aiOn = false).contains("MEKA's AI is off"))
+        assertTrue(r.statusLine(listening = true, aiOn = false).contains("Navilife's AI is off"))
         assertTrue(r.statusLit(listening = true, aiOn = false))
         assertTrue(r.statusLine(listening = true, aiOn = true).contains("replies drafted for you to send"))
         assertFalse(r.statusLit(listening = true, aiOn = null))
@@ -60,9 +60,9 @@ class MessagesSetupTest {
         assertEquals(listOf("Barça lads", "Family", "School run"), list.groups.map { it.name })
         assertEquals(listOf(GroupMode.DIGEST, GroupMode.DIGEST, GroupMode.IGNORE), list.groups.map { it.mode })
         assertEquals(listOf(false, true, false), list.groups.map { it.private })
-        assertEquals("Sent to MEKA's AI for a lane and a draft", list.people[0].line)
-        assertEquals("Kept from MEKA's AI · shown as FYI, nothing drafted", list.people[2].line)
-        assertEquals("Kept from MEKA's AI · Digest, no gist", list.groups[1].line)
+        assertEquals("Sent to Navilife's AI for a lane and a draft", list.people[0].line)
+        assertEquals("Kept from Navilife's AI · shown as FYI, nothing drafted", list.people[2].line)
+        assertEquals("Kept from Navilife's AI · Digest, no gist", list.groups[1].line)
         assertEquals(GroupDigestRules.modeHint(GroupMode.IGNORE), list.groups[2].line)
         assertTrue(MessagesSetupRules.rows(emptyList(), TriageSettings(), day).isEmpty)
     }
@@ -76,7 +76,7 @@ class MessagesSetupTest {
         assertEquals(emptySet(), r.setNeverToAi(one, "TUNDE", on = false))
         assertEquals(one, r.setNeverToAi(one, "  ", on = true))
         assertTrue(TriageSettings(neverToAi = one).isPrivate("tunde"))
-        assertEquals("Tunde · kept from MEKA's AI", r.privateLine("Tunde", on = true))
-        assertEquals("Tunde · back to MEKA's AI", r.privateLine("Tunde", on = false))
+        assertEquals("Tunde · kept from Navilife's AI", r.privateLine("Tunde", on = true))
+        assertEquals("Tunde · back to Navilife's AI", r.privateLine("Tunde", on = false))
     }
 }

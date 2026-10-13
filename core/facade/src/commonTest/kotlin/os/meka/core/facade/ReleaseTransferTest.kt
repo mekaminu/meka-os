@@ -96,7 +96,7 @@ class ReleaseTransferTest {
         assertEquals(412L, ReleaseTransfer.checkApk(zip, meta).first?.versionCode)
         assertEquals("That file isn't an APK.", ReleaseTransfer.checkApk("hello".encodeToByteArray(), meta).second)
         assertTrue(ReleaseTransfer.checkApk(zip, null).second!!.contains("output-metadata.json"))
-        assertTrue(ReleaseTransfer.checkApk(zip, meta.replace("os.meka.android", "com.other")).second!!.startsWith("That APK isn't MEKA"))
+        assertTrue(ReleaseTransfer.checkApk(zip, meta.replace("os.meka.android", "com.other")).second!!.startsWith("That APK isn't Navilife"))
     }
 
     @Test

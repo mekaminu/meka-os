@@ -89,7 +89,7 @@ data class MailAccountsView(
 object MailAccountRules {
     const val TITLE = "Mail"
     const val ROW_LINE = "Gmail and Outlook · read, tidied, sent only on your tap"
-    const val HEADER = "MEKA reads and tidies your mail and sends only when you tap Send. Nothing is ever deleted for good."
+    const val HEADER = "Navilife reads and tidies your mail and sends only when you tap Send. Nothing is ever deleted for good."
     const val EMPTY = "No mail connected yet. Connect each account: your personal Gmail, Outlook and the business Gmail."
     const val OFFLINE = "Couldn't reach your server. Your accounts are still connected; try again."
     /** The label chips, always in this order (both apps). */
@@ -99,9 +99,9 @@ object MailAccountRules {
 
     /** Said before the provider's page opens, so its permission screen isn't a surprise. */
     fun connectNote(provider: String): String = when (provider) {
-        MailProviders.GMAIL -> "Google will ask to let MEKA read, organise and send your email. Keep every box ticked: MEKA sends only when you tap Send. " +
-            "Google may say the app is unverified (it's your own): Advanced → Go to MEKA."
-        else -> "Microsoft will ask to let MEKA read, organise and send your email. MEKA sends only when you tap Send."
+        MailProviders.GMAIL -> "Google will ask to let Navilife read, organise and send your email. Keep every box ticked: Navilife sends only when you tap Send. " +
+            "Google may say the app is unverified (it's your own): Advanced → Go to Navilife."
+        else -> "Microsoft will ask to let Navilife read, organise and send your email. Navilife sends only when you tap Send."
     }
 
     /** A new account's label: Outlook for Outlook; the first Gmail is Personal, a second one Business. */
@@ -127,8 +127,8 @@ object MailAccountRules {
 
     /** [sorting]: the server already sorts this account (slice 2a), so the line no longer promises it. */
     fun line(status: String, lastSyncAtMs: Long?, nowMs: Long, sorting: Boolean): String = when {
-        status == "needs_reconnect" -> "Sign-in ended · Reconnect to keep MEKA reading it"
-        status == "error" -> "Couldn't reach it last time · MEKA tries again every few minutes"
+        status == "needs_reconnect" -> "Sign-in ended · Reconnect to keep Navilife reading it"
+        status == "error" -> "Couldn't reach it last time · Navilife tries again every few minutes"
         lastSyncAtMs == null -> "Connected · checking the sign-in…"
         sorting -> "Connected · checked ${ago(lastSyncAtMs, nowMs)} · sorted, nothing moved yet"
         else -> "Connected · checked ${ago(lastSyncAtMs, nowMs)} · sorting comes in the next update"
@@ -156,7 +156,7 @@ object MailAccountRules {
     fun endingLine(untilMs: Long, nowMs: Long): String {
         val h = (untilMs - nowMs) / 3_600_000
         val whenText = if (h < 1) "within the hour" else "in $h h"
-        return "Sign-in ends $whenText · Reconnect to keep MEKA reading it"
+        return "Sign-in ends $whenText · Reconnect to keep Navilife reading it"
     }
 
     /** The pane: only mail accounts, Personal first, then Business, then Outlook (then by address). */
@@ -200,12 +200,12 @@ object MailAccountRules {
 
     /** Asked before disconnecting, in place on the row. */
     fun disconnectAsk(row: MailAccountRow): String =
-        "Disconnect ${row.title} (${row.email})? MEKA stops reading it and forgets the sign-in. Nothing in the mailbox changes."
+        "Disconnect ${row.title} (${row.email})? Navilife stops reading it and forgets the sign-in. Nothing in the mailbox changes."
 
     /** After disconnecting: done, and where to take MEKA's permission away at the provider as well. */
     fun disconnectedLine(provider: String, email: String): String = "Disconnected $email · " + when (provider) {
-        MailProviders.GMAIL -> "MEKA asked Google to withdraw its permission; Google Account → Security → Your connections to third-party apps shows it's gone"
-        else -> "to remove MEKA from Microsoft too: account.microsoft.com → Privacy → Apps and services"
+        MailProviders.GMAIL -> "Navilife asked Google to withdraw its permission; Google Account → Security → Your connections to third-party apps shows it's gone"
+        else -> "to remove Navilife from Microsoft too: account.microsoft.com → Privacy → Apps and services"
     }
 
     const val DISCONNECT_FAILED = "Couldn't reach your server, so it's still connected. Try again."
@@ -229,7 +229,7 @@ object MailAccountRules {
                 SetupState.TODO, SetupFix.MAIL, "Reconnect",
             )
             v.rows.isEmpty() -> SetupStep(
-                SETUP_KEY, SETUP_TITLE, "Connect your personal Gmail, Outlook and the business Gmail so MEKA can keep the inbox tidy",
+                SETUP_KEY, SETUP_TITLE, "Connect your personal Gmail, Outlook and the business Gmail so Navilife can keep the inbox tidy",
                 SetupState.TODO, SetupFix.MAIL, "Connect",
             )
             v.toConnect != null -> SetupStep(

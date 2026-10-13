@@ -20,7 +20,7 @@ import os.meka.core.sync.Replica
 object PreventedMissRules {
     const val KEY = "prevented"
     const val LABEL = "Prevented misses"
-    const val PENDING_LINE = "Counted from MEKA's next reminder about a task or renewal"
+    const val PENDING_LINE = "Counted from Navilife's next reminder about a task or renewal"
 
     /** A reminder's subject from its notice key: `task:<id>` or `renewal:<id>:<cancel-by day>`; null for other notices. */
     fun aboutOf(noticeKey: String): String? = when {

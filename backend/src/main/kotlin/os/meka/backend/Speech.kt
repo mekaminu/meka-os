@@ -111,7 +111,7 @@ class SpeechService(
     }
 
     fun voices(): SpeechCodec.Voices {
-        if (engine == null) return SpeechCodec.Voices(SpeechCodec.Voices.OFF, reason = "MEKA's voice isn't set up on this server")
+        if (engine == null) return SpeechCodec.Voices(SpeechCodec.Voices.OFF, reason = "Navilife's voice isn't set up on this server")
         val m = month()
         val used = runCatching { usage.used(m) }.getOrDefault(0)
         val list = runCatching { offered() }.getOrElse {
@@ -129,7 +129,7 @@ class SpeechService(
      * for [SpeechCodec.Request.binary]) and a response without audio; every other answer has no bytes.
      */
     fun say(r: SpeechCodec.Request): Said {
-        val e = engine ?: return Said(SpeechCodec.Response(SpeechCodec.Response.OFF, reason = "MEKA's voice isn't set up on this server"))
+        val e = engine ?: return Said(SpeechCodec.Response(SpeechCodec.Response.OFF, reason = "Navilife's voice isn't set up on this server"))
         val m = month()
         val chars = r.text.length.toLong()
         if (usage.used(m) + chars > capChars) return Said(SpeechCodec.Response(SpeechCodec.Response.OVER, reason = OVER))
@@ -182,7 +182,7 @@ class SpeechService(
         /** Meka's shortlist (build plan): these lead the list on the same engine. */
         val PREFERRED = listOf("Amy", "Emma", "Brian", "Arthur")
         const val UNREACHABLE = "Couldn't reach Amazon Polly"
-        const val OVER = "This month's voice is used up; MEKA's own voice speaks until the 1st"
+        const val OVER = "This month's voice is used up; Navilife's own voice speaks until the 1st"
         /** What [warm] says once at start (metered like any clip). */
         const val WARM_LINE = "Hello."
         /** How often the background refresh reads the voice list (well inside the six hours a request would wait). */

@@ -71,7 +71,7 @@ object ChatShadeRules {
     const val ARRIVAL_OFF = "Stop clearing this chat from the shade"
     const val ARRIVAL_SETTING_TITLE = "Cleared from the shade as they come"
     const val ARRIVAL_SETTING_LINE =
-        "MEKA keeps every message and its card; WhatsApp still shows them unread. Send then opens the chat with the reply copied."
+        "Navilife keeps every message and its card; WhatsApp still shows them unread. Send then opens the chat with the reply copied."
 
     /** The chat key of a captured message, the same as [TriageChatRules.key] gives its card. */
     fun key(item: CapturedItem): String {
@@ -93,7 +93,7 @@ object ChatShadeRules {
 
     /** The undo bar's line after switching it. */
     fun arrivalLine(title: String, on: Boolean): String =
-        if (on) "$title · cleared from the shade as it comes; MEKA keeps every message" else "$title · stays in the shade as usual"
+        if (on) "$title · cleared from the shade as it comes; Navilife keeps every message" else "$title · stays in the shade as usual"
 
     /** "Barça lads, Five-a-side": the Messages setting's line, or null when no chat has it. */
     fun arrivalSummary(settings: TriageSettings): String? =

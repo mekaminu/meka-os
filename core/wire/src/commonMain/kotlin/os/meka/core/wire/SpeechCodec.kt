@@ -119,7 +119,7 @@ object SpeechCodec {
      * plain name, is a failed answer, never trusted.
      */
     fun binaryResponse(audioB64: String, voice: String?, engine: String?): Response {
-        if (audioB64.isEmpty() || audioB64.length > MAX_AUDIO_B64) return Response(Response.FAILED, reason = "MEKA's voice sent an unusable clip")
+        if (audioB64.isEmpty() || audioB64.length > MAX_AUDIO_B64) return Response(Response.FAILED, reason = "Navilife's voice sent an unusable clip")
         val v = voice?.takeIf { VOICE.matches(it) }
         val e = engine?.takeIf { it.length <= 20 && it.all { c -> c.isLetter() } }
         return Response(Response.SPOKEN, audioB64, BINARY, v, e)

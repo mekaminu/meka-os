@@ -140,7 +140,7 @@ object SessionRules {
     const val MIN_SESSION_MINUTES = 30
     const val GYM_MINUTES = 60
     const val BOOK_OFFER_CAPTION =
-        "Keeps its ticks and streak: MEKA books its sessions around your calendar and work, and rebooks a missed one."
+        "Keeps its ticks and streak: Navilife books its sessions around your calendar and work, and rebooks a missed one."
 
     /**
      * A habit Meka made by hand that is really the Gym: its title has [GYM_WORDS] as a whole word, or "work out", in any
@@ -163,7 +163,7 @@ object SessionRules {
     fun bookOfferLabel(title: String): String {
         val t = title.trim()
         val short = if (t.length <= MAX_LABEL) t else t.take(MAX_LABEL + 1).substringBeforeLast(' ').ifEmpty { t.take(MAX_LABEL) } + "…"
-        return "Let MEKA book “$short”"
+        return "Let Navilife book “$short”"
     }
 
     /** What booking a hand-made habit changes besides "Book my sessions": an hour when it was shorter, evenings when "Any time". */

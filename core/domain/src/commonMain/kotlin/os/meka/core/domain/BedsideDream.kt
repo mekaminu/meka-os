@@ -26,9 +26,9 @@ object BedsideDreamRules {
     const val SETUP_TITLE = "Bedside screen saver"
     const val SETUP_FIX_LABEL = "Take me there"
     /** Where to find it on a Samsung; also the help line. */
-    const val WHERE = "Settings → Display → Screen saver → MEKA"
+    const val WHERE = "Settings → Display → Screen saver → Navilife"
     /** The label Android lists the screen saver under. */
-    const val LABEL = "MEKA bedside clock"
+    const val LABEL = "Navilife bedside clock"
 
     /** The clock moves to the next place this often. */
     const val SHIFT_EVERY_MINUTES = 2

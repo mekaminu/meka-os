@@ -13,7 +13,7 @@ package os.meka.core.domain
  */
 object GoalBreakdownRules {
     const val ACTION = "Break it down"
-    const val HINT = "MEKA suggests milestones and first steps · tick the ones to keep, nothing is added until you do"
+    const val HINT = "Navilife suggests milestones and first steps · tick the ones to keep, nothing is added until you do"
     const val READING_LINE = "Thinking it through…"
     const val NOTHING_LINE = "Nothing new to suggest · it already looks broken down"
     const val FULL_LINE = "This goal has all the milestones it can keep · remove one to make room"

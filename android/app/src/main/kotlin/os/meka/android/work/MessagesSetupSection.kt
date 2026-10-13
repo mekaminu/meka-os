@@ -112,9 +112,9 @@ internal fun MessagesSetupSection(core: MekaCore, store: CaptureStore, listening
             }
         }
 
-        Text("Kept from MEKA's AI", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
+        Text("Kept from Navilife's AI", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
         Text(
-            "A person or group kept from MEKA's AI still shows in Needs you, as FYI with nothing drafted; a kept group still has its digest, with no gist.",
+            "A person or group kept from Navilife's AI still shows in Needs you, as FYI with nothing drafted; a kept group still has its digest, with no gist.",
             style = MekaType.caption, color = Meka.colors.textTertiary,
         )
         if (list.isEmpty) Text(MessagesSetupRules.EMPTY, style = MekaType.caption, color = Meka.colors.textTertiary)
@@ -163,7 +163,7 @@ internal fun MessagesSetupSection(core: MekaCore, store: CaptureStore, listening
 
         Text("Privacy and cost", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
         (MessagesSetupRules.PRIVACY + MessagesSetupRules.COST).forEach { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
-        Text("What MEKA can't see", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
+        Text("What Navilife can't see", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
         MessagesSetupRules.LIMITS.forEach { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
     }
 }

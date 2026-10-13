@@ -315,7 +315,7 @@ fun AskMekaSection(
                     modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
                         .clickable(role = Role.Button) { if (talk.active) { haptics.tick(); talk.stop() } else startTalking() }
                         .testTag(ASK_MIC_TAG)
-                        .semantics { contentDescription = if (talk.active) "Stop talking to MEKA" else "Talk to MEKA" },
+                        .semantics { contentDescription = if (talk.active) "Stop talking to Navilife" else "Talk to Navilife" },
                 )
             }
         }
@@ -337,7 +337,7 @@ fun AskMekaSection(
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
             Text(
-                "MEKA's AI · " + (status?.line ?: ""), style = MekaType.caption, color = Meka.colors.accent,
+                "Navilife's AI · " + (status?.line ?: ""), style = MekaType.caption, color = Meka.colors.accent,
                 modifier = Modifier.padding(top = MekaSpace.xs, start = MekaSpace.xxs),
             )
         }
@@ -476,7 +476,7 @@ private fun TalkPanel(talk: TalkController, onOrb: () -> Unit) {
             talk.phase, talk.level,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                 .clickable(enabled = talk.active, role = Role.Button, onClick = onOrb)
-                .semantics { contentDescription = "MEKA, ${TalkOrb.label(talk.phase, mac = false, talkOver = talk.talkOver)}" },
+                .semantics { contentDescription = "Navilife, ${TalkOrb.label(talk.phase, mac = false, talkOver = talk.talkOver)}" },
         )
         AnimatedContent(
             targetState = talk.problem?.line ?: TalkOrb.label(talk.phase, mac = false, talkOver = talk.talkOver),

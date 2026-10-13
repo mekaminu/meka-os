@@ -56,7 +56,7 @@ class ReleaseActivityTest {
         assertEquals(ActivityKind.PUBLISHED, row.kind)
         assertEquals("09:00", row.time)
         assertEquals("GitHub build published build 412", row.summary)
-        assertEquals("MEKA 0.1.412 · 24 KB · install it from Today on the Fold", row.detail)
+        assertEquals("Navilife 0.1.412 · 24 KB · install it from Today on the Fold", row.detail)
         assertEquals("Why: Hands-free phone updates · after a green CI run on main", row.why)
         assertFalse(row.canUndo)
         assertEquals(listOf("hh"), woken)

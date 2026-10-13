@@ -40,7 +40,7 @@ object RecoveryEnrolment {
 
     fun outcome(r: Result, householdId: String, deviceId: String, device: String): Outcome = when (r) {
         is Result.Enrolled ->
-            if (r.householdId != householdId || r.deviceId != deviceId) Outcome(null, "This $device can't join that household · reinstall MEKA and try again")
+            if (r.householdId != householdId || r.deviceId != deviceId) Outcome(null, "This $device can't join that household · reinstall Navilife and try again")
             else Outcome(r.secret, null)
         is Result.Unreadable -> Outcome(null, r.line)
         is Result.Refused -> Outcome(null, r.line)

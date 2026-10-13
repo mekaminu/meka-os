@@ -370,9 +370,9 @@ final class CoreModel {
             )
             do {
                 core = try open()
-                lastError = aside ?? "MEKA's database wouldn't open, so MEKA started afresh."
+                lastError = aside ?? "Navilife's database wouldn't open, so Navilife started afresh."
             } catch {
-                lastError = "MEKA's database won't open: \(error.localizedDescription)"
+                lastError = "Navilife's database won't open: \(error.localizedDescription)"
                 return
             }
         }
@@ -667,7 +667,7 @@ final class CoreModel {
 
     func publishFoldUpdate(reduced: Bool) async {
         guard let path = foldUpdatePath, !publishingFoldUpdate else { return }
-        guard let core else { foldUpdateOutcome = "MEKA is still starting. Try again in a moment."; return }
+        guard let core else { foldUpdateOutcome = "Navilife is still starting. Try again in a moment."; return }
         publishingFoldUpdate = true
         let message: String
         do {
@@ -717,7 +717,7 @@ final class CoreModel {
         panel.nameFieldStringValue = file.fileName
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = true
-        panel.message = "Save everything in MEKA as one JSON file. It isn't encrypted."
+        panel.message = "Save everything in Navilife as one JSON file. It isn't encrypted."
         guard panel.runModal() == .OK, let url = panel.url else { exporting = false; return }
         do {
             try json.write(to: url, atomically: true, encoding: .utf8)

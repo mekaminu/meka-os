@@ -91,7 +91,7 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
         Text("Activity", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.ACTIVITY)).appear(rememberAppearance(0)))
         Text(
-            if (view.isEmpty) view.emptyLine else "What MEKA did and why. ${view.weekLine}.",
+            if (view.isEmpty) view.emptyLine else "What Navilife did and why. ${view.weekLine}.",
             style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)),
         )
         AnimatedContent(

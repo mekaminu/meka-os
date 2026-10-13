@@ -533,6 +533,9 @@ internal fun AppearanceRow(open: Boolean, modifier: Modifier, openTopics: () -> 
             }
             // How the Fold reports it is held (bedside clock slice 1), live, so the bedside clock's trigger can be seen.
             os.meka.android.fold.FoldPostureLines(Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.xxs))
+            // The name and tagline (the rename to Navilife, 2026-10-13), over the build line.
+            Text(AppUpdateRules.TAGLINE, style = MekaType.caption, color = Meka.colors.textSecondary,
+                modifier = Modifier.padding(start = MekaSpace.m, end = MekaSpace.m))
             // The build on this phone (Meka, 2026-10-08), so we can tell whether it has the latest motion work.
             val app = context as? MekaApplication
             if (app != null) {

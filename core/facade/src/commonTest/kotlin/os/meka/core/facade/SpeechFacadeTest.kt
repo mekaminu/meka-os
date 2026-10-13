@@ -119,17 +119,17 @@ class SpeechFacadeTest {
             listOf(SpeechCodec.Voice("Amy", "Female", "generative"), SpeechCodec.Voice("Brian", "Male", "neural")),
             "Amy", "2026-10", 12_400, 1_000_000,
         )
-        assertEquals("MEKA's voice · Amy · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
+        assertEquals("Navilife's voice · Amy · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
         assertTrue(c.chooseMekaVoice("Brian"))
-        assertEquals("MEKA's voice · Brian · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
+        assertEquals("Navilife's voice · Brian · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
         // A voice this server doesn't offer is said by its default, so that's the one named.
         assertTrue(c.chooseMekaVoice("Zed"))
-        assertEquals("MEKA's voice · Amy · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
+        assertEquals("Navilife's voice · Amy · 12,400 of 1,000,000 characters in October", c.voiceUsageLine())
         server.down = true
         assertNull(c.voiceUsageLine())
         // The device's own voice: said without asking the server.
         assertTrue(c.chooseMekaVoice("device"))
-        assertEquals("MEKA's voice · the device's own voice, nothing is sent", c.voiceUsageLine())
+        assertEquals("Navilife's voice · the device's own voice, nothing is sent", c.voiceUsageLine())
         server.down = false
         assertTrue(c.chooseMekaVoice(null))
         server.voices = SpeechCodec.Voices(SpeechCodec.Voices.OFF)
@@ -152,7 +152,7 @@ class SpeechFacadeTest {
         val v = c.voicePicker(mac = true)
         assertEquals(listOf("Amy", "Brian", "device"), v.choices.map { it.id })
         assertEquals("Amy", v.choices.single { it.selected }.id)
-        assertEquals("MEKA's voice · Amy · 12,400 of 1,000,000 characters in October", v.usageLine)
+        assertEquals("Navilife's voice · Amy · 12,400 of 1,000,000 characters in October", v.usageLine)
         // Choosing one lights it on the next look (and follows to every device: it's the synced setting).
         assertTrue(c.chooseMekaVoice("Brian"))
         assertEquals("Brian", c.voicePicker(mac = true).choices.single { it.selected }.id)
@@ -239,13 +239,13 @@ class SpeechFacadeTest {
         server.answer = { now += 1_800; SpeechCodec.Response(SpeechCodec.Response.SPOKEN, audio = "bXAz", format = "mp3") }
         c.speechClip("First.", first = true)
         c.speechClip("First.", first = true) // from memory: not counted
-        assertEquals("Time to MEKA's voice · 1.8 s", c.voiceTimingLine())
+        assertEquals("Time to Navilife's voice · 1.8 s", c.voiceTimingLine())
         server.slowMs = 4_500
         assertNull(c.speechClip("Slow.", first = true))
-        assertEquals("Time to MEKA's voice · late · 1.8 s", c.voiceTimingLine())
+        assertEquals("Time to Navilife's voice · late · 1.8 s", c.voiceTimingLine())
         server.slowMs = 0
         server.answer = { now += 300; SpeechCodec.Response(SpeechCodec.Response.OFF) }
         assertNull(c.speechClip("Off.", first = true))
-        assertTrue(c.voiceTimingLine()!!.startsWith("Time to MEKA's voice · no answer · late · 1.8 s"))
+        assertTrue(c.voiceTimingLine()!!.startsWith("Time to Navilife's voice · no answer · late · 1.8 s"))
     }
 }

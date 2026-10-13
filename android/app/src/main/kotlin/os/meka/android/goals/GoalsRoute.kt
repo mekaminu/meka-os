@@ -127,7 +127,7 @@ fun GoalsRoute(core: MekaCore) {
         item(key = "pace") {
             val line = view.paceLine
             Text(
-                line ?: "Add a habit and MEKA keeps count, and makes room in your plan when one falls behind.",
+                line ?: "Add a habit and Navilife keeps count, and makes room in your plan when one falls behind.",
                 style = MekaType.itemMeta,
                 color = if (view.behind > 0) Meka.colors.accent else Meka.colors.textSecondary,
                 modifier = Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1)),
@@ -171,7 +171,7 @@ fun GoalsRoute(core: MekaCore) {
             Column(Modifier.animateItem().padding(top = MekaSpace.m)) {
                 Action("Add Gym") { haptics.light(); act { open = core.addGym() } }
                 Text(
-                    "Three times a week, evenings, an hour: MEKA books the sessions around your calendar and work, and rebooks a missed one.",
+                    "Three times a week, evenings, an hour: Navilife books the sessions around your calendar and work, and rebooks a missed one.",
                     style = MekaType.caption, color = Meka.colors.textTertiary,
                 )
             }

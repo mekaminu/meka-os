@@ -43,7 +43,7 @@ object UpdateNotice {
         if (nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL, "App updates", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "A quiet note when a new MEKA build is ready to install. Nothing installs without your tap."
+                    description = "A quiet note when a new Navilife build is ready to install. Nothing installs without your tap."
                 },
             )
         }

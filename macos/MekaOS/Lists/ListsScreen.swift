@@ -129,7 +129,7 @@ struct ListsScreen: View {
         let items = model.lists?.waiting ?? []
         let promised = model.lists?.promised ?? []
         if items.isEmpty && promised.isEmpty {
-            EmptyLine(text: "Nothing promised either way. Add what you told someone you'd do, or a reply, a parcel or a refund you're waiting on, and MEKA tells you when it's due.", palette: palette)
+            EmptyLine(text: "Nothing promised either way. Add what you told someone you'd do, or a reply, a parcel or a refund you're waiting on, and Navilife tells you when it's due.", palette: palette)
         }
         if !promised.isEmpty { sectionLabel("You promised").padding(.top, MekaSpace.xs) }
         ForEach(promised, id: \.id) { p in

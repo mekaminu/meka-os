@@ -3943,7 +3943,7 @@ class MekaCore(
         val summary = os.meka.core.domain.AskRules.doneLine(card.proposal, today)
         val (_, id) = activity.actRecorded(
             summary, os.meka.core.domain.TrustRules.why(kind), os.meka.core.domain.TrustRules.source(kind),
-            AutonomyLevel.AUTO_UNDER_RULE.name, detail = "Asked in MEKA",
+            AutonomyLevel.AUTO_UNDER_RULE.name, detail = "Asked in Navilife",
         ) { performAsk(card) }
         return id?.let { os.meka.core.domain.AskAutoDone(card.proposal, os.meka.core.domain.TrustRules.autoLine(summary), it) }
     }

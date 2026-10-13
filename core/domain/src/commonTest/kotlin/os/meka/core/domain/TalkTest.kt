@@ -17,7 +17,7 @@ class TalkTest {
 
     @Test
     fun goodbyesEndButOkOrAQuestionWithThankYouInItDoesNot() {
-        listOf("That's all", "that's it, thanks!", "No thanks, bye", "OK cheers", "Thank you MEKA", "stop", "nothing else", "nope", "I'm done for now")
+        listOf("That's all", "that's it, thanks!", "No thanks, bye", "OK cheers", "Thank you Navilife", "stop", "nothing else", "nope", "I'm done for now")
             .forEach { assertTrue(TalkRules.isEnding(it), it); assertEquals(TalkReply.End, TalkRules.reply(it, 0), it) }
         listOf("ok", "great", "thanks, and add milk", "stop the timer", "is that all for today?", "what's left")
             .forEach { assertFalse(TalkRules.isEnding(it), it) }
@@ -131,7 +131,7 @@ class TalkTest {
 
         // AI off: said once, then the conversation ends (a barge-in ends it at once).
         var off = TalkFlow.heard(TalkFlow.start().session, "what's next").session
-        off = TalkFlow.answered(off, "what's next", AskOutcome.Unavailable("MEKA's AI is off"), today).session
+        off = TalkFlow.answered(off, "what's next", AskOutcome.Unavailable("Navilife's AI is off"), today).session
         assertTrue(off.endAfterSpeaking)
         assertEquals(listOf(TalkEffect.End), TalkFlow.spoke(off).effects)
         assertEquals(listOf(TalkEffect.StopSpeaking, TalkEffect.End), TalkFlow.bargeIn(off).effects)
@@ -259,7 +259,7 @@ class TalkTest {
     @Test
     fun planMyDayOpensThePlannerAndAnythingMoreIsAQuestion() {
         listOf(
-            "Plan my day", "plan my day please", "OK MEKA, can you plan the day for me?", "let's plan today",
+            "Plan my day", "plan my day please", "OK Navilife, can you plan the day for me?", "let's plan today",
             "make a plan for the day", "What's my plan for today", "yes, plan my day", "open the planner", "help me plan my day",
         ).forEach { assertEquals(TalkReply.Open(AskRules.question(it)!!, TalkPlace.PLAN), TalkRules.reply(it, 0), it) }
         listOf("plan my day around the dentist", "plan a trip to Barcelona", "what's the plan for Saturday", "planning", "my day")

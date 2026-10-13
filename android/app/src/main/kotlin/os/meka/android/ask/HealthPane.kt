@@ -253,7 +253,7 @@ private fun NotificationTraceLines(checkedAtMs: Long?, shown: Int = 12) {
     val facts = remember(checkedAtMs) { os.meka.android.notify.NotifyTraceStore.health(context) }
     val cal = remember(checkedAtMs) { os.meka.android.notify.NotifyTraceStore.calendar() }
     Text(
-        (if (facts.allowed) "Allowed" else "Off for MEKA") + if (facts.channels.isEmpty()) " · no categories yet" else "",
+        (if (facts.allowed) "Allowed" else "Off for Navilife") + if (facts.channels.isEmpty()) " · no categories yet" else "",
         style = MekaType.caption, color = Meka.colors.textSecondary,
     )
     // Slice 3: each category on its own line with when MEKA last posted on it, the newest first.

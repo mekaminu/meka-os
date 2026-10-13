@@ -3,7 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>$(PRODUCT_NAME)</string>
+    <string>Navilife</string>
+    <key>CFBundleDisplayName</key>
+    <string>Navilife</string>
     <key>CFBundleIdentifier</key>
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleShortVersionString</key>
@@ -17,9 +19,9 @@
     <key>MekaSyncURL</key>
     <string>$(MEKA_SYNC_URL)</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>MEKA listens while you talk to it. Your voice is turned into words on this Mac and never recorded or sent away.</string>
+    <string>Navilife listens while you talk to it. Your voice is turned into words on this Mac and never recorded or sent away.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>MEKA turns what you say into words on this Mac only, so you can talk to it. Nothing is sent to Apple or kept.</string>
+    <string>Navilife turns what you say into words on this Mac only, so you can talk to it. Nothing is sent to Apple or kept.</string>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
@@ -37,7 +39,7 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>Add to MEKA</string>
+                <string>Add to Navilife</string>
             </dict>
             <key>NSMessage</key>
             <string>captureText</string>
@@ -54,7 +56,7 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>Handle this with MEKA</string>
+                <string>Handle this with Navilife</string>
             </dict>
             <key>NSMessage</key>
             <string>handleText</string>

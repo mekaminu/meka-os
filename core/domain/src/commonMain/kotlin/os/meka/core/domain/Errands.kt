@@ -372,7 +372,7 @@ object ErrandPlaceRules {
 
     const val CHANNEL_NAME = "Errands nearby"
     const val CHANNEL_ABOUT = "When you're near a place you saved with errands waiting there."
-    const val PRIVACY = "Each place's spot stays on this phone; nothing about where you are is synced or sent. Android watches the saved spots itself, even with MEKA closed."
+    const val PRIVACY = "Each place's spot stays on this phone; nothing about where you are is synced or sent. Android watches the saved spots itself, even with Navilife closed."
     const val SAVING = "Finding where you are…"
     const val NO_FIX = "Couldn't find where you are · try again outside"
     const val NO_PERMISSION = "Needs precise location · turn on near-me reminders first"

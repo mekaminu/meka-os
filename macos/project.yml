@@ -36,13 +36,14 @@ targets:
     info:
       path: MekaOS/Info.plist
       properties:
-        CFBundleDisplayName: Meka
+        CFBundleDisplayName: Navilife
+        CFBundleName: Navilife
         LSApplicationCategoryType: public.app-category.productivity
         NSHumanReadableCopyright: ""
         MekaSyncURL: $(MEKA_SYNC_URL)
         # Talk to MEKA (V1 voice slice 3): speech is recognised on the Mac only; nothing is recorded or sent away.
-        NSMicrophoneUsageDescription: MEKA listens while you talk to it. Your voice is turned into words on this Mac and never recorded or sent away.
-        NSSpeechRecognitionUsageDescription: MEKA turns what you say into words on this Mac only, so you can talk to it. Nothing is sent to Apple or kept.
+        NSMicrophoneUsageDescription: Navilife listens while you talk to it. Your voice is turned into words on this Mac and never recorded or sent away.
+        NSSpeechRecognitionUsageDescription: Navilife turns what you say into words on this Mac only, so you can talk to it. Nothing is sent to Apple or kept.
         # Self-updating phone app: tools/publish-fold.sh opens mekaos://publish-fold-update?apk=… (FoldUpdateSheet).
         CFBundleURLTypes:
           - CFBundleURLName: os.meka.mac.publish
@@ -50,7 +51,7 @@ targets:
         # Capture from anywhere: select text in any app → Services → "Add to MEKA" (CaptureService.swift).
         NSServices:
           - NSMenuItem:
-              default: Add to MEKA
+              default: Add to Navilife
             NSMessage: captureText
             NSPortName: $(PRODUCT_NAME)
             NSRequiredContext: {}
@@ -58,7 +59,7 @@ targets:
           # "Handle this" (V1): select an email or any text → Services → "Handle this with MEKA"; MEKA reads it and
           # offers what to add in Needs you (nothing is added until Meka taps Add).
           - NSMenuItem:
-              default: Handle this with MEKA
+              default: Handle this with Navilife
             NSMessage: handleText
             NSPortName: $(PRODUCT_NAME)
             NSRequiredContext: {}
@@ -101,7 +102,7 @@ targets:
     info:
       path: NewsWidget/Info.plist
       properties:
-        CFBundleDisplayName: MEKA News
+        CFBundleDisplayName: Navilife News
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:

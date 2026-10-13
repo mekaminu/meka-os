@@ -79,7 +79,7 @@ data class TriageCard(
     val askedBy: String? = null,
 ) {
     companion object {
-        const val LOCAL_LINE = "Not sent to MEKA's AI"
+        const val LOCAL_LINE = "Not sent to Navilife's AI"
         const val NO_GIST_LINE = "Sent you a message"
     }
 }

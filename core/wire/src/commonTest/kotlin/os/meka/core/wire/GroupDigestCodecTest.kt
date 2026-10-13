@@ -49,7 +49,7 @@ class GroupDigestCodecTest {
             ),
         )
         assertEquals(r, GroupDigestCodec.decodeResponse(GroupDigestCodec.encodeResponse(r)))
-        assertEquals(GroupDigestCodec.Response("off", reason = "MEKA's AI is off"), GroupDigestCodec.decodeResponse(GroupDigestCodec.encodeResponse(GroupDigestCodec.Response("off", reason = "MEKA's AI is off"))))
+        assertEquals(GroupDigestCodec.Response("off", reason = "Navilife's AI is off"), GroupDigestCodec.decodeResponse(GroupDigestCodec.encodeResponse(GroupDigestCodec.Response("off", reason = "Navilife's AI is off"))))
     }
 
     @Test

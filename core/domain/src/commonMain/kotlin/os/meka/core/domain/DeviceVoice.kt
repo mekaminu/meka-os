@@ -74,7 +74,7 @@ object DeviceVoiceRules {
 
     fun note(mac: Boolean): String =
         "Speed and pitch change ${if (mac) "the Mac's" else "the phone's"} own voice, kept on this device only. " +
-            "MEKA's voices speak at their own pace."
+            "Navilife's voices speak at their own pace."
 
     /** The voices MEKA may speak with: installed, on the device (nothing sent away), English; best first, as [TalkVoice.best]. */
     fun usable(voices: List<DeviceVoice>): List<DeviceVoice> {
@@ -157,7 +157,7 @@ object DeviceVoiceRules {
         val auto = DeviceVoiceRow(
             AUTOMATIC,
             "Automatic",
-            if (best != null) "MEKA picks the best installed · now ${label(best)}" else "The engine's own voice",
+            if (best != null) "Navilife picks the best installed · now ${label(best)}" else "The engine's own voice",
             selected = chosen == null,
         )
         val rows = list.map { DeviceVoiceRow(it.name, label(it), detail(it, mac), selected = it == chosen) }

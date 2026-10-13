@@ -117,14 +117,14 @@ class DocumentsTest {
         assertEquals(DocumentRules.EMPTY_LINE, dFold.view().summary)
         val added = dFold.add("Rex passport 20 May 2027")
         assertFalse(added.refused)
-        assertEquals("Added Rex passport · expires Thu 20 May 2027 · MEKA reminds you from Wed 18 Nov 2026", added.line)
-        assertEquals("Added Railcard · expires Mon 31 May 2027 · MEKA reminds you from Mon 17 May 2027", dFold.add("Railcard 05/2027").line)
+        assertEquals("Added Rex passport · expires Thu 20 May 2027 · Navilife reminds you from Wed 18 Nov 2026", added.line)
+        assertEquals("Added Railcard · expires Mon 31 May 2027 · Navilife reminds you from Mon 17 May 2027", dFold.add("Railcard 05/2027").line)
         assertTrue(dFold.add("Passport 31 Feb 2029").refused)
         sync()
         assertEquals(listOf("Rex passport", "Railcard"), dMac.items().map { it.title })
         val e35 = d(5, 20, 2035)
         assertEquals(
-            "Updated Rex passport · expires ${DocumentRules.dateLabel(e35)} · MEKA reminds you from ${DocumentRules.dateLabel(e35 - 183)}",
+            "Updated Rex passport · expires ${DocumentRules.dateLabel(e35)} · Navilife reminds you from ${DocumentRules.dateLabel(e35 - 183)}",
             dMac.add("rex passport 20 May 2035").line,
         )
         sync()

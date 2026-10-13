@@ -264,7 +264,7 @@ data class AfterWorkSummary(val people: List<PersonSummary>) {
 
     companion object {
         const val WORK_TITLE = "While you were at work"
-        const val AWAY_TITLE = "Messages MEKA took"
+        const val AWAY_TITLE = "Messages Navilife took"
         /** The card's affordance beside its title (Fold review 2026-10-12 17:56, item 3). */
         const val OPEN_LABEL = "Open"
     }

@@ -23,9 +23,9 @@ object MessagesSetupRules {
      */
     fun statusLine(listening: Boolean?, aiOn: Boolean?): String = when {
         listening == null -> "Your Fold reads WhatsApp and texts as they arrive; set it up there: Work mode → Messages."
-        !listening -> "Give MEKA notification access so it can read WhatsApp and texts as they arrive."
-        aiOn == false -> "MEKA is reading WhatsApp and texts. MEKA's AI is off, so groups still go to the digest but no replies are drafted."
-        else -> "MEKA is reading WhatsApp and texts: replies drafted for you to send, actions as cards, groups in the digest."
+        !listening -> "Give Navilife notification access so it can read WhatsApp and texts as they arrive."
+        aiOn == false -> "Navilife is reading WhatsApp and texts. Navilife's AI is off, so groups still go to the digest but no replies are drafted."
+        else -> "Navilife is reading WhatsApp and texts: replies drafted for you to send, actions as cards, groups in the digest."
     }
 
     /** Whether the status line needs a look (lit in the accent). */
@@ -34,24 +34,24 @@ object MessagesSetupRules {
     /** WhatsApp → Settings → Notifications, so groups reach MEKA but stop buzzing. */
     val WHATSAPP_STEPS = listOf(
         "WhatsApp → Settings → Notifications: keep \"Show notifications\" on for messages and groups.",
-        "Groups: Notification tone \"None\", Vibrate \"Off\", High-priority notifications \"Off\". MEKA then gathers them quietly.",
-        "Don't mute groups in WhatsApp: a muted chat sends no notification, so MEKA can't see it.",
+        "Groups: Notification tone \"None\", Vibrate \"Off\", High-priority notifications \"Off\". Navilife then gathers them quietly.",
+        "Don't mute groups in WhatsApp: a muted chat sends no notification, so Navilife can't see it.",
         "Android Settings → Notifications → WhatsApp: allowed.",
     )
 
     /** What goes to MEKA's AI, and what stays on the phone. */
     val PRIVACY = listOf(
-        "Only a message's text, the sender's name and the time go to MEKA's AI: one message at a time for chats, one call per digest for busy groups.",
+        "Only a message's text, the sender's name and the time go to Navilife's AI: one message at a time for chats, one call per digest for busy groups.",
         "Messages stay sealed on this phone and are dropped after 7 days. The server keeps only the cards: who, the gist and the draft, never the message.",
         "Nothing is ever sent without your tap.",
     )
 
     /** What it costs, inside MEKA's AI's monthly cap. */
-    const val COST = "A few pounds a month at most, inside MEKA's AI's monthly cap (Ask → More shows this month's spend)."
+    const val COST = "A few pounds a month at most, inside Navilife's AI's monthly cap (Ask → More shows this month's spend)."
 
     /** What reading notifications can't do. */
     val LIMITS = listOf(
-        "MEKA sees only what a notification shows: long messages are cut short.",
+        "Navilife sees only what a notification shows: long messages are cut short.",
         "Voice notes and photos can't be read; a voice note becomes a \"listen later\" card.",
         "A muted chat sends no notification, and a message read first on another device may not notify.",
         "A reply to you in a group can't be seen in a notification; only your name (Meka, Chukwuemeka, @Meka) counts as a mention.",
@@ -99,15 +99,15 @@ object MessagesSetupRules {
 
     /** The row's line under the name. */
     fun rowLine(row: MessagesSetupRow): String = when {
-        row.private && row.group -> "Kept from MEKA's AI · ${row.mode?.label ?: GroupMode.DIGEST.label}, no gist"
-        row.private -> "Kept from MEKA's AI · shown as FYI, nothing drafted"
+        row.private && row.group -> "Kept from Navilife's AI · ${row.mode?.label ?: GroupMode.DIGEST.label}, no gist"
+        row.private -> "Kept from Navilife's AI · shown as FYI, nothing drafted"
         row.group -> GroupDigestRules.modeHint(row.mode ?: GroupMode.DIGEST)
-        else -> "Sent to MEKA's AI for a lane and a draft"
+        else -> "Sent to Navilife's AI for a lane and a draft"
     }
 
     /** For the undo bar: "Tunde · kept from MEKA's AI" / "Tunde · back to MEKA's AI". */
     fun privateLine(name: String, on: Boolean): String =
-        if (on) "${name.trim()} · kept from MEKA's AI" else "${name.trim()} · back to MEKA's AI"
+        if (on) "${name.trim()} · kept from Navilife's AI" else "${name.trim()} · back to Navilife's AI"
 
     const val EMPTY = "People and groups show here once they've messaged you."
 }

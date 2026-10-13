@@ -113,7 +113,7 @@ class MotionClockTest {
             }
             val label = "scale=$scale ${if (meka) "mekaRecomposer" else "standard"}"
             PROBES.forEach { key -> Log.i("MekaMotion", "$label $key: ${samples.map { it[key] }}") }
-            assertFalse("$label: MEKA's motion is reduced", values["reduced"] == 1f)
+            assertFalse("$label: Navilife's motion is reduced", values["reduced"] == 1f)
             val frozen = PROBES.filter { key ->
                 val seen = samples.map { it[key] }
                 seen.any { it == null } || seen.distinct().size < 3

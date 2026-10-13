@@ -32,7 +32,7 @@ object BillRules {
     /** The line under the pay-link field. */
     fun linkLine(item: RenewalItem, bad: Boolean): String = when {
         bad -> "That isn't a web address · try octopus.energy"
-        item.payLink != null -> "The reminder ${REMIND_DAYS} days before opens ${site(item.payLink)} · MEKA never pays"
+        item.payLink != null -> "The reminder ${REMIND_DAYS} days before opens ${site(item.payLink)} · Navilife never pays"
         else -> "Where you pay it (optional) · the reminder can open it"
     }
 

@@ -779,7 +779,7 @@ class MekaCoreTest {
         val w = m.deskNewsWidget()
         assertEquals(true, w.isEmpty)
         assertEquals("No news yet", w.emptyTitle)
-        assertEquals("Choose topics in MEKA · Ask › More › News", w.emptyLine)
+        assertEquals("Choose topics in Navilife · Ask › More › News", w.emptyLine)
     }
 
     @Test
@@ -1095,7 +1095,7 @@ class MekaCoreTest {
         val r = a.shutdownView.value.receipt
         assertNotNull(r)
         assertEquals(reminders, r.count)
-        assertEquals("MEKA handled ${if (reminders == 1) "1 thing" else "$reminders things"} today", r.line)
+        assertEquals("Navilife handled ${if (reminders == 1) "1 thing" else "$reminders things"} today", r.line)
         a.syncNow(); m.syncNow()
         m.tick()
         assertEquals(r, m.shutdownView.value.receipt)
@@ -1271,7 +1271,7 @@ class MekaCoreTest {
         a.setHabitDone(id, true)
         assertTrue(!a.goalsView.value.offersAddGym, "no separate Add Gym beside a habit called gym")
         assertEquals(id, a.goalsView.value.bookOffer?.id)
-        assertEquals("Let MEKA book “Gym”", os.meka.core.domain.SessionRules.bookOfferLabel(a.goalsView.value.bookOffer!!.title))
+        assertEquals("Let Navilife book “Gym”", os.meka.core.domain.SessionRules.bookOfferLabel(a.goalsView.value.bookOffer!!.title))
         a.letMekaBook(id)
         val h = a.goalsView.value.habits.single()
         assertEquals(id, h.id)
@@ -1617,7 +1617,7 @@ class MekaCoreTest {
         assertTrue(off.available)
         assertFalse(off.on)
         assertEquals("Also add the blocks to Google", off.label)
-        assertEquals("Apply plans the tasks in MEKA only", off.line)
+        assertEquals("Apply plans the tasks in Navilife only", off.line)
         val first = fold.applyPlan(fold.planDay())
         assertTrue(first.editIds.isEmpty())
         assertNull(first.line)

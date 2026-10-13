@@ -241,7 +241,7 @@ class CalendarWriterTest {
         assertTrue(provider.deleted.isEmpty())
         sync()
         assertEquals(EventEditState.REFUSED, state(id))
-        assertEquals("Someone else organises it · MEKA only changes your own events", CalendarEditRules.line(edits.edit(id)!!, now))
+        assertEquals("Someone else organises it · Navilife only changes your own events", CalendarEditRules.line(edits.edit(id)!!, now))
     }
 
     @Test

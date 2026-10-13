@@ -124,8 +124,8 @@ object TripRules {
 
     const val ADD_HINT = "Add… (Barcelona 14–18 Nov, Flight BA478 Sat 14 Nov 07:40 ref ABC123)"
     const val EMPTY_LINE = "No trips yet. Type a trip with its dates, then each booking with its day, time and reference."
-    const val NOT_READ = "MEKA couldn't read that. Try \"Barcelona 14–18 Nov\" or \"Flight BA478 Sat 14 Nov 07:40 ref ABC123\"."
-    const val NO_DAY = "MEKA couldn't read a day in that booking. Try \"Flight BA478 Sat 14 Nov 07:40 ref ABC123\"."
+    const val NOT_READ = "Navilife couldn't read that. Try \"Barcelona 14–18 Nov\" or \"Flight BA478 Sat 14 Nov 07:40 ref ABC123\"."
+    const val NO_DAY = "Navilife couldn't read a day in that booking. Try \"Flight BA478 Sat 14 Nov 07:40 ref ABC123\"."
     const val NO_TRIP = "Add the trip first, with its dates (\"Barcelona 14–18 Nov\"), then its bookings."
     const val NO_BOOKINGS = "Nothing booked yet. Type each booking above with its day: \"Hotel Arts 14–18 Nov\"."
     const val NOTE = "Typed by you. Bookings from your email and travel documents offline come later (with mail access and the Vault)."

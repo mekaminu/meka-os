@@ -21,7 +21,7 @@ struct MekaNewsWidget: Widget {
             DeskNewsWidgetView(entry: entry)
                 .containerBackground(for: .widget) { DeskNewsBackground() }
         }
-        .configurationDisplayName("MEKA News")
+        .configurationDisplayName("Navilife News")
         .description("Today's match, Barça and AI headlines with pictures.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
@@ -50,7 +50,7 @@ struct DeskNewsEntry: TimelineEntry {
                       fixedLine: "BBC News · 3 h ago", picture: nil, tileInitial: "B", isBarca: false, openUrl: "mekaos://news",
                       untilMs: Int64.max),
             ],
-            emptyTitle: "No news yet", emptyLine: "Choose topics in MEKA · Ask › More › News", writtenAtMs: 0),
+            emptyTitle: "No news yet", emptyLine: "Choose topics in Navilife · Ask › More › News", writtenAtMs: 0),
         pictures: [:])
 }
 
@@ -119,7 +119,7 @@ struct DeskNewsWidgetView: View {
             Spacer(minLength: 0)
             Text(entry.snapshot?.emptyTitle ?? "No news yet").font(.system(size: 15, weight: .medium))
                 .foregroundStyle(palette.textPrimary)
-            Text(entry.snapshot?.emptyLine ?? "Open MEKA to bring your headlines here")
+            Text(entry.snapshot?.emptyLine ?? "Open Navilife to bring your headlines here")
                 .font(.system(size: 12)).foregroundStyle(palette.textSecondary).lineLimit(3)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)

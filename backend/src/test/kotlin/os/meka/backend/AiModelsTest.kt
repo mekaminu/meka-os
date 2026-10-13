@@ -36,7 +36,7 @@ class AiModelsTest {
     }
 
     private fun ask(text: String = "What's on today?", tier: ModelTier = ModelTier.SMALL, maxTokens: Int = 1024) =
-        ModelRequest("ask", tier, "You are MEKA.", listOf(ModelTurn(ModelTurn.Role.USER, text)), maxTokens)
+        ModelRequest("ask", tier, "You are Navilife.", listOf(ModelTurn(ModelTurn.Role.USER, text)), maxTokens)
 
     private fun setup(usd: Long = 20, key: () -> String? = { goodKey }, alerts: MutableList<AiBudget.Level> = mutableListOf()): Triple<AnthropicProvider, AiBudget, FakeHttp> {
         val http = FakeHttp()
@@ -57,7 +57,7 @@ class AiModelsTest {
         assertEquals(goodKey, http.headers.last()["x-api-key"])
         val sent = Json.parseToJsonElement(body!!).jsonObject
         assertEquals("claude-haiku-9", sent["model"]!!.jsonPrimitive.content)
-        assertEquals("You are MEKA.", sent["system"]!!.jsonPrimitive.content)
+        assertEquals("You are Navilife.", sent["system"]!!.jsonPrimitive.content)
         assertEquals("user", sent["messages"]!!.jsonArray.single().jsonObject["role"]!!.jsonPrimitive.content)
         assertFalse("tools" in sent)
         // Haiku: $1 in, $5 out per million tokens → 1000 + 1000 micro-dollars.

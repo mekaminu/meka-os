@@ -99,7 +99,7 @@ class RecoveryKeyFacadeTest {
         val c = core()
         val v = c.refreshRecoveryKey()
         assertEquals(RecoveryKeyRules.OFFLINE, v.problem)
-        assertEquals("Can't check right now · MEKA's server didn't answer", v.line)
+        assertEquals("Can't check right now · Navilife's server didn't answer", v.line)
         val draft = c.makeRecoveryKey()
         assertFalse(c.saveRecoveryKey(draft, draft.confirmPositions.map { draft.words[it] }))
         assertEquals(RecoveryKeyRules.OFFLINE, c.recoveryKeyView.value!!.problem)

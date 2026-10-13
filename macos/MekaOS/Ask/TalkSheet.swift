@@ -52,11 +52,11 @@ struct TalkSheet: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let action = s.action, s.label == TalkOnOpenRules.shared.LABEL {
-                        switchButton(action, "listen when I open MEKA") { toggleListenOnOpen() }
+                        switchButton(action, "listen when I open Navilife") { toggleListenOnOpen() }
                     } else if let action = s.action, s.label == TalkAnywhereRules.shared.LABEL {
                         switchButton(action, "⌥Space from any app") { toggleAnywhere() }
                     } else if let action = s.action, s.label == BargeInRules.shared.LABEL {
-                        switchButton(action, "talk over MEKA to interrupt") { toggleTalkOver() }
+                        switchButton(action, "talk over Navilife to interrupt") { toggleTalkOver() }
                     }
                 }
                 .padding(.top, MekaSpace.m)

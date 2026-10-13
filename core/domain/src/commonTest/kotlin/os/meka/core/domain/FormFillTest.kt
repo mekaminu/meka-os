@@ -59,7 +59,7 @@ class FormFillTest {
         assertEquals(listOf("AB12 CDE", "Ivel Medical Centre", "Octopus"), v.answers.map { it.copyText })
         // A fact kept from the AI still answers: this never goes to the AI or the server.
         assertEquals("Energy supplier", v.answers[2].label)
-        assertEquals("3 answers from What MEKA knows · Copy, then paste into the form", v.line)
+        assertEquals("3 answers from What Navilife knows · Copy, then paste into the form", v.line)
         assertEquals("Vehicle registration: AB12 CDE\nName of doctor's surgery: Ivel Medical Centre\nEnergy supplier: Octopus", v.copyAllText)
         assertEquals("Copy Car reg for Vehicle registration", v.answers[0].copySpoken)
         assertEquals("Vehicle registration: AB12 CDE, from Car reg", v.answers[0].spoken)
@@ -73,7 +73,7 @@ class FormFillTest {
         assertTrue(FormFillRules.answers("Hi Meka, are you free on Thursday for a quick call?", null, facts).answers.isEmpty())
         val long = fact("Notes", "x".repeat(60))
         val one = FormFillRules.answers("Notes:", null, listOf(long))
-        assertEquals("1 answer from What MEKA knows · Copy, then paste into the form", one.line)
+        assertEquals("1 answer from What Navilife knows · Copy, then paste into the form", one.line)
         assertEquals("Copied Notes · " + "x".repeat(40) + "…", FormFillRules.copiedLine(one.answers.single()))
         // At most eight answers.
         val many = (1..10).map { fact("Thing$it", "v$it") }

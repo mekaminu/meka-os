@@ -16,8 +16,8 @@ class MailTidyTest {
         assertEquals(MailTidy.RECEIPT, plan(sure(MailSort.RECEIPT)))
         assertEquals(MailTidy.ARCHIVE, plan(sure(MailSort.NOTIFICATION)))
         assertEquals(MailTidy.ARCHIVE, plan(sure(MailSort.PROMO)))
-        assertEquals("MEKA/Newsletters", MailTidy.NEWSLETTER.label)
-        assertEquals("MEKA/Receipts", MailTidy.RECEIPT.label)
+        assertEquals("Navilife/Newsletters", MailTidy.NEWSLETTER.label)
+        assertEquals("Navilife/Receipts", MailTidy.RECEIPT.label)
         assertNull(MailTidy.ARCHIVE.label)
     }
 
@@ -51,7 +51,7 @@ class MailTidyTest {
         assertEquals(MailTidyRules.NOTHING_TO_TIDY, MailTidyRules.dryRunLine(emptyMap()))
         assertEquals(MailTidyRules.NOTHING_TO_TIDY, MailTidyRules.dryRunLine(mapOf("KEEP" to 40)))
         assertEquals(
-            "Autopilot, dry run · would tidy 52 · 30 newsletters → MEKA/Newsletters · 12 receipts and orders → MEKA/Receipts · " +
+            "Autopilot, dry run · would tidy 52 · 30 newsletters → Navilife/Newsletters · 12 receipts and orders → Navilife/Receipts · " +
                 "10 notifications and promos archived · nothing moved yet",
             MailTidyRules.dryRunLine(mapOf("ARCHIVE" to 10, "RECEIPT" to 12, "NEWSLETTER" to 30, "KEEP" to 7)),
         )
@@ -64,7 +64,7 @@ class MailTidyTest {
     @Test
     fun anAccountsRowCarriesTheDryRun() {
         val a = MailAccountFacts("gmail", "alex@example.com", "ok", 0L, "PERSONAL", sorted = mapOf("NEWSLETTER" to 2), wouldTidy = mapOf("NEWSLETTER" to 2))
-        assertEquals("Autopilot, dry run · would tidy 2 · 2 newsletters → MEKA/Newsletters · nothing moved yet", MailAccountRules.row(a, emptyList(), 0L).tidyLine)
+        assertEquals("Autopilot, dry run · would tidy 2 · 2 newsletters → Navilife/Newsletters · nothing moved yet", MailAccountRules.row(a, emptyList(), 0L).tidyLine)
         assertNull(MailAccountRules.row(a.copy(wouldTidy = null), emptyList(), 0L).tidyLine)
     }
 }

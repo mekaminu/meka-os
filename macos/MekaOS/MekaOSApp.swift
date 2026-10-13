@@ -67,7 +67,7 @@ struct MekaOSApp: App {
                     .keyboardShortcut("k", modifiers: .command)
                 // Talk to MEKA (V1 voice slice 3): Ask comes forward and the conversation starts (again: it ends).
                 // With "From any app" on, macOS hands ⌥Space to GlobalTalkHotKey first, which does the same.
-                Button("Talk to MEKA") { model.requestTalk(reduced: MotionSetting.reduced) }
+                Button("Talk to Navilife") { model.requestTalk(reduced: MotionSetting.reduced) }
                     .keyboardShortcut(.space, modifiers: .option)
             }
             CommandMenu("Go") {

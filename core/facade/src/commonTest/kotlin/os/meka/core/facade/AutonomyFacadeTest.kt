@@ -58,13 +58,13 @@ class AutonomyFacadeTest {
         val fold = core()
         val mac = core("mac")
         fold.answerTrustOffer("add_task", yes = true)
-        assertEquals("MEKA does 1 thing on its own · each with Undo and in Activity", fold.autonomyView.value.summary)
+        assertEquals("Navilife does 1 thing on its own · each with Undo and in Activity", fold.autonomyView.value.summary)
         assertTrue(fold.row("add_task").onItsOwn)
         assertEquals(AutonomyRules.ASK_FIRST, fold.row("add_task").action)
 
-        assertEquals("Paused · MEKA asks before everything", fold.setAutonomyPaused(true))
+        assertEquals("Paused · Navilife asks before everything", fold.setAutonomyPaused(true))
         assertNull(fold.setAutonomyPaused(true))
-        assertEquals("Paused since 17:15 · MEKA asks before everything", fold.autonomyView.value.summary)
+        assertEquals("Paused since 17:15 · Navilife asks before everything", fold.autonomyView.value.summary)
         assertEquals(AutonomyRules.RESUME, fold.autonomyView.value.pauseButton)
         assertEquals(AutonomyRules.PAUSED_LINE, fold.row("add_task").line)
 
@@ -77,7 +77,7 @@ class AutonomyFacadeTest {
         // The pause reaches the Mac.
         fold.syncNow(); mac.syncNow()
         assertTrue(mac.autonomyView.value.paused)
-        assertEquals("Resumed · MEKA does what you've trusted it with again", mac.setAutonomyPaused(false))
+        assertEquals("Resumed · Navilife does what you've trusted it with again", mac.setAutonomyPaused(false))
         mac.syncNow(); fold.syncNow()
         assertFalse(fold.autonomyView.value.paused)
 
@@ -96,11 +96,11 @@ class AutonomyFacadeTest {
         assertEquals(AutonomyRules.DECLINED_LINE, c.row("shopping").line)
         assertEquals(AutonomyRules.OFFER_AGAIN, c.row("shopping").action)
 
-        assertEquals("MEKA will ask before it adds tasks again.", c.resetTrust("add_task"))
+        assertEquals("Navilife will ask before it adds tasks again.", c.resetTrust("add_task"))
         assertEquals("Asks first · offers after 5 yeses in a row", c.row("add_task").line)
         assertNull(c.row("add_task").action)
         assertNull(c.resetTrust("add_task"))
-        assertEquals("MEKA may offer again after 5 yeses in a row.", c.resetTrust("shopping"))
+        assertEquals("Navilife may offer again after 5 yeses in a row.", c.resetTrust("shopping"))
         assertNull(c.row("shopping").action)
         assertNull(c.resetTrust("nonsense"))
         assertEquals(AutonomyRules.NONE_LINE, c.autonomyView.value.summary)

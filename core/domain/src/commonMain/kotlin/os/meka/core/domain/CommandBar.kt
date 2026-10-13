@@ -114,7 +114,7 @@ object CommandBarRules {
         Entry(CommandBarAction.SYNC_NOW, CommandBarSection.DO, "Sync now", "refresh reload update"),
         Entry(CommandBarAction.WORK_MODE, CommandBarSection.OPEN, "Work mode", "hours schedule shift"),
         Entry(CommandBarAction.NOTIFICATIONS, CommandBarSection.OPEN, "Notifications", "quiet hours digest alerts settings"),
-        Entry(CommandBarAction.ACTIVITY, CommandBarSection.OPEN, "Activity", "log history what meka did undo"),
+        Entry(CommandBarAction.ACTIVITY, CommandBarSection.OPEN, "Activity", "log history what meka navilife did undo"),
         Entry(CommandBarAction.YOUR_DATA, CommandBarSection.OPEN, "Your data", "export backup download json"),
         Entry(CommandBarAction.CALENDARS, CommandBarSection.OPEN, "Calendars", "accounts connect google outlook"),
         Entry(CommandBarAction.APPEARANCE_DARK, CommandBarSection.APPEARANCE, "Dark appearance", "theme mode night"),

@@ -122,14 +122,14 @@ object BatteryCareRules {
 
     /** The steps on a Samsung phone, in One UI's words. */
     val SAMSUNG_STEPS = listOf(
-        "Settings → Battery → Background usage limits → Never sleeping apps → + → MEKA",
-        "Make sure MEKA isn't in Sleeping apps or Deep sleeping apps",
-        "Settings → Apps → MEKA → Battery → Unrestricted",
+        "Settings → Battery → Background usage limits → Never sleeping apps → + → Navilife",
+        "Make sure Navilife isn't in Sleeping apps or Deep sleeping apps",
+        "Settings → Apps → Navilife → Battery → Unrestricted",
     )
 
     /** Any other phone. */
     val ANDROID_STEPS = listOf(
-        "Settings → Apps → MEKA → Battery → Unrestricted",
+        "Settings → Apps → Navilife → Battery → Unrestricted",
     )
 
     /**
@@ -145,12 +145,12 @@ object BatteryCareRules {
             val who = if (facts.samsung) "Samsung's battery saver" else "Android's battery saver"
             return BatteryCareView(
                 BatteryCareStatus.STOPPED,
-                "MEKA was stopped $from–$to, likely by $who · Keep MEKA awake",
+                "Navilife was stopped $from–$to, likely by $who · Keep Navilife awake",
                 critical = true, steps = steps, allowInAndroid = !facts.exempt, openSamsung = facts.samsung, gap = gap,
             )
         }
         if (!facts.exempt) {
-            val line = if (facts.samsung) "Samsung may put MEKA to sleep · Keep MEKA awake" else "Android may pause MEKA · Keep MEKA awake"
+            val line = if (facts.samsung) "Samsung may put Navilife to sleep · Keep Navilife awake" else "Android may pause Navilife · Keep Navilife awake"
             return BatteryCareView(
                 BatteryCareStatus.NOT_EXEMPT, line, critical = false, steps = steps,
                 allowInAndroid = true, openSamsung = facts.samsung, gap = null,

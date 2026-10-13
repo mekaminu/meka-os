@@ -42,11 +42,11 @@ object OwnKeyRules {
      */
     val OUTLOOK = OwnKey(
         id = "keyoutlooksecret",
-        title = "Renew MEKA's Outlook sign-in secret",
-        subject = "MEKA · Outlook calendar",
+        title = "Renew Navilife's Outlook sign-in secret",
+        subject = "Navilife · Outlook calendar",
         notes = listOf(
-            "When it runs out (6 Oct 2028) MEKA can no longer read or change your Outlook calendar.",
-            "1. portal.azure.com → App registrations → MEKA OS → Certificates & secrets → New client secret (24 months).",
+            "When it runs out (6 Oct 2028) Navilife can no longer read or change your Outlook calendar.",
+            "1. portal.azure.com → App registrations → Navilife → Certificates & secrets → New client secret (24 months).",
             "2. Copy its Value into AWS Secrets Manager, meka-os-dev/oauth/microsoft, as \"client_secret\" (keep \"client_id\").",
             "3. Tap Renewed here, or set the new secret's end date.",
             "Nothing needs reconnecting: the server reads the secret again on its own.",
@@ -59,10 +59,10 @@ object OwnKeyRules {
     /** The AI key (Anthropic Console, saved 2026-10-07; one year). Shown in Needs you from 20 Sep 2027. */
     val AI = OwnKey(
         id = "keyaiapikey",
-        title = "Renew MEKA's AI key",
-        subject = "MEKA · AI layer",
+        title = "Renew Navilife's AI key",
+        subject = "Navilife · AI layer",
         notes = listOf(
-            "When it runs out (7 Oct 2027) MEKA's AI features stop; everything else keeps working.",
+            "When it runs out (7 Oct 2027) Navilife's AI features stop; everything else keeps working.",
             "1. console.anthropic.com → API keys → Create key (keep the monthly cap).",
             "2. Paste it into AWS Secrets Manager, meka-os-dev/ai/anthropic, as \"api_key\".",
             "3. Tap Renewed here, or set the new key's end date.",

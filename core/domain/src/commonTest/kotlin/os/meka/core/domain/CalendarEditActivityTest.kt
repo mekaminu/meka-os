@@ -57,7 +57,7 @@ class CalendarEditActivityTest {
         val waiting = rows(logMac).single()
         assertEquals("Moving “Dentist” in Google", waiting.summary)
         assertEquals("Fri 9 Oct · 14:00–15:00 → 16:00–17:00", waiting.detail)
-        assertEquals("Why: Your edit in MEKA · editing allowed for meka@gmail.com", waiting.why)
+        assertEquals("Why: Your edit in Navilife · editing allowed for meka@gmail.com", waiting.why)
         assertFalse(waiting.canUndo)
         assertNull(waiting.undoneLine)
         assertEquals("10:00", waiting.time)

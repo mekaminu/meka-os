@@ -34,13 +34,13 @@ class AppUpdatesTest {
         assertEquals(false, AppUpdateRules.shouldNotify(b412, toldCode = 413, onScreen = false))
         assertEquals(413L, AppUpdateRules.told(b412, 413))
         assertEquals(413L, AppUpdateRules.told(null, 413))
-        assertEquals("Build 412 · 24.3 MB · open MEKA to install", AppUpdateRules.notificationLine(b412))
+        assertEquals("Build 412 · 24.3 MB · open Navilife to install", AppUpdateRules.notificationLine(b412))
     }
 
     @Test
     fun linesAndSizes() {
         assertEquals("Build 412 · 24.3 MB", AppUpdateRules.line(b412))
-        assertEquals("MEKA 0.1.412 · build 412 · 24.3 MB", AppUpdateRules.summary(b412))
+        assertEquals("Navilife 0.1.412 · build 412 · 24.3 MB", AppUpdateRules.summary(b412))
         assertEquals("1 KB", AppUpdateRules.sizeLabel(10))
         assertEquals("850 KB", AppUpdateRules.sizeLabel(850_000))
         assertEquals("1.0 MB", AppUpdateRules.sizeLabel(999_999))
@@ -66,7 +66,7 @@ class AppUpdatesTest {
         assertEquals("From build 470 (18.2 MB) · same size", AppUpdateRules.installedWhy(18_210_000, 470, 18_200_000))
         assertEquals("From build 470 (18.2 MB) · 1.0 MB bigger", AppUpdateRules.installedWhy(19_200_000, 470, 18_200_000))
         assertEquals("From build 470", AppUpdateRules.installedWhy(18_200_000, 470, null))
-        assertEquals("MEKA takes 18.2 MB on this phone", AppUpdateRules.installedWhy(18_200_000, null, null))
+        assertEquals("Navilife takes 18.2 MB on this phone", AppUpdateRules.installedWhy(18_200_000, null, null))
         assertEquals(true, AppUpdateRules.shouldRecordInstall(471, null))
         assertEquals(true, AppUpdateRules.shouldRecordInstall(471, 470))
         assertEquals(false, AppUpdateRules.shouldRecordInstall(471, 471))
@@ -85,9 +85,9 @@ class AppUpdatesTest {
         kotlin.test.assertFalse(AppUpdateRules.shouldNoteIcon(notedIcon = AppUpdateRules.ICON, hadEarlierBuild = true))
         kotlin.test.assertFalse(AppUpdateRules.shouldNoteIcon(notedIcon = null, hadEarlierBuild = false))
         // A later icon change would be noted again under its own entry.
-        kotlin.test.assertTrue(AppUpdateRules.shouldNoteIcon(notedIcon = "bezel-m", hadEarlierBuild = true))
-        kotlin.test.assertTrue(AppUpdateRules.iconActivityId() != AppUpdateRules.iconActivityId("bezel-m"))
-        kotlin.test.assertTrue("Hands M" in AppUpdateRules.ICON_SUMMARY)
+        kotlin.test.assertTrue(AppUpdateRules.shouldNoteIcon(notedIcon = "hands-m", hadEarlierBuild = true))
+        kotlin.test.assertTrue(AppUpdateRules.iconActivityId() != AppUpdateRules.iconActivityId("hands-m"))
+        kotlin.test.assertEquals("Now called Navilife", AppUpdateRules.ICON_SUMMARY)
         kotlin.test.assertTrue("restart" in AppUpdateRules.ICON_WHY)
     }
 }

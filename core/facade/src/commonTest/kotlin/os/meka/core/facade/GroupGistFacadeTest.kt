@@ -113,7 +113,7 @@ class GroupGistFacadeTest {
         assertIs<GistRead.Unavailable>(fold.gistGroupDigest(items, TriageSettings(), emptyMap()))
         assertTrue(fold.groupGists.value.isEmpty())
         server.down = false
-        server.reply = GroupDigestCodec.Response("off", reason = "MEKA's AI is off")
+        server.reply = GroupDigestCodec.Response("off", reason = "Navilife's AI is off")
         assertIs<GistRead.Read>(fold.gistGroupDigest(items, TriageSettings(), emptyMap()))
         assertEquals(listOf<String?>(null, null), fold.groupGists.value.map { it.gist })
     }

@@ -41,7 +41,7 @@ object ReceiptRules {
             .map { part(it, byKind.getValue(it)) }
         val n = handled.size
         return DailyReceipt(
-            line = "MEKA handled ${if (n == 1) "1 thing" else "$n things"} today",
+            line = "Navilife handled ${if (n == 1) "1 thing" else "$n things"} today",
             detail = parts.joinToString(" · "),
             count = n,
         )

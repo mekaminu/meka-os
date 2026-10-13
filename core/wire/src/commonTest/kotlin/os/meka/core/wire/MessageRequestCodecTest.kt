@@ -34,7 +34,7 @@ class MessageRequestCodecTest {
             listOf(MessageRequestCodec.Proposal("task", "Pick up dry cleaning", "2026-10-10", null, "tomorrow")),
         )
         assertEquals(r, MessageRequestCodec.decodeResponse(MessageRequestCodec.encodeResponse(r)))
-        val off = MessageRequestCodec.Response("off", reason = "MEKA's AI isn't set up")
+        val off = MessageRequestCodec.Response("off", reason = "Navilife's AI isn't set up")
         assertEquals(off, MessageRequestCodec.decodeResponse(MessageRequestCodec.encodeResponse(off)))
     }
 

@@ -48,12 +48,12 @@ object FamilyRules {
     const val DEFAULT_NAME = "Jeanette"
     const val MAX_NAME = 30
     const val MAX_OFF_SHOWN = 3
-    const val SHARED = "Only the shopping list, the dinners and the emergency card (read only) are shared. Nothing else of yours leaves MEKA."
+    const val SHARED = "Only the shopping list, the dinners and the emergency card (read only) are shared. Nothing else of yours leaves Navilife."
     const val NOTE = "The link works on the first phone that opens it, and only there. Send it to that one person."
     const val NOT_CONNECTED = "Connect this device to your server first."
-    const val NO_KEY = "This device's key isn't registered with MEKA's server yet · try again in a minute"
-    const val NO_ROUTE = "MEKA's server doesn't have family sharing yet · it arrives with the next deploy"
-    const val OFFLINE = "Couldn't reach MEKA's server · try again"
+    const val NO_KEY = "This device's key isn't registered with Navilife's server yet · try again in a minute"
+    const val NO_ROUTE = "Navilife's server doesn't have family sharing yet · it arrives with the next deploy"
+    const val OFFLINE = "Couldn't reach Navilife's server · try again"
 
     /**
      * A name MEKA's server accepts ("Jeanette", "Mary-Jane"): letters, spaces, hyphens and apostrophes, up to 30, and

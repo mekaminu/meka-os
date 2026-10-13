@@ -386,10 +386,10 @@ interface AccountsApi {
     suspend fun mailAccounts(): List<os.meka.core.domain.MailAccountFacts> = emptyList()
     /** Names what a mail account is for; returns the mail accounts as they are now. */
     suspend fun setMailLabel(provider: String, email: String, label: String): List<os.meka.core.domain.MailAccountFacts> =
-        throw UnsupportedOperationException("mail labels need MEKA's server")
+        throw UnsupportedOperationException("mail labels need Navilife's server")
     /** Disconnects a mail account (slice 1b): the server forgets its sign-in; returns the mail accounts as they are now. */
     suspend fun disconnectMail(provider: String, email: String): List<os.meka.core.domain.MailAccountFacts> =
-        throw UnsupportedOperationException("disconnecting mail needs MEKA's server")
+        throw UnsupportedOperationException("disconnecting mail needs Navilife's server")
 }
 
 /**
@@ -703,7 +703,7 @@ class HttpSyncTransport(
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/speech/speak")
         }
         if (resp.contentType()?.match(AUDIO_MPEG) == true) {
-            val unusable = SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = "MEKA's voice sent an unusable clip")
+            val unusable = SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = "Navilife's voice sent an unusable clip")
             val size = resp.contentLength()
             if (size != null && size > SpeechCodec.MAX_AUDIO_BYTES) return unusable
             val bytes = resp.readRawBytes()

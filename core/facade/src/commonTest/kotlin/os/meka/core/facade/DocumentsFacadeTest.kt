@@ -36,7 +36,7 @@ class DocumentsFacadeTest {
         // A railcard running out in 15 days: its two-week window opens tomorrow.
         val added = fold.addDocument("Railcard 25 Oct 2026")
         assertFalse(added.refused)
-        assertEquals("Added Railcard · expires Sun 25 Oct 2026 · MEKA reminds you from Sun 11 Oct 2026", added.line)
+        assertEquals("Added Railcard · expires Sun 25 Oct 2026 · Navilife reminds you from Sun 11 Oct 2026", added.line)
         assertEquals("1 document · next to run out: Railcard, Oct 2026", fold.documentsView.value.summary)
 
         fold.syncNow(); mac.syncNow()

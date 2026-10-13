@@ -20,7 +20,7 @@ class ChatSummaryCodecTest {
         assertEquals(request, ChatSummaryCodec.decodeRequest(ChatSummaryCodec.encodeRequest(request)))
         val r = ChatSummaryCodec.Response("answered", listOf(ChatSummaryCodec.ChatAnswer("Tunde", "Kick-off time"), ChatSummaryCodec.ChatAnswer("Barça lads")))
         assertEquals(r, ChatSummaryCodec.decodeResponse(ChatSummaryCodec.encodeResponse(r)))
-        val off = ChatSummaryCodec.Response("off", reason = "MEKA's AI is off")
+        val off = ChatSummaryCodec.Response("off", reason = "Navilife's AI is off")
         assertEquals(off, ChatSummaryCodec.decodeResponse(ChatSummaryCodec.encodeResponse(off)))
     }
 

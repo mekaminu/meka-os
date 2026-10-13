@@ -562,7 +562,7 @@ object Governor {
             ordered.isNotEmpty() && ordered.all { it.target == ordered.first().target } -> ordered.first().target
             else -> NoticeTarget.NEEDS_YOU
         }
-        return Digest(title, summary, lines, ordered.size, "MEKA · ${plural(ordered.size, "thing")} for you", target)
+        return Digest(title, summary, lines, ordered.size, "Navilife · ${plural(ordered.size, "thing")} for you", target)
     }
 
     private fun countLine(s: NoticeSource, n: Int): String = when (s) {

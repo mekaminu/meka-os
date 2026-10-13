@@ -83,7 +83,7 @@ internal fun LazyListScope.renewals(
     if (r.count == 0) {
         empty(
             "renewals",
-            "MOT, insurance, the boiler service, subscriptions and bills. Add each with its date and MEKA shows it in good time, with a cancel-by reminder if you set one.",
+            "MOT, insurance, the boiler service, subscriptions and bills. Add each with its date and Navilife shows it in good time, with a cancel-by reminder if you set one.",
         )
     }
     homeUpkeep(HomeUpkeepRules.view(r.all, today), open, toggle, core, act, tap)

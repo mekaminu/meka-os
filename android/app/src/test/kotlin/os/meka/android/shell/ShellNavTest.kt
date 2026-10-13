@@ -70,7 +70,7 @@ class ShellNavTest {
     fun askIsALifeGridDailyAndOneSettingsRow() {
         // Fold review 2026-10-12, item 7.
         assertEquals(
-            listOf("Lists", "Goals and habits", "People", "Dinners", "Bins", "Date night", "School", "Appointments", "Annual leave", "Gifts", "Trips", "Errands", "Emergency card", "What MEKA knows"),
+            listOf("Lists", "Goals and habits", "People", "Dinners", "Bins", "Date night", "School", "Appointments", "Annual leave", "Gifts", "Trips", "Errands", "Emergency card", "What Navilife knows"),
             ShellNav.lifeTiles().map { it.label },
         )
         assertEquals(LifeTileRules.ORDER, ShellNav.lifeTiles().map { it.tile })
@@ -79,7 +79,7 @@ class ShellNavTest {
             ShellNav.daily().map { it.label },
         )
         assertEquals(
-            listOf("About you", "Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Mail", "Family", "Watch", "Recovery key", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"),
+            listOf("About you", "Work mode", "Protected time", "Notifications", "Appearance", "Navilife's voice", "Talk", "Calendars", "Mail", "Family", "Watch", "Recovery key", "What Navilife may do", "Navilife's AI", "Activity", "Setup", "Health", "Vault", "Your data"),
             ShellNav.settings(connected = true).map { it.label },
         )
         assertFalse(MoreItem.WATCH in ShellNav.settings(connected = false))
@@ -125,7 +125,7 @@ class ShellNavTest {
     @Test
     fun healthSaysItsSummaryAndIsLitWhenSomethingNeedsALook() {
         // Reliability first, item 3.
-        assertEquals("Is everything MEKA needs working?", ShellNav.moreLine(MoreItem.HEALTH, 0))
+        assertEquals("Is everything Navilife needs working?", ShellNav.moreLine(MoreItem.HEALTH, 0))
         assertEquals("2 things need a look", ShellNav.moreLine(MoreItem.HEALTH, 0, health = "2 things need a look"))
         assertTrue(ShellNav.moreLit(MoreItem.HEALTH, 0, healthAttention = 2))
         assertFalse(ShellNav.moreLit(MoreItem.HEALTH, 3, healthAttention = 0))
@@ -136,7 +136,7 @@ class ShellNavTest {
     @Test
     fun setupSaysWhatIsLeftAndIsLitUntilAllSet() {
         // Setup checklist (Meka approved 2026-10-09).
-        assertEquals("Everything MEKA can do, and what's left to set up", ShellNav.moreLine(MoreItem.SETUP, 0))
+        assertEquals("Everything Navilife can do, and what's left to set up", ShellNav.moreLine(MoreItem.SETUP, 0))
         assertEquals("3 steps left · 12 of 15 done", ShellNav.moreLine(MoreItem.SETUP, 0, setup = "3 steps left · 12 of 15 done"))
         assertTrue(ShellNav.moreLit(MoreItem.SETUP, 0, setupLeft = 3))
         assertFalse(ShellNav.moreLit(MoreItem.SETUP, 0, healthAttention = 2))

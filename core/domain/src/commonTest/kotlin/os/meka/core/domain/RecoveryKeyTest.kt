@@ -115,8 +115,8 @@ class RecoveryKeyTest {
         assertFalse(RecoveryKeyRules.view(null, now, cal).lit)
         assertEquals("The old key stops working once the new one is saved", RecoveryKeyRules.replaceWarning(RecoveryKeyRules.Status(RecoveryKeyRules.Status.READY)))
         assertNull(RecoveryKeyRules.replaceWarning(RecoveryKeyRules.Status(RecoveryKeyRules.Status.USED)))
-        assertTrue(RecoveryKeyRules.refusal("key").startsWith("That recovery key doesn't open MEKA"))
-        assertEquals("MEKA's server refused it", RecoveryKeyRules.refusal(null))
+        assertTrue(RecoveryKeyRules.refusal("key").startsWith("That recovery key doesn't open Navilife"))
+        assertEquals("Navilife's server refused it", RecoveryKeyRules.refusal(null))
     }
 
     @Test

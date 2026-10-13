@@ -294,7 +294,7 @@ object ReleasePublisherCli {
                     val meta = File(args.getOrNull(3) ?: return@runBlocking fail("usage: publisher-publish <url> <apk> <metadata>"))
                         .takeIf { it.isFile }?.readText()?.let { WireCodec.decodeApkMetadata(it) }
                         ?: return@runBlocking fail("no readable output-metadata.json")
-                    if (meta.applicationId != APP_ID) return@runBlocking fail("not the MEKA app (${meta.applicationId.take(60)})")
+                    if (meta.applicationId != APP_ID) return@runBlocking fail("not the Navilife app (${meta.applicationId.take(60)})")
                     when (val r = client.publish(PLATFORM, apk.readBytes(), meta.versionCode, meta.versionName)) {
                         is ReleasePublisherClient.Outcome.Published -> { println("Published build ${r.release.versionCode} (${r.release.sizeBytes} bytes)"); 0 }
                         is ReleasePublisherClient.Outcome.NotNewer -> { println("::notice title=Phone update not published::${r.reason}"); 0 }

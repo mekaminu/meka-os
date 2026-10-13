@@ -107,8 +107,8 @@ object LifeAdminRules {
     val START_CHOICES: List<Int> = listOf(9 * 60, 10 * 60, 13 * 60, 18 * 60, 19 * 60, 20 * 60)
     val WEEKDAY_CHOICES: List<String> = LocalClock.DAY_SHORT
 
-    const val OFF_LINE = "Off · pick a day and MEKA books one hour a week for the small admin jobs"
-    const val NOTE = "MEKA gathers tasks like calls, forms, renewals and replies into the hour, and the renewals that need you. " +
+    const val OFF_LINE = "Off · pick a day and Navilife books one hour a week for the small admin jobs"
+    const val NOTE = "Navilife gathers tasks like calls, forms, renewals and replies into the hour, and the renewals that need you. " +
         "Overdue ones wait for the hour instead of coming up in every digest. " +
         "The planner and Gym leave it clear; if a meeting lands on it, it moves. Skip a week and that hour is free again."
     /** Slice 2: a task ticked this long after the hour still counts as done in it. */

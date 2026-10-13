@@ -53,7 +53,7 @@ object NewsWidgetRules {
     const val MATCH_ID = "match"
 
     const val EMPTY_TITLE = "No news yet"
-    const val EMPTY_LINE = "Choose topics in MEKA · Ask › More › News"
+    const val EMPTY_LINE = "Choose topics in Navilife · Ask › More › News"
 
     /** The widget from Today's ticker (the same stories, the same order), at [nowMs]. */
     fun view(ticker: NewsTicker, nowMs: Long): NewsWidgetView {

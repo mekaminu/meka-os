@@ -419,7 +419,7 @@ object AskRules {
 
     /** The line Ask shows when the server answered without an answer: off, over budget, or failed with its reason. */
     fun unavailableLine(state: String, reason: String?): String = when (state) {
-        "off" -> "MEKA's AI is off"
+        "off" -> "Navilife's AI is off"
         "over" -> "This month's AI budget is used up · back on the 1st"
         else -> reason?.trim()?.take(120)?.takeIf { it.isNotEmpty() }?.let { "Couldn't ask: $it" } ?: "Couldn't ask just now"
     }
@@ -474,7 +474,7 @@ object AskRules {
         return out.ifEmpty { listOf(answerText(text)) }
     }
 
-    const val OFFLINE_LINE = "Couldn't reach MEKA · try again when you're online"
+    const val OFFLINE_LINE = "Couldn't reach Navilife · try again when you're online"
     const val NOT_CONNECTED_LINE = "Ask works once this device is connected"
 
     /** The undo bar's line once a card is done ("Added “Milk”", "Timer set · 20 min"). */

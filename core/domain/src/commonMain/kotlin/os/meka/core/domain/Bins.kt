@@ -86,7 +86,7 @@ object BinRules {
 
     const val ADD_HINT = "Add… (Black bin Tue fortnightly from 13 Oct, Food caddy every Tue)"
     const val EMPTY_LINE = "Nothing entered yet. Type each bin once with its day, and for every-other-week bins the date of one collection."
-    const val NOT_READ = "MEKA couldn't read that. Try \"Black bin Tue fortnightly from 13 Oct\" or \"Food caddy every Tuesday\"."
+    const val NOT_READ = "Navilife couldn't read that. Try \"Black bin Tue fortnightly from 13 Oct\" or \"Food caddy every Tuesday\"."
     const val SHIFT_NOTE = "a day later for the bank holiday"
     const val COUNCIL = "Typed by you. Christmas weeks: type a one-off, \"Black bin Sat 2 Jan instead of 29 Dec\" or \"No black bin 29 Dec\". Central Bedfordshire's own collection days can fill this later."
     /** A one-off moves a collection at most this many days either way. */
@@ -177,7 +177,7 @@ object BinRules {
         data class Move(val bins: List<BinItem>, val fromDays: List<Long>, val toDay: Long?) : MoveRead
     }
 
-    const val MOVE_NOT_READ = "MEKA couldn't read that one-off. Try \"Black bin Sat 2 Jan instead of 29 Dec\" or \"No black bin 29 Dec\"."
+    const val MOVE_NOT_READ = "Navilife couldn't read that one-off. Try \"Black bin Sat 2 Jan instead of 29 Dec\" or \"No black bin 29 Dec\"."
 
     private val MOVE_FILLER = FILLER + setOf("instead", "moved", "move", "moves", "to", "collection", "bin's", "bins", "this", "time", "only", "once", "one", "off", "oneoff")
 

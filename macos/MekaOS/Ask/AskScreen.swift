@@ -357,6 +357,9 @@ private struct AppearanceRow: View {
                         FloatingTicker.shared.refresh()
                     }
             }
+            // The name and tagline (the rename to Navilife, 2026-10-13), over the build line.
+            Text(AppUpdateRules.shared.TAGLINE)
+                .font(MekaType.caption).foregroundStyle(palette.textSecondary)
             // The build on this Mac (Meka, 2026-10-08), so we can tell which build is running.
             Text(AppUpdateRules.shared.versionLine(versionName: MacBuild.version, versionCode: MacBuild.number, latestCode: nil))
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)

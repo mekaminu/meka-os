@@ -56,21 +56,21 @@ class WorkoutsTest {
     fun settingLines() {
         assertEquals(listOf("Gym", "Run"), WorkoutRules.tickable(listOf(h("g", "Gym"), h("r", "Run"), h("x", "Read"))))
         assertEquals("On · workouts tick Gym or Run. Read on this phone only.", WorkoutRules.settingLine(WorkoutRules.Access.ON, listOf("Gym", "Run")))
-        assertEquals("Allow MEKA to read exercise in Health Connect", WorkoutRules.settingLine(WorkoutRules.Access.NEEDS_PERMISSION, emptyList()))
+        assertEquals("Allow Navilife to read exercise in Health Connect", WorkoutRules.settingLine(WorkoutRules.Access.NEEDS_PERMISSION, emptyList()))
     }
 
     @Test
     fun backgroundReadingLines() {
         assertEquals(
-            "On · workouts tick Gym, even while MEKA is closed. Read on this phone only.",
+            "On · workouts tick Gym, even while Navilife is closed. Read on this phone only.",
             WorkoutRules.settingLine(WorkoutRules.Access.ON, listOf("Gym"), background = true),
         )
         assertEquals(
-            "Read while MEKA is open · allow in the background and a workout ticks it before “Did you go?”",
+            "Read while Navilife is open · allow in the background and a workout ticks it before “Did you go?”",
             WorkoutRules.backgroundLine(WorkoutRules.Access.ON, background = false, offered = true),
         )
         assertEquals(
-            "Read while MEKA is open · background reading wasn't allowed (change it in Health Connect → MEKA)",
+            "Read while Navilife is open · background reading wasn't allowed (change it in Health Connect → Navilife)",
             WorkoutRules.backgroundLine(WorkoutRules.Access.ON, background = false, offered = false),
         )
         assertEquals(null, WorkoutRules.backgroundLine(WorkoutRules.Access.ON, background = true, offered = true))

@@ -77,7 +77,7 @@ fun AutonomyPane(core: MekaCore, onClose: () -> Unit) {
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
-        Text("What MEKA may do", style = MekaType.greeting, color = Meka.colors.textPrimary,
+        Text("What Navilife may do", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.AUTONOMY)).appear(rememberAppearance(0)))
         Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "autonomy-summary") { s ->
             Text(s, style = MekaType.body, color = if (v.paused) Meka.colors.accent else Meka.colors.textSecondary,

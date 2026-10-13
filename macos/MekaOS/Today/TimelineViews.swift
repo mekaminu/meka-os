@@ -53,7 +53,7 @@ struct EventActionsModifier: ViewModifier {
                         HStack(spacing: MekaSpace.xs) {
                             Button { model.addPrepTask(e) } label: { Label("Prep task", systemImage: "plus") }
                             Button { model.hideEvent(e.id) } label: { Label("Hide", systemImage: "eye.slash") }
-                                .help("Hide from my day (MEKA only; your calendar is unchanged)")
+                                .help("Hide from my day (Navilife only; your calendar is unchanged)")
                         }
                         .labelStyle(.titleAndIcon)
                         .buttonStyle(.borderless)

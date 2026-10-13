@@ -78,7 +78,7 @@ data class AboutYou(
 
 /** The fields About you edits one line at a time, in the pane's order. */
 enum class AboutField(val key: String, val label: String, val hint: String, val emptyLine: String) {
-    SHOWN_NAME(AboutYouFields.SHOWN_NAME, "Your name", "What MEKA calls you", "MEKA says “you” until you add it"),
+    SHOWN_NAME(AboutYouFields.SHOWN_NAME, "Your name", "What Navilife calls you", "Navilife says “you” until you add it"),
     PARTNER_NAME(AboutYouFields.PARTNER_NAME, "Partner", "Their first name", "Add your partner to get their requests flagged"),
     PARTNER_PHONE(AboutYouFields.PARTNER_PHONE, "Partner's number", "Their mobile number", "Add their number so their calls always ring"),
     HOME(AboutYouFields.HOME, "Home", "Your town", "Add home for its weather and the commute"),
@@ -122,14 +122,14 @@ data class AboutSaved(val line: String, val refused: Boolean = false, val undo: 
 object AboutYouRules {
     const val ENTITY_ID = "me"
     const val TITLE = "About you"
-    const val ROW_LINE = "Names, home and work · kept in your data, not in MEKA's code"
+    const val ROW_LINE = "Names, home and work · kept in your data, not in Navilife's code"
     const val MAX_NAME = 30
     const val MAX_PLACE = 60
     const val MAX_SCHOOL = 60
     const val MAX_CHILDREN = 8
     const val CHILD_HINT = "Add a child… (Alex, U7, Oakfield School)"
     const val NO_CHILDREN = "No children added · add each one to name their clubs and school days"
-    const val WELCOME = "Tell MEKA who's who once. It stays in your own data (synced, encrypted), never in MEKA's code."
+    const val WELCOME = "Tell Navilife who's who once. It stays in your own data (synced, encrypted), never in Navilife's code."
     const val TYPED = "Kept in your own data (synced, encrypted) on both apps. Change anything here."
     const val SAVED = "Saved"
     const val NOT_NAME = "A name is letters, spaces, hyphens and apostrophes, up to 30."
@@ -137,7 +137,7 @@ object AboutYouRules {
     const val NOT_PLACE = "Type a town or area, up to 60 letters."
     const val NOT_CHILD = "Type a name first: “Alex”, “Alex, U7” or “Alex, U7, Oakfield School”."
     const val TOO_MANY = "That's the most children About you holds."
-    const val WATCH_ON = "On · MEKA flags what they ask you for in messages"
+    const val WATCH_ON = "On · Navilife flags what they ask you for in messages"
     const val WATCH_OFF = "Off · their messages are treated like anyone's"
 
     // ---- Slice 2: whether each app has it (release 2's gate) ----
@@ -169,9 +169,9 @@ object AboutYouRules {
             !h.filled -> HealthRow(HEALTH_KEY, TITLE, "Nothing in it yet · fill it in under Ask → Settings → About you", HealthState.WARN)
             fold != null && mac != null -> HealthRow(HEALTH_KEY, TITLE, "On the Fold and the Mac · kept in your data", HealthState.OK)
             fold != null -> HealthRow(HEALTH_KEY, TITLE,
-                "On the Fold${since(fold)} · not on the Mac yet · open MEKA on the Mac", HealthState.WARN)
+                "On the Fold${since(fold)} · not on the Mac yet · open Navilife on the Mac", HealthState.WARN)
             mac != null -> HealthRow(HEALTH_KEY, TITLE,
-                "On the Mac${since(mac)} · not on the Fold yet · open MEKA on the Fold", HealthState.WARN)
+                "On the Mac${since(mac)} · not on the Fold yet · open Navilife on the Fold", HealthState.WARN)
             else -> HealthRow(HEALTH_KEY, TITLE, "Filled in · waiting for a sync to confirm it", HealthState.UNKNOWN)
         }
     }
@@ -351,7 +351,7 @@ object AboutYouRules {
         a.seededAtMs != null -> {
             val day = SearchRules.dayLabel(cal.epochDayOf(a.seededAtMs), cal.epochDayOf(nowMs))
             val on = if (day == "Today" || day == "Yesterday") day.lowercase() else "on $day"
-            "MEKA filled this in $on from what it already knew · check it and change anything. It's kept in your own data, not in MEKA's code."
+            "Navilife filled this in $on from what it already knew · check it and change anything. It's kept in your own data, not in Navilife's code."
         }
         else -> TYPED
     }

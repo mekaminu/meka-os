@@ -23,7 +23,7 @@ struct FactsSheet: View {
     var body: some View {
         let v = model.facts ?? FactsView.companion.EMPTY
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text("What MEKA knows").font(MekaType.upNextTitle).staggeredAppear(0)
+            Text("What Navilife knows").font(MekaType.upNextTitle).staggeredAppear(0)
             Text(v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)

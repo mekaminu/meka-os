@@ -20,13 +20,13 @@ class CalendarAccessTest {
 
     @Test
     fun aReadOnlyAccountOffersAllowEditingAndAnEditableOneStopEditing() {
-        assertEquals("Read-only · MEKA only reads this calendar", CalendarAccessRules.line("google", canEdit = false))
+        assertEquals("Read-only · Navilife only reads this calendar", CalendarAccessRules.line("google", canEdit = false))
         assertEquals(CalendarAccessAction.ALLOW_EDITING, CalendarAccessRules.action("google", canEdit = false))
         assertEquals("Allow editing", CalendarAccessAction.ALLOW_EDITING.label)
-        assertEquals("Editing allowed · events you add or change in MEKA go to Outlook", CalendarAccessRules.line("microsoft", canEdit = true))
+        assertEquals("Editing allowed · events you add or change in Navilife go to Outlook", CalendarAccessRules.line("microsoft", canEdit = true))
         assertEquals(CalendarAccessAction.STOP_EDITING, CalendarAccessRules.action("microsoft", canEdit = true))
         assertEquals("Stop editing", CalendarAccessAction.STOP_EDITING.label)
-        assertEquals("Editing off · MEKA only reads Google now", CalendarAccessRules.stoppedLine("google"))
+        assertEquals("Editing off · Navilife only reads Google now", CalendarAccessRules.stoppedLine("google"))
     }
 
     @Test

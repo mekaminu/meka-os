@@ -210,7 +210,7 @@ class AppointmentsTest {
         assertTrue(r.events(listOf(item.copy(bookedDay = null)), emptyList(), today, cal).isEmpty())
         // What Booked… writes to Google.
         val d = r.draft(item, cal)!!
-        assertEquals(EventDraft("Dentist", own.startAtMs, own.endAtMs, false, null, "Booked in MEKA"), d)
+        assertEquals(EventDraft("Dentist", own.startAtMs, own.endAtMs, false, null, "Booked in Navilife"), d)
         assertEquals("Dentist · Booked · Tue 20 Oct 09:30 · adding to Google", r.bookedLine("Dentist · Booked · Tue 20 Oct 09:30", "Google", false))
         assertEquals("Dentist · Booked · Wed 21 Oct · moving it in Outlook", r.bookedLine("Dentist · Booked · Wed 21 Oct", "Outlook", true))
     }

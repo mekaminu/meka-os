@@ -253,7 +253,7 @@ class ActivityTest {
             assertEquals(ActivityKind.PUBLISHED, row.kind)
             assertEquals("09:00", row.time)
             assertEquals("GitHub build published build 412", row.summary)
-            assertEquals("MEKA 0.1.412 · 24.3 MB · install it from Today on the Fold", row.detail)
+            assertEquals("Navilife 0.1.412 · 24.3 MB · install it from Today on the Fold", row.detail)
             assertEquals("Why: Hands-free phone updates · after a green CI run on main", row.why)
             assertFalse(row.canUndo)
             assertEquals(UndoOutcome.NOT_UNDOABLE, l.undo(id))

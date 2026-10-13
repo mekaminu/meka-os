@@ -160,8 +160,8 @@ object HereRules {
     }
 
     const val PRIVACY =
-        "Only when you ask about “here” or open MEKA away from home and work. Your location is rounded to about 1 km on " +
-            "the phone; MEKA's server asks Open-Meteo for that point's forecast and keeps nothing. Never tracked in the " +
+        "Only when you ask about “here” or open Navilife away from home and work. Your location is rounded to about 1 km on " +
+            "the phone; Navilife's server asks Open-Meteo for that point's forecast and keeps nothing. Never tracked in the " +
             "background, never synced to your other devices."
 
     /** The settings row: off by default; lit when on but the phone hasn't allowed location. */

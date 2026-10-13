@@ -226,7 +226,7 @@ class BlockedCallers(
  */
 object SuspectedSpamRules {
     const val TITLE = "Suspected spam"
-    const val HINT = "MEKA's AI thought these callers' messages sounded like scams. Until you choose, their calls go to " +
+    const val HINT = "Navilife's AI thought these callers' messages sounded like scams. Until you choose, their calls go to " +
         "the assistant instead of ringing; family, contacts and people you've called still ring."
     const val NOT_SPAM_LABEL = "Not spam"
     const val MAX_WHY = 80
@@ -272,7 +272,7 @@ object SuspectedSpamRules {
         ActivityFields.KIND to FieldValue.Text(ActivityKind.CALL.name),
         ActivityFields.SUMMARY to FieldValue.Text("Added ${BlockedCallerRules.display(number)} to Suspected spam".take(ActivityRules.MAX_LINE)),
         ActivityFields.DETAIL to FieldValue.Text((cleanWhy(why) ?: "Their message sounded like a scam").take(ActivityRules.MAX_LINE)),
-        ActivityFields.WHY to FieldValue.Text("Call assistant · MEKA's AI read their message; you choose Block or Not spam"),
+        ActivityFields.WHY to FieldValue.Text("Call assistant · Navilife's AI read their message; you choose Block or Not spam"),
         ActivityFields.SOURCE to FieldValue.Text("calls"),
     )
 

@@ -69,7 +69,7 @@ class BedsideDreamTest {
         assertEquals(SetupState.TODO, off.state)
         assertEquals(SetupFix.SCREEN_SAVER, off.fix)
         assertEquals("Take me there", off.fixLabel)
-        assertTrue(off.line.endsWith("Settings → Display → Screen saver → MEKA"))
+        assertTrue(off.line.endsWith("Settings → Display → Screen saver → Navilife"))
         val unknown = BedsideDreamRules.setupStep(null)
         assertEquals(SetupState.UNKNOWN, unknown.state)
         assertFalse(unknown.toDo)

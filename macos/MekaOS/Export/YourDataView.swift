@@ -59,7 +59,7 @@ struct YourDataSection: View {
                 Spacer()
             }
             .staggeredAppear(firstIndex + 2)
-            Text("The file isn't encrypted: keep it somewhere only you can open. It's JSON, readable without MEKA.")
+            Text("The file isn't encrypted: keep it somewhere only you can open. It's JSON, readable without Navilife.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .staggeredAppear(firstIndex + 2)

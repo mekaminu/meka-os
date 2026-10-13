@@ -71,7 +71,7 @@ class WatchLinkTest {
     @Test
     fun theWatchShowsTheCodeAndTheTimeLeft() {
         val s = WatchLinkRules.codeScreen("12345678", now + WatchLinkRules.CODE_MS, now)
-        assertEquals("Link to MEKA", s.title)
+        assertEquals("Link to Navilife", s.title)
         assertEquals("1234 5678", s.code)
         assertEquals("On your phone: Ask → More → Watch", s.line)
         assertEquals("10 min left", s.left)

@@ -164,7 +164,7 @@ object AppointmentRules {
     const val MAX_MONTHS = 120
     const val HINT = "Dentist every 6 months, last 12 Apr"
     const val EMPTY_SUMMARY = "No appointments yet · add the ones you keep up with"
-    const val NOTE = "Type what it is, how often, and when you last went: “Haircut every 6 weeks, last 26 Sep”. When you've booked one: “Dentist booked Tue 20 Oct 9:30”. MEKA nudges you when one comes due; it never books or calls anyone."
+    const val NOTE = "Type what it is, how often, and when you last went: “Haircut every 6 weeks, last 26 Sep”. When you've booked one: “Dentist booked Tue 20 Oct 9:30”. Navilife nudges you when one comes due; it never books or calls anyone."
     const val NO_TITLE = "Start with what it is: “Dentist every 6 months, last 12 Apr”"
     const val NO_INTERVAL = "How often? “Physio every 3 months”"
     const val BAD_LAST = "Couldn't read when you last went · try “last 12 Apr” or “last March”"
@@ -174,7 +174,7 @@ object AppointmentRules {
     const val WENT_LABEL = "Went"
     const val LATER_LABEL = "Not yet"
     const val WHEN_HINT = "When? “Tue 20 Oct 9:30”"
-    const val CARD_DETAIL = "Booked… takes the day and time, Went notes a visit today, Not yet asks again in two weeks. Call to book puts the call on Today, Copy email gives you an email to send yourself. MEKA books nothing and calls no one."
+    const val CARD_DETAIL = "Booked… takes the day and time, Went notes a visit today, Not yet asks again in two weeks. Call to book puts the call on Today, Copy email gives you an email to send yourself. Navilife books nothing and calls no one."
     const val CALL_LABEL = "Call to book"
     const val EMAIL_LABEL = "Copy email"
     const val EMAIL_COPIED = "Booking email copied · paste it into an email to them"
@@ -758,7 +758,7 @@ object AppointmentCalendarRules {
     const val CALENDAR = "Appointments"
     const val ID_PREFIX = "appt-"
     const val LENGTH_MIN = 60
-    const val NOTES = "Booked in MEKA"
+    const val NOTES = "Booked in Navilife"
     private const val DAY_MS = 86_400_000L
     private const val MINUTE_MS = 60_000L
 

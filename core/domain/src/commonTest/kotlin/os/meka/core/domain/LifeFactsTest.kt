@@ -71,7 +71,7 @@ class LifeFactsTest {
         assertEquals(FactAdded(FactRules.NOT_READ, true), fFold.add("just words"))
         sync()
         val v = fMac.view()
-        assertEquals("2 facts · MEKA answers from them", v.summary)
+        assertEquals("2 facts · Navilife answers from them", v.summary)
         assertEquals(listOf("Sizes", "Car"), v.groups.map { it.label })
         assertEquals(FactAdded("Updated Car reg", false), fMac.add("car reg: CD34 EFG"))
         assertEquals(FactAdded("Shoe size is already on the page", false), fMac.add("Shoe size: 10"))
@@ -83,7 +83,7 @@ class LifeFactsTest {
         assertEquals("CD34 EFG", row.value)
         assertEquals(FactRules.KEPT_LINE, row.aiLine)
         assertEquals(FactRules.USE_BUTTON, row.aiButton)
-        assertEquals("2 facts · MEKA answers from 1 · 1 kept from AI", fv.summary)
+        assertEquals("2 facts · Navilife answers from 1 · 1 kept from AI", fv.summary)
         assertTrue(fFold.remove(row.id))
         sync()
         assertEquals(1, fMac.view().count)
@@ -121,16 +121,16 @@ class LifeFactsTest {
         fun card(title: String?) = AskRules.card(AskRawAction("add_fact", title = title), ctx, emptyMap(), world.clock.nowMs, cal, facts = fFold.all())
         val car = card("my car reg is AB12 CDE")!!
         assertEquals(AskProposal.AddFact("Car reg", "AB12 CDE", null), car.proposal)
-        assertEquals("Keep on What MEKA knows · Car reg: AB12 CDE", car.line)
+        assertEquals("Keep on What Navilife knows · Car reg: AB12 CDE", car.line)
         assertEquals("Keep", car.button)
-        assertEquals("Kept Car reg: AB12 CDE on What MEKA knows", AskRules.doneLine(car.proposal, 0))
+        assertEquals("Kept Car reg: AB12 CDE on What Navilife knows", AskRules.doneLine(car.proposal, 0))
         assertEquals("remember Car reg as AB12 CDE", TalkRules.phrase(car.proposal, 0, past = false))
         // The same name again changes it (even one kept from the AI); the card never shows the old value.
         val newGp = card("gp: Dr Shah")!!
         assertEquals(AskProposal.AddFact("GP", "Dr Shah", gp.id), newGp.proposal)
-        assertEquals("Update on What MEKA knows · GP: Dr Shah", newGp.line)
+        assertEquals("Update on What Navilife knows · GP: Dr Shah", newGp.line)
         assertEquals("Update", newGp.button)
-        assertEquals("Updated GP on What MEKA knows", AskRules.doneLine(newGp.proposal, 0))
+        assertEquals("Updated GP on What Navilife knows", AskRules.doneLine(newGp.proposal, 0))
         assertEquals("changed GP to Dr Shah", TalkRules.phrase(newGp.proposal, 0, past = true))
         // Already there, unreadable, or a secret or number the page turns away: no card.
         assertNull(card("Shoe size: 10"))

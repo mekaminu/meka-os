@@ -296,7 +296,7 @@ class AskMekaFacadeTest {
     fun noAnswerSaysWhy() = runTest {
         val c = core()
         server.reply = AskReply.Unavailable("off", null)
-        assertEquals(AskOutcome.Unavailable("MEKA's AI is off"), c.askMeka("hi"))
+        assertEquals(AskOutcome.Unavailable("Navilife's AI is off"), c.askMeka("hi"))
         server.reply = AskReply.Unavailable("over", null)
         assertEquals(AskOutcome.Unavailable("This month's AI budget is used up · back on the 1st"), c.askMeka("hi"))
         server.reply = AskReply.Unavailable("failed", "Couldn't reach Anthropic")
@@ -697,7 +697,7 @@ class AskMekaFacadeTest {
         now += 1_000
         assertEquals("Added GP to Health and care", c.addFact("GP: Dr Patel, Ivel Medical Centre").line)
         assertTrue(c.addFact("Bank card: 4111 1111 1111 1111").refused)
-        assertEquals("3 facts · MEKA answers from them", c.factsView.value.summary)
+        assertEquals("3 facts · Navilife answers from them", c.factsView.value.summary)
 
         assertIs<AskOutcome.Answered>(c.askMeka("What's the car's reg?"))
         val ctx = server.asked.last().second
@@ -710,7 +710,7 @@ class AskMekaFacadeTest {
         // Kept from AI: still on the page, never sent.
         val car = c.factsView.value.groups.first { it.group == "car" }.rows.single()
         assertTrue(c.setFactAi(car.id, use = false))
-        assertEquals("3 facts · MEKA answers from 2 · 1 kept from AI", c.factsView.value.summary)
+        assertEquals("3 facts · Navilife answers from 2 · 1 kept from AI", c.factsView.value.summary)
         assertIs<AskOutcome.Answered>(c.askMeka("What do you know about me?"))
         assertEquals(
             listOf("Facts · 2 kept · all below", "Fact · Sizes · Shoe size: 10", "Fact · Health and care · GP: Dr Patel, Ivel Medical Centre"),
@@ -861,15 +861,15 @@ class AskMekaFacadeTest {
         ))
         val out = assertIs<AskOutcome.Answered>(c.askMeka("Remember that my shoe size is 10 and my GP is Dr Shah now"))
         assertEquals(
-            listOf("Keep on What MEKA knows · Shoe size: 10", "Update on What MEKA knows · GP: Dr Shah"),
+            listOf("Keep on What Navilife knows · Shoe size: 10", "Update on What Navilife knows · GP: Dr Shah"),
             out.answer.cards.map { it.line },
         )
         assertEquals(1, c.factsView.value.count) // nothing until tapped
 
         val kept = c.doAsk(out.answer.cards[0])
-        assertEquals("Kept Shoe size: 10 on What MEKA knows", kept.line)
+        assertEquals("Kept Shoe size: 10 on What Navilife knows", kept.line)
         val updated = c.doAsk(out.answer.cards[1])
-        assertEquals("Updated GP on What MEKA knows", updated.line)
+        assertEquals("Updated GP on What Navilife knows", updated.line)
         assertEquals(setOf("Shoe size: 10", "GP: Dr Shah"), c.factsView.value.groups.flatMap { g -> g.rows.map { "${it.label}: ${it.value}" } }.toSet())
         // Twice: already there.
         assertFailsWith<ValidationException> { c.doAsk(out.answer.cards[0]) }
@@ -955,7 +955,7 @@ class AskMekaFacadeTest {
             "on", null, 120, 2000, "ok",
             listOf(os.meka.core.domain.AiDayUse("ask", 2, 6_000), os.meka.core.domain.AiDayUse("ask.talk", 6, 12_000)),
         )
-        assertEquals("MEKA's AI today · Talk 6 · Ask 2 · 2¢", c.aiTodayLine())
+        assertEquals("Navilife's AI today · Talk 6 · Ask 2 · 2¢", c.aiTodayLine())
         server.down = true
         assertEquals(null, c.aiTodayLine())
         assertEquals(null, core(transport = null).aiTodayLine())
@@ -1101,7 +1101,7 @@ class AskMekaFacadeTest {
         c.askMeka("Why didn't I get a notification?")
         val ctx = server.asked.last().second
         val lines = ctx.items.filter { it.kind == AskItemKind.NOTIFICATIONS }.map { it.line }
-        assertEquals("Notifications on this phone · on for MEKA", lines.first())
+        assertEquals("Notifications on this phone · on for Navilife", lines.first())
         assertEquals("Last notification · sent today at 16:15 on Heads-ups", lines[1])
         assertTrue(lines.any { it.startsWith("Digests · Most things wait for") })
         assertTrue(lines.last().startsWith("Trace · ") && "Posted 1 notice on Heads-ups" in lines.last())
@@ -1110,7 +1110,7 @@ class AskMekaFacadeTest {
         server.reply = AskReply.Unavailable("off", null)
         health = health.copy(allowed = false)
         val off = assertIs<AskOutcome.Answered>(c.askMeka("why no notifications?"))
-        assertTrue(off.answer.text.startsWith("Notifications are off for MEKA on this phone"))
+        assertTrue(off.answer.text.startsWith("Notifications are off for Navilife on this phone"))
         assertTrue(off.answer.cards.isEmpty())
         server.down = true
         health = health.copy(allowed = true)

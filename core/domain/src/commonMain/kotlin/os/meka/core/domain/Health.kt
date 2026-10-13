@@ -170,7 +170,7 @@ object HealthRules {
         val attention = rows.count { it.needsLook }
         val critical = rows.any { it.state == HealthState.BAD }
         val summary = when (attention) {
-            0 -> if (rows.any { it.state == HealthState.UNKNOWN }) "Working, as far as MEKA can tell" else "Everything's working"
+            0 -> if (rows.any { it.state == HealthState.UNKNOWN }) "Working, as far as Navilife can tell" else "Everything's working"
             1 -> "1 thing needs a look"
             else -> "$attention things need a look"
         }
@@ -178,13 +178,13 @@ object HealthRules {
         val todayLine = when (others.size) {
             0 -> null
             1 -> "${others[0].title} · ${others[0].line}"
-            else -> "MEKA health · ${others.size} things need a look"
+            else -> "Navilife health · ${others.size} things need a look"
         }
         return HealthView(rows, summary, attention, critical, todayLine, f.nowMs)
     }
 
     private fun server(f: HealthFacts, cal: LocalCalendar): HealthRow {
-        val title = "MEKA's server"
+        val title = "Navilife's server"
         val synced = f.lastSyncedMs?.let { "last synced ${at(it, f.nowMs, cal)}" }
         return when {
             !f.connected -> HealthRow("server", title, "This device isn't connected yet", HealthState.BAD)
@@ -261,7 +261,7 @@ object HealthRules {
     private fun messages(f: HealthFacts, cal: LocalCalendar): HealthRow? {
         val access = f.device.notificationAccess ?: return null
         val title = "Messages capture"
-        if (!access) return HealthRow("messages", title, "MEKA can't see notifications · messages aren't captured", HealthState.BAD, HealthFix.NOTIFICATION_ACCESS, "Allow")
+        if (!access) return HealthRow("messages", title, "Navilife can't see notifications · messages aren't captured", HealthState.BAD, HealthFix.NOTIFICATION_ACCESS, "Allow")
         val last = f.device.lastNotificationMs
             ?: return HealthRow("messages", title, "Listening · nothing read yet", HealthState.OK)
         return if (f.nowMs - last > LISTENER_QUIET_MS) {
@@ -276,33 +276,33 @@ object HealthRules {
             !f.callAssistantOn -> HealthRow("calls", title, "Off · switch it on in Work mode", HealthState.OK, HealthFix.WORK, "Work mode")
             f.server == null -> HealthRow("calls", title, "On · couldn't check the phone service", HealthState.UNKNOWN)
             !f.server.calls -> HealthRow("calls", title, "On, but the phone service isn't set up on the server", HealthState.BAD)
-            f.device.callRoleHeld == false -> HealthRow("calls", title, "MEKA isn't screening calls on this phone", HealthState.BAD, HealthFix.CALL_ROLE, "Allow")
+            f.device.callRoleHeld == false -> HealthRow("calls", title, "Navilife isn't screening calls on this phone", HealthState.BAD, HealthFix.CALL_ROLE, "Allow")
             else -> CallCreditRules.healthLine(f.callCredit)?.let { (line, state) -> HealthRow("calls", title, line, state) }
                 ?: HealthRow("calls", title, "On · $last", HealthState.OK)
         }
     }
 
     private fun ai(f: HealthFacts): HealthRow {
-        val ai = f.ai ?: return HealthRow("ai", "MEKA's AI", "Couldn't check", HealthState.UNKNOWN)
+        val ai = f.ai ?: return HealthRow("ai", "Navilife's AI", "Couldn't check", HealthState.UNKNOWN)
         val state = when {
             ai == AskRules.STATUS_UNKNOWN -> HealthState.UNKNOWN
             ai.canAsk && !ai.lit -> HealthState.OK
             else -> HealthState.WARN
         }
-        return HealthRow("ai", "MEKA's AI", ai.line, state)
+        return HealthRow("ai", "Navilife's AI", ai.line, state)
     }
 
     private fun voice(f: HealthFacts): HealthRow = when (f.server?.speech) {
-        null -> HealthRow("voice", "MEKA's voice", "Couldn't check", HealthState.UNKNOWN)
-        true -> HealthRow("voice", "MEKA's voice", "On · Amazon Polly", HealthState.OK)
-        false -> HealthRow("voice", "MEKA's voice", "Not set up · the device's own voice speaks", HealthState.WARN)
+        null -> HealthRow("voice", "Navilife's voice", "Couldn't check", HealthState.UNKNOWN)
+        true -> HealthRow("voice", "Navilife's voice", "On · Amazon Polly", HealthState.OK)
+        false -> HealthRow("voice", "Navilife's voice", "Not set up · the device's own voice speaks", HealthState.WARN)
     }
 
     private fun battery(f: HealthFacts): HealthRow? {
         val exempt = f.device.batteryExempt ?: return null
         return when {
-            f.device.batteryStopped -> HealthRow("battery", "Battery", "MEKA was stopped today, likely by Samsung's battery saver", HealthState.BAD, HealthFix.BATTERY, "Keep MEKA awake")
-            !exempt -> HealthRow("battery", "Battery", "Samsung may put MEKA to sleep", HealthState.WARN, HealthFix.BATTERY, "Keep MEKA awake")
+            f.device.batteryStopped -> HealthRow("battery", "Battery", "Navilife was stopped today, likely by Samsung's battery saver", HealthState.BAD, HealthFix.BATTERY, "Keep Navilife awake")
+            !exempt -> HealthRow("battery", "Battery", "Samsung may put Navilife to sleep", HealthState.WARN, HealthFix.BATTERY, "Keep Navilife awake")
             else -> HealthRow("battery", "Battery", "Allowed to run in the background", HealthState.OK)
         }
     }

@@ -146,9 +146,9 @@ fun Application.mekaSync(
 
         // Public pages the OAuth consent screens link to (Google requires a home page and privacy policy to publish).
         get("/") {
-            call.respondText(resultPage("MEKA OS", "A private, single-household personal operating system. It is not a public service and has no sign-ups."), ContentType.Text.Html)
+            call.respondText(resultPage("Navilife", "A private, single-household personal operating system. It is not a public service and has no sign-ups."), ContentType.Text.Html)
         }
-        get("/privacy") { call.respondText(resultPage("MEKA OS privacy policy", PRIVACY_TEXT), ContentType.Text.Html) }
+        get("/privacy") { call.respondText(resultPage("Navilife privacy policy", PRIVACY_TEXT), ContentType.Text.Html) }
 
         // One-time device enrolment (ADR-005 M0). Disabled unless MEKA_ENROL_TOKEN is configured.
         post("/v1/enrol") {
@@ -799,10 +799,10 @@ fun Application.mekaSync(
 }
 
 private const val PRIVACY_TEXT =
-    "MEKA OS is a private app used only by its owner's household. When you connect a Google or Microsoft account, " +
-        "MEKA OS reads your calendar events so they can appear in your own MEKA OS apps. It changes your calendar only " +
+    "Navilife is a private app used only by its owner's household. When you connect a Google or Microsoft account, " +
+        "Navilife reads your calendar events so they can appear in your own Navilife apps. It changes your calendar only " +
         "if you choose Allow editing for that account, and then only to add, move, edit or delete events you ask it to " +
-        "from your own MEKA OS apps; Stop editing turns that off at once. Event details are " +
+        "from your own Navilife apps; Stop editing turns that off at once. Event details are " +
         "stored encrypted in the owner's own cloud account and on the owner's devices, are never sold or shared with " +
         "anyone, and are not used for advertising or to train AI models. Sign-in tokens are encrypted with a key only " +
         "this service can use. You can disconnect at any time from your Google or Microsoft account settings, after " +
@@ -814,10 +814,10 @@ internal fun connectedText(r: Integrations.CallbackResult.Connected): String {
     val who = "${providerName(r.provider)} (${r.email})"
     return when {
         MailProviders.isMail(r.provider) ->
-            "$who is connected. MEKA reads and tidies it once sorting arrives in an update, and sends only when you tap Send. You can close this page."
-        r.canEdit -> "$who is connected, and MEKA OS may now add and change events in it when you do so in the app. You can close this page."
+            "$who is connected. Navilife reads and tidies it once sorting arrives in an update, and sends only when you tap Send. You can close this page."
+        r.canEdit -> "$who is connected, and Navilife may now add and change events in it when you do so in the app. You can close this page."
         r.editingAsked -> "$who is connected, but read-only: editing wasn't allowed. To allow it, tap Allow editing again and keep the calendar permission ticked. You can close this page."
-        else -> "$who is connected. Your calendar will appear in MEKA OS within a minute. You can close this page."
+        else -> "$who is connected. Your calendar will appear in Navilife within a minute. You can close this page."
     }
 }
 
@@ -827,7 +827,7 @@ private fun html(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").repla
 
 /** Plain, self-contained page shown in the browser after the provider's sign-in. */
 private fun resultPage(title: String, message: String) = """<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>MEKA OS · ${html(title)}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Navilife · ${html(title)}</title>
 <style>:root{color-scheme:light dark}body{font:17px/1.5 -apple-system,system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;padding:24px;box-sizing:border-box}
 main{max-width:30rem}h1{font-size:1.5rem;margin:0 0 .5rem}p{margin:0;opacity:.8}</style></head>
 <body><main><h1>${html(title)}</h1><p>${html(message)}</p></main></body></html>"""

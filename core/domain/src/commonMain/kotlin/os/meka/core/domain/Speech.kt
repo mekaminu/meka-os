@@ -122,7 +122,7 @@ object SpeechRules {
         return "${tenths / 10}.${tenths % 10} s"
     }
 
-    const val TIMING_LABEL = "Time to MEKA's voice"
+    const val TIMING_LABEL = "Time to Navilife's voice"
     /** The server refuses more than this per piece (SpeechCodec.MAX_TEXT). */
     const val MAX_PIECE = 600
     /** Sentences after the first are joined up to about this many characters, so a reply is one or two requests. */
@@ -253,7 +253,7 @@ object SpeechRules {
     /** 1234567 → "1,234,567". */
     fun grouped(n: Long): String = n.toString().reversed().chunked(3).joinToString(",").reversed()
 
-    const val USAGE_LABEL = "MEKA's voice"
+    const val USAGE_LABEL = "Navilife's voice"
     const val ON = "on"
     private val MONTH = Regex("(\\d{4})-(\\d{2})")
     private val MONTHS = listOf(
@@ -389,8 +389,8 @@ data class VoicePickerView(
 object VoicePickerRules {
     /** What ▶ Sample says: MEKA's own words, never anything of Meka's. */
     const val SAMPLE = "Good morning, Meka. You've got three things today and it's 14 degrees."
-    const val TITLE = "MEKA's voice"
-    const val INTRO = "How MEKA sounds in Talk, the spoken brief and when it answers calls. The choice follows you to every device."
+    const val TITLE = "Navilife's voice"
+    const val INTRO = "How Navilife sounds in Talk, the spoken brief and when it answers calls. The choice follows you to every device."
 
     /** "Amy · British · female · most natural". */
     fun detail(v: OfferedVoice, isDefault: Boolean): String {
@@ -399,7 +399,7 @@ object VoicePickerRules {
             "neural" -> "natural"
             else -> v.engine.lowercase().ifEmpty { null }
         }
-        return listOfNotNull("British", v.gender.lowercase().ifEmpty { null }, engine, if (isDefault) "MEKA's default" else null)
+        return listOfNotNull("British", v.gender.lowercase().ifEmpty { null }, engine, if (isDefault) "Navilife's default" else null)
             .joinToString(" · ")
     }
 
@@ -410,10 +410,10 @@ object VoicePickerRules {
 
     fun help(mac: Boolean): String = if (mac) {
         "For a better Mac voice: System Settings → Accessibility → Spoken Content → System voice → Manage Voices, " +
-            "and download a Premium or Enhanced English (United Kingdom) voice. MEKA picks the best one installed."
+            "and download a Premium or Enhanced English (United Kingdom) voice. Navilife picks the best one installed."
     } else {
         "For a better free phone voice: install Speech Services by Google, choose it in Settings → General management → " +
-            "Text-to-speech → Preferred engine, then download English (United Kingdom) in high quality. MEKA picks the best one installed."
+            "Text-to-speech → Preferred engine, then download English (United Kingdom) in high quality. Navilife picks the best one installed."
     }
 
     /**
@@ -444,15 +444,15 @@ object VoicePickerRules {
         }
         val rows = polly.map { v -> VoiceChoice(v.id, v.id, detail(v, v.id == default), selected = v.id == picked) }.toMutableList()
         if (!on && chosen != null && !device) {
-            rows += VoiceChoice(chosen, chosen, "MEKA's voice · not reachable right now", selected = true, sample = false)
+            rows += VoiceChoice(chosen, chosen, "Navilife's voice · not reachable right now", selected = true, sample = false)
         }
         rows += VoiceChoice(MekaVoiceRules.DEVICE, deviceLabel(mac), DEVICE_DETAIL, selected = device || (picked == null && !rows.any { it.selected }))
         val where = if (mac) "the Mac" else "the phone"
         val status = when {
             !loaded -> null
-            !connected -> "MEKA's voices come from your MEKA server. Until this device is connected, $where's own voice speaks."
-            state == SpeechRules.OFF -> "MEKA's voices aren't switched on for this server, so $where's own voice speaks."
-            !on -> "Couldn't reach MEKA's voices just now, so $where's own voice speaks. Try again in a moment."
+            !connected -> "Navilife's voices come from your Navilife server. Until this device is connected, $where's own voice speaks."
+            state == SpeechRules.OFF -> "Navilife's voices aren't switched on for this server, so $where's own voice speaks."
+            !on -> "Couldn't reach Navilife's voices just now, so $where's own voice speaks. Try again in a moment."
             chosen != null && !device && chosen !in polly.map { it.id } -> "“$chosen” isn't offered any more, so $default speaks."
             else -> null
         }

@@ -38,7 +38,7 @@ final class CaptureInbox {
 final class CaptureServiceProvider: NSObject {
     @objc func captureText(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
         guard let text = pboard.string(forType: .string), !text.isEmpty else {
-            error.pointee = "There was no text to add to MEKA." as NSString
+            error.pointee = "There was no text to add to Navilife." as NSString
             return
         }
         MainActor.assumeIsolated { CaptureInbox.shared.receive(text) }
@@ -47,7 +47,7 @@ final class CaptureServiceProvider: NSObject {
     /// "Handle this with MEKA": the text goes to the core's `handleThis` (only a String crosses).
     @objc func handleText(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
         guard let text = pboard.string(forType: .string), !text.isEmpty else {
-            error.pointee = "There was no text for MEKA to handle." as NSString
+            error.pointee = "There was no text for Navilife to handle." as NSString
             return
         }
         MainActor.assumeIsolated { CaptureInbox.shared.receive(text, handle: true) }

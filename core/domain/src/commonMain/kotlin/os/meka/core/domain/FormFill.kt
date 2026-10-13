@@ -34,7 +34,7 @@ data class FormAnswersView(
 
 object FormFillRules {
     /** The block's heading in the capture sheet and the Mac sheet. */
-    const val TITLE = "From What MEKA knows"
+    const val TITLE = "From What Navilife knows"
     const val COPY = "Copy"
     const val COPY_ALL = "Copy all"
     /** Most answers shown for one share. */

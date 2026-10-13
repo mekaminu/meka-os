@@ -29,7 +29,7 @@ object VoicePlaylistRules {
     /** What the conversation remembers MEKA did, so "and the second one?" has something to go on. */
     const val PLAYED = "Played Meka's voice messages from the call assistant."
 
-    private val DROP = setOf("please", "meka", "hey", "can", "could", "would", "will", "you", "me", "back", "now", "then",
+    private val DROP = setOf("please", "meka", "navilife", "hey", "can", "could", "would", "will", "you", "me", "back", "now", "then",
         "so", "just", "um", "umm", "uh", "er", "erm", "and", "ok", "okay", "for", "out")
     private val DETERMINERS = setOf("my", "the", "any", "all", "new", "latest", "those", "them", "of")
     private val NOUNS = listOf(

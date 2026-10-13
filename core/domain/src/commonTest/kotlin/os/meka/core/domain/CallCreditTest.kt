@@ -131,7 +131,7 @@ class CallCreditTest {
         assertEquals(NoticeTarget.NEEDS_YOU, veryLow.target)
         val paused = CallCreditRules.notices(CallCredit(CallCreditState.PAUSED, null, "GBP", t + hour, CallCreditPause.UNREADABLE), true).single()
         assertEquals("Call assistant paused", paused.title)
-        assertEquals("MEKA couldn't read the Twilio balance for a day · calls ring as usual at work", paused.text)
+        assertEquals("Navilife couldn't read the Twilio balance for a day · calls ring as usual at work", paused.text)
         assertEquals(emptyList(), CallCreditRules.notices(CallCredit(CallCreditState.VERY_LOW, 180, "GBP", t), assistantOn = false))
         assertEquals("Call assistant credit", NoticeSource.CALL_CREDIT.label)
     }

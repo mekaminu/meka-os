@@ -83,7 +83,7 @@ fun FactsPane(core: MekaCore, onClose: () -> Unit) {
                 modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         }
         item(key = "title") {
-            Text("What MEKA knows", style = MekaType.greeting, color = Meka.colors.textPrimary,
+            Text("What Navilife knows", style = MekaType.greeting, color = Meka.colors.textPrimary,
                 modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.FACTS)).appear(rememberAppearance(0)))
         }
         item(key = "summary") {
@@ -125,7 +125,7 @@ fun FactsPane(core: MekaCore, onClose: () -> Unit) {
                     r, Modifier.animateItem().appear(rememberAppearance(base + 1 + i)),
                     onCopy = {
                         haptics.light()
-                        LiveReplies.copyText(context, r.copyText, label = "MEKA fact")
+                        LiveReplies.copyText(context, r.copyText, label = "Navilife fact")
                         said = FactAdded(FactRules.copiedLine(r), refused = false)
                     },
                     onAi = {

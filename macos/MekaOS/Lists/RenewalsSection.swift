@@ -17,7 +17,7 @@ struct RenewalsSection: View {
             Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.bottom, MekaSpace.xs)
         }
         if (r?.count ?? 0) == 0 {
-            EmptyLine(text: "MOT, insurance, the boiler service, subscriptions and bills. Add each with its date and MEKA shows it in good time, with a cancel-by reminder if you set one.", palette: palette)
+            EmptyLine(text: "MOT, insurance, the boiler service, subscriptions and bills. Add each with its date and Navilife shows it in good time, with a cancel-by reminder if you set one.", palette: palette)
         }
         if let home = model.homeUpkeep {
             ListRowView(title: HomeUpkeepRules.shared.LABEL, meta: home.summary, due: false, expanded: open == Self.homeKey, palette: palette,

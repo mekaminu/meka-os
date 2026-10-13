@@ -51,7 +51,7 @@ object WatchHomeRules {
     const val UNLINKED = "This watch was unlinked"
     const val UNLINKED_LINE = "Link it again: tap below, then type the new code in Ask → More → Watch on your phone"
     const val LINK_AGAIN = "Link again"
-    const val NO_SERVER = "This watch doesn't know MEKA's server · install it again from the Mac (tools/install-watch.sh)"
+    const val NO_SERVER = "This watch doesn't know Navilife's server · install it again from the Mac (tools/install-watch.sh)"
     const val ASKING = "Getting a code…"
     const val TRY_AGAIN = "Try again"
     const val OFFLINE = "Offline · it syncs when the watch is back online"

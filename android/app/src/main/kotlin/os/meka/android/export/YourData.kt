@@ -167,7 +167,7 @@ fun YourData(core: MekaCore, modifier: Modifier = Modifier, onClose: (() -> Unit
             }
         }
         Text(
-            "The file isn't encrypted: keep it somewhere only you can open. It's JSON, readable without MEKA.",
+            "The file isn't encrypted: keep it somewhere only you can open. It's JSON, readable without Navilife.",
             style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(3)),
         )
         Text(

@@ -225,7 +225,7 @@ class CallAssistantTest {
         assertTrue("Meka will get your message and call you back" in hook(VoiceStep.ANSWERED, *call, "Digits" to "2").bodyAsText())
         val item = fold().items().single()
         assertTrue(item.away)
-        assertEquals("Messages MEKA took", fold().summary().title)
+        assertEquals("Messages Navilife took", fold().summary().title)
 
         // Work switched on by hand that evening (a late shift): the at-work greeting again.
         ops.append(
@@ -332,7 +332,7 @@ class CallAssistantTest {
         assertEquals("high", m["android"]!!.jsonObject["priority"]!!.jsonPrimitive.content)
         assertEquals("sync", m["data"]!!.jsonObject["t"]!!.jsonPrimitive.content)
         assertEquals("normal", FcmSender.message("tok")["message"]!!.jsonObject["android"]!!.jsonObject["priority"]!!.jsonPrimitive.content)
-        assertTrue(CallAssistantScript.GREETING.startsWith("Hi, you've reached Meka's automated assistant."))
+        assertTrue(CallAssistantScript.GREETING.startsWith("Hi, this is Navilife, Meka's automated assistant."))
     }
 
     @Test

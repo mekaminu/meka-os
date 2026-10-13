@@ -106,7 +106,7 @@ object TrustRules {
         if (s.trusted || s.declined || s.streak < STREAK) null
         else TrustOffer(
             k.key,
-            "That's $STREAK “${k.label}” cards in a row you've said yes to. Want MEKA to just ${k.plural} from now on? " +
+            "That's $STREAK “${k.label}” cards in a row you've said yes to. Want Navilife to just ${k.plural} from now on? " +
                 "Each one shows here with Undo and in Activity; a question that carries other people's words (an " +
                 "invitation on your calendar, a shared link) still asks first.",
             YES, NO,
@@ -115,11 +115,11 @@ object TrustRules {
     fun answered(yes: Boolean): TrustState = if (yes) TrustState(STREAK, trusted = true) else TrustState(STREAK, declined = true)
 
     fun answerLine(k: TrustKind, yes: Boolean): String =
-        if (yes) "MEKA will ${k.plural} without asking. Undo any one to go back to asking."
-        else "MEKA will keep asking before it ${k.plural.replaceFirst(" ", "s ")}."
+        if (yes) "Navilife will ${k.plural} without asking. Undo any one to go back to asking."
+        else "Navilife will keep asking before it ${k.plural.replaceFirst(" ", "s ")}."
 
     fun autoUndoneLine(k: TrustKind, outcome: UndoOutcome): String =
-        outcome.line + ". MEKA will ask before it ${k.plural.replaceFirst(" ", "s ")} again."
+        outcome.line + ". Navilife will ask before it ${k.plural.replaceFirst(" ", "s ")} again."
 
     /** The Ask answer's line for something done on its own. */
     fun autoLine(doneLine: String): String = doneLine + DONE_TAIL

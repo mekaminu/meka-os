@@ -12,7 +12,7 @@ class MotionCheckTest {
         val c = MotionCheckRules.phone(MotionChoice.EXPRESSIVE, 1f, powerSave = false)
         assertEquals(
             listOf(
-                MotionCheckRow("MEKA Motion", "Expressive"),
+                MotionCheckRow("Navilife Motion", "Expressive"),
                 MotionCheckRow("Phone's animation scale", "1×"),
                 MotionCheckRow("Power saving", "Off"),
             ),
@@ -50,7 +50,7 @@ class MotionCheckTest {
     @Test
     fun mekaOffSaysSo() {
         val c = MotionCheckRules.phone(MotionChoice.OFF, 1f, powerSave = false)
-        assertEquals("Animations off because MEKA's Motion is Off — tap to turn them on", c.result)
+        assertEquals("Animations off because Navilife's Motion is Off — tap to turn them on", c.result)
         assertEquals(MotionChoice.EXPRESSIVE, c.fix)
     }
 
@@ -67,8 +67,8 @@ class MotionCheckTest {
     @Test
     fun macCheck() {
         val off = MotionCheckRules.mac(MotionChoice.OFF, reduceMotion = true, lowPower = false)
-        assertEquals(listOf("MEKA Motion", "Reduce Motion", "Low Power Mode"), off.rows.map { it.label })
-        assertEquals("Animations off because MEKA's Motion is Off — click to turn them on", off.result)
+        assertEquals(listOf("Navilife Motion", "Reduce Motion", "Low Power Mode"), off.rows.map { it.label })
+        assertEquals("Animations off because Navilife's Motion is Off — click to turn them on", off.result)
         assertEquals("Animations on · Expressive · playing even with Reduce Motion on",
             MotionCheckRules.mac(null, reduceMotion = true, lowPower = false).result)
         assertEquals("Animations on · Subtle · playing even with Reduce Motion on",
@@ -79,9 +79,9 @@ class MotionCheckTest {
 
     @Test
     fun versionLine() {
-        assertEquals("MEKA 0.1.412 · build 412", AppUpdateRules.versionLine("0.1.412", 412, null))
-        assertEquals("MEKA 0.1.412 · build 412 · up to date", AppUpdateRules.versionLine("0.1.412", 412, 412))
-        assertEquals("MEKA 0.1.412 · build 412 · up to date", AppUpdateRules.versionLine("0.1.412", 412, 400))
-        assertEquals("MEKA 0.1.412 · build 412 · update ready (build 415)", AppUpdateRules.versionLine("0.1.412", 412, 415))
+        assertEquals("Navilife 0.1.412 · build 412", AppUpdateRules.versionLine("0.1.412", 412, null))
+        assertEquals("Navilife 0.1.412 · build 412 · up to date", AppUpdateRules.versionLine("0.1.412", 412, 412))
+        assertEquals("Navilife 0.1.412 · build 412 · up to date", AppUpdateRules.versionLine("0.1.412", 412, 400))
+        assertEquals("Navilife 0.1.412 · build 412 · update ready (build 415)", AppUpdateRules.versionLine("0.1.412", 412, 415))
     }
 }

@@ -142,7 +142,7 @@ object LiveReplies {
         return runCatching { context.startActivity(launch) }.isSuccess
     }
 
-    fun copyText(context: Context, text: String, label: String = "MEKA reply") {
+    fun copyText(context: Context, text: String, label: String = "Navilife reply") {
         val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
         clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
     }

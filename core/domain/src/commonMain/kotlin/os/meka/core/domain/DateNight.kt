@@ -92,7 +92,7 @@ object DateNightRules {
     val START_CHOICES: List<Int> = listOf(18 * 60, 18 * 60 + 30, 19 * 60, 19 * 60 + 30, 20 * 60)
     val WEEKDAY_CHOICES: List<String> = LocalClock.DAY_SHORT
 
-    const val OFF_LINE = "Off · pick an evening and MEKA keeps it clear every two weeks"
+    const val OFF_LINE = "Off · pick an evening and Navilife keeps it clear every two weeks"
     const val NOTE = "The planner and Gym bookings leave the evening clear. Skip one and that evening is free to plan again."
     const val OFF_LABEL = "Turn off"
     const val SKIP_LABEL = "Skip this one"

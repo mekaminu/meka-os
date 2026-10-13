@@ -44,7 +44,7 @@ object AskFieldRules {
     fun placeholder(canAsk: Boolean): String = if (canAsk) PLACEHOLDER_ASK else PLACEHOLDER_SEARCH
 
     /** What the field is called to a screen reader. */
-    fun fieldLabel(canAsk: Boolean): String = if (canAsk) "Ask MEKA or search" else "Search everything"
+    fun fieldLabel(canAsk: Boolean): String = if (canAsk) "Ask Navilife or search" else "Search everything"
 
     /**
      * The line under the field before anything is typed. Once Meka has asked MEKA something on this device ([used]),
@@ -56,7 +56,7 @@ object AskFieldRules {
         else -> "Searched on this ${if (mac) "Mac" else "phone"}; nothing leaves it."
     }
 
-    const val HINT_ASK = "Type to search · Return asks MEKA"
+    const val HINT_ASK = "Type to search · Return asks Navilife"
 
     /** Two things to ask, as chips under the one-line hint (Ask polish, item 5); a tap asks it. */
     val EXAMPLES: List<String> = listOf("What's tomorrow?", "Add milk to shopping")
@@ -66,7 +66,7 @@ object AskFieldRules {
 
     /** The first-use line under the field before anything is typed. */
     fun idleLine(canAsk: Boolean, mac: Boolean = false): String =
-        if (canAsk) "Type to find tasks, events and lists; Return asks MEKA about your day, or to add, move or tick off a task, add to shopping, start a fast or set a timer. Nothing happens until you ${if (mac) "click" else "tap"}."
+        if (canAsk) "Type to find tasks, events and lists; Return asks Navilife about your day, or to add, move or tick off a task, add to shopping, start a fast or set a timer. Nothing happens until you ${if (mac) "click" else "tap"}."
         else "Type to find tasks, events, lists, goals and habits. Searched on this ${if (mac) "Mac" else "phone"}; nothing leaves it."
 
     /** The kind as one word in front of a match's line. */
@@ -122,7 +122,7 @@ object AskFieldRules {
             rows = rows,
             total = view.total,
             seeAll = if (view.total > rows.size) "See all ${view.total} matches" else null,
-            empty = if (view.total == 0) (if (canAsk) "No matches · Return asks MEKA" else "No matches for “$q”") else null,
+            empty = if (view.total == 0) (if (canAsk) "No matches · Return asks Navilife" else "No matches for “$q”") else null,
         )
     }
 

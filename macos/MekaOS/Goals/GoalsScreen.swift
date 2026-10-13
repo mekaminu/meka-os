@@ -21,7 +21,7 @@ struct GoalsScreen: View {
                     .font(MekaType.greeting).tracking(MekaType.greetingTracking)
                     .foregroundStyle(palette.textPrimary)
                     .staggeredAppear(0)
-                Text(model.goals?.paceLine ?? "Add a habit and MEKA keeps count, and makes room in your plan when one falls behind.")
+                Text(model.goals?.paceLine ?? "Add a habit and Navilife keeps count, and makes room in your plan when one falls behind.")
                     .font(MekaType.itemMeta)
                     .foregroundStyle((model.goals?.behind ?? 0) > 0 ? palette.accent : palette.textSecondary)
                     .contentTransition(.opacity)
@@ -54,7 +54,7 @@ struct GoalsScreen: View {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Button("Add Gym") { model.addGym() }
                             .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
-                        Text("Three times a week, evenings, an hour: MEKA books the sessions around your calendar and work, and rebooks a missed one.")
+                        Text("Three times a week, evenings, an hour: Navilife books the sessions around your calendar and work, and rebooks a missed one.")
                             .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
                     .padding(.top, MekaSpace.m)

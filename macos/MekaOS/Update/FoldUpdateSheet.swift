@@ -27,7 +27,7 @@ struct FoldUpdateSheet: View {
                     }
                 } else if let summary = model.foldUpdateCheck?.summary {
                     Text(summary).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                    Text("The Fold offers it the next time MEKA opens there, or within 15 minutes. You tap Install once; Android checks it's signed like the app you have.")
+                    Text("The Fold offers it the next time Navilife opens there, or within 15 minutes. You tap Install once; Android checks it's signed like the app you have.")
                         .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 } else {
                     Text(model.foldUpdateCheck?.problem ?? "Choose the APK to publish.")
@@ -64,7 +64,7 @@ struct FoldUpdateSheet: View {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "apk") ?? .data]
         panel.allowsMultipleSelection = false
-        panel.message = "Choose the MEKA APK Gradle built (android/app/build/outputs/apk/debug/app-debug.apk)."
+        panel.message = "Choose the Navilife APK Gradle built (android/app/build/outputs/apk/debug/app-debug.apk)."
         if panel.runModal() == .OK, let url = panel.url { model.prepareFoldUpdate(path: url.path) }
     }
 }

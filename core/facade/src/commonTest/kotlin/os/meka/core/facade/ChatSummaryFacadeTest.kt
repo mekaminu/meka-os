@@ -96,7 +96,7 @@ class ChatSummaryFacadeTest {
         server.down = true
         assertIs<ChatSummaryRead.Unavailable>(fold.summariseChats())
         server.down = false
-        server.reply = ChatSummaryCodec.Response("off", reason = "MEKA's AI is off")
+        server.reply = ChatSummaryCodec.Response("off", reason = "Navilife's AI is off")
         assertIs<ChatSummaryRead.Unavailable>(fold.summariseChats())
         assertTrue(fold.chatSummaries.value.isEmpty())
         assertNull(ChatSummaryRules.withSummaries(TriageChatRules.chats(fold.triage.value), fold.chatSummaries.value).single().summary)

@@ -21,7 +21,7 @@ struct AutonomySheet: View {
         let paused = v.paused
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                Text("What MEKA may do").font(MekaType.upNextTitle).staggeredAppear(0)
+                Text("What Navilife may do").font(MekaType.upNextTitle).staggeredAppear(0)
                 Text(v.summary).font(MekaType.body)
                     .foregroundStyle(paused ? palette.accent : palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

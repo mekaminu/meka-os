@@ -56,7 +56,7 @@ internal fun UpdateCard(state: UpdateState, updater: AppUpdater, modifier: Modif
     }
     val line = when (state) {
         is UpdateState.Ready -> AppUpdateRules.line(release.build)
-        is UpdateState.NeedsPermission -> "Allow MEKA to install its own updates (once), then tap Install."
+        is UpdateState.NeedsPermission -> "Allow Navilife to install its own updates (once), then tap Install."
         is UpdateState.Downloading -> AppUpdateRules.progressLine(state.chunksDone, release.chunkCount)
         is UpdateState.Confirming -> "Downloaded and checked. Tap Install in Android's prompt."
         is UpdateState.Failed -> state.reason

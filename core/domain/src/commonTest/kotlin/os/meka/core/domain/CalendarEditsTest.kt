@@ -145,8 +145,8 @@ class CalendarEditsTest {
         assertIs<EventEditResult.Refused>(eFold.add("google", "meka@gmail.com", EventDraft("X", at(16), at(17), false)))
         editing = true
         val fixture = CalendarEvent("evf", "Barça v Sevilla", at(20), at(22), false, null, "fixtures", null, "Fixtures")
-        assertEquals(EventEditResult.Refused("MEKA can't change this calendar"), eFold.delete(fixture))
-        assertEquals(EventEditResult.Refused("MEKA can't add events there"), eFold.add("fixtures", "meka@gmail.com", EventDraft("X", at(16), at(17), false)))
+        assertEquals(EventEditResult.Refused("Navilife can't change this calendar"), eFold.delete(fixture))
+        assertEquals(EventEditResult.Refused("Navilife can't add events there"), eFold.add("fixtures", "meka@gmail.com", EventDraft("X", at(16), at(17), false)))
         assertFalse(CalendarEditRules.editable(fixture) { _, _ -> true })
         assertTrue(CalendarEditRules.editable(dentist()) { _, _ -> true })
         assertFalse(CalendarEditRules.editable(dentist()) { _, _ -> false })

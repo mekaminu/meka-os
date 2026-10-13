@@ -17,13 +17,13 @@ class UpdateFailureTest {
     @Test
     fun androidsOwnWordsAreKeptUnderTheLine() {
         assertEquals(
-            "Android refused it: it isn't signed like the MEKA you have (it must carry the debug key of the Mac that installed MEKA).",
+            "Android refused it: it isn't signed like the Navilife you have (it must carry the debug key of the Mac that installed Navilife).",
             r.line(conflict),
         )
         assertEquals("Android: ${conflict.message} · STATUS_FAILURE_CONFLICT", r.detail(conflict))
         // A conflict that isn't about the signature says so plainly.
         val other = conflict.copy(message = "INSTALL_FAILED_DUPLICATE_PERMISSION")
-        assertEquals("Android refused it: it conflicts with the MEKA you have.", r.line(other))
+        assertEquals("Android refused it: it conflicts with the Navilife you have.", r.line(other))
         // No message: the status alone.
         assertEquals("Android: STATUS_FAILURE_BLOCKED", r.detail(conflict.copy(status = r.STATUS_FAILURE_BLOCKED, message = null)))
         assertEquals("Android blocked the install.", r.line(conflict.copy(status = r.STATUS_FAILURE_BLOCKED, message = null)))

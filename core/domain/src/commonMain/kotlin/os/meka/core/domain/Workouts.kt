@@ -104,10 +104,10 @@ object WorkoutRules {
     fun settingLine(access: Access, habitTitles: List<String>, background: Boolean = false): String = when (access) {
         Access.UNAVAILABLE -> "Health Connect isn't on this phone"
         Access.OFF -> "Off · turn on and a workout your watch logs ticks the habit it matches. Read on this phone only."
-        Access.NEEDS_PERMISSION -> "Allow MEKA to read exercise in Health Connect"
+        Access.NEEDS_PERMISSION -> "Allow Navilife to read exercise in Health Connect"
         Access.ON -> when {
             habitTitles.isEmpty() -> "On · add a habit like Gym or Run and its workouts tick it"
-            background -> "On · workouts tick ${andList(habitTitles.take(3))}, even while MEKA is closed. Read on this phone only."
+            background -> "On · workouts tick ${andList(habitTitles.take(3))}, even while Navilife is closed. Read on this phone only."
             else -> "On · workouts tick ${andList(habitTitles.take(3))}. Read on this phone only."
         }
     }
@@ -118,8 +118,8 @@ object WorkoutRules {
      */
     fun backgroundLine(access: Access, background: Boolean, offered: Boolean): String? = when {
         access != Access.ON || background -> null
-        !offered -> "Read while MEKA is open · background reading wasn't allowed (change it in Health Connect → MEKA)"
-        else -> "Read while MEKA is open · allow in the background and a workout ticks it before “Did you go?”"
+        !offered -> "Read while Navilife is open · background reading wasn't allowed (change it in Health Connect → Navilife)"
+        else -> "Read while Navilife is open · allow in the background and a workout ticks it before “Did you go?”"
     }
 
     /** The habits a workout could tick (for [settingLine]). */

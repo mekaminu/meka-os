@@ -140,7 +140,7 @@ object RecoveryKeyRules {
 
     /** The row in Settings; null [status] while it can't be read (offline). */
     fun view(status: Status?, nowMs: Long, cal: LocalCalendar): StatusView = when (status?.state) {
-        null -> StatusView("Can't check right now · MEKA's server didn't answer", "Make a recovery key", lit = false)
+        null -> StatusView("Can't check right now · Navilife's server didn't answer", "Make a recovery key", lit = false)
         Status.READY -> StatusView(
             "Made ${day(status.createdAtMs, nowMs, cal)}" + (status.createdBy?.let { " on the $it" } ?: "") +
                 " · gets you back in if you lose both devices",
@@ -156,11 +156,11 @@ object RecoveryKeyRules {
 
     /** The server's refusals (`{"error": …}` from `/v1/recovery/…`) in words. */
     fun refusal(code: String?): String = when (code) {
-        "key" -> "That recovery key doesn't open MEKA · check the words, or it was already used"
+        "key" -> "That recovery key doesn't open Navilife · check the words, or it was already used"
         "wait" -> "Too many tries · wait an hour and try again"
-        "taken", "revoked" -> "This device can't be connected that way · reinstall MEKA and try again"
+        "taken", "revoked" -> "This device can't be connected that way · reinstall Navilife and try again"
         "none" -> "No recovery key was made for this household"
-        else -> "MEKA's server refused it"
+        else -> "Navilife's server refused it"
     }
 
     /** Making a new key replaces the old one: the confirmation sheet's warning when one exists. */
@@ -182,19 +182,19 @@ object RecoveryKeyRules {
     fun confirms(draft: RecoveryKeyDraft, answers: List<String>): Boolean = confirms(draft.words, draft.confirmPositions, answers)
 
     const val HOW = "Write the 24 words on paper, in order, and keep it at home away from your phone and Mac. " +
-        "If you lose both, the words connect a new one. MEKA never sees them; don't photograph them or keep them in notes."
+        "If you lose both, the words connect a new one. Navilife never sees them; don't photograph them or keep them in notes."
     const val WRITE_DOWN = "I've written them down"
     const val CONFIRM = "Type these words from your paper"
     const val NOT_MATCHING = "Those words don't match · check the paper and try again"
     const val SAVED = "Saved · keep the paper somewhere safe"
     const val NOT_CONNECTED = "Connect this device to your server first."
-    const val NO_ROUTE = "MEKA's server can't keep a recovery key yet · it arrives with the next deploy"
-    const val NO_KEY = "This device's key isn't registered with MEKA's server yet · try again in a minute"
-    const val OFFLINE = "Couldn't reach MEKA's server · try again"
+    const val NO_ROUTE = "Navilife's server can't keep a recovery key yet · it arrives with the next deploy"
+    const val NO_KEY = "This device's key isn't registered with Navilife's server yet · try again in a minute"
+    const val OFFLINE = "Couldn't reach Navilife's server · try again"
     const val WHY_YOU = "You did this in Recovery key"
     /** The first-run screen's way in (a new phone or Mac when both are lost). */
     const val RECOVER = "Recover with your recovery key"
-    const val RECOVER_HOW = "Type the 24 words from your paper. This device joins your household and your data comes back from MEKA's server; the key is then used up, so make a new one."
+    const val RECOVER_HOW = "Type the 24 words from your paper. This device joins your household and your data comes back from Navilife's server; the key is then used up, so make a new one."
 
     /** The pane's state: the row, a warning before replacing a key, and the last problem (null when none). */
     fun pane(status: Status?, nowMs: Long, cal: LocalCalendar, problem: String?): RecoveryKeyView {

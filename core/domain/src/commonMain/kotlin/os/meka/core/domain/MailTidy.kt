@@ -15,9 +15,9 @@ enum class MailTidy(val one: String, val many: String, val label: String?) {
     /** Left exactly where it is. */
     KEEP("kept", "kept", null),
     /** Archived with the label MEKA/Newsletters. */
-    NEWSLETTER("newsletter", "newsletters", "MEKA/Newsletters"),
+    NEWSLETTER("newsletter", "newsletters", "Navilife/Newsletters"),
     /** Archived with the label MEKA/Receipts. */
-    RECEIPT("receipt or order", "receipts and orders", "MEKA/Receipts"),
+    RECEIPT("receipt or order", "receipts and orders", "Navilife/Receipts"),
     /** Archived (notifications and promos), no label. */
     ARCHIVE("notification or promo", "notifications and promos", null);
 

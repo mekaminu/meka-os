@@ -63,7 +63,7 @@ object SleepRules {
     fun settingLine(access: WorkoutRules.Access, minutes: Int?): String = when (access) {
         WorkoutRules.Access.UNAVAILABLE -> "Health Connect isn't on this phone"
         WorkoutRules.Access.OFF -> "Off · turn on and after a short night (under 6 h) Plan my day plans a lighter day. Read on this phone only."
-        WorkoutRules.Access.NEEDS_PERMISSION -> "Allow MEKA to read sleep in Health Connect"
+        WorkoutRules.Access.NEEDS_PERMISSION -> "Allow Navilife to read sleep in Health Connect"
         WorkoutRules.Access.ON -> when {
             minutes == null -> "On · no sleep logged last night, so today's plan is as usual. Read on this phone only."
             taskCap(minutes) != null -> "On · last night ${hm(minutes)} · a lighter plan today. Read on this phone only."

@@ -25,10 +25,10 @@ class MacNotifyTest {
         assertEquals(HealthState.BAD, row.state)
         assertEquals(HealthFix.NOTIFICATIONS_ON, row.fix)
         assertEquals("Turn on", row.fixLabel)
-        assertEquals("Off for MEKA in System Settings · nothing can reach this Mac", row.line)
+        assertEquals("Off for Navilife in System Settings · nothing can reach this Mac", row.line)
         val v = HealthRules.view(facts(n), cal)
         assertTrue(v.critical)
-        assertEquals("Notifications · Off for MEKA in System Settings · nothing can reach this Mac", v.todayLine)
+        assertEquals("Notifications · Off for Navilife in System Settings · nothing can reach this Mac", v.todayLine)
     }
 
     @Test
@@ -36,7 +36,7 @@ class MacNotifyTest {
         val off = NotifyTrace.healthRow(MacNotifyRules.health(true, macOff = true, lastPostMs = 0), now, cal)!!
         assertEquals(HealthState.BAD, off.state)
         assertNull(off.fix)
-        assertEquals("This Mac is set to Off in MEKA's Notifications · nothing posts here", off.line)
+        assertEquals("This Mac is set to Off in Navilife's Notifications · nothing posts here", off.line)
 
         // No trace on the Mac is not "hasn't looked yet": a Mac that never posted is still fine.
         val never = NotifyTrace.healthRow(MacNotifyRules.health(true, false, 0), now, cal)!!
@@ -56,9 +56,9 @@ class MacNotifyTest {
 
     @Test
     fun theSheetsOffLineSaysWhyNothingArrives() {
-        assertEquals("Notifications are off for MEKA in System Settings, so nothing can reach this Mac.", MacNotifyRules.offLine(false, false))
-        assertEquals("Notifications are off for MEKA in System Settings, so nothing can reach this Mac.", MacNotifyRules.offLine(false, true))
-        assertEquals("This Mac is set to Off below, so MEKA posts nothing here.", MacNotifyRules.offLine(true, true))
+        assertEquals("Notifications are off for Navilife in System Settings, so nothing can reach this Mac.", MacNotifyRules.offLine(false, false))
+        assertEquals("Notifications are off for Navilife in System Settings, so nothing can reach this Mac.", MacNotifyRules.offLine(false, true))
+        assertEquals("This Mac is set to Off below, so Navilife posts nothing here.", MacNotifyRules.offLine(true, true))
         assertNull(MacNotifyRules.offLine(true, false))
     }
 
@@ -77,6 +77,6 @@ class MacNotifyTest {
         val no = MacNotifyRules.testView(false)
         assertEquals("On this Mac · didn't show", no.localLine)
         assertEquals(false, no.localOk)
-        assertTrue(no.hint!!.contains("System Settings → Notifications → MEKA"))
+        assertTrue(no.hint!!.contains("System Settings → Notifications → Navilife"))
     }
 }

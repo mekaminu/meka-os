@@ -104,7 +104,7 @@ class HandleThisFacadeTest {
     fun offlineOffOrNotConnectedSaysSoAndKeepsNothing() = runTest {
         val c = core()
         server.down = true
-        assertEquals("Couldn't reach MEKA · try again when you're online", assertIs<HandleOutcome.Unavailable>(c.handleThis(letter)).line)
+        assertEquals("Couldn't reach Navilife · try again when you're online", assertIs<HandleOutcome.Unavailable>(c.handleThis(letter)).line)
         server.down = false
         server.reply = MessageRequestCodec.Response("off")
         assertIs<HandleOutcome.Unavailable>(c.handleThis(letter))

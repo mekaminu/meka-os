@@ -81,7 +81,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .trips: "Trips"
         case .errands: "Errands"
         case .emergency: "Emergency card"
-        case .facts: "What MEKA knows"
+        case .facts: "What Navilife knows"
         case .brief: "Morning brief"
         case .weekAhead: "Week ahead"
         case .news: "News"
@@ -94,15 +94,15 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .protectedTime: "Protected time"
         case .notifications: "Notifications"
         case .appearance: "Appearance"
-        case .voice: "MEKA's voice"
+        case .voice: "Navilife's voice"
         case .talk: "Talk"
         case .calendars: "Calendars"
         case .mail: MailAccountRules.shared.TITLE
         case .family: "Family"
         case .watch: "Watch"
         case .recovery: "Recovery key"
-        case .autonomy: "What MEKA may do"
-        case .ai: "MEKA's AI"
+        case .autonomy: "What Navilife may do"
+        case .ai: "Navilife's AI"
         case .activity: "Activity"
         case .setup: "Setup"
         case .health: "Health"
@@ -127,7 +127,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .trips: "Trips and bookings, day by day"
         case .errands: "Things to get or do when you're at a place"
         case .emergency: "Who to call and where things are"
-        case .facts: "Car reg, GP, sizes · the facts MEKA answers from"
+        case .facts: "Car reg, GP, sizes · the facts Navilife answers from"
         case .brief: "Your day, who you're waiting on and headlines"
         case .weekAhead: "The coming week day by day · Sunday at 18:00"
         case .news: "Barça, AI and the headlines · topics and sources"
@@ -140,21 +140,21 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .protectedTime: "Evenings and weekends, kept free of tasks"
         case .notifications: "Quiet hours, digests and what reaches you"
         case .appearance: "Dark, Light or Auto"
-        case .voice: "How MEKA sounds in Talk, the brief and calls"
+        case .voice: "How Navilife sounds in Talk, the brief and calls"
         case .talk: "⌥Space and the mic"
         case .calendars: "Connected accounts and feeds"
         case .mail: MailAccountRules.shared.ROW_LINE
         case .family: "Share the shopping list with Jeanette"
-        case .watch: "Link your Galaxy Watch to MEKA"
+        case .watch: "Link your Galaxy Watch to Navilife"
         case .recovery: RecoveryKeyRules.shared.ROW_LINE
         case .autonomy: "What it does on its own · the pause switch"
         case .ai: "Whether it's on and what it costs this month"
-        case .activity: "What MEKA did and why"
-        case .setup: "Everything MEKA can do, and what's left to set up"
-        case .health: "Is everything MEKA needs working?"
+        case .activity: "What Navilife did and why"
+        case .setup: "Everything Navilife can do, and what's left to set up"
+        case .health: "Is everything Navilife needs working?"
         case .vault: "Documents and when they run out; your data"
         case .yourData: "Export everything as one file"
-        case .settings: "Work mode, notifications, appearance, voice and MEKA's AI"
+        case .settings: "Work mode, notifications, appearance, voice and Navilife's AI"
         }
     }
 
@@ -368,7 +368,7 @@ enum ShellNav {
     /// Placeholder line for destinations whose feature hasn't landed yet.
     static func upcomingLine(_ d: ShellDestination) -> String? {
         switch d {
-        case .vault: "Your documents and when they run out; MEKA reminds you in time to renew."
+        case .vault: "Your documents and when they run out; Navilife reminds you in time to renew."
         case .today, .needsYou, .calendar, .ask, .lists, .goals, .review: nil
         }
     }

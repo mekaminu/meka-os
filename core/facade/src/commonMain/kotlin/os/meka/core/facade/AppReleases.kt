@@ -36,7 +36,7 @@ sealed class PublishOutcome {
 
     /** One line for the publisher's screen. */
     val message: String get() = when (this) {
-        is Published -> "Published build ${release.versionCode} to the Fold. MEKA there offers it the next time it opens, or within 15 minutes."
+        is Published -> "Published build ${release.versionCode} to the Fold. Navilife there offers it the next time it opens, or within 15 minutes."
         is Refused -> "Not published: $reason."
         is Failed -> reason
     }
@@ -128,7 +128,7 @@ object ReleaseTransfer {
         if (apk.size < 4 || apk[0] != 'P'.code.toByte() || apk[1] != 'K'.code.toByte()) return null to "That file isn't an APK."
         val meta = metadataJson?.let { WireCodec.decodeApkMetadata(it) }
             ?: return null to "There's no Gradle output-metadata.json beside the APK. Build it with tools/publish-fold.sh."
-        if (meta.applicationId != ANDROID_APP_ID) return null to "That APK isn't MEKA (${meta.applicationId.take(60)})."
+        if (meta.applicationId != ANDROID_APP_ID) return null to "That APK isn't Navilife (${meta.applicationId.take(60)})."
         return meta to null
     }
 }

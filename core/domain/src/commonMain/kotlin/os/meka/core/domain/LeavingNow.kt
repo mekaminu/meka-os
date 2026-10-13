@@ -72,7 +72,7 @@ object LeavingRules {
     const val STILL_RIGHT_MS = 10 * 60_000L
 
     const val TITLE = "Leaving now"
-    const val NOTE = "When an office day's work ends, MEKA drafts the message from your journey home and the trains. " +
+    const val NOTE = "When an office day's work ends, Navilife drafts the message from your journey home and the trains. " +
         "Nothing is sent until you tap Send; Edit opens the chat with the words in."
 
     fun read(fields: Map<String, FieldValue>?): LeavingSetting {

@@ -389,8 +389,8 @@ private fun DetailContent(
         }
 
         Text(
-            if (d.editable) "Edit and Delete change the event in your calendar too. Prep tasks, reminders and hiding stay in MEKA."
-            else "Change the event itself in your calendar. Prep tasks, reminders and hiding stay in MEKA.", style = MekaType.caption, color = Meka.colors.textTertiary,
+            if (d.editable) "Edit and Delete change the event in your calendar too. Prep tasks, reminders and hiding stay in Navilife."
+            else "Change the event itself in your calendar. Prep tasks, reminders and hiding stay in Navilife.", style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(5)),
         )
         Spacer(Modifier.height(MekaSpace.xl))

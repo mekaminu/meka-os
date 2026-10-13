@@ -275,7 +275,7 @@ fun SetupTodayCard(core: MekaCore, modifier: Modifier = Modifier) {
                 .padding(MekaSpace.m),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
-            Text("SET UP MEKA", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+            Text("SET UP Navilife", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
             Crossfade(view?.todayLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "setup-card") { t ->
                 Text(t, style = MekaType.body, color = Meka.colors.textPrimary)
             }

@@ -80,7 +80,7 @@ class RecoveryEnrolmentTest {
         assertEquals(null, ok.problem)
         val other = RecoveryEnrolment.outcome(RecoveryEnrolment.Result.Enrolled("away", "mac0011", "ab".repeat(32)), "home", "mac0011", "Mac")
         assertEquals(null, other.secret)
-        assertEquals("This Mac can't join that household · reinstall MEKA and try again", other.problem)
+        assertEquals("This Mac can't join that household · reinstall Navilife and try again", other.problem)
         assertEquals("23 of 24 words", RecoveryEnrolment.outcome(RecoveryEnrolment.Result.Unreadable("23 of 24 words"), "home", "m", "Mac").problem)
         assertEquals("Couldn't reach the server", RecoveryEnrolment.outcome(RecoveryEnrolment.Result.Failed("Couldn't reach the server"), "home", "m", "Mac").problem)
     }
