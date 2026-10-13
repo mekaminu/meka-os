@@ -1,6 +1,11 @@
 package os.meka.android.mail
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,6 +68,10 @@ import os.meka.core.facade.MekaCore
  * Outlook. Connecting opens the provider's own sign-in page in the browser; MEKA never sees the password and the
  * server keeps the sign-in encrypted. The list refreshes whenever MEKA comes back to the foreground, so it updates as
  * soon as Meka returns from the browser. Reading and tidying come in the next slices.
+ *
+ * Slice 1b: an account whose Google sign-in ends within the day says so (accent) with Reconnect; **Disconnect** on each
+ * account unfolds a question in place (expand spring, tick haptic) and Disconnect there (medium haptic) makes the server
+ * forget the sign-in; the row leaves and the note says where to remove MEKA at the provider too. Reduced motion: fades.
  */
 @Composable
 fun MailPane(core: MekaCore, onClose: () -> Unit) {
@@ -90,6 +100,14 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
             ConnectStart.NotSetUp -> message = "Mail isn't set up on your server yet. Finish the registration steps, then try again."
             is ConnectStart.Failed -> message = r.reason
         }
+    }
+
+    fun disconnect(row: MailAccountRow) = scope.launch {
+        haptics.medium()
+        message = null
+        val now = core.disconnectMail(row.provider, row.email)
+        if (now == null) message = MailAccountRules.DISCONNECT_FAILED
+        else { view = Result.success(now); note = MailAccountRules.disconnectedLine(row.provider, row.email) }
     }
 
     fun relabel(row: MailAccountRow, label: MailLabel) = scope.launch {
@@ -123,6 +141,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                         row, Modifier.appear(rememberAppearance(i)),
                         onReconnect = { v.connects.firstOrNull { it.provider == row.provider }?.let { connect(it.provider, it.note) } },
                         onLabel = { relabel(row, it) },
+                        onDisconnect = { disconnect(row) },
                     )
                 }
                 v.toConnect?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
@@ -141,7 +160,12 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
 
 /** One account: its label and provider, the address, its state, Reconnect when the sign-in ended, and the label chips. */
 @Composable
-private fun MailAccountCard(row: MailAccountRow, modifier: Modifier, onReconnect: () -> Unit, onLabel: (MailLabel) -> Unit) {
+private fun MailAccountCard(
+    row: MailAccountRow, modifier: Modifier, onReconnect: () -> Unit, onLabel: (MailLabel) -> Unit, onDisconnect: () -> Unit,
+) {
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    var asking by rememberSaveable(row.provider, row.email) { mutableStateOf(false) }
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
@@ -159,10 +183,35 @@ private fun MailAccountCard(row: MailAccountRow, modifier: Modifier, onReconnect
             }
         }
         Crossfade(row.line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "mail-line") {
-            Text(it, style = MekaType.caption, color = if (row.needsReconnect) Meka.colors.critical else Meka.colors.textTertiary)
+            Text(it, style = MekaType.caption, color = when {
+                row.ending -> Meka.colors.accent
+                row.needsReconnect -> Meka.colors.critical
+                else -> Meka.colors.textTertiary
+            })
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), modifier = Modifier.padding(top = MekaSpace.xs)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.xs),
+        ) {
             MailAccountRules.LABELS.forEach { l -> LabelChip(l, selected = l == row.label) { if (l != row.label) onLabel(l) } }
+            Spacer(Modifier.weight(1f))
+            Text(MailAccountRules.DISCONNECT, style = MekaType.caption, color = Meka.colors.textSecondary,
+                modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); asking = !asking }.minTouch())
+        }
+        AnimatedVisibility(
+            asking,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs), modifier = Modifier.padding(top = MekaSpace.xs)) {
+                Text(MailAccountRules.disconnectAsk(row), style = MekaType.caption, color = Meka.colors.textSecondary)
+                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) {
+                    Text(MailAccountRules.DISCONNECT, style = MekaType.itemMeta, color = Meka.colors.critical,
+                        modifier = Modifier.clickable(role = Role.Button) { asking = false; onDisconnect() }.minTouch())
+                    Text(MailAccountRules.KEEP, style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); asking = false }.minTouch())
+                }
+            }
         }
     }
 }

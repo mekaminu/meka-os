@@ -56,7 +56,7 @@ fun SignInLineView(line: SignInLine, core: MekaCore, modifier: Modifier = Modifi
         problem = null
         when (val r = core.startConnect(line.provider, line.editing)) {
             is ConnectStart.OpenBrowser -> runCatching { uri.openUri(r.url) }.onFailure { problem = "Couldn't open the browser." }
-            ConnectStart.NotSetUp -> problem = "This calendar isn't set up on your server any more."
+            ConnectStart.NotSetUp -> problem = "This account isn't set up on your server any more."
             is ConnectStart.Failed -> problem = r.reason
         }
     }

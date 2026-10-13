@@ -390,6 +390,17 @@ fun Application.mekaSync(
                 else call.respondText(WireCodec.encodeAccounts(withContext(Dispatchers.IO) { integrations.accounts(who.householdId) }), ContentType.Application.Json)
             }
 
+            // Disconnects a mail account (Inbox autopilot, slice 1b): the server forgets its sign-in; the mailbox is untouched.
+            post("/v1/integrations/{provider}/disconnect") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val req = WireCodec.decodeMailDisconnect(body)
+                val provider = call.parameters["provider"].orEmpty()
+                val found = withContext(Dispatchers.IO) { integrations.disconnectMail(who.householdId, provider, req.email) }
+                if (!found) call.respondText("no such mail account", status = HttpStatusCode.NotFound)
+                else call.respondText(WireCodec.encodeAccounts(withContext(Dispatchers.IO) { integrations.accounts(who.householdId) }), ContentType.Application.Json)
+            }
+
             post("/v1/integrations/list") {
                 val who = call.device(devices, verifier, call.boundedBody(), requireKey = true)
                 val list = withContext(Dispatchers.IO) { integrations.accounts(who.householdId) }

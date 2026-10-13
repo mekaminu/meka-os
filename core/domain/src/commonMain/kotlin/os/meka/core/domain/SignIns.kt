@@ -15,6 +15,10 @@ import os.meka.core.sync.Replica
  *
  * Once the app is published to Production the token keeps working past day 7: the line shows once, on day 6, and is
  * gone after the 7th day with nothing expiring. A Microsoft sign-in doesn't run out like this (only when revoked).
+ *
+ * Inbox autopilot, slice 1b: mail accounts ([MailProviders]) get the same entity, line and heads-up. A Gmail sign-in
+ * runs out after 7 days like a Google calendar's (same Google app); the words say "mail" instead of "calendars", and
+ * Reconnect signs the mail account in again. A disconnected account is always OK (it has nothing left to end).
  */
 object SignInFields {
     const val PROVIDER = "provider"
@@ -85,15 +89,26 @@ object SignInRules {
      * [seenExpiredMs] (when the server first saw it, kept across polls) or [nowMs].
      */
     fun state(provider: String, status: String, grantedAtMs: Long?, nowMs: Long, seenExpiredMs: Long? = null): Pair<SignInState, Long?> {
+        if (status == DISCONNECTED) return SignInState.OK to null
         if (status == "needs_reconnect") return SignInState.EXPIRED to (seenExpiredMs ?: nowMs)
-        if (provider == "google" && grantedAtMs != null) {
+        if (runsOutWeekly(provider) && grantedAtMs != null) {
             val ends = grantedAtMs + TESTING_GRANT_MS
             if (nowMs >= ends - WARN_BEFORE_MS && nowMs < ends) return SignInState.ENDING to ends
         }
         return SignInState.OK to null
     }
 
-    private fun who(provider: String) = CalendarAccountRules.providerLabel(provider)
+    /** The server's status for a mail account Meka disconnected (it stays on file, signed out). */
+    const val DISCONNECTED = "disconnected"
+
+    /** Google's sign-ins (calendar and Gmail, one Google app) last 7 days while the app is in Testing. */
+    fun runsOutWeekly(provider: String): Boolean = provider == "google" || provider == MailProviders.GMAIL
+
+    private fun who(provider: String) =
+        if (MailProviders.isMail(provider)) MailProviders.name(provider) else CalendarAccountRules.providerLabel(provider)
+
+    /** What stops when the sign-in ends: "calendars aren't updating" / "mail isn't being read". */
+    private fun stops(provider: String) = if (MailProviders.isMail(provider)) "mail isn't being read" else "calendars aren't updating"
 
     private fun whenLabel(ms: Long, nowMs: Long, cal: LocalCalendar): String {
         val days = cal.epochDayOf(ms) - cal.epochDayOf(nowMs)
@@ -110,12 +125,15 @@ object SignInRules {
         val expired = signIns.filter { it.state == SignInState.EXPIRED }.minByOrNull { it.untilMs ?: 0L }
         if (expired != null) {
             val p = who(expired.provider)
+            val mail = MailProviders.isMail(expired.provider)
             return SignInLine(
-                text = "$p sign-in expired · calendars aren't updating · Reconnect",
-                detail = "${expired.account} needs signing in again. Until then MEKA shows the events it had and can't add or change any." +
-                    if (expired.provider == "google") " " + PRODUCTION_HINT else "",
+                text = "$p sign-in expired · ${stops(expired.provider)} · Reconnect",
+                detail = "${expired.account} needs signing in again. " +
+                    (if (mail) "Until then MEKA can't read or tidy that mailbox; nothing in it changes."
+                    else "Until then MEKA shows the events it had and can't add or change any.") +
+                    if (runsOutWeekly(expired.provider)) " " + PRODUCTION_HINT else "",
                 critical = true, provider = expired.provider, account = expired.account, editing = expired.canEdit,
-                spoken = "$p sign-in expired for ${expired.account}. Calendars aren't updating. Double tap to reconnect.",
+                spoken = "$p sign-in expired for ${expired.account}. ${stops(expired.provider).replaceFirstChar { it.uppercase() }}. Double tap to reconnect.",
             )
         }
         val ending = signIns.filter { it.state == SignInState.ENDING && (it.untilMs ?: 0L) > nowMs }.minByOrNull { it.untilMs ?: 0L } ?: return null
@@ -124,7 +142,9 @@ object SignInRules {
         val whenText = whenLabel(until, nowMs, cal)
         return SignInLine(
             text = "$p sign-in ends $whenText · Reconnect",
-            detail = "Google lets MEKA's sign-in last 7 days while its Google app is in testing. Reconnecting now keeps ${ending.account}'s calendars updating for another 7 days. $PRODUCTION_HINT",
+            detail = "Google lets MEKA's sign-in last 7 days while its Google app is in testing. Reconnecting now keeps " +
+                (if (MailProviders.isMail(ending.provider)) "MEKA reading ${ending.account}" else "${ending.account}'s calendars updating") +
+                " for another 7 days. $PRODUCTION_HINT",
             critical = false, provider = ending.provider, account = ending.account, editing = ending.canEdit,
             spoken = "$p sign-in for ${ending.account} ends $whenText. Double tap to reconnect.",
         )
@@ -144,12 +164,15 @@ object SignInRules {
             SignInState.ENDING -> if (until <= nowMs) null else Notice(
                 key = "signin:${s.provider}:${s.account}:ending:$until", source = NoticeSource.SIGN_IN, tier = NoticeTier.HEADS_UP,
                 title = "$p sign-in ends ${whenLabel(until, nowMs, cal)}",
-                text = "Reconnect from Today to keep ${s.account}'s calendars updating",
+                text = if (MailProviders.isMail(s.provider)) "Reconnect from Today to keep MEKA reading ${s.account}"
+                else "Reconnect from Today to keep ${s.account}'s calendars updating",
                 atMs = until - WARN_BEFORE_MS, target = NoticeTarget.TODAY, expiresAtMs = until,
             )
             SignInState.EXPIRED -> Notice(
                 key = "signin:${s.provider}:${s.account}:expired:$until", source = NoticeSource.SIGN_IN, tier = NoticeTier.HEADS_UP,
-                title = "Reconnect $p", text = "${s.account}'s calendars stopped updating · Reconnect from Today",
+                title = "Reconnect $p",
+                text = if (MailProviders.isMail(s.provider)) "MEKA stopped reading ${s.account} · Reconnect from Today"
+                else "${s.account}'s calendars stopped updating · Reconnect from Today",
                 atMs = until, target = NoticeTarget.TODAY, expiresAtMs = until + EXPIRED_NOTICE_STALE_MS,
             )
         }

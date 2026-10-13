@@ -85,6 +85,13 @@ class WireCodecTest {
     }
 
     @Test
+    fun mailDisconnectsRoundTripAndNeedAnAddress() {
+        val c = WireCodec.MailDisconnect("alex@example.com")
+        assertEquals(c, WireCodec.decodeMailDisconnect(WireCodec.encodeMailDisconnect(c)))
+        assertFailsWith<WireFormatException> { WireCodec.decodeMailDisconnect(WireCodec.encodeMailDisconnect(WireCodec.MailDisconnect("nobody"))) }
+    }
+
+    @Test
     fun mailLabelChangesRoundTripAndOnlyLabelShapedNamesPass() {
         val c = WireCodec.MailLabelChange("alex@example.com", "BUSINESS")
         assertEquals(c, WireCodec.decodeMailLabelChange(WireCodec.encodeMailLabelChange(c)))

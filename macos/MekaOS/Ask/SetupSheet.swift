@@ -70,6 +70,7 @@ struct SetupSheet: View {
         case .voice: dismiss(); model.showVoice = true
         case .recovery: dismiss(); model.showRecovery = true
         case .aboutYou: dismiss(); model.showAboutYou = true
+        case .mail: dismiss(); model.showMail = true
         case .notifications:
             Task {
                 // macOS asks once; after that the choice lives in System Settings → Notifications → MEKA.
@@ -87,7 +88,7 @@ struct SetupSheet: View {
     static func fixHere(_ step: SetupStep) -> Bool {
         guard step.toDo, let f = step.fix else { return false }
         switch f {
-        case .calendars, .work, .voice, .notifications, .recovery, .aboutYou: return true
+        case .calendars, .work, .voice, .notifications, .recovery, .aboutYou, .mail: return true
         case .notificationAccess, .callRole, .battery, .screenSaver: return false
         }
     }

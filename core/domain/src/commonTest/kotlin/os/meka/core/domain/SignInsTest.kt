@@ -97,4 +97,28 @@ class SignInsTest {
         assertEquals("sign_in.accabc123", SignInRules.entityId("accAbc123"))
         assertEquals(listOf(SignIn("google", "meka@gmail.com", SignInState.ENDING, 1_000L, true)), SignInStore(m.replica).all())
     }
+
+    @Test
+    fun mailSignInsEndLikeGooglesAndSayMail() {
+        val granted = 1_000_000_000_000L
+        val ends = granted + 7 * day
+        assertEquals(SignInState.ENDING to ends, SignInRules.state(MailProviders.GMAIL, "ok", granted, ends - 3_600_000L))
+        assertEquals(SignInState.OK to null, SignInRules.state(MailProviders.OUTLOOK, "ok", granted, ends - 3_600_000L))
+        assertEquals(SignInState.EXPIRED to 7L, SignInRules.state(MailProviders.OUTLOOK, "needs_reconnect", granted, 7L))
+        // Disconnected: nothing left to end, whatever the sign-in was.
+        assertEquals(SignInState.OK to null, SignInRules.state(MailProviders.GMAIL, SignInRules.DISCONNECTED, granted, ends - 3_600_000L))
+        val now = ends - 3_600_000L
+        val expired = SignIn(MailProviders.OUTLOOK, "alex@example.net", SignInState.EXPIRED, now - 1)
+        val line = SignInRules.line(listOf(expired), now, cal)!!
+        assertEquals("Outlook sign-in expired · mail isn't being read · Reconnect", line.text)
+        assertTrue(line.detail.contains("can't read or tidy that mailbox"))
+        assertEquals(MailProviders.OUTLOOK, line.provider)
+        assertTrue(line.spoken.contains("Mail isn't being read."))
+        val ending = SignIn(MailProviders.GMAIL, "alex@example.com", SignInState.ENDING, ends)
+        val l2 = SignInRules.line(listOf(ending), now, cal)!!
+        assertTrue(l2.text.startsWith("Gmail sign-in ends "))
+        assertTrue(l2.detail.contains("keeps MEKA reading alex@example.com"))
+        val notices = SignInRules.notices(listOf(ending, expired), now, cal)
+        assertEquals(listOf("Reconnect from Today to keep MEKA reading alex@example.com", "MEKA stopped reading alex@example.net · Reconnect from Today"), notices.map { it.text })
+    }
 }

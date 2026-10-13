@@ -29,6 +29,11 @@ interface MailProvider {
     fun accountEmail(accessToken: String): String
     /** A read that proves the mail permission works: the inbox's message count where the provider says it. */
     fun inbox(accessToken: String): MailboxCheck
+    /**
+     * Disconnect (slice 1b): asks the provider to withdraw MEKA's permission with this refresh token. Best effort:
+     * true when the provider confirmed it; Microsoft has no such call for personal accounts (Meka removes it there).
+     */
+    fun revoke(refreshToken: String): Boolean = false
 }
 
 /** What the sign-in check saw (counts only; no message is read). */
@@ -57,6 +62,9 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
     override fun accountEmail(accessToken: String): String = GoogleCalendar(http).accountEmail(accessToken)
 
     // 403 here (the Gmail API not enabled in the Cloud project) is "couldn't reach it", not an ended sign-in.
+    // Google's token revocation (RFC 7009): 200 when withdrawn, 400 when the token was already no good.
+    override fun revoke(refreshToken: String): Boolean = http.postFormStatus("https://oauth2.googleapis.com/revoke", mapOf("token" to refreshToken)) == 200
+
     override fun inbox(accessToken: String): MailboxCheck {
         val label = http.call("GET", "$API/labels/INBOX", accessToken).body ?: error("Gmail answered without a body")
         return MailboxCheck(label["messagesTotal"].long(), label["messagesUnread"].long())

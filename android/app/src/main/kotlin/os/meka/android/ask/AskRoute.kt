@@ -334,6 +334,7 @@ fun AskRoute(
                     os.meka.core.domain.SetupFix.VOICE -> MoreItem.VOICE
                     os.meka.core.domain.SetupFix.RECOVERY -> MoreItem.RECOVERY
                     os.meka.core.domain.SetupFix.ABOUT_YOU -> MoreItem.ABOUT_YOU
+                    os.meka.core.domain.SetupFix.MAIL -> MoreItem.MAIL
                     else -> pane
                 }
             })

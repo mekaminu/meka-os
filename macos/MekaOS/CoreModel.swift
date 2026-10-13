@@ -949,6 +949,21 @@ final class CoreModel {
         }
     }
 
+    /// Disconnects a mail account (slice 1b): the server forgets its sign-in; nothing in the mailbox changes.
+    /// Only the two Strings cross to the core.
+    func disconnectMail(provider: String, email: String) async {
+        guard let core else { return }
+        MekaHaptics.medium()
+        mailMessage = nil
+        if let now = try? await core.disconnectMail(provider: provider, email: email) {
+            mail = now
+            mailOffline = false
+            mailNote = MailAccountRules.shared.disconnectedLine(provider: provider, email: email)
+        } else {
+            mailMessage = MailAccountRules.shared.DISCONNECT_FAILED
+        }
+    }
+
     // MARK: Calendar editing: Add event (slice 2b)
 
     /// Reads which accounts allow editing (the Calendar section asks when it appears).

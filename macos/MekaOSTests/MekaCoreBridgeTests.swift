@@ -2711,5 +2711,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         )
         let mail = try await core.mailAccounts()
         XCTAssertNil(mail)
+        // Slice 1b: Disconnect offline says nothing changed; Setup's Mail step; a mail sign-in's line on Today.
+        let gone = try await core.disconnectMail(provider: "gmail", email: "alex@example.com")
+        XCTAssertNil(gone)
+        XCTAssertEqual(rules.setupStep(accounts: [], nowMs: 0).fix, SetupFix.mail)
+        XCTAssertTrue(rules.disconnectAsk(row: v.rows[1]).hasPrefix("Disconnect Business · Gmail"))
+        XCTAssertTrue(MailProviders.shared.isMail(provider: "outlook_mail"))
     }
 }

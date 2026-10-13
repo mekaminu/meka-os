@@ -197,11 +197,32 @@ class Integrations(
     }
 
     fun accounts(householdId: String): List<WireCodec.IntegrationAccount> =
-        store.accounts(householdId).map { WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs, it.canEdit, it.label) }
+        store.accounts(householdId).filter { it.status != DISCONNECTED }.map { WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs, it.canEdit, it.label) }
 
     /** Names what a mail account is for (Personal · Business · Outlook). False for an unknown account, provider or label. */
     fun setMailLabel(householdId: String, provider: String, email: String, label: String): Boolean =
         provider in mail && MailLabel.of(label) != null && store.transaction { store.setLabel(householdId, provider, email.lowercase(), label) }
+
+    /**
+     * Disconnects a mail account (Inbox autopilot, slice 1b): asks the provider to withdraw MEKA's permission (best
+     * effort; Google only), wipes the stored sign-in and marks the account disconnected, so nothing reads it any more
+     * and Today's sign-in line for it goes (its sign-in entity turns OK). Nothing in the mailbox is touched. Signing in
+     * again brings it back with its label. False for an unknown or non-mail account.
+     */
+    fun disconnectMail(householdId: String, provider: String, email: String): Boolean {
+        val m = mail[provider] ?: return false
+        val a = store.accounts(householdId).firstOrNull { it.provider == provider && it.email == email.lowercase() && it.status != DISCONNECTED }
+            ?: return false
+        runCatching {
+            val refresh = cipher.decrypt(a.refreshTokenEnc, context(a.householdId, a.provider)).decodeToString()
+            m.revoke(refresh)
+        }
+        val done = store.transaction { store.disconnect(householdId, provider, a.email) }
+        if (done) {
+            store.account(a.id)?.let { runCatching { if (applySignIn(it)) onChanged(householdId) } }
+        }
+        return done
+    }
 
     /**
      * Stop editing on one account (calendar editing): from now on the server only reads it. Giving a permission up
@@ -228,7 +249,8 @@ class Integrations(
         for (hh in store.households()) {
             var changed = false
             for (a in store.accounts(hh)) {
-                if (a.provider !in providers) continue
+                // Calendars and (Inbox autopilot, slice 1b) mail accounts: a Gmail sign-in runs out like a Google one.
+                if (a.provider !in providers && a.provider !in mail) continue
                 runCatching { if (applySignIn(a)) changed = true }
             }
             if (changed) runCatching { onChanged(hh) }

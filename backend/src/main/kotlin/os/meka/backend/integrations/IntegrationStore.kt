@@ -66,6 +66,11 @@ interface IntegrationStore {
     fun stopEditing(householdId: String, provider: String, email: String): Boolean
     /** Names what a mail account is for. Returns false when there's no such account. */
     fun setLabel(householdId: String, provider: String, email: String, label: String): Boolean
+    /**
+     * Disconnects an account (Inbox autopilot, slice 1b: mail): its sign-in is wiped and it is marked `disconnected`,
+     * so nothing syncs it; signing in again ([upsertAccount]) brings it back with its label. False when there's none.
+     */
+    fun disconnect(householdId: String, provider: String, email: String): Boolean
     fun account(id: String): AccountRow?
     fun accounts(householdId: String): List<AccountRow>
     fun syncableAccounts(): List<AccountRow>
@@ -79,6 +84,9 @@ interface IntegrationStore {
     fun mirror(householdId: String, accountId: String): Map<String, MirrorRow>
     fun putMirror(householdId: String, row: MirrorRow)
 }
+
+/** An account Meka disconnected (`integration_account.status`; Inbox autopilot, slice 1b). */
+const val DISCONNECTED = os.meka.core.domain.SignInRules.DISCONNECTED
 
 internal object FieldOpsJson {
     fun encode(m: Map<String, Pair<String, String>>): String =
@@ -114,13 +122,19 @@ class InMemoryIntegrationStore(private val knownHouseholds: List<String> = empty
         accounts[a.id] = a.copy(label = label)
         return true
     }
+    @Synchronized override fun disconnect(householdId: String, provider: String, email: String): Boolean {
+        val a = accounts.values.firstOrNull { it.householdId == householdId && it.provider == provider && it.email == email } ?: return false
+        accounts[a.id] = a.copy(status = DISCONNECTED, refreshTokenEnc = ByteArray(0), canEdit = false)
+        return true
+    }
     @Synchronized override fun account(id: String) = accounts[id]
     @Synchronized override fun accounts(householdId: String) = accounts.values.filter { it.householdId == householdId }
-    @Synchronized override fun syncableAccounts() = accounts.values.filter { it.status != "needs_reconnect" }
+    @Synchronized override fun syncableAccounts() = accounts.values.filter { it.status != "needs_reconnect" && it.status != DISCONNECTED }
     override fun households() = knownHouseholds
-    @Synchronized override fun updateRefreshToken(id: String, enc: ByteArray) { accounts[id]?.let { accounts[id] = it.copy(refreshTokenEnc = enc) } }
-    @Synchronized override fun markSynced(id: String, atMs: Long) { accounts[id]?.let { accounts[id] = it.copy(status = "ok", lastSyncAtMs = atMs) } }
-    @Synchronized override fun markError(id: String, status: String, error: String) { accounts[id]?.let { accounts[id] = it.copy(status = status) } }
+    @Synchronized override fun updateRefreshToken(id: String, enc: ByteArray) { accounts[id]?.takeIf { it.status != DISCONNECTED }?.let { accounts[id] = it.copy(refreshTokenEnc = enc) } }
+    // A sync that was already running when Meka disconnected never brings the account back.
+    @Synchronized override fun markSynced(id: String, atMs: Long) { accounts[id]?.takeIf { it.status != DISCONNECTED }?.let { accounts[id] = it.copy(status = "ok", lastSyncAtMs = atMs) } }
+    @Synchronized override fun markError(id: String, status: String, error: String) { accounts[id]?.takeIf { it.status != DISCONNECTED }?.let { accounts[id] = it.copy(status = status) } }
     override fun lockAccount(id: String) = Unit
     @Synchronized override fun mirror(householdId: String, accountId: String) =
         mirrors.filter { (k, v) -> k.first == householdId && v.accountId == accountId }.values.associateBy { it.entityId }
@@ -182,7 +196,7 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
 
     override fun account(id: String) = query("WHERE id = ?", id).firstOrNull()
     override fun accounts(householdId: String) = query("WHERE household_id = ? ORDER BY created_at", householdId)
-    override fun syncableAccounts() = query("WHERE status <> 'needs_reconnect'")
+    override fun syncableAccounts() = query("WHERE status NOT IN ('needs_reconnect', '$DISCONNECTED')")
 
     override fun households(): List<String> = c { c ->
         c.prepareStatement("SELECT DISTINCT household_id FROM device WHERE revoked_at IS NULL").use { st ->
@@ -196,7 +210,7 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
     }
 
     override fun updateRefreshToken(id: String, enc: ByteArray) =
-        update("UPDATE integration_account SET refresh_token_enc = ?, updated_at = now() WHERE id = ?") { it.setBytes(1, enc); it.setString(2, id) }
+        update("UPDATE integration_account SET refresh_token_enc = ?, updated_at = now() WHERE id = ? AND status <> '$DISCONNECTED'") { it.setBytes(1, enc); it.setString(2, id) }
 
     override fun stopEditing(householdId: String, provider: String, email: String): Boolean = c { c ->
         c.prepareStatement("UPDATE integration_account SET can_edit = false, updated_at = now() WHERE household_id = ? AND provider = ? AND email = ?").use {
@@ -212,13 +226,24 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
         }
     }
 
+    override fun disconnect(householdId: String, provider: String, email: String): Boolean = c { c ->
+        c.prepareStatement(
+            "UPDATE integration_account SET status = ?, refresh_token_enc = ?, can_edit = false, last_error = NULL, updated_at = now() " +
+                "WHERE household_id = ? AND provider = ? AND email = ?",
+        ).use { st ->
+            st.setString(1, DISCONNECTED); st.setBytes(2, ByteArray(0))
+            st.setString(3, householdId); st.setString(4, provider); st.setString(5, email)
+            st.executeUpdate() > 0
+        }
+    }
+
     override fun markSynced(id: String, atMs: Long) =
-        update("UPDATE integration_account SET status = 'ok', last_error = NULL, last_sync_at = ? WHERE id = ?") {
+        update("UPDATE integration_account SET status = 'ok', last_error = NULL, last_sync_at = ? WHERE id = ? AND status <> '$DISCONNECTED'") {
             it.setTimestamp(1, Timestamp(atMs)); it.setString(2, id)
         }
 
     override fun markError(id: String, status: String, error: String) =
-        update("UPDATE integration_account SET status = ?, last_error = ?, updated_at = now() WHERE id = ?") {
+        update("UPDATE integration_account SET status = ?, last_error = ?, updated_at = now() WHERE id = ? AND status <> '$DISCONNECTED'") {
             it.setString(1, status); it.setString(2, error.take(300)); it.setString(3, id)
         }
 

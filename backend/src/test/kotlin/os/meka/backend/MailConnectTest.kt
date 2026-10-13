@@ -40,6 +40,8 @@ class MailConnectTest {
         }
         override fun accountEmail(accessToken: String) = email
         override fun inbox(accessToken: String): MailboxCheck { checks++; return MailboxCheck(120, 3) }
+        val revokedTokens = mutableListOf<String>()
+        override fun revoke(refreshToken: String): Boolean { revokedTokens += refreshToken; return true }
     }
 
     /** The calendar provider on the same Google client: it must never see a mail sign-in. */
@@ -164,5 +166,53 @@ class MailConnectTest {
         val o = OutlookMail().authorizeUrl(client, "https://meka.example/v1/oauth/microsoft/callback", "st", "ch")
         assertTrue(o.contains("Mail.ReadWrite") && o.contains("Mail.Send") && o.contains("offline_access"))
         assertTrue(o.contains("/consumers/"))
+    }
+
+    // ---- Slice 1b ----
+
+    @Test
+    fun disconnectForgetsTheSignInStopsTheCheckAndAComebackKeepsTheLabel() {
+        gmail.granted = gmailScopes
+        val id = assertIs<Integrations.CallbackResult.Connected>(connectGmail()).accountId
+        integrations.setMailLabel("home", "gmail", "alex@example.com", "BUSINESS")
+        assertFalse(integrations.disconnectMail("home", "google", "alex@example.com")) // not a mail provider
+        assertFalse(integrations.disconnectMail("home", "gmail", "nobody@example.com"))
+        assertFalse(integrations.disconnectMail("other", "gmail", "alex@example.com"))
+        assertTrue(integrations.disconnectMail("home", "gmail", "Alex@Example.com"))
+        assertEquals(listOf("refresh-gmail"), gmail.revokedTokens) // Google asked to withdraw it
+        assertTrue(integrations.accounts("home").isEmpty())
+        assertEquals(0, store.account(id)!!.refreshTokenEnc.size)
+        assertTrue(store.syncableAccounts().none { it.id == id })
+        assertFalse(integrations.disconnectMail("home", "gmail", "alex@example.com")) // already gone
+        // A check already running can't bring it back.
+        store.markSynced(id, now)
+        store.markError(id, "error", "x")
+        assertEquals("disconnected", store.account(id)!!.status)
+        // Signing in again brings it back, label and all.
+        connectGmail()
+        val back = integrations.accounts("home").single()
+        assertEquals("ok", back.status)
+        assertEquals("BUSINESS", back.label)
+    }
+
+    @Test
+    fun aGmailSignInRunsOutLikeGooglesAndDisconnectingClearsTheLine() {
+        val hhStore = InMemoryIntegrationStore(listOf("home"))
+        val withHome = Integrations(
+            hhStore, InMemoryServerOpStore(), mapOf("google" to calendar), { p -> if (p == "google" || p == "microsoft") OAuthClient("cid-$p", "s") else null },
+            Cipher(), "https://meka.example", { now }, mail = mapOf("gmail" to gmail, "outlook_mail" to outlook),
+        )
+        gmail.granted = gmailScopes
+        val url = assertIs<Integrations.StartResult.Url>(withHome.start("home", "gmail")).url
+        val id = assertIs<Integrations.CallbackResult.Connected>(withHome.callback("google", stateOf(url), "code", null)).accountId
+        fun state() = hhStore.mirror("home", id)[os.meka.core.domain.SignInRules.entityId(id)]
+            ?.fieldOps?.get(os.meka.core.domain.SignInFields.STATE)?.second
+        withHome.noteSignIns()
+        assertTrue(state() == null || state() == "s:OK")
+        now += 6 * os.meka.core.domain.SignInRules.DAY_MS + 3_600_000L
+        withHome.noteSignIns()
+        assertEquals("s:ENDING", state())
+        assertTrue(withHome.disconnectMail("home", "gmail", "alex@example.com"))
+        assertEquals("s:OK", state())
     }
 }

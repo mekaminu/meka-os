@@ -10,6 +10,10 @@ import SwiftUI
 /// Motion: the sheet scale-fades (system); a shimmer until the server answers; rows stagger in; each account's title
 /// and line cross-fade; a label chip's fill blends with a tick haptic; Connect gives a light haptic; the note under the
 /// buttons cross-fades. Reduce Motion: cross-fades.
+///
+/// Slice 1b: an account whose Google sign-in ends within the day says so in the accent with Reconnect; Disconnect on
+/// each row unfolds a question in place (expand spring, tick haptic) and Disconnect there (medium haptic) has the
+/// server forget the sign-in; the row leaves and the note says where to remove MEKA at the provider as well.
 struct MailSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -35,6 +39,9 @@ struct MailSheet: View {
                     }, onLabel: { label in
                         let provider = row.provider, email = row.email
                         Task { await model.setMailLabel(provider: provider, email: email, label: label) }
+                    }, onDisconnect: {
+                        let provider = row.provider, email = row.email
+                        Task { await model.disconnectMail(provider: provider, email: email) }
                     })
                     .staggeredAppear(i + 2)
                 }
@@ -90,7 +97,9 @@ private struct MailAccountRowView: View {
     let palette: MekaPalette
     let onReconnect: () -> Void
     let onLabel: (MailLabel) -> Void
+    let onDisconnect: () -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var asking = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -109,7 +118,7 @@ private struct MailAccountRowView: View {
                 }
             }
             Text(row.line).font(MekaType.caption)
-                .foregroundStyle(row.needsReconnect ? palette.critical : palette.textTertiary)
+                .foregroundStyle(row.ending ? palette.accent : row.needsReconnect ? palette.critical : palette.textTertiary)
                 .contentTransition(.opacity)
             HStack(spacing: MekaSpace.xs) {
                 ForEach(MailAccountRules.shared.LABELS, id: \.name) { label in
@@ -125,8 +134,41 @@ private struct MailAccountRowView: View {
                         .accessibilityLabel("Label \(label.label)")
                         .accessibilityAddTraits(on ? .isSelected : [])
                 }
+                Spacer()
+                Button(MailAccountRules.shared.DISCONNECT) {
+                    MekaHaptics.tick()
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { asking.toggle() }
+                }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.caption)
+                .foregroundStyle(palette.textSecondary)
             }
             .padding(.top, MekaSpace.xs)
+            if asking {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(MailAccountRules.shared.disconnectAsk(row: row)).font(MekaType.caption)
+                        .foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: MekaSpace.l) {
+                        Button(MailAccountRules.shared.DISCONNECT) {
+                            asking = false
+                            onDisconnect()
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(palette.critical)
+                        Button(MailAccountRules.shared.KEEP) {
+                            MekaHaptics.tick()
+                            withAnimation(MekaMotion.expand(reduced: reduceMotion)) { asking = false }
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(palette.accent)
+                    }
+                }
+                .padding(.top, MekaSpace.xs)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
         }
         .padding(MekaSpace.m)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))

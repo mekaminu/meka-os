@@ -3379,13 +3379,41 @@ class MekaCore(
      */
     suspend fun mailAccounts(): os.meka.core.domain.MailAccountsView? {
         val list = try { accountsApi?.mailAccounts() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
-        return list?.let { os.meka.core.domain.MailAccountRules.view(it, nowMs()) }
+        return list?.let { mailView(it) }
+    }
+
+    /** The pane with the household's sign-ins (slice 1b: an account whose Google sign-in is ending says so). */
+    private suspend fun mailView(list: List<os.meka.core.domain.MailAccountFacts>): os.meka.core.domain.MailAccountsView {
+        val known = onCore { signIns.all() }
+        return os.meka.core.domain.MailAccountRules.view(list, nowMs(), known)
+    }
+
+    /**
+     * Disconnects a mail account (slice 1b): the server stops reading it and forgets its sign-in (and asks Google to
+     * withdraw the permission); nothing in the mailbox changes. The accounts as they are now, or null when the server
+     * couldn't be reached (it stays connected; the pane says so). Setup's Mail step follows.
+     */
+    suspend fun disconnectMail(provider: String, email: String): os.meka.core.domain.MailAccountsView? {
+        val list = (try { accountsApi?.disconnectMail(provider, email) } catch (e: CancellationException) { throw e } catch (e: Exception) { null })
+            ?: return null
+        noteMailForSetup(list)
+        return mailView(list)
+    }
+
+    /** Puts Setup's Mail step right after Mail changed, without asking the server again. */
+    private suspend fun noteMailForSetup(list: List<os.meka.core.domain.MailAccountFacts>?) {
+        val step = os.meka.core.domain.MailAccountRules.setupStep(list, nowMs())
+        onCore {
+            val v = _setup.value
+            if (v != null && v.steps.any { it.key == step.key }) _setup.value = os.meka.core.domain.SetupRules.replaceStep(v, step)
+        }
     }
 
     /** Names what a mail account is for (Personal · Business · Outlook); the accounts as they are now, or null offline. */
     suspend fun setMailLabel(provider: String, email: String, label: os.meka.core.domain.MailLabel): os.meka.core.domain.MailAccountsView? {
         val list = try { accountsApi?.setMailLabel(provider, email, label.name) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
-        return list?.let { os.meka.core.domain.MailAccountRules.view(it, nowMs()) }
+        list?.let { noteMailForSetup(it) }
+        return list?.let { mailView(it) }
     }
 
     private fun rememberEditing(accounts: List<ConnectedAccount>) {
@@ -3435,15 +3463,20 @@ class MekaCore(
     private class HealthServerFacts(
         val server: os.meka.core.domain.ServerHealth?, val accounts: List<os.meka.core.domain.HealthAccount>?,
         val ai: os.meka.core.domain.AiStatusView?, val atMs: Long,
+        /** The mail accounts (Inbox autopilot, slice 1b: Setup's Mail step); null when they couldn't be read. */
+        val mail: List<os.meka.core.domain.MailAccountFacts>? = null,
     )
     private var lastHealthServer: HealthServerFacts? = null
 
     /** The server's three answers (household health, the calendar list, the AI's status), asked together; kept for Health and Setup. */
     private suspend fun fetchHealthServer(): HealthServerFacts {
+        var mail: List<os.meka.core.domain.MailAccountFacts>? = null
         val (server, accounts, ai) = kotlinx.coroutines.coroutineScope {
             val s = async { runCatchingNotCancel { healthApi?.householdHealth() } }
             val a = async { runCatchingNotCancel { accountsApi?.accounts() } }
             val i = async { if (aiApi == null) null else aiStatus().takeIf { it != os.meka.core.domain.AskRules.STATUS_UNKNOWN } }
+            val m = async { runCatchingNotCancel { accountsApi?.mailAccounts() } }
+            mail = m.await()
             Triple(s.await(), a.await(), i.await())
         }
         accounts?.let(::rememberEditing)
@@ -3451,7 +3484,7 @@ class MekaCore(
         val facts = HealthServerFacts(
             server?.let { os.meka.core.domain.ServerHealth(it.push, it.calls, it.speech, it.atMs, it.macs, it.lastPushAtMs, it.lastPushResult) },
             accounts?.filter { !os.meka.core.domain.MailProviders.isMail(it.provider) }?.map { os.meka.core.domain.HealthAccount(it.provider, it.email, os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names), it.status, it.lastSyncAtMs) },
-            ai, nowMs(),
+            ai, nowMs(), mail,
         )
         onCore { lastHealthServer = facts }
         return facts
@@ -3529,6 +3562,8 @@ class MekaCore(
         val view = os.meka.core.domain.SetupRules.view(facts, recovery, screenSaver, onCore { work.commute() })
             // About you (rule 13, slice 1): its own step first, to do while nothing is filled in.
             .let { v -> os.meka.core.domain.AboutYouRules.withSetupStep(v, onCore { aboutYou.profile() }) }
+            // Mail (Inbox autopilot, slice 1b): the three accounts he named, once this device reaches MEKA's server.
+            .let { v -> if (!connected) v else os.meka.core.domain.SetupRules.replaceStep(v, os.meka.core.domain.MailAccountRules.setupStep(server.mail, nowMs())) }
         _setup.value = view
         return view
     }

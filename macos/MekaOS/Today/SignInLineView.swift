@@ -12,6 +12,8 @@ struct SignInLineView: View {
     let palette: MekaPalette
     @State private var open = false
 
+    private var isMail: Bool { MailProviders.shared.isMail(provider: line.provider) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             Button {
@@ -32,14 +34,20 @@ struct SignInLineView: View {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(line.detail).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    if let message = model.calendarsMessage {
+                    if let message = isMail ? model.mailMessage : model.calendarsMessage {
                         Text(message).font(MekaType.caption).foregroundStyle(palette.critical)
                     }
                     Button("Reconnect") {
                         MekaHaptics.light()
                         let provider = line.provider
                         let editing = line.editing
-                        Task { await model.connectCalendar(provider, editing: editing) }
+                        // A mail account signs in again through Mail's own connect (Inbox autopilot, slice 1b).
+                        if isMail {
+                            let note = MailAccountRules.shared.connectNote(provider: provider)
+                            Task { await model.connectMail(provider, note: note) }
+                        } else {
+                            Task { await model.connectCalendar(provider, editing: editing) }
+                        }
                     }
                     .buttonStyle(MekaPressStyle())
                     .font(MekaType.caption)

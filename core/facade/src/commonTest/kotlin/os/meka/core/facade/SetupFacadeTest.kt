@@ -41,6 +41,16 @@ class SetupFacadeTest {
             ConnectedAccount("weather", "home", "ok", now - 600_000),
         )
         override suspend fun stopEditing(provider: String, email: String): List<ConnectedAccount> = accounts()
+        val mail = mutableListOf(
+            os.meka.core.domain.MailAccountFacts("gmail", "alex@example.com", "ok", now, "PERSONAL"),
+            os.meka.core.domain.MailAccountFacts("gmail", "shop@example.com", "ok", now, "BUSINESS"),
+            os.meka.core.domain.MailAccountFacts("outlook_mail", "alex@example.net", "ok", now, "OUTLOOK"),
+        )
+        override suspend fun mailAccounts(): List<os.meka.core.domain.MailAccountFacts> = mail.toList()
+        override suspend fun disconnectMail(provider: String, email: String): List<os.meka.core.domain.MailAccountFacts> {
+            mail.removeAll { it.provider == provider && it.email == email }
+            return mailAccounts()
+        }
     }
 
     private val server = Server(SyncService(InMemoryServerOpStore()))
@@ -129,5 +139,28 @@ class SetupFacadeTest {
         // The Mac's Setup has it too.
         val mac = c.refreshSetup(SetupDevice(mac = true, notificationsAllowed = true))
         assertEquals(SetupState.DONE, mac.steps.first { it.key == os.meka.core.domain.SetupRules.COMMUTE_KEY }.state)
+    }
+
+    @Test
+    fun mailIsAStepOnceConnectedAndDisconnectingReopensItAtOnce() = runTest {
+        val c = core()
+        c.syncNow()
+        val v = c.refreshSetup(fold)
+        val step = v.steps.first { it.key == os.meka.core.domain.MailAccountRules.SETUP_KEY }
+        assertEquals(SetupState.DONE, step.state)
+        assertEquals("Connected · Personal · Business · Outlook", step.line)
+        // Disconnecting the business Gmail: the pane loses it and Setup's step is to do again, without asking afresh.
+        val asked = server.healthAsked
+        val after = c.disconnectMail("gmail", "shop@example.com")!!
+        assertEquals(listOf("Personal · Gmail", "Outlook · Outlook"), after.rows.map { it.title })
+        val reopened = c.setupView.value!!.steps.first { it.key == os.meka.core.domain.MailAccountRules.SETUP_KEY }
+        assertEquals(SetupState.TODO, reopened.state)
+        assertEquals(os.meka.core.domain.SetupFix.MAIL, reopened.fix)
+        assertEquals(asked, server.healthAsked)
+        // Not connected to a server: it waits (not counted).
+        val alone = MekaCore(householdId = "hh", deviceId = "mac", store = InMemoryReplicaStore(), transport = null,
+            secureRandom = Random(2), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now })
+        assertEquals(SetupState.LATER, alone.refreshSetup(fold).steps.first { it.key == os.meka.core.domain.MailAccountRules.SETUP_KEY }.state)
+        assertEquals(null, alone.disconnectMail("gmail", "alex@example.com"))
     }
 }

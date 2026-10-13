@@ -60,6 +60,8 @@ data class MailAccountRow(
     val needsReconnect: Boolean,
     /** The labels Meka can switch it to, its own first. */
     val labels: List<MailLabel>,
+    /** Slice 1b: the Google sign-in ends within the day (Reconnect shows, the line says when). */
+    val ending: Boolean = false,
 )
 
 /** One "Connect …" button. */
@@ -120,23 +122,39 @@ object MailAccountRules {
         else -> "Connected · checked ${ago(lastSyncAtMs, nowMs)} · sorting comes in the next update"
     }
 
-    fun row(a: MailAccountFacts, others: Collection<MailLabel>, nowMs: Long): MailAccountRow {
+    fun row(a: MailAccountFacts, others: Collection<MailLabel>, nowMs: Long): MailAccountRow = row(a, others, nowMs, null)
+
+    /** With the account's sign-in (slice 1b): a Google sign-in in its last day says when it ends, with Reconnect. */
+    fun row(a: MailAccountFacts, others: Collection<MailLabel>, nowMs: Long, signIn: SignIn?): MailAccountRow {
         val label = MailLabel.of(a.label) ?: defaultLabel(a.provider, others)
+        val endsAt = signIn?.takeIf { it.state == SignInState.ENDING && a.status != "needs_reconnect" }?.untilMs?.takeIf { it > nowMs }
         return MailAccountRow(
             provider = a.provider, email = a.email, label = label,
             title = "${label.label} · ${MailProviders.name(a.provider)}",
-            line = line(a.status, a.lastSyncAtMs, nowMs),
-            needsReconnect = a.status == "needs_reconnect",
+            line = endsAt?.let { endingLine(it, nowMs) } ?: line(a.status, a.lastSyncAtMs, nowMs),
+            needsReconnect = a.status == "needs_reconnect" || endsAt != null,
             labels = listOf(label) + MailLabel.entries.filter { it != label },
+            ending = endsAt != null,
         )
     }
 
+    /** "Sign-in ends in 5 h · Reconnect to keep MEKA reading it" (no clock time: the rules have no time zone). */
+    fun endingLine(untilMs: Long, nowMs: Long): String {
+        val h = (untilMs - nowMs) / 3_600_000
+        val whenText = if (h < 1) "within the hour" else "in $h h"
+        return "Sign-in ends $whenText · Reconnect to keep MEKA reading it"
+    }
+
     /** The pane: only mail accounts, Personal first, then Business, then Outlook (then by address). */
-    fun view(accounts: List<MailAccountFacts>, nowMs: Long): MailAccountsView {
-        val mail = accounts.filter { MailProviders.isMail(it.provider) }
+    fun view(accounts: List<MailAccountFacts>, nowMs: Long): MailAccountsView = view(accounts, nowMs, emptyList())
+
+    /** With the household's sign-ins (slice 1b), so an account whose Google sign-in is ending says so. */
+    fun view(accounts: List<MailAccountFacts>, nowMs: Long, signIns: List<SignIn>): MailAccountsView {
+        val mail = accounts.filter { MailProviders.isMail(it.provider) && it.status != SignInRules.DISCONNECTED }
         // Stored labels first, so an unlabelled account defaults around them; then each resolved one counts too.
         val taken = mail.mapNotNull { MailLabel.of(it.label) }.toMutableList()
-        val rows = mail.map { a -> row(a, taken, nowMs).also { if (a.label == null) taken += it.label } }
+        fun signIn(a: MailAccountFacts) = signIns.firstOrNull { it.provider == a.provider && it.account.equals(a.email, ignoreCase = true) }
+        val rows = mail.map { a -> row(a, taken, nowMs, signIn(a)).also { if (a.label == null) taken += it.label } }
             .sortedWith(compareBy<MailAccountRow> { it.label.ordinal }.thenBy { it.email })
         return MailAccountsView(
             header = HEADER,
@@ -160,4 +178,50 @@ object MailAccountRules {
 
     /** What changing a label says. */
     fun labelledLine(label: MailLabel): String = "Labelled ${label.label}"
+
+    // ---- Disconnect (slice 1b) ----
+
+    const val DISCONNECT = "Disconnect"
+    const val KEEP = "Keep"
+
+    /** Asked before disconnecting, in place on the row. */
+    fun disconnectAsk(row: MailAccountRow): String =
+        "Disconnect ${row.title} (${row.email})? MEKA stops reading it and forgets the sign-in. Nothing in the mailbox changes."
+
+    /** After disconnecting: done, and where to take MEKA's permission away at the provider as well. */
+    fun disconnectedLine(provider: String, email: String): String = "Disconnected $email · " + when (provider) {
+        MailProviders.GMAIL -> "MEKA asked Google to withdraw its permission; Google Account → Security → Your connections to third-party apps shows it's gone"
+        else -> "to remove MEKA from Microsoft too: account.microsoft.com → Privacy → Apps and services"
+    }
+
+    const val DISCONNECT_FAILED = "Couldn't reach your server, so it's still connected. Try again."
+
+    // ---- Setup's Mail step (slice 1b) ----
+
+    const val SETUP_KEY = "mail"
+    const val SETUP_TITLE = "Mail"
+
+    /**
+     * Setup's Mail step: done once the three accounts he named are connected; to do while one is missing or its
+     * sign-in ended ("Reconnect"); [accounts] null when MEKA's server couldn't be asked.
+     */
+    fun setupStep(accounts: List<MailAccountFacts>?, nowMs: Long): SetupStep {
+        if (accounts == null) return SetupStep(SETUP_KEY, SETUP_TITLE, "Couldn't check", SetupState.UNKNOWN)
+        val v = view(accounts, nowMs)
+        val ended = v.rows.filter { it.needsReconnect }
+        return when {
+            ended.isNotEmpty() -> SetupStep(
+                SETUP_KEY, SETUP_TITLE, "Sign-in ended · " + ended.joinToString(", ") { it.title } + " · Reconnect in Mail",
+                SetupState.TODO, SetupFix.MAIL, "Reconnect",
+            )
+            v.rows.isEmpty() -> SetupStep(
+                SETUP_KEY, SETUP_TITLE, "Connect your personal Gmail, Outlook and the business Gmail so MEKA can keep the inbox tidy",
+                SetupState.TODO, SetupFix.MAIL, "Connect",
+            )
+            v.toConnect != null -> SetupStep(
+                SETUP_KEY, SETUP_TITLE, "${v.rows.size} connected · ${v.toConnect}", SetupState.TODO, SetupFix.MAIL, "Connect",
+            )
+            else -> SetupStep(SETUP_KEY, SETUP_TITLE, "Connected · " + v.rows.joinToString(" · ") { it.label.label }, SetupState.DONE)
+        }
+    }
 }

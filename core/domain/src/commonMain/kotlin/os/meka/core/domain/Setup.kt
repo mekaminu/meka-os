@@ -13,7 +13,7 @@ package os.meka.core.domain
 enum class SetupState { DONE, TODO, ELSEWHERE, LATER, UNKNOWN }
 
 /** Where a step's button goes; the apps map each to their own screen or the system's. */
-enum class SetupFix { CALENDARS, WORK, VOICE, NOTIFICATION_ACCESS, CALL_ROLE, BATTERY, NOTIFICATIONS, RECOVERY, SCREEN_SAVER, ABOUT_YOU }
+enum class SetupFix { CALENDARS, WORK, VOICE, NOTIFICATION_ACCESS, CALL_ROLE, BATTERY, NOTIFICATIONS, RECOVERY, SCREEN_SAVER, ABOUT_YOU, MAIL }
 
 data class SetupStep(
     /** Stable: "calendar.google", "calls.role", "mac"… */
@@ -116,7 +116,8 @@ object SetupRules {
             SetupSection("Messages", messages(f)),
             SetupSection("MEKA's voice", voice(f)),
             SetupSection("Weather and travel", listOfNotNull(commute?.let(::commuteStep)) + places(f)),
-            SetupSection("Mail", listOf(SetupStep("mail", "Mail", "Comes with email triage: you'll reconnect Google and Outlook with mail access then", SetupState.LATER))),
+            // Inbox autopilot, slice 1b: the facade puts MailAccountRules.setupStep in place of this one (same key).
+            SetupSection("Mail", listOf(SetupStep(MailAccountRules.SETUP_KEY, MailAccountRules.SETUP_TITLE, "Connect this device to MEKA's server first", SetupState.LATER))),
             SetupSection(if (f.device.mac) "This Mac" else "This phone", device(f) + listOfNotNull(screenSaver?.takeIf { !f.device.mac }?.let { BedsideDreamRules.setupStep(it.isMeka) })),
             SetupSection("Your devices", listOfNotNull(mac(f), recovery?.let { recoveryStep(f.connected, it.status) })),
         )

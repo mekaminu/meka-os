@@ -161,6 +161,13 @@ object WireCodec {
         )
     }
 
+    /** Disconnecting a mail account (Inbox autopilot, slice 1b): the server forgets its sign-in. */
+    data class MailDisconnect(val email: String)
+    fun encodeMailDisconnect(c: MailDisconnect): String = doc { put("email", c.email) }
+    fun decodeMailDisconnect(s: String): MailDisconnect = parse(s) { o ->
+        MailDisconnect(o.str("email").also { if (it.length !in 3..320 || '@' !in it) throw WireFormatException("unexpected email") })
+    }
+
     /**
      * Starting a connection (calendar editing): [editing] asks the provider for permission to change events as well as
      * read them. An empty body (older apps) is a read-only connection.

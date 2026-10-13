@@ -78,4 +78,68 @@ class MailAccountsTest {
         assertEquals("3 days ago", MailAccountRules.ago(now - 3 * 24 * 60 * min, now))
         assertEquals("just now", MailAccountRules.ago(now + min, now))
     }
+
+    // ---- Slice 1b ----
+
+    private val outlook = MailAccountFacts(MailProviders.OUTLOOK, "alex@example.net", "ok", now, "OUTLOOK")
+
+    @Test
+    fun anEndingGoogleSignInSaysWhenWithReconnect() {
+        val a = gmail("alex@example.com", "PERSONAL")
+        val ending = SignIn(MailProviders.GMAIL, "Alex@Example.com", SignInState.ENDING, now + 5 * 60 * min + 10 * min)
+        val row = MailAccountRules.view(listOf(a, outlook), now, listOf(ending)).rows[0]
+        assertEquals("Sign-in ends in 5 h · Reconnect to keep MEKA reading it", row.line)
+        assertTrue(row.needsReconnect)
+        assertTrue(row.ending)
+        // Within the hour; and once it has passed, the server's own state decides (nothing ending any more).
+        assertEquals("Sign-in ends within the hour · Reconnect to keep MEKA reading it",
+            MailAccountRules.view(listOf(a), now, listOf(ending.copy(untilMs = now + 20 * min))).rows[0].line)
+        val passed = MailAccountRules.view(listOf(a), now, listOf(ending.copy(untilMs = now - min))).rows[0]
+        assertFalse(passed.ending)
+        assertFalse(passed.needsReconnect)
+        // Another account's sign-in doesn't count; an ended one keeps its own line.
+        assertFalse(MailAccountRules.view(listOf(a), now, listOf(ending.copy(account = "other@example.com"))).rows[0].ending)
+        val ended = MailAccountRules.view(listOf(a.copy(status = "needs_reconnect")), now, listOf(ending)).rows[0]
+        assertEquals("Sign-in ended · Reconnect to keep MEKA reading it", ended.line)
+        assertFalse(ended.ending)
+    }
+
+    @Test
+    fun aDisconnectedAccountIsGoneFromThePane() {
+        val v = MailAccountRules.view(listOf(gmail("alex@example.com", "PERSONAL", status = SignInRules.DISCONNECTED), outlook), now)
+        assertEquals(listOf("Outlook · Outlook"), v.rows.map { it.title })
+        val row = MailAccountRules.view(listOf(gmail("alex@example.com", "PERSONAL")), now).rows[0]
+        assertEquals(
+            "Disconnect Personal · Gmail (alex@example.com)? MEKA stops reading it and forgets the sign-in. Nothing in the mailbox changes.",
+            MailAccountRules.disconnectAsk(row),
+        )
+        assertTrue(MailAccountRules.disconnectedLine(MailProviders.GMAIL, "alex@example.com").startsWith("Disconnected alex@example.com · MEKA asked Google"))
+        assertTrue(MailAccountRules.disconnectedLine(MailProviders.OUTLOOK, "alex@example.net").contains("account.microsoft.com"))
+    }
+
+    @Test
+    fun setupsMailStepFollowsTheThreeAccounts() {
+        assertEquals(SetupState.UNKNOWN, MailAccountRules.setupStep(null, now).state)
+        val none = MailAccountRules.setupStep(emptyList(), now)
+        assertEquals(SetupState.TODO, none.state)
+        assertEquals(SetupFix.MAIL, none.fix)
+        assertEquals("Connect", none.fixLabel)
+        val some = MailAccountRules.setupStep(listOf(gmail("alex@example.com", "PERSONAL")), now)
+        assertEquals("1 connected · Still to connect: Outlook · the business Gmail", some.line)
+        assertEquals(SetupState.TODO, some.state)
+        val all = listOf(gmail("alex@example.com", "PERSONAL"), gmail("alex.shop@example.com", "BUSINESS"), outlook)
+        val done = MailAccountRules.setupStep(all, now)
+        assertEquals(SetupState.DONE, done.state)
+        assertEquals("Connected · Personal · Business · Outlook", done.line)
+        assertNull(done.fix)
+        val ended = MailAccountRules.setupStep(all.map { if (it.label == "BUSINESS") it.copy(status = "needs_reconnect") else it }, now)
+        assertEquals("Sign-in ended · Business · Gmail · Reconnect in Mail", ended.line)
+        assertEquals("Reconnect", ended.fixLabel)
+        // In place of the placeholder (same key), so Setup counts it.
+        val f = SetupFacts(SetupDevice(mac = true), connected = true, server = null, accounts = emptyList(), ai = null,
+            callAssistantOn = false, voiceMessageSeen = false, voiceChosen = null, nowMs = now)
+        val v = SetupRules.replaceStep(SetupRules.view(f), none)
+        assertEquals(SetupState.TODO, v.steps.first { it.key == MailAccountRules.SETUP_KEY }.state)
+        assertEquals(SetupRules.view(f).toDo + 1, v.toDo)
+    }
 }

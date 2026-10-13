@@ -128,6 +128,17 @@ internal class Http(private val client: HttpClient = HttpClient.newBuilder().con
         )
     }
 
+    /** A form POST whose answer is only its status (token revocation); never throws for a 4xx. */
+    fun postFormStatus(url: String, form: Map<String, String>): Int {
+        val body = form.entries.joinToString("&") { (k, v) -> enc(k) + "=" + enc(v) }
+        return client.send(
+            HttpRequest.newBuilder(URI(url)).timeout(Duration.ofSeconds(30))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body)).build(),
+            HttpResponse.BodyHandlers.discarding(),
+        ).statusCode()
+    }
+
     /** One API call's answer: the status and the body when it was JSON. */
     data class Answer(val status: Int, val body: JsonObject?)
 

@@ -387,6 +387,9 @@ interface AccountsApi {
     /** Names what a mail account is for; returns the mail accounts as they are now. */
     suspend fun setMailLabel(provider: String, email: String, label: String): List<os.meka.core.domain.MailAccountFacts> =
         throw UnsupportedOperationException("mail labels need MEKA's server")
+    /** Disconnects a mail account (slice 1b): the server forgets its sign-in; returns the mail accounts as they are now. */
+    suspend fun disconnectMail(provider: String, email: String): List<os.meka.core.domain.MailAccountFacts> =
+        throw UnsupportedOperationException("disconnecting mail needs MEKA's server")
 }
 
 /**
@@ -455,6 +458,9 @@ class HttpSyncTransport(
 
     override suspend fun setMailLabel(provider: String, email: String, label: String): List<os.meka.core.domain.MailAccountFacts> =
         mail(WireCodec.decodeAccounts(post("/v1/integrations/$provider/label", WireCodec.encodeMailLabelChange(WireCodec.MailLabelChange(email, label)))))
+
+    override suspend fun disconnectMail(provider: String, email: String): List<os.meka.core.domain.MailAccountFacts> =
+        mail(WireCodec.decodeAccounts(post("/v1/integrations/$provider/disconnect", WireCodec.encodeMailDisconnect(WireCodec.MailDisconnect(email)))))
 
     private fun mail(list: List<WireCodec.IntegrationAccount>) = list.filter { os.meka.core.domain.MailProviders.isMail(it.provider) }
         .map { os.meka.core.domain.MailAccountFacts(it.provider, it.email, it.status, it.lastSyncAtMs, it.label) }
