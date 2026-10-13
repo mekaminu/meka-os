@@ -361,6 +361,8 @@ final class CoreModel {
         let database = Self.prepareDatabase()
         databaseLine = DatabaseProtectionRules.shared.macLine(protection: database.protection)
         if let note = database.note { lastError = note }
+        // Read the lazy key here, not inside the closure (Swift wants self explicit there; nightly ci run 551).
+        let syncDeviceKey: MacDeviceKey? = syncURL == nil ? nil : deviceKey
         let open = { () throws -> MekaCore in
             try MacCoreFactory.shared.openCore(
                 householdId: identity.householdID,
@@ -371,7 +373,7 @@ final class CoreModel {
                 encrypted: database.encrypted,
                 databaseDirectory: Self.databaseDirectory(),
                 databaseName: "meka.db",
-                deviceKey: syncURL == nil ? nil : deviceKey
+                deviceKey: syncDeviceKey
             )
         }
         let core: MekaCore
