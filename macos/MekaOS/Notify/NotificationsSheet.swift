@@ -44,7 +44,7 @@ struct NotificationsSheet: View {
 
             // Notifications never seen, the Mac's half: say plainly when nothing can reach this Mac.
             if let off = MacNotifyRules.shared.offLine(allowed: model.notificationsAllowed, macOff: model.macAlerts == .off) {
-                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                     Text(off).font(MekaType.itemMeta).foregroundStyle(palette.critical)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
@@ -61,7 +61,7 @@ struct NotificationsSheet: View {
             }
             .pickerStyle(.segmented).labelsHidden()
             .staggeredAppear(1)
-            HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+            HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                 Button("Send a test") { model.sendTestNotification() }
                     .disabled(model.notifyTest.map { !$0.done } ?? false)
                 if let test = model.notifyTest {
