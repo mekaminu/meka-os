@@ -9,7 +9,7 @@ option (docs/design/icons/navilife/option-n3-2.png):
   * the Fold's adaptive icon in android/app/src/main/res: ic_launcher_foreground (the dial without its black, inside
     the 66 dp safe zone, PNG per density), ic_launcher_monochrome (the same shapes in white, for One UI's themed
     icons), ic_launcher_background (black with the brass glow, a vector), and the same for the Galaxy Watch in
-    wear/app/src/main/res (its tile preview and complication use these too)
+    wear/app/src/main/res (its complication uses these too; the tile preview is the whole dial, 400 px)
   * the status-bar glyph ic_stat_meka: a single-colour compass dial (ring, needle and cap) that holds at 24 dp
   * the Mac's AppIcon.appiconset (PNGs at every size macOS asks for) in macos/MekaOS/Assets.xcassets
   * docs/design/icons/app-icon-512.png, a 512 px square for anywhere a flat icon is wanted
@@ -184,6 +184,10 @@ def main():
         for name in ("ic_launcher", "ic_launcher_round"):
             with open(os.path.join(res, f"mipmap-anydpi/{name}.xml"), "w") as fh:
                 fh.write(ANDROID_ADAPTIVE)
+    # The watch tile's preview (lint wants at least 384 px, whatever the density): the whole dial, 400 px.
+    nodpi = os.path.join(ROOT, "wear/app/src/main/res/drawable-nodpi")
+    os.makedirs(nodpi, exist_ok=True)
+    full.resize((400, 400), Image.LANCZOS).save(os.path.join(nodpi, "tile_preview.png"), optimize=True)
     with open(os.path.join(ROOT, "android/app/src/main/res/drawable/ic_stat_meka.xml"), "w") as fh:
         fh.write(glyph())
 

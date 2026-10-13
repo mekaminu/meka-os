@@ -94,7 +94,7 @@ class CallAssistantTest {
         assertEquals(HttpStatusCode.OK, greet.status)
         val twiml = greet.bodyAsText()
         assertTrue(twiml.startsWith("<?xml"))
-        assertTrue("Hi, you&apos;ve reached Meka&apos;s automated assistant." in twiml, twiml)
+        assertTrue("Hi, this is Navilife, Meka&apos;s automated assistant." in twiml, twiml)
         assertTrue("""<Record action="$base/v1/voice/twilio/recorded"""" in twiml, twiml)
         assertTrue("""transcribeCallback="$base/v1/voice/twilio/transcribed"""" in twiml, twiml)
         assertTrue("""maxLength="120"""" in twiml)

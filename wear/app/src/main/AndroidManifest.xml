@@ -57,7 +57,7 @@
             </intent-filter>
             <meta-data
                 android:name="androidx.wear.tiles.PREVIEW"
-                android:resource="@drawable/ic_launcher_foreground" />
+                android:resource="@drawable/tile_preview" />
         </service>
 
         <!-- MEKA's ring on any watch face: a running fast towards its goal, else today's list done. -->
