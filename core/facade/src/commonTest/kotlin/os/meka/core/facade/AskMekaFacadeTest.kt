@@ -223,6 +223,8 @@ class AskMekaFacadeTest {
         now = 1_791_482_400_000L // Thu 8 Oct 2026, 19:00 in London; Friday is an office day
         val c = core()
         val fri = 20_735L
+        // The evening digest has gone already (otherwise a heads-up rides in it).
+        val before = c.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
         val clock = os.meka.core.sync.HlcClock("server", { now })
         fun server(id: String, field: String, v: os.meka.core.sync.FieldValue) = serverOps.append(os.meka.core.sync.Op(id, "hh",
             os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.LineStatusStore.ENTITY_ID, field, v, clock.now(), emptyList(), "server"))
@@ -236,7 +238,7 @@ class AskMekaFacadeTest {
         assertEquals("Wake 10 min earlier · 06:30", w.trains!!.actionLabel)
         assertEquals("Trains · Thameslink planned closure tomorrow morning · Great Northern to King's Cross is running", w.trains!!.line)
 
-        val gov = c.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        val gov = c.governNotifications(before.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)
         val n = gov.post.single { it.key == "wake-trains:$fri" }
         assertEquals("Wake at 06:30 instead of 06:40? · Great Northern to King's Cross is running", n.text)
         assertEquals(listOf(os.meka.core.domain.NoticeAction.WAKE_EARLIER), n.actions)
