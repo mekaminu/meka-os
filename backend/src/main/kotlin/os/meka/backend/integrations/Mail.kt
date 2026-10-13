@@ -60,7 +60,8 @@ interface MailProvider {
     fun repliedThreads(accessToken: String, sinceMs: Long): Set<String> = emptySet()
 
     /**
-     * Slice 3b: takes each email out of the inbox (archived), with its [MailTidy.label] where it has one. Returns, for
+     * Slice 3b: takes each email out of the inbox (archived), with its [MailTidy.label] where it has one; slice 5b:
+     * [MailTidy.TRASH] goes to the provider's Trash / Deleted Items instead (recoverable, never deleted for good). Returns, for
      * each email it moved, the id it has now (Gmail keeps the id; Outlook's move gives a new one). One that has gone
      * meanwhile is left out. Default: moves nothing.
      */
@@ -247,6 +248,11 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         val done = LinkedHashMap<String, String>()
         for ((t, ids) in items.entries.groupBy({ it.value }, { it.key })) {
             if (t == MailTidy.KEEP) continue
+            if (t == MailTidy.TRASH) {
+                // Slice 5b: messages.trash (Gmail keeps it 30 days; never a permanent delete).
+                ids.forEach { id -> if (http.call("POST", "$API/messages/${Http.enc(id)}/trash", accessToken).status in 200..299) done[id] = id }
+                continue
+            }
             val add = t.label?.let { listOf(labelId(accessToken, it)) }.orEmpty()
             for (chunk in ids.chunked(1000)) {
                 val a = http.call("POST", "$API/messages/batchModify", accessToken, buildJsonObject {
@@ -265,6 +271,11 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         val labels = HashMap<String, String?>()
         val done = LinkedHashMap<String, String>()
         for ((id, t) in items) {
+            if (t == MailTidy.TRASH) {
+                // Out of Trash with the labels it had (INBOX included: trashing never took it off).
+                if (http.call("POST", "$API/messages/${Http.enc(id)}/untrash", accessToken).status in 200..299) done[id] = id
+                continue
+            }
             val label = t.label?.let { name -> labels.getOrPut(name) { runCatching { labelId(accessToken, name) }.getOrNull() } }
             val a = http.call("POST", "$API/messages/${Http.enc(id)}/modify", accessToken, buildJsonObject {
                 putJsonArray("addLabelIds") { add("INBOX") }
@@ -395,7 +406,8 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
                 val cats = categories(accessToken, id) ?: return@let
                 if (label !in cats) setCategories(accessToken, id, cats + label)
             }
-            move(accessToken, id, "archive")?.let { done[id] = it }
+            // Slice 5b: an unsubscribed sender's later mail to Deleted Items (recoverable; never a permanent delete).
+            move(accessToken, id, if (t == MailTidy.TRASH) "deleteditems" else "archive")?.let { done[id] = it }
         }
         return done
     }

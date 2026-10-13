@@ -136,6 +136,34 @@ class MailUnsubscribeTest {
     }
 
     @Test
+    fun onlyAFinishedUnsubscribeSendsLaterMailToTrash() {
+        val base = MailUnsubscribeRules.senderFields("Personal", "Weekly Digest", "digest.example.com", UnsubscribeMethod.ONE_CLICK, now, 8)
+        val ask = mapOf(MailSenderFields.ASKED_AT to os.meka.core.sync.FieldValue.Int64(now))
+        val tried = now + 60_000
+        // Never asked, asked but not tried, or an outcome that didn't unsubscribe: nothing goes to Trash.
+        assertFalse(MailUnsubscribeRules.trashes(null, tried + 1))
+        assertFalse(MailUnsubscribeRules.trashes(sender("ms1", base), tried + 1))
+        assertFalse(MailUnsubscribeRules.trashes(sender("ms1", base + ask), tried + 1))
+        for (st in listOf(UnsubscribeState.OPEN_LINK, UnsubscribeState.FAILED, UnsubscribeState.RETRY)) {
+            assertFalse(MailUnsubscribeRules.trashes(sender("ms1", base + ask + MailUnsubscribeRules.outcomeFields(st, tried)), tried + 1), st.name)
+        }
+        // Done or sent: mail that came after it goes; mail from before stays.
+        for (st in listOf(UnsubscribeState.DONE, UnsubscribeState.SENT)) {
+            val done = sender("ms1", base + ask + MailUnsubscribeRules.outcomeFields(st, tried))
+            assertTrue(MailUnsubscribeRules.trashes(done, tried + 1), st.name)
+            assertFalse(MailUnsubscribeRules.trashes(done, tried), st.name)
+        }
+        // Mail's row counts what went.
+        val done = base + ask + MailUnsubscribeRules.outcomeFields(UnsubscribeState.DONE, tried)
+        assertEquals(UnsubscribeState.DONE.note, MailSenderPanelRules.rows(listOf(sender("ms1", done)), "Personal", now, cal).single().state)
+        val two = sender("ms1", done + MailUnsubscribeRules.trashedFields(1, 1, tried + 5))
+        assertEquals(2, two.trashed)
+        assertEquals("${UnsubscribeState.DONE.note} · 2 later emails sent to Trash",
+            MailSenderPanelRules.rows(listOf(two), "Personal", now, cal).single().state)
+        assertEquals("1 later email sent to Trash", MailSenderPanelRules.trashedLine(1))
+    }
+
+    @Test
     fun busiestSendersFirstAndAtMostEight() {
         val many = (1..12).map { i -> sender("ms$i", MailUnsubscribeRules.senderFields("Personal", "S$i", null, UnsubscribeMethod.MAILTO, now - i, i)) }
         val rows = MailSenderPanelRules.rows(many, "Personal", now, cal)

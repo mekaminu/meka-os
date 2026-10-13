@@ -22,7 +22,19 @@ enum class MailTidy(val one: String, val many: String, val label: String?) {
     /** Archived with the label MEKA/Receipts. */
     RECEIPT("receipt or order", "receipts and orders", "Navilife/Receipts"),
     /** Archived (notifications and promos), no label. */
-    ARCHIVE("notification or promo", "notifications and promos", null);
+    ARCHIVE("notification or promo", "notifications and promos", null),
+    /**
+     * Slice 5b: a newsletter or promo from a sender Meka unsubscribed from, arriving after the unsubscribe: moved to
+     * Trash (recoverable for 30 days, never deleted for good), with Undo like any tidy.
+     */
+    TRASH("from an unsubscribed sender", "from unsubscribed senders", null);
+
+    /** How a batch line names where it went: "→ Navilife/Newsletters", "archived", "→ Trash". */
+    val destination: String get() = when {
+        label != null -> "→ $label"
+        this == TRASH -> "→ Trash"
+        else -> "archived"
+    }
 
     companion object {
         fun of(stored: String?): MailTidy? = entries.firstOrNull { it.name == stored }
@@ -39,6 +51,11 @@ data class MailTidyFacts(
     val keepAddresses: Set<String> = emptySet(),
     /** Slice 3b: the email is in a thread Meka has written in (he replied, or started it): never tidied. */
     val replied: Boolean = false,
+    /**
+     * Slice 5b: the sender is one Meka unsubscribed from (the unsubscribe went through) and this email came after it
+     * ([MailUnsubscribeRules.trashes]).
+     */
+    val unsubscribed: Boolean = false,
 )
 
 object MailTidyRules {
@@ -63,7 +80,11 @@ object MailTidyRules {
 
     fun plan(f: MailTidyFacts): MailTidy {
         val s = f.sorted ?: return MailTidy.KEEP
-        if (!f.inInbox || !s.sure || f.replied || protectedSender(f.fromAddress, f.keepAddresses)) return MailTidy.KEEP
+        if (!f.inInbox || f.replied || protectedSender(f.fromAddress, f.keepAddresses)) return MailTidy.KEEP
+        // Slice 5b: only what still reads as a newsletter or promo goes to Trash (a receipt or a person's email from the
+        // same address is planned as usual), sure or not: he already said he doesn't want them.
+        if (f.unsubscribed && (s.sort == MailSort.NEWSLETTER || s.sort == MailSort.PROMO)) return MailTidy.TRASH
+        if (!s.sure) return MailTidy.KEEP
         return when (s.sort) {
             MailSort.NEWSLETTER -> MailTidy.NEWSLETTER
             MailSort.RECEIPT -> MailTidy.RECEIPT
@@ -84,10 +105,7 @@ object MailTidyRules {
         }
         val total = parts.sumOf { it.first }
         if (total == 0) return NOTHING_TO_TIDY
-        val each = parts.joinToString(" · ") { (n, t) ->
-            val what = "$n ${if (n == 1) t.one else t.many}"
-            if (t.label != null) "$what → ${t.label}" else "$what archived"
-        }
+        val each = parts.joinToString(" · ") { (n, t) -> "$n ${if (n == 1) t.one else t.many} ${t.destination}" }
         return "Autopilot, dry run · would tidy $total · $each · nothing moved yet"
     }
 
@@ -127,12 +145,15 @@ object MailTidyBatchFields {
     const val NEWSLETTERS = "newsletters"
     const val RECEIPTS = "receipts"
     const val ARCHIVED = "archived"
+    /** Slice 5b: later mail from unsubscribed senders moved to Trash. */
+    const val TRASHED = "trashed"
 
     /** The count field of each tidy kind. */
     fun kindField(t: MailTidy): String? = when (t) {
         MailTidy.NEWSLETTER -> NEWSLETTERS
         MailTidy.RECEIPT -> RECEIPTS
         MailTidy.ARCHIVE -> ARCHIVED
+        MailTidy.TRASH -> TRASHED
         MailTidy.KEEP -> null
     }
 }
@@ -202,10 +223,7 @@ object MailAutopilotRules {
         val parts = MailTidy.entries.filter { it != MailTidy.KEEP }.mapNotNull { t -> counts[t]?.takeIf { it > 0 }?.let { it to t } }
         val total = parts.sumOf { it.first }
         val summary = "Tidied $total ${if (total == 1) "email" else "emails"} · $account"
-        val detail = parts.joinToString(" · ") { (n, t) ->
-            val what = "$n ${if (n == 1) t.one else t.many}"
-            if (t.label != null) "$what → ${t.label}" else "$what archived"
-        }
+        val detail = parts.joinToString(" · ") { (n, t) -> "$n ${if (n == 1) t.one else t.many} ${t.destination}" }
         return summary to detail
     }
 
@@ -284,7 +302,8 @@ object MailAutopilotPanelRules {
     const val TURN_ON = "Turn on"
     const val UNDO = "Undo"
     const val ON_LINE = "On · newsletters, receipts, notifications and promos are archived as they arrive, each with Undo " +
-        "here and in Activity. Never mail from people, schools, banks or threads you wrote in. Each account's first day is a dry run."
+        "here and in Activity; a sender you unsubscribed from goes to Trash. Never mail from people, schools, banks or threads " +
+        "you wrote in. Each account's first day is a dry run."
     const val OFF_LINE = "Off · new mail stays where it lands. Turn on to have Navilife tidy it as it arrives."
     const val PAUSED_LINE = "Paused with everything Navilife does on its own · Resume in What Navilife may do"
     const val PUTTING_BACK = "Putting back at the next check…"

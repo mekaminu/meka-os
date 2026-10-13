@@ -97,6 +97,34 @@ class MailTidyTest {
     }
 
     @Test
+    fun anUnsubscribedSendersNewslettersAndPromosGoToTrash() {
+        fun p(s: MailSorted, from: String = "news@shop.example", replied: Boolean = false, inInbox: Boolean = true) =
+            MailTidyRules.plan(MailTidyFacts(from, inInbox, s, unsubscribed = true, replied = replied))
+        assertEquals(MailTidy.TRASH, p(sure(MailSort.NEWSLETTER)))
+        assertEquals(MailTidy.TRASH, p(sure(MailSort.PROMO)))
+        // Unsure still goes: he already said he doesn't want them.
+        assertEquals(MailTidy.TRASH, p(MailSorted(MailSort.NEWSLETTER, MailSortReason.MAILING_LIST, false)))
+        // A receipt or a notification from the same address is tidied as usual; a person's email stays.
+        assertEquals(MailTidy.RECEIPT, p(sure(MailSort.RECEIPT)))
+        assertEquals(MailTidy.ARCHIVE, p(sure(MailSort.NOTIFICATION)))
+        assertEquals(MailTidy.KEEP, p(sure(MailSort.NEEDS_YOU)))
+        // The never-touch rules still win.
+        assertEquals(MailTidy.KEEP, p(sure(MailSort.NEWSLETTER), replied = true))
+        assertEquals(MailTidy.KEEP, p(sure(MailSort.NEWSLETTER), inInbox = false))
+        assertEquals(MailTidy.KEEP, p(sure(MailSort.PROMO), from = "offers@barclays.co.uk"))
+        // Not unsubscribed: a newsletter is archived.
+        assertEquals(MailTidy.NEWSLETTER, plan(sure(MailSort.NEWSLETTER)))
+        // The lines say Trash.
+        val (summary, detail) = MailAutopilotRules.lines(mapOf(MailTidy.NEWSLETTER to 1, MailTidy.TRASH to 2), "Personal")
+        assertEquals("Tidied 3 emails · Personal", summary)
+        assertEquals("1 newsletter → Navilife/Newsletters · 2 from unsubscribed senders → Trash", detail)
+        assertEquals("1 from an unsubscribed sender → Trash", MailAutopilotRules.lines(mapOf(MailTidy.TRASH to 1), "Personal").second)
+        val b = MailAutopilotRules.readBatch("t", MailAutopilotRules.batchFields(1L, "Personal", mapOf(MailTidy.TRASH to 2)))!!
+        assertEquals(mapOf(MailTidy.TRASH to 2), b.kinds)
+        assertEquals("Tidied 2 · 2 from unsubscribed senders", ArchivedForYouRules.headline(listOf(b)))
+    }
+
+    @Test
     fun aBatchSaysWhatMovedAndRoundTrips() {
         val counts = mapOf(MailTidy.NEWSLETTER to 3, MailTidy.RECEIPT to 2, MailTidy.ARCHIVE to 1, MailTidy.KEEP to 9)
         val (summary, detail) = MailAutopilotRules.lines(counts, "Personal")

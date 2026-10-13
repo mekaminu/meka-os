@@ -13,8 +13,9 @@ import os.meka.core.sync.fv
  * body. Mail on both apps lists them under each account with **Unsubscribe**; the tap writes [MailSenderFields.ASKED_AT]
  * and the server does it at its next check, by the first that works of: RFC 8058 one-click (an HTTPS POST, nothing
  * else sent), an email to the list's `mailto:` address sent from that same account, or, when only a web page is
- * offered, the page handed back for him to open. Nothing is sent without his tap. Slice 5b sends their later mail to
- * Trash; 5c the weekly "not opened in 30 days" offer.
+ * offered, the page handed back for him to open. Nothing is sent without his tap. Slice 5b: once the unsubscribe has
+ * gone through, their later newsletters and promos go to Trash with Autopilot ([trashes], [MailTidy.TRASH]); 5c the
+ * weekly "not opened in 30 days" offer.
  */
 enum class UnsubscribeMethod {
     /** RFC 8058: `List-Unsubscribe-Post: List-Unsubscribe=One-Click` with an https link. */
@@ -171,11 +172,28 @@ object MailUnsubscribeRules {
             state = UnsubscribeState.of(text(MailSenderFields.STATE)),
             note = text(MailSenderFields.NOTE),
             link = safeUrl(text(MailSenderFields.LINK)),
+            trashed = (f[MailSenderFields.TRASHED] as? FieldValue.Int64)?.value?.toInt()?.coerceAtLeast(0) ?: 0,
         )
     }
 
     /** An Unsubscribe the server should act on: asked, and not tried since (asking again after a failure retries). */
     fun due(s: MailSender): Boolean = s.askedAtMs != null && (s.triedAtMs == null || s.askedAtMs > s.triedAtMs)
+
+    /**
+     * Slice 5b: an email from [s] that arrived at [receivedAtMs] goes to Trash: the unsubscribe went through (one-click
+     * confirmed or the email sent), nothing newer is pending, and the email came after it.
+     */
+    fun trashes(s: MailSender?, receivedAtMs: Long): Boolean {
+        if (s == null || due(s) || s.state?.finished != true) return false
+        val tried = s.triedAtMs ?: return false
+        return receivedAtMs > tried
+    }
+
+    /** Slice 5b: what the server adds to the sender after a check sent [more] of its later emails to Trash. */
+    fun trashedFields(previous: Int, more: Int, nowMs: Long): Map<String, FieldValue> = mapOf(
+        MailSenderFields.TRASHED to (previous + more).toLong().fv(),
+        MailSenderFields.TRASHED_AT to nowMs.fv(),
+    )
 
     /** What the server writes once it has tried: the outcome, the line Mail shows and (to finish by hand) the page. */
     fun outcomeFields(state: UnsubscribeState, nowMs: Long, link: String? = null): Map<String, FieldValue> = buildMap {
@@ -224,6 +242,9 @@ object MailSenderFields {
     const val STATE = "unsubState"
     const val NOTE = "unsubNote"
     const val LINK = "unsubLink"
+    /** Slice 5b: how many of its later emails went to Trash since the unsubscribe (Int64), and when the last did. */
+    const val TRASHED = "trashedCount"
+    const val TRASHED_AT = "trashedAtMs"
 }
 
 data class MailSender(
@@ -239,6 +260,8 @@ data class MailSender(
     val state: UnsubscribeState?,
     val note: String?,
     val link: String?,
+    /** Slice 5b: later emails sent to Trash since the unsubscribe. */
+    val trashed: Int = 0,
 )
 
 /** One sender under its account in Mail. */
@@ -302,6 +325,7 @@ object MailSenderPanelRules {
                     canUnsubscribe = !due && !done && s.state != UnsubscribeState.OPEN_LINK,
                     state = when {
                         due -> ASKED
+                        done && s.trashed > 0 -> listOfNotNull(s.note ?: s.state?.note, trashedLine(s.trashed)).joinToString(" · ")
                         else -> s.note ?: s.state?.note
                     },
                     done = done,
@@ -309,6 +333,9 @@ object MailSenderPanelRules {
                 )
             }
     }
+
+    /** "2 later emails sent to Trash" (slice 5b; Undo is on the tidy in Mail and Activity). */
+    fun trashedLine(n: Int): String = if (n == 1) "1 later email sent to Trash" else "$n later emails sent to Trash"
 
     /** What tapping Unsubscribe writes: the ask (the server acts at its next check). Null when it's already done or asked. */
     fun ask(s: MailSender?, nowMs: Long): Map<String, FieldValue>? {

@@ -632,6 +632,54 @@ class MailSyncTest {
     }
 
     @Test
+    fun anUnsubscribedSendersLaterNewslettersGoToTrashWithUndo() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops, unsubscriber = { true })
+        gmail.mailbox["a1"] = newsletter("a1", "news@digest.example", "Weekly Digest", "<https://digest.example/u/1>", oneClick = true, ageDays = 1)
+        val id = connect(i)
+        i.syncAccount(id)
+        now += day + 1
+        autopilotOn(ops)
+        val sender = MailUnsubscribeRules.senderId(id, "news@digest.example")
+        // Not unsubscribed yet: its next newsletter is archived as usual.
+        now += 60_000
+        gmail.mailbox["a2"] = newsletter("a2", "news@digest.example", "Weekly Digest", "<https://digest.example/u/2>", oneClick = true)
+        gmail.nextRound = { MailChanges(fetch = listOf("a2"), cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(mapOf("a2" to MailTidy.NEWSLETTER), gmail.tidyCalls.single())
+        // He taps Unsubscribe; the one-click goes through.
+        now += 60_000
+        device(ops, EntityTypes.MAIL_SENDER, sender, MailSenderFields.ASKED_AT, FieldValue.Int64(now))
+        now += 60_000
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(FieldValue.Text(UnsubscribeState.DONE.name), senders(ops).getValue(sender)[MailSenderFields.STATE])
+        // Later: its newsletter goes to Trash; a receipt from the same address and another list are tidied as usual.
+        now += day
+        gmail.mailbox["a3"] = newsletter("a3", "news@digest.example", "Weekly Digest", "<https://digest.example/u/3>", oneClick = true)
+        gmail.mailbox["r3"] = msg("r3", 0, "news@digest.example").copy(subject = "Your order has shipped", listId = "<news@digest.example>")
+        gmail.mailbox["o3"] = newsletter("o3", "hello@other.example", "Other", "<https://other.example/u>")
+        gmail.nextRound = { MailChanges(fetch = listOf("a3", "r3", "o3"), cursor = "h4") }
+        i.syncAccount(id)
+        assertEquals(mapOf("a3" to MailTidy.TRASH, "r3" to MailTidy.RECEIPT, "o3" to MailTidy.NEWSLETTER), gmail.tidyCalls.last())
+        val batch = tidies(ops).entries.maxBy { (it.value[MailTidyBatchFields.AT] as FieldValue.Int64).value }
+        assertEquals(FieldValue.Int64(1), batch.value[MailTidyBatchFields.TRASHED])
+        assertTrue((batch.value[MailTidyBatchFields.DETAIL] as FieldValue.Text).value.contains("1 from an unsubscribed sender → Trash"))
+        assertEquals(FieldValue.Int64(1), senders(ops).getValue(sender)[MailSenderFields.TRASHED])
+        // Undo puts it back, and it is never moved again.
+        now += 60_000
+        device(ops, EntityTypes.MAIL_TIDY, batch.key, MailTidyBatchFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        gmail.nextRound = { MailChanges(cursor = "h5") }
+        i.syncAccount(id)
+        assertTrue(gmail.mailbox.getValue("a3").inInbox)
+        val calls = gmail.tidyCalls.size
+        gmail.nextRound = { MailChanges(fetch = listOf("a3"), cursor = "h6") }
+        i.syncAccount(id)
+        assertEquals(calls, gmail.tidyCalls.size)
+    }
+
+    @Test
     fun aFailedOneClickFallsBackToTheMailtoAndAnUnreachableOneCanBeTriedAgain() {
         val ms = InMemoryMailStore()
         val ops = InMemoryServerOpStore()

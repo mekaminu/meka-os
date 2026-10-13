@@ -11,6 +11,7 @@ import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailTidyBatchFields
 import os.meka.core.domain.MailSort
+import os.meka.core.domain.MailSender
 import os.meka.core.domain.MailUnsubscribeRules
 import os.meka.core.domain.UnsubscribeMethod
 import os.meka.core.domain.UnsubscribePlan
@@ -457,8 +458,19 @@ class Integrations(
         // Can't tell which threads he wrote in: nothing is tidied this check.
         val replied = m.repliedThreads(token, since - MAIL_WINDOW_MS)
         val keep = keepAddresses(hh)
+        // Slice 5b: the senders he unsubscribed from (read from their synced entities; the id is the account + address).
+        val senders = reader.entities(hh, EntityTypes.MAIL_SENDER)
+        fun senderOf(h: MailHeader): MailSender? {
+            val address = h.fromAddress ?: return null
+            val id = MailUnsubscribeRules.senderId(a.id, address)
+            return senders[id]?.let { MailUnsubscribeRules.read(id, it) }
+        }
         val plan = candidates.mapNotNull { (h, s) ->
-            val t = MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, keep, replied = h.threadId?.let { it in replied } == true))
+            val t = MailTidyRules.plan(MailTidyFacts(
+                h.fromAddress, h.inInbox, s, keep,
+                replied = h.threadId?.let { it in replied } == true,
+                unsubscribed = MailUnsubscribeRules.trashes(senderOf(h), h.receivedAtMs),
+            ))
             if (t == MailTidy.KEEP) null else h to t
         }.take(MailAutopilotRules.MAX_PER_CHECK)
         if (plan.isEmpty()) return
@@ -472,6 +484,10 @@ class Integrations(
         done.forEach { (h, _) -> ms.put(hh, a.id, h.copy(inInbox = false)) }
         val account = MailLabel.of(a.label)?.label ?: "Mail"
         writeTidy(a, batchId, MailAutopilotRules.batchFields(at, account, done.groupingBy { it.second }.eachCount()))
+        // Slice 5b: each unsubscribed sender's row in Mail says how many later emails went to Trash.
+        done.filter { it.second == MailTidy.TRASH }.mapNotNull { (h, _) -> senderOf(h) }.groupBy { it.id }.forEach { (id, ss) ->
+            writeSender(a, id, MailUnsubscribeRules.trashedFields(ss.first().trashed, ss.size, at))
+        }
     }
 
     /** Puts back every tidy of this account an app asked to undo (within its 30 days), once. */

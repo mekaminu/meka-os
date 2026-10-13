@@ -141,7 +141,7 @@ object AutonomyRules {
     /** The row's key; the apps send it to the facade's `resetTrust` like any row's action, which switches Autopilot. */
     const val MAIL_AUTOPILOT = MailAutopilotRules.ENTITY_ID
     const val MAIL_AUTOPILOT_TITLE = "Inbox autopilot"
-    const val MAIL_ON_LINE = "Archives newsletters, receipts, notifications and promos as they arrive · each with Undo in Mail and Activity"
+    const val MAIL_ON_LINE = "Archives newsletters, receipts, notifications and promos as they arrive, and an unsubscribed sender's mail goes to Trash · each with Undo in Mail and Activity"
     const val MAIL_OFF_LINE = "Off · new mail stays where it lands"
 
     fun mailRow(mail: MailAutopilotSetting, paused: Boolean) = AutonomyRow(
