@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.MekaApplication
 import os.meka.android.designsystem.Meka
@@ -64,6 +65,7 @@ import os.meka.core.domain.LocalClock
 import os.meka.core.domain.NoticeSource
 import os.meka.core.domain.NoticeTier
 import os.meka.core.domain.NotificationSettings
+import os.meka.core.domain.NotifyTestRules
 import os.meka.core.facade.MekaCore
 import os.meka.android.shell.SharedMotion
 import os.meka.android.shell.MoreItem
@@ -128,6 +130,37 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
 
+        // Send a test (slice 2): a local notification and a push through MEKA's server, each with what came of it.
+        val testRun by NotifyTester.run.collectAsState()
+        var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+        val testView = testRun?.let { NotifyTestRules.view(it, nowMs) }
+        LaunchedEffect(testRun, testView?.done) {
+            while (testRun != null && testView?.done == false) { delay(1_000); nowMs = System.currentTimeMillis() }
+        }
+        PillButton(if (testRun == null || testView?.done == true) "Send a test" else "Sending a test…") {
+            if (testRun == null || testView?.done == true) {
+                haptics.tick(); nowMs = System.currentTimeMillis()
+                NotifyTester.start(context.applicationContext as MekaApplication)
+            }
+        }
+        AnimatedVisibility(
+            testView != null,
+            enter = if (Meka.reducedMotion) fadeIn() else expandVertically() + fadeIn(),
+            exit = if (Meka.reducedMotion) fadeOut() else shrinkVertically() + fadeOut(),
+        ) {
+            Column(Modifier.padding(top = MekaSpace.xxs)) {
+                testView?.let { v ->
+                    Crossfade(v.localLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "test-local") {
+                        Text(it, style = MekaType.itemMeta, color = testColor(v.localOk))
+                    }
+                    Crossfade(v.pushLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "test-push") {
+                        Text(it, style = MekaType.itemMeta, color = testColor(v.pushOk))
+                    }
+                    v.hint?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                }
+            }
+        }
+
         Spacer(Modifier.height(MekaSpace.m))
         Label("Quiet hours", 2)
         ToggleRow(if (quiet.enabled) "On · ${quiet.summary}" else "Off", quiet.enabled, Modifier.appear(rememberAppearance(2))) {
@@ -178,6 +211,13 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
         )
         Spacer(Modifier.height(MekaSpace.xl))
     }
+}
+
+@Composable
+private fun testColor(ok: Boolean?) = when (ok) {
+    true -> Meka.colors.textPrimary
+    false -> Meka.colors.critical
+    null -> Meka.colors.textSecondary
 }
 
 @Composable

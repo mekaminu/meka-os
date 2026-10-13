@@ -314,6 +314,16 @@ interface FoldPostureApi {
 }
 
 /**
+ * Notifications never seen (slice 2): `POST /v1/diagnostics/notifications` sends the phone's trace (false from an older
+ * server or before this device's key is registered); `POST /v1/push/test` asks the server to push a test to this
+ * device and returns its word ("sent", "no_address" …), or null from an older server.
+ */
+interface NotifyDiagnosticsApi {
+    suspend fun reportNotifyTrace(report: os.meka.core.wire.NotifyDiagnosticsCodec.Report): Boolean
+    suspend fun testPush(): String?
+}
+
+/**
  * A caller's recording (call assistant polish 8c): `POST /v1/voice-message/audio` with the held message's id. The MP3's
  * bytes, or null when the server keeps none (or is older and has no route).
  */
@@ -386,7 +396,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, RecoveryApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -731,6 +741,30 @@ class HttpSyncTransport(
             resp.status.value == 404 || resp.status.value == 403 -> false
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.REPORT_PATH}")
             else -> true
+        }
+    }
+
+    override suspend fun reportNotifyTrace(report: os.meka.core.wire.NotifyDiagnosticsCodec.Report): Boolean {
+        val codec = os.meka.core.wire.NotifyDiagnosticsCodec
+        prepare() // the route requires the device's signing key on the server
+        val resp = send(codec.REPORT_PATH, codec.encodeReport(report))
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.REPORT_PATH}")
+            resp.status.value == 404 || resp.status.value == 403 -> false
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.REPORT_PATH}")
+            else -> true
+        }
+    }
+
+    override suspend fun testPush(): String? {
+        val codec = os.meka.core.wire.NotifyDiagnosticsCodec
+        prepare()
+        val resp = send(codec.TEST_PATH, codec.encodeEmptyRequest())
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.TEST_PATH}")
+            resp.status.value == 404 || resp.status.value == 403 -> null
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.TEST_PATH}")
+            else -> codec.decodeTestAnswer(resp.bodyAsText())
         }
     }
 

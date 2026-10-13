@@ -35,6 +35,12 @@ fun interface PushSender {
 
     /** The same wake-up at high priority, so a dozing phone syncs now (an urgent voice message). Still only "sync". */
     fun wakeUrgent(address: PushAddress): SendResult = wake(address)
+
+    /**
+     * Send a test (notifications slice 2): `{"t": "test"}` at high priority to the one device that asked; the phone
+     * posts its own "push works" notification. Still nothing about Meka's data.
+     */
+    fun test(address: PushAddress): SendResult = wakeUrgent(address)
 }
 
 /**
@@ -56,6 +62,27 @@ class Push(
     private data class Key(val householdId: String, val deviceId: String)
     private val lastSentAt = HashMap<Key, Long>()
     private val pending = HashSet<Key>()
+    /** Each device's last push and what it came to, since this task started (memory only; Health's Instant updates). */
+    private val last = HashMap<Key, Pair<Long, SendResult>>()
+
+    /** [who]'s last push since the server started: when, and what it came to; null when none yet. */
+    @Synchronized
+    fun lastResult(who: DeviceIdentity): Pair<Long, SendResult>? = last[Key(who.householdId, who.deviceId)]
+
+    @Synchronized
+    private fun noteResult(householdId: String, deviceId: String, r: SendResult) { last[Key(householdId, deviceId)] = now() to r }
+
+    /**
+     * Send a test to [who] itself, now, on the caller's thread (it answers the phone with what Firebase said); null
+     * when this device has no push address.
+     */
+    fun test(who: DeviceIdentity): SendResult? {
+        val a = store.household(who.householdId).firstOrNull { it.deviceId == who.deviceId } ?: return null
+        val r = runCatching { sender.test(a) }.getOrDefault(SendResult.FAILED)
+        noteResult(who.householdId, who.deviceId, r)
+        if (r == SendResult.GONE) store.forget(who.householdId, a.token)
+        return r
+    }
 
     fun register(who: DeviceIdentity, t: WireCodec.PushToken) {
         if (t.token.isEmpty()) store.remove(who) else store.put(who, t.service, t.token)
@@ -76,7 +103,11 @@ class Push(
      */
     fun urgent(householdId: String) {
         for (a in store.household(householdId)) {
-            schedule(0) { if (sender.wakeUrgent(a) == SendResult.GONE) store.forget(householdId, a.token) }
+            schedule(0) {
+                val r = sender.wakeUrgent(a)
+                noteResult(householdId, a.deviceId, r)
+                if (r == SendResult.GONE) store.forget(householdId, a.token)
+            }
         }
     }
 
@@ -101,7 +132,9 @@ class Push(
         synchronized(this) { pending -= k; lastSentAt[k] = now() }
         // Read the address at send time: the device may have changed or removed it meanwhile.
         val a = store.household(k.householdId).firstOrNull { it.deviceId == k.deviceId } ?: return
-        if (sender.wake(a) == SendResult.GONE) store.forget(k.householdId, a.token)
+        val r = sender.wake(a)
+        noteResult(k.householdId, k.deviceId, r)
+        if (r == SendResult.GONE) store.forget(k.householdId, a.token)
     }
 }
 

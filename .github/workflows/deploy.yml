@@ -216,6 +216,12 @@ jobs:
         continue-on-error: true
         run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-postures "${{ steps.decide.outputs.url }}"
 
+      # Where the phone's notifications stop (notifications never seen, slice 2): its trace and the server's last push.
+      - name: Phone notification trace
+        if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
+        continue-on-error: true
+        run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-notifications "${{ steps.decide.outputs.url }}"
+
       - name: Build the phone app with the Mac's debug key
         if: steps.decide.outputs.publish == 'true'
         env:

@@ -54,6 +54,10 @@ data class ServerHealth(
     val atMs: Long,
     /** Macs connected to the household (Setup's "Mac" step); null from a server that doesn't say. */
     val macs: Int? = null,
+    /** The server's last push to this device since it started ([LastPushRules]); null when it doesn't say. */
+    val lastPushAtMs: Long? = null,
+    /** "sent" · "failed" · "gone" · "off". */
+    val lastPushResult: String? = null,
 ) {
     companion object {
         const val PUSH_ON = "on"
@@ -149,7 +153,7 @@ object HealthRules {
     fun view(f: HealthFacts, cal: LocalCalendar): HealthView {
         val rows = buildList {
             add(server(f, cal))
-            if (!f.device.mac) add(push(f))
+            if (!f.device.mac) add(push(f, cal))
             NotifyTrace.healthRow(f.device.notifications, f.nowMs, cal)?.let(::add)
             addAll(calendars(f, cal))
             feeds(f, cal)?.let(::add)
@@ -192,11 +196,15 @@ object HealthRules {
         }
     }
 
-    private fun push(f: HealthFacts): HealthRow {
+    private fun push(f: HealthFacts, cal: LocalCalendar): HealthRow {
         val title = "Instant updates"
         return when (f.server?.push) {
             null -> HealthRow("push", title, "Couldn't check", HealthState.UNKNOWN)
-            ServerHealth.PUSH_ON -> HealthRow("push", title, "On · changes from the Mac arrive in seconds", HealthState.OK)
+            ServerHealth.PUSH_ON -> {
+                val last = LastPushRules.suffix(f.server.lastPushAtMs, f.server.lastPushResult, f.nowMs, cal)
+                if (LastPushRules.failed(f.server.lastPushResult)) HealthRow("push", title, "On$last · changes arrive within 15 min until it works", HealthState.WARN)
+                else HealthRow("push", title, "On · changes from the Mac arrive in seconds$last", HealthState.OK)
+            }
             ServerHealth.PUSH_MISSING -> HealthRow("push", title, "This phone hasn't registered · changes arrive within 15 min", HealthState.WARN)
             else -> HealthRow("push", title, "Not set up on the server · changes arrive within 15 min", HealthState.WARN)
         }

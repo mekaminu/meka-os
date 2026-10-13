@@ -105,7 +105,9 @@ class FcmSender(
 
     override fun wakeUrgent(address: PushAddress): SendResult = send(address, urgent = true)
 
-    private fun send(address: PushAddress, urgent: Boolean): SendResult {
+    override fun test(address: PushAddress): SendResult = send(address, urgent = true, kind = "test")
+
+    private fun send(address: PushAddress, urgent: Boolean, kind: String = "sync"): SendResult {
         if (address.service != SERVICE) return SendResult.FAILED
         val sa = account() ?: return SendResult.OFF
         val token = accessToken(sa) ?: return SendResult.FAILED
@@ -113,7 +115,7 @@ class FcmSender(
             http.post(
                 "https://fcm.googleapis.com/v1/projects/${sa.projectId}/messages:send",
                 mapOf("Authorization" to "Bearer $token", "Content-Type" to "application/json; charset=UTF-8"),
-                message(address.token, urgent).toString(),
+                message(address.token, urgent, kind).toString(),
             )
         }.getOrElse { return SendResult.FAILED }
         return when {
@@ -144,14 +146,17 @@ class FcmSender(
     companion object {
         const val SERVICE = "fcm"
 
-        /** [urgent] sends at high priority (an urgent voice message); the content is the same `{"t":"sync"}`. */
-        fun message(token: String, urgent: Boolean = false): JsonObject = buildJsonObject {
+        /**
+         * [urgent] sends at high priority (an urgent voice message); the content is the same `{"t":"sync"}`. [kind]
+         * "test" is Send a test's push (notifications slice 2): `{"t":"test"}`, its own collapse key.
+         */
+        fun message(token: String, urgent: Boolean = false, kind: String = "sync"): JsonObject = buildJsonObject {
             putJsonObject("message") {
                 put("token", token)
-                putJsonObject("data") { put("t", "sync") }
+                putJsonObject("data") { put("t", kind) }
                 putJsonObject("android") {
                     put("priority", if (urgent) "high" else "normal")
-                    put("collapse_key", "sync")
+                    put("collapse_key", kind)
                     put("ttl", "3600s")
                 }
             }

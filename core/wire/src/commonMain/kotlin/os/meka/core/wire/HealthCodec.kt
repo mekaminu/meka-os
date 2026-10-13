@@ -31,11 +31,20 @@ object HealthCodec {
         val atMs: Long,
         /** How many Macs are connected to the household (Setup's "Mac" step); null from an older server. */
         val macs: Int? = null,
+        /** The server's last push to this device since it started (notifications slice 2); null when none or older. */
+        val lastPushAtMs: Long? = null,
+        /** [PUSH_SENT] · [PUSH_FAILED] · [PUSH_GONE] · [PUSH_OFF_RESULT]. */
+        val lastPushResult: String? = null,
     ) {
         companion object {
             const val PUSH_ON = "on"
             const val PUSH_MISSING = "missing"
             const val PUSH_OFF = "off"
+            const val PUSH_SENT = "sent"
+            const val PUSH_FAILED = "failed"
+            const val PUSH_GONE = "gone"
+            const val PUSH_OFF_RESULT = "off"
+            val RESULTS = setOf(PUSH_SENT, PUSH_FAILED, PUSH_GONE, PUSH_OFF_RESULT)
         }
     }
 
@@ -53,6 +62,10 @@ object HealthCodec {
         put("speech", r.speech)
         put("at", r.atMs)
         r.macs?.let { put("macs", it) }
+        if (r.lastPushAtMs != null && r.lastPushResult != null) {
+            put("lastPushAt", r.lastPushAtMs)
+            put("lastPush", r.lastPushResult)
+        }
     }.toString()
 
     /** An unknown push state reads as off (an older or newer server), never as fine. */
@@ -61,12 +74,18 @@ object HealthCodec {
         checkVersion(o)
         val push = (o["push"] as? JsonPrimitive)?.takeIf { it.isString }?.content
             ?.takeIf { it == Response.PUSH_ON || it == Response.PUSH_MISSING } ?: Response.PUSH_OFF
+        val lastPushAt = (o["lastPushAt"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull?.takeIf { it > 0 }
+        // An unknown result reads as failed, never as fine.
+        val lastPush = (o["lastPush"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+            ?.let { if (it in Response.RESULTS) it else Response.PUSH_FAILED }
         Response(
             push = push,
             calls = o.bool("calls"),
             speech = o.bool("speech"),
             atMs = (o["at"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull ?: throw IllegalArgumentException("at"),
             macs = (o["macs"] as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull?.takeIf { it >= 0 },
+            lastPushAtMs = lastPush?.let { lastPushAt },
+            lastPushResult = lastPushAt?.let { lastPush },
         )
     }
 

@@ -15,6 +15,13 @@ class PushTest {
     }
 
     @Test
+    fun aTestPushIsATestAndNotASync() {
+        assertTrue(PushMessages.isTest(mapOf("t" to "test")))
+        assertFalse(PushMessages.isSyncWake(mapOf("t" to "test")))
+        assertFalse(PushMessages.isTest(mapOf("t" to "sync")))
+    }
+
+    @Test
     fun aTokenIsSentOncePerNewToken() {
         assertTrue(PushMessages.needsSending("abc", null))
         assertFalse(PushMessages.needsSending("abc", "abc"))

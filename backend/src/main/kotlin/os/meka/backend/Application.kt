@@ -63,6 +63,7 @@ import os.meka.core.wire.HereCodec
 import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
 import os.meka.core.wire.FoldPostureCodec
+import os.meka.core.wire.NotifyDiagnosticsCodec
 import os.meka.core.wire.UpdateFailureCodec
 import os.meka.core.wire.VoiceMessageCodec
 import os.meka.core.wire.WireCodec
@@ -113,6 +114,8 @@ fun Application.mekaSync(
     updateFailures: UpdateFailures? = null,
     /** The Fold's posture changes (bedside clock, slice 2); null leaves the routes out. */
     foldPostures: FoldPostures? = null,
+    /** The phone's notification trace (notifications never seen, slice 2); null leaves the routes out. */
+    notifyReports: NotifyReports? = null,
     /** Approval requests from outside MEKA (Kestrel's trades; build plan V1); null leaves the routes out. */
     approvals: ApprovalRoutes? = null,
     /** The recovery key (build plan V1 "Recovery key"; ADR-005 amendment 2026-10-12); null leaves its routes out. */
@@ -473,6 +476,39 @@ fun Application.mekaSync(
             }
         }
 
+        if (notifyReports != null) {
+            // Notifications never seen (slice 2): the phone sends its trace (keyed devices only; the publisher is
+            // refused), and the publisher (or a keyed device) reads the newest report for a build run.
+            post(NotifyDiagnosticsCodec.REPORT_PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val report = NotifyDiagnosticsCodec.decodeReport(body)
+                withContext(Dispatchers.IO) { notifyReports.report(who, report) }
+                call.respondText("{}", ContentType.Application.Json)
+            }
+
+            post(NotifyDiagnosticsCodec.LATEST_PATH) {
+                val body = call.boundedBody()
+                val who = call.releaseCaller(devices, verifier, body, publisher)
+                NotifyDiagnosticsCodec.decodeEmptyRequest(body)
+                val latest = withContext(Dispatchers.IO) { notifyReports.latest(who) }
+                call.respondText(NotifyDiagnosticsCodec.encodeLatest(latest), ContentType.Application.Json)
+            }
+        }
+
+        // Send a test (notifications slice 2): a test push to the very device that asked, answered with what Firebase
+        // said. Keyed devices only; the publisher is refused (it has no push address).
+        post(NotifyDiagnosticsCodec.TEST_PATH) {
+            val body = call.boundedBody()
+            val who = call.device(devices, verifier, body, requireKey = true)
+            NotifyDiagnosticsCodec.decodeEmptyRequest(body)
+            val word = if (push == null) NotifyDiagnosticsCodec.OFF else {
+                withContext(Dispatchers.IO) { push.test(who) }?.let { NotifyReports.word(it) } ?: NotifyDiagnosticsCodec.NO_ADDRESS
+            }
+            call.application.environment.log.info("push test: $word") // no identifiers
+            call.respondText(NotifyDiagnosticsCodec.encodeTestAnswer(word), ContentType.Application.Json)
+        }
+
         if (newsImages != null) {
             // A news picture by the server's key (never an address). Keyed devices only; the publisher is refused.
             post("/v1/news/image") {
@@ -709,7 +745,11 @@ fun Application.mekaSync(
                 else -> HealthCodec.Response.PUSH_MISSING
             }
             val macs = withContext(Dispatchers.IO) { runCatching { devices.macs(who.householdId) }.getOrNull() }
-            val health = HealthCodec.Response(pushState, calls = voice != null, speech = speech != null, atMs = System.currentTimeMillis(), macs = macs)
+            val lastPush = push?.lastResult(who)
+            val health = HealthCodec.Response(
+                pushState, calls = voice != null, speech = speech != null, atMs = System.currentTimeMillis(), macs = macs,
+                lastPushAtMs = lastPush?.first, lastPushResult = lastPush?.second?.let { NotifyReports.word(it) },
+            )
             call.respondText(HealthCodec.encodeResponse(health), ContentType.Application.Json)
         }
 
@@ -934,6 +974,7 @@ fun main(args: Array<String>) {
                     voice = voice, newsImages = newsImages, calendarWriter = calendarWriter, ai = ai, speech = speech,
                     verifier = verifier, family = family, updateFailures = UpdateFailures(PostgresUpdateFailureStore(ds)),
                     foldPostures = FoldPostures(PostgresFoldPostureStore(ds)),
+                    notifyReports = NotifyReports(PostgresNotifyReportStore(ds), push),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
                 )
@@ -1069,7 +1110,7 @@ object Migrations {
         8 to "/db/V8__calendar_editing.sql", 9 to "/db/V9__event_edits.sql", 10 to "/db/V10__ai_usage.sql",
         11 to "/db/V11__speech_usage.sql", 12 to "/db/V12__sign_ins.sql", 13 to "/db/V13__family_invite.sql",
         14 to "/db/V14__ai_usage_day.sql", 15 to "/db/V15__app_update_failure.sql", 16 to "/db/V16__recovery_key.sql",
-        17 to "/db/V17__fold_posture.sql",
+        17 to "/db/V17__fold_posture.sql", 18 to "/db/V18__notify_report.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

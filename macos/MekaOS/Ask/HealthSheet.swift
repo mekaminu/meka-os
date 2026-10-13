@@ -72,7 +72,7 @@ struct HealthSheet: View {
             Task { await model.connectCalendar(provider, editing: editing) }
         case .calendars: dismiss(); model.showCalendars = true
         case .work: dismiss(); model.showWork = true
-        case .battery, .notificationAccess, .callRole, .installUpdate: break
+        case .battery, .notificationAccess, .callRole, .installUpdate, .notificationsOn: break
         }
     }
 
@@ -81,7 +81,7 @@ struct HealthSheet: View {
         guard let f = row.fix else { return false }
         switch f {
         case .syncNow, .reconnect, .calendars, .work: return true
-        case .battery, .notificationAccess, .callRole, .installUpdate: return false
+        case .battery, .notificationAccess, .callRole, .installUpdate, .notificationsOn: return false
         }
     }
 }

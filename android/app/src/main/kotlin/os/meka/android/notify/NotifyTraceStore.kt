@@ -71,7 +71,10 @@ object NotifyTraceStore {
 
     /** What Health shows about notifications on this phone. */
     fun health(context: Context): NotificationHealth =
-        NotificationHealth(allowed = WorkAlerts.canPost(context), channels = MekaChannels.states(context), trace = log(context))
+        NotificationHealth(
+            allowed = WorkAlerts.canPost(context), channels = MekaChannels.states(context), trace = log(context),
+            phoneOff = (context.applicationContext as? MekaApplication)?.governor?.device?.value == os.meka.core.domain.DeviceAlerts.OFF,
+        )
 
     /** The phone's own calendar, for the trace's times. */
     fun calendar(): LocalCalendar =

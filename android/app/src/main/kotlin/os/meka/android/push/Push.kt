@@ -26,12 +26,17 @@ class MekaMessagingService : FirebaseMessagingService() {
             os.meka.core.domain.NotifyTraceEntry(System.currentTimeMillis(), os.meka.core.domain.NotifyTraceKind.PUSH, message.data["t"].orEmpty().take(20)),
         )
         if (PushMessages.isSyncWake(message.data)) SyncWorker.syncSoon(applicationContext)
+        // Send a test (slice 2): the server's test push shows its own notification.
+        if (PushMessages.isTest(message.data)) os.meka.android.notify.NotifyTester.pushArrived(applicationContext)
     }
 }
 
 /** Pure rules, unit-tested. */
 object PushMessages {
     fun isSyncWake(data: Map<String, String>): Boolean = data["t"] == "sync"
+
+    /** Send a test's push (notifications never seen, slice 2). */
+    fun isTest(data: Map<String, String>): Boolean = data["t"] == "test"
 
     /** Send the token to the server unless it already has this very one. */
     fun needsSending(current: String?, sent: String?): Boolean = !current.isNullOrBlank() && current != sent

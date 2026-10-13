@@ -1,0 +1,77 @@
+package os.meka.backend
+
+import os.meka.core.wire.NotifyDiagnosticsCodec
+import javax.sql.DataSource
+
+/**
+ * The phone's notification trace (notifications never seen, slice 2). The phone sends its report; GitHub's release
+ * publisher (or any keyed device) reads the household's newest one, with the server's last push to the device that
+ * sent it, so the publish job can print it for a build run. Nothing personal: channel names, counts, reasons and error
+ * class names, the phone's model name, and which device sent it.
+ */
+interface NotifyReportStore {
+    fun put(householdId: String, deviceId: String, report: NotifyDiagnosticsCodec.Report)
+    /** The newest report and the device that sent it. */
+    fun latest(householdId: String): Pair<String, NotifyDiagnosticsCodec.Report>?
+}
+
+class NotifyReports(private val store: NotifyReportStore, private val push: Push?) {
+    fun report(who: DeviceIdentity, report: NotifyDiagnosticsCodec.Report) {
+        // The publisher reads; it never reports.
+        if (who.deviceId == ReleasePublisher.ID) throw Forbidden()
+        store.put(who.householdId, who.deviceId, report)
+    }
+
+    fun latest(who: DeviceIdentity): NotifyDiagnosticsCodec.Latest {
+        val (deviceId, report) = store.latest(who.householdId) ?: return NotifyDiagnosticsCodec.Latest(null)
+        val sender = DeviceIdentity(who.householdId, deviceId)
+        val last = push?.lastResult(sender)
+        return NotifyDiagnosticsCodec.Latest(
+            report,
+            lastPushAtMs = last?.first,
+            lastPushResult = last?.second?.let { word(it) },
+            hasAddress = push?.hasAddress(sender),
+        )
+    }
+
+    companion object {
+        /** The wire's word for a send's result. */
+        fun word(r: SendResult): String = when (r) {
+            SendResult.SENT -> NotifyDiagnosticsCodec.SENT
+            SendResult.GONE -> NotifyDiagnosticsCodec.GONE
+            SendResult.FAILED -> NotifyDiagnosticsCodec.FAILED
+            SendResult.OFF -> NotifyDiagnosticsCodec.OFF
+        }
+    }
+}
+
+class InMemoryNotifyReportStore : NotifyReportStore {
+    private val rows = HashMap<String, Pair<String, NotifyDiagnosticsCodec.Report>>()
+    @Synchronized override fun put(householdId: String, deviceId: String, report: NotifyDiagnosticsCodec.Report) { rows[householdId] = deviceId to report }
+    @Synchronized override fun latest(householdId: String) = rows[householdId]
+}
+
+class PostgresNotifyReportStore(private val ds: DataSource) : NotifyReportStore {
+    override fun put(householdId: String, deviceId: String, report: NotifyDiagnosticsCodec.Report) = ds.connection.use { c ->
+        c.prepareStatement(
+            """INSERT INTO notify_report(household_id, device_id, report) VALUES (?,?,?)
+               ON CONFLICT (household_id) DO UPDATE SET device_id = EXCLUDED.device_id, report = EXCLUDED.report, received_at = now()""",
+        ).use {
+            it.setString(1, householdId); it.setString(2, deviceId); it.setString(3, NotifyDiagnosticsCodec.encodeReport(report))
+            it.executeUpdate()
+        }
+        Unit
+    }
+
+    override fun latest(householdId: String): Pair<String, NotifyDiagnosticsCodec.Report>? = ds.connection.use { c ->
+        c.prepareStatement("SELECT device_id, report FROM notify_report WHERE household_id = ?").use { st ->
+            st.setString(1, householdId)
+            st.executeQuery().use { rs ->
+                if (!rs.next()) null else {
+                    val device = rs.getString(1)
+                    runCatching { NotifyDiagnosticsCodec.decodeReport(rs.getString(2)) }.getOrNull()?.let { device to it }
+                }
+            }
+        }
+    }
+}

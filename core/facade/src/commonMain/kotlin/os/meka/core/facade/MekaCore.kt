@@ -224,6 +224,7 @@ class MekaCore(
     private var healthApi: HealthApi? = transport as? HealthApi
     private var updateFailureApi: UpdateFailureApi? = transport as? UpdateFailureApi
     private var foldPostureApi: FoldPostureApi? = transport as? FoldPostureApi
+    private var notifyDiagnosticsApi: NotifyDiagnosticsApi? = transport as? NotifyDiagnosticsApi
     private var voiceMessageApi: VoiceMessageApi? = transport as? VoiceMessageApi
     private var familyApi: FamilyApi? = transport as? FamilyApi
     /** Family (sharing slice 4): the links as the server last listed them, in memory only (the server holds them). */
@@ -3197,6 +3198,7 @@ class MekaCore(
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
             speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; healthApi = transport as? HealthApi
             updateFailureApi = transport as? UpdateFailureApi; foldPostureApi = transport as? FoldPostureApi
+            notifyDiagnosticsApi = transport as? NotifyDiagnosticsApi
             voiceMessageApi = transport as? VoiceMessageApi; familyApi = transport as? FamilyApi; deviceLinkApi = transport as? DeviceLinkApi
             recoveryApi = transport as? RecoveryApi
         }
@@ -3305,7 +3307,7 @@ class MekaCore(
         accounts?.let(::rememberEditing)
         val names = onCore { eventActions.calendarNames() }
         val facts = HealthServerFacts(
-            server?.let { os.meka.core.domain.ServerHealth(it.push, it.calls, it.speech, it.atMs, it.macs) },
+            server?.let { os.meka.core.domain.ServerHealth(it.push, it.calls, it.speech, it.atMs, it.macs, it.lastPushAtMs, it.lastPushResult) },
             accounts?.map { os.meka.core.domain.HealthAccount(it.provider, it.email, os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names), it.status, it.lastSyncAtMs) },
             ai, nowMs(),
         )
@@ -4644,6 +4646,30 @@ class MekaCore(
             changes.take(os.meka.core.wire.FoldPostureCodec.CHANGES_MAX).map { os.meka.core.wire.FoldPostureCodec.Change(it.atMs, it.entry) },
         )
         return try { api.reportFoldPostures(report) } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
+    }
+
+    /**
+     * Notifications never seen (slice 2): the phone's notification state and trace, sent to the server so a build run
+     * can read where notifications stop. [phone] is MEKA's own "This phone" setting ("ALL" · "DIGESTS" · "OFF").
+     * Returns whether the server took it (false offline, not connected or on an older server; the phone tries later).
+     */
+    suspend fun reportNotifyTrace(model: String?, health: os.meka.core.domain.NotificationHealth, phone: String): Boolean {
+        val api = notifyDiagnosticsApi ?: return false
+        if (health.trace.isEmpty()) return false
+        val codec = os.meka.core.wire.NotifyDiagnosticsCodec
+        val report = codec.Report(
+            model, nowMs(), health.allowed, phone,
+            health.channels.map { codec.Channel(it.id, it.name, it.on) },
+            health.trace.take(codec.TRACE_MAX).map { codec.Entry(it.atMs, it.kind.name, it.detail) },
+        )
+        return try { api.reportNotifyTrace(report) } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
+    }
+
+    /** Send a test (slice 2): asks the server to push a test to this device; what it said, or UNREACHABLE. */
+    suspend fun testPush(): os.meka.core.domain.PushTestResult {
+        val api = notifyDiagnosticsApi ?: return os.meka.core.domain.PushTestResult.UNREACHABLE
+        val word = try { api.testPush() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        return os.meka.core.domain.PushTestResult.of(word)
     }
 
     /** Publishes a build this device holds (the Mac publishing the phone app it built). */

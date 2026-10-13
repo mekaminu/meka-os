@@ -32,6 +32,18 @@ class HealthCodecTest {
     }
 
     @Test
+    fun theLastPushRoundTripsAndAnUnknownResultReadsAsFailed() {
+        // Notifications never seen, slice 2: the server's last push to this device, for Health's Instant updates row.
+        val r = HealthCodec.Response(HealthCodec.Response.PUSH_ON, calls = true, speech = true, atMs = 5, lastPushAtMs = 4, lastPushResult = "sent")
+        assertEquals(r, HealthCodec.decodeResponse(HealthCodec.encodeResponse(r)))
+        assertEquals("failed", HealthCodec.decodeResponse("""{"w":1,"push":"on","at":5,"lastPushAt":4,"lastPush":"odd"}""").lastPushResult)
+        val half = HealthCodec.decodeResponse("""{"w":1,"push":"on","at":5,"lastPush":"sent"}""")
+        assertEquals(null, half.lastPushResult)
+        assertEquals(null, half.lastPushAtMs)
+        assertEquals(null, HealthCodec.decodeResponse("""{"w":1,"push":"on","at":5}""").lastPushAtMs)
+    }
+
+    @Test
     fun theRequestCarriesOnlyTheVersion() {
         assertEquals("""{"w":1}""", HealthCodec.encodeRequest())
         HealthCodec.decodeRequest(HealthCodec.encodeRequest())

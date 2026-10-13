@@ -14,6 +14,7 @@ import os.meka.core.sync.HlcClock
 import os.meka.core.sync.Op
 import os.meka.core.sync.ServerOpStore
 import os.meka.core.wire.FoldPostureCodec
+import os.meka.core.wire.NotifyDiagnosticsCodec
 import os.meka.core.wire.UpdateFailureCodec
 import os.meka.core.wire.WireCodec
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
@@ -48,7 +49,7 @@ object ReleasePublisher {
     const val LABEL = "GitHub build"
     const val AUTH_SCHEME = "Publisher"
     /** The only routes the publisher may call. */
-    val ROUTES = setOf("/v1/releases/latest", "/v1/releases/upload", UpdateFailureCodec.LIST_PATH, FoldPostureCodec.LATEST_PATH)
+    val ROUTES = setOf("/v1/releases/latest", "/v1/releases/upload", UpdateFailureCodec.LIST_PATH, FoldPostureCodec.LATEST_PATH, NotifyDiagnosticsCodec.LATEST_PATH)
 
     /** A fresh key pair: (PKCS#8 private key, X.509 public key), both standard base64. */
     fun generateKeyPair(): Pair<String, String> {
@@ -184,6 +185,13 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
         return FoldPostureCodec.decodeLatest(body)
     }
 
+    /** The phone's newest notification report with the server's last push; throws on a server without the route. */
+    suspend fun notifications(): NotifyDiagnosticsCodec.Latest {
+        val (status, body) = send(NotifyDiagnosticsCodec.LATEST_PATH, NotifyDiagnosticsCodec.encodeEmptyRequest())
+        if (status != 200) throw IllegalStateException("HTTP $status from ${NotifyDiagnosticsCodec.LATEST_PATH}")
+        return NotifyDiagnosticsCodec.decodeLatest(body)
+    }
+
     suspend fun publish(platform: String, bytes: ByteArray, versionCode: Long, versionName: String): Outcome {
         if (bytes.isEmpty() || bytes.size > WireCodec.RELEASE_MAX_BYTES) return Outcome.Failed("the file is empty or too large")
         val size = bytes.size.toLong()
@@ -237,10 +245,13 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  *    Always exits 0: reading them never fails the publish job.
  *  - `publisher-postures <url>`: prints the Fold's last posture changes (bedside clock, slice 2) as GitHub notices,
  *    newest first, so a build run reads what the Fold 8 reports. Always exits 0.
+ *  - `publisher-notifications <url>`: prints the phone's notification report (notifications never seen, slice 2): one
+ *    summary notice (allowed, MEKA's phone setting, channels off, the server's last push) and one per trace entry.
+ *    Always exits 0.
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications")
     const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
@@ -266,6 +277,12 @@ object ReleasePublisherCli {
                     val r = runCatching { client.postures() }
                         .getOrElse { println("::notice title=Fold posture::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
                     postureLines(r).forEach(::println)
+                    0
+                }
+                "publisher-notifications" -> {
+                    val l = runCatching { client.notifications() }
+                        .getOrElse { println("::notice title=Notifications::couldn't read them (${it.message?.take(120)})"); return@runBlocking 0 }
+                    notificationLines(l).forEach(::println)
                     0
                 }
                 else -> {
@@ -304,6 +321,27 @@ object ReleasePublisherCli {
         return r.changes.map { c ->
             "::notice title=Fold posture (${r.model ?: "phone"}, sent $sent)::${utc(c.atMs)} · ${c.entry}".replace("%", "%25")
         }
+    }
+
+    /** The job's lines for the phone's notification report: a summary, then one notice per trace entry, newest first. */
+    fun notificationLines(l: NotifyDiagnosticsCodec.Latest): List<String> {
+        val r = l.report ?: return listOf("::notice title=Notifications::the phone hasn't sent its notification trace yet")
+        val off = r.channels.filter { !it.on }.map { it.name }
+        val lastAt = l.lastPushAtMs // another module's property: no smart cast
+        val push = when {
+            lastAt != null -> "last push ${utc(lastAt)} · ${l.lastPushResult}"
+            l.hasAddress == false -> "no push address for the phone"
+            else -> "no push since the server started"
+        }
+        val summary = listOf(
+            if (r.allowed) "allowed" else "NOT allowed (permission or app switch)",
+            "this phone: ${r.phone}",
+            if (off.isEmpty()) "${r.channels.size} channels, all on" else "off: ${off.joinToString(", ")}",
+            push,
+        ).joinToString(" · ")
+        val head = "::notice title=Notifications (${r.model ?: "phone"}, sent ${utc(r.sentAtMs)})::$summary"
+        return (listOf(head) + r.trace.map { e -> "::notice title=Notification trace::${utc(e.atMs)} · ${e.kind} · ${e.detail}" })
+            .map { it.replace("%", "%25") }
     }
 
     private fun utc(ms: Long) = java.time.Instant.ofEpochMilli(ms).toString().take(16).replace('T', ' ') + " UTC"

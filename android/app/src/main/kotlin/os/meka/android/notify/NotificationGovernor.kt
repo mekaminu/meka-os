@@ -77,7 +77,10 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
         val channels = posted.map { channelName(it.tier) } + listOfNotNull(digest?.let { channelName(NoticeTier.DIGEST) })
         NotifyTraceStore.record(context, NotifyTrace.look(
             System.currentTimeMillis(), allowed, posted.size, digest != null, channels, r.nextWakeMs, NotifyTraceStore.calendar(),
+            phoneOff = _device.value == DeviceAlerts.OFF,
         ))
+        // Slice 2: the trace goes to MEKA's server now and then, so a build run can read where notifications stop.
+        NotifyTraceReporter.poke(app)
     }
 
     /**

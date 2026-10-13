@@ -23,6 +23,8 @@ enum class NotifyTraceKind {
     PUSH,
     /** The app started and made its notification channels. */
     STARTED,
+    /** Send a test (slice 2): the local test posted (or not), the server's answer, or the test push arriving. */
+    TEST,
 }
 
 data class NotifyTraceEntry(val atMs: Long, val kind: NotifyTraceKind, val detail: String = "")
@@ -37,6 +39,8 @@ data class NotificationHealth(
     val channels: List<NotifyChannelState>,
     /** Newest first. */
     val trace: List<NotifyTraceEntry>,
+    /** MEKA's own "This phone" setting is Off (Notifications → This phone), so the governor posts nothing here. */
+    val phoneOff: Boolean = false,
 )
 
 object NotifyTrace {
@@ -64,9 +68,11 @@ object NotifyTrace {
         channelNames: List<String>,
         nextLookMs: Long?,
         cal: LocalCalendar,
+        phoneOff: Boolean = false,
     ): NotifyTraceEntry {
         val next = nextLookMs?.let { " · next look ${LocalClock.formatMinute(cal.minuteOfDay(it))}" }.orEmpty()
         if (!allowed) return NotifyTraceEntry(atMs, NotifyTraceKind.BLOCKED, "notifications are off for MEKA$next")
+        if (phoneOff) return NotifyTraceEntry(atMs, NotifyTraceKind.BLOCKED, "this phone is set to Off in MEKA's Notifications$next")
         if (posted == 0 && !digest) return NotifyTraceEntry(atMs, NotifyTraceKind.LOOKED, "nothing due$next")
         val what = buildList {
             if (posted > 0) add("$posted ${if (posted == 1) "notice" else "notices"}")
@@ -93,6 +99,7 @@ object NotifyTrace {
             NotifyTraceKind.FAILED -> "Failed · ${e.detail}"
             NotifyTraceKind.PUSH -> "Push arrived${if (e.detail.isBlank()) "" else " · ${e.detail}"}"
             NotifyTraceKind.STARTED -> "MEKA started${if (e.detail.isBlank()) "" else " · ${e.detail}"}"
+            NotifyTraceKind.TEST -> "Test · ${e.detail}"
         }
         return "$at · $what"
     }
@@ -126,6 +133,9 @@ object NotifyTrace {
         val title = "Notifications"
         if (!n.allowed) {
             return HealthRow("notifications", title, "Off for MEKA · nothing can reach you", HealthState.BAD, HealthFix.NOTIFICATIONS_ON, "Turn on")
+        }
+        if (n.phoneOff) {
+            return HealthRow("notifications", title, "This phone is set to Off in MEKA's Notifications · nothing posts here", HealthState.BAD)
         }
         val off = n.channels.filter { !it.on }
         if (n.channels.isNotEmpty() && off.size == n.channels.size) {
