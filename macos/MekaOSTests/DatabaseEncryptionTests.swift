@@ -44,8 +44,8 @@ final class DatabaseEncryptionTests: XCTestCase {
         XCTAssertGreaterThan(before.values.reduce(0, +), 0)
 
         let prepared = prepare(key: (key, true))
-        XCTAssertEqual(prepared.keyHex, key)
-        XCTAssertTrue(prepared.encrypted)
+        XCTAssertEqual(prepared.keyHex, key, "encrypting failed at: \(DatabaseEncryption.lastFailure ?? "nothing")")
+        guard prepared.encrypted else { return }
         XCTAssertEqual(prepared.protection, .encrypted)
         XCTAssertNil(prepared.note)
         XCTAssertEqual(DatabaseEncryption.fileState(url), .sealed)
@@ -129,7 +129,8 @@ final class DatabaseEncryptionTests: XCTestCase {
         // The app quit after moving the plain file aside and before the copy took its place.
         try FileManager.default.moveItem(at: url, to: URL(fileURLWithPath: url.path + DatabaseEncryption.oldSuffix))
         let prepared = prepare(key: (key, false))
-        XCTAssertEqual(prepared.keyHex, key)
+        XCTAssertEqual(prepared.keyHex, key, "encrypting failed at: \(DatabaseEncryption.lastFailure ?? "nothing")")
+        guard prepared.encrypted else { return }
         XCTAssertEqual(DatabaseEncryption.fileState(url), .sealed)
         XCTAssertGreaterThan(DatabaseEncryption.tableCounts(url, keyHex: key)?.values.reduce(0, +) ?? 0, 0)
     }

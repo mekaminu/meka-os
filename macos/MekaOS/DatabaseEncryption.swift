@@ -119,6 +119,10 @@ nonisolated enum DatabaseEncryption {
 
     // MARK: - Encrypting a plain database
 
+    /// Which step of the last encryption attempt failed (nil after a success): the Mac tests print it, since the CI
+    /// runner's log can't be read from a build run (nightly ci run 553 saw the copy refused without saying why).
+    nonisolated(unsafe) static var lastFailure: String?
+
     private static func encryptInPlace(
         _ url: URL, directory: URL, name: String, keyHex: String, opensWithKey: (String, String, String) -> Bool
     ) -> Bool {
@@ -126,29 +130,43 @@ nonisolated enum DatabaseEncryption {
         let copy = directory.appendingPathComponent(copyName)
         let old = directory.appendingPathComponent(name + oldSuffix)
         removeDatabase(copy)
-        guard let version = export(url, to: copy, keyHex: keyHex),
-              fileState(copy) == .sealed,
-              let plainRows = tableCounts(url, keyHex: nil), !plainRows.isEmpty,
-              let sealedRows = tableCounts(copy, keyHex: keyHex), sealedRows == plainRows,
-              userVersion(copy, keyHex: keyHex) == version,
-              opensWithKey(directory.path, copyName, keyHex)
-        else {
+        // Fold any write-ahead log into the plain file first, so the copy and the counts read one file.
+        checkpoint(url)
+        func fail(_ step: String) -> Bool {
+            lastFailure = step
             removeDatabase(copy)
             return false
         }
+        guard let version = export(url, to: copy, keyHex: keyHex) else { return fail("export: \(lastSQLiteError ?? "?")") }
+        guard fileState(copy) == .sealed else { return fail("the copy isn't sealed") }
+        guard let plainRows = tableCounts(url, keyHex: nil), !plainRows.isEmpty else { return fail("the plain file's rows didn't read") }
+        guard let sealedRows = tableCounts(copy, keyHex: keyHex) else { return fail("the copy's rows didn't read with the key") }
+        guard sealedRows == plainRows else { return fail("rows differ: plain \(plainRows.sorted { $0.key < $1.key }) copy \(sealedRows.sorted { $0.key < $1.key })") }
+        let copyVersion = userVersion(copy, keyHex: keyHex)
+        guard copyVersion == version else { return fail("user_version \(version) became \(copyVersion.map(String.init) ?? "nil")") }
+        guard opensWithKey(directory.path, copyName, keyHex) else { return fail("the core's driver didn't open the copy") }
         removeDatabase(old)
-        guard moveDatabase(url, to: old) else {
-            removeDatabase(copy)
-            return false
-        }
+        guard moveDatabase(url, to: old) else { return fail("moving the plain file aside failed") }
         guard moveDatabase(copy, to: url), opensWithKey(directory.path, name, keyHex) else {
+            lastFailure = "the swapped-in copy didn't open through the core's driver"
             removeDatabase(url)
             removeDatabase(copy)
             moveDatabase(old, to: url)
             return false
         }
         removeDatabase(old)
+        lastFailure = nil
         return true
+    }
+
+    /// The last SQLite error message seen by [export] (diagnostics for the tests).
+    nonisolated(unsafe) private(set) static var lastSQLiteError: String?
+
+    /// `PRAGMA wal_checkpoint(TRUNCATE)` on a plain database; nothing happens to one that isn't in WAL mode.
+    private static func checkpoint(_ url: URL) {
+        guard let db = open(url, keyHex: nil) else { return }
+        defer { sqlite3_close(db) }
+        sqlite3_exec(db, "PRAGMA wal_checkpoint(TRUNCATE);", nil, nil, nil)
     }
 
     /// Copies the plain database at [url] into a new encrypted one at [copy]; returns the schema version carried over.
@@ -160,7 +178,10 @@ nonisolated enum DatabaseEncryption {
             + " SELECT sqlcipher_export('encrypted');"
             + " PRAGMA encrypted.user_version = \(version);"
             + " DETACH DATABASE encrypted;"
-        guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else { return nil }
+        guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else {
+            lastSQLiteError = String(cString: sqlite3_errmsg(db))
+            return nil
+        }
         return version
     }
 
