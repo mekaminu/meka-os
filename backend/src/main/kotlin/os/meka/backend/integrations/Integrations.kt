@@ -371,7 +371,10 @@ class Integrations(
         try {
             val changed = applyLines(a, source.statuses())
             store.transaction { store.markSynced(a.id, now()) }
-            if (changed) runCatching { onChanged(a.householdId) }
+            // In the evening, tomorrow morning's plans too (the commute counts everywhere, slice 7); a failure there
+            // leaves the last plans and the feed's status alone.
+            val planned = hour >= PLANNED_FROM_HOUR && runCatching { syncPlanned(a, source) }.getOrDefault(false)
+            if (changed || planned) runCatching { onChanged(a.householdId) }
         } catch (e: Exception) {
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
             throw e
@@ -395,6 +398,43 @@ class Integrations(
             )
             write(a, LineStatusStore.ENTITY_ID, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
             linesChanged
+        }
+    }
+
+    /** When each line-status feed last read tomorrow's plans (in memory: a restart just reads them again). */
+    private val plannedAt = HashMap<String, Long>()
+
+    /**
+     * Tomorrow 06:00–10:00 London ([PLANNED_FROM_MIN]–[PLANNED_TO_MIN]): what TfL has planned for the route's lines
+     * then, at most every [PLANNED_PERIOD_MS], into the same entity's [LineStatusFields.PLANNED] with its day and the
+     * rounded read time. Returns whether the plans changed (so the devices are woken for the wake alarm's offer).
+     */
+    private fun syncPlanned(a: AccountRow, source: LineStatusProvider): Boolean {
+        val last = synchronized(plannedAt) { plannedAt[a.id] }
+        if (last != null && now() - last < PLANNED_PERIOD_MS) return false
+        synchronized(plannedAt) { plannedAt[a.id] = now() }
+        val tomorrow = java.time.Instant.ofEpochMilli(now()).atZone(zone).toLocalDate().plusDays(1)
+        val from = tomorrow.atStartOfDay(zone).plusMinutes(PLANNED_FROM_MIN.toLong()).toInstant().toEpochMilli()
+        val to = tomorrow.atStartOfDay(zone).plusMinutes(PLANNED_TO_MIN.toLong()).toInstant().toEpochMilli()
+        val states = source.planned(from, to)
+        if (states.isEmpty()) return false
+        return applyPlanned(a, tomorrow.toEpochDay(), states)
+    }
+
+    internal fun applyPlanned(a: AccountRow, day: Long, states: List<LineState>): Boolean = store.transaction {
+        ops.transaction {
+            store.lockAccount(a.id)
+            val prev = store.mirror(a.householdId, a.id)[LineStatusStore.ENTITY_ID]
+            val encoded = LineStatusCodec.encode(states)
+            val changed = prev?.fieldOps?.get(LineStatusFields.PLANNED)?.second != valueKey(FieldValue.Text(encoded)) ||
+                prev?.fieldOps?.get(LineStatusFields.PLANNED_DAY)?.second != valueKey(FieldValue.Int64(day))
+            val desired = linkedMapOf(
+                LineStatusFields.PLANNED to FieldValue.Text(encoded),
+                LineStatusFields.PLANNED_DAY to FieldValue.Int64(day),
+                LineStatusFields.PLANNED_CHECKED to FieldValue.Int64(RouteRules.checkedStep(now())),
+            )
+            write(a, LineStatusStore.ENTITY_ID, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
+            changed
         }
     }
 
@@ -775,6 +815,11 @@ class Integrations(
         const val LINES_PERIOD_MS = 4 * 60_000L
         const val LINES_FROM_HOUR = 5
         const val LINES_TO_HOUR = 23
+        /** From 17:00 London the line feed also reads tomorrow morning's plans, at most every half hour. */
+        const val PLANNED_FROM_HOUR = 17
+        const val PLANNED_PERIOD_MS = 30 * 60_000L
+        const val PLANNED_FROM_MIN = 6 * 60
+        const val PLANNED_TO_MIN = 10 * 60
         /** The car: a look at the registration every 10 minutes (the DVLA is asked only when [CarCheckRules.due]). */
         const val CAR_PERIOD_MS = 10 * 60_000L
         const val CAR_MAX_PER_DAY = 20

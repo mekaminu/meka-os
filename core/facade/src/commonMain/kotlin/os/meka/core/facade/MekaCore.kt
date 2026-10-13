@@ -2684,6 +2684,22 @@ class MekaCore(
         val s = _wake.value.suggestion
         s != null && alarms.setWake(s.minute, s.commitment.line)
     }
+    /**
+     * The commute counts everywhere, slice 7: "Wake 10 min earlier" for tomorrow's trains, from Shut down's button
+     * ([key] null) or the heads-up's ([key] its notice key, which must still be tomorrow's offer). Moves the wake alarm
+     * (setting it when there was none) to the offer's time on every device; returns "Wake alarm 06:30 · 10 min early
+     * for the trains", or null when the offer no longer stands (moved already, or the trains came good).
+     */
+    suspend fun wakeEarlierForTrains(key: String?): String? = onCore {
+        val w = _wake.value
+        val t = w.trains ?: return@onCore null
+        if (key != null && key != os.meka.core.domain.CommuteDisruptionRules.key(t.epochDay)) return@onCore null
+        val m = t.earlierMinute ?: return@onCore null
+        if (alarms.wakeDay() != t.epochDay) return@onCore null
+        val what = w.suggestion?.commitment?.line ?: "Work"
+        if (!alarms.setWake(m, "$what · ${os.meka.core.domain.CommuteDisruptionRules.EARLIER_MIN} min early for the trains")) return@onCore null
+        "Wake alarm ${os.meka.core.domain.LocalClock.formatMinute(m)} · ${os.meka.core.domain.CommuteDisruptionRules.EARLIER_MIN} min early for the trains"
+    }
     /** Turns the next morning's wake alarm off on every device. */
     suspend fun wakeOff() = onCore { alarms.wakeOff() }
     /** The get-ready buffer (15 min–3 h in fives); false and nothing written otherwise. */
@@ -4945,7 +4961,9 @@ class MekaCore(
         _goals.value = goalsNow
         _workMode.value = workState
         _shutdown.value = shutdownNow
-        _wake.value = alarms.wakeView(dayEvents, hoursOf(workState, todayEpochDay()))
+        _wake.value = alarms.wakeView(dayEvents, hoursOf(workState, todayEpochDay())).let {
+            it.copy(trains = os.meka.core.domain.CommuteDisruptionRules.offer(lineStatus.snapshot(), it, nowMs(), ZoneCalendar(timeZone)))
+        }
         _nextAlarm.value = alarms.next()
         _quickAlarms.value = alarms.quickItems()
         val notifySettings = notifyPrefs.settings()
@@ -5079,6 +5097,7 @@ class MekaCore(
             trips = trips.items(),
             documents = documents.items(),
             sessionAskGraceMin = if (workoutsInBackground) os.meka.core.domain.WorkoutRules.ASK_GRACE_MIN else 0,
+            wake = currentWake(),
         )
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */

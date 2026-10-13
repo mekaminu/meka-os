@@ -47,6 +47,18 @@ struct WakeSection: View {
                     .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
                     .transition(.opacity)
             }
+            // Tomorrow morning's trains in trouble (the commute counts everywhere, slice 7): only a click moves the alarm.
+            if let trains = wake.trains {
+                Text(trains.line)
+                    .font(MekaType.caption).foregroundStyle(palette.accent)
+                    .contentTransition(.opacity)
+                    .transition(.opacity)
+                if let label = trains.actionLabel {
+                    Button(label) { draft = nil; model.wakeEarlierForTrains() }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                        .transition(.opacity)
+                }
+            }
             Menu(wake.bufferLine) {
                 ForEach(wake.bufferChoices.map { $0.int32Value }, id: \.self) { m in
                     Button(AlarmRules.shared.bufferLine(min: m)) { model.setWakeBuffer(m) }
@@ -58,6 +70,7 @@ struct WakeSection: View {
         .animation(MekaMotion.replan(reduced: reduceMotion), value: minute)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: wake.line)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: wake.useSuggestionLabel)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: wake.trains?.line)
     }
 
     private func step(_ by: Int32) {

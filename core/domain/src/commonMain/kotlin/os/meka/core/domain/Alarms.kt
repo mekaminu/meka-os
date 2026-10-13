@@ -121,6 +121,8 @@ data class WakeView(
     /** "1 h to get ready" · "45 min to get ready". */
     val bufferLine: String,
     val bufferChoices: List<Int>,
+    /** Tomorrow morning's trains in trouble and the offer to wake earlier (the commute counts everywhere, slice 7). */
+    val trains: WakeTrains? = null,
 ) {
     val isSet: Boolean get() = setMinute != null
 

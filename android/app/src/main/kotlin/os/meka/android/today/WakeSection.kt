@@ -112,6 +112,26 @@ internal fun WakeSection(core: MekaCore, modifier: Modifier = Modifier) {
                 modifier = Modifier.padding(top = MekaSpace.xs).clickable(role = Role.Button) { haptics.light(); act { core.useSuggestedWake() } },
             )
         }
+        // Tomorrow morning's trains in trouble (the commute counts everywhere, slice 7): the line, and the offer to wake
+        // ten minutes earlier. Nothing moves until it's tapped.
+        AnimatedVisibility(w.trains != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
+            val t = w.trains
+            Column(Modifier.padding(top = MekaSpace.xs)) {
+                AnimatedContent(
+                    targetState = t?.line ?: "",
+                    transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                    label = "wake-trains",
+                ) { line -> Text(line, style = MekaType.caption, color = Meka.colors.accent) }
+                t?.actionLabel?.let { label ->
+                    Text(
+                        label, style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.padding(top = MekaSpace.xxs).clickable(role = Role.Button) {
+                            haptics.light(); draft = null; act { core.wakeEarlierForTrains(null) }
+                        },
+                    )
+                }
+            }
+        }
         val app = context.applicationContext as? MekaApplication
         val onTime = remember(w) { app?.alarms?.onTime() ?: true }
         if (w.isSet && !onTime) {

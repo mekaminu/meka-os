@@ -20,6 +20,11 @@ interface LineStatusProvider {
     val label: String
     /** Each line's worst status in force now. Throws when the source can't be read (tried again at the next poll). */
     fun statuses(): List<LineState>
+    /**
+     * The commute counts everywhere, slice 7: each line's worst status planned to be in force at some point between
+     * [fromMs] and [toMs] (the next morning's commute). Throws when it can't be read; empty when the source can't say.
+     */
+    fun planned(fromMs: Long, toMs: Long): List<LineState> = emptyList()
 }
 
 /**
@@ -40,11 +45,17 @@ class TflLineStatus internal constructor(
 
     override fun statuses(): List<LineState> = parse(fetch(url))
 
+    /** `Line/{ids}/Status/{from}/to/{to}`: the statuses TfL has planned for that window (UTC times, to the minute). */
+    fun plannedUrl(fromMs: Long, toMs: Long): String =
+        "https://api.tfl.gov.uk/Line/${lines.joinToString(",")}/Status/${isoMinute(fromMs)}/to/${isoMinute(toMs)}"
+
+    override fun planned(fromMs: Long, toMs: Long): List<LineState> = parse(fetch(plannedUrl(fromMs, toMs)), window = fromMs to toMs)
+
     /**
      * One entry per line asked about that TfL answered for, with the worst status in force now (a status whose every
      * validity period says it isn't now — planned works later — is left out). Nothing usable is an error.
      */
-    internal fun parse(body: String): List<LineState> {
+    internal fun parse(body: String, window: Pair<Long, Long>? = null): List<LineState> {
         require(body.length <= MAX_BYTES) { "status too large" }
         val arr = Json.parseToJsonElement(body) as? JsonArray ?: error("not a list of lines")
         val out = arr.mapNotNull { it as? JsonObject }.mapNotNull { line ->
@@ -53,7 +64,9 @@ class TflLineStatus internal constructor(
             val statuses = (line["lineStatuses"] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
             val now = statuses.filter { s ->
                 val periods = (s["validityPeriods"] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
-                periods.isEmpty() || periods.any { (it["isNow"] as? JsonPrimitive)?.booleanOrNull != false }
+                if (window == null) periods.isEmpty() || periods.any { (it["isNow"] as? JsonPrimitive)?.booleanOrNull != false }
+                // Planned: a status counts when one of its periods overlaps the window (an unreadable period counts).
+                else periods.isEmpty() || periods.any { p -> overlaps(p, window) }
             }.mapNotNull { (it["statusSeverity"] as? JsonPrimitive)?.intOrNull }
             // A line with nothing in force now is running as normal.
             LineState(id, RouteRules.worst(now) ?: GOOD_SERVICE)
@@ -61,6 +74,23 @@ class TflLineStatus internal constructor(
         check(out.isNotEmpty()) { "no line status" }
         return out
     }
+
+    private fun overlaps(p: JsonObject, window: Pair<Long, Long>): Boolean {
+        val from = instant(p["fromDate"]) ?: return true
+        val to = instant(p["toDate"]) ?: return true
+        return from < window.second && to > window.first
+    }
+
+    private fun instant(e: Any?): Long? {
+        val t = (e as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
+        return runCatching { java.time.Instant.parse(t).toEpochMilli() }.getOrNull()
+            // TfL sometimes leaves the zone off; its times are UTC.
+            ?: runCatching { java.time.LocalDateTime.parse(t).toInstant(java.time.ZoneOffset.UTC).toEpochMilli() }.getOrNull()
+    }
+
+    private fun isoMinute(ms: Long): String =
+        java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:00'Z'").withZone(java.time.ZoneOffset.UTC)
+            .format(java.time.Instant.ofEpochMilli(ms))
 
     companion object {
         private const val MAX_BYTES = 300_000

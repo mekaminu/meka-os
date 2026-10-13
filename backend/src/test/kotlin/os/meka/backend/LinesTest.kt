@@ -152,4 +152,52 @@ class LinesTest {
         integrations.syncAll()
         assertEquals(before + 2, fetches)
     }
+
+    @Test
+    fun theEveningReadsTomorrowMorningsPlansForTheWakeAlarm() {
+        // Planned: a status counts when one of its periods overlaps the window; one only later in the day doesn't.
+        val tomorrow = """{"${'$'}type":"x","id":0,"statusSeverity":4,"validityPeriods":[{"fromDate":"2026-10-10T04:30:00Z","toDate":"2026-10-10T08:00:00Z","isNow":false}]}"""
+        val evening = """{"${'$'}type":"x","id":0,"statusSeverity":2,"validityPeriods":[{"fromDate":"2026-10-10T20:00:00Z","toDate":"2026-10-10T23:00:00Z","isNow":false}]}"""
+        val body = sample("thameslink" to listOf(tomorrow), "great-northern" to listOf(status(10)), "elizabeth" to listOf(evening))
+        val asked = mutableListOf<String>()
+        val source = TflLineStatus({ url -> asked += url; if ("/to/" in url) body else allGood() })
+        val from = 1_791_608_400_000L // Sat 10 Oct 2026 06:00 BST (05:00Z)
+        val to = from + 4 * 3_600_000L
+        assertEquals(listOf(LineState("thameslink", 4), LineState("great-northern", 10), LineState("elizabeth", 10)), source.planned(from, to))
+        assertEquals("https://api.tfl.gov.uk/Line/thameslink,great-northern,elizabeth/Status/2026-10-10T05:00:00Z/to/2026-10-10T09:00:00Z", asked.last())
+
+        val store = InMemoryIntegrationStore(knownHouseholds = listOf("home"))
+        val ops = InMemoryServerOpStore()
+        val woken = mutableListOf<String>()
+        val integrations = Integrations(
+            store, ops, emptyMap(), { null }, noCipher, "https://meka.example", { now },
+            lines = mapOf(source.id to source), onChanged = { woken += it },
+        )
+        // Friday 07:30: the day's status only.
+        asked.clear()
+        integrations.syncAll()
+        assertTrue(asked.none { "/to/" in it })
+        // Friday 18:00 BST: tomorrow 06:00–10:00 is read too, written with its day, and the devices are woken.
+        now = 1_791_565_200_000L
+        integrations.syncAll()
+        assertEquals("https://api.tfl.gov.uk/Line/thameslink,great-northern,elizabeth/Status/2026-10-10T05:00:00Z/to/2026-10-10T09:00:00Z",
+            asked.last { "/to/" in it })
+        val r = Replica("home", "fold", HlcClock("fold", { now }), InMemoryReplicaStore(), MekaSchema) { "d" + System.nanoTime() }
+        r.applyRemoteBatch(ops.after("home", 0, 10_000).map { it.op })
+        val snap = LineStatusStore(r).snapshot()
+        assertEquals(4, snap.plannedSeverityOf(RouteRules.THAMESLINK))
+        assertEquals(CivilDate.toEpochDay(2026, 10, 10), snap.plannedDay)
+        assertEquals(2, woken.size)
+        // Within the half hour it isn't read again, even as the day's status is.
+        val plannedReads = asked.count { "/to/" in it }
+        now += 5 * 60_000L
+        integrations.syncAll()
+        assertEquals(plannedReads, asked.count { "/to/" in it })
+        // A failed read of the plans leaves the feed's own status ok.
+        val failing = TflLineStatus({ url -> if ("/to/" in url) "<html>down</html>" else allGood() })
+        val store2 = InMemoryIntegrationStore(knownHouseholds = listOf("home"))
+        Integrations(store2, InMemoryServerOpStore(), emptyMap(), { null }, noCipher, "https://meka.example", { now },
+            lines = mapOf(failing.id to failing)).syncAll()
+        assertEquals("ok", store2.accounts("home").single().status)
+    }
 }

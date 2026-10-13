@@ -18,13 +18,30 @@ object LineStatusFields {
     const val LINES = "lines"
     /** When the server last read TfL, rounded down to [RouteRules.CHECKED_STEP_MS] (so it writes at most twice an hour). */
     const val CHECKED = "checked"
+    /**
+     * The commute counts everywhere, slice 7: TfL's planned status for the next morning's commute (06:00–10:00 London
+     * on [PLANNED_DAY]), in the same "id=severity;…" text as [LINES]. The server reads it in the evening.
+     */
+    const val PLANNED = "plannedLines"
+    /** The day [PLANNED] is for (epoch day). */
+    const val PLANNED_DAY = "plannedDay"
+    /** When the server read [PLANNED], rounded down like [CHECKED]. */
+    const val PLANNED_CHECKED = "plannedChecked"
 }
 
 /** One line's status: TfL's line id and its status severity code. */
 data class LineState(val id: String, val severity: Int)
 
-data class LineStatusSnapshot(val lines: List<LineState>, val checkedMs: Long?) {
+data class LineStatusSnapshot(
+    val lines: List<LineState>,
+    val checkedMs: Long?,
+    /** The next morning's planned status ([LineStatusFields.PLANNED]); empty when the server hasn't read one. */
+    val planned: List<LineState> = emptyList(),
+    val plannedDay: Long? = null,
+    val plannedCheckedMs: Long? = null,
+) {
     fun severityOf(id: String): Int? = lines.firstOrNull { it.id == id }?.severity
+    fun plannedSeverityOf(id: String): Int? = planned.firstOrNull { it.id == id }?.severity
 
     companion object {
         val EMPTY = LineStatusSnapshot(emptyList(), null)
@@ -237,6 +254,9 @@ class LineStatusStore(private val replica: Replica) {
         return LineStatusSnapshot(
             lines = LineStatusCodec.decode(e[LineStatusFields.LINES]?.textOrNull),
             checkedMs = (e[LineStatusFields.CHECKED] as? FieldValue.Int64)?.value,
+            planned = LineStatusCodec.decode(e[LineStatusFields.PLANNED]?.textOrNull),
+            plannedDay = (e[LineStatusFields.PLANNED_DAY] as? FieldValue.Int64)?.value,
+            plannedCheckedMs = (e[LineStatusFields.PLANNED_CHECKED] as? FieldValue.Int64)?.value,
         )
     }
 

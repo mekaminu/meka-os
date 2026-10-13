@@ -219,6 +219,42 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun tomorrowsTrainsOfferAnEarlierWakeAndOnlyATapMovesIt() = runTest {
+        now = 1_791_482_400_000L // Thu 8 Oct 2026, 19:00 in London; Friday is an office day
+        val c = core()
+        val fri = 20_735L
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        fun server(id: String, field: String, v: os.meka.core.sync.FieldValue) = serverOps.append(os.meka.core.sync.Op(id, "hh",
+            os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.LineStatusStore.ENTITY_ID, field, v, clock.now(), emptyList(), "server"))
+        // What the server's evening read of tomorrow's plans writes (slice 7): a Thameslink closure, Great Northern running.
+        server("srvpl0", os.meka.core.domain.LineStatusFields.PLANNED, os.meka.core.sync.FieldValue.Text("elizabeth=10;great-northern=10;thameslink=4"))
+        server("srvpl1", os.meka.core.domain.LineStatusFields.PLANNED_DAY, os.meka.core.sync.FieldValue.Int64(fri))
+        server("srvpl2", os.meka.core.domain.LineStatusFields.PLANNED_CHECKED, os.meka.core.sync.FieldValue.Int64(1_791_480_600_000L))
+        c.syncNow()
+        val w = c.wakeView.value
+        assertEquals(null, w.setMinute) // nothing moved by itself
+        assertEquals("Wake 10 min earlier · 06:30", w.trains!!.actionLabel)
+        assertEquals("Trains · Thameslink planned closure tomorrow morning · Great Northern to King's Cross is running", w.trains!!.line)
+
+        val gov = c.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        val n = gov.post.single { it.key == "wake-trains:$fri" }
+        assertEquals("Wake at 06:30 instead of 06:40? · Great Northern to King's Cross is running", n.text)
+        assertEquals(listOf(os.meka.core.domain.NoticeAction.WAKE_EARLIER), n.actions)
+
+        // Another day's key changes nothing; the right one sets the alarm 10 minutes before the suggestion.
+        assertEquals(null, c.wakeEarlierForTrains("wake-trains:${fri + 1}"))
+        assertEquals(null, c.wakeView.value.setMinute)
+        assertEquals("Wake alarm 06:30 · 10 min early for the trains", c.wakeEarlierForTrains(n.key))
+        assertEquals(6 * 60 + 30, c.wakeView.value.setMinute)
+        assertEquals("Work at 09:00 · 10 min early for the trains", c.nextAlarm.value?.line)
+        assertEquals("Trains · Thameslink planned closure tomorrow morning · alarm already 10 min early", c.wakeView.value.trains!!.line)
+        // Once moved: no button, no second heads-up, and a second tap does nothing.
+        assertEquals(null, c.wakeView.value.trains!!.actionLabel)
+        assertEquals(null, c.wakeEarlierForTrains(null))
+        assertTrue(c.governNotifications(gov.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL).post.none { it.key == n.key })
+    }
+
+    @Test
     fun theWeatherPlaceIsSetFromTheAppAndReachesTheServer() = runTest {
         val c = core()
         assertEquals(os.meka.core.domain.WeatherPlaceView.HOME, c.weatherView.value.placeChoice)

@@ -1387,6 +1387,8 @@ final class CoreModel {
     func setWake(_ minute: Int32) { MekaHaptics.light(); run { _ = try await $0.setWake(minute: minute) } }
     /// "Use 06:30": the suggestion moved earlier than the alarm.
     func useSuggestedWake() { MekaHaptics.light(); run { _ = try await $0.useSuggestedWake() } }
+    /// The commute counts everywhere, slice 7: "Wake 10 min earlier" for tomorrow's trains (Shut down's button).
+    func wakeEarlierForTrains() { MekaHaptics.light(); run { _ = try await $0.wakeEarlierForTrains(key: nil) } }
     func wakeOff() { MekaHaptics.tick(); run { try await $0.wakeOff() } }
     func setWakeBuffer(_ minutes: Int32) { MekaHaptics.tick(); run { _ = try await $0.setWakeBuffer(minutes: minutes) } }
 
@@ -1959,6 +1961,14 @@ final class CoreModel {
         guard let core else { return }
         let key = a.key
         let name = a.action
+        // Tomorrow's trains: only this click moves the wake alarm (the commute counts everywhere, slice 7).
+        if name == MacNotifier.wakeEarlierAction {
+            Task {
+                _ = try? await core.wakeEarlierForTrains(key: key)
+                MacNotifier.remove(key: key)
+            }
+            return
+        }
         Task {
             guard let action = NotifyRules.shared.actionFromName(name: name),
                   let card = try? await core.answerSessionNotice(key: key, action: action) else {

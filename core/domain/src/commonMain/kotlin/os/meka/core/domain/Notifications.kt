@@ -61,7 +61,12 @@ enum class NoticeAction(val label: String) {
      * Bills due ([BillRules.notices]): opens the page Meka saved as where he pays the bill ([Notice.link]). Both apps;
      * MEKA never pays anything.
      */
-    PAY("Pay");
+    PAY("Pay"),
+    /**
+     * The commute counts everywhere, slice 7 ([CommuteDisruptionRules.notices]): tomorrow's trains are in trouble, so
+     * the wake alarm moves ten minutes earlier, on Meka's tap only. Both apps.
+     */
+    WAKE_EARLIER("Wake 10 min earlier");
 
     /** Whether a device that can [send] messages (the Fold) shows it: Send and Edit there, Copy elsewhere. */
     fun shownOn(send: Boolean): Boolean = when (this) {
@@ -670,6 +675,8 @@ object NoticeSources {
         documents: List<DocumentItem> = emptyList(),
         /** Health Connect slice 2: minutes "Did you go?" waits after a session while workouts are read in the background. */
         sessionAskGraceMin: Int = 0,
+        /** The next morning's wake alarm, for the trains' "wake 10 min earlier?" ([CommuteDisruptionRules.notices]). */
+        wake: WakeView? = null,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -803,6 +810,8 @@ object NoticeSources {
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
+        // Tomorrow morning's trains in trouble: offer to wake ten minutes earlier, never moving the alarm itself.
+        out += CommuteDisruptionRules.notices(lines, wake, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.
         out += requestNotices(requests, settings)
         // The approvals inbox: Needs a decision when a request arrives, Critical in its last 15 minutes.
