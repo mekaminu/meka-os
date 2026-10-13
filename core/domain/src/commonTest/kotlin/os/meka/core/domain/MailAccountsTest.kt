@@ -3,6 +3,7 @@ package os.meka.core.domain
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -141,5 +142,22 @@ class MailAccountsTest {
         val v = SetupRules.replaceStep(SetupRules.view(f), none)
         assertEquals(SetupState.TODO, v.steps.first { it.key == MailAccountRules.SETUP_KEY }.state)
         assertEquals(SetupRules.view(f).toDo + 1, v.toDo)
+    }
+
+    @Test
+    fun eachAccountListsItsOwnSendersWithUnsubscribe() {
+        val sender = assertNotNull(MailUnsubscribeRules.read("ms1",
+            MailUnsubscribeRules.senderFields("Personal", "Weekly Digest", "digest.example", UnsubscribeMethod.MAILTO, now - 60_000, 3)))
+        val other = assertNotNull(MailUnsubscribeRules.read("ms2",
+            MailUnsubscribeRules.senderFields("Business", "Supplier", "supplier.example", UnsubscribeMethod.MAILTO, now - 60_000, 1)))
+        val v = MailAccountRules.view(
+            listOf(gmail("alex@example.com", "PERSONAL")), now, emptyList(), MailAutopilotRules.read(null), false, emptyList(), LocalCalendar.UTC,
+            listOf(sender, other),
+        )
+        val row = v.rows.single()
+        assertEquals(listOf("ms1"), row.senders.map { it.id })
+        assertEquals("1 sender · tap Unsubscribe and Navilife does it for you", row.sendersLine)
+        // Without senders (an older caller) there's no section.
+        assertNull(MailAccountRules.view(listOf(gmail("alex@example.com", "PERSONAL")), now, emptyList(), MailAutopilotRules.read(null), false, emptyList(), LocalCalendar.UTC).rows.single().sendersLine)
     }
 }

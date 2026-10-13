@@ -3445,6 +3445,7 @@ class MekaCore(
         return onCore {
             os.meka.core.domain.MailAccountRules.view(
                 list, nowMs(), signIns.all(), mailAutopilotSetting(), autonomy.paused(), activity.mailTidyBatches(), ZoneCalendar(timeZone),
+                activity.mailSenders(),
             )
         }
     }
@@ -3480,6 +3481,16 @@ class MekaCore(
      */
     suspend fun undoMailTidy(id: String): MailSwitched {
         val line = onCore { activity.undo(id).line.also { activityChanged(); archivedChanged() } }
+        return MailSwitched(line, lastMailFacts?.let { mailView(it) })
+    }
+
+    /**
+     * Inbox autopilot, slice 5a: Unsubscribe on one newsletter or promo sender in Mail. Synced; the server does it at its
+     * next check (one-click, else an email to the list's unsubscribe address from that account, else the sender's page
+     * handed back to open) and writes the outcome, which Mail and Activity show. Returns what Mail says and the pane.
+     */
+    suspend fun unsubscribeMailSender(id: String): MailSwitched {
+        val line = onCore { activity.askUnsubscribe(id).also { activityChanged() } }
         return MailSwitched(line, lastMailFacts?.let { mailView(it) })
     }
 

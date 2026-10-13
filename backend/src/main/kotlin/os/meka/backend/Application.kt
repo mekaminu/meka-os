@@ -33,6 +33,7 @@ import os.meka.backend.integrations.PostgresNewsImageStore
 import os.meka.backend.integrations.EspnTeamFixtures
 import os.meka.backend.integrations.GoogleCalendar
 import os.meka.backend.integrations.GmailMail
+import os.meka.backend.integrations.HttpOneClickUnsubscriber
 import os.meka.backend.integrations.OutlookMail
 import os.meka.core.domain.MailProviders
 import os.meka.backend.integrations.GovUkBankHolidays
@@ -1047,6 +1048,8 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         mailStore = PostgresMailStore(opStore),
         // Slice 2b: the unsure ones get one look from the small model (sender and subject only), metered as mail.sort.
         mailAi = ai?.provider?.let { MailSortAi(it) },
+        // Slice 5a: RFC 8058 one-click unsubscribe, only when Meka taps Unsubscribe (public https hosts only).
+        unsubscriber = HttpOneClickUnsubscriber(),
     )
 }
 
@@ -1151,6 +1154,7 @@ object Migrations {
         20 to "/db/V20__mail_message.sql",
         21 to "/db/V21__mail_sort.sql",
         22 to "/db/V22__mail_tidy.sql",
+        23 to "/db/V23__mail_sender.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

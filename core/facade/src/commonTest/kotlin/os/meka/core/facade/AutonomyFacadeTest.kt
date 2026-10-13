@@ -162,6 +162,7 @@ class AutonomyFacadeTest {
         assertEquals("Turn off", mac.row(AutonomyRules.MAIL_AUTOPILOT).action)
         // Undo on a tidy that isn't there says so.
         assertEquals("This can't be undone", mac.undoMailTidy("nothing").line)
+        assertEquals(os.meka.core.domain.MailSenderPanelRules.UNKNOWN, mac.unsubscribeMailSender("nothing").line)
         // Slice 4: nothing tidied, no "Archived for you"; Got it and its Undo still answer, and it syncs.
         assertNull(mac.archivedForYou.value)
         assertEquals(os.meka.core.domain.ArchivedForYouRules.GOT_IT_LINE, mac.seenArchivedForYou())

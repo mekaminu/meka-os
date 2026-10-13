@@ -990,6 +990,16 @@ final class CoreModel {
         if let v = r.view { mail = v } else { await loadMail() }
     }
 
+    /// Unsubscribe on one newsletter or promo sender: the server does it at its next check. Only the id crosses.
+    func unsubscribeMailSender(_ id: String) async {
+        guard let core else { return }
+        MekaHaptics.medium()
+        mailMessage = nil
+        guard let r = try? await core.unsubscribeMailSender(id: id) else { return }
+        mailNote = r.line
+        if let v = r.view { mail = v } else { await loadMail() }
+    }
+
     // MARK: Calendar editing: Add event (slice 2b)
 
     /// Reads which accounts allow editing (the Calendar section asks when it appears).

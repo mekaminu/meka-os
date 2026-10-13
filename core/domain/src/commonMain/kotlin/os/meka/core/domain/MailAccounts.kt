@@ -72,6 +72,10 @@ data class MailAccountRow(
     val tidyLine: String? = null,
     /** Slice 3b-2: Autopilot's tidies in this account, newest first, each with Undo ([MailAutopilotPanelRules.rows]). */
     val tidies: List<MailTidyRow> = emptyList(),
+    /** Slice 5a: the account's newsletter and promo senders, each with Unsubscribe ([MailSenderPanelRules.rows]). */
+    val senders: List<MailSenderRow> = emptyList(),
+    /** Slice 5a: "8 senders · tap Unsubscribe and Navilife does it for you", or null with none. */
+    val sendersLine: String? = null,
 )
 
 /** One "Connect …" button. */
@@ -190,6 +194,7 @@ object MailAccountRules {
     fun view(
         accounts: List<MailAccountFacts>, nowMs: Long, signIns: List<SignIn>,
         autopilot: MailAutopilotSetting, paused: Boolean, batches: List<MailTidyBatch>, cal: LocalCalendar,
+        senders: List<MailSender> = emptyList(),
     ): MailAccountsView {
         val base = view(accounts, nowMs, signIns)
         val facts = accounts.filter { MailProviders.isMail(it.provider) }
@@ -199,7 +204,8 @@ object MailAccountRules {
             r.copy(
                 tidyLine = MailAutopilotPanelRules.accountLine(autopilot, paused, a?.wouldTidy, MailAutopilotPanelRules.todays(mine, r.label.label, nowMs, cal)),
                 tidies = MailAutopilotPanelRules.rows(mine, nowMs, cal),
-            )
+                senders = MailSenderPanelRules.rows(senders, r.label.label, nowMs, cal),
+            ).let { it.copy(sendersLine = MailSenderPanelRules.header(it.senders)) }
         }
         return base.copy(rows = rows, autopilot = if (rows.isEmpty()) null else MailAutopilotPanelRules.panel(autopilot, paused))
     }

@@ -66,6 +66,8 @@ import os.meka.core.domain.MailAccountsView
 import os.meka.core.domain.MailAutopilotPanel
 import os.meka.core.domain.MailAutopilotPanelRules
 import os.meka.core.domain.MailTidyRow
+import os.meka.core.domain.MailSenderPanelRules
+import os.meka.core.domain.MailSenderRow
 import os.meka.core.domain.MailLabel
 import os.meka.core.facade.ConnectStart
 import os.meka.core.facade.MekaCore
@@ -139,6 +141,15 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
         if (now != null) view = Result.success(now) else reload++
     }
 
+    fun unsubscribe(id: String) = scope.launch {
+        haptics.medium()
+        message = null
+        val r = core.unsubscribeMailSender(id)
+        note = r.line
+        val now = r.view
+        if (now != null) view = Result.success(now) else reload++
+    }
+
     fun undoTidy(id: String) = scope.launch {
         haptics.light()
         message = null
@@ -174,6 +185,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                         onLabel = { relabel(row, it) },
                         onDisconnect = { disconnect(row) },
                         onUndo = { undoTidy(it) },
+                        onUnsubscribe = { unsubscribe(it) },
                     )
                 }
                 v.toConnect?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
@@ -194,11 +206,12 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
 @Composable
 private fun MailAccountCard(
     row: MailAccountRow, modifier: Modifier, onReconnect: () -> Unit, onLabel: (MailLabel) -> Unit, onDisconnect: () -> Unit,
-    onUndo: (String) -> Unit,
+    onUndo: (String) -> Unit, onUnsubscribe: (String) -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     var asking by rememberSaveable(row.provider, row.email) { mutableStateOf(false) }
+    var allSenders by rememberSaveable(row.provider, row.email, "senders") { mutableStateOf(false) }
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .animateContentSize(MekaMotion.expand(reduced)).padding(MekaSpace.m),
@@ -245,6 +258,17 @@ private fun MailAccountCard(
         }
         // Slice 3b-2: what Autopilot tidied here, newest first, each with Undo.
         row.tidies.forEach { t -> TidyLine(t) { onUndo(t.id) } }
+        // Slice 5a: who sends the newsletters and promos, each with Unsubscribe (Navilife does it at its next check).
+        row.sendersLine?.let { line ->
+            Text(MailSenderPanelRules.TITLE, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs))
+            Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
+            val shown = if (allSenders) row.senders else row.senders.take(SENDERS_FOLDED)
+            shown.forEach { s -> SenderLine(s) { onUnsubscribe(s.id) } }
+            if (row.senders.size > SENDERS_FOLDED) {
+                Text(if (allSenders) "Show fewer" else "Show ${row.senders.size - SENDERS_FOLDED} more", style = MekaType.caption, color = Meka.colors.accent,
+                    modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); allSenders = !allSenders }.minTouch())
+            }
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.xs),
@@ -317,6 +341,35 @@ private fun TidyLine(t: MailTidyRow, onUndo: () -> Unit) {
         if (t.canUndo) {
             Text(MailAutopilotPanelRules.UNDO, style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clickable(role = Role.Button) { onUndo() }.minTouch().padding(start = MekaSpace.m))
+        }
+    }
+}
+
+private const val SENDERS_FOLDED = 3
+
+/**
+ * One sender under its account: its name, "example.com · 8 emails · last Mon 12 Oct", and Unsubscribe; once asked the
+ * state cross-fades in ("Unsubscribing at the next check…", then the server's outcome, accent when done); a sender that
+ * only offers a page shows Open page.
+ */
+@Composable
+private fun SenderLine(s: MailSenderRow, onUnsubscribe: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val uri = LocalUriHandler.current
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.xxs)) {
+        Column(Modifier.weight(1f)) {
+            Text(s.name, style = MekaType.body, color = if (s.done) Meka.colors.textTertiary else Meka.colors.textPrimary)
+            if (s.line.isNotEmpty()) Text(s.line, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Crossfade(s.state, animationSpec = MekaMotion.appear(reduced), label = "sender-state") { st ->
+                st?.let { Text(it, style = MekaType.caption, color = if (s.done) Meka.colors.accent else Meka.colors.textSecondary) }
+            }
+        }
+        val link = s.link
+        when {
+            link != null -> Text(MailSenderPanelRules.OPEN, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clickable(role = Role.Button) { runCatching { uri.openUri(link) } }.minTouch().padding(start = MekaSpace.m))
+            s.canUnsubscribe -> Text(MailSenderPanelRules.UNSUBSCRIBE, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clickable(role = Role.Button) { onUnsubscribe() }.minTouch().padding(start = MekaSpace.m))
         }
     }
 }

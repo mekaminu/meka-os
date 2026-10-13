@@ -55,6 +55,8 @@ struct MailSheet: View {
                         Task { await model.disconnectMail(provider: provider, email: email) }
                     }, onUndo: { id in
                         Task { await model.undoMailTidy(id) }
+                    }, onUnsubscribe: { id in
+                        Task { await model.unsubscribeMailSender(id) }
                     })
                     .staggeredAppear(i + 3)
                 }
@@ -102,6 +104,7 @@ struct MailSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map(\.tidyLine) ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.tidies.map { $0.state ?? "" } } ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.autopilot?.line)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.senders.map { $0.state ?? "" } } ?? [])
         .task { await model.loadMail() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.loadMail() }
@@ -148,8 +151,44 @@ private struct MailAccountRowView: View {
     let onLabel: (MailLabel) -> Void
     let onDisconnect: () -> Void
     let onUndo: (String) -> Void
+    var onUnsubscribe: (String) -> Void = { _ in }
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.openURL) private var openURL
     @State private var asking = false
+    @State private var allSenders = false
+
+    /// One sender: its name, "example.com · 8 emails · last Mon 12 Oct", Unsubscribe (or Open page), and the state once asked.
+    @ViewBuilder private func senderLine(_ s: MailSenderRow) -> some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(s.name).font(MekaType.body).foregroundStyle(s.done ? palette.textTertiary : palette.textPrimary)
+                if !s.line.isEmpty {
+                    Text(s.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+                if let state = s.state {
+                    Text(state).font(MekaType.caption).foregroundStyle(s.done ? palette.accent : palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                        .transition(.opacity)
+                }
+            }
+            Spacer()
+            if let link = s.link, let url = URL(string: link) {
+                Button(MailSenderPanelRules.shared.OPEN) { openURL(url) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.accent)
+            } else if s.canUnsubscribe {
+                let id = s.id
+                Button(MailSenderPanelRules.shared.UNSUBSCRIBE) { onUnsubscribe(id) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.accent)
+            }
+        }
+        .padding(.top, MekaSpace.xxs)
+        .transition(.opacity)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -208,6 +247,24 @@ private struct MailAccountRowView: View {
                 }
                 .padding(.top, MekaSpace.xxs)
                 .transition(.opacity)
+            }
+            // Slice 5a: who sends the newsletters and promos, each with Unsubscribe (done at Navilife's next check).
+            if let line = row.sendersLine {
+                Text(MailSenderPanelRules.shared.TITLE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .padding(.top, MekaSpace.xs)
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                ForEach(allSenders ? row.senders : Array(row.senders.prefix(3)), id: \.id) { s in
+                    senderLine(s)
+                }
+                if row.senders.count > 3 {
+                    Button(allSenders ? "Show fewer" : "Show \(row.senders.count - 3) more") {
+                        MekaHaptics.tick()
+                        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { allSenders.toggle() }
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.accent)
+                }
             }
             HStack(spacing: MekaSpace.xs) {
                 ForEach(MailAccountRules.shared.LABELS, id: \.name) { label in

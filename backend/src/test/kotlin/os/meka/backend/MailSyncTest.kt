@@ -37,6 +37,15 @@ import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailTidyBatchFields
 import os.meka.backend.integrations.EntityReader
 import os.meka.backend.integrations.MailMoved
+import os.meka.backend.integrations.HttpOneClickUnsubscriber
+import os.meka.backend.integrations.OneClickUnsubscriber
+import os.meka.backend.integrations.UnsubscribeMessage
+import os.meka.core.domain.MailSenderFields
+import os.meka.core.domain.MailProviders
+import os.meka.core.domain.MailUnsubscribeRules
+import os.meka.core.domain.UnsubscribeMailto
+import os.meka.core.domain.UnsubscribeMethod
+import os.meka.core.domain.UnsubscribeState
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.Hlc
 import os.meka.core.sync.InMemoryServerOpStore
@@ -139,8 +148,7 @@ class MailSyncTest {
     // ---- The server's sync ----
 
     /** A Gmail-like provider: ids from the feed, headers read one at a time. */
-    private class FakeGmail : MailProvider {
-        override val id = "gmail"
+    private class FakeGmail(override val id: String = "gmail") : MailProvider {
         override val oauth = "google"
         override val requiredScopes = listOf(GmailMail.MODIFY, GmailMail.SEND)
         val mailbox = linkedMapOf<String, MailHeader>()
@@ -182,6 +190,17 @@ class MailSyncTest {
                 mailbox[id] = h.copy(inInbox = true, labels = h.labels.filter { it != t.label } + "INBOX")
                 id
             }
+
+        // Slice 5a: unsubscribe emails sent, and (Outlook) the headers read on demand.
+        val sent = mutableListOf<UnsubscribeMailto>()
+        var sendFails = false
+        val outlookHeaders = mutableMapOf<String, Pair<String?, Boolean>>()
+        val headerReads = mutableListOf<String>()
+        override fun sendUnsubscribe(accessToken: String, mail: UnsubscribeMailto): Boolean {
+            if (sendFails) error("Gmail 503")
+            sent += mail; return true
+        }
+        override fun listHeaders(accessToken: String, id: String): Pair<String?, Boolean>? { headerReads += id; return outlookHeaders[id] }
     }
 
     private class Cipher : TokenCipher {
@@ -195,10 +214,12 @@ class MailSyncTest {
     private fun world(
         mailStore: MailStore, gmail: FakeGmail = FakeGmail(), store: InMemoryIntegrationStore = InMemoryIntegrationStore(),
         mailAi: MailAiSorter? = null, ops: InMemoryServerOpStore = InMemoryServerOpStore(),
+        unsubscriber: OneClickUnsubscriber = OneClickUnsubscriber.NONE,
     ) =
         Triple(gmail, store, Integrations(
             store, ops, emptyMap(), { p -> if (p == "google") OAuthClient("cid", "s") else null },
             Cipher(), "https://meka.example", { now }, mail = mapOf("gmail" to gmail), mailStore = mailStore, mailAi = mailAi,
+            unsubscriber = unsubscriber,
         ))
 
     private fun connect(i: Integrations): String {
@@ -550,6 +571,145 @@ class MailSyncTest {
         assertTrue(gmail.mailbox.getValue("s").inInbox)
     }
 
+    // ---- Slice 5a: Unsubscribe for him ----
+
+    private fun senders(ops: InMemoryServerOpStore) = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_SENDER)
+    private fun newsletter(id: String, from: String, name: String?, unsub: String?, oneClick: Boolean = false, ageDays: Long = 0) =
+        msg(id, ageDays, from).copy(fromName = name, listId = "<$from>", listUnsubscribe = unsub, oneClickUnsubscribe = oneClick)
+
+    @Test
+    fun newsletterSendersArePublishedAndUnsubscribeIsDoneOnlyWhenAsked() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val posted = mutableListOf<String>()
+        val (gmail, _, i) = world(ms, ops = ops, unsubscriber = { url -> posted += url; true })
+        gmail.mailbox["a1"] = newsletter("a1", "news@digest.example", "Weekly Digest", "<mailto:leave@digest.example>, <https://digest.example/u/1>", oneClick = true, ageDays = 2)
+        gmail.mailbox["a2"] = newsletter("a2", "news@digest.example", "Weekly Digest", "<mailto:leave@digest.example>, <https://digest.example/u/2>", oneClick = true, ageDays = 1)
+        gmail.mailbox["b1"] = newsletter("b1", "hello@club.example", null, "<mailto:off@club.example?subject=stop>")
+        gmail.mailbox["c1"] = newsletter("c1", "info@page.example", "Page News", "<https://page.example/prefs>")
+        gmail.mailbox["d1"] = newsletter("d1", "x@nowayout.example", "No Way Out", null)
+        gmail.mailbox["p1"] = msg("p1", 0) // a person: never a sender here
+        val id = connect(i)
+        i.syncAccount(id)
+        val pub = senders(ops)
+        // No way out isn't published (nothing to offer); a person never is.
+        assertEquals(3, pub.size)
+        val digest = pub.getValue(MailUnsubscribeRules.senderId(id, "news@digest.example"))
+        assertEquals(FieldValue.Text("Weekly Digest"), digest[MailSenderFields.NAME])
+        assertEquals(FieldValue.Text("digest.example"), digest[MailSenderFields.DOMAIN])
+        assertEquals(FieldValue.Text("Personal"), digest[MailSenderFields.ACCOUNT])
+        assertEquals(FieldValue.Text(UnsubscribeMethod.ONE_CLICK.name), digest[MailSenderFields.METHOD])
+        assertEquals(FieldValue.Int64(2), digest[MailSenderFields.COUNT])
+        assertEquals(FieldValue.Int64(now - day), digest[MailSenderFields.LAST_AT])
+        assertEquals(FieldValue.Text("club.example"), pub.getValue(MailUnsubscribeRules.senderId(id, "hello@club.example"))[MailSenderFields.NAME])
+        // Nothing is done without a tap; no header or email id is in the synced data.
+        assertTrue(posted.isEmpty() && gmail.sent.isEmpty())
+        assertTrue(pub.values.flatMap { it.values }.none { v -> (v as? FieldValue.Text)?.value?.let { "u/2" in it || "a2" == it || "leave@" in it } == true })
+
+        // He taps Unsubscribe on all three.
+        now += 60_000
+        for (from in listOf("news@digest.example", "hello@club.example", "info@page.example")) {
+            device(ops, EntityTypes.MAIL_SENDER, MailUnsubscribeRules.senderId(id, from), MailSenderFields.ASKED_AT, FieldValue.Int64(now))
+        }
+        now += 60_000
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        i.syncAccount(id)
+        // One-click to the newest email's link; the mailto from this account; the page handed back.
+        assertEquals(listOf("https://digest.example/u/2"), posted)
+        assertEquals(listOf(UnsubscribeMailto("off@club.example", "stop", "unsubscribe")), gmail.sent)
+        val after = senders(ops)
+        assertEquals(FieldValue.Text(UnsubscribeState.DONE.name), after.getValue(MailUnsubscribeRules.senderId(id, "news@digest.example"))[MailSenderFields.STATE])
+        assertEquals(FieldValue.Text(UnsubscribeState.SENT.name), after.getValue(MailUnsubscribeRules.senderId(id, "hello@club.example"))[MailSenderFields.STATE])
+        val page = after.getValue(MailUnsubscribeRules.senderId(id, "info@page.example"))
+        assertEquals(FieldValue.Text(UnsubscribeState.OPEN_LINK.name), page[MailSenderFields.STATE])
+        assertEquals(FieldValue.Text("https://page.example/prefs"), page[MailSenderFields.LINK])
+        assertEquals(FieldValue.Int64(now), page[MailSenderFields.TRIED_AT])
+        // Done once: the next check does nothing more.
+        now += 60_000
+        i.syncAccount(id)
+        assertEquals(1, posted.size)
+        assertEquals(1, gmail.sent.size)
+    }
+
+    @Test
+    fun aFailedOneClickFallsBackToTheMailtoAndAnUnreachableOneCanBeTriedAgain() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops, unsubscriber = { false })
+        gmail.mailbox["a1"] = newsletter("a1", "news@digest.example", "Weekly Digest", "<mailto:leave@digest.example>, <https://digest.example/u/1>", oneClick = true)
+        gmail.mailbox["b1"] = newsletter("b1", "hello@club.example", "Club", "<mailto:off@club.example>")
+        val id = connect(i)
+        i.syncAccount(id)
+        val digest = MailUnsubscribeRules.senderId(id, "news@digest.example")
+        val club = MailUnsubscribeRules.senderId(id, "hello@club.example")
+        now += 60_000
+        device(ops, EntityTypes.MAIL_SENDER, digest, MailSenderFields.ASKED_AT, FieldValue.Int64(now))
+        device(ops, EntityTypes.MAIL_SENDER, club, MailSenderFields.ASKED_AT, FieldValue.Int64(now))
+        // Sending fails for the club (the digest's one-click fails too, then its mailto fails the same way).
+        gmail.sendFails = true
+        now += 60_000
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(FieldValue.Text(UnsubscribeState.OPEN_LINK.name), senders(ops).getValue(digest)[MailSenderFields.STATE])
+        assertEquals(FieldValue.Text(UnsubscribeState.RETRY.name), senders(ops).getValue(club)[MailSenderFields.STATE])
+        // Asked again: tried again, and this time it goes.
+        gmail.sendFails = false
+        now += 60_000
+        device(ops, EntityTypes.MAIL_SENDER, club, MailSenderFields.ASKED_AT, FieldValue.Int64(now))
+        now += 60_000
+        i.syncAccount(id)
+        assertEquals(FieldValue.Text(UnsubscribeState.SENT.name), senders(ops).getValue(club)[MailSenderFields.STATE])
+        assertEquals(listOf("off@club.example"), gmail.sent.map { it.to })
+    }
+
+    @Test
+    fun outlooksListHeadersAreReadFromTheNewestEmail() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        // The fake signs in through Google's client; only its id makes it Outlook here.
+        val outlook = FakeGmail(id = MailProviders.OUTLOOK)
+        val store = InMemoryIntegrationStore()
+        val i = Integrations(
+            store, ops, emptyMap(), { p -> if (p == "google") OAuthClient("cid", "s") else null },
+            Cipher(), "https://meka.example", { now }, mail = mapOf(MailProviders.OUTLOOK to outlook), mailStore = ms,
+        )
+        // Graph's feed has no list headers: sorted a newsletter by Gmail-free rules (a no-reply list sender with a List-Id here).
+        outlook.mailbox["o1"] = msg("o1", 0, "news@shop.example").copy(fromName = "Shop", listId = "<shop.example>")
+        outlook.outlookHeaders["o1"] = "<mailto:leave@shop.example>" to false
+        val url = assertIs<Integrations.StartResult.Url>(i.start("home", MailProviders.OUTLOOK)).url
+        val state = URI(url).query.split("&").first { it.startsWith("state=") }.removePrefix("state=")
+        val id = assertIs<Integrations.CallbackResult.Connected>(i.callback("google", state, "code", null)).accountId
+        i.syncAccount(id)
+        assertEquals(listOf("o1"), outlook.headerReads)
+        val f = senders(ops).getValue(MailUnsubscribeRules.senderId(id, "news@shop.example"))
+        assertEquals(FieldValue.Text(UnsubscribeMethod.MAILTO.name), f[MailSenderFields.METHOD])
+        // Read once.
+        outlook.nextRound = { MailChanges(cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(1, outlook.headerReads.size)
+    }
+
+    @Test
+    fun oneClickOnlyPostsToPublicHosts() {
+        val private = HttpOneClickUnsubscriber(resolve = { listOf(java.net.InetAddress.getByName("10.1.2.3")) })
+        assertFalse(private.post("https://lists.example/u"))
+        assertFalse(HttpOneClickUnsubscriber(resolve = { emptyList() }).post("https://lists.example/u"))
+        assertFalse(HttpOneClickUnsubscriber().post("http://lists.example/u"))
+        for (a in listOf("127.0.0.1", "10.0.0.1", "172.16.5.4", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:10.0.0.1")) {
+            assertFalse(HttpOneClickUnsubscriber.isPublic(java.net.InetAddress.getByName(a)), a)
+        }
+        for (a in listOf("93.184.216.34", "8.8.8.8", "2606:4700::1111")) assertTrue(HttpOneClickUnsubscriber.isPublic(java.net.InetAddress.getByName(a)), a)
+    }
+
+    @Test
+    fun theUnsubscribeEmailIsPlainText() {
+        assertEquals(
+            "To: leave@digest.example\r\nSubject: unsubscribe\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nunsubscribe\r\n",
+            UnsubscribeMessage.rfc822(UnsubscribeMailto("leave@digest.example", "unsubscribe", "unsubscribe")),
+        )
+        assertTrue(UnsubscribeMessage.rfc822(UnsubscribeMailto("a@b.example", "désabonner", "x")).contains("Subject: =?UTF-8?B?"))
+    }
+
     // ---- On real Postgres (MEKA_TEST_DB_URL, CI); skipped when unset ----
 
     @Test
@@ -560,7 +720,7 @@ class MailSyncTest {
             password = System.getenv("MEKA_TEST_DB_PASSWORD") ?: "postgres"; maximumPoolSize = 4
         }).use { ds ->
             Migrations.apply(ds)
-            ds.connection.use { c -> c.createStatement().execute("TRUNCATE op_log, device, household, integration_account, mail_message, mail_sync, mail_tidy_item, mail_never_tidy CASCADE") }
+            ds.connection.use { c -> c.createStatement().execute("TRUNCATE op_log, device, household, integration_account, mail_message, mail_sync, mail_tidy_item, mail_never_tidy, mail_sender CASCADE") }
             PostgresDeviceRegistry(ds).enrol("hh-m", "android0123456789ab", "Fold")
             val ops = PostgresOpStore(ds)
             val accounts = PostgresIntegrationStore(ops)
@@ -609,12 +769,26 @@ class MailSyncTest {
             assertTrue(ms.tidied(acc, "mt2").isEmpty())
             ms.neverTidy(acc, listOf("o1", "o1y", "o1"))
             assertEquals(setOf("o1", "o1y"), ms.neverTidied(acc))
+            // Slice 5a: senders, newest email's headers win, a re-read changes nothing, Outlook's headers set later.
+            ms.noteSender("hh-m", acc, full.copy(id = "n1", receivedAtMs = now - 2 * day, fromName = "Old"))
+            ms.noteSender("hh-m", acc, full.copy(id = "n2", receivedAtMs = now - day, fromName = null, listUnsubscribe = "<https://x.example/u>"))
+            ms.noteSender("hh-m", acc, full.copy(id = "n2", receivedAtMs = now - day))
+            ms.noteSender("hh-m", acc, full.copy(id = "n0", receivedAtMs = now - 3 * day))
+            val rec = ms.senders(acc, 10).single()
+            assertEquals("sam@example.com", rec.address)
+            assertEquals("Old", rec.name)
+            assertEquals("<https://x.example/u>", rec.listUnsubscribe)
+            assertEquals("n2", rec.lastMessageId)
+            assertEquals(2, rec.seen)
+            assertTrue(rec.headersChecked)
+            ms.setSenderHeaders(acc, "sam@example.com", "<mailto:a@x.example>", false)
+            assertEquals("<mailto:a@x.example>", ms.senders(acc, 10).single().listUnsubscribe)
             ms.prune(acc, now)
             assertTrue(ms.messages(acc).isEmpty())
             ms.apply("hh-m", acc, MailChanges(fetch = listOf("x"), cursor = "h3"))
             ms.forget(acc)
             assertNull(ms.cursor(acc))
-            assertTrue(ms.tidied(acc, "mt1").isEmpty() && ms.neverTidied(acc).isEmpty())
+            assertTrue(ms.tidied(acc, "mt1").isEmpty() && ms.neverTidied(acc).isEmpty() && ms.senders(acc, 10).isEmpty())
             assertEquals(0, ms.pendingCount(acc))
         }
     }

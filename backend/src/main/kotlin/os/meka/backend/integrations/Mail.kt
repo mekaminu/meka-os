@@ -12,6 +12,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import os.meka.core.domain.MailProviders
 import os.meka.core.domain.MailTidy
+import os.meka.core.domain.UnsubscribeMailto
 
 /**
  * A mail provider (ADR-009's `EmailProvider`; Inbox autopilot, slice 1). Meka decided MEKA may read, organise and send
@@ -67,6 +68,27 @@ interface MailProvider {
 
     /** Undo of [tidy]: each email (by the id [tidy] returned) back in the inbox, its label taken off; returns its id now. */
     fun untidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> = emptyMap()
+
+    /**
+     * Slice 5a: one email's `List-Unsubscribe` and whether it offers one-click (Outlook, whose change feed doesn't carry
+     * them); null when it has gone. Gmail's are read with the headers already.
+     */
+    fun listHeaders(accessToken: String, id: String): Pair<String?, Boolean>? = null
+
+    /**
+     * Slice 5a: the list's unsubscribe email, sent from this account only because Meka tapped Unsubscribe. True when
+     * the provider accepted it.
+     */
+    fun sendUnsubscribe(accessToken: String, mail: UnsubscribeMailto): Boolean = false
+}
+
+/** The unsubscribe email as RFC 822 text (plain text; a non-ASCII subject in RFC 2047's encoded form). */
+internal object UnsubscribeMessage {
+    fun rfc822(mail: UnsubscribeMailto): String {
+        val subject = if (mail.subject.all { it.code in 0x20..0x7e }) mail.subject
+        else "=?UTF-8?B?" + java.util.Base64.getEncoder().encodeToString(mail.subject.toByteArray()) + "?="
+        return "To: ${mail.to}\r\nSubject: $subject\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n${mail.body}\r\n"
+    }
 }
 
 /**
@@ -253,6 +275,12 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         return done
     }
 
+    /** Slice 5a: messages.send with the RFC 822 text; Gmail fills in From with this account. */
+    override fun sendUnsubscribe(accessToken: String, mail: UnsubscribeMailto): Boolean {
+        val raw = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(UnsubscribeMessage.rfc822(mail).toByteArray())
+        return http.call("POST", "$API/messages/send", accessToken, buildJsonObject { put("raw", raw) }).status in 200..299
+    }
+
     companion object {
         private const val DAY_MS = 86_400_000L
         /** 500 ids a page: up to 10,000 messages in the first listing. */
@@ -382,6 +410,28 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
         }
         return done
     }
+
+    /** Slice 5a: the message's internet headers (on demand, one message per sender). */
+    override fun listHeaders(accessToken: String, id: String): Pair<String?, Boolean>? {
+        val a = http.call("GET", "$GRAPH/me/messages/${Http.enc(id)}?\$select=internetMessageHeaders", accessToken)
+        if (a.status == 404) return null
+        val hs = (a.body?.get("internetMessageHeaders") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+            .mapNotNull { h -> h["name"].str()?.let { n -> n.lowercase() to (h["value"].str() ?: "") } }.toMap()
+        val unsub = hs["list-unsubscribe"]?.take(MailAddress.MAX_HEADER)
+        val oneClick = hs["list-unsubscribe-post"]?.replace(" ", "")?.equals("List-Unsubscribe=One-Click", ignoreCase = true) == true
+        return unsub to oneClick
+    }
+
+    /** Slice 5a: sendMail from this account (kept in Sent Items, so he can see it went). */
+    override fun sendUnsubscribe(accessToken: String, mail: UnsubscribeMailto): Boolean =
+        http.call("POST", "$GRAPH/me/sendMail", accessToken, buildJsonObject {
+            put("message", buildJsonObject {
+                put("subject", mail.subject)
+                put("body", buildJsonObject { put("contentType", "Text"); put("content", mail.body) })
+                putJsonArray("toRecipients") { add(buildJsonObject { put("emailAddress", buildJsonObject { put("address", mail.to) }) }) }
+            })
+            put("saveToSentItems", true)
+        }).status in 200..299
 
     private companion object {
         const val GRAPH = "https://graph.microsoft.com/v1.0"

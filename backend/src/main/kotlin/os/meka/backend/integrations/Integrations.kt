@@ -10,6 +10,11 @@ import os.meka.core.domain.MailTidyRules
 import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailTidyBatchFields
+import os.meka.core.domain.MailSort
+import os.meka.core.domain.MailUnsubscribeRules
+import os.meka.core.domain.UnsubscribeMethod
+import os.meka.core.domain.UnsubscribePlan
+import os.meka.core.domain.UnsubscribeState
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.AutonomyRules
 import os.meka.core.domain.BankHolidayFields
@@ -110,6 +115,8 @@ class Integrations(
     private val mailStore: MailStore? = null,
     /** Slice 2b: the AI's look at the unsure ones (sender and subject only); null (AI off, tests) leaves them unsure. */
     private val mailAi: MailAiSorter? = null,
+    /** Slice 5a: RFC 8058 one-click unsubscribe (an https POST, only on Meka's tap); [OneClickUnsubscriber.NONE] in tests. */
+    private val unsubscriber: OneClickUnsubscriber = OneClickUnsubscriber.NONE,
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -425,6 +432,8 @@ class Integrations(
         }
         ms.prune(a.id, since)
         sortHeaders(a, ms)
+        // Slice 5a: the newsletter and promo senders (before Autopilot moves their newest email) and any Unsubscribe asked.
+        runCatching { mailSenders(a, m, token, ms) }
         // Slice 3b: Autopilot (only once it's on and the dry-run day is over); a failure there never fails the check.
         runCatching { autopilot(a, m, token, ms) }
     }
@@ -482,6 +491,74 @@ class Integrations(
         }
     }
 
+    /**
+     * Inbox autopilot, slice 5a: the account's busiest newsletter and promo senders published as `mail_sender` entities
+     * (name, domain, how they can be unsubscribed, their last email and count; never an email id or the header), and
+     * any Unsubscribe an app asked for done now. Outlook's list headers are read from each sender's newest email, a few
+     * per check, before Autopilot moves it.
+     */
+    internal fun mailSenders(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val outlook = m.id == MailProviders.OUTLOOK
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        val published = reader.entities(a.householdId, EntityTypes.MAIL_SENDER)
+        var checks = 0
+        val records = ms.senders(a.id, SENDERS_READ).map { r ->
+            if (!outlook || r.headersChecked || r.lastMessageId == null || checks >= SENDER_HEADER_CHECKS) return@map r
+            checks++
+            val got = runCatching { m.listHeaders(token, r.lastMessageId) }.getOrNull() ?: return@map r
+            ms.setSenderHeaders(a.id, r.address, got.first, got.second)
+            r.copy(listUnsubscribe = got.first, oneClick = got.second, headersChecked = true)
+        }
+        records.forEachIndexed { i, r ->
+            val id = MailUnsubscribeRules.senderId(a.id, r.address)
+            val plan = MailUnsubscribeRules.plan(r.listUnsubscribe, r.oneClick, check = outlook && !r.headersChecked)
+            val existing = published[id]
+            if (i < SENDERS_SHOWN && (plan.method != UnsubscribeMethod.NONE || existing != null)) {
+                writeSender(a, id, MailUnsubscribeRules.senderFields(
+                    account, MailUnsubscribeRules.displayName(r.name, r.address), MailSortRules.domain(r.address), plan.method, r.lastAtMs, r.seen,
+                ))
+            }
+            val s = existing?.let { MailUnsubscribeRules.read(id, it) } ?: return@forEachIndexed
+            if (MailUnsubscribeRules.due(s)) unsubscribe(a, m, token, id, plan)
+        }
+    }
+
+    /**
+     * One Unsubscribe Meka asked for: one-click first, else the list's unsubscribe email from this account, else the
+     * sender's page handed back to open. The outcome goes on the sender's entity (Mail and Activity show it).
+     */
+    private fun unsubscribe(a: AccountRow, m: MailProvider, token: String, id: String, plan: UnsubscribePlan) {
+        val url = plan.url
+        val mailto = plan.mailto
+        val oneClick = plan.method == UnsubscribeMethod.ONE_CLICK && url != null && runCatching { unsubscriber.post(url) }.getOrDefault(false)
+        var unreachable = false
+        val sent = !oneClick && mailto != null && try {
+            m.sendUnsubscribe(token, mailto)
+        } catch (e: Exception) {
+            unreachable = true
+            false
+        }
+        val state = when {
+            oneClick -> UnsubscribeState.DONE
+            sent -> UnsubscribeState.SENT
+            plan.fallbackUrl != null -> UnsubscribeState.OPEN_LINK
+            plan.method == UnsubscribeMethod.CHECK || unreachable -> UnsubscribeState.RETRY
+            else -> UnsubscribeState.FAILED
+        }
+        writeSender(a, id, MailUnsubscribeRules.outcomeFields(state, now(), if (state == UnsubscribeState.OPEN_LINK) plan.fallbackUrl else null))
+    }
+
+    private fun writeSender(a: AccountRow, id: String, fields: Map<String, FieldValue>) {
+        val wrote = store.transaction {
+            ops.transaction {
+                store.lockAccount(a.id)
+                val prev = store.mirror(a.householdId, a.id)[id]
+                write(a, id, 0, 0, false, prev, fields, EntityTypes.MAIL_SENDER)
+            }
+        }
+        if (wrote) runCatching { onChanged(a.householdId) }
+    }
+
     private fun writeTidy(a: AccountRow, batchId: String, fields: Map<String, FieldValue>) {
         val wrote = store.transaction {
             ops.transaction {
@@ -501,9 +578,13 @@ class Integrations(
         for (round in 0 until SORT_ROUNDS) {
             val batch = ms.unsorted(a.id, SORT_BATCH)
             if (batch.isEmpty()) break
-            ms.setSorts(a.id, batch.associate { h ->
+            val sorts = batch.associate { h ->
                 h.id to MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId))
-            })
+            }
+            ms.setSorts(a.id, sorts)
+            // Slice 5a: who sends the newsletters and promos (oldest first, so the newest one's headers win).
+            batch.asReversed().filter { h -> sorts[h.id]?.let { it.sure && (it.sort == MailSort.NEWSLETTER || it.sort == MailSort.PROMO) } == true }
+                .forEach { h -> ms.noteSender(a.householdId, a.id, h) }
             if (batch.size < SORT_BATCH) break
         }
         askAi(a, ms)
@@ -1065,6 +1146,10 @@ class Integrations(
         /** Slice 2a: headers sorted per round (rules only, cheap; a big first listing takes a few rounds of one check). */
         const val SORT_BATCH = 500
         const val SORT_ROUNDS = 20
+        /** Slice 5a: the senders published per account (the busiest), the ones read for an Unsubscribe, Outlook header reads a check. */
+        const val SENDERS_SHOWN = 30
+        const val SENDERS_READ = 200
+        const val SENDER_HEADER_CHECKS = 10
         /** Slice 2b: the most unsure emails one AI call looks at (one call per account per check). */
         const val AI_BATCH = 25
         /** Gmail headers read per 5-minute check (one call each; Gmail allows far more): a big first listing fills in over a few checks. */

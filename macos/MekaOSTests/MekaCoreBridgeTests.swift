@@ -2738,6 +2738,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(switched.view)
         let undo = try await core.undoMailTidy(id: "nothing")
         XCTAssertEqual(undo.line, "This can't be undone")
+        // Slice 5a: Unsubscribe on an unknown sender answers offline.
+        let unsub = try await core.unsubscribeMailSender(id: "nothing")
+        XCTAssertEqual(unsub.line, MailSenderPanelRules.shared.UNKNOWN)
         // Slice 4: "Archived for you" — nothing tidied, no card; Got it and its Undo answer offline.
         XCTAssertNil(core.archivedForYou.value)
         let seen = try await core.seenArchivedForYou()

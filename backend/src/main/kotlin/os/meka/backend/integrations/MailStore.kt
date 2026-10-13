@@ -47,7 +47,29 @@ interface MailStore {
     /** Slice 3b: an Undo done: these ids (as they were, and as they are back in the inbox) are never tidied again. */
     fun neverTidy(accountId: String, ids: Collection<String>)
     fun neverTidied(accountId: String): Set<String>
+
+    /**
+     * Slice 5a: a newsletter or promo email's sender noted (name, list headers and message id from the newest one;
+     * the seen count rises by one for each newer email). Nothing for an email without a sender.
+     */
+    fun noteSender(householdId: String, accountId: String, h: MailHeader)
+    /** Slice 5a: the account's noted senders, busiest first, at most [limit]. */
+    fun senders(accountId: String, limit: Int): List<MailSenderRecord>
+    /** Slice 5a: Outlook: the list headers read from the sender's latest email (on demand). */
+    fun setSenderHeaders(accountId: String, address: String, listUnsubscribe: String?, oneClick: Boolean)
 }
+
+/** A noted sender as the server keeps it (slice 5a). [lastMessageId] is the id of its newest email (Outlook's headers are read from it). */
+data class MailSenderRecord(
+    val address: String,
+    val name: String?,
+    val listUnsubscribe: String?,
+    val oneClick: Boolean,
+    val headersChecked: Boolean,
+    val lastMessageId: String?,
+    val lastAtMs: Long,
+    val seen: Int,
+)
 
 /** One email a tidy moved: its id before, the id it has now ([movedId]; Outlook's move changes it) and what was done. */
 data class MailMoved(val id: String, val movedId: String, val tidy: MailTidy)
@@ -63,6 +85,7 @@ class InMemoryMailStore : MailStore {
     private val sorts = mutableMapOf<String, MutableMap<String, MailSorted>>()
     private val tidies = mutableMapOf<Pair<String, String>, List<MailMoved>>()
     private val never = mutableMapOf<String, MutableSet<String>>()
+    private val senders = mutableMapOf<String, LinkedHashMap<String, MailSenderRecord>>()
 
     private fun of(accountId: String) = rows.getOrPut(accountId) { LinkedHashMap() }
 
@@ -82,7 +105,7 @@ class InMemoryMailStore : MailStore {
     }
     @Synchronized override fun forget(accountId: String) {
         rows.remove(accountId); cursors.remove(accountId); sorts.remove(accountId)
-        tidies.keys.removeIf { it.first == accountId }; never.remove(accountId)
+        tidies.keys.removeIf { it.first == accountId }; never.remove(accountId); senders.remove(accountId)
     }
     @Synchronized override fun messages(accountId: String) = of(accountId).values.filterNotNull().sortedByDescending { it.receivedAtMs }
     @Synchronized override fun pendingCount(accountId: String) = of(accountId).values.count { it == null }
@@ -115,6 +138,23 @@ class InMemoryMailStore : MailStore {
     @Synchronized override fun tidied(accountId: String, batchId: String) = tidies[accountId to batchId].orEmpty()
     @Synchronized override fun neverTidy(accountId: String, ids: Collection<String>) { never.getOrPut(accountId) { mutableSetOf() } += ids }
     @Synchronized override fun neverTidied(accountId: String): Set<String> = never[accountId].orEmpty().toSet()
+    @Synchronized override fun noteSender(householdId: String, accountId: String, h: MailHeader) {
+        val address = h.fromAddress?.lowercase() ?: return
+        val m = senders.getOrPut(accountId) { LinkedHashMap() }
+        val prev = m[address]
+        if (prev != null && (h.receivedAtMs < prev.lastAtMs || h.id == prev.lastMessageId)) return
+        m[address] = MailSenderRecord(
+            address, h.fromName ?: prev?.name, h.listUnsubscribe, h.oneClickUnsubscribe,
+            headersChecked = h.listUnsubscribe != null,
+            lastMessageId = h.id, lastAtMs = h.receivedAtMs, seen = (prev?.seen ?: 0) + 1,
+        )
+    }
+    @Synchronized override fun senders(accountId: String, limit: Int) = senders[accountId].orEmpty().values
+        .sortedWith(compareByDescending<MailSenderRecord> { it.seen }.thenByDescending { it.lastAtMs }.thenBy { it.address }).take(limit)
+    @Synchronized override fun setSenderHeaders(accountId: String, address: String, listUnsubscribe: String?, oneClick: Boolean) {
+        val m = senders[accountId] ?: return
+        m[address]?.let { m[address] = it.copy(listUnsubscribe = listUnsubscribe, oneClick = oneClick, headersChecked = true) }
+    }
 }
 
 class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
@@ -198,6 +238,7 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
             c.prepareStatement("DELETE FROM mail_sync WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
             c.prepareStatement("DELETE FROM mail_tidy_item WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
             c.prepareStatement("DELETE FROM mail_never_tidy WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
+            c.prepareStatement("DELETE FROM mail_sender WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
             Unit
         }
     }
@@ -342,6 +383,53 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
             st.setString(1, accountId)
             st.executeQuery().use { rs -> buildSet { while (rs.next()) add(rs.getString(1)) } }
         }
+    }
+
+    // Newer email only: the newest one's name and headers win and the count rises; a re-read of the same one changes nothing.
+    override fun noteSender(householdId: String, accountId: String, h: MailHeader) {
+        val address = h.fromAddress?.lowercase() ?: return
+        c { c ->
+            c.prepareStatement(
+                """INSERT INTO mail_sender(account_id, address, household_id, name, list_unsubscribe, one_click, headers_checked,
+                     last_message_id, last_at_ms, seen_count) VALUES (?,?,?,?,?,?,?,?,?,1)
+                   ON CONFLICT (account_id, address) DO UPDATE SET
+                     name = COALESCE(EXCLUDED.name, mail_sender.name), list_unsubscribe = EXCLUDED.list_unsubscribe,
+                     one_click = EXCLUDED.one_click, headers_checked = EXCLUDED.headers_checked,
+                     last_message_id = EXCLUDED.last_message_id, last_at_ms = EXCLUDED.last_at_ms,
+                     seen_count = mail_sender.seen_count + 1, updated_at = now()
+                   WHERE EXCLUDED.last_at_ms >= mail_sender.last_at_ms AND EXCLUDED.last_message_id IS DISTINCT FROM mail_sender.last_message_id""",
+            ).use { st ->
+                st.setString(1, accountId); st.setString(2, address); st.setString(3, householdId); st.setString(4, h.fromName)
+                st.setString(5, h.listUnsubscribe); st.setBoolean(6, h.oneClickUnsubscribe); st.setBoolean(7, h.listUnsubscribe != null)
+                st.setString(8, h.id); st.setLong(9, h.receivedAtMs)
+                st.executeUpdate()
+            }
+            Unit
+        }
+    }
+
+    override fun senders(accountId: String, limit: Int): List<MailSenderRecord> = c { c ->
+        c.prepareStatement(
+            """SELECT address, name, list_unsubscribe, one_click, headers_checked, last_message_id, last_at_ms, seen_count
+               FROM mail_sender WHERE account_id = ? ORDER BY seen_count DESC, last_at_ms DESC, address LIMIT ?""",
+        ).use { st ->
+            st.setString(1, accountId); st.setInt(2, limit)
+            st.executeQuery().use { rs ->
+                buildList {
+                    while (rs.next()) add(MailSenderRecord(
+                        rs.getString(1), rs.getString(2), rs.getString(3), rs.getBoolean(4), rs.getBoolean(5), rs.getString(6), rs.getLong(7), rs.getInt(8),
+                    ))
+                }
+            }
+        }
+    }
+
+    override fun setSenderHeaders(accountId: String, address: String, listUnsubscribe: String?, oneClick: Boolean) = c { c ->
+        c.prepareStatement("UPDATE mail_sender SET list_unsubscribe = ?, one_click = ?, headers_checked = TRUE, updated_at = now() WHERE account_id = ? AND address = ?").use { st ->
+            st.setString(1, listUnsubscribe); st.setBoolean(2, oneClick); st.setString(3, accountId); st.setString(4, address)
+            st.executeUpdate()
+        }
+        Unit
     }
 
     private fun ResultSet.header() = MailHeader(

@@ -247,6 +247,27 @@ object ActivityRules {
         undoAskedAtMs = b.undoAskedAtMs ?: (if (nowMs - b.atMs > MailAutopilotRules.UNDO_DAYS * 86_400_000L) b.atMs else null),
     )
 
+    // ---- Inbox autopilot: Unsubscribe (slice 5a) ----
+
+    const val UNSUBSCRIBE_WHY = "You tapped Unsubscribe in Mail · Navilife did it from that account"
+    const val UNSUBSCRIBE_SOURCE = "mail_unsubscribe"
+
+    /** An Unsubscribe the server tried, as an Activity row (nothing to undo); null before it was tried. */
+    fun unsubscribeItem(s: MailSender): ActivityItem? {
+        val at = s.triedAtMs ?: return null
+        val state = s.state ?: return null
+        val summary = when {
+            state.finished -> "Unsubscribed from ${s.name} · ${s.account}"
+            state == UnsubscribeState.OPEN_LINK -> "${s.name} · ${s.account} · open its page to unsubscribe"
+            else -> "Couldn't unsubscribe from ${s.name} · ${s.account}"
+        }
+        return ActivityItem(
+            id = "u" + s.id, atMs = at, kind = ActivityKind.CHANGED,
+            summary = summary, detail = s.note ?: state.note, why = UNSUBSCRIBE_WHY, source = UNSUBSCRIBE_SOURCE, level = null,
+            changes = emptyList(), undoneAtMs = null, undoNote = null,
+        )
+    }
+
     // ---- Calendar edits (slice 2d) ----
 
     /** Row id for calendar edit [editId]: one per edit, on every device. */
@@ -529,7 +550,25 @@ class ActivityLog(
     private val calendar: LocalCalendar = LocalCalendar.UTC,
 ) {
     /** Everything in the log: MEKA's own entries, then Meka's calendar edits (read from the edits themselves). */
-    fun items(): List<ActivityItem> = stored() + calendarEdits() + mailTidies()
+    fun items(): List<ActivityItem> = stored() + calendarEdits() + mailTidies() + unsubscribes()
+
+    /** Inbox autopilot (slice 5a): each Unsubscribe the server tried, read from the synced `mail_sender` entity. */
+    private fun unsubscribes(): List<ActivityItem> = mailSenders().mapNotNull { ActivityRules.unsubscribeItem(it) }
+
+    /** The newsletter and promo senders as Mail reads them. */
+    fun mailSenders(): List<MailSender> = replica.entities(EntityTypes.MAIL_SENDER)
+        .mapNotNull { s -> MailUnsubscribeRules.read(s.ref.entityId, s.fields) }
+
+    /**
+     * Unsubscribe on one sender (Mail): asks the server to do it at its next check. The line Mail shows: asked, already
+     * done/asked, or unknown.
+     */
+    fun askUnsubscribe(id: String): String {
+        val s = mailSenders().firstOrNull { it.id == id } ?: return MailSenderPanelRules.UNKNOWN
+        val ask = MailSenderPanelRules.ask(s, nowMs()) ?: return if (MailUnsubscribeRules.due(s)) MailSenderPanelRules.ASKED_LINE else MailSenderPanelRules.ALREADY
+        replica.commitLocal(EntityTypes.MAIL_SENDER, id, ask)
+        return MailSenderPanelRules.ASKED_LINE
+    }
 
     /** Inbox autopilot (slice 3b-2): each tidy the server did, read from the synced `mail_tidy` entity itself. */
     private fun mailTidies(): List<ActivityItem> {

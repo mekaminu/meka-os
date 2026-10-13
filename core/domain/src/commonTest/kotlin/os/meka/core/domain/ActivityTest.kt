@@ -270,6 +270,31 @@ class ActivityTest {
         assertTrue(la.view().isEmpty)
     }
 
+    // ---- Inbox autopilot, slice 5a: Unsubscribe asked on one app, the server's outcome in Activity ----
+
+    @Test
+    fun unsubscribeIsAskedOnceAndTheOutcomeShowsInActivity() {
+        val at = world.clock.nowMs
+        val id = MailUnsubscribeRules.senderId("acc", "news@digest.example")
+        m.replica.commitLocal(EntityTypes.MAIL_SENDER, id, MailUnsubscribeRules.senderFields("Personal", "Weekly Digest", "digest.example", UnsubscribeMethod.ONE_CLICK, at, 4))
+        syncBoth()
+        assertEquals(MailSenderPanelRules.UNKNOWN, la.askUnsubscribe("nope"))
+        assertTrue(la.items().none { it.id == "u$id" })
+        world.clock.nowMs += 60_000
+        assertEquals(MailSenderPanelRules.ASKED_LINE, la.askUnsubscribe(id))
+        assertEquals(MailSenderPanelRules.ASKED_LINE, la.askUnsubscribe(id))
+        syncBoth()
+        assertEquals(world.clock.nowMs, m.replica.entity(EntityTypes.MAIL_SENDER, id)?.get(MailSenderFields.ASKED_AT)?.longOrNull)
+        // The server does it.
+        m.replica.commitLocal(EntityTypes.MAIL_SENDER, id, MailUnsubscribeRules.outcomeFields(UnsubscribeState.DONE, world.clock.nowMs + 60_000))
+        syncBoth()
+        val item = la.items().single { it.id == "u$id" }
+        assertEquals("Unsubscribed from Weekly Digest · Personal", item.summary)
+        assertFalse(item.canUndo)
+        assertEquals(UndoOutcome.NOT_UNDOABLE, la.undo("u$id"))
+        assertEquals(MailSenderPanelRules.ALREADY, la.askUnsubscribe(id))
+    }
+
     // ---- Inbox autopilot, slice 3b-2: the server's tidies in Activity, with Undo ----
 
     @Test
