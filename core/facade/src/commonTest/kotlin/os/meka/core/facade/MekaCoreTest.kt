@@ -497,7 +497,8 @@ class MekaCoreTest {
 
     @Test
     fun theWakeAlarmSetOnTheFoldRingsOnBothAndDismissOnTheMacStopsTheFold() = runTest {
-        // Alarms, slice 1: Thursday evening (BST); Friday is a work day, so work at 09:00 less an hour.
+        // Alarms, slice 1: Thursday evening (BST); Friday is an office day, so work at 09:00 less the commute
+        // (1 h 20 until set) and an hour.
         val london = TimeZone.of("Europe/London")
         fun at(d: Int, h: Int, m: Int) = kotlinx.datetime.LocalDateTime(2026, 10, d, h, m).toInstant(london).toEpochMilliseconds()
         now = at(8, 21, 30)
@@ -505,12 +506,19 @@ class MekaCoreTest {
         a.tick()
         val v = a.wakeView.value
         assertEquals("Tomorrow · Fri 9 Oct", v.dayLabel)
-        assertEquals("08:00", v.timeLabel)
-        assertEquals("Suggested from Work at 09:00 · 1 h to get ready", v.line)
+        assertEquals("06:40", v.timeLabel)
+        assertEquals("Suggested from Work at 09:00 · 1 h 20 commute · 1 h to get ready", v.line)
         assertEquals(null, a.nextAlarm.value)
+        // The commute set on the Mac moves the Fold's suggestion (the commute counts everywhere, slice 1).
+        assertTrue(m.setCommute(60, 90))
+        assertEquals("1 h there · 1 h 30 home", os.meka.core.domain.CommuteRules.summary(m.workMode.value.commute))
+        m.syncNow(); a.syncNow(); a.tick()
+        assertEquals("Suggested from Work at 09:00 · 1 h commute · 1 h to get ready", a.wakeView.value.line)
+        assertTrue(a.setCommute(80, 80))
+        a.tick()
 
         assertTrue(a.useSuggestedWake())
-        assertEquals(at(9, 8, 0), a.nextAlarm.value?.ringAtMs)
+        assertEquals(at(9, 6, 40), a.nextAlarm.value?.ringAtMs)
         assertEquals("Work at 09:00", a.nextAlarm.value?.line)
         assertTrue(a.setWake(7 * 60 + 45))
         assertEquals("07:45", a.wakeView.value.timeLabel)

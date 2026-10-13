@@ -29,6 +29,7 @@ object WorkFields {
      * Int64, one of [VoiceRecordingRules.KEEP_CHOICES] (0 = don't keep). Last writer wins; absent = 30. Added 2026-10-10.
      */
     const val RECORDING_DAYS = "callRecordingDays"
+    // The door-to-door commute ([CommuteFields], 2026-10-13) is on this entity too: commuteToWorkMin, commuteHomeMin.
 }
 
 /** Local wall-clock position in the week: ISO day of week (1 = Monday … 7 = Sunday) and minute of day (0 … 1439). */
@@ -276,6 +277,8 @@ data class WorkModeState(
     val recordingDays: Int = VoiceRecordingRules.DEFAULT_KEEP_DAYS,
     /** The assistant is paused for want of credit ([CallCreditRules]): calls ring as usual, the Work screen says why. */
     val callAssistantPaused: Boolean = false,
+    /** The door-to-door commute each way ([CommuteRules]): counted on office days only. */
+    val commute: CommuteSetting = CommuteSetting.DEFAULT,
 ) {
     /** The switch overrides the schedule: offer "Back to schedule". */
     val switchedManually: Boolean get() = source == WorkSource.MANUAL
@@ -419,6 +422,8 @@ data class WorkHours(
      * [holidays] stays the bank holidays alone (the school's days still follow those).
      */
     val leaveDays: Set<Long> = emptySet(),
+    /** The door-to-door commute ([CommuteRules.toWorkOn]): only counted on an office day. */
+    val commute: CommuteSetting = CommuteSetting.DEFAULT,
 ) {
     fun isWorkDay(epochDay: Long): Boolean =
         epochDay != offDay && epochDay !in leaveDays && WorkModeRules.isWorkDay(schedule, holidays, epochDay)
@@ -461,7 +466,7 @@ data class WorkHours(
             leaveDays: Set<Long> = emptySet(),
         ): WorkHours = WorkHours(
             state.schedule, holidays, offDay = todayEpochDay.takeIf { state.switchedManually && !state.atWork },
-            homeDays = homeDays, leaveDays = leaveDays,
+            homeDays = homeDays, leaveDays = leaveDays, commute = state.commute,
         )
 
         /** [WorkFields.HOME_DAYS] read: unreadable entries skipped. */
@@ -498,7 +503,7 @@ class WorkMode(
 
     /** [epochDay] is today's local date; with it, bank holidays are days off. */
     fun state(clock: LocalClock, epochDay: Long? = null): WorkModeState =
-        WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, workHolidays()).copy(callAssistant = callAssistant(), recordingDays = recordingDays())
+        WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, workHolidays()).copy(callAssistant = callAssistant(), recordingDays = recordingDays(), commute = commute())
 
     /** Work hours for Today and the Calendar tab, with today's manual "Work off" (a sick day) taken into account. */
     fun hours(clock: LocalClock, epochDay: Long): WorkHours =
@@ -541,6 +546,21 @@ class WorkMode(
         val stored = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.RECORDING_DAYS)
         if (stored != null && recordingDays() == days) return false
         replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.RECORDING_DAYS to days.toLong().fv()))
+        return true
+    }
+
+    /** The door-to-door commute each way (synced; the default until either app sets it). */
+    fun commute(): CommuteSetting = CommuteRules.read(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.fields)
+
+    /** Sets both directions; false (nothing written) for a time outside 10 min–4 h in fives, or no change. */
+    fun setCommute(toWorkMin: Int, homeMin: Int): Boolean {
+        if (!CommuteRules.valid(toWorkMin) || !CommuteRules.valid(homeMin)) return false
+        val now = commute()
+        if (now.chosen && now.toWorkMin == toWorkMin && now.homeMin == homeMin) return false
+        replica.commitLocal(
+            EntityTypes.CONTEXT_MODE, ENTITY_ID,
+            mapOf(CommuteFields.TO_WORK to toWorkMin.toLong().fv(), CommuteFields.HOME to homeMin.toLong().fv()),
+        )
         return true
     }
 

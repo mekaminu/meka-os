@@ -86,6 +86,7 @@ import os.meka.core.domain.LocalClock
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.PersonSummary
 import os.meka.core.domain.WorkSchedule
+import os.meka.core.domain.CommuteRules
 import os.meka.core.domain.LeavingRules
 import os.meka.core.facade.MekaCore
 import java.time.Instant
@@ -188,6 +189,12 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
             style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { save(schedule.copy(enabled = !schedule.enabled)) }.padding(vertical = MekaSpace.xxs),
         )
+
+        Spacer(Modifier.height(MekaSpace.m))
+        Label(CommuteRules.TITLE, 3)
+        CommuteSection(work.commute, Modifier.appear(rememberAppearance(3))) { to, home ->
+            scope.launch { core.setCommute(to, home) }
+        }
 
         Spacer(Modifier.height(MekaSpace.m))
         Label(LeavingRules.TITLE, 3)

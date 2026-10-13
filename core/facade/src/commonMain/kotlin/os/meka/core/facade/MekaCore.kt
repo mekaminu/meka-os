@@ -2993,6 +2993,13 @@ class MekaCore(
     suspend fun setWorkSchedule(days: List<Int>, startMinute: Int, endMinute: Int, enabled: Boolean) =
         onCore { work.setSchedule(WorkSchedule(days.toSet(), startMinute, endMinute, enabled, work.schedule().dayHours)) }
 
+    /**
+     * The door-to-door commute each way (the commute counts everywhere, slice 1), synced; counted on office days only
+     * (the wake alarm: work start − commute − time to get ready). Returns false for a time outside 10 min–4 h in
+     * fives or no change.
+     */
+    suspend fun setCommute(toWorkMin: Int, homeMin: Int): Boolean = onCore { work.setCommute(toWorkMin, homeMin).also { if (it) refresh() } }
+
     /** [isoDay]'s own hours (Thursday's short day); the usual hours clear them. */
     suspend fun setWorkDayHours(isoDay: Int, startMinute: Int, endMinute: Int) =
         onCore { work.setSchedule(work.schedule().withDayHours(isoDay, os.meka.core.domain.DayHours(startMinute, endMinute))) }

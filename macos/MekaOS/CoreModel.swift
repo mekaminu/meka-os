@@ -1086,6 +1086,14 @@ final class CoreModel {
     }
 
     /// "Leaving now": on or off, who it goes to and the usual journey home. Only a Bool, a String and an Int32 cross.
+    /// The door-to-door commute each way (the commute counts everywhere, slice 1), synced with the Fold. Only two
+    /// Int32s cross.
+    func setCommute(toWorkMin: Int, homeMin: Int) {
+        MekaHaptics.tick()
+        let t = Int32(toWorkMin), h = Int32(homeMin)
+        run { _ = try await $0.setCommute(toWorkMin: t, homeMin: h) }
+    }
+
     func setLeavingNow(on: Bool, to: String, journeyMin: Int) {
         MekaHaptics.tick()
         let j = Int32(journeyMin)

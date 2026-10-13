@@ -74,16 +74,25 @@ data class Alarm(
     val ringAtMs: Long get() = snoozedUntilMs ?: atMs
 }
 
-/** Tomorrow's first commitment: what the wake time is worked out from. */
-data class WakeCommitment(val minute: Int, val title: String, val isWork: Boolean) {
+/**
+ * Tomorrow's first commitment: what the wake time is worked out from. [commuteMin] is the door-to-door commute before
+ * it (work on an office day, [CommuteRules]); 0 for an event or a work-from-home day.
+ */
+data class WakeCommitment(val minute: Int, val title: String, val isWork: Boolean, val commuteMin: Int = 0) {
     /** "Standup at 08:00" · "Work at 09:00". */
     val line: String get() = "$title at ${LocalClock.formatMinute(minute)}"
+
+    /** When Meka has to be out of the door (or at the event): the commitment less the commute. */
+    val leaveMinute: Int get() = minute - commuteMin
+
+    /** "Work at 09:00 · 1 h 20 commute" on an office day, else [line]. */
+    val withCommute: String get() = if (commuteMin > 0) "$line · ${AlarmRules.duration(commuteMin)} commute" else line
 }
 
 data class WakeSuggestion(
     val minute: Int,
     val commitment: WakeCommitment,
-    /** "Standup at 08:00 · 1 h to get ready". */
+    /** "Standup at 08:00 · 1 h to get ready" · "Work at 09:00 · 1 h 20 commute · 1 h to get ready". */
     val line: String,
 )
 
@@ -166,27 +175,35 @@ object AlarmRules {
         return if (cal.minuteOfDay(nowMs) < EARLIEST_COMMITMENT_MIN) today else today + 1
     }
 
-    /** The first thing on [epochDay] from 04:00: a timed event or the start of a work shift (events win a tie). */
+    /**
+     * The first thing on [epochDay] from 04:00: a timed event or the start of a work shift, whichever needs Meka out
+     * of bed first. On an office day the shift counts from when he has to leave ([CommuteRules.toWorkOn]): work at
+     * 09:00 with a 1 h 20 commute comes before an 08:30 event at home. Events win a tie.
+     */
     fun firstCommitment(epochDay: Long, events: List<CalendarEvent>, work: WorkHours, cal: LocalCalendar): WakeCommitment? {
         val from = cal.toEpochMs(epochDay, EARLIEST_COMMITMENT_MIN)
         val end = cal.toEpochMs(epochDay + 1, 0)
         val event = events.filter { !it.allDay && it.startAtMs >= from && it.startAtMs < end }
             .minWithOrNull(compareBy<CalendarEvent> { it.startAtMs }.thenBy { it.title })
         val shift = work.blocks(epochDay, cal).firstOrNull { it.startMs >= from && it.startMs < end }
+        val commute = shift?.let { CommuteRules.toWorkOn(work, epochDay) } ?: 0
         return when {
-            event != null && (shift == null || event.startAtMs <= shift.startMs) ->
+            event != null && (shift == null || event.startAtMs <= shift.startMs - commute * 60_000L) ->
                 WakeCommitment(cal.minuteOfDay(event.startAtMs), event.title.trim().ifEmpty { "First event" }, isWork = false)
-            shift != null -> WakeCommitment(shift.startMinute, WorkHours.TITLE, isWork = true)
+            shift != null -> WakeCommitment(shift.startMinute, WorkHours.TITLE, isWork = true, commuteMin = commute)
             else -> null
         }
     }
 
-    /** The commitment less the buffer, rounded down to five minutes, never before 04:00. */
+    /**
+     * The commitment less its commute (office days) and the buffer, rounded down to five minutes, never before 04:00:
+     * work at 09:00, a 1 h 20 commute and 1 h to get ready → 06:40.
+     */
     fun suggest(commitment: WakeCommitment?, bufferMin: Int): WakeSuggestion? {
         commitment ?: return null
-        val raw = commitment.minute - bufferMin
+        val raw = commitment.leaveMinute - bufferMin
         val minute = (raw.floorDiv(STEP_MIN) * STEP_MIN).coerceAtLeast(EARLIEST_WAKE_MIN)
-        return WakeSuggestion(minute, commitment, "${commitment.line} · ${bufferLine(bufferMin)}")
+        return WakeSuggestion(minute, commitment, "${commitment.withCommute} · ${bufferLine(bufferMin)}")
     }
 
     /** "1 h to get ready" · "45 min to get ready" · "1 h 15 to get ready". */
@@ -221,8 +238,9 @@ object AlarmRules {
         val today = cal.epochDayOf(nowMs)
         val dayWord = if (wakeDay == today) "This morning" else "Tomorrow"
         val line = when {
-            set != null && suggestion != null && !earlier -> "Alarm set · ${suggestion.commitment.line}, ${bufferLine(bufferMin)}"
-            set != null && earlier -> "Alarm set · ${suggestion!!.commitment.line} now, so ${LocalClock.formatMinute(suggestion.minute)} gives you ${duration(bufferMin)}"
+            set != null && suggestion != null && !earlier -> "Alarm set · ${suggestion.commitment.withCommute}, ${bufferLine(bufferMin)}"
+            set != null && earlier -> "Alarm set · ${suggestion!!.commitment.line} now, so ${LocalClock.formatMinute(suggestion.minute)} gives you ${duration(bufferMin)}" +
+                (if (suggestion.commitment.commuteMin > 0) " and the ${duration(suggestion.commitment.commuteMin)} commute" else "")
             set != null -> "Alarm set · rings in ${duration(((cal.toEpochMs(wakeDay, set) - nowMs + 59_999) / 60_000).toInt().coerceAtLeast(0))}"
             suggestion != null -> "Suggested from ${suggestion.line}"
             else -> NOTHING_EARLY.replace("tomorrow", if (wakeDay == today) "this morning" else "tomorrow")

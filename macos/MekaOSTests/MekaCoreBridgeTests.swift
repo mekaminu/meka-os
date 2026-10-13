@@ -339,6 +339,24 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(LeavingRules.shared.journeyLabel(min: 90), "1 h 30")
     }
 
+    func testCommuteReachesSwift() async throws {
+        // The commute counts everywhere, slice 1: the synced setting on the work state, its line and the chips.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "commute-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let rules = CommuteRules.shared
+        XCTAssertEqual(rules.summary(s: CommuteSetting.companion.DEFAULT), "About 1 h 20 each way · change it below")
+        let changed = try await core.setCommute(toWorkMin: 90, homeMin: 70)
+        XCTAssertTrue(changed.boolValue)
+        XCTAssertEqual(core.workMode.value.commute.toWorkMin, 90)
+        XCTAssertTrue(core.workMode.value.commute.chosen)
+        XCTAssertEqual(rules.summary(s: core.workMode.value.commute), "1 h 30 there · 1 h 10 home")
+        XCTAssertEqual(rules.choices(current: 75).map { Int($0.int32Value) }, [45, 60, 70, 75, 80, 90, 100, 120])
+        XCTAssertEqual(rules.label(min: 80), "1 h 20")
+    }
+
     func testWeekAheadReachesSwift() async throws {
         // The Sunday week ahead: the view, its days and lines, and Sunday's heads-up source.
         let core = MacCoreFactory.shared.create(

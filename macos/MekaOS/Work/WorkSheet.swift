@@ -68,6 +68,7 @@ struct WorkSheet: View {
             Toggle("Use these hours (off: the switch only)", isOn: Binding(get: { enabled }, set: { enabled = $0; save() }))
                 .staggeredAppear(2)
 
+            commute.staggeredAppear(3)
             leavingNow.staggeredAppear(3)
 
             Text("CALL ASSISTANT").font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
@@ -112,6 +113,39 @@ struct WorkSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.switchedManually)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.callAssistant)
         .onAppear(perform: load)
+    }
+
+    /// The commute counts everywhere, slice 1: the door-to-door time each way, synced with the Fold (default about
+    /// 1 h 20 until set). Counted on office days only; the wake alarm uses it. The line cross-fades.
+    private var commute: some View {
+        let rules = CommuteRules.shared
+        let setting = model.work?.commute ?? CommuteSetting.companion.DEFAULT
+        let toWork = Int(setting.toWorkMin), home = Int(setting.homeMin)
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text("COMMUTE").font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.m)
+            Text(rules.summary(s: setting))
+                .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                .contentTransition(.opacity)
+            HStack(spacing: MekaSpace.xs) {
+                Picker("To work", selection: Binding(get: { toWork }, set: { model.setCommute(toWorkMin: $0, homeMin: home) })) {
+                    ForEach(rules.choices(current: Int32(toWork)).map { Int($0.int32Value) }, id: \.self) { m in
+                        Text(rules.label(min: Int32(m))).tag(m)
+                    }
+                }
+                .frame(width: 180)
+                Picker("Home", selection: Binding(get: { home }, set: { model.setCommute(toWorkMin: toWork, homeMin: $0) })) {
+                    ForEach(rules.choices(current: Int32(home)).map { Int($0.int32Value) }, id: \.self) { m in
+                        Text(rules.label(min: Int32(m))).tag(m)
+                    }
+                }
+                .frame(width: 160)
+            }
+            Text(rules.NOTE)
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: setting.chosen)
     }
 
     /// "Leaving now" (V1): on or off, who the draft goes to and the journey home, synced with the Fold (where the

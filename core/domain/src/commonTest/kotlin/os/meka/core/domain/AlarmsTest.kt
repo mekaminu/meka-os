@@ -21,6 +21,8 @@ class AlarmsTest {
     private val fri = thu + 1
     private val sat = thu + 2
     private val work = WorkHours(WorkSchedule.DEFAULT)
+    /** Friday from home: no commute, so an 08:00 standup comes before work. */
+    private val wfh = WorkHours(WorkSchedule.DEFAULT, homeDays = setOf(fri))
 
     private fun ms(d: Long, minute: Int) = d * day + minute * min
     private fun at(d: Long, minute: Int) { world.clock.nowMs = ms(d, minute) }
@@ -30,12 +32,16 @@ class AlarmsTest {
 
     @Test
     fun theWakeTimeIsTheFirstCommitmentLessTheBuffer() {
-        // Friday is a work day: work at 09:00 less an hour.
+        // Friday is an office day: work at 09:00 less the 1 h 20 commute and an hour.
         val s = AlarmRules.suggest(AlarmRules.firstCommitment(fri, emptyList(), work, cal), 60)!!
-        assertEquals(8 * 60, s.minute)
-        assertEquals("Work at 09:00 · 1 h to get ready", s.line)
+        assertEquals(6 * 60 + 40, s.minute)
+        assertEquals("Work at 09:00 · 1 h 20 commute · 1 h to get ready", s.line)
+        // From home: work less an hour.
+        val home = AlarmRules.suggest(AlarmRules.firstCommitment(fri, emptyList(), wfh, cal), 60)!!
+        assertEquals(8 * 60, home.minute)
+        assertEquals("Work at 09:00 · 1 h to get ready", home.line)
         // An earlier event wins over work, and the time rounds down to five minutes.
-        val standup = AlarmRules.firstCommitment(fri, listOf(ev("Standup", fri, 8 * 60 + 7)), work, cal)!!
+        val standup = AlarmRules.firstCommitment(fri, listOf(ev("Standup", fri, 8 * 60 + 7)), wfh, cal)!!
         assertEquals("Standup at 08:07", standup.line)
         assertEquals(7 * 60 + 5, AlarmRules.suggest(standup, 60)!!.minute)
         assertEquals("Standup at 08:07 · 1 h 15 to get ready", AlarmRules.suggest(standup, 75)!!.line)
@@ -59,7 +65,7 @@ class AlarmsTest {
         at(thu, 21 * 60 + 30)
         val a = alarms(fold)
         val events = listOf(ev("Standup", fri, 8 * 60))
-        val v = a.wakeView(events, work)
+        val v = a.wakeView(events, wfh)
         assertEquals(fri, v.epochDay)
         assertEquals("Tomorrow · Fri 9 Oct", v.dayLabel)
         assertFalse(v.isSet)
@@ -67,13 +73,13 @@ class AlarmsTest {
         assertEquals("Suggested from Standup at 08:00 · 1 h to get ready", v.line)
 
         assertTrue(a.setWake(v.minute, v.suggestion?.commitment?.line))
-        val set = a.wakeView(events, work)
+        val set = a.wakeView(events, wfh)
         assertTrue(set.isSet)
         assertEquals("Alarm set · Standup at 08:00, 1 h to get ready", set.line)
         assertFalse(set.suggestionEarlier)
 
         // A new 07:30 meeting: the alarm stays, the view offers the earlier time.
-        val moved = a.wakeView(events + ev("Early call", fri, 7 * 60 + 30), work)
+        val moved = a.wakeView(events + ev("Early call", fri, 7 * 60 + 30), wfh)
         assertEquals("07:00", moved.timeLabel)
         assertTrue(moved.suggestionEarlier)
         assertEquals("Use 06:30", moved.useSuggestionLabel)
@@ -81,13 +87,13 @@ class AlarmsTest {
 
         // The buffer is Meka's to choose; outside 15 min–3 h is refused.
         assertTrue(a.setBuffer(45))
-        assertEquals(7 * 60 + 15, a.wakeView(events, work).suggestion!!.minute)
+        assertEquals(7 * 60 + 15, a.wakeView(events, wfh).suggestion!!.minute)
         assertFalse(a.setBuffer(200))
         assertFalse(a.setBuffer(47))
         assertEquals(45, a.bufferMin())
 
         a.wakeOff()
-        assertFalse(a.wakeView(events, work).isSet)
+        assertFalse(a.wakeView(events, wfh).isSet)
         assertNull(a.next())
     }
 
