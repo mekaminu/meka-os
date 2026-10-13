@@ -113,4 +113,97 @@ class CommuteTest {
         assertTrue(macWork.setCommute(80, 80))
         assertTrue(macWork.commute().chosen)
     }
+
+    // ---- Slice 2: Today's commute bands and the Calendar's line ----
+
+    private fun timeline(now: Long, d: Long, hours: WorkHours?, events: List<CalendarEvent> = emptyList()) =
+        TodayProjection.project(emptyList(), now, CalendarAgenda.window(d, cal), events, cal, work = hours).timeline
+
+    private fun rows(tl: DayTimeline) = tl.rows.map {
+        when {
+            it.kind == TimelineKind.GAP -> "gap:${it.title}"
+            it.kind == TimelineKind.NOW && it.detail != null -> "now:${it.detail}"
+            else -> it.id
+        }
+    }
+
+    @Test
+    fun anOfficeDayHasABandEachSideOfWork() {
+        val bands = CommuteRules.bands(work, fri, cal)
+        assertEquals(listOf("07:40–09:00", "17:30–18:50"), bands.map { it.label })
+        assertTrue(bands[0].toWork)
+        assertEquals(ms(fri, 7 * 60 + 40), bands[0].startMs)
+        assertEquals(ms(fri, 18 * 60 + 50), bands[1].endMs)
+        // Thursday's short day: home about 16:50.
+        assertEquals("15:30–16:50", CommuteRules.bands(work, thu, cal)[1].label)
+        // No bands from home, on leave, on a bank holiday or at the weekend.
+        assertTrue(CommuteRules.bands(WorkHours(WorkSchedule.DEFAULT, homeDays = setOf(fri)), fri, cal).isEmpty())
+        assertTrue(CommuteRules.bands(WorkHours(WorkSchedule.DEFAULT, leaveDays = setOf(fri)), fri, cal).isEmpty())
+        assertTrue(CommuteRules.bands(WorkHours(WorkSchedule.DEFAULT, HolidayCalendar(mapOf(fri to "Bank holiday"))), fri, cal).isEmpty())
+        assertTrue(CommuteRules.bands(work, sat, cal).isEmpty())
+        // His own times move them.
+        val own = WorkHours(WorkSchedule.DEFAULT, commute = CommuteSetting(60, 95, chosen = true))
+        assertEquals(listOf("08:00–09:00", "17:30–19:05"), CommuteRules.bands(own, fri, cal).map { it.label })
+        // A shift late in the day: the commute home is cut at midnight; an early one's commute starts at midnight.
+        val late = WorkHours(WorkSchedule(setOf(5), 15 * 60, 23 * 60))
+        val lateBands = CommuteRules.bands(late, fri, cal)
+        assertEquals(ms(fri + 1, 0), lateBands[1].endMs)
+        assertEquals("23:00–00:20", lateBands[1].label)
+        val early = WorkHours(WorkSchedule(setOf(5), 60, 9 * 60))
+        assertEquals(ms(fri, 0), CommuteRules.bands(early, fri, cal)[0].startMs)
+        // A night shift has no commute home on the day it starts.
+        val night = WorkHours(WorkSchedule(setOf(5), 22 * 60, 6 * 60))
+        assertEquals(listOf(true), CommuteRules.bands(night, fri, cal).map { it.toWork })
+    }
+
+    @Test
+    fun todaysTimelineShowsTheCommuteAsBandsNotEvents() {
+        // 06:30 on an office day: free until he leaves, the commute, work, the commute home.
+        val morning = timeline(ms(fri, 6 * 60 + 30), fri, work)
+        assertEquals(listOf("now:1 h 10 free before you leave", "c-to", "w-540", "c-home"), rows(morning))
+        val to = morning.rows[1]
+        assertEquals(TimelineKind.COMMUTE, to.kind)
+        assertEquals("07:40–09:00", to.time)
+        assertEquals("Commute", to.title)
+        assertNull(to.detail)
+        val home = morning.rows.last()
+        assertEquals("Commute home", home.title)
+        assertEquals("17:30–18:50", home.time)
+        assertEquals("Home about 18:50", home.detail)
+        // Not an event ahead, not Up next, not in the section's summary.
+        assertFalse(morning.hasEventsAhead)
+        assertNull(morning.nextEvent)
+        assertEquals("Work 09:00–17:30", morning.summary)
+        // On the train: lit, with when he gets in.
+        val onTheWay = timeline(ms(fri, 8 * 60), fri, work)
+        assertEquals("c-to", onTheWay.rows.first().id)
+        assertTrue(onTheWay.rows.first().running)
+        assertEquals("Now · at work about 09:00", onTheWay.rows.first().detail)
+        // Training at 19:30: the gap after the commute home is time at home.
+        val training = ev("Training", fri, 19 * 60 + 30)
+        assertEquals(listOf("w-540", "now", "c-home", "gap:40 min free at home", "e-Training"), rows(timeline(ms(fri, 11 * 60), fri, work, listOf(training))))
+        // On the way home: lit, and the morning band has gone (not folded into "earlier").
+        val evening = timeline(ms(fri, 18 * 60), fri, work)
+        assertEquals("c-home", evening.rows.first().id)
+        assertEquals("Now · home about 18:50", evening.rows.first().detail)
+        assertTrue(evening.earlier.isEmpty())
+        // Home: nothing left on the timeline.
+        assertTrue(timeline(ms(fri, 19 * 60), fri, work).rows.isEmpty())
+        // From home: no bands.
+        val wfh = timeline(ms(fri, 6 * 60 + 30), fri, WorkHours(WorkSchedule.DEFAULT, homeDays = setOf(fri)))
+        assertEquals(listOf("now:2 h 30 free until Work from home", "w-540"), rows(wfh))
+    }
+
+    @Test
+    fun theCalendarSaysWhenHeLeavesAndGetsHome() {
+        val v = CalendarAgenda.build(emptyList(), emptyList(), ms(thu, 6 * 60), cal, days = 4, work = work)
+        assertEquals("Leave 07:40 · home about 16:50", v.sections[0].commuteLine) // Thursday's short day
+        assertEquals("Leave 07:40 · home about 18:50", v.sections[1].commuteLine)
+        assertNull(v.sections[2].commuteLine) // the weekend
+        val wfh = CalendarAgenda.build(emptyList(), emptyList(), ms(thu, 6 * 60), cal, days = 2,
+            work = WorkHours(WorkSchedule.DEFAULT, homeDays = setOf(fri)))
+        assertNull(wfh.sections[1].commuteLine)
+        // Only the commute home when the morning's is cut off by midnight.
+        assertEquals("Home about 09:20", CommuteRules.calendarLine(WorkHours(WorkSchedule(setOf(5), 0, 8 * 60)), fri, cal))
+    }
 }

@@ -291,7 +291,20 @@ private struct AgendaSectionView: View {
             }
             .animation(MekaMotion.appear(reduced: reduceMotion), value: section.workLabel)
             .padding(.top, free ? MekaSpace.xs : MekaSpace.l)
-            .padding(.bottom, MekaSpace.xs)
+            .padding(.bottom, section.commuteLine == nil ? MekaSpace.xs : 0)
+
+            // The commute on an office day (the commute counts everywhere, slice 2): a quiet line under the heading,
+            // ending on the Work label's column, "Leave 07:40 · home about 18:50"; it cross-fades as it changes.
+            if let commute = section.commuteLine {
+                Text(commute).font(MekaType.micro).tracking(MekaType.microTracking)
+                    .foregroundStyle(palette.textTertiary.opacity(0.75)).lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.top, MekaSpace.xxs)
+                    .padding(.bottom, MekaSpace.xs)
+                    .id(commute)
+                    .transition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: commute)
+            }
 
             if !section.allDayItems.isEmpty {
                 // The "All day" group as Today shows it: the label once, one row each, "+2 more" unfolds the rest.

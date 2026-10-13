@@ -259,6 +259,37 @@ struct WorkTimelineRow: View {
     }
 }
 
+/// The commute on an office day (the commute counts everywhere, slice 2): thinner than the work band — no box, a short
+/// bar and "Commute" / "Commute home · Home about 18:50" in the caption style; on the way, the bar is lit and "Now · home
+/// about 18:50" sits in the accent colour. Not an event: no clicks. It glides and leaves like the work row.
+struct CommuteTimelineRow: View {
+    let row: TimelineRow
+    let palette: MekaPalette
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text(row.time).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textTertiary)
+                .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
+            HStack(spacing: MekaSpace.xs) {
+                RoundedRectangle(cornerRadius: 1).fill(row.running ? palette.accent : palette.hairline).frame(width: 2, height: 10)
+                HStack(spacing: 0) {
+                    Text(row.title).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    if let detail = row.detail {
+                        Text(" · \(detail)").font(MekaType.caption)
+                            .foregroundStyle(row.running ? palette.accent : palette.textTertiary).lineLimit(1)
+                    }
+                }
+            }
+            .padding(.horizontal, MekaSpace.xs)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, MekaSpace.xxs)
+        .padding(.horizontal, MekaSpace.xs)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([row.title, row.time, row.detail].compactMap { $0 }.joined(separator: ", "))
+    }
+}
+
 /// The work band itself; the Calendar tab uses it for "Work 09:00–17:30" on each work day.
 struct WorkBand: View {
     let title: String

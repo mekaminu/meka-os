@@ -76,6 +76,11 @@ data class AgendaSection(
     val allDayLabel: String = "",
     /** One row per all-day entry ([allDay] in order), with its calendar under the title only when calendars are mixed. */
     val allDayItems: List<AllDayItem> = emptyList(),
+    /**
+     * The commute on an office day (the commute counts everywhere, slice 2), a quiet line under the heading:
+     * "Leave 07:40 · home about 18:50" ([CommuteRules.calendarLine]); null on any other day.
+     */
+    val commuteLine: String? = null,
 ) {
     /**
      * The quiet label beside the day's heading (Fold review 2026-10-12, polish 5: the Work row repeated under every day
@@ -284,6 +289,7 @@ object CalendarAgenda {
                             workRunning = workNow != null,
                             allDayLabel = allDayGroup?.label ?: "",
                             allDayItems = allDayGroup?.items ?: emptyList(),
+                            commuteLine = work?.let { CommuteRules.calendarLine(it, d, calendar) },
                         ),
                     )
                     i++

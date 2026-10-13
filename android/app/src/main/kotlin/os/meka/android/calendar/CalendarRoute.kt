@@ -376,6 +376,7 @@ private fun AgendaList(
                     TimelineKind.GAP -> Unit // the agenda has no gaps; Today shows free time
                     TimelineKind.SESSION -> Unit // booked sessions live on Today (and Goals), not in the agenda
                     TimelineKind.WORK -> Unit // the day's heading says "Work 09:00–17:30" instead
+                    TimelineKind.COMMUTE -> Unit // the heading's commute line says it instead
                 }
             }
         }
@@ -393,10 +394,8 @@ private fun AgendaList(
 @Composable
 private fun SectionHeader(s: AgendaSection, modifier: Modifier) {
     val free = s.kind == AgendaKind.FREE
-    Row(
-        modifier.fillMaxWidth().padding(top = if (free) MekaSpace.xs else MekaSpace.l, bottom = MekaSpace.xs),
-        verticalAlignment = Alignment.Bottom,
-    ) {
+    Column(modifier.fillMaxWidth().padding(top = if (free) MekaSpace.xs else MekaSpace.l, bottom = MekaSpace.xs)) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         Row(Modifier.weight(1f), verticalAlignment = Alignment.Bottom) {
             Text(
                 s.title, style = if (free) MekaType.body else MekaType.itemTitle,
@@ -418,6 +417,15 @@ private fun SectionHeader(s: AgendaSection, modifier: Modifier) {
                 }
             }
         }
+    }
+    // The commute on an office day (the commute counts everywhere, slice 2): a quiet line under the heading, pinned
+    // to the same trailing column as the Work label, "Leave 07:40 · home about 18:50"; it cross-fades as it changes.
+    s.commuteLine?.let { line ->
+        Crossfade(line, Modifier.align(Alignment.End), animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "commute-line") { l ->
+            Text(l, style = MekaType.micro, color = Meka.colors.textTertiary.copy(alpha = WORK_LABEL_DIM), maxLines = 1,
+                modifier = Modifier.padding(top = MekaSpace.xxs))
+        }
+    }
     }
 }
 

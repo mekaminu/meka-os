@@ -1135,6 +1135,7 @@ private fun TodayPane(
                             TimelineKind.NOW -> NowLine(r, m)
                             TimelineKind.SESSION -> SessionTimelineRow(r, m)
                             TimelineKind.WORK -> WorkTimelineRow(r, m)
+                            TimelineKind.COMMUTE -> CommuteTimelineRow(r, m)
                         }
                     }
                 }

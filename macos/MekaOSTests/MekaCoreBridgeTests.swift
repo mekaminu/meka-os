@@ -355,6 +355,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.summary(s: core.workMode.value.commute), "1 h 30 there · 1 h 10 home")
         XCTAssertEqual(rules.choices(current: 75).map { Int($0.int32Value) }, [45, 60, 70, 75, 80, 90, 100, 120])
         XCTAssertEqual(rules.label(min: 80), "1 h 20")
+        // Slice 2: Today's commute rows and the Calendar's line.
+        XCTAssertEqual(TimelineKind.commute.name, "COMMUTE")
+        XCTAssertEqual(rules.homeLine(minute: 18 * 60 + 50), "Home about 18:50")
+        XCTAssertEqual(rules.HOME_TITLE, "Commute home")
     }
 
     func testWeekAheadReachesSwift() async throws {

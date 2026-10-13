@@ -143,6 +143,31 @@ internal fun WorkBand(title: String, detail: String?, running: Boolean, modifier
     }
 }
 
+/**
+ * The commute on an office day (the commute counts everywhere, slice 2): thinner than the work band — no box, just a
+ * short bar and "Commute" / "Commute home · Home about 18:50" in the caption style; while on the way the bar is lit and
+ * "Now · home about 18:50" sits in the accent colour. Not an event: no taps. Motion as the work row (it glides with the
+ * other rows and leaves once over; reduced motion cross-fades).
+ */
+@Composable
+internal fun CommuteTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs)
+            .semantics(mergeDescendants = true) { contentDescription = listOfNotNull(r.title, r.time, r.detail).joinToString(", ") },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TimeColumn(r.time, past = true)
+        Spacer(Modifier.width(MekaSpace.xs))
+        Box(Modifier.width(2.dp).height(10.dp).clip(RoundedCornerShape(1.dp)).background(if (r.running) Meka.colors.accent else Meka.colors.hairline))
+        Spacer(Modifier.width(MekaSpace.xs))
+        Text(r.title, style = MekaType.caption, color = Meka.colors.textTertiary)
+        r.detail?.let {
+            Text(" · $it", style = MekaType.caption, color = if (r.running) Meka.colors.accent else Meka.colors.textTertiary,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
 /** A free stretch: "1 h 30 free", quiet. */
 @Composable
 internal fun GapRow(r: TimelineRow, modifier: Modifier = Modifier) {

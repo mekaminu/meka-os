@@ -12,6 +12,13 @@ enum class TimelineKind {
      * free gaps and leaves the timeline once it's over.
      */
     WORK,
+
+    /**
+     * The door-to-door commute on an office day (the commute counts everywhere, slice 2): a thin band before work
+     * ("Commute 07:40–09:00") and after it ("Commute home 17:30–18:50 · Home about 18:50"), not an event. Like work it
+     * takes its time out of the free gaps, isn't folded into "earlier", leaves once over and isn't offered to Up next.
+     */
+    COMMUTE,
 }
 
 /**
@@ -21,6 +28,7 @@ enum class TimelineKind {
 data class TimelineRow(
     /**
      * Stable across re-projections: "e-<event>", "t-<task>", "s-<habit>" (a booked session), "w-<start minute>" (work),
+     * "c-to" / "c-home" (the commute),
      * "gap-<the row after it>" (stable while now moves), "now".
      */
     val id: String,
@@ -189,6 +197,8 @@ object TimelineRules {
         anytimeLeft: Int = anytime.size,
         /** Whom Meka set for each club series ([ClubChildRules]): the clash asks "who's taking Rex?", the row names him. */
         children: Map<String, String> = emptyMap(),
+        /** Today's commute bands ([CommuteRules.bands]); none unless it's an office day. */
+        commute: List<CommuteBand> = emptyList(),
     ): DayTimeline {
         fun hhmm(ms: Long) = LocalClock.formatMinute(calendar.minuteOfDay(ms))
 
@@ -200,7 +210,9 @@ object TimelineRules {
          * and sessions fold once ended, work just leaves.
          */
         data class Item(val row: TimelineRow, val start: Long, val end: Long, val isEvent: Boolean) {
-            val isWork: Boolean get() = row.kind == TimelineKind.WORK
+            /** Work or the commute: quiet bands that just leave once over. */
+            val isWork: Boolean get() = row.kind == TimelineKind.WORK || row.kind == TimelineKind.COMMUTE
+            val isCommute: Boolean get() = row.kind == TimelineKind.COMMUTE
         }
         val clashes = WorkClashRules.clashes(dayEvents, work, calendar, children).associateBy { it.eventId }
         val items = buildList {
@@ -236,6 +248,13 @@ object TimelineRules {
                     if (running) "Now · until ${LocalClock.formatMinute(w.endMinute)}" else null, null, null, running, w.startMs)
                 add(Item(row, w.startMs, w.endMs, true))
             }
+            commute.filter { it.endMs > nowMs && it.endMs > today.startMs && it.startMs < today.endMs && it.endMs > it.startMs }.forEach { b ->
+                val running = b.startMs <= nowMs && b.endMs > nowMs
+                val row = TimelineRow(if (b.toWork) "c-to" else "c-home", TimelineKind.COMMUTE, b.label,
+                    if (b.toWork) CommuteRules.TO_WORK_TITLE else CommuteRules.HOME_TITLE, CommuteRules.detail(b, running),
+                    null, null, running, b.startMs)
+                add(Item(row, b.startMs, b.endMs, true))
+            }
         }.sortedWith(compareBy<Item> { it.start }.thenBy { !it.isEvent }.thenBy { it.isWork }.thenBy { it.row.title })
 
         val ended = items.filter { it.isEvent && !it.isWork && it.end <= nowMs }
@@ -253,17 +272,22 @@ object TimelineRules {
             val runningEnds = started.filter { it.isEvent }.map { it.end }
             var cursor = (runningEnds + nowMs).max()
             // The gap after work says so: it starts where work ended.
-            var afterWork = started.any { it.isWork && it.end == cursor }
+            var afterWork = started.any { it.isWork && !it.isCommute && it.end == cursor }
+            var afterCommuteHome = started.any { it.isCommute && it.row.id == "c-home" && it.end == cursor }
             ahead.forEachIndexed { i, item ->
                 val free = ((item.start - cursor) / MIN_MS).toInt()
                 if (free >= MIN_GAP_MIN) {
                     val nowAt = lastIndex
                     if (i == 0 && cursor == nowMs && nowAt >= 0 && this[nowAt].kind == TimelineKind.NOW) {
                         // The free stretch starts now: say it on the now line, once ("07:57 ● 1 h free until Work").
-                        this[nowAt] = this[nowAt].copy(detail = untilLabel(free, item.row.title))
+                        val words = if (item.isCommute && item.row.id == "c-to") "${freeLabel(free)} before you leave"
+                        else untilLabel(free, item.row.title)
+                        this[nowAt] = this[nowAt].copy(detail = words)
                     } else {
                         val label = when {
-                            item.isWork -> "${freeLabel(free)} before work"
+                            item.isCommute && item.row.id == "c-to" -> "${freeLabel(free)} before you leave"
+                            item.isWork && !item.isCommute -> "${freeLabel(free)} before work"
+                            afterCommuteHome -> "${freeLabel(free)} at home"
                             afterWork -> "${freeLabel(free)} after work"
                             else -> freeLabel(free)
                         }
@@ -271,16 +295,21 @@ object TimelineRules {
                     }
                 }
                 add(item.row)
-                if (item.end >= cursor) afterWork = item.isWork
+                if (item.end >= cursor) {
+                    afterWork = item.isWork && !item.isCommute
+                    afterCommuteHome = item.isCommute && item.row.id == "c-home"
+                }
                 cursor = maxOf(cursor, item.end)
             }
             // Nothing ahead while something is on (work, an event): the now line says so, instead of leaving a bare
             // line and an empty stretch above "1 done today" (Meka's 10:48 screenshots, 2026-10-09).
             val nowAt = indexOfFirst { it.kind == TimelineKind.NOW }
             // At work it reads as work, with the anytime tasks still to do (Fold review 2026-10-09 13:45, item 4).
-            if (ahead.isEmpty() && started.isNotEmpty() && nowAt >= 0 && this[nowAt].detail == null) {
+            // Only the commute home still to come counts as nothing ahead: nothing else planned after he's home.
+            if (ahead.all { it.isCommute } && started.isNotEmpty() && nowAt >= 0 && this[nowAt].detail == null) {
                 val until = if (cursor > nowMs && cursor < today.endMs) hhmm(cursor) else null
-                val atWork = started.firstOrNull { it.isWork && it.end == cursor }?.row?.title
+                val homeBy = ahead.lastOrNull()?.end
+                val atWork = started.firstOrNull { it.isWork && (it.end == cursor || it.end == ahead.firstOrNull()?.start && homeBy == cursor) }?.row?.title
                 this[nowAt] = this[nowAt].copy(detail = restLabel(until, atWork, anytimeLeft))
             }
         }

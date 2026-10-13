@@ -518,6 +518,7 @@ struct TodayView: View {
         case .now: NowLine(row: r, palette: palette)
         case .session: SessionTimelineRow(row: r, palette: palette)
         case .work: WorkTimelineRow(row: r, palette: palette)
+        case .commute: CommuteTimelineRow(row: r, palette: palette)
         default: EmptyView()
         }
     }

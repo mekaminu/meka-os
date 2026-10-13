@@ -11,8 +11,10 @@ import os.meka.core.sync.FieldValue
  * Stored on the synced `context_mode/work` entity (ADR-008 addendum 2026-10-13, additive, LWW, either app writes):
  * `commuteToWorkMin` and `commuteHomeMin` (Int64 minutes, 10–240 in fives; absent = the default). Non-AI, pure.
  *
- * Slice 1 uses it for the wake alarm (work start − morning commute − time to get ready). Later slices: Today's and the
- * Calendar's commute bands, clashes against arrival home, the planner, Leaving now, the brief's leave-by.
+ * Slice 1 uses it for the wake alarm (work start − morning commute − time to get ready). Slice 2: Today's commute bands
+ * ([CommuteRules.bands], a thin row before and after the office block, not events) and the Calendar's line under an
+ * office day's heading ([CommuteRules.calendarLine]). Later slices: clashes against arrival home, the planner, Leaving
+ * now, the brief's leave-by.
  */
 object CommuteFields {
     const val TO_WORK = "commuteToWorkMin"
@@ -24,6 +26,21 @@ data class CommuteSetting(val toWorkMin: Int, val homeMin: Int, val chosen: Bool
     companion object {
         val DEFAULT = CommuteSetting(CommuteRules.DEFAULT_MIN, CommuteRules.DEFAULT_MIN, chosen = false)
     }
+}
+
+/**
+ * One commute on a day, clipped to that day: to work ([toWork]) ends when the shift starts, home starts when it ends.
+ * [startMinute]/[endMinute] are the clock times ("07:40", "18:50") even when clipped at midnight.
+ */
+data class CommuteBand(
+    val toWork: Boolean,
+    val startMs: Long,
+    val endMs: Long,
+    val startMinute: Int,
+    val endMinute: Int,
+) {
+    /** "07:40–09:00" */
+    val label: String get() = "${LocalClock.formatMinute(startMinute)}–${LocalClock.formatMinute(endMinute)}"
 }
 
 object CommuteRules {
@@ -72,4 +89,66 @@ object CommuteRules {
 
     /** The commute home on [epochDay] in minutes, or null when it isn't an office day. */
     fun homeOn(work: WorkHours, epochDay: Long): Int? = if (officeDay(work, epochDay)) work.commute.homeMin else null
+
+    /** Today's row titles for the two bands. */
+    const val TO_WORK_TITLE = "Commute"
+    const val HOME_TITLE = "Commute home"
+    private const val DAY_MIN = 24 * 60
+    private const val MIN_MS = 60_000L
+
+    /**
+     * The commute bands on [epochDay] (slice 2): on an office day, the morning commute ending as the day's shift starts
+     * and the commute home starting as it ends, each clipped to the day (a band that would cross midnight is cut
+     * there). None on WFH, leave, bank holidays or days off. A night shift's tail carried from the day before has no
+     * band of its own.
+     */
+    fun bands(work: WorkHours, epochDay: Long, calendar: LocalCalendar): List<CommuteBand> {
+        if (!officeDay(work, epochDay)) return emptyList()
+        val h = work.hoursOn(epochDay)
+        val dayStart = calendar.toEpochMs(epochDay, 0)
+        val dayEnd = calendar.toEpochMs(epochDay + 1, 0)
+        val shiftStart = calendar.toEpochMs(epochDay, h.startMinute)
+        val to = work.commute.toWorkMin
+        val home = work.commute.homeMin
+        return buildList {
+            val toStart = maxOf(dayStart, shiftStart - to * MIN_MS)
+            if (shiftStart > toStart) {
+                add(CommuteBand(true, toStart, shiftStart, (h.startMinute - to).mod(DAY_MIN), h.startMinute))
+            }
+            if (!h.crossesMidnight) {
+                val shiftEnd = calendar.toEpochMs(epochDay, h.endMinute)
+                val homeEnd = minOf(dayEnd, shiftEnd + home * MIN_MS)
+                if (homeEnd > shiftEnd) {
+                    add(CommuteBand(false, shiftEnd, homeEnd, h.endMinute, (h.endMinute + home).mod(DAY_MIN)))
+                }
+            }
+        }
+    }
+
+    /** "Home about 18:50" */
+    fun homeLine(minute: Int): String = "Home about ${LocalClock.formatMinute(minute)}"
+
+    /**
+     * A band's line on Today's timeline: the commute home says "Home about 18:50"; while either is on, "Now · at work
+     * about 09:00" / "Now · home about 18:50" (lit); the morning one says nothing more until then (its time says it).
+     */
+    fun detail(b: CommuteBand, running: Boolean): String? = when {
+        running && b.toWork -> "Now · at work about ${LocalClock.formatMinute(b.endMinute)}"
+        running -> "Now · home about ${LocalClock.formatMinute(b.endMinute)}"
+        b.toWork -> null
+        else -> homeLine(b.endMinute)
+    }
+
+    /**
+     * The Calendar's quiet line under an office day's heading: "Leave 07:40 · home about 18:50" (just one half when
+     * the other is cut off by midnight); null on any other day.
+     */
+    fun calendarLine(work: WorkHours, epochDay: Long, calendar: LocalCalendar): String? {
+        val bs = bands(work, epochDay, calendar)
+        if (bs.isEmpty()) return null
+        return listOfNotNull(
+            bs.firstOrNull { it.toWork }?.let { "Leave ${LocalClock.formatMinute(it.startMinute)}" },
+            bs.firstOrNull { !it.toWork }?.let { "home about ${LocalClock.formatMinute(it.endMinute)}" },
+        ).joinToString(" · ").replaceFirstChar { it.uppercase() }
+    }
 }

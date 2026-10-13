@@ -162,6 +162,7 @@ object TodayProjection {
             work = workBlocks,
             anytimeLeft = unscheduled.size,
             children = children,
+            commute = work?.let { CommuteRules.bands(it, today.epochDay, calendar) }.orEmpty(),
         )
         val ring = DayRingRules.build(
             planned = (needs.map { it.task } + listOfNotNull(upNext) + yourDay).filter { it.scheduledAtMs != null },
