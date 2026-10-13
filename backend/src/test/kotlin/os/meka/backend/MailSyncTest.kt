@@ -26,7 +26,19 @@ import os.meka.backend.integrations.TokenSet
 import os.meka.core.domain.MailSort
 import os.meka.core.domain.MailSortReason
 import os.meka.core.domain.MailSorted
+import os.meka.core.domain.AutonomyFields
+import os.meka.core.domain.AutonomyRules
+import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.MailAutopilotFields
+import os.meka.core.domain.MailAutopilotRules
+import os.meka.core.domain.MailTidy
+import os.meka.core.domain.MailTidyBatchFields
+import os.meka.backend.integrations.EntityReader
+import os.meka.backend.integrations.MailMoved
+import os.meka.core.sync.FieldValue
+import os.meka.core.sync.Hlc
 import os.meka.core.sync.InMemoryServerOpStore
+import os.meka.core.sync.Op
 import java.net.URI
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -145,6 +157,29 @@ class MailSyncTest {
             return nextRound(cursor)
         }
         override fun header(accessToken: String, id: String): MailHeader? { headersRead += id; return mailbox[id] }
+
+        // Slice 3b: Autopilot's moves on the fake mailbox.
+        val sentThreads = mutableSetOf<String>()
+        var repliedFails = false
+        val tidyCalls = mutableListOf<Map<String, MailTidy>>()
+        override fun repliedThreads(accessToken: String, sinceMs: Long): Set<String> {
+            if (repliedFails) error("Gmail 503")
+            return sentThreads
+        }
+        override fun tidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> {
+            tidyCalls += items
+            return items.filterKeys { it in mailbox }.mapValues { (id, t) ->
+                val h = mailbox.getValue(id)
+                mailbox[id] = h.copy(inInbox = false, labels = h.labels - "INBOX" + listOfNotNull(t.label))
+                id
+            }
+        }
+        override fun untidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> =
+            items.filterKeys { it in mailbox }.mapValues { (id, t) ->
+                val h = mailbox.getValue(id)
+                mailbox[id] = h.copy(inInbox = true, labels = h.labels.filter { it != t.label } + "INBOX")
+                id
+            }
     }
 
     private class Cipher : TokenCipher {
@@ -157,10 +192,10 @@ class MailSyncTest {
 
     private fun world(
         mailStore: MailStore, gmail: FakeGmail = FakeGmail(), store: InMemoryIntegrationStore = InMemoryIntegrationStore(),
-        mailAi: MailAiSorter? = null,
+        mailAi: MailAiSorter? = null, ops: InMemoryServerOpStore = InMemoryServerOpStore(),
     ) =
         Triple(gmail, store, Integrations(
-            store, InMemoryServerOpStore(), emptyMap(), { p -> if (p == "google") OAuthClient("cid", "s") else null },
+            store, ops, emptyMap(), { p -> if (p == "google") OAuthClient("cid", "s") else null },
             Cipher(), "https://meka.example", { now }, mail = mapOf("gmail" to gmail), mailStore = mailStore, mailAi = mailAi,
         ))
 
@@ -375,6 +410,121 @@ class MailSyncTest {
         assertEquals(before, gmail.mailbox.toMap())
     }
 
+    // ---- Slice 3b: Autopilot applies the plan, with Undo ----
+
+    private var opN = 0
+    private fun device(ops: InMemoryServerOpStore, type: String, id: String, field: String, v: FieldValue) {
+        ops.append(Op("dev${opN++}", "home", type, id, field, v, Hlc(now, opN, "fold"), emptyList(), "fold"))
+    }
+
+    private fun autopilotOn(ops: InMemoryServerOpStore, on: Boolean = true) {
+        device(ops, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID, MailAutopilotFields.ON, FieldValue.Bool(on))
+        device(ops, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID, MailAutopilotFields.CHANGED_AT, FieldValue.Int64(now))
+    }
+
+    private fun tidies(ops: InMemoryServerOpStore) = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_TIDY)
+
+    @Test
+    fun autopilotTidiesNewSureMailOnlyWhenOnAfterTheDryRunDay() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["old"] = msg("old", 1, "editor@weekly.example").copy(listId = "<weekly.example>") // backlog: stays
+        val id = connect(i)
+        i.syncAccount(id)
+        // Turned on during the dry-run day: nothing moves yet.
+        autopilotOn(ops)
+        now += day / 2
+        gmail.mailbox["n1"] = msg("n1", 0, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.nextRound = { MailChanges(fetch = listOf("n1"), cursor = "h2") }
+        i.syncAccount(id)
+        assertTrue(gmail.tidyCalls.isEmpty())
+        // The day is over: mail that arrives now is tidied; the backlog and n1 (dry-run day) stay.
+        now += day
+        gmail.mailbox["n2"] = msg("n2", 0, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.mailbox["r2"] = msg("r2", 0, "auto-confirm@shop.example").copy(subject = "Your order has shipped")
+        gmail.mailbox["u2"] = msg("u2", 0, "noreply@x.example")
+        gmail.mailbox["p2"] = msg("p2", 0) // a person: Needs you, kept
+        gmail.mailbox["b2"] = msg("b2", 0, "alerts@barclays.co.uk").copy(listId = "<alerts.barclays.co.uk>") // a bank: kept
+        gmail.mailbox["t2"] = msg("t2", 0, "auto-confirm@shop2.example").copy(subject = "Your order has shipped", threadId = "sent-thread")
+        gmail.sentThreads += "sent-thread" // he wrote in t2's thread: kept
+        gmail.nextRound = { MailChanges(fetch = listOf("n2", "r2", "u2", "p2", "b2", "t2"), cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(mapOf("n2" to MailTidy.NEWSLETTER, "r2" to MailTidy.RECEIPT, "u2" to MailTidy.ARCHIVE), gmail.tidyCalls.single())
+        assertFalse(gmail.mailbox.getValue("n2").inInbox)
+        assertTrue(gmail.mailbox.getValue("old").inInbox && gmail.mailbox.getValue("n1").inInbox && gmail.mailbox.getValue("t2").inInbox)
+        val (batchId, f) = tidies(ops).entries.single()
+        assertEquals(FieldValue.Text("Tidied 3 emails · Personal"), f[MailTidyBatchFields.SUMMARY])
+        assertEquals(FieldValue.Int64(3), f[MailTidyBatchFields.COUNT])
+        assertEquals(3, ms.tidied(id, batchId).size)
+        // The next check plans nothing again.
+        gmail.nextRound = { MailChanges(cursor = "h4") }
+        i.syncAccount(id)
+        assertEquals(1, gmail.tidyCalls.size)
+    }
+
+    @Test
+    fun undoPutsATidyBackAndItIsNeverTidiedAgain() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        now += day + 1
+        autopilotOn(ops)
+        now += 1
+        gmail.mailbox["n"] = msg("n", 0, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.nextRound = { MailChanges(fetch = listOf("n"), cursor = "h2") }
+        i.syncAccount(id)
+        val batchId = tidies(ops).keys.single()
+        assertFalse(gmail.mailbox.getValue("n").inInbox)
+        // Undo on the Fold.
+        now += 60_000
+        device(ops, EntityTypes.MAIL_TIDY, batchId, MailTidyBatchFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertTrue(gmail.mailbox.getValue("n").inInbox)
+        assertFalse("Navilife/Newsletters" in gmail.mailbox.getValue("n").labels)
+        val f = tidies(ops).getValue(batchId)
+        assertEquals(FieldValue.Text("Put back 1 email in the inbox"), f[MailTidyBatchFields.UNDO_NOTE])
+        assertTrue(f[MailTidyBatchFields.UNDONE_AT] is FieldValue.Int64)
+        // Back in the inbox (Gmail's history says so): never tidied again, and the Undo isn't done twice.
+        gmail.nextRound = { MailChanges(fetch = listOf("n"), cursor = "h4") }
+        i.syncAccount(id)
+        assertEquals(1, gmail.tidyCalls.size)
+        assertTrue(gmail.mailbox.getValue("n").inInbox)
+    }
+
+    @Test
+    fun offPausedOrUnsureOfHisThreadsMovesNothing() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        now += 2 * day
+        fun arrive(n: String) {
+            gmail.mailbox[n] = msg(n, 0, "editor@weekly.example").copy(listId = "<weekly.example>")
+            gmail.nextRound = { MailChanges(fetch = listOf(n), cursor = "h$n") }
+            now += 60_000
+            i.syncAccount(id)
+        }
+        arrive("a") // never turned on
+        autopilotOn(ops); now += 1
+        device(ops, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID, AutonomyFields.PAUSED, FieldValue.Bool(true))
+        arrive("b") // MEKA paused
+        device(ops, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID, AutonomyFields.PAUSED, FieldValue.Bool(false))
+        gmail.repliedFails = true
+        arrive("c") // can't tell his threads: nothing, and the check still succeeds
+        assertTrue(gmail.tidyCalls.isEmpty())
+        assertEquals("ok", i.accounts("home").single().status)
+        gmail.repliedFails = false
+        autopilotOn(ops, on = false); now += 1
+        arrive("d") // turned off again
+        assertTrue(gmail.tidyCalls.isEmpty())
+        assertTrue(tidies(ops).isEmpty())
+    }
+
     // ---- On real Postgres (MEKA_TEST_DB_URL, CI); skipped when unset ----
 
     @Test
@@ -385,7 +535,7 @@ class MailSyncTest {
             password = System.getenv("MEKA_TEST_DB_PASSWORD") ?: "postgres"; maximumPoolSize = 4
         }).use { ds ->
             Migrations.apply(ds)
-            ds.connection.use { c -> c.createStatement().execute("TRUNCATE op_log, device, household, integration_account, mail_message, mail_sync CASCADE") }
+            ds.connection.use { c -> c.createStatement().execute("TRUNCATE op_log, device, household, integration_account, mail_message, mail_sync, mail_tidy_item, mail_never_tidy CASCADE") }
             PostgresDeviceRegistry(ds).enrol("hh-m", "android0123456789ab", "Fold")
             val ops = PostgresOpStore(ds)
             val accounts = PostgresIntegrationStore(ops)
@@ -427,11 +577,19 @@ class MailSyncTest {
             ms.setSorts(acc, mapOf("o1" to MailSorted(MailSort.FYI, MailSortReason.AI_FYI, true)))
             assertTrue(ms.unsure(acc, 10).isEmpty())
             assertEquals(MailSorted(MailSort.FYI, MailSortReason.AI_FYI, true), ms.sortOf(acc, "o1"))
+            // Slice 3b: what a tidy moved, and what an Undo put back for good.
+            ms.recordTidy(acc, "mt1", listOf(MailMoved("o1", "o1x", MailTidy.NEWSLETTER)))
+            ms.recordTidy(acc, "mt1", listOf(MailMoved("o1", "o1y", MailTidy.NEWSLETTER)))
+            assertEquals(listOf(MailMoved("o1", "o1y", MailTidy.NEWSLETTER)), ms.tidied(acc, "mt1"))
+            assertTrue(ms.tidied(acc, "mt2").isEmpty())
+            ms.neverTidy(acc, listOf("o1", "o1y", "o1"))
+            assertEquals(setOf("o1", "o1y"), ms.neverTidied(acc))
             ms.prune(acc, now)
             assertTrue(ms.messages(acc).isEmpty())
             ms.apply("hh-m", acc, MailChanges(fetch = listOf("x"), cursor = "h3"))
             ms.forget(acc)
             assertNull(ms.cursor(acc))
+            assertTrue(ms.tidied(acc, "mt1").isEmpty() && ms.neverTidied(acc).isEmpty())
             assertEquals(0, ms.pendingCount(acc))
         }
     }

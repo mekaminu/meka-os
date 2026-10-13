@@ -5,7 +5,13 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import os.meka.core.domain.MailProviders
+import os.meka.core.domain.MailTidy
 
 /**
  * A mail provider (ADR-009's `EmailProvider`; Inbox autopilot, slice 1). Meka decided MEKA may read, organise and send
@@ -45,6 +51,22 @@ interface MailProvider {
 
     /** One message's headers (Gmail: the ids [changes] hands back in [MailChanges.fetch]); null when it's gone. */
     fun header(accessToken: String, id: String): MailHeader? = null
+
+    /**
+     * Slice 3b: the threads Meka has written in since [sinceMs] (his sent mail's thread or conversation ids), so
+     * Autopilot never tidies a conversation he's part of. Throws when it can't tell (then nothing is tidied).
+     */
+    fun repliedThreads(accessToken: String, sinceMs: Long): Set<String> = emptySet()
+
+    /**
+     * Slice 3b: takes each email out of the inbox (archived), with its [MailTidy.label] where it has one. Returns, for
+     * each email it moved, the id it has now (Gmail keeps the id; Outlook's move gives a new one). One that has gone
+     * meanwhile is left out. Default: moves nothing.
+     */
+    fun tidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> = emptyMap()
+
+    /** Undo of [tidy]: each email (by the id [tidy] returned) back in the inbox, its label taken off; returns its id now. */
+    fun untidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> = emptyMap()
 }
 
 /**
@@ -169,6 +191,68 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         return GmailHistory.header(a.body ?: error("Gmail answered without a body"))
     }
 
+    /** Slice 3b: the thread ids of what Meka sent in the window (one listing; ids and thread ids only). */
+    override fun repliedThreads(accessToken: String, sinceMs: Long): Set<String> {
+        val days = ((System.currentTimeMillis() - sinceMs) / DAY_MS + 1).coerceIn(1, 3650)
+        val threads = HashSet<String>()
+        var page: String? = null
+        var pages = 0
+        do {
+            val q = mutableMapOf("q" to "in:sent newer_than:${days}d", "maxResults" to "500")
+            page?.let { q["pageToken"] = it }
+            val body = http.call("GET", "$API/messages?" + Http.query(q), accessToken).body ?: error("Gmail answered without a body")
+            (body["messages"] as? JsonArray)?.forEach { m -> (m as? JsonObject)?.get("threadId").str()?.let(threads::add) }
+            page = body["nextPageToken"].str()
+        } while (page != null && ++pages < MAX_LIST_PAGES)
+        return threads
+    }
+
+    /** The id of the label [name], made (shown in Gmail's list) the first time it's needed. */
+    internal fun labelId(accessToken: String, name: String): String {
+        fun find(): String? = ((http.call("GET", "$API/labels", accessToken).body ?: error("Gmail answered without a body"))["labels"] as? JsonArray)
+            ?.mapNotNull { it as? JsonObject }?.firstOrNull { it["name"].str() == name }?.get("id").str()
+        find()?.let { return it }
+        val made = http.call("POST", "$API/labels", accessToken, buildJsonObject {
+            put("name", name); put("labelListVisibility", "labelShow"); put("messageListVisibility", "show")
+        })
+        made.body?.get("id").str()?.takeIf { made.status in 200..299 }?.let { return it }
+        // 409: made meanwhile (another check); read it again.
+        return find() ?: error("Gmail wouldn't make the label")
+    }
+
+    /** One batchModify per label, a thousand ids at a time: archived (INBOX off) and labelled. Ids stay the same. */
+    override fun tidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> {
+        val done = LinkedHashMap<String, String>()
+        for ((t, ids) in items.entries.groupBy({ it.value }, { it.key })) {
+            if (t == MailTidy.KEEP) continue
+            val add = t.label?.let { listOf(labelId(accessToken, it)) }.orEmpty()
+            for (chunk in ids.chunked(1000)) {
+                val a = http.call("POST", "$API/messages/batchModify", accessToken, buildJsonObject {
+                    putJsonArray("ids") { chunk.forEach { add(it) } }
+                    putJsonArray("addLabelIds") { add.forEach { add(it) } }
+                    putJsonArray("removeLabelIds") { add("INBOX") }
+                })
+                if (a.status in 200..299) chunk.forEach { done[it] = it }
+            }
+        }
+        return done
+    }
+
+    /** One modify per email (an Undo is at most a check's worth): back in the inbox, its label off; a deleted one is skipped. */
+    override fun untidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> {
+        val labels = HashMap<String, String?>()
+        val done = LinkedHashMap<String, String>()
+        for ((id, t) in items) {
+            val label = t.label?.let { name -> labels.getOrPut(name) { runCatching { labelId(accessToken, name) }.getOrNull() } }
+            val a = http.call("POST", "$API/messages/${Http.enc(id)}/modify", accessToken, buildJsonObject {
+                putJsonArray("addLabelIds") { add("INBOX") }
+                putJsonArray("removeLabelIds") { label?.let { add(it) } }
+            })
+            if (a.status in 200..299) done[id] = id
+        }
+        return done
+    }
+
     companion object {
         private const val DAY_MS = 86_400_000L
         /** 500 ids a page: up to 10,000 messages in the first listing. */
@@ -244,6 +328,60 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
     }
 
     private fun graphTime(ms: Long) = java.time.Instant.ofEpochMilli(ms / 1000 * 1000).toString()
+
+    /** Slice 3b: the conversation ids of what Meka sent in the window (Sent Items, conversation ids only). */
+    override fun repliedThreads(accessToken: String, sinceMs: Long): Set<String> {
+        var url = "$GRAPH/me/mailFolders/sentitems/messages?\$select=conversationId&\$top=100&\$filter=" +
+            Http.enc("sentDateTime ge " + graphTime(sinceMs))
+        val out = HashSet<String>()
+        var pages = 0
+        while (true) {
+            val body = http.call("GET", url, accessToken).body ?: error("Outlook answered without a body")
+            (body["value"] as? JsonArray)?.forEach { v -> (v as? JsonObject)?.get("conversationId").str()?.let(out::add) }
+            url = body["@odata.nextLink"].str() ?: return out
+            if (++pages >= MAX_PAGES) return out
+        }
+    }
+
+    private fun categories(accessToken: String, id: String): List<String>? {
+        val a = http.call("GET", "$GRAPH/me/messages/${Http.enc(id)}?\$select=categories", accessToken)
+        if (a.status == 404) return null
+        return (a.body?.get("categories") as? JsonArray)?.mapNotNull { it.str() }.orEmpty()
+    }
+
+    private fun setCategories(accessToken: String, id: String, cats: List<String>) =
+        http.call("PATCH", "$GRAPH/me/messages/${Http.enc(id)}", accessToken, buildJsonObject { putJsonArray("categories") { cats.forEach { add(it) } } })
+
+    /** Moves [id] to a well-known folder; the message's id there, or null when it has gone. */
+    private fun move(accessToken: String, id: String, folder: String): String? {
+        val a = http.call("POST", "$GRAPH/me/messages/${Http.enc(id)}/move", accessToken, buildJsonObject { put("destinationId", folder) })
+        return if (a.status in 200..299) a.body?.get("id").str() ?: id else null
+    }
+
+    /** Each email: its category added (Outlook's label), then moved to Archive (a new id). */
+    override fun tidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> {
+        val done = LinkedHashMap<String, String>()
+        for ((id, t) in items) {
+            if (t == MailTidy.KEEP) continue
+            t.label?.let { label ->
+                val cats = categories(accessToken, id) ?: return@let
+                if (label !in cats) setCategories(accessToken, id, cats + label)
+            }
+            move(accessToken, id, "archive")?.let { done[id] = it }
+        }
+        return done
+    }
+
+    /** Each email back to the Inbox (another new id), its category taken off. */
+    override fun untidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> {
+        val done = LinkedHashMap<String, String>()
+        for ((id, t) in items) {
+            val back = move(accessToken, id, "inbox") ?: continue
+            t.label?.let { label -> categories(accessToken, back)?.takeIf { label in it }?.let { setCategories(accessToken, back, it - label) } }
+            done[id] = back
+        }
+        return done
+    }
 
     private companion object {
         const val GRAPH = "https://graph.microsoft.com/v1.0"

@@ -1150,6 +1150,7 @@ object Migrations {
         17 to "/db/V17__fold_posture.sql", 18 to "/db/V18__notify_report.sql", 19 to "/db/V19__mail_account_label.sql",
         20 to "/db/V20__mail_message.sql",
         21 to "/db/V21__mail_sort.sql",
+        22 to "/db/V22__mail_tidy.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

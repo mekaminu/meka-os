@@ -3,6 +3,7 @@ package os.meka.backend.integrations
 import os.meka.backend.PostgresOpStore
 import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.MailSorted
+import os.meka.core.domain.MailTidy
 import java.sql.Connection
 import java.sql.ResultSet
 
@@ -38,7 +39,18 @@ interface MailStore {
     fun unsure(accountId: String, limit: Int): List<MailHeader>
     /** Slice 3a: every sorted email still in the inbox with its sort (Autopilot's dry run plans these). */
     fun inboxSorted(accountId: String): List<Pair<MailHeader, MailSorted>>
+
+    /** Slice 3b: what one tidy moved (ids only), so its Undo can put them back. */
+    fun recordTidy(accountId: String, batchId: String, moved: List<MailMoved>)
+    /** Slice 3b: the emails one tidy of this account moved. */
+    fun tidied(accountId: String, batchId: String): List<MailMoved>
+    /** Slice 3b: an Undo done: these ids (as they were, and as they are back in the inbox) are never tidied again. */
+    fun neverTidy(accountId: String, ids: Collection<String>)
+    fun neverTidied(accountId: String): Set<String>
 }
+
+/** One email a tidy moved: its id before, the id it has now ([movedId]; Outlook's move changes it) and what was done. */
+data class MailMoved(val id: String, val movedId: String, val tidy: MailTidy)
 
 /** Slice 2b: the AI's answer per email id ("needs_you", "fyi", or null for none); null overall when it couldn't answer. */
 fun interface MailAiSorter {
@@ -49,6 +61,8 @@ class InMemoryMailStore : MailStore {
     private val cursors = mutableMapOf<String, String>()
     private val rows = mutableMapOf<String, LinkedHashMap<String, MailHeader?>>()
     private val sorts = mutableMapOf<String, MutableMap<String, MailSorted>>()
+    private val tidies = mutableMapOf<Pair<String, String>, List<MailMoved>>()
+    private val never = mutableMapOf<String, MutableSet<String>>()
 
     private fun of(accountId: String) = rows.getOrPut(accountId) { LinkedHashMap() }
 
@@ -66,7 +80,10 @@ class InMemoryMailStore : MailStore {
     @Synchronized override fun prune(accountId: String, beforeMs: Long) {
         of(accountId).entries.removeIf { (id, h) -> (h != null && h.receivedAtMs < beforeMs).also { if (it) sorts[accountId]?.remove(id) } }
     }
-    @Synchronized override fun forget(accountId: String) { rows.remove(accountId); cursors.remove(accountId); sorts.remove(accountId) }
+    @Synchronized override fun forget(accountId: String) {
+        rows.remove(accountId); cursors.remove(accountId); sorts.remove(accountId)
+        tidies.keys.removeIf { it.first == accountId }; never.remove(accountId)
+    }
     @Synchronized override fun messages(accountId: String) = of(accountId).values.filterNotNull().sortedByDescending { it.receivedAtMs }
     @Synchronized override fun pendingCount(accountId: String) = of(accountId).values.count { it == null }
     @Synchronized override fun unsorted(accountId: String, limit: Int): List<MailHeader> {
@@ -91,6 +108,13 @@ class InMemoryMailStore : MailStore {
         val m = sorts[accountId].orEmpty()
         return messages(accountId).filter { it.inInbox }.mapNotNull { h -> m[h.id]?.let { h to it } }
     }
+    @Synchronized override fun recordTidy(accountId: String, batchId: String, moved: List<MailMoved>) {
+        val ids = moved.map { it.id }.toSet()
+        tidies[accountId to batchId] = tidies[accountId to batchId].orEmpty().filter { it.id !in ids } + moved
+    }
+    @Synchronized override fun tidied(accountId: String, batchId: String) = tidies[accountId to batchId].orEmpty()
+    @Synchronized override fun neverTidy(accountId: String, ids: Collection<String>) { never.getOrPut(accountId) { mutableSetOf() } += ids }
+    @Synchronized override fun neverTidied(accountId: String): Set<String> = never[accountId].orEmpty().toSet()
 }
 
 class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
@@ -172,6 +196,8 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
         c { c ->
             c.prepareStatement("DELETE FROM mail_message WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
             c.prepareStatement("DELETE FROM mail_sync WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
+            c.prepareStatement("DELETE FROM mail_tidy_item WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
+            c.prepareStatement("DELETE FROM mail_never_tidy WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
             Unit
         }
     }
@@ -271,6 +297,50 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
                     }
                 }
             }
+        }
+    }
+
+    override fun recordTidy(accountId: String, batchId: String, moved: List<MailMoved>) {
+        if (moved.isEmpty()) return
+        c { c ->
+            c.prepareStatement(
+                """INSERT INTO mail_tidy_item(account_id, batch_id, message_id, moved_id, tidy) VALUES (?,?,?,?,?)
+                   ON CONFLICT (account_id, batch_id, message_id) DO UPDATE SET moved_id = EXCLUDED.moved_id, tidy = EXCLUDED.tidy""",
+            ).use { st ->
+                moved.forEach { m ->
+                    st.setString(1, accountId); st.setString(2, batchId); st.setString(3, m.id); st.setString(4, m.movedId)
+                    st.setString(5, m.tidy.name); st.addBatch()
+                }
+                st.executeBatch()
+            }
+            Unit
+        }
+    }
+
+    override fun tidied(accountId: String, batchId: String): List<MailMoved> = c { c ->
+        c.prepareStatement("SELECT message_id, moved_id, tidy FROM mail_tidy_item WHERE account_id = ? AND batch_id = ? ORDER BY message_id").use { st ->
+            st.setString(1, accountId); st.setString(2, batchId)
+            st.executeQuery().use { rs ->
+                buildList { while (rs.next()) MailTidy.of(rs.getString(3))?.let { add(MailMoved(rs.getString(1), rs.getString(2), it)) } }
+            }
+        }
+    }
+
+    override fun neverTidy(accountId: String, ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        c { c ->
+            c.prepareStatement("INSERT INTO mail_never_tidy(account_id, message_id) VALUES (?,?) ON CONFLICT DO NOTHING").use { st ->
+                ids.toSet().forEach { id -> st.setString(1, accountId); st.setString(2, id); st.addBatch() }
+                st.executeBatch()
+            }
+            Unit
+        }
+    }
+
+    override fun neverTidied(accountId: String): Set<String> = c { c ->
+        c.prepareStatement("SELECT message_id FROM mail_never_tidy WHERE account_id = ?").use { st ->
+            st.setString(1, accountId)
+            st.executeQuery().use { rs -> buildSet { while (rs.next()) add(rs.getString(1)) } }
         }
     }
 

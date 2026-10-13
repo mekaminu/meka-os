@@ -7,6 +7,10 @@ import os.meka.core.domain.MailSortFacts
 import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.MailTidyFacts
 import os.meka.core.domain.MailTidyRules
+import os.meka.core.domain.MailAutopilotRules
+import os.meka.core.domain.MailTidy
+import os.meka.core.domain.MailTidyBatchFields
+import os.meka.core.domain.AutonomyRules
 import os.meka.core.domain.BankHolidayFields
 import os.meka.core.domain.BankHolidayStore
 import os.meka.core.domain.BankHolidays
@@ -412,6 +416,71 @@ class Integrations(
         }
         ms.prune(a.id, since)
         sortHeaders(a, ms)
+        // Slice 3b: Autopilot (only once it's on and the dry-run day is over); a failure there never fails the check.
+        runCatching { autopilot(a, m, token, ms) }
+    }
+
+    /**
+     * Inbox autopilot, slice 3b: first any Undo an app asked for (every email of that tidy back in the inbox, its label
+     * off, never tidied again), then — when [MailAutopilotRules.since] says it may — the sure newsletters, receipts,
+     * notifications and promos that arrived since then are archived with their labels, at most
+     * [MailAutopilotRules.MAX_PER_CHECK] a check, never a thread Meka wrote in, never one an Undo put back. Each tidy
+     * is one `mail_tidy` entity the apps show with Undo; which emails it moved stays on the server (ids only).
+     */
+    internal fun autopilot(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val hh = a.householdId
+        undoTidies(a, m, token, ms)
+        val setting = MailAutopilotRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID))
+        val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
+        val since = MailAutopilotRules.since(setting, paused, a.grantedAtMs, now()) ?: return
+        val never = ms.neverTidied(a.id)
+        val candidates = ms.inboxSorted(a.id).filter { (h, _) -> h.receivedAtMs >= since && h.id !in never }
+        if (candidates.isEmpty()) return
+        // Can't tell which threads he wrote in: nothing is tidied this check.
+        val replied = m.repliedThreads(token, since - MAIL_WINDOW_MS)
+        val plan = candidates.mapNotNull { (h, s) ->
+            val t = MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, replied = h.threadId?.let { it in replied } == true))
+            if (t == MailTidy.KEEP) null else h to t
+        }.take(MailAutopilotRules.MAX_PER_CHECK)
+        if (plan.isEmpty()) return
+        val at = now()
+        val batchId = MailAutopilotRules.batchId(a.id, at)
+        val moved = m.tidy(token, plan.associate { (h, t) -> h.id to t })
+        val done = plan.filter { (h, _) -> h.id in moved }
+        if (done.isEmpty()) return
+        ms.recordTidy(a.id, batchId, done.map { (h, t) -> MailMoved(h.id, moved.getValue(h.id), t) })
+        // Out of the inbox now, so the next check doesn't plan them again before the provider's feed says so.
+        done.forEach { (h, _) -> ms.put(hh, a.id, h.copy(inInbox = false)) }
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        writeTidy(a, batchId, MailAutopilotRules.batchFields(at, account, done.groupingBy { it.second }.eachCount()))
+    }
+
+    /** Puts back every tidy of this account an app asked to undo (within its 30 days), once. */
+    private fun undoTidies(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val due = reader.entities(a.householdId, EntityTypes.MAIL_TIDY)
+            .mapNotNull { (id, f) -> MailAutopilotRules.readBatch(id, f) }
+            .filter { MailAutopilotRules.undoDue(it, now()) }
+        for (b in due) {
+            val items = ms.tidied(a.id, b.id)
+            if (items.isEmpty()) continue // another account's tidy
+            val back = m.untidy(token, items.associate { it.movedId to it.tidy })
+            ms.neverTidy(a.id, items.map { it.id } + items.map { it.movedId } + back.values)
+            writeTidy(a, b.id, mapOf(
+                MailTidyBatchFields.UNDONE_AT to FieldValue.Int64(now()),
+                MailTidyBatchFields.UNDO_NOTE to FieldValue.Text(MailAutopilotRules.undoneNote(back.size, items.size)),
+            ))
+        }
+    }
+
+    private fun writeTidy(a: AccountRow, batchId: String, fields: Map<String, FieldValue>) {
+        val wrote = store.transaction {
+            ops.transaction {
+                store.lockAccount(a.id)
+                val prev = store.mirror(a.householdId, a.id)[batchId]
+                write(a, batchId, 0, 0, false, prev, fields, EntityTypes.MAIL_TIDY)
+            }
+        }
+        if (wrote) runCatching { onChanged(a.householdId) }
     }
 
     /**

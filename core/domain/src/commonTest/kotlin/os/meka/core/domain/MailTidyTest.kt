@@ -67,4 +67,53 @@ class MailTidyTest {
         assertEquals("Autopilot, dry run · would tidy 2 · 2 newsletters → Navilife/Newsletters · nothing moved yet", MailAccountRules.row(a, emptyList(), 0L).tidyLine)
         assertNull(MailAccountRules.row(a.copy(wouldTidy = null), emptyList(), 0L).tidyLine)
     }
+
+    @Test
+    fun aThreadMekaWroteInIsNeverTidied() {
+        assertEquals(MailTidy.KEEP, MailTidyRules.plan(MailTidyFacts("orders@shop.example", true, sure(MailSort.RECEIPT), replied = true)))
+        assertEquals(MailTidy.RECEIPT, MailTidyRules.plan(MailTidyFacts("orders@shop.example", true, sure(MailSort.RECEIPT), replied = false)))
+    }
+
+    @Test
+    fun autopilotWaitsForTheSwitchTheDryRunDayAndNoPause() {
+        val day = MailAutopilotRules.DRY_RUN_MS
+        val connected = 1_000_000L
+        val on = MailAutopilotSetting(on = true, changedAtMs = connected + 1000)
+        // Off, paused, never connected, or still on its first day: nothing moves.
+        assertNull(MailAutopilotRules.since(MailAutopilotSetting(false, null), false, connected, connected + 2 * day))
+        assertNull(MailAutopilotRules.since(on, true, connected, connected + 2 * day))
+        assertNull(MailAutopilotRules.since(on, false, null, connected + 2 * day))
+        assertNull(MailAutopilotRules.since(on, false, connected, connected + day - 1))
+        // After the day: only mail from the end of the dry run (or from when it was turned on, if later).
+        assertEquals(connected + day, MailAutopilotRules.since(on, false, connected, connected + day))
+        val later = MailAutopilotSetting(true, connected + 3 * day)
+        assertEquals(connected + 3 * day, MailAutopilotRules.since(later, false, connected, connected + 4 * day))
+        // Absent setting reads as off.
+        assertEquals(MailAutopilotSetting(false, null), MailAutopilotRules.read(null))
+        assertEquals(MailAutopilotSetting(true, 5L), MailAutopilotRules.read(MailAutopilotRules.fields(true, 5L)))
+    }
+
+    @Test
+    fun aBatchSaysWhatMovedAndRoundTrips() {
+        val counts = mapOf(MailTidy.NEWSLETTER to 3, MailTidy.RECEIPT to 2, MailTidy.ARCHIVE to 1, MailTidy.KEEP to 9)
+        val (summary, detail) = MailAutopilotRules.lines(counts, "Personal")
+        assertEquals("Tidied 6 emails · Personal", summary)
+        assertEquals("3 newsletters → Navilife/Newsletters · 2 receipts and orders → Navilife/Receipts · 1 notification or promo archived", detail)
+        assertEquals("Tidied 1 email · Business", MailAutopilotRules.lines(mapOf(MailTidy.ARCHIVE to 1), "Business").first)
+        val id = MailAutopilotRules.batchId("acc1", 42L)
+        assertEquals(id, MailAutopilotRules.batchId("acc1", 42L))
+        assertTrue(id != MailAutopilotRules.batchId("acc2", 42L))
+        val b = MailAutopilotRules.readBatch(id, MailAutopilotRules.batchFields(42L, "Personal", counts))!!
+        assertEquals(6, b.count)
+        assertEquals(summary, b.summary)
+        assertTrue(b.canUndo)
+        assertTrue(!MailAutopilotRules.undoDue(b, 50L))
+        val asked = b.copy(undoAskedAtMs = 60L)
+        assertTrue(!asked.canUndo)
+        assertTrue(MailAutopilotRules.undoDue(asked, 70L))
+        assertTrue(!MailAutopilotRules.undoDue(asked, 42L + 31 * 86_400_000L))
+        assertTrue(!MailAutopilotRules.undoDue(asked.copy(undoneAtMs = 80L), 90L))
+        assertEquals("Put back 6 emails in the inbox", MailAutopilotRules.undoneNote(6, 6))
+        assertEquals("Put back 4 of 6 · 2 had gone", MailAutopilotRules.undoneNote(4, 6))
+    }
 }
