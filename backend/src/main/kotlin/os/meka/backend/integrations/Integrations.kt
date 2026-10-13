@@ -458,10 +458,20 @@ class Integrations(
         val mine = store.transaction { store.mirror(hh, a.id) }.keys
         val asked = reader.entities(hh, EntityTypes.MAIL_ITEM).filterKeys { it in mine }
             .mapNotNull { (id, f) -> MailNeedsRules.read(id, f) }
-            .filter { MailNeedsRules.archiveDue(it) || MailNeedsRules.putBackDue(it) }
+            .filter { MailNeedsRules.archiveDue(it) || MailNeedsRules.putBackDue(it) || MailNeedsRules.replyDue(it, now()) }
         if (asked.isEmpty()) return
         val byItem = ms.messages(a.id).associateBy { MailNeedsRules.itemId(a.id, it.id) }
-        for (item in asked) {
+        for (asking in asked) {
+            var item = asking
+            if (MailNeedsRules.replyDue(item, now())) {
+                // Slice 6b-2a: his reply, from this account, before the email is archived. Sent once: a failure goes
+                // back to him (the card returns with his words), never retried here.
+                val why = replyMail(m, token, byItem[item.id], item.replyText!!)
+                val fields = if (why == null) MailNeedsRules.replySentFields(now()) else MailNeedsRules.replyFailedFields(now(), why)
+                writeMail(a, item.id, fields, EntityTypes.MAIL_ITEM)
+                if (why != null) continue
+                item = item.copy(replySentAtMs = now())
+            }
             if (MailNeedsRules.archiveDue(item)) {
                 val h = byItem[item.id]
                 if (h == null || !h.inInbox) {
@@ -483,6 +493,23 @@ class Integrations(
                 }
                 writeMail(a, item.id, MailNeedsRules.putBackFields(now()), EntityTypes.MAIL_ITEM)
             }
+        }
+    }
+
+    /** Sends one reply; null when the provider took it, else why not in a few words (never the reply itself). */
+    private fun replyMail(m: MailProvider, token: String, h: MailHeader?, text: String): String? {
+        val name = if (m.id == os.meka.core.domain.MailProviders.OUTLOOK) "Outlook" else "Gmail"
+        if (h == null) return MailNeedsRules.WHY_GONE
+        return try {
+            when (m.reply(token, h.id, text)) {
+                MailReplyResult.SENT -> null
+                MailReplyResult.GONE -> MailNeedsRules.WHY_GONE
+                MailReplyResult.FAILED -> MailNeedsRules.whyRefused(name)
+            }
+        } catch (e: ReconnectRequired) {
+            "sign in to $name again"
+        } catch (e: Exception) {
+            MailNeedsRules.whyUnreachable(name)
         }
     }
 

@@ -14,6 +14,12 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -48,7 +54,8 @@ import os.meka.core.facade.MekaCore
 /**
  * Inbox autopilot, slice 6a: "From your mail" in Needs you — the emails the server sorted as needing Meka, still in
  * the inbox, newest first: who, which account (the business one wears a Business chip), when, the subject and the
- * first words, each with **Done** (archived at the server's next check), **Task** and **Waiting for** (slice 6b-1: made
+ * first words, each with **Reply** (slice 6b-2a: he writes it on the card; it goes from that account only when he taps
+ * Send, at the server's next check, Undo on the bar stops it), **Done** (archived at the server's next check), **Task** and **Waiting for** (slice 6b-1: made
  * from the email, which is archived too) and **Snooze** (back tomorrow 08:00). Each has Undo on the bar. Tapping the header folds the emails in and out (expand spring; reduced motion: cross-fade).
  */
 @Composable
@@ -94,6 +101,16 @@ internal fun MailNeedsSection(
                             onTask = { haptics.medium(); answer { core.taskFromMailItem(row.id) } },
                             onWaiting = { haptics.medium(); answer { core.waitingFromMailItem(row.id) } },
                             onSnooze = { haptics.light(); answer { core.snoozeMailItem(row.id) } },
+                            onSend = { text, sent ->
+                                haptics.medium()
+                                scope.launch {
+                                    val said = runCatching { core.replyToMailItem(row.id, text) }.getOrNull() ?: return@launch
+                                    // A problem with the words keeps the editor open with them; otherwise Undo on the bar.
+                                    if (MailNeedsRules.replyProblem(text) != null) return@launch
+                                    sent()
+                                    undo(said) { runCatching { core.undoMailItem() } }
+                                }
+                            },
                         )
                     }
                 }
@@ -106,7 +123,14 @@ internal fun MailNeedsSection(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MailNeedsRowView(row: MailNeedsRow, onDone: () -> Unit, onTask: () -> Unit, onWaiting: () -> Unit, onSnooze: () -> Unit) {
+private fun MailNeedsRowView(
+    row: MailNeedsRow, onDone: () -> Unit, onTask: () -> Unit, onWaiting: () -> Unit, onSnooze: () -> Unit,
+    onSend: (String, () -> Unit) -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    // Slice 6b-2a: a reply that didn't send opens again with his words.
+    var replying by rememberSaveable(row.id, row.replyDraft) { mutableStateOf(row.replyDraft != null) }
+    var text by rememberSaveable(row.id, row.replyDraft) { mutableStateOf(row.replyDraft ?: "") }
     Column(Modifier.fillMaxWidth().testTag("mail-item-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -123,12 +147,45 @@ private fun MailNeedsRowView(row: MailNeedsRow, onDone: () -> Unit, onTask: () -
             Text(row.subject, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             row.preview?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+            row.notice?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.testTag("mail-reply-notice")) }
         }
-        // Four answers wrap onto a second line on the narrow cover screen rather than squeezing.
+        // Reply unfolds an editor under the email (expand spring; reduced motion: cross-fade). Nothing goes until Send.
+        AnimatedVisibility(replying, enter = unfold(), exit = fold()) {
+            val problem = MailNeedsRules.replyProblem(text)
+            Column(
+                Modifier.fillMaxWidth().padding(top = MekaSpace.xs).animateContentSize(MekaMotion.expand(reduced)),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                androidx.compose.foundation.layout.Box(
+                    Modifier.fillMaxWidth().heightIn(min = 96.dp).clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
+                        .padding(MekaSpace.s),
+                ) {
+                    if (text.isEmpty()) Text(MailNeedsRules.REPLY_HINT, style = MekaType.body, color = Meka.colors.textTertiary)
+                    BasicTextField(
+                        value = text, onValueChange = { text = it },
+                        textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
+                        cursorBrush = SolidColor(Meka.colors.accent),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        modifier = Modifier.fillMaxWidth().testTag("mail-reply-${row.id}").semantics { contentDescription = "Reply to ${row.from}" },
+                    )
+                }
+                Text(row.replyLine, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                if (problem == MailNeedsRules.REPLY_TOO_LONG) Text(problem, style = MekaType.itemMeta, color = Meka.colors.critical)
+                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    MailNeedsPill(
+                        MailNeedsRules.SEND, enabled = problem == null,
+                        spoken = "Send this reply to ${row.from} now", onClick = { onSend(text) { replying = false; text = "" } },
+                    )
+                    MailNeedsPill(MailNeedsRules.CANCEL, quiet = true, spoken = "Close the reply without sending", onClick = { replying = false })
+                }
+            }
+        }
+        // Five answers wrap onto a second line on the narrow cover screen rather than squeezing.
         FlowRow(
             Modifier.padding(top = MekaSpace.xxs),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
+            if (!replying) MailNeedsPill(MailNeedsRules.REPLY, spoken = "Reply to ${row.from}", onClick = { replying = true })
             MailNeedsPill(MailNeedsRules.DONE, spoken = "${MailNeedsRules.DONE}: archive ${row.subject}", onClick = onDone)
             MailNeedsPill(MailNeedsRules.TASK, spoken = "Make a task from ${row.subject} and archive the email", onClick = onTask)
             MailNeedsPill(MailNeedsRules.WAITING, quiet = true, spoken = "Waiting for ${row.from} on ${row.subject}, chase in 3 days", onClick = onWaiting)
@@ -138,13 +195,13 @@ private fun MailNeedsRowView(row: MailNeedsRow, onDone: () -> Unit, onTask: () -
 }
 
 @Composable
-private fun MailNeedsPill(label: String, spoken: String, quiet: Boolean = false, onClick: () -> Unit) {
+private fun MailNeedsPill(label: String, spoken: String, quiet: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     Text(
         label, style = MekaType.itemMeta,
-        color = if (quiet) Meka.colors.textSecondary else Meka.colors.accent,
+        color = when { !enabled -> Meka.colors.textTertiary; quiet -> Meka.colors.textSecondary; else -> Meka.colors.accent },
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
             .background(Meka.colors.surface)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = spoken }
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )

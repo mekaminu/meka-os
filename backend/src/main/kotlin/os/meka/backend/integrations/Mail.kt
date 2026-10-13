@@ -81,6 +81,50 @@ interface MailProvider {
      * the provider accepted it.
      */
     fun sendUnsubscribe(accessToken: String, mail: UnsubscribeMailto): Boolean = false
+
+    /**
+     * Slice 6b-2a: Meka's reply to the email [id], sent from this account in its thread, only because he tapped Send.
+     * [MailReplyResult.GONE] when the email no longer exists. Never retried by itself: a failure goes back to him.
+     */
+    fun reply(accessToken: String, id: String, text: String): MailReplyResult = MailReplyResult.FAILED
+}
+
+enum class MailReplyResult { SENT, GONE, FAILED }
+
+/**
+ * Slice 6b-2a: a reply as RFC 822 text (Gmail's messages.send): to the original's Reply-To or From, "Re: " + its
+ * subject, In-Reply-To and References so it threads, plain UTF-8 text in base64. Header values come from the
+ * original email, so line breaks in them are dropped (no header injection).
+ */
+internal object MailReplyMessage {
+    fun subject(original: String?): String {
+        val s = clean(original).ifEmpty { return "Re:" }
+        return if (s.length >= 3 && s.substring(0, 3).equals("re:", ignoreCase = true)) s else "Re: $s"
+    }
+
+    fun rfc822(to: String, subject: String, messageId: String?, references: String?, text: String): String {
+        val subj = clean(subject)
+        val encodedSubject = if (subj.all { it.code in 0x20..0x7e }) subj
+        else "=?UTF-8?B?" + java.util.Base64.getEncoder().encodeToString(subj.toByteArray()) + "?="
+        val id = clean(messageId).takeIf { it.isNotEmpty() }
+        val refs = listOfNotNull(clean(references).takeIf { it.isNotEmpty() }, id).joinToString(" ").takeIf { it.isNotEmpty() }
+        val body = java.util.Base64.getMimeEncoder(76, "\r\n".toByteArray()).encodeToString(text.replace("\r\n", "\n").replace("\n", "\r\n").toByteArray())
+        return buildString {
+            append("To: ").append(clean(to)).append("\r\n")
+            append("Subject: ").append(encodedSubject).append("\r\n")
+            id?.let { append("In-Reply-To: ").append(it).append("\r\n") }
+            refs?.let { append("References: ").append(it).append("\r\n") }
+            append("MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n")
+            append(body).append("\r\n")
+        }
+    }
+
+    /** One plain address (who the reply goes to): no spaces, separators or brackets, one @ with something either side. */
+    fun validAddress(s: String): Boolean =
+        s.length in 3..254 && s.count { it == '@' } == 1 && !s.startsWith('@') && !s.endsWith('@') &&
+            s.none { it.isWhitespace() || it in ",;<>()\"\\" || it.code < 0x20 }
+
+    private fun clean(s: String?): String = s.orEmpty().replace('\r', ' ').replace('\n', ' ').trim()
 }
 
 /** The unsubscribe email as RFC 822 text (plain text; a non-ASCII subject in RFC 2047's encoded form). */
@@ -298,6 +342,25 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         return http.call("POST", "$API/messages/send", accessToken, buildJsonObject { put("raw", raw) }).status in 200..299
     }
 
+    /** Slice 6b-2a: the original's headers read, the reply built and sent in its thread (Gmail fills in From). */
+    override fun reply(accessToken: String, id: String, text: String): MailReplyResult {
+        val headers = listOf("From", "Reply-To", "Subject", "Message-ID", "References")
+        val url = "$API/messages/${Http.enc(id)}?format=metadata&" + headers.joinToString("&") { "metadataHeaders=" + Http.enc(it) }
+        val a = http.call("GET", url, accessToken)
+        if (a.status == 404) return MailReplyResult.GONE
+        val m = a.body?.takeIf { a.status in 200..299 } ?: return MailReplyResult.FAILED
+        val hs = ((m["payload"] as? JsonObject)?.get("headers") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+            .mapNotNull { h -> h["name"].str()?.let { n -> n.lowercase() to (h["value"].str() ?: "") } }.toMap()
+        val to = MailAddress.parse(hs["reply-to"]).second ?: MailAddress.parse(hs["from"]).second ?: return MailReplyResult.FAILED
+        if (!MailReplyMessage.validAddress(to)) return MailReplyResult.FAILED
+        val raw = MailReplyMessage.rfc822(to, MailReplyMessage.subject(hs["subject"]), hs["message-id"], hs["references"], text)
+        val sent = http.call("POST", "$API/messages/send", accessToken, buildJsonObject {
+            put("raw", java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(raw.toByteArray()))
+            m["threadId"].str()?.let { put("threadId", it) }
+        })
+        return if (sent.status in 200..299) MailReplyResult.SENT else MailReplyResult.FAILED
+    }
+
     companion object {
         private const val DAY_MS = 86_400_000L
         /** 500 ids a page: up to 10,000 messages in the first listing. */
@@ -450,6 +513,21 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
             })
             put("saveToSentItems", true)
         }).status in 200..299
+
+    /**
+     * Slice 6b-2a: Graph's reply on the message (Outlook threads it, answers the sender and keeps it in Sent Items),
+     * his words as the plain-text body.
+     */
+    override fun reply(accessToken: String, id: String, text: String): MailReplyResult {
+        val a = http.call("POST", "$GRAPH/me/messages/${Http.enc(id)}/reply", accessToken, buildJsonObject {
+            put("message", buildJsonObject { put("body", buildJsonObject { put("contentType", "Text"); put("content", text) }) })
+        })
+        return when {
+            a.status in 200..299 -> MailReplyResult.SENT
+            a.status == 404 -> MailReplyResult.GONE
+            else -> MailReplyResult.FAILED
+        }
+    }
 
     private companion object {
         const val GRAPH = "https://graph.microsoft.com/v1.0"

@@ -148,4 +148,67 @@ class MailNeedsTest {
         assertNull(undone.waitingId)
         assertEquals(1, MailNeedsRules.card(listOf(undone), now + 1, cal)?.rows?.size)
     }
+
+    // ---- Slice 6b-2a: Reply, sent only on his tap ----
+
+    @Test
+    fun aReplyNeedsWordsAndAFairLength() {
+        assertEquals(MailNeedsRules.REPLY_EMPTY, MailNeedsRules.replyProblem("   \n "))
+        assertEquals(MailNeedsRules.REPLY_TOO_LONG, MailNeedsRules.replyProblem("x".repeat(MailNeedsRules.MAX_REPLY + 1)))
+        assertNull(MailNeedsRules.replyProblem("Yes, I can take them."))
+        val sent = item("a", hour, extra = MailNeedsRules.replyFields("  Yes, I can take them.  ", now))
+        assertEquals("Yes, I can take them.", sent.replyText)
+        assertEquals("Reply sending from Personal at Navilife's next check · Undo stops it", MailNeedsRules.replySendingLine("Personal"))
+        assertEquals("To Sam Taylor · sent from Personal only when you tap Send", MailNeedsRules.card(listOf(item("b", hour)), now, cal)!!.rows.single().replyLine)
+    }
+
+    @Test
+    fun theServerSendsOnlyAfterTheHoldAndArchivesOnlyOnceItWent() {
+        val asked = item("a", hour, extra = MailNeedsRules.replyFields("Yes", now))
+        // The card goes at once; nothing is sent or archived inside Undo's window.
+        assertNull(MailNeedsRules.card(listOf(asked), now, cal))
+        assertTrue(MailNeedsRules.replyWaiting(asked))
+        assertFalse(MailNeedsRules.replyDue(asked, now + MailNeedsRules.REPLY_HOLD_MS - 1))
+        assertFalse(MailNeedsRules.archiveDue(asked))
+        assertTrue(MailNeedsRules.replyDue(asked, now + MailNeedsRules.REPLY_HOLD_MS))
+        // Undo inside the window: never sent, card back.
+        val undone = item("a", hour, extra = MailNeedsRules.replyFields("Yes", now) + MailNeedsRules.undoDoneFields(now + 5_000))
+        assertFalse(MailNeedsRules.replyDue(undone, now + day))
+        assertFalse(MailNeedsRules.archiveDue(undone))
+        assertEquals(1, MailNeedsRules.card(listOf(undone), now + 6_000, cal)?.rows?.size)
+        // Sent: not again, and now archived.
+        val sent = item("a", hour, extra = MailNeedsRules.replyFields("Yes", now) + MailNeedsRules.replySentFields(now + 30_000))
+        assertTrue(MailNeedsRules.replySent(sent))
+        assertFalse(MailNeedsRules.replyDue(sent, now + day))
+        assertTrue(MailNeedsRules.archiveDue(sent))
+        // Undo after it went: the card comes back saying it was replied to (the reply can't be taken back).
+        val back = item("a", hour, extra = MailNeedsRules.replyFields("Yes", now) + MailNeedsRules.replySentFields(now + 30_000) +
+            MailNeedsRules.archivedFields(now + 30_001) + MailNeedsRules.undoDoneFields(now + 60_000))
+        assertTrue(MailNeedsRules.putBackDue(back))
+        assertEquals("Personal · 07:30 · replied 08:30", MailNeedsRules.card(listOf(back), now + 61_000, cal)!!.rows.single().line)
+    }
+
+    @Test
+    fun aFailedReplyBringsTheCardBackWithHisWords() {
+        val failed = item("a", hour, extra = MailNeedsRules.replyFields("Yes, I can take them.", now) +
+            MailNeedsRules.replyFailedFields(now + 30_000, MailNeedsRules.whyRefused("Gmail")))
+        assertTrue(MailNeedsRules.replyFailed(failed))
+        assertFalse(MailNeedsRules.done(failed))
+        assertFalse(MailNeedsRules.archiveDue(failed))
+        assertFalse(MailNeedsRules.replyDue(failed, now + day))
+        val row = MailNeedsRules.card(listOf(failed), now + 31_000, cal)!!.rows.single()
+        assertEquals("Reply didn't send · Gmail didn't take it · your words are kept", row.notice)
+        assertEquals("Yes, I can take them.", row.replyDraft)
+        assertTrue(row.spoken.endsWith("your words are kept"))
+        // Send again: waiting again, the notice gone.
+        val again = item("a", hour, extra = MailNeedsRules.replyFields("Yes, I can take them.", now) +
+            MailNeedsRules.replyFailedFields(now + 30_000, "x") + MailNeedsRules.replyFields("Yes, I can take them!", now + 40_000))
+        assertTrue(MailNeedsRules.replyDue(again, now + 60_000))
+        assertNull(MailNeedsRules.card(listOf(again), now + 41_000, cal))
+        // Done instead after a failure: archived, nothing sent.
+        val doneInstead = item("a", hour, extra = MailNeedsRules.replyFields("Yes", now) +
+            MailNeedsRules.replyFailedFields(now + 30_000, "x") + MailNeedsRules.doneFields(now + 40_000))
+        assertTrue(MailNeedsRules.archiveDue(doneInstead))
+        assertFalse(MailNeedsRules.replyDue(doneInstead, now + day))
+    }
 }

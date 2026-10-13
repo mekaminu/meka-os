@@ -16,6 +16,8 @@ import os.meka.backend.integrations.MailChanges
 import os.meka.backend.integrations.MailCursorExpired
 import os.meka.backend.integrations.MailHeader
 import os.meka.backend.integrations.MailProvider
+import os.meka.backend.integrations.MailReplyMessage
+import os.meka.backend.integrations.MailReplyResult
 import os.meka.backend.integrations.MailStore
 import os.meka.backend.integrations.MailboxCheck
 import os.meka.backend.integrations.OAuthClient
@@ -203,6 +205,15 @@ class MailSyncTest {
             sent += mail; return true
         }
         override fun listHeaders(accessToken: String, id: String): Pair<String?, Boolean>? { headerReads += id; return outlookHeaders[id] }
+
+        // Slice 6b-2a: replies sent.
+        val replies = mutableListOf<Pair<String, String>>()
+        var replyAnswer: () -> MailReplyResult = { MailReplyResult.SENT }
+        override fun reply(accessToken: String, id: String, text: String): MailReplyResult {
+            val r = replyAnswer()
+            if (r == MailReplyResult.SENT) replies += id to text
+            return r
+        }
     }
 
     private class Cipher : TokenCipher {
@@ -632,6 +643,92 @@ class MailSyncTest {
         assertTrue(MailNeedsRules.read(q, items(ops).getValue(q))!!.goneAtMs != null)
         assertTrue(i.disconnectMail("home", "gmail", "alex@example.com"))
         assertTrue(MailNeedsRules.read(p, items(ops).getValue(p))!!.goneAtMs != null)
+    }
+
+    // ---- Slice 6b-2a: Reply ----
+
+    @Test
+    fun aReplyIsSentOnceAfterTheHoldThenTheEmailIsArchived() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["p"] = msg("p", 0).copy(fromName = "Sam Taylor", subject = "Football on Saturday")
+        gmail.mailbox["r"] = msg("r", 0).copy(fromName = "Alex Reed", subject = "Quote")
+        val id = connect(i)
+        i.syncAccount(id)
+        val p = MailNeedsRules.itemId(id, "p")
+        val r = MailNeedsRules.itemId(id, "r")
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+
+        // Send on the Fold: inside the hold nothing is sent or archived.
+        now += 60_000
+        MailNeedsRules.replyFields("Yes, I can take them.", now).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, p, f, v) }
+        now += 5_000
+        i.syncAccount(id)
+        assertTrue(gmail.replies.isEmpty())
+        assertTrue(gmail.tidyCalls.isEmpty())
+        // After it: sent once from this account, then archived.
+        now += MailNeedsRules.REPLY_HOLD_MS
+        i.syncAccount(id)
+        assertEquals(listOf("p" to "Yes, I can take them."), gmail.replies)
+        assertEquals(mapOf("p" to MailTidy.ARCHIVE), gmail.tidyCalls.single())
+        val sent = MailNeedsRules.read(p, items(ops).getValue(p))!!
+        assertTrue(MailNeedsRules.replySent(sent) && sent.doneAtMs != null)
+        i.syncAccount(id)
+        assertEquals(1, gmail.replies.size)
+
+        // Undo inside the hold: never sent.
+        MailNeedsRules.replyFields("Can't, sorry", now).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, r, f, v) }
+        now += 1_000
+        device(ops, EntityTypes.MAIL_ITEM, r, MailItemFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        now += MailNeedsRules.REPLY_HOLD_MS * 3
+        i.syncAccount(id)
+        assertEquals(1, gmail.replies.size)
+        assertTrue(gmail.mailbox.getValue("r").inInbox)
+
+        // Gmail refuses it: the card comes back with his words, not archived, not retried.
+        now += 1_000
+        MailNeedsRules.replyFields("Can't, sorry", now).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, r, f, v) }
+        gmail.replyAnswer = { MailReplyResult.FAILED }
+        now += MailNeedsRules.REPLY_HOLD_MS
+        i.syncAccount(id)
+        val failed = MailNeedsRules.read(r, items(ops).getValue(r))!!
+        assertTrue(MailNeedsRules.replyFailed(failed))
+        assertEquals("Gmail didn't take it", failed.replyFailedWhy)
+        assertTrue(MailNeedsRules.showing(failed, now))
+        assertTrue(gmail.mailbox.getValue("r").inInbox)
+        // Unreachable: the same, said so.
+        gmail.replyAnswer = { error("Gmail 503") }
+        now += 1_000
+        MailNeedsRules.replyFields("Can't, sorry", now).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, r, f, v) }
+        now += MailNeedsRules.REPLY_HOLD_MS
+        i.syncAccount(id)
+        assertEquals("couldn't reach Gmail", MailNeedsRules.read(r, items(ops).getValue(r))!!.replyFailedWhy)
+        assertEquals(1, gmail.replies.size)
+        // The reply's words are never in the server's published fields beyond the device's own write.
+        assertFalse(items(ops).getValue(p).filterKeys { it != MailItemFields.REPLY_TEXT }.values.any { it == FieldValue.Text("Yes, I can take them.") })
+    }
+
+    @Test
+    fun theReplyThreadsAndKeepsHeadersClean() {
+        assertEquals("Re: Football on Saturday", MailReplyMessage.subject("Football on Saturday"))
+        assertEquals("RE: Quote", MailReplyMessage.subject("RE: Quote"))
+        assertEquals("Re:", MailReplyMessage.subject(null))
+        val raw = MailReplyMessage.rfc822("sam@example.com", "Re: Café\r\nX: y", "<a1@mail.example>", "<a0@mail.example>", "Yes,\nI can take them.")
+        val head = raw.substringBefore("\r\n\r\n").split("\r\n")
+        assertEquals("To: sam@example.com", head[0])
+        assertTrue(MailReplyMessage.validAddress("sam@example.com"))
+        assertFalse(MailReplyMessage.validAddress("sam@example.com\r\nBcc: x@evil.example"))
+        assertFalse(MailReplyMessage.validAddress("a@b, c@d"))
+        assertFalse(MailReplyMessage.validAddress("nobody"))
+        assertTrue(head[1].startsWith("Subject: =?UTF-8?B?"))
+        assertEquals("In-Reply-To: <a1@mail.example>", head[2])
+        assertEquals("References: <a0@mail.example> <a1@mail.example>", head[3])
+        assertTrue(head.none { it.startsWith("X:") })
+        val body = String(java.util.Base64.getMimeDecoder().decode(raw.substringAfter("\r\n\r\n").trim()))
+        assertEquals("Yes,\r\nI can take them.", body)
+        // No Message-ID on the original: no threading headers, still a valid email.
+        assertFalse("In-Reply-To" in MailReplyMessage.rfc822("sam@example.com", "Re: x", null, null, "ok"))
     }
 
     private fun senders(ops: InMemoryServerOpStore) = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_SENDER)

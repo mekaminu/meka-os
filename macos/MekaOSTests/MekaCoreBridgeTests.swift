@@ -2782,6 +2782,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(unknownTask, MailNeedsRules.shared.UNKNOWN)
         let unknownWaiting = try await core.waitingFromMailItem(id: "nothing")
         XCTAssertEqual(unknownWaiting, MailNeedsRules.shared.UNKNOWN)
+        // Slice 6b-2a: Reply, sent by the server only after Send.
+        let unknownReply = try await core.replyToMailItem(id: "nothing", text: "Yes")
+        XCTAssertEqual(unknownReply, MailNeedsRules.shared.UNKNOWN)
+        XCTAssertEqual(MailNeedsRules.shared.replyProblem(text: "  "), MailNeedsRules.shared.REPLY_EMPTY)
+        XCTAssertNil(MailNeedsRules.shared.replyProblem(text: "Yes, I can take them."))
         try await core.undoMailItem()
         XCTAssertNil(core.mailNeeds.value)
         XCTAssertEqual(MailNeedsRules.shared.headline(n: 3), "3 emails need you")

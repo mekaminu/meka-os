@@ -3616,6 +3616,22 @@ final class CoreModel {
         }
     }
 
+    /// Send on a reply written on an email in "From your mail" (slice 6b-2a): nothing is sent here; the server sends it
+    /// from the account the email came to at its next check (Undo on the bar stops it) and archives the email. A problem
+    /// with the words (empty, too long) leaves the editor open. Only the id and the text (Strings) cross.
+    func replyToMailItem(_ id: String, _ text: String, sent: @escaping @MainActor () -> Void) {
+        guard let core else { return }
+        if MailNeedsRules.shared.replyProblem(text: text) != nil { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.replyToMailItem(id: id, text: text)
+                sent()
+                offerEventUndo(line, .mailItem)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Snooze on an email in "From your mail": back tomorrow 08:00 on both apps, with Undo. Only the id crosses.
     func snoozeMailItem(_ id: String) {
         guard let core else { return }

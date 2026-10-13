@@ -153,4 +153,33 @@ class MailNeedsFacadeTest {
         assertEquals(1, fold.listsView.value.waiting.size)
         assertEquals(MailNeedsRules.UNKNOWN, fold.waitingFromMailItem("nothing"))
     }
+
+    // ---- Slice 6b-2a ----
+
+    @Test
+    fun sendWritesHisWordsForTheServerAndUndoStopsIt() = runTest {
+        val a = email("m1", "Sam Taylor", "Football on Saturday", hour, "Business")
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        // Nothing to send: nothing written, the card stays.
+        assertEquals(MailNeedsRules.REPLY_EMPTY, fold.replyToMailItem(a, "  "))
+        assertNotNull(fold.mailNeeds.value)
+        assertEquals("Reply sending from Business at Navilife's next check · Undo stops it", fold.replyToMailItem(a, "Yes, I can take them."))
+        assertNull(fold.mailNeeds.value)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertNull(mac.mailNeeds.value)
+        val ops = serverOps.after("hh", 0, 100_000).map { it.op }.filter { it.entityId == a }.associate { it.field to it.value }
+        assertEquals(FieldValue.Text("Yes, I can take them."), ops[MailItemFields.REPLY_TEXT])
+        assertEquals(FieldValue.Int64(now), ops[MailItemFields.REPLY_ASKED_AT])
+
+        now += 1_000
+        fold.undoMailItem()
+        assertEquals(listOf(a), fold.mailNeeds.value?.rows?.map { it.id })
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        val item = MailNeedsRules.read(a, serverOps.after("hh", 0, 100_000).map { it.op }.filter { it.entityId == a }.associate { it.field to it.value })!!
+        assertTrue(!MailNeedsRules.replyDue(item, now + 60_000))
+        assertEquals(listOf(a), mac.mailNeeds.value?.rows?.map { it.id })
+        assertEquals(MailNeedsRules.UNKNOWN, fold.replyToMailItem("nothing", "Hi"))
+    }
 }

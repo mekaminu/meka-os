@@ -20,8 +20,11 @@ import os.meka.core.sync.fv
  * from the email ([taskTitle], [taskNotes], id [taskId] so two devices converge on one) and **Waiting for** puts it in
  * Waiting for (who = the sender, chase in [ListRules.DEFAULT_CHASE_DAYS] days); either one is a Done as well (the email
  * is archived at the server's next check) and records what it made ([MailItemFields.TASK_ID] /
- * [MailItemFields.WAITING_ID]); Undo removes what it made and brings the card back. Reply comes in a later slice.
- * Nothing is ever sent from here.
+ * [MailItemFields.WAITING_ID]); Undo removes what it made and brings the card back. Slice 6b-2a: **Reply** — he writes
+ * the reply on the card and taps Send ([MailItemFields.REPLY_TEXT], [MailItemFields.REPLY_ASKED_AT]); the server sends
+ * it from the account the email came to, in its thread, at its next check once [REPLY_HOLD_MS] have passed (so Undo
+ * stops it), writes [MailItemFields.REPLY_SENT_AT] and archives the email; a send that fails writes
+ * [MailItemFields.REPLY_FAILED_AT] and the card comes back with his words kept. Nothing is sent without his tap on Send.
  */
 object MailItemFields {
     // The server's.
@@ -45,6 +48,15 @@ object MailItemFields {
     const val TASK_ID = "taskId"
     /** Slice 6b-1: the Waiting for item made from it ("" once undone). */
     const val WAITING_ID = "waitingId"
+    /** Slice 6b-2a: the reply he wrote (an app's; the server reads it only to send it, never logs it). */
+    const val REPLY_TEXT = "replyText"
+    /** Slice 6b-2a: when he tapped Send (an app's). */
+    const val REPLY_ASKED_AT = "replyAskedAtMs"
+    /** Slice 6b-2a: the server sent it (the server's). */
+    const val REPLY_SENT_AT = "replySentAtMs"
+    /** Slice 6b-2a: the server couldn't send it (the server's), and why in a few words. */
+    const val REPLY_FAILED_AT = "replyFailedAtMs"
+    const val REPLY_FAILED_WHY = "replyFailedWhy"
 }
 
 data class MailItem(
@@ -66,6 +78,12 @@ data class MailItem(
     val taskId: String? = null,
     /** Slice 6b-1: the Waiting for item made from it, or null. */
     val waitingId: String? = null,
+    /** Slice 6b-2a: his reply, when he tapped Send, and what the server did with it. */
+    val replyText: String? = null,
+    val replyAskedAtMs: Long? = null,
+    val replySentAtMs: Long? = null,
+    val replyFailedAtMs: Long? = null,
+    val replyFailedWhy: String? = null,
 )
 
 /** One email on the card. */
@@ -82,6 +100,12 @@ data class MailNeedsRow(
     val business: Boolean,
     /** What a screen reader says for the row. */
     val spoken: String,
+    /** Slice 6b-2a: "Reply didn't send · Gmail didn't take it · your words are kept" when the last Send failed, else null. */
+    val notice: String? = null,
+    /** Slice 6b-2a: the words of a reply that didn't send, to start the editor with; null otherwise. */
+    val replyDraft: String? = null,
+    /** Slice 6b-2a: "Sam Taylor" — who Reply answers (the line under the editor names them and the account). */
+    val replyLine: String = "",
 )
 
 data class MailNeedsCard(
@@ -103,6 +127,15 @@ object MailNeedsRules {
     const val SNOOZE = "Snooze"
     const val TASK = "Task"
     const val WAITING = "Waiting for"
+    const val REPLY = "Reply"
+    const val SEND = "Send"
+    const val CANCEL = "Cancel"
+    const val REPLY_HINT = "Write your reply"
+    /** Slice 6b-2a: the server waits this long after Send before sending, so Undo on the bar stops it. */
+    const val REPLY_HOLD_MS = 20_000L
+    const val MAX_REPLY = 4_000
+    const val REPLY_EMPTY = "Write your reply first"
+    const val REPLY_TOO_LONG = "Keep it under 4,000 characters"
     const val TASK_LINE = "Task added · email archived at Navilife's next check"
     const val WAITING_LINE = "In Waiting for · chase in 3 days · email archived at Navilife's next check"
     const val BUSINESS_CHIP = "Business"
@@ -213,17 +246,71 @@ object MailNeedsRules {
             snoozedUntilMs = ms(MailItemFields.SNOOZED_UNTIL),
             taskId = text(MailItemFields.TASK_ID),
             waitingId = text(MailItemFields.WAITING_ID),
+            replyText = (f[MailItemFields.REPLY_TEXT] as? FieldValue.Text)?.value?.takeIf { it.isNotBlank() },
+            replyAskedAtMs = ms(MailItemFields.REPLY_ASKED_AT),
+            replySentAtMs = ms(MailItemFields.REPLY_SENT_AT),
+            replyFailedAtMs = ms(MailItemFields.REPLY_FAILED_AT),
+            replyFailedWhy = text(MailItemFields.REPLY_FAILED_WHY),
         )
     }
 
-    /** He tapped Done (on either app) and hasn't taken it back since. */
+    /**
+     * He tapped Done (or Task, Waiting for, Send on either app) and hasn't taken it back since. A reply the server
+     * couldn't send undoes the Done it came with, so the card comes back with his words.
+     */
     fun done(i: MailItem): Boolean {
         val asked = i.doneAskedAtMs ?: return false
+        if (i.replyFailedAtMs != null && i.replyAskedAtMs != null && i.replyFailedAtMs >= i.replyAskedAtMs && asked <= i.replyFailedAtMs) return false
         return i.undoAskedAtMs == null || i.undoAskedAtMs < asked
     }
 
-    /** The server should archive it now: Done, and not archived since that Done. */
-    fun archiveDue(i: MailItem): Boolean = done(i) && (i.doneAtMs == null || i.doneAtMs < i.doneAskedAtMs!!)
+    /** The server should archive it now: Done, any reply sent first, and not archived since that Done. */
+    fun archiveDue(i: MailItem): Boolean = done(i) && !replyWaiting(i) && (i.doneAtMs == null || i.doneAtMs < i.doneAskedAtMs!!)
+
+    // ---- Slice 6b-2a: Reply, sent only on his tap ----
+
+    /** What's wrong with [text] as a reply, or null when it can be sent. */
+    fun replyProblem(text: String): String? = when {
+        text.isBlank() -> REPLY_EMPTY
+        text.trim().length > MAX_REPLY -> REPLY_TOO_LONG
+        else -> null
+    }
+
+    /** Send: a Done that carries his words; the server sends them once [REPLY_HOLD_MS] have passed. */
+    fun replyFields(text: String, nowMs: Long): Map<String, FieldValue> =
+        doneFields(nowMs) + (MailItemFields.REPLY_TEXT to text.trim().fv()) + (MailItemFields.REPLY_ASKED_AT to nowMs.fv())
+
+    /** "Reply sending from Personal at Navilife's next check · Undo stops it" — the bar's line after Send. */
+    fun replySendingLine(account: String): String = "Reply sending from $account at Navilife's next check · Undo stops it"
+
+    fun replySent(i: MailItem): Boolean = i.replyAskedAtMs != null && i.replySentAtMs != null && i.replySentAtMs >= i.replyAskedAtMs
+
+    fun replyFailed(i: MailItem): Boolean = i.replyAskedAtMs != null && i.replyFailedAtMs != null && i.replyFailedAtMs >= i.replyAskedAtMs
+
+    /** He tapped Send, hasn't undone it, and the server hasn't sent it or given up on it yet. */
+    fun replyWaiting(i: MailItem): Boolean {
+        val asked = i.replyAskedAtMs ?: return false
+        if (replySent(i) || replyFailed(i) || i.replyText.isNullOrBlank()) return false
+        return i.undoAskedAtMs == null || i.undoAskedAtMs < asked
+    }
+
+    /** The server should send it now: waiting, and [REPLY_HOLD_MS] have passed since Send (Undo's window). */
+    fun replyDue(i: MailItem, nowMs: Long): Boolean = replyWaiting(i) && nowMs - i.replyAskedAtMs!! >= REPLY_HOLD_MS
+
+    /** What the server writes once the provider took the reply. */
+    fun replySentFields(nowMs: Long): Map<String, FieldValue> = mapOf(MailItemFields.REPLY_SENT_AT to nowMs.fv())
+
+    /** What the server writes when it couldn't send it ([why]: a few words, never the reply). The card comes back. */
+    fun replyFailedFields(nowMs: Long, why: String): Map<String, FieldValue> =
+        mapOf(MailItemFields.REPLY_FAILED_AT to nowMs.fv(), MailItemFields.REPLY_FAILED_WHY to why.take(80).fv(), MailItemFields.GONE_AT to 0L.fv())
+
+    /** Why a reply didn't send, as the server says it. */
+    const val WHY_GONE = "the email has gone from the inbox"
+    fun whyRefused(provider: String): String = "$provider didn't take it"
+    fun whyUnreachable(provider: String): String = "couldn't reach $provider"
+
+    private fun replyNotice(i: MailItem): String? =
+        if (replyFailed(i) && !done(i)) "Reply didn't send · ${i.replyFailedWhy ?: "try again"} · your words are kept" else null
 
     /** The server should put it back now: Done was undone after the server had archived it, and not put back since. */
     fun putBackDue(i: MailItem): Boolean {
@@ -258,11 +345,16 @@ object MailNeedsRules {
         if (all.isEmpty()) return null
         val rows = all.take(SHOWN).map { i ->
             val thread = if (i.threadCount > 1) "${i.threadCount} in this thread" else null
-            val line = listOfNotNull(i.account, whenLabel(i.receivedAtMs, nowMs, cal), thread).joinToString(" · ")
+            val replied = if (replySent(i)) "replied ${whenLabel(i.replySentAtMs!!, nowMs, cal)}" else null
+            val line = listOfNotNull(i.account, whenLabel(i.receivedAtMs, nowMs, cal), thread, replied).joinToString(" · ")
+            val notice = replyNotice(i)
             MailNeedsRow(
                 id = i.id, from = i.from, line = line, subject = i.subject, preview = i.preview,
                 business = i.account == MailLabel.BUSINESS.label,
-                spoken = listOfNotNull("${i.from}, ${i.subject}", line, i.preview).joinToString(". "),
+                spoken = listOfNotNull("${i.from}, ${i.subject}", line, i.preview, notice).joinToString(". "),
+                notice = notice,
+                replyDraft = if (notice != null) i.replyText else null,
+                replyLine = "To ${i.from} · sent from ${i.account} only when you tap Send",
             )
         }
         val more = all.size - rows.size

@@ -3,7 +3,9 @@ import SwiftUI
 
 /// "From your mail" on the Mac (Inbox autopilot, slice 6a), in Needs you above "Archived for you": the emails the server
 /// sorted as needing Meka, still in the inbox, newest first — who, which account (the business one wears a Business
-/// chip), when, the subject and the first words — each with Done (archived at the server's next check), Task and Waiting
+/// chip), when, the subject and the first words — each with Reply (slice 6b-2a: written on the card, sent from that
+/// account only on Send, at the server's next check; Undo on the bar stops it; a reply that didn't send opens again with
+/// his words), Done (archived at the server's next check), Task and Waiting
 /// for (slice 6b-1: made from the email, which is archived too) and Snooze (back tomorrow 08:00), each with Undo on the bar. It staggers in after the cards above; clicking the header folds the
 /// emails in and out on the expand spring; the headline cross-fades. Reduced motion: cross-fades.
 struct MailNeedsView: View {
@@ -37,7 +39,8 @@ struct MailNeedsView: View {
                                                  done: { model.doneMailItem(row.id) },
                                                  task: { model.taskFromMailItem(row.id) },
                                                  waiting: { model.waitingFromMailItem(row.id) },
-                                                 snooze: { model.snoozeMailItem(row.id) })
+                                                 snooze: { model.snoozeMailItem(row.id) },
+                                                 send: { text, sent in model.replyToMailItem(row.id, text, sent: sent) })
                             }
                             if let more = card.moreLine {
                                 Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
@@ -71,6 +74,10 @@ private struct MailNeedsRowView: View {
     let task: () -> Void
     let waiting: () -> Void
     let snooze: () -> Void
+    let send: (String, @escaping @MainActor () -> Void) -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var replying = false
+    @State private var text = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -89,10 +96,23 @@ private struct MailNeedsRowView: View {
                     Text(preview).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).lineLimit(2)
                 }
                 Text(row.line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                if let notice = row.notice {
+                    Text(notice).font(MekaType.itemMeta).foregroundStyle(palette.critical)
+                }
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(row.spoken)
+            if replying {
+                MailReplyEditor(row: row, palette: palette, text: $text,
+                                send: { send(text) { replying = false; text = "" } },
+                                cancel: { replying = false })
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
             HStack(spacing: MekaSpace.xs) {
+                if !replying {
+                    MailNeedsPill(label: MailNeedsRules.shared.REPLY, palette: palette,
+                                  spoken: "Reply to \(row.from)", action: { replying = true })
+                }
                 MailNeedsPill(label: MailNeedsRules.shared.DONE, palette: palette,
                               spoken: "Done: archive \(row.subject)", action: done)
                 MailNeedsPill(label: MailNeedsRules.shared.TASK, palette: palette,
@@ -104,6 +124,49 @@ private struct MailNeedsRowView: View {
             }
             .padding(.top, MekaSpace.xxs)
         }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: replying)
+        .onAppear {
+            // A reply that didn't send opens again with his words.
+            if let draft = row.replyDraft { text = draft; replying = true }
+        }
+        .onChange(of: row.replyDraft) { _, draft in
+            if let draft { text = draft; replying = true }
+        }
+    }
+}
+
+/// The reply editor under an email (slice 6b-2a): his words, who it goes to and from which account, Send and Cancel.
+private struct MailReplyEditor: View {
+    let row: MailNeedsRow
+    let palette: MekaPalette
+    @Binding var text: String
+    let send: () -> Void
+    let cancel: () -> Void
+
+    var body: some View {
+        let problem = MailNeedsRules.shared.replyProblem(text: text)
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            TextField(MailNeedsRules.shared.REPLY_HINT, text: $text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(MekaType.body)
+                .lineLimit(4...12)
+                .padding(MekaSpace.s)
+                .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+                .accessibilityLabel("Reply to \(row.from)")
+            Text(row.replyLine).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+            if problem == MailNeedsRules.shared.REPLY_TOO_LONG {
+                Text(MailNeedsRules.shared.REPLY_TOO_LONG).font(MekaType.itemMeta).foregroundStyle(palette.critical)
+            }
+            HStack(spacing: MekaSpace.xs) {
+                MailNeedsPill(label: MailNeedsRules.shared.SEND, palette: palette,
+                              spoken: "Send this reply to \(row.from) now", action: send)
+                    .disabled(problem != nil)
+                    .keyboardShortcut(.return, modifiers: .command)
+                MailNeedsPill(label: MailNeedsRules.shared.CANCEL, palette: palette, quiet: true,
+                              spoken: "Close the reply without sending", action: cancel)
+            }
+        }
+        .padding(.top, MekaSpace.xs)
     }
 }
 

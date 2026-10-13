@@ -3568,6 +3568,23 @@ class MekaCore(
         R.WAITING_LINE
     }
 
+    /**
+     * Inbox autopilot, slice 6b-2a: **Send** on a reply he wrote on an email in "From your mail". Nothing is sent here:
+     * the card goes on both apps and the server sends his words from the account the email came to, in its thread, at
+     * its next check once [os.meka.core.domain.MailNeedsRules.REPLY_HOLD_MS] have passed, then archives the email. Undo
+     * on the bar stops it (until the server has sent it). Returns the line to show, or what's wrong with the text
+     * ([os.meka.core.domain.MailNeedsRules.replyProblem]) with nothing written.
+     */
+    suspend fun replyToMailItem(id: String, text: String): String = onCore {
+        val R = os.meka.core.domain.MailNeedsRules
+        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
+        R.replyProblem(text)?.let { return@onCore it }
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.replyFields(text, nowMs()))
+        mailNeedsUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.undoDoneFields(nowMs())) }
+        mailNeedsChanged()
+        R.replySendingLine(item.account)
+    }
+
     /** Undo on the last Done or Snooze in "From your mail" on this device. */
     suspend fun undoMailItem() = onCore {
         val undo = mailNeedsUndo ?: return@onCore
