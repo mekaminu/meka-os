@@ -123,6 +123,33 @@ class MailMomentFacadeTest {
         assertNull(mac.mailMoment.value)
     }
 
+    /** Slice 7b-2: the watch is a device of its own and shows only the count, lit while the moment is up. */
+    @Test
+    fun theWatchShowsTheCountLitAtTheMomentAndNothingOnceClear() = runTest {
+        val watch = core("watch")
+        assertTrue(watch.syncNow())
+        assertNull(watch.watchHome().inbox)
+        assertNull(watch.watchTile().inboxLine)
+        val a = email("m1", "Sam Taylor", "Football on Saturday", hour)
+        email("m2", "Alex Reed", "Invoice question", 2 * hour)
+        assertTrue(watch.syncNow())
+        val lit = assertNotNull(watch.watchHome().inbox)
+        assertEquals("TEN-MINUTE INBOX", lit.label)
+        assertEquals("2 need you · on your phone", lit.line)
+        assertEquals("Ten-minute inbox · 2 need you", watch.watchTile().inboxLine)
+        assertTrue(!lit.spoken.contains("Football") && !lit.line.contains("Sam")) // never what the emails say
+
+        // Done on the Fold: the watch's count follows the sync; Not today leaves a calm count.
+        val fold = core("android")
+        assertTrue(fold.syncNow())
+        fold.doneMailItem(a)
+        fold.notTodayMailMoment()
+        assertTrue(fold.syncNow()); assertTrue(watch.syncNow())
+        val calm = assertNotNull(watch.watchHome().inbox)
+        assertEquals("INBOX", calm.label)
+        assertEquals("1 need you", calm.line)
+    }
+
     @Test
     fun noMailMeansNoClearDayIsNoted() = runTest {
         val fold = core("android")

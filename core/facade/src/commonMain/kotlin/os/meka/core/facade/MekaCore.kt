@@ -3248,7 +3248,18 @@ class MekaCore(
      * make (Done · Tomorrow, Went · Didn't go) and the fast with Start or End. Pure and cheap. Nothing is stored.
      */
     fun watchHome(): os.meka.core.domain.WatchHomeView =
-        os.meka.core.domain.WatchHomeRules.view(coverNow(), _fasting.value, nowMs())
+        os.meka.core.domain.WatchHomeRules.view(coverNow(), _fasting.value, nowMs(), watchInbox())
+
+    /**
+     * Inbox autopilot, slice 7b-2: the watch's inbox count — the rows of "From your mail" (linked emails once, as in
+     * the ten-minute inbox), lit while the ten-minute inbox's moment is up. Only the count reaches the wrist.
+     */
+    private fun watchInbox(): os.meka.core.domain.WatchInbox? =
+        os.meka.core.domain.WatchHomeRules.inbox(mailWaitingRows, _mailMoment.value)
+
+    /** The rows of "From your mail" as last counted on the core's thread (read by [watchHome] from any thread). */
+    @kotlin.concurrent.Volatile
+    private var mailWaitingRows = 0
 
     /** A watch button: the same change as the Fold's cover screen makes for that tap. */
     suspend fun watchPress(button: os.meka.core.domain.WatchButton) {
@@ -3774,6 +3785,7 @@ class MekaCore(
         val cal = ZoneCalendar(timeZone)
         val setting = mailMomentSetting()
         val rows = os.meka.core.domain.MailNeedsRules.allRows(items, nowMs(), cal)
+        mailWaitingRows = rows.size
         _mailMoment.value = if (mailMomentRunning) null else os.meka.core.domain.MailMomentRules.card(setting, rows.size, nowMs(), cal)
         _mailMomentSession.value = if (!mailMomentRunning) null else
             os.meka.core.domain.MailMomentRules.session(rows, mailMomentSkipped, mailMomentStarted, setting, cal.epochDayOf(nowMs()))

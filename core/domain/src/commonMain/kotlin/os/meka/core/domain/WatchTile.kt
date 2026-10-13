@@ -32,6 +32,12 @@ data class WatchTileView(
     val spoken: String,
     /** The tile offers Capture (slice 4a: opens MEKA listening); only once the watch is linked. */
     val capture: Boolean = false,
+    /**
+     * Inbox autopilot, slice 7b-2: "Inbox · 6 need you" (lit "Ten-minute inbox · 6 need you" at the moment's time);
+     * null when nothing waits or a fast's clock already takes the tile's last line (the screen shows both).
+     */
+    val inboxLine: String? = null,
+    val inboxLit: Boolean = false,
 )
 
 /** The complication's ring: [value] of 0…1 with a short [text] and [title] beside it. */
@@ -99,11 +105,12 @@ object WatchTileRules {
             home.line?.let(::add)
             if (f.running) add("${f.title}, ${spokenClock(f.clock)}")
             button?.let { add("Double tap ${it.label} to ${it.label.lowercase()}") }
-        }.joinToString(". ") + "."
+        }.joinToString(". ") + "." + (home.inbox?.let { " " + it.spoken } ?: "")
+        val inbox = home.inbox?.takeIf { fastLine == null }
         return WatchTileView(
             label = home.label, lit = home.lit, title = title, line = home.line,
             button = button, buttonId = button?.let(::pressId), fastLine = fastLine, fastReached = f.running && f.reached,
-            spoken = spoken, capture = true,
+            spoken = spoken, capture = true, inboxLine = inbox?.short, inboxLit = inbox?.lit == true,
         )
     }
 

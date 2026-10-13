@@ -102,6 +102,11 @@ class WatchTileService : TileService() {
             column.addContent(gap(MekaSpace.xs.value))
                 .addContent(text(it, MekaType.caption, if (v.fastReached) C.success else C.accent, 1))
         }
+        // Inbox autopilot, slice 7b-2: the count only, lit at the ten-minute inbox's moment (a fast's clock takes it).
+        v.inboxLine?.let {
+            column.addContent(gap(MekaSpace.xs.value))
+                .addContent(text(it, MekaType.caption, if (v.inboxLit) C.accent else C.textSecondary, 1))
+        }
         // The whole tile opens MEKA; the button sits on top with its own click.
         return LayoutElementBuilders.Box.Builder()
             .setWidth(DimensionBuilders.expand())

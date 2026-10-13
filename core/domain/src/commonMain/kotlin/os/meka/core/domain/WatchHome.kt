@@ -20,6 +20,26 @@ data class WatchHomeView(
     /** "Then: Standup at 15:00"; null when there's nothing after it. */
     val thenLine: String?,
     val fast: WatchFast,
+    /** Inbox autopilot, slice 7b-2: how many emails wait in "From your mail"; null when none (or no mail connected). */
+    val inbox: WatchInbox? = null,
+)
+
+/**
+ * The watch's inbox count (Inbox autopilot, slice 7b-2): the wrist only shows how many emails need him, never what they
+ * say; going through them stays on the phone and the Mac (the ten-minute inbox).
+ */
+data class WatchInbox(
+    /** "INBOX" · "TEN-MINUTE INBOX" (from the moment's time until Not today or a clear inbox). */
+    val label: String,
+    /** The ten-minute inbox's moment has come: the label is lit. */
+    val lit: Boolean,
+    /** "6 need you" · "6 need you · on your phone". */
+    val line: String,
+    /** "Inbox clear 4 days running" while the moment is lit, else null. */
+    val streakLine: String?,
+    /** The tile's one line: "Inbox · 6 need you". */
+    val short: String,
+    val spoken: String,
 )
 
 /** A button on the watch: what it says and what it does to the task or session it sits under. */
@@ -91,7 +111,34 @@ object WatchHomeRules {
         )
     }
 
-    fun view(now: NowView, fasting: FastingView, nowMs: Long): WatchHomeView {
+    const val INBOX = "INBOX"
+    const val MOMENT = "TEN-MINUTE INBOX"
+    const val ON_PHONE = "on your phone"
+
+    /**
+     * The inbox count for the wrist: [waiting] is the number of rows in "From your mail" (linked emails count once, as
+     * in the ten-minute inbox); [moment] is today's Ten-minute inbox card while it is up. Null when nothing waits.
+     */
+    fun inbox(waiting: Int, moment: MailMomentCard?): WatchInbox? {
+        if (waiting <= 0) return null
+        val count = "$waiting need you"
+        val emails = if (waiting == 1) "1 email needs you" else "$waiting emails need you"
+        return if (moment != null) {
+            WatchInbox(
+                label = MOMENT, lit = true, line = "$count · $ON_PHONE", streakLine = moment.streakLine,
+                short = "Ten-minute inbox · $count",
+                spoken = "Ten-minute inbox. $emails. Go through them on your phone.",
+            )
+        } else {
+            WatchInbox(
+                label = INBOX, lit = false, line = count, streakLine = null,
+                short = "Inbox · $count",
+                spoken = "Inbox. $emails.",
+            )
+        }
+    }
+
+    fun view(now: NowView, fasting: FastingView, nowMs: Long, inbox: WatchInbox? = null): WatchHomeView {
         val target = now.task?.id ?: now.session?.habitId
         val offered = WATCH_ACTIONS.filter { now.offers(it) }.filter { a ->
             when (a) {
@@ -111,6 +158,7 @@ object WatchHomeRules {
             buttons = buttons,
             thenLine = now.thenLine,
             fast = fast(fasting, nowMs),
+            inbox = inbox,
         )
     }
 

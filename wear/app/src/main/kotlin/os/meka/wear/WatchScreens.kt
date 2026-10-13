@@ -2,6 +2,9 @@ package os.meka.wear
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -246,7 +249,10 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
             tick++
         }
     }
-    val home = remember(today, fasting, tick) { core.watchHome() }
+    // Inbox autopilot, slice 7b-2: the inbox count follows the synced emails and the ten-minute inbox's moment.
+    val mailNeeds by core.mailNeeds.collectAsState()
+    val mailMoment by core.mailMoment.collectAsState()
+    val home = remember(today, fasting, tick, mailNeeds, mailMoment) { core.watchHome() }
     val scope = rememberCoroutineScope()
 
     if ((sync as? SyncStatus.Failing)?.reason == MekaCore.SIGNED_OUT_MESSAGE) {
@@ -298,12 +304,50 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
         Spacer(Modifier.height(MekaSpace.xs))
         CaptureBlock(core, reduced, listen, onListen)
 
+        InboxRow(home.inbox, reduced)
+
         Spacer(Modifier.height(MekaSpace.m))
         FastRow(home.fast, reduced) { scope.launch { runCatching { core.watchFastButton() } } }
 
         if (sync is SyncStatus.Offline) {
             Spacer(Modifier.height(MekaSpace.xs))
             Line(WatchHomeRules.OFFLINE, MekaType.caption.copy(color = C.textTertiary))
+        }
+    }
+}
+
+/**
+ * Inbox autopilot, slice 7b-2: how many emails need him, and nothing of what they say. It unfolds on the expand spring
+ * when the first email arrives and folds away once the inbox is clear (reduced motion: a fade); lit in the accent from
+ * the ten-minute inbox's moment, with its streak. Going through them stays on the phone and the Mac.
+ */
+@Composable
+private fun InboxRow(inbox: os.meka.core.domain.WatchInbox?, reduced: Boolean) {
+    // The last count shown, so the row folds away still showing it (not state: nothing reads it to recompose).
+    val last = remember { arrayOfNulls<os.meka.core.domain.WatchInbox>(1) }
+    if (inbox != null) last[0] = inbox
+    AnimatedVisibility(
+        visible = inbox != null,
+        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        label = "inbox",
+    ) {
+        val v = inbox ?: last[0] ?: return@AnimatedVisibility
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = MekaSpace.m)
+                .semantics(mergeDescendants = true) { contentDescription = v.spoken },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            Line(v.label, MekaType.captionStrong.copy(color = if (v.lit) C.accent else C.textSecondary), maxLines = 1)
+            AnimatedContent(
+                targetState = v.line,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "inboxCount",
+            ) { line -> Line(line, MekaType.caption.copy(color = C.textPrimary, fontFeatureSettings = "tnum")) }
+            v.streakLine?.let { Line(it, MekaType.caption.copy(color = C.textTertiary)) }
         }
     }
 }
