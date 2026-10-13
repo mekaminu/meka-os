@@ -91,7 +91,7 @@ object WorkAlerts {
         }
         val n = b.build()
         try {
-            NotificationManagerCompat.from(context).notify(item.id.hashCode(), n)
+            os.meka.android.notify.MekaPost.notify(context, item.id.hashCode(), n)
         } catch (e: SecurityException) {
             // Permission withdrawn between the check and the post: the item is still in the summary.
         }

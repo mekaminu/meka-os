@@ -88,6 +88,22 @@ class NotifyReportsTest {
     }
 
     @Test
+    fun thePublisherPrintsEachChannelsLastPostWhenThePhoneSendsThem() {
+        val withPosts = report.copy(channels = listOf(
+            NotifyDiagnosticsCodec.Channel("meka_heads_up", "Heads-ups", true, at - 60_000),
+            NotifyDiagnosticsCodec.Channel("meka_work", "Urgent while at work", true, at),
+            NotifyDiagnosticsCodec.Channel("meka_digest", "Digests", false),
+        ))
+        val lines = ReleasePublisherCli.notificationLines(NotifyDiagnosticsCodec.Latest(withPosts))
+        assertEquals(
+            "::notice title=Notification channels::Urgent while at work 2026-10-13 20:41 UTC · Heads-ups 2026-10-13 20:40 UTC · never: Digests",
+            lines[1],
+        )
+        // A phone from before slice 3 sends no times: no channel line.
+        assertTrue(ReleasePublisherCli.notificationLines(NotifyDiagnosticsCodec.Latest(report)).none { "Notification channels" in it })
+    }
+
+    @Test
     fun aTestPushGoesOnlyToTheAskerAndSaysWhatHappened() = testApplication {
         mekaServer()
         assertEquals("no_address", testPush())

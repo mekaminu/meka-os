@@ -128,7 +128,7 @@ class AfterWorkNudger(private val context: Context, private val app: MekaApplica
             .setAutoCancel(true)
             .build()
         try {
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, n)
+            os.meka.android.notify.MekaPost.notify(context, NOTIFICATION_ID, n)
         } catch (e: SecurityException) {
             // Permission withdrawn between the check and the post: the card in Needs you still shows it.
         }

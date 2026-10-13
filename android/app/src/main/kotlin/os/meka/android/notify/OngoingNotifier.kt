@@ -107,7 +107,7 @@ class OngoingNotifier(private val context: Context, private val app: MekaApplica
 
     @SuppressLint("MissingPermission") // checked by WorkAlerts.canPost() in run(); a late revoke is caught here
     private fun notify(id: Int, n: android.app.Notification): Boolean = try {
-        NotificationManagerCompat.from(context).notify(id, n)
+        os.meka.android.notify.MekaPost.notify(context, id, n)
         true
     } catch (e: SecurityException) {
         false

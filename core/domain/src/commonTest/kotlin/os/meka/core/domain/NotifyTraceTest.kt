@@ -35,6 +35,41 @@ class NotifyTraceTest {
     }
 
     @Test
+    fun eachChannelsLastPostIsKeptAndShown() {
+        var posts = NotifyChannelPosts.record(emptyMap(), "meka_heads_up", now - HealthRules.HOUR)
+        posts = NotifyChannelPosts.record(posts, "meka_heads_up", now - 2 * HealthRules.HOUR) // an older time never wins
+        posts = NotifyChannelPosts.record(posts, "meka_work", now)
+        posts = NotifyChannelPosts.record(posts, null, now)
+        posts = NotifyChannelPosts.record(posts, "bad=id", now)
+        assertEquals(mapOf("meka_heads_up" to now - HealthRules.HOUR, "meka_work" to now), posts)
+        assertEquals(posts, NotifyChannelPosts.decode(NotifyChannelPosts.encode(posts)))
+        assertEquals(emptyMap(), NotifyChannelPosts.decode("junk\n=5\nx=notanumber"))
+
+        val all = NotifyChannelPosts.withPosts(channels + NotifyChannelState("meka_work", "Urgent while at work", true) + NotifyChannelState("meka_alarm", "Alarms", false), posts)
+        assertEquals(
+            listOf(
+                "Urgent while at work · on · last sent ${HealthRules.at(now, now, cal)}",
+                "Heads-ups · on · last sent ${HealthRules.at(now - HealthRules.HOUR, now, cal)}",
+                "Alarms · off in Android's settings · nothing sent yet",
+                "Digests · on · nothing sent yet",
+            ),
+            NotifyChannelPosts.lines(all, now, cal),
+        )
+    }
+
+    @Test
+    fun healthCountsPostsOutsideTheGovernor() {
+        // The governor only looked, but a work alert posted on its own channel: Health says something was sent.
+        val looked = NotifyTraceEntry(now - 5 * HealthRules.MIN, NotifyTraceKind.LOOKED, "nothing due")
+        val withPost = channels.map { if (it.id == "meka_heads_up") it.copy(lastPostMs = now - 10 * HealthRules.MIN) else it }
+        val row = NotifyTrace.healthRow(NotificationHealth(true, withPost, listOf(looked)), now, cal)!!
+        assertEquals(HealthState.OK, row.state)
+        assertTrue(row.line.contains("last sent ${HealthRules.at(now - 10 * HealthRules.MIN, now, cal)}"), row.line)
+        val none = NotifyTrace.healthRow(NotificationHealth(true, channels, listOf(looked)), now, cal)!!
+        assertTrue(none.line.contains("none sent yet"), none.line)
+    }
+
+    @Test
     fun quietLooksCollapseAndTheLogIsCapped() {
         val quiet = NotifyTraceEntry(now, NotifyTraceKind.LOOKED, "nothing due · next look 21:10")
         var log = NotifyTrace.add(emptyList(), quiet)

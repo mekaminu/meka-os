@@ -252,11 +252,16 @@ private fun NotificationTraceLines(checkedAtMs: Long?, shown: Int = 12) {
     val context = LocalContext.current
     val facts = remember(checkedAtMs) { os.meka.android.notify.NotifyTraceStore.health(context) }
     val cal = remember(checkedAtMs) { os.meka.android.notify.NotifyTraceStore.calendar() }
-    val categories = facts.channels.sortedBy { it.name }.joinToString(" · ") { "${it.name} ${if (it.on) "on" else "off"}" }
     Text(
-        (if (facts.allowed) "Allowed" else "Off for MEKA") + if (categories.isEmpty()) " · no categories yet" else " · $categories",
+        (if (facts.allowed) "Allowed" else "Off for MEKA") + if (facts.channels.isEmpty()) " · no categories yet" else "",
         style = MekaType.caption, color = Meka.colors.textSecondary,
     )
+    // Slice 3: each category on its own line with when MEKA last posted on it, the newest first.
+    val now = remember(checkedAtMs) { System.currentTimeMillis() }
+    facts.channels.sortedWith(compareByDescending<os.meka.core.domain.NotifyChannelState> { it.lastPostMs ?: 0L }.thenBy { it.name })
+        .zip(os.meka.core.domain.NotifyChannelPosts.lines(facts.channels, now, cal)).forEach { (c, line) ->
+            Text(line, style = MekaType.caption, color = if (c.on) Meka.colors.textSecondary else Meka.colors.critical)
+        }
     if (facts.trace.isEmpty()) {
         Text("Nothing recorded yet", style = MekaType.caption, color = Meka.colors.textTertiary)
     }

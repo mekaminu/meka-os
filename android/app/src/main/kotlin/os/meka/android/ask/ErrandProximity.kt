@@ -229,7 +229,7 @@ object ErrandProximity {
         ensureChannel(context)
         val b = builder(context, n.title, n.text, n.key)
             .addAction(0, "Done", actionIntent(context, ErrandNearReceiver.ACTION_DONE, n.key, n.ids))
-        return try { NotificationManagerCompat.from(context).notify(notificationId(n.key), b.build()); true } catch (e: SecurityException) { false }
+        return try { os.meka.android.notify.MekaPost.notify(context, notificationId(n.key), b.build()); true } catch (e: SecurityException) { false }
     }
 
     /** After Done: "Done at Tesco · milk and batteries" with Undo for a few minutes, silent. */
@@ -241,7 +241,7 @@ object ErrandProximity {
             .setSilent(true)
             .setTimeoutAfter(ErrandPlaceRules.DONE_NOTE_MS)
             .addAction(0, "Undo", actionIntent(context, ErrandNearReceiver.ACTION_UNDO, key, ids))
-        try { NotificationManagerCompat.from(context).notify(notificationId(key), b.build()) } catch (e: SecurityException) { }
+        try { os.meka.android.notify.MekaPost.notify(context, notificationId(key), b.build()) } catch (e: SecurityException) { }
     }
 
     fun cancel(context: Context, key: String) = NotificationManagerCompat.from(context).cancel(notificationId(key))

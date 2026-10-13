@@ -34,6 +34,13 @@ struct NotificationsSheet: View {
             }
             .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
             .staggeredAppear(0)
+            // Notifications never seen, slice 3: why silence between digests isn't broken.
+            if let explain = model.notifyPreview?.explainLine, !explain.isEmpty {
+                Text(explain).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .staggeredAppear(0)
+            }
 
             section("THIS MAC", 1)
             Picker("This Mac", selection: Binding(get: { model.macAlerts }, set: { model.setMacAlerts($0) })) {

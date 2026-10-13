@@ -68,7 +68,9 @@ class AlarmRingService : Service() {
         }
         // Android wants the foreground notification promptly, before anything else.
         val ring = app.core.nextAlarm.value
-        startForeground(AlarmRouting.NOTIFICATION_ID, notification(ring), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        val n = notification(ring)
+        startForeground(AlarmRouting.NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        os.meka.android.notify.NotifyTraceStore.posted(this, n.channelId)
         if (ring == null || !AlarmRouting.shouldRing(ring, id, System.currentTimeMillis())) {
             stopRinging()
             return START_NOT_STICKY

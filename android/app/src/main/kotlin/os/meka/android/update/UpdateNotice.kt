@@ -69,7 +69,7 @@ object UpdateNotice {
             .setAutoCancel(true)
             .build()
         try {
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, n)
+            os.meka.android.notify.MekaPost.notify(context, NOTIFICATION_ID, n)
         } catch (e: SecurityException) {
             // Permission withdrawn between the check and the post: Today's card still offers the update.
         }

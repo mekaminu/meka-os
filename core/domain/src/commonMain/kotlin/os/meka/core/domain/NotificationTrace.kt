@@ -29,8 +29,46 @@ enum class NotifyTraceKind {
 
 data class NotifyTraceEntry(val atMs: Long, val kind: NotifyTraceKind, val detail: String = "")
 
-/** One notification channel as Android reports it. */
-data class NotifyChannelState(val id: String, val name: String, val on: Boolean)
+/**
+ * One notification channel as Android reports it, and (slice 3) when MEKA last posted on it from this phone — every
+ * post, the governor's and the paths outside it (work alerts, the after-work nudge, updates, alarms…).
+ */
+data class NotifyChannelState(val id: String, val name: String, val on: Boolean, val lastPostMs: Long? = null)
+
+/**
+ * Slice 3: when MEKA last posted on each channel, kept on the phone as "channelId=atMs" lines. Ids are MEKA's own
+ * stable channel ids; nothing about what was posted.
+ */
+object NotifyChannelPosts {
+    fun record(posts: Map<String, Long>, channelId: String?, atMs: Long): Map<String, Long> {
+        val id = channelId?.trim()?.takeIf { it.isNotEmpty() && '=' !in it && '\n' !in it } ?: return posts
+        return posts + (id to maxOf(atMs, posts[id] ?: 0L))
+    }
+
+    fun encode(posts: Map<String, Long>): String = posts.entries.sortedBy { it.key }.joinToString("\n") { "${it.key}=${it.value}" }
+
+    fun decode(text: String?): Map<String, Long> = text.orEmpty().lines().mapNotNull { l ->
+        val i = l.lastIndexOf('=')
+        if (i <= 0) return@mapNotNull null
+        val at = l.substring(i + 1).toLongOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
+        l.substring(0, i) to at
+    }.toMap()
+
+    /** [channels] with each one's last post filled in from [posts]. */
+    fun withPosts(channels: List<NotifyChannelState>, posts: Map<String, Long>): List<NotifyChannelState> =
+        channels.map { c -> posts[c.id]?.let { c.copy(lastPostMs = it) } ?: c }
+
+    /**
+     * Health's line per channel, the ones posted on most recently first, then the rest by name:
+     * "Heads-ups · on · last sent 20:41" · "Digests · on · nothing sent yet" · "Alarms · off in Android's settings".
+     */
+    fun lines(channels: List<NotifyChannelState>, nowMs: Long, cal: LocalCalendar): List<String> =
+        channels.sortedWith(compareByDescending<NotifyChannelState> { it.lastPostMs ?: 0L }.thenBy { it.name }).map { c ->
+            val state = if (c.on) "on" else "off in Android's settings"
+            val last = c.lastPostMs?.let { "last sent ${HealthRules.at(it, nowMs, cal)}" } ?: "nothing sent yet"
+            "${c.name} · $state · $last"
+        }
+}
 
 /** What the Fold tells Health about notifications ([NotifyTrace]); null on the Mac until it has the same. */
 data class NotificationHealth(
@@ -145,8 +183,9 @@ object NotifyTrace {
         if (lastLook?.kind == NotifyTraceKind.FAILED) {
             return HealthRow("notifications", title, "Couldn't post · ${lastLook.detail}", HealthState.BAD)
         }
-        val lastPost = n.trace.firstOrNull { it.kind == NotifyTraceKind.POSTED }
-        val posted = lastPost?.let { "last sent ${HealthRules.at(it.atMs, nowMs, cal)}" } ?: "none sent yet"
+        // The newest post anywhere: the governor's (in the trace) or any channel's (paths outside the governor too).
+        val lastPostMs = listOfNotNull(n.trace.firstOrNull { it.kind == NotifyTraceKind.POSTED }?.atMs, n.channels.mapNotNull { it.lastPostMs }.maxOrNull()).maxOrNull()
+        val posted = lastPostMs?.let { "last sent ${HealthRules.at(it, nowMs, cal)}" } ?: "none sent yet"
         if (off.isNotEmpty()) {
             return HealthRow("notifications", title, "Off in Android's settings: ${off.joinToString(", ") { it.name }} · $posted", HealthState.WARN, HealthFix.NOTIFICATIONS_ON, "Open")
         }

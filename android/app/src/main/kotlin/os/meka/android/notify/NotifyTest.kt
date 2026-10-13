@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,7 +90,7 @@ object NotifyTester {
             .setAutoCancel(true)
             .setTimeoutAfter(10 * 60_000L)
             .build()
-        NotificationManagerCompat.from(context).notify(id, n)
+        os.meka.android.notify.MekaPost.notify(context, id, n)
         true
     } catch (e: SecurityException) {
         false

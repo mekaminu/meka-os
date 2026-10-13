@@ -39,6 +39,13 @@ class NotifyDiagnosticsCodecTest {
     }
 
     @Test
+    fun aChannelsLastPostTravelsAndOlderReportsHaveNone() {
+        val r = report.copy(channels = listOf(NotifyDiagnosticsCodec.Channel("meka_heads_up", "Heads-ups", true, 1_760_000_000_000L)))
+        assertEquals(r, NotifyDiagnosticsCodec.decodeReport(NotifyDiagnosticsCodec.encodeReport(r)))
+        assertEquals(null, NotifyDiagnosticsCodec.decodeReport(NotifyDiagnosticsCodec.encodeReport(report)).channels.first().lastPostMs)
+    }
+
+    @Test
     fun theTestAnswerIsOneOfTheKnownWords() {
         NotifyDiagnosticsCodec.RESULTS.forEach { assertEquals(it, NotifyDiagnosticsCodec.decodeTestAnswer(NotifyDiagnosticsCodec.encodeTestAnswer(it))) }
         assertEquals("failed", NotifyDiagnosticsCodec.decodeTestAnswer("""{"w":1,"result":"maybe"}"""))

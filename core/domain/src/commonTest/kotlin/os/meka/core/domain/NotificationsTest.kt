@@ -196,6 +196,23 @@ class NotificationsTest {
     }
 
     @Test
+    fun theExplainLineNamesTheDigestTimesAsSet() {
+        assertEquals(
+            "Most things wait for the digests at 12:30 and 18:00, so quiet in between is normal. Decisions and urgent things come at once.",
+            Governor.preview(emptyList(), settings.copy(digestMinutes = listOf(18 * 60, 12 * 60 + 30)), at(9), cal).explainLine,
+        )
+        assertEquals(
+            "Most things wait for the digests at 08:00, 12:30 and 18:00, so quiet in between is normal. Decisions and urgent things come at once.",
+            Governor.explainLine(settings.copy(digestMinutes = listOf(8 * 60, 12 * 60 + 30, 18 * 60))),
+        )
+        assertEquals(
+            "Most things wait for the digest at 18:00, so quiet in between is normal. Decisions and urgent things come at once.",
+            Governor.explainLine(settings.copy(digestMinutes = listOf(18 * 60))),
+        )
+        assertTrue(Governor.explainLine(settings.copy(digestMinutes = emptyList())).startsWith("Digests are off: heads-ups come as they happen"))
+    }
+
+    @Test
     fun sourcesTurnListsFastingAndShutdownIntoNotices() {
         val renewal = RenewalItem(
             id = "r1", title = "Home insurance", kind = ObligationKind.INSURANCE, subject = null, notes = null,

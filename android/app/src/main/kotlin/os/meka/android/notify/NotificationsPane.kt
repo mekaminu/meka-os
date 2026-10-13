@@ -114,6 +114,12 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
             Crossfade(preview.digestLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "digest-line") {
                 Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
             }
+            // Slice 3: why silence between digests isn't broken.
+            if (preview.explainLine.isNotEmpty()) {
+                Crossfade(preview.explainLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "explain-line") {
+                    Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
+                }
+            }
         }
 
         Spacer(Modifier.height(MekaSpace.m))

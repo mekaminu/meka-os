@@ -12,7 +12,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.CallLog
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.work.BackoffPolicy
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -147,7 +146,7 @@ object UnknownCallNotice {
             .addAction(0, UnknownCallRules.REPORT_ACTION, reportIntent(context, offer))
             .build()
         return try {
-            NotificationManagerCompat.from(context).notify(id(offer.key), n); true
+            os.meka.android.notify.MekaPost.notify(context, id(offer.key), n); true
         } catch (e: SecurityException) { false }
     }
 
@@ -163,7 +162,7 @@ object UnknownCallNotice {
             .addAction(0, UnknownCallRules.REPORT_ACTION, reportIntent(context, offer))
             .setTimeoutAfter(BLOCKED_SHOWN_MS)
             .build()
-        try { NotificationManagerCompat.from(context).notify(id(key), n) } catch (e: SecurityException) { }
+        try { os.meka.android.notify.MekaPost.notify(context, id(key), n) } catch (e: SecurityException) { }
     }
 
     private const val BLOCKED_SHOWN_MS = 60_000L

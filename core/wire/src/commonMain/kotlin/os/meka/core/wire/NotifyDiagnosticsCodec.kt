@@ -42,7 +42,8 @@ object NotifyDiagnosticsCodec {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    data class Channel(val id: String, val name: String, val on: Boolean)
+    /** [lastPostMs]: when MEKA last posted on the channel from this phone (slice 3; older phones send none). */
+    data class Channel(val id: String, val name: String, val on: Boolean, val lastPostMs: Long? = null)
 
     data class Entry(val atMs: Long, val kind: String, val detail: String)
 
@@ -118,7 +119,9 @@ object NotifyDiagnosticsCodec {
         put("phone", clean(r.phone, 12))
         put("channels", buildJsonArray {
             r.channels.take(CHANNELS_MAX).forEach { c ->
-                add(buildJsonObject { put("id", clean(c.id, NAME_MAX)); put("name", clean(c.name, NAME_MAX)); put("on", c.on) })
+                add(buildJsonObject { put("id", clean(c.id, NAME_MAX)); put("name", clean(c.name, NAME_MAX)); put("on", c.on)
+                    c.lastPostMs?.takeIf { it > 0 }?.let { put("last", it) }
+                })
             }
         })
         put("trace", buildJsonArray {
@@ -135,7 +138,7 @@ object NotifyDiagnosticsCodec {
             val c = e as? JsonObject ?: return@mapNotNull null
             val id = c.str("id")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val on = (c["on"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull ?: return@mapNotNull null
-            Channel(clean(id, NAME_MAX), clean(c.str("name") ?: id, NAME_MAX), on)
+            Channel(clean(id, NAME_MAX), clean(c.str("name") ?: id, NAME_MAX), on, c.long("last")?.takeIf { it > 0 })
         }.take(CHANNELS_MAX)
         val trace = (o["trace"] as? JsonArray ?: throw IllegalArgumentException("trace")).mapNotNull { e ->
             val t = e as? JsonObject ?: return@mapNotNull null

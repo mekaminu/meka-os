@@ -395,6 +395,11 @@ data class NotificationPreview(
     val quietLine: String,
     /** "Next digest at 18:00 · 3 things so far" · "No digests" */
     val digestLine: String,
+    /**
+     * Notifications never seen (slice 3): why silence isn't broken — "Most things wait for the digests at 12:30 and
+     * 18:00, so quiet in between is normal. Decisions and urgent things come at once." · digests off: heads-ups as they come.
+     */
+    val explainLine: String = "",
 )
 
 object Governor {
@@ -503,7 +508,18 @@ object Governor {
             val whenText = (if (day > 0) "tomorrow " else "") + LocalClock.formatMinute(cal.minuteOfDay(next))
             "Next digest $whenText" + if (pending > 0) " · ${plural(pending, "thing")} so far" else " · nothing yet"
         }
-        return NotificationPreview(quietLine, digestLine)
+        return NotificationPreview(quietLine, digestLine, explainLine(settings))
+    }
+
+    /** [NotificationPreview.explainLine]: the digest times as set, so silence between them isn't mistaken for broken. */
+    fun explainLine(settings: NotificationSettings): String {
+        val times = settings.digestMinutes.sorted().map { LocalClock.formatMinute(it) }
+        if (times.isEmpty()) return "Digests are off: heads-ups come as they happen, except in quiet hours. Decisions and urgent things always come at once."
+        val at = when (times.size) {
+            1 -> "the digest at ${times[0]}"
+            else -> "the digests at ${times.dropLast(1).joinToString(", ")} and ${times.last()}"
+        }
+        return "Most things wait for $at, so quiet in between is normal. Decisions and urgent things come at once."
     }
 
     fun effectiveTier(n: Notice, settings: NotificationSettings): NoticeTier {

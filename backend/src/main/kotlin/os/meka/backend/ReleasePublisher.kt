@@ -340,7 +340,13 @@ object ReleasePublisherCli {
             push,
         ).joinToString(" · ")
         val head = "::notice title=Notifications (${r.model ?: "phone"}, sent ${utc(r.sentAtMs)})::$summary"
-        return (listOf(head) + r.trace.map { e -> "::notice title=Notification trace::${utc(e.atMs)} · ${e.kind} · ${e.detail}" })
+        // Slice 3: when MEKA last posted on each channel (phones before slice 3 send no times: the line is left out).
+        val posts = r.channels.filter { it.lastPostMs != null }.sortedByDescending { it.lastPostMs }
+        val channelLine = if (posts.isEmpty()) emptyList() else listOf(
+            "::notice title=Notification channels::" + posts.joinToString(" · ") { "${it.name} ${utc(it.lastPostMs!!)}" } +
+                r.channels.filter { it.lastPostMs == null }.takeIf { it.isNotEmpty() }?.let { n -> " · never: ${n.joinToString(", ") { it.name }}" }.orEmpty(),
+        )
+        return (listOf(head) + channelLine + r.trace.map { e -> "::notice title=Notification trace::${utc(e.atMs)} · ${e.kind} · ${e.detail}" })
             .map { it.replace("%", "%25") }
     }
 
