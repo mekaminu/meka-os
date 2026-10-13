@@ -228,3 +228,144 @@ private struct MailNeedsPill: View {
             .accessibilityLabel(spoken)
     }
 }
+
+/// "Time to chase" on the Mac (Inbox autopilot, slice 6b-3), in Needs you under "From your mail": each Waiting for item
+/// made from an email whose chase day has come — who, what, which account and since when — with Chase (an editor that
+/// opens holding Navilife's short chase, his to change; it goes from that account, in the email's thread, only on Send,
+/// at the server's next check; Undo on the bar stops it), Got it (off Waiting for) and Not yet (chase again in 3 days,
+/// nothing sent). A chase that didn't send opens again with his words and why. Clicking the header folds the rows on the
+/// expand spring; reduced motion: cross-fades.
+struct MailChaseView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let palette: MekaPalette
+    var firstIndex: Int = 2
+    @State private var open = true
+
+    var body: some View {
+        Group {
+            if let card = model.mailChases {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Button { MekaHaptics.tick(); open.toggle() } label: {
+                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                            Text(card.title.uppercased())
+                                .font(MekaType.captionStrong).foregroundStyle(palette.textSecondary)
+                            Text(card.headline).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                                .contentTransition(.opacity)
+                                .animation(MekaMotion.expand(reduced: reduceMotion), value: card.headline)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(card.title). \(card.headline)")
+                    if open {
+                        VStack(alignment: .leading, spacing: MekaSpace.m) {
+                            ForEach(card.rows, id: \.id) { row in
+                                MailChaseRowView(row: row, palette: palette,
+                                                 got: { model.gotMailChase(row.id) },
+                                                 notYet: { model.notYetMailChase(row.id) },
+                                                 send: { text, sent in model.chaseMailItem(row.id, text, sent: sent) })
+                            }
+                            if let more = card.moreLine {
+                                Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                            }
+                        }
+                        .padding(.top, MekaSpace.xs)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+                .padding(MekaSpace.m)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                .mekaHoverLift()
+                .staggeredAppear(firstIndex)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mailChases == nil)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mailChases?.rows.map(\.id) ?? [])
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
+    }
+}
+
+private struct MailChaseRowView: View {
+    let row: MailChaseRow
+    let palette: MekaPalette
+    let got: () -> Void
+    let notYet: () -> Void
+    let send: (String, @escaping @MainActor () -> Void) -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var chasing = false
+    @State private var text = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(row.from).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
+                    if row.business {
+                        Text(MailNeedsRules.shared.BUSINESS_CHIP)
+                            .font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                            .background(palette.surface, in: Capsule())
+                    }
+                }
+                Text(row.title).font(MekaType.body).foregroundStyle(palette.textSecondary).lineLimit(2)
+                Text(row.line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                if let notice = row.notice {
+                    Text(notice).font(MekaType.itemMeta).foregroundStyle(palette.critical)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(row.spoken)
+            if chasing {
+                let problem = MailNeedsRules.shared.replyProblem(text: text)
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    TextField(MailNeedsRules.shared.REPLY_HINT, text: $text, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(MekaType.body)
+                        .lineLimit(4...12)
+                        .padding(MekaSpace.xs)
+                        .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+                        .accessibilityLabel("Chase \(row.from)")
+                    Text(row.replyLine).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                    if problem == MailNeedsRules.shared.REPLY_TOO_LONG {
+                        Text(MailNeedsRules.shared.REPLY_TOO_LONG).font(MekaType.itemMeta).foregroundStyle(palette.critical)
+                    }
+                    HStack(spacing: MekaSpace.xs) {
+                        MailNeedsPill(label: MailNeedsRules.shared.SEND, palette: palette,
+                                      spoken: "Send this chase to \(row.from) now",
+                                      action: { send(text) { chasing = false } })
+                            .disabled(problem != nil)
+                            .keyboardShortcut(.return, modifiers: .command)
+                        MailNeedsPill(label: MailNeedsRules.shared.CANCEL, palette: palette, quiet: true,
+                                      spoken: "Close the chase without sending", action: { chasing = false })
+                    }
+                }
+                .padding(.top, MekaSpace.xs)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+            HStack(spacing: MekaSpace.xs) {
+                if !chasing {
+                    MailNeedsPill(label: MailChaseRules.shared.CHASE, palette: palette,
+                                  spoken: "Chase \(row.from) by email; Navilife has drafted it, nothing is sent until you tap Send",
+                                  action: { text = row.draft; chasing = true })
+                }
+                MailNeedsPill(label: MailChaseRules.shared.GOT_IT, palette: palette,
+                              spoken: "Got it: \(row.title) arrived, off Waiting for", action: got)
+                MailNeedsPill(label: MailChaseRules.shared.NOT_YET, palette: palette, quiet: true,
+                              spoken: "Not yet: chase \(row.from) again in 3 days", action: notYet)
+            }
+            .padding(.top, MekaSpace.xxs)
+        }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: chasing)
+        .onAppear {
+            // A chase that didn't send opens again with his words.
+            if row.notice != nil { text = row.draft; chasing = true }
+        }
+        .onChange(of: row.notice) { _, notice in
+            if notice != nil { text = row.draft; chasing = true }
+        }
+    }
+}

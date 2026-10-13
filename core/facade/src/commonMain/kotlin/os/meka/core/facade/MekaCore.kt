@@ -734,6 +734,16 @@ class MekaCore(
     /** Takes back the last Done or Snooze on this device; null after an Undo. */
     private var mailNeedsUndo: (() -> Unit)? = null
 
+    private val _mailChases = MutableStateFlow<os.meka.core.domain.MailChaseCard?>(null)
+    /**
+     * Inbox autopilot, slice 6b-3: Needs you's "Time to chase" card — each Waiting for item made from an email whose
+     * chase day has come, with a chase drafted for him to send (only on his tap), Got it and Not yet; null when none.
+     */
+    val mailChases: StateFlow<os.meka.core.domain.MailChaseCard?> = _mailChases.asStateFlow()
+
+    /** Takes back the last Send, Got it or Not yet on "Time to chase" on this device; null after an Undo. */
+    private var mailChaseUndo: (() -> Unit)? = null
+
     init {
         replica.addListener { refresh(); requestSync() }
         refresh()
@@ -3506,7 +3516,83 @@ class MekaCore(
     }
 
     private fun mailNeedsChanged() {
-        _mailNeeds.value = os.meka.core.domain.MailNeedsRules.card(activity.mailItems(), nowMs(), ZoneCalendar(timeZone))
+        val items = activity.mailItems()
+        _mailNeeds.value = os.meka.core.domain.MailNeedsRules.card(items, nowMs(), ZoneCalendar(timeZone))
+        _mailChases.value = os.meka.core.domain.MailChaseRules.card(
+            items, lists.waitingItems(), aboutYou.profile().shownName, nowMs(), ZoneCalendar(timeZone),
+        )
+    }
+
+    /** The Waiting for item's chase fields as they are, so an Undo can put them back exactly. */
+    private fun chaseState(waitingId: String): Map<String, FieldValue> {
+        val s = replica.entity(os.meka.core.domain.EntityTypes.COMMITMENT, waitingId)
+        return listOf(
+            os.meka.core.domain.CommitmentFields.FOLLOW_UP_AT, os.meka.core.domain.CommitmentFields.LAST_INTERACTION_AT,
+            os.meka.core.domain.ActionableFields.LIFECYCLE, os.meka.core.domain.ActionableFields.COMPLETED_AT,
+        ).associateWith { f -> s?.get(f) ?: FieldValue.Null }
+    }
+
+    private fun chaseRow(id: String): os.meka.core.domain.MailChaseRow? = _mailChases.value?.rows?.firstOrNull { it.id == id }
+        ?: os.meka.core.domain.MailChaseRules.card(activity.mailItems(), lists.waitingItems(), aboutYou.profile().shownName, nowMs(), ZoneCalendar(timeZone))
+            ?.rows?.firstOrNull { it.id == id }
+
+    /**
+     * Inbox autopilot, slice 6b-3: **Send** on a chase in "Time to chase". Nothing is sent here: his words go on the
+     * email's card for the server, which sends them from the account the email came to, in its thread, at its next
+     * check once [os.meka.core.domain.MailNeedsRules.REPLY_HOLD_MS] have passed; the Waiting for item records the chase
+     * (next one in 3 days). Undo on the bar stops it (until the server has sent it) and puts the chase date back.
+     * Returns the line to show, or what's wrong with the text with nothing written.
+     */
+    suspend fun chaseMailItem(id: String, text: String): String = onCore {
+        val C = os.meka.core.domain.MailChaseRules
+        val row = chaseRow(id) ?: return@onCore C.UNKNOWN
+        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore C.UNKNOWN
+        os.meka.core.domain.MailNeedsRules.replyProblem(text)?.let { return@onCore it }
+        val before = chaseState(row.waitingId)
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, C.sendFields(text, nowMs()))
+        lists.chased(row.waitingId)
+        mailChaseUndo = {
+            val now = activity.mailItems().firstOrNull { it.id == id }
+            // Too late once the server sent it: the chase stands as recorded.
+            if (now == null || !C.sent(now)) {
+                replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, C.undoFields(nowMs()))
+                replica.commitLocal(os.meka.core.domain.EntityTypes.COMMITMENT, row.waitingId, before)
+            }
+        }
+        mailNeedsChanged()
+        C.sendingLine(item.from, item.account)
+    }
+
+    /** **Got it** on "Time to chase": the thing arrived, off Waiting for (Undo puts it back). Nothing is sent. */
+    suspend fun gotMailChase(id: String): String = onCore {
+        val C = os.meka.core.domain.MailChaseRules
+        val row = chaseRow(id) ?: return@onCore C.UNKNOWN
+        val before = chaseState(row.waitingId)
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, C.seenFields(nowMs()))
+        lists.received(row.waitingId)
+        mailChaseUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.COMMITMENT, row.waitingId, before) }
+        mailNeedsChanged()
+        C.GOT_LINE
+    }
+
+    /** **Not yet** on "Time to chase": chase again in 3 days, nothing sent (Undo puts the date back). */
+    suspend fun notYetMailChase(id: String): String = onCore {
+        val C = os.meka.core.domain.MailChaseRules
+        val row = chaseRow(id) ?: return@onCore C.UNKNOWN
+        val before = chaseState(row.waitingId)
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, C.seenFields(nowMs()))
+        lists.setChase(row.waitingId, os.meka.core.domain.ListRules.DEFAULT_CHASE_DAYS)
+        mailChaseUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.COMMITMENT, row.waitingId, before) }
+        mailNeedsChanged()
+        C.NOT_YET_LINE
+    }
+
+    /** Undo on the last Send, Got it or Not yet in "Time to chase" on this device. */
+    suspend fun undoMailChase() = onCore {
+        val undo = mailChaseUndo ?: return@onCore
+        mailChaseUndo = null
+        undo()
+        mailNeedsChanged()
     }
 
     /**

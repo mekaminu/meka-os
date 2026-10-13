@@ -57,6 +57,16 @@ object MailItemFields {
     /** Slice 6b-2a: the server couldn't send it (the server's), and why in a few words. */
     const val REPLY_FAILED_AT = "replyFailedAtMs"
     const val REPLY_FAILED_WHY = "replyFailedWhy"
+    /** Slice 6b-3: the chase he sent from Time to chase (an app's; the server reads it only to send it). */
+    const val CHASE_TEXT = "chaseText"
+    /** Slice 6b-3: when he tapped Send on the chase, took it back, or put a failed one aside (an app's). */
+    const val CHASE_ASKED_AT = "chaseAskedAtMs"
+    const val CHASE_UNDO_AT = "chaseUndoAtMs"
+    const val CHASE_SEEN_AT = "chaseSeenAtMs"
+    /** Slice 6b-3: the server sent the chase, or couldn't and why (the server's). */
+    const val CHASE_SENT_AT = "chaseSentAtMs"
+    const val CHASE_FAILED_AT = "chaseFailedAtMs"
+    const val CHASE_FAILED_WHY = "chaseFailedWhy"
 }
 
 data class MailItem(
@@ -84,6 +94,14 @@ data class MailItem(
     val replySentAtMs: Long? = null,
     val replyFailedAtMs: Long? = null,
     val replyFailedWhy: String? = null,
+    /** Slice 6b-3: the chase of the Waiting for item made from it, and what the server did with it. */
+    val chaseText: String? = null,
+    val chaseAskedAtMs: Long? = null,
+    val chaseUndoAtMs: Long? = null,
+    val chaseSeenAtMs: Long? = null,
+    val chaseSentAtMs: Long? = null,
+    val chaseFailedAtMs: Long? = null,
+    val chaseFailedWhy: String? = null,
 )
 
 /** One email on the card. */
@@ -251,6 +269,13 @@ object MailNeedsRules {
             replySentAtMs = ms(MailItemFields.REPLY_SENT_AT),
             replyFailedAtMs = ms(MailItemFields.REPLY_FAILED_AT),
             replyFailedWhy = text(MailItemFields.REPLY_FAILED_WHY),
+            chaseText = (f[MailItemFields.CHASE_TEXT] as? FieldValue.Text)?.value?.takeIf { it.isNotBlank() },
+            chaseAskedAtMs = ms(MailItemFields.CHASE_ASKED_AT),
+            chaseUndoAtMs = ms(MailItemFields.CHASE_UNDO_AT),
+            chaseSeenAtMs = ms(MailItemFields.CHASE_SEEN_AT),
+            chaseSentAtMs = ms(MailItemFields.CHASE_SENT_AT),
+            chaseFailedAtMs = ms(MailItemFields.CHASE_FAILED_AT),
+            chaseFailedWhy = text(MailItemFields.CHASE_FAILED_WHY),
         )
     }
 

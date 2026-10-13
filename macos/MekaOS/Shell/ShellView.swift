@@ -144,6 +144,9 @@ struct NeedsYouView: View {
                     // The emails that need Meka (Inbox autopilot, slice 6a), each with Done and Snooze.
                     MailNeedsView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
                         .padding(.bottom, model.mailNeeds == nil ? 0 : MekaSpace.m)
+                    // Waiting for items from email whose chase is due (Inbox autopilot, slice 6b-3), each drafted.
+                    MailChaseView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
+                        .padding(.bottom, model.mailChases == nil ? 0 : MekaSpace.m)
                     // What Autopilot archived (Inbox autopilot, slice 4), with the digests until Got it.
                     ArchivedForYouView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
                         .padding(.bottom, model.archivedForYou == nil ? 0 : MekaSpace.m)

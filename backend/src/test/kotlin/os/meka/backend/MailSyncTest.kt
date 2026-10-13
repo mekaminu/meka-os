@@ -45,6 +45,7 @@ import os.meka.backend.integrations.UnsubscribeMessage
 import os.meka.core.domain.MailSenderFields
 import os.meka.core.domain.MailItemFields
 import os.meka.core.domain.MailNeedsRules
+import os.meka.core.domain.MailChaseRules
 import os.meka.core.domain.MailProviders
 import os.meka.core.domain.MailUnsubscribeRules
 import os.meka.core.domain.UnsubscribeMailto
@@ -707,6 +708,52 @@ class MailSyncTest {
         assertEquals(1, gmail.replies.size)
         // The reply's words are never in the server's published fields beyond the device's own write.
         assertFalse(items(ops).getValue(p).filterKeys { it != MailItemFields.REPLY_TEXT }.values.any { it == FieldValue.Text("Yes, I can take them.") })
+    }
+
+    // ---- Slice 6b-3: Waiting for's chase ----
+
+    @Test
+    fun aChaseIsSentOnceInTheThreadAfterTheHoldAndTheEmailStaysArchived() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["p"] = msg("p", 0).copy(fromName = "Sam Taylor", subject = "The quote")
+        val id = connect(i)
+        i.syncAccount(id)
+        val p = MailNeedsRules.itemId(id, "p")
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        // Waiting for on the Fold: a Done, so the server archives it.
+        now += 60_000
+        MailNeedsRules.waitingFields(MailNeedsRules.waitingId(p), now).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, p, f, v) }
+        i.syncAccount(id)
+        assertEquals(1, gmail.tidyCalls.size)
+        // Three days on he sends the chase: nothing inside the hold, then once, in the thread; nothing else moves.
+        now += 3 * 86_400_000L
+        MailChaseRules.sendFields("Hi Sam, any news?", now).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, p, f, v) }
+        now += 5_000
+        i.syncAccount(id)
+        assertTrue(gmail.replies.isEmpty())
+        now += MailNeedsRules.REPLY_HOLD_MS
+        i.syncAccount(id)
+        assertEquals(listOf("p" to "Hi Sam, any news?"), gmail.replies)
+        assertEquals(1, gmail.tidyCalls.size)
+        assertFalse(gmail.mailbox.getValue("p").inInbox)
+        val sent = MailNeedsRules.read(p, items(ops).getValue(p))!!
+        assertTrue(MailChaseRules.sent(sent))
+        assertTrue(MailNeedsRules.done(sent))
+        i.syncAccount(id)
+        assertEquals(1, gmail.replies.size)
+        // Gmail refuses the next one: said so, not retried.
+        gmail.replyAnswer = { MailReplyResult.GONE }
+        now += 1_000
+        MailChaseRules.sendFields("Any news?", now).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, p, f, v) }
+        now += MailNeedsRules.REPLY_HOLD_MS
+        i.syncAccount(id)
+        i.syncAccount(id)
+        val failed = MailNeedsRules.read(p, items(ops).getValue(p))!!
+        assertTrue(MailChaseRules.failed(failed))
+        assertEquals(MailChaseRules.WHY_GONE, failed.chaseFailedWhy)
+        assertEquals(1, gmail.replies.size)
     }
 
     @Test

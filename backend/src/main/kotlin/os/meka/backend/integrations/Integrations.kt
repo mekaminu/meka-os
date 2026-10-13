@@ -15,6 +15,7 @@ import os.meka.core.domain.MailSender
 import os.meka.core.domain.MailUnsubscribeRules
 import os.meka.core.domain.MailUnopenedRules
 import os.meka.core.domain.MailNeedsRules
+import os.meka.core.domain.MailChaseRules
 import os.meka.core.domain.MailItemFields
 import os.meka.core.domain.UnsubscribeMethod
 import os.meka.core.domain.UnsubscribePlan
@@ -456,17 +457,25 @@ class Integrations(
     internal fun mailNeedsAsks(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
         val hh = a.householdId
         val mine = store.transaction { store.mirror(hh, a.id) }.keys
-        val asked = reader.entities(hh, EntityTypes.MAIL_ITEM).filterKeys { it in mine }
+        val all = reader.entities(hh, EntityTypes.MAIL_ITEM).filterKeys { it in mine }
             .mapNotNull { (id, f) -> MailNeedsRules.read(id, f) }
-            .filter { MailNeedsRules.archiveDue(it) || MailNeedsRules.putBackDue(it) || MailNeedsRules.replyDue(it, now()) }
-        if (asked.isEmpty()) return
+        val chases = all.filter { MailChaseRules.due(it, now()) }
+        val asked = all.filter { MailNeedsRules.archiveDue(it) || MailNeedsRules.putBackDue(it) || MailNeedsRules.replyDue(it, now()) }
+        if (asked.isEmpty() && chases.isEmpty()) return
         val byItem = ms.messages(a.id).associateBy { MailNeedsRules.itemId(a.id, it.id) }
+        for (item in chases) {
+            // Slice 6b-3: his chase of a Waiting for item, from this account, in the email's thread (the email stays
+            // archived). Outlook gave the archived email a new id: that one. Sent once; a failure goes back to him.
+            val target = ms.tidied(a.id, item.id).lastOrNull()?.movedId ?: byItem[item.id]?.id
+            val why = replyMail(m, token, target, item.chaseText!!)?.let { if (it == MailNeedsRules.WHY_GONE) MailChaseRules.WHY_GONE else it }
+            writeMail(a, item.id, if (why == null) MailChaseRules.sentFields(now()) else MailChaseRules.failedFields(now(), why), EntityTypes.MAIL_ITEM)
+        }
         for (asking in asked) {
             var item = asking
             if (MailNeedsRules.replyDue(item, now())) {
                 // Slice 6b-2a: his reply, from this account, before the email is archived. Sent once: a failure goes
                 // back to him (the card returns with his words), never retried here.
-                val why = replyMail(m, token, byItem[item.id], item.replyText!!)
+                val why = replyMail(m, token, byItem[item.id]?.id, item.replyText!!)
                 val fields = if (why == null) MailNeedsRules.replySentFields(now()) else MailNeedsRules.replyFailedFields(now(), why)
                 writeMail(a, item.id, fields, EntityTypes.MAIL_ITEM)
                 if (why != null) continue
@@ -497,11 +506,11 @@ class Integrations(
     }
 
     /** Sends one reply; null when the provider took it, else why not in a few words (never the reply itself). */
-    private fun replyMail(m: MailProvider, token: String, h: MailHeader?, text: String): String? {
+    private fun replyMail(m: MailProvider, token: String, messageId: String?, text: String): String? {
         val name = if (m.id == os.meka.core.domain.MailProviders.OUTLOOK) "Outlook" else "Gmail"
-        if (h == null) return MailNeedsRules.WHY_GONE
+        if (messageId == null) return MailNeedsRules.WHY_GONE
         return try {
-            when (m.reply(token, h.id, text)) {
+            when (m.reply(token, messageId, text)) {
                 MailReplyResult.SENT -> null
                 MailReplyResult.GONE -> MailNeedsRules.WHY_GONE
                 MailReplyResult.FAILED -> MailNeedsRules.whyRefused(name)

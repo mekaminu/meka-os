@@ -2799,5 +2799,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(core.mailNeeds.value)
         XCTAssertEqual(MailNeedsRules.shared.headline(n: 3), "3 emails need you")
         XCTAssertEqual(MailNeedsRules.shared.cleanPreview(raw: "Tom &amp; Jerry"), "Tom & Jerry")
+        // Slice 6b-3: nothing to chase, no card; Send, Got it and Not yet on an unknown id say so.
+        XCTAssertNil(core.mailChases.value)
+        let unknownChase = try await core.chaseMailItem(id: "nothing", text: "Any news?")
+        XCTAssertEqual(unknownChase, MailChaseRules.shared.UNKNOWN)
+        let unknownGot = try await core.gotMailChase(id: "nothing")
+        XCTAssertEqual(unknownGot, MailChaseRules.shared.UNKNOWN)
+        let unknownNotYet = try await core.notYetMailChase(id: "nothing")
+        XCTAssertEqual(unknownNotYet, MailChaseRules.shared.UNKNOWN)
+        try await core.undoMailChase()
+        XCTAssertEqual(MailChaseRules.shared.headline(n: 2), "2 to chase by email")
+        XCTAssertEqual(MailChaseRules.shared.draft(from: "Sam Taylor", shownName: nil),
+                       "Hi Sam,\n\nJust checking in on this — is there any news?\n\nThanks")
     }
 }

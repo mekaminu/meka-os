@@ -352,6 +352,7 @@ internal fun NeedsYouColumn(
     val archived by core.archivedForYou.collectAsState()
     val unopened by core.mailUnopened.collectAsState()
     val mailNeeds by core.mailNeeds.collectAsState()
+    val mailChases by core.mailChases.collectAsState()
     val gists by core.groupGists.collectAsState()
     // A busy chat's one-line summary (slice 3c), made on this phone and synced; asked for when the chats change.
     val summaries by core.chatSummaries.collectAsState()
@@ -406,6 +407,13 @@ internal fun NeedsYouColumn(
         mailNeeds?.let { n ->
             item(key = "mail-needs") {
                 MailNeedsSection(n, core, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        // Inbox autopilot, slice 6b-3: Waiting for items from email whose chase is due, a chase drafted for each.
+        mailChases?.let { c ->
+            item(key = "mail-chases") {
+                MailChaseSection(c, core, moves.undoLine,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
             }
         }

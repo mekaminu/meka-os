@@ -178,6 +178,8 @@ final class CoreModel {
     private(set) var mailUnopened: MailUnopenedCard?
     /// Inbox autopilot, slice 6a: "From your mail" — the emails that need Meka, each with Done and Snooze.
     private(set) var mailNeeds: MailNeedsCard?
+    /// Inbox autopilot, slice 6b-3: "Time to chase" — Waiting for items from email whose chase is due, each drafted.
+    private(set) var mailChases: MailChaseCard?
     /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
     private(set) var lists: ListsView?
     /// Needs you as a stack of decisions (four tabs, slice 2); see `needsYouCards`.
@@ -411,6 +413,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await n in core.mailNeeds { self?.mailNeeds = n }
+        })
+        observers.append(Task { [weak self] in
+            for await c in core.mailChases { self?.mailChases = c }
         })
         observers.append(Task { [weak self] in
             for await b in core.blockedCallers { self?.blockedCallers = b }
@@ -2698,6 +2703,7 @@ final class CoreModel {
         case .archivedSeen: run { try await $0.undoSeenArchivedForYou() }
         case .mailUnopened: run { try await $0.undoUnopened() }
         case .mailItem: run { try await $0.undoMailItem() }
+        case .mailChase: run { try await $0.undoMailChase() }
         case .appointment(let done): run { _ = try await $0.undoAppointment(done: done) }
         case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
@@ -3645,6 +3651,46 @@ final class CoreModel {
         }
     }
 
+    /// Send on a chase in "Time to chase" (Inbox autopilot, slice 6b-3): nothing is sent here; the server sends it from
+    /// the account the email came to, in its thread, at its next check (Undo on the bar stops it). A problem with the
+    /// words leaves the editor open. Only the id and the text (Strings) cross.
+    func chaseMailItem(_ id: String, _ text: String, sent: @escaping @MainActor () -> Void) {
+        guard let core else { return }
+        if MailNeedsRules.shared.replyProblem(text: text) != nil { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.chaseMailItem(id: id, text: text)
+                sent()
+                offerEventUndo(line, .mailChase)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Got it on "Time to chase": off Waiting for, Undo on the bar. Only the id crosses.
+    func gotMailChase(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.gotMailChase(id: id)
+                offerEventUndo(line, .mailChase)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Not yet on "Time to chase": chase again in 3 days, nothing sent, Undo on the bar. Only the id crosses.
+    func notYetMailChase(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                let line = try await core.notYetMailChase(id: id)
+                offerEventUndo(line, .mailChase)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Snooze on an email in "From your mail": back tomorrow 08:00 on both apps, with Undo. Only the id crosses.
     func snoozeMailItem(_ id: String) {
         guard let core else { return }
@@ -3879,6 +3925,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case mailUnopened
         /// Done or Snooze on an email in "From your mail": the card comes back (and the email, if already archived).
         case mailItem
+        /// Send, Got it or Not yet on "Time to chase": the chase is stopped (if not sent yet) and the date put back.
+        case mailChase
         /// Went, Booked… or Not yet on an appointment: its visit, booking and set-aside day go back.
         case appointment(AppointmentDone)
         /// Call to book on an appointment (slice 2b): the task goes and the card asks again as before.
