@@ -60,6 +60,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -612,6 +613,11 @@ class MailSyncTest {
         assertEquals("Hi Alex, can you take the boys?", card.preview)
         assertEquals(2, card.threadCount)
         assertFalse(items(ops).values.flatMap { it.values }.any { it == FieldValue.Text("sam@example.com") })
+        // Slice 6c: both carry the thread's hashed key (never the provider's thread id), so the apps link them.
+        val qCard = MailNeedsRules.read(q, items(ops).getValue(q))!!
+        assertNotNull(card.threadKey)
+        assertEquals(card.threadKey, qCard.threadKey)
+        assertFalse(items(ops).values.flatMap { it.values }.any { it == FieldValue.Text("t-p") })
 
         // Done on the Fold: archived at the next check, the card marked gone.
         now += 60_000

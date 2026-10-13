@@ -3602,21 +3602,35 @@ class MekaCore(
      */
     suspend fun doneMailItem(id: String): String = onCore {
         activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN
-        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailNeedsRules.doneFields(nowMs()))
-        mailNeedsUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailNeedsRules.undoDoneFields(nowMs())) }
+        // Slice 6c: the emails linked to it go with it, and come back with one Undo.
+        val group = mailGroup(id)
+        group.forEach { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, it, os.meka.core.domain.MailNeedsRules.doneFields(nowMs())) }
+        mailNeedsUndo = { group.forEach { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, it, os.meka.core.domain.MailNeedsRules.undoDoneFields(nowMs())) } }
         mailNeedsChanged()
-        os.meka.core.domain.MailNeedsRules.DONE_LINE
+        os.meka.core.domain.MailLinkRules.doneLine(group.size)
+    }
+
+    /** Slice 6c: [id] and the emails linked to it on "From your mail" ([id] first). */
+    private fun mailGroup(id: String): List<String> = os.meka.core.domain.MailLinkRules.groupIds(activity.mailItems(), id, nowMs())
+
+    /** Slice 6c: the linked emails (all but [id]) are Done with it; Undo brings them back. */
+    private fun doneLinked(group: List<String>): () -> Unit {
+        val rest = group.drop(1)
+        rest.forEach { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, it, os.meka.core.domain.MailNeedsRules.doneFields(nowMs())) }
+        return { rest.forEach { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, it, os.meka.core.domain.MailNeedsRules.undoDoneFields(nowMs())) } }
     }
 
     /** **Snooze** on an email in "From your mail": its card leaves both apps until tomorrow 08:00 (with Undo). */
     suspend fun snoozeMailItem(id: String): String = onCore {
-        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN
-        val before = item.snoozedUntilMs ?: 0L
+        activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN
+        val group = mailGroup(id)
+        val items = activity.mailItems().associateBy { it.id }
+        val before = group.associateWith { items[it]?.snoozedUntilMs ?: 0L }
         val until = os.meka.core.domain.MailNeedsRules.snoozeUntil(nowMs(), ZoneCalendar(timeZone))
-        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailNeedsRules.snoozeFields(until))
-        mailNeedsUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailNeedsRules.snoozeFields(before)) }
+        group.forEach { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, it, os.meka.core.domain.MailNeedsRules.snoozeFields(until)) }
+        mailNeedsUndo = { before.forEach { (g, b) -> replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, g, os.meka.core.domain.MailNeedsRules.snoozeFields(b)) } }
         mailNeedsChanged()
-        os.meka.core.domain.MailNeedsRules.SNOOZED_LINE
+        os.meka.core.domain.MailLinkRules.snoozedLine(group.size)
     }
 
     /**
@@ -3627,14 +3641,17 @@ class MekaCore(
     suspend fun taskFromMailItem(id: String): String = onCore {
         val R = os.meka.core.domain.MailNeedsRules
         val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
+        val group = mailGroup(id)
         val taskId = tasks.createWithId(R.taskId(id), os.meka.core.domain.NewTask(R.taskTitle(item), notes = R.taskNotes(item, ZoneCalendar(timeZone))))
         replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.taskFields(taskId, nowMs()))
+        val undoLinked = doneLinked(group)
         mailNeedsUndo = {
             runCatching { tasks.delete(taskId) }
             replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.undoMadeFields(nowMs()))
+            undoLinked()
         }
         mailNeedsChanged()
-        R.TASK_LINE
+        os.meka.core.domain.MailLinkRules.taskLine(group.size)
     }
 
     /**
@@ -3644,14 +3661,17 @@ class MekaCore(
     suspend fun waitingFromMailItem(id: String): String = onCore {
         val R = os.meka.core.domain.MailNeedsRules
         val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
+        val group = mailGroup(id)
         val waitingId = lists.addWaiting(R.taskTitle(item), item.from, os.meka.core.domain.ListRules.DEFAULT_CHASE_DAYS, withId = R.waitingId(id))
         replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.waitingFields(waitingId, nowMs()))
+        val undoLinked = doneLinked(group)
         mailNeedsUndo = {
             runCatching { lists.deleteWaiting(waitingId) }
             replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.undoMadeFields(nowMs()))
+            undoLinked()
         }
         mailNeedsChanged()
-        R.WAITING_LINE
+        os.meka.core.domain.MailLinkRules.waitingLine(group.size)
     }
 
     /**
@@ -3665,8 +3685,14 @@ class MekaCore(
         val R = os.meka.core.domain.MailNeedsRules
         val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
         R.replyProblem(text)?.let { return@onCore it }
+        val group = mailGroup(id)
         replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.replyFields(text, nowMs()))
-        mailNeedsUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.undoDoneFields(nowMs())) }
+        // Slice 6c: the reply answers the newest; the emails linked to it are archived with it.
+        val undoLinked = doneLinked(group)
+        mailNeedsUndo = {
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.undoDoneFields(nowMs()))
+            undoLinked()
+        }
         mailNeedsChanged()
         R.replySendingLine(item.account)
     }

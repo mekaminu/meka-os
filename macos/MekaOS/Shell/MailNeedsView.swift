@@ -7,7 +7,8 @@ import SwiftUI
 /// account only on Send, at the server's next check; Undo on the bar stops it; a reply that didn't send opens again with
 /// his words), Done (archived at the server's next check), Task and Waiting
 /// for (slice 6b-1: made from the email, which is archived too) and Snooze (back tomorrow 08:00), each with Undo on the bar. It staggers in after the cards above; clicking the header folds the
-/// emails in and out on the expand spring; the headline cross-fades. Reduced motion: cross-fades.
+/// emails in and out on the expand spring; the headline cross-fades. Reduced motion: cross-fades. Slice 6c: emails linked
+/// to one (same thread, order number, or person and topic) fold under it and go with it.
 struct MailNeedsView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -84,6 +85,7 @@ private struct MailNeedsRowView: View {
     @State private var lastDraft: String?
     @State private var draftLine: String?
     @State private var drafting = false
+    @State private var showLinked = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -108,6 +110,33 @@ private struct MailNeedsRowView: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(row.spoken)
+            // Slice 6c: the emails linked to this one fold under it; the line unfolds them. Done, Snooze, Task and
+            // Waiting for take them all, and one Undo brings them back.
+            if let linkedLine = row.linkedLine {
+                Button { MekaHaptics.tick(); showLinked.toggle() } label: {
+                    Text(linkedLine).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, MekaSpace.xxs)
+                .accessibilityLabel(showLinked ? "\(linkedLine). Hide them" : "\(linkedLine). Show them")
+                if showLinked {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        ForEach(row.linked, id: \.id) { l in
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(l.from).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).lineLimit(1)
+                                Text(l.subject).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
+                                Text(l.line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                            }
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("\(l.from), \(l.subject). \(l.line)")
+                        }
+                    }
+                    .padding(MekaSpace.xs)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                }
+            }
             if replying {
                 MailReplyEditor(row: row, palette: palette, text: $text,
                                 lastDraft: lastDraft, draftLine: draftLine, drafting: drafting,
@@ -133,6 +162,7 @@ private struct MailNeedsRowView: View {
             .padding(.top, MekaSpace.xxs)
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: replying)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: showLinked)
         .onAppear {
             // A reply that didn't send opens again with his words.
             if let draft = row.replyDraft { text = draft; replying = true }

@@ -34,6 +34,8 @@ object MailItemFields {
     const val PREVIEW = "preview"
     const val AT = "receivedAtMs"
     const val THREAD = "threadCount"
+    /** Slice 6c: a hash of the account and the provider's thread id, so the apps can link emails of one thread. */
+    const val THREAD_KEY = "threadKey"
     /** It left the inbox or Needs you (0 when it is back). */
     const val GONE_AT = "goneAtMs"
     /** The server archived it after a Done. */
@@ -102,6 +104,8 @@ data class MailItem(
     val chaseSentAtMs: Long? = null,
     val chaseFailedAtMs: Long? = null,
     val chaseFailedWhy: String? = null,
+    /** Slice 6c: the server's hash of the thread, or null (published before 6c). */
+    val threadKey: String? = null,
 )
 
 /** One email on the card. */
@@ -124,6 +128,10 @@ data class MailNeedsRow(
     val replyDraft: String? = null,
     /** Slice 6b-2a: "Sam Taylor" — who Reply answers (the line under the editor names them and the account). */
     val replyLine: String = "",
+    /** Slice 6c: the emails linked to this one (same thread, order or person and topic), newest first. */
+    val linked: List<MailLinkedRow> = emptyList(),
+    /** Slice 6c: "+ 2 linked · same order 112-4455", or null when none is. */
+    val linkedLine: String? = null,
 )
 
 data class MailNeedsCard(
@@ -230,9 +238,15 @@ object MailNeedsRules {
         else -> null
     }
 
+    /** Slice 6c: the thread's key the server publishes (never the provider's own id). */
+    fun threadKey(accountId: String, threadId: String): String = "th" + ActivityRules.fnv64("mailthread:$accountId:$threadId")
+
     /** What the server publishes for one email (Needs you, in the inbox, inside the window). */
-    fun serverFields(account: String, fromName: String?, fromAddress: String?, subject: String?, preview: String?, receivedAtMs: Long, threadCount: Int): Map<String, FieldValue> =
-        mapOf(
+    fun serverFields(
+        account: String, fromName: String?, fromAddress: String?, subject: String?, preview: String?, receivedAtMs: Long, threadCount: Int,
+        threadKey: String? = null,
+    ): Map<String, FieldValue> =
+        (if (threadKey != null) mapOf(MailItemFields.THREAD_KEY to threadKey.fv()) else emptyMap<String, FieldValue>()) + mapOf(
             MailItemFields.ACCOUNT to account.fv(),
             MailItemFields.FROM to MailUnsubscribeRules.displayName(fromName, fromAddress).take(MAX_FROM).fv(),
             MailItemFields.SUBJECT to (subject?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_SUBJECT) ?: "(no subject)").fv(),
@@ -276,6 +290,7 @@ object MailNeedsRules {
             chaseSentAtMs = ms(MailItemFields.CHASE_SENT_AT),
             chaseFailedAtMs = ms(MailItemFields.CHASE_FAILED_AT),
             chaseFailedWhy = text(MailItemFields.CHASE_FAILED_WHY),
+            threadKey = text(MailItemFields.THREAD_KEY),
         )
     }
 
@@ -364,25 +379,40 @@ object MailNeedsRules {
         }
     }
 
-    /** Needs you's card, or null when no email needs him. Newest first. */
+    /** The emails on the card, newest first. */
+    fun showingSorted(items: List<MailItem>, nowMs: Long): List<MailItem> =
+        items.filter { showing(it, nowMs) }.sortedWith(compareByDescending<MailItem> { it.receivedAtMs }.thenBy { it.id })
+
+    /**
+     * Needs you's card, or null when no email needs him. Newest first; slice 6c: linked emails ([MailLinkRules]) share
+     * one row, the newest, with the rest under it.
+     */
     fun card(items: List<MailItem>, nowMs: Long, cal: LocalCalendar): MailNeedsCard? {
-        val all = items.filter { showing(it, nowMs) }.sortedWith(compareByDescending<MailItem> { it.receivedAtMs }.thenBy { it.id })
+        val all = showingSorted(items, nowMs)
         if (all.isEmpty()) return null
-        val rows = all.take(SHOWN).map { i ->
+        val groups = MailLinkRules.groups(all)
+        val rows = groups.take(SHOWN).map { group ->
+            val i = group.first()
             val thread = if (i.threadCount > 1) "${i.threadCount} in this thread" else null
             val replied = if (replySent(i)) "replied ${whenLabel(i.replySentAtMs!!, nowMs, cal)}" else null
             val line = listOfNotNull(i.account, whenLabel(i.receivedAtMs, nowMs, cal), thread, replied).joinToString(" · ")
             val notice = replyNotice(i)
+            val linked = group.drop(1).map { l ->
+                MailLinkedRow(l.id, l.from, l.subject, listOf(l.account, whenLabel(l.receivedAtMs, nowMs, cal)).joinToString(" · "))
+            }
+            val linkedLine = MailLinkRules.linkedLine(group)
             MailNeedsRow(
                 id = i.id, from = i.from, line = line, subject = i.subject, preview = i.preview,
                 business = i.account == MailLabel.BUSINESS.label,
-                spoken = listOfNotNull("${i.from}, ${i.subject}", line, i.preview, notice).joinToString(". "),
+                spoken = listOfNotNull("${i.from}, ${i.subject}", line, i.preview, linkedLine, notice).joinToString(". "),
                 notice = notice,
                 replyDraft = if (notice != null) i.replyText else null,
                 replyLine = "To ${i.from} · sent from ${i.account} only when you tap Send",
+                linked = linked,
+                linkedLine = linkedLine,
             )
         }
-        val more = all.size - rows.size
+        val more = groups.drop(SHOWN).sumOf { it.size }
         val snoozedCount = items.count { snoozed(it, nowMs) }
         return MailNeedsCard(
             title = TITLE,

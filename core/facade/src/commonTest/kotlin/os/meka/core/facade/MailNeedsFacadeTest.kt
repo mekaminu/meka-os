@@ -73,6 +73,38 @@ class MailNeedsFacadeTest {
     }
 
     @Test
+    fun linkedEmailsGoAndComeBackTogether() = runTest {
+        // Slice 6c: two emails from Sam about the same thing share a row; Done takes both, Undo brings both back.
+        val a = email("m1", "Sam Taylor", "Re: Football on Saturday", hour)
+        val b = email("m2", "Sam Taylor", "Football on Saturday", 2 * hour)
+        val c = email("m3", "Alex Reed", "Invoice question", 3 * hour)
+        val fold = core("android")
+        assertTrue(fold.syncNow())
+        val card = assertNotNull(fold.mailNeeds.value)
+        assertEquals(listOf(a, c), card.rows.map { it.id })
+        assertEquals(listOf(b), card.rows[0].linked.map { it.id })
+        assertEquals("Done · 2 emails archived at Navilife's next check", fold.doneMailItem(a))
+        assertEquals(listOf(c), fold.mailNeeds.value?.rows?.map { it.id })
+        now += 1_000
+        fold.undoMailItem()
+        assertEquals(listOf(a, c), fold.mailNeeds.value?.rows?.map { it.id })
+        // Snooze and Task take the group too.
+        assertEquals("2 emails snoozed till tomorrow 08:00", fold.snoozeMailItem(a))
+        assertEquals(listOf(c), fold.mailNeeds.value?.rows?.map { it.id })
+        now += 1_000
+        fold.undoMailItem()
+        assertEquals(listOf(a, c), fold.mailNeeds.value?.rows?.map { it.id })
+        assertEquals("Task added · 2 emails archived at Navilife's next check", fold.taskFromMailItem(a))
+        assertEquals(listOf(c), fold.mailNeeds.value?.rows?.map { it.id })
+        assertTrue(fold.syncNow())
+        val asked = serverOps.after("hh", 0, 100_000).map { it.op }.filter { it.field == MailItemFields.DONE_ASKED_AT }.map { it.entityId }.toSet()
+        assertTrue(a in asked && b in asked)
+        now += 1_000
+        fold.undoMailItem()
+        assertEquals(listOf(a, c), fold.mailNeeds.value?.rows?.map { it.id })
+    }
+
+    @Test
     fun snoozeHidesItUntilTomorrowMorning() = runTest {
         val a = email("m1", "Sam Taylor", "Football on Saturday", hour)
         val mac = core("mac")

@@ -63,7 +63,8 @@ import os.meka.core.facade.MekaCore
  * first words, each with **Reply** (slice 6b-2a: he writes it on the card; it goes from that account only when he taps
  * Send, at the server's next check, Undo on the bar stops it; slice 6b-2b: **Draft it** fills the editor with Navilife's
  * draft in his tone, never over his own words, still sent only on Send), **Done** (archived at the server's next check), **Task** and **Waiting for** (slice 6b-1: made
- * from the email, which is archived too) and **Snooze** (back tomorrow 08:00). Each has Undo on the bar. Tapping the header folds the emails in and out (expand spring; reduced motion: cross-fade).
+ * from the email, which is archived too) and **Snooze** (back tomorrow 08:00). Each has Undo on the bar. Slice 6c: emails
+ * linked to it (same thread, order number, or person and topic) fold under it and go with it. Tapping the header folds the emails in and out (expand spring; reduced motion: cross-fade).
  */
 @Composable
 internal fun MailNeedsSection(
@@ -146,6 +147,7 @@ private fun MailNeedsRowView(
     var lastDraft by rememberSaveable(row.id) { mutableStateOf<String?>(null) }
     var draftLine by rememberSaveable(row.id) { mutableStateOf<String?>(null) }
     var drafting by remember { mutableStateOf(false) }
+    var showLinked by rememberSaveable(row.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().testTag("mail-item-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -163,6 +165,30 @@ private fun MailNeedsRowView(
             row.preview?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
             row.notice?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.testTag("mail-reply-notice")) }
+        }
+        // Slice 6c: the emails linked to this one, folded under it; the line unfolds them (expand spring; reduced
+        // motion: cross-fade). Done, Snooze, Task and Waiting for take them all; one Undo brings them back.
+        row.linkedLine?.let { line ->
+            Text(
+                line, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); showLinked = !showLinked }
+                    .padding(vertical = MekaSpace.xxs).testTag("mail-linked-${row.id}")
+                    .semantics { contentDescription = if (showLinked) "$line. Hide them" else "$line. Show them" },
+            )
+        }
+        AnimatedVisibility(showLinked && row.linked.isNotEmpty(), enter = unfold(), exit = fold()) {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface).padding(MekaSpace.xs),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                row.linked.forEach { l ->
+                    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = "${l.from}, ${l.subject}. ${l.line}" }) {
+                        Text(l.from, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(l.subject, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(l.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                    }
+                }
+            }
         }
         // Reply unfolds an editor under the email (expand spring; reduced motion: cross-fade). Nothing goes until Send.
         AnimatedVisibility(replying, enter = unfold(), exit = fold()) {

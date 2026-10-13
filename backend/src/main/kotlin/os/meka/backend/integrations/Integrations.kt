@@ -526,7 +526,7 @@ class Integrations(
      * Inbox autopilot, slice 6a: each email sorted as Needs you that is still in the inbox and came in the last
      * [MailNeedsRules.WINDOW_MS] (at most [MailNeedsRules.MAX_PER_ACCOUNT], newest first) published as a `mail_item`:
      * the account's label, the sender's name, the subject, the provider's short preview, when, and how many emails of
-     * its thread MEKA holds — never the address or the body. Ones published before that left get [MailItemFields.GONE_AT].
+     * its thread MEKA holds (slice 6c: and the thread's hashed key, so the apps link its emails) — never the address or the body. Ones published before that left get [MailItemFields.GONE_AT].
      */
     internal fun publishMailNeeds(a: AccountRow, ms: MailStore) {
         val nowMs = now()
@@ -544,6 +544,7 @@ class Integrations(
             shown += id
             writeMail(a, id, MailNeedsRules.serverFields(
                 account, h.fromName, h.fromAddress, h.subject, previews[h.id] ?: h.preview, h.receivedAtMs, threads[h.threadId ?: h.id] ?: 1,
+                threadKey = MailNeedsRules.threadKey(a.id, h.threadId ?: h.id),
             ), EntityTypes.MAIL_ITEM)
         }
         goneMailNeeds(a, shown)
