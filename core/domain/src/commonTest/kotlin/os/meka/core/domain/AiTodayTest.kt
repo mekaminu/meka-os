@@ -15,9 +15,10 @@ class AiTodayTest {
                 AiDayUse("ask.talk", 6, 12_000),
                 AiDayUse("extract.callscam", 1, 1_000),
                 AiDayUse("extract.email", 1, 1_000),
+                AiDayUse("mail.sort", 2, 1_000),
             ),
         )
-        assertEquals("MEKA's AI today · Talk 6 · Ask 2 · Messages 4 · Calls 1 · Other 1 · 3¢", line)
+        assertEquals("MEKA's AI today · Talk 6 · Ask 2 · Messages 4 · Calls 1 · Mail 2 · Other 1 · 3¢", line)
     }
 
     @Test

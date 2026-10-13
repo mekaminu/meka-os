@@ -1,6 +1,7 @@
 package os.meka.backend.integrations
 
 import os.meka.backend.PostgresOpStore
+import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.MailSorted
 import java.sql.Connection
 import java.sql.ResultSet
@@ -33,6 +34,13 @@ interface MailStore {
     fun sortCounts(accountId: String): Map<String, Int>
     /** Slice 2a: one email's sort, or null before it's sorted (tests; later the cards). */
     fun sortOf(accountId: String, id: String): MailSorted?
+    /** Slice 2b: emails still in the inbox the rules put in Needs you unsure (for the AI), newest first. */
+    fun unsure(accountId: String, limit: Int): List<MailHeader>
+}
+
+/** Slice 2b: the AI's answer per email id ("needs_you", "fyi", or null for none); null overall when it couldn't answer. */
+fun interface MailAiSorter {
+    fun lanes(emails: List<MailHeader>): Map<String, String?>?
 }
 
 class InMemoryMailStore : MailStore {
@@ -73,6 +81,10 @@ class InMemoryMailStore : MailStore {
         return of(accountId).values.filterNotNull().filter { it.inInbox }.mapNotNull { m[it.id]?.sort?.name }.groupingBy { it }.eachCount()
     }
     @Synchronized override fun sortOf(accountId: String, id: String) = sorts[accountId]?.get(id)
+    @Synchronized override fun unsure(accountId: String, limit: Int): List<MailHeader> {
+        val m = sorts[accountId].orEmpty()
+        return messages(accountId).filter { h -> h.inInbox && m[h.id]?.let(MailSortRules::wantsAi) == true }.take(limit)
+    }
 }
 
 class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
@@ -220,6 +232,19 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
                 val reason = os.meka.core.domain.MailSortReason.of(rs.getString(2)) ?: return@use null
                 MailSorted(sort, reason, rs.getBoolean(3))
             }
+        }
+    }
+
+    override fun unsure(accountId: String, limit: Int): List<MailHeader> = c { c ->
+        c.prepareStatement(
+            """SELECT message_id, thread_id, from_address, from_name, subject, received_at_ms, unread, in_inbox, labels,
+                 list_unsubscribe, one_click_unsubscribe, list_id
+               FROM mail_message WHERE account_id = ? AND headers_at IS NOT NULL AND in_inbox
+                 AND sort = 'NEEDS_YOU' AND sort_sure = FALSE
+               ORDER BY received_at_ms DESC, message_id LIMIT ?""",
+        ).use { st ->
+            st.setString(1, accountId); st.setInt(2, limit)
+            st.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.header()) } }
         }
     }
 

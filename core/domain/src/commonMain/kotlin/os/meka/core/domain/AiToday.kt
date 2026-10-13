@@ -8,14 +8,14 @@ data class AiDayUse(val feature: String, val calls: Long, val microUsd: Long)
  * (pennies), inside the cap; show a daily count in Activity"). Non-AI, pure.
  *
  * "MEKA's AI today · Talk 6 · Ask 2 · Messages 4 · 3¢": Talk's spoken answers first, then typed questions, then what
- * MEKA read for Meka (messages, groups' gists, callers' messages checked for spam), then anything else, and what the
+ * MEKA read for Meka (messages, groups' gists, callers' messages checked for spam, emails sorted), then anything else, and what the
  * day cost at list price. Nothing asked today → no line.
  */
 object AiTodayRules {
     const val PREFIX = "MEKA's AI today"
 
     /** The groups, in the order they are said, and the server's feature names they gather. */
-    enum class Group(val label: String) { TALK("Talk"), ASK("Ask"), BRIEF("Brief"), MESSAGES("Messages"), CALLS("Calls"), OTHER("Other") }
+    enum class Group(val label: String) { TALK("Talk"), ASK("Ask"), BRIEF("Brief"), MESSAGES("Messages"), CALLS("Calls"), MAIL("Mail"), OTHER("Other") }
 
     fun groupOf(feature: String): Group = when {
         feature == "ask.talk" -> Group.TALK
@@ -24,6 +24,7 @@ object AiTodayRules {
         feature == "extract.message" || feature == "triage.message" || feature.startsWith("digest.") ||
             feature.startsWith("messages.") -> Group.MESSAGES
         feature == "extract.callscam" -> Group.CALLS
+        feature.startsWith("mail.") -> Group.MAIL
         else -> Group.OTHER
     }
 

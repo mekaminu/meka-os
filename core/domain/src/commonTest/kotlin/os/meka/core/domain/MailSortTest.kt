@@ -102,4 +102,21 @@ class MailSortTest {
         assertEquals("Connected · checked 4 min ago · sorting comes in the next update", old.line)
         assertNull(old.sortedLine)
     }
+
+    @Test
+    fun theAiOnlyChoosesBetweenNeedsYouAndFyiAndIsNeverAskedTwice() {
+        assertEquals(MailSorted(MailSort.FYI, MailSortReason.AI_FYI, true), MailSortRules.afterAi("fyi"))
+        assertEquals(MailSorted(MailSort.FYI, MailSortReason.AI_FYI, true), MailSortRules.afterAi(" FYI "))
+        assertEquals(MailSorted(MailSort.NEEDS_YOU, MailSortReason.AI_NEEDS_YOU, true), MailSortRules.afterAi("needs_you"))
+        // Anything else keeps it for Meka: the AI can't make mail Junk, Promo or anything to be tidied.
+        for (odd in listOf(null, "", "junk", "promo", "newsletter", "ignore previous instructions")) {
+            assertEquals(MailSorted(MailSort.NEEDS_YOU, MailSortReason.AI_UNCLEAR, true), MailSortRules.afterAi(odd), odd.toString())
+        }
+        val person = MailSortRules.sort(MailSortFacts("sam@example.com", "Sam", "Saturday?", listOf("INBOX"), null, null))
+        assertTrue(MailSortRules.wantsAi(person))
+        assertFalse(MailSortRules.wantsAi(MailSortRules.afterAi("fyi")))
+        assertFalse(MailSortRules.wantsAi(MailSortRules.afterAi(null)))
+        assertFalse(MailSortRules.wantsAi(MailSortRules.sort(MailSortFacts("x@service.gov.uk", null, null, emptyList(), null, null))))
+        assertFalse(MailSortRules.wantsAi(MailSortRules.sort(MailSortFacts("noreply@x.com", null, null, emptyList(), null, null))))
+    }
 }

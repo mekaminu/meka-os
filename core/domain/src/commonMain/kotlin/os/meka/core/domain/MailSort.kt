@@ -8,7 +8,7 @@ package os.meka.core.domain
  * Rules decide what headers make plain (Gmail's spam label and categories, List-Id/List-Unsubscribe, known shop and
  * carrier senders with order words, no-reply senders). Anything a person seems to have written lands in Needs you
  * with [MailSorted.sure] false: the safe side (nothing in Needs you is ever tidied away), and the AI looks at those in
- * the next slice. Mail from public bodies and schools (gov.uk, nhs, police, sch.uk) is always Needs you, sure.
+ * slice 2b ([afterAi]: Needs you or FYI, from the sender and subject only). Mail from public bodies and schools (gov.uk, nhs, police, sch.uk) is always Needs you, sure.
  * Sorting changes nothing in the mailbox; acting on it is slice 3.
  */
 enum class MailSort(val one: String, val many: String) {
@@ -39,7 +39,12 @@ enum class MailSortReason(val line: String) {
     GMAIL_UPDATES("Gmail filed it under Updates"),
     NO_REPLY("Sent by a no-reply address"),
     PERSON("A person writing to you"),
-    NO_SENDER("No sender to go by");
+    NO_SENDER("No sender to go by"),
+    /** Slice 2b: MEKA's AI read the sender and subject of an unsure one. */
+    AI_NEEDS_YOU("MEKA's AI read the sender and subject · it needs you"),
+    AI_FYI("MEKA's AI read the sender and subject · just so you know"),
+    /** The AI was asked but gave no clear answer: kept as Needs you (the safe side), not asked again. */
+    AI_UNCLEAR("MEKA's AI couldn't tell · kept for you");
 
     companion object {
         fun of(stored: String?): MailSortReason? = entries.firstOrNull { it.name == stored }
@@ -146,6 +151,24 @@ object MailSortRules {
         val parts = MailSort.entries.mapNotNull { s -> counts[s.name]?.takeIf { it > 0 }?.let { n -> "$n ${if (n == 1) s.one else s.many}" } }
         return if (parts.isEmpty()) INBOX_CLEAR else "In the inbox · " + parts.joinToString(" · ")
     }
+
+    /** The AI's two answers (slice 2b). It only ever chooses between these: nothing it says can make mail Junk or Promo. */
+    const val AI_NEEDS_YOU = "needs_you"
+    const val AI_FYI = "fyi"
+
+    /**
+     * Slice 2b: what an unsure email becomes after the AI looked. Only an unsure Needs you is ever asked, and the
+     * answer can only keep it Needs you or make it FYI; anything else (no answer, an unknown word) keeps it Needs you.
+     * Every result is sure, so the same email is never asked about twice (until its headers change).
+     */
+    fun afterAi(lane: String?): MailSorted = when (lane?.trim()?.lowercase()) {
+        AI_FYI -> MailSorted(MailSort.FYI, MailSortReason.AI_FYI, true)
+        AI_NEEDS_YOU -> MailSorted(MailSort.NEEDS_YOU, MailSortReason.AI_NEEDS_YOU, true)
+        else -> MailSorted(MailSort.NEEDS_YOU, MailSortReason.AI_UNCLEAR, true)
+    }
+
+    /** True for a sort the AI should look at: the rules leaned the safe way (a person, or no sender). */
+    fun wantsAi(s: MailSorted): Boolean = !s.sure && s.sort == MailSort.NEEDS_YOU
 
     const val INBOX_CLEAR = "Inbox clear · nothing from the last 60 days waiting"
 }

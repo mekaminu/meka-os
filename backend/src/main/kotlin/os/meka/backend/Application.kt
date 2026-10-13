@@ -964,7 +964,8 @@ fun main(args: Array<String>) {
             val opStore = PostgresOpStore(ds)
             val push = pushFromEnv(ds)
             val newsImages = NewsImages(PostgresNewsImageStore(ds))
-            val integrations = integrationsFromEnv(opStore, onChanged = { hh -> push?.serverChanged(hh) }, images = newsImages)
+            val ai = aiFromEnv(ds)?.also { startAiCheck(it.health) }
+            val integrations = integrationsFromEnv(opStore, onChanged = { hh -> push?.serverChanged(hh) }, images = newsImages, ai = ai)
             integrations?.let { startCalendarSync(it) }
             // Calendar edits Meka makes in MEKA go to Google/Outlook after their undo window (calendar editing).
             val calendarWriter = integrations?.writer(
@@ -974,7 +975,6 @@ fun main(args: Array<String>) {
             // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
             val speech = speechFromEnv(ds)?.also { startSpeechWarm(it) }
-            val ai = aiFromEnv(ds)?.also { startAiCheck(it.health) }
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech, ai)
             voice?.let { startRecordingSweep(it.assistant) }
             // The call assistant's low-balance guard: the phone service's credit, read a few times a day.
@@ -1015,7 +1015,7 @@ fun main(args: Array<String>) {
 }
 
 /** Null unless the deployment provides a KMS key and a public URL (local dev runs without integrations). */
-fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: String) -> Unit = {}, images: NewsImages? = null): Integrations? {
+fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: String) -> Unit = {}, images: NewsImages? = null, ai: AiLayer? = null): Integrations? {
     val key = System.getenv("MEKA_KMS_KEY_ID") ?: return null
     val publicUrl = System.getenv("MEKA_PUBLIC_URL") ?: return null
     val secrets = buildMap {
@@ -1045,6 +1045,8 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         mail = listOf(GmailMail(), OutlookMail()).associateBy { it.id },
         // Slice 1c: the last 60 days' headers per mail account (never a body).
         mailStore = PostgresMailStore(opStore),
+        // Slice 2b: the unsure ones get one look from the small model (sender and subject only), metered as mail.sort.
+        mailAi = ai?.provider?.let { MailSortAi(it) },
     )
 }
 

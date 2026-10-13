@@ -11,6 +11,7 @@ import os.meka.backend.integrations.InMemoryIntegrationStore
 import os.meka.backend.integrations.InMemoryMailStore
 import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.MailAddress
+import os.meka.backend.integrations.MailAiSorter
 import os.meka.backend.integrations.MailChanges
 import os.meka.backend.integrations.MailCursorExpired
 import os.meka.backend.integrations.MailHeader
@@ -154,10 +155,13 @@ class MailSyncTest {
     private fun msg(id: String, ageDays: Long, from: String = "sam@example.com") =
         MailHeader(id, "t-$id", from, null, "Subject $id", now - ageDays * day, unread = true, inInbox = true)
 
-    private fun world(mailStore: MailStore, gmail: FakeGmail = FakeGmail(), store: InMemoryIntegrationStore = InMemoryIntegrationStore()) =
+    private fun world(
+        mailStore: MailStore, gmail: FakeGmail = FakeGmail(), store: InMemoryIntegrationStore = InMemoryIntegrationStore(),
+        mailAi: MailAiSorter? = null,
+    ) =
         Triple(gmail, store, Integrations(
             store, InMemoryServerOpStore(), emptyMap(), { p -> if (p == "google") OAuthClient("cid", "s") else null },
-            Cipher(), "https://meka.example", { now }, mail = mapOf("gmail" to gmail), mailStore = mailStore,
+            Cipher(), "https://meka.example", { now }, mail = mapOf("gmail" to gmail), mailStore = mailStore, mailAi = mailAi,
         ))
 
     private fun connect(i: Integrations): String {
@@ -299,6 +303,58 @@ class MailSyncTest {
         assertEquals(emptyMap(), i.accounts("home").single().sorted)
     }
 
+    // ---- Slice 2b: the AI's look at the unsure ones ----
+
+    private class FakeAi(var answer: ((List<MailHeader>) -> Map<String, String?>?)) : MailAiSorter {
+        val asked = mutableListOf<List<String>>()
+        override fun lanes(emails: List<MailHeader>): Map<String, String?>? { asked += emails.map { it.id }; return answer(emails) }
+    }
+
+    @Test
+    fun theUnsureOnesGetOneLookAndOnlyNeedsYouOrFyiComesBack() {
+        val ms = InMemoryMailStore()
+        val ai = FakeAi { null } // AI off first
+        val (gmail, _, i) = world(ms, mailAi = ai)
+        gmail.mailbox["p"] = msg("p", 1) // a person: unsure
+        gmail.mailbox["q"] = msg("q", 2, "jo@example.com")
+        gmail.mailbox["r"] = msg("r", 3, "pat@example.com")
+        gmail.mailbox["n"] = msg("n", 1, "editor@weekly.example").copy(listId = "<weekly.example>") // sure: never asked
+        gmail.mailbox["a"] = msg("a", 1, "kim@example.com").copy(inInbox = false) // archived: not asked
+        val id = connect(i)
+        i.syncAccount(id)
+        assertEquals(listOf(listOf("p", "q", "r")), ai.asked)
+        // Off: nothing decided, still unsure.
+        assertFalse(ms.sortOf(id, "p")!!.sure)
+        gmail.nextRound = { MailChanges(cursor = "h2") } // nothing new in the mailbox from here
+        ai.answer = { e -> mapOf(e[0].id to "fyi", e[1].id to "needs_you") } // r left out
+        i.syncAccount(id)
+        assertEquals(MailSorted(MailSort.FYI, MailSortReason.AI_FYI, true), ms.sortOf(id, "p"))
+        assertEquals(MailSorted(MailSort.NEEDS_YOU, MailSortReason.AI_NEEDS_YOU, true), ms.sortOf(id, "q"))
+        assertEquals(MailSorted(MailSort.NEEDS_YOU, MailSortReason.AI_UNCLEAR, true), ms.sortOf(id, "r"))
+        assertEquals(mapOf("FYI" to 1, "NEEDS_YOU" to 2, "NEWSLETTER" to 1), i.accounts("home").single().sorted)
+        // Nothing left unsure: no more calls.
+        i.syncAccount(id)
+        assertEquals(2, ai.asked.size)
+        // A failing AI doesn't stop the sync.
+        ai.answer = { throw IllegalStateException("boom") }
+        gmail.nextRound = { MailChanges(headers = listOf(msg("s", 0, "lee@example.com")), cursor = "h9") }
+        i.syncAccount(id)
+        assertFalse(ms.sortOf(id, "s")!!.sure)
+    }
+
+    @Test
+    fun theAiSeesAtMostOneBatchACheckNewestFirst() {
+        val ms = InMemoryMailStore()
+        val ai = FakeAi { e -> e.associate { it.id to "needs_you" } }
+        val (gmail, _, i) = world(ms, mailAi = ai)
+        gmail.nextRound = { MailChanges(headers = (0 until Integrations.AI_BATCH + 3).map { n -> msg("m$n", n.toLong() % 50) }, cursor = "h1") }
+        val id = connect(i)
+        i.syncAccount(id)
+        assertEquals(Integrations.AI_BATCH, ai.asked.single().size)
+        assertEquals(3, ms.unsure(id, 100).size)
+        assertTrue(ms.unsure(id, 100).all { h -> ai.asked.single().none { it == h.id } })
+    }
+
     // ---- On real Postgres (MEKA_TEST_DB_URL, CI); skipped when unset ----
 
     @Test
@@ -341,6 +397,13 @@ class MailSyncTest {
             assertNull(ms.sortOf(acc, "o1"))
             ms.setSorts(acc, mapOf("o1" to MailSorted(MailSort.NEWSLETTER, MailSortReason.MAILING_LIST, true)))
             assertEquals(emptyMap(), ms.sortCounts(acc))
+            // Slice 2b: only unsure Needs you in the inbox waits for the AI.
+            ms.put("hh-m", acc, full)
+            ms.setSorts(acc, mapOf("o1" to MailSorted(MailSort.NEEDS_YOU, MailSortReason.PERSON, false)))
+            assertEquals(listOf("o1"), ms.unsure(acc, 10).map { it.id })
+            ms.setSorts(acc, mapOf("o1" to MailSorted(MailSort.FYI, MailSortReason.AI_FYI, true)))
+            assertTrue(ms.unsure(acc, 10).isEmpty())
+            assertEquals(MailSorted(MailSort.FYI, MailSortReason.AI_FYI, true), ms.sortOf(acc, "o1"))
             ms.prune(acc, now)
             assertTrue(ms.messages(acc).isEmpty())
             ms.apply("hh-m", acc, MailChanges(fetch = listOf("x"), cursor = "h3"))

@@ -101,6 +101,8 @@ class Integrations(
     private val mail: Map<String, MailProvider> = emptyMap(),
     /** Slice 1c: each mail account's headers (last 60 days), kept current from the provider's change feed; null skips it. */
     private val mailStore: MailStore? = null,
+    /** Slice 2b: the AI's look at the unsure ones (sender and subject only); null (AI off, tests) leaves them unsure. */
+    private val mailAi: MailAiSorter? = null,
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -399,17 +401,31 @@ class Integrations(
 
     /**
      * Slice 2a: every header not sorted yet gets its bucket from [MailSortRules] (headers only, nothing sent anywhere,
-     * nothing in the mailbox changes). Unsure ones (a person seems to have written) wait for the AI in slice 2b.
+     * nothing in the mailbox changes). Unsure ones (a person seems to have written) then get the AI's look ([askAi]).
      */
     private fun sortHeaders(a: AccountRow, ms: MailStore) {
-        repeat(SORT_ROUNDS) {
+        for (round in 0 until SORT_ROUNDS) {
             val batch = ms.unsorted(a.id, SORT_BATCH)
-            if (batch.isEmpty()) return
+            if (batch.isEmpty()) break
             ms.setSorts(a.id, batch.associate { h ->
                 h.id to MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId))
             })
-            if (batch.size < SORT_BATCH) return
+            if (batch.size < SORT_BATCH) break
         }
+        askAi(a, ms)
+    }
+
+    /**
+     * Slice 2b: one AI call per check for up to [AI_BATCH] unsure ones, newest first (words only: sender and subject).
+     * The answer can only keep an email in Needs you or make it FYI ([MailSortRules.afterAi]); an email the answer
+     * leaves out stays Needs you and isn't asked about again. AI off, over budget or failing: they wait, unchanged.
+     */
+    private fun askAi(a: AccountRow, ms: MailStore) {
+        val ai = mailAi ?: return
+        val batch = ms.unsure(a.id, AI_BATCH)
+        if (batch.isEmpty()) return
+        val lanes = runCatching { ai.lanes(batch) }.getOrNull() ?: return
+        ms.setSorts(a.id, batch.associate { h -> h.id to MailSortRules.afterAi(lanes[h.id]) })
     }
 
     /**
@@ -955,6 +971,8 @@ class Integrations(
         /** Slice 2a: headers sorted per round (rules only, cheap; a big first listing takes a few rounds of one check). */
         const val SORT_BATCH = 500
         const val SORT_ROUNDS = 20
+        /** Slice 2b: the most unsure emails one AI call looks at (one call per account per check). */
+        const val AI_BATCH = 25
         /** Gmail headers read per 5-minute check (one call each; Gmail allows far more): a big first listing fills in over a few checks. */
         const val HEADERS_PER_CHECK = 300
         const val WINDOW_AHEAD_MS = 30 * 24 * 3_600_000L
