@@ -723,6 +723,17 @@ class MekaCore(
     /** Puts back the offer's last answer on this device (Unsubscribe from all, Not now or Keep); null after an Undo. */
     private var unopenedUndo: (() -> Unit)? = null
 
+    private val _mailNeeds = MutableStateFlow<os.meka.core.domain.MailNeedsCard?>(null)
+    /**
+     * Inbox autopilot, slice 6a: Needs you's "From your mail" card — the emails the server sorted as needing Meka, still
+     * in the inbox, newest first, each with Done and Snooze; null when none. Follows sync and the minute tick (a snooze
+     * ending brings its email back).
+     */
+    val mailNeeds: StateFlow<os.meka.core.domain.MailNeedsCard?> = _mailNeeds.asStateFlow()
+
+    /** Takes back the last Done or Snooze on this device; null after an Undo. */
+    private var mailNeedsUndo: (() -> Unit)? = null
+
     init {
         replica.addListener { refresh(); requestSync() }
         refresh()
@@ -3494,6 +3505,42 @@ class MekaCore(
         os.meka.core.domain.MailUnopenedRules.keptLine(s.name)
     }
 
+    private fun mailNeedsChanged() {
+        _mailNeeds.value = os.meka.core.domain.MailNeedsRules.card(activity.mailItems(), nowMs(), ZoneCalendar(timeZone))
+    }
+
+    /**
+     * Inbox autopilot, slice 6a: **Done** on an email in "From your mail": its card goes on both apps and the server
+     * archives it at its next check (Gmail: out of the inbox; Outlook: to Archive). Undo brings the card back (and the
+     * email back to the inbox if the server already archived it). Returns the line to show.
+     */
+    suspend fun doneMailItem(id: String): String = onCore {
+        activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailNeedsRules.doneFields(nowMs()))
+        mailNeedsUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailNeedsRules.undoDoneFields(nowMs())) }
+        mailNeedsChanged()
+        os.meka.core.domain.MailNeedsRules.DONE_LINE
+    }
+
+    /** **Snooze** on an email in "From your mail": its card leaves both apps until tomorrow 08:00 (with Undo). */
+    suspend fun snoozeMailItem(id: String): String = onCore {
+        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN
+        val before = item.snoozedUntilMs ?: 0L
+        val until = os.meka.core.domain.MailNeedsRules.snoozeUntil(nowMs(), ZoneCalendar(timeZone))
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailNeedsRules.snoozeFields(until))
+        mailNeedsUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailNeedsRules.snoozeFields(before)) }
+        mailNeedsChanged()
+        os.meka.core.domain.MailNeedsRules.SNOOZED_LINE
+    }
+
+    /** Undo on the last Done or Snooze in "From your mail" on this device. */
+    suspend fun undoMailItem() = onCore {
+        val undo = mailNeedsUndo ?: return@onCore
+        mailNeedsUndo = null
+        undo()
+        mailNeedsChanged()
+    }
+
     /** Undo on the offer's last answer on this device. */
     suspend fun undoUnopened() = onCore {
         val undo = unopenedUndo ?: return@onCore
@@ -5142,6 +5189,8 @@ class MekaCore(
         archivedChanged()
         // Slice 5c: the weekly "Not opened in 30 days" follows the synced senders, its answers and Saturday 09:00.
         unopenedChanged()
+        // Slice 6a: "From your mail" follows the synced emails, Done/Snooze on either app and the minute (a snooze ending).
+        mailNeedsChanged()
         val all = tasks.all()
         val marks = eventActions.marks(all)
         _eventMarks.value = marks

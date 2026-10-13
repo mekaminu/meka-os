@@ -109,6 +109,8 @@ object EntityTypes {
     const val MAIL_TIDY = "mail_tidy"
     /** Inbox autopilot, slice 5a (2026-10-13): one newsletter or promo sender in one mail account, with Unsubscribe (see [MailUnsubscribeRules]). */
     const val MAIL_SENDER = "mail_sender"
+    /** Inbox autopilot, slice 6a (2026-10-13): one email that needs Meka, as a card in Needs you, with Done and Snooze (see [MailNeedsRules]). */
+    const val MAIL_ITEM = "mail_item"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -117,7 +119,7 @@ object EntityTypes {
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
         CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA, TRIP, TRIP_BOOKING, CHAT_SUMMARY,
-        APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE, MAIL_TIDY, MAIL_SENDER,
+        APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE, MAIL_TIDY, MAIL_SENDER, MAIL_ITEM,
     )
 }
 
@@ -401,6 +403,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.MAIL_TIDY -> MergePolicy.Lww
         // Mail senders: the server writes the sender and the outcome; Unsubscribe is asked on either app, latest wins.
         entityType == EntityTypes.MAIL_SENDER -> MergePolicy.Lww
+        // Mail cards: the server writes the email and what it did; Done, Undo and Snooze come from either app, latest wins.
+        entityType == EntityTypes.MAIL_ITEM -> MergePolicy.Lww
         // Drive times: only the server writes them; its latest answer wins.
         entityType == EntityTypes.TRAVEL_TIME -> MergePolicy.Lww
         // School: a line removed on any device is gone for good; the cover answer and its Undo, the latest wins.

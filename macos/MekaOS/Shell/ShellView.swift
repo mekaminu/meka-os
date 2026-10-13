@@ -141,6 +141,9 @@ struct NeedsYouView: View {
                     // The group digest the Fold made at 12:30 / 18:30 (V1, messages slice 4b): gists, never the messages.
                     GroupGistsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                         .padding(.bottom, model.digestGists.isEmpty ? 0 : MekaSpace.m)
+                    // The emails that need Meka (Inbox autopilot, slice 6a), each with Done and Snooze.
+                    MailNeedsView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
+                        .padding(.bottom, model.mailNeeds == nil ? 0 : MekaSpace.m)
                     // What Autopilot archived (Inbox autopilot, slice 4), with the digests until Got it.
                     ArchivedForYouView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
                         .padding(.bottom, model.archivedForYou == nil ? 0 : MekaSpace.m)

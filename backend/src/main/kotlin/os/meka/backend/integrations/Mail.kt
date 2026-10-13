@@ -94,7 +94,8 @@ internal object UnsubscribeMessage {
 
 /**
  * A message's headers as the server keeps them (slice 1c): who it's from, the subject, when, read or not, whether it
- * is in the inbox, the provider's labels and the list headers the sorting and unsubscribe slices read. Never a body.
+ * is in the inbox, the provider's labels and the list headers the sorting and unsubscribe slices read, and (slice 6a)
+ * the provider's short preview. Never the body.
  */
 data class MailHeader(
     val id: String,
@@ -111,6 +112,11 @@ data class MailHeader(
     /** `List-Unsubscribe-Post: List-Unsubscribe=One-Click` was present (RFC 8058). */
     val oneClickUnsubscribe: Boolean = false,
     val listId: String? = null,
+    /**
+     * Slice 6a: the provider's own short preview of the text (Gmail's snippet, Outlook's bodyPreview), for the card of an
+     * email that needs Meka. Never the whole body, never logged.
+     */
+    val preview: String? = null,
 )
 
 /**
@@ -346,7 +352,7 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
      */
     override fun changes(accessToken: String, cursor: String?, sinceMs: Long): MailChanges {
         var url = cursor ?: ("$GRAPH/me/mailFolders/inbox/messages/delta?" +
-            "\$select=" + Http.enc("from,subject,receivedDateTime,isRead,conversationId") +
+            "\$select=" + Http.enc("from,subject,receivedDateTime,isRead,conversationId,bodyPreview") +
             "&\$filter=" + Http.enc("receivedDateTime ge " + graphTime(sinceMs)))
         val headers = mutableListOf<MailHeader>()
         val removed = mutableListOf<String>()
@@ -489,6 +495,7 @@ internal object GmailHistory {
             listUnsubscribe = hs["list-unsubscribe"]?.take(MailAddress.MAX_HEADER),
             oneClickUnsubscribe = hs["list-unsubscribe-post"]?.replace(" ", "")?.equals("List-Unsubscribe=One-Click", ignoreCase = true) == true,
             listId = hs["list-id"]?.take(MailAddress.MAX_HEADER),
+            preview = m["snippet"].str()?.take(MailAddress.MAX_PREVIEW)?.takeIf { it.isNotBlank() },
         )
     }
 }
@@ -514,6 +521,7 @@ internal object GraphDelta {
                 receivedAtMs = m["receivedDateTime"].str()?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } ?: 0L,
                 unread = m["isRead"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull == "false" } ?: false,
                 inInbox = true,
+                preview = m["bodyPreview"].str()?.take(MailAddress.MAX_PREVIEW)?.takeIf { it.isNotBlank() },
             )
         }
         return Page(headers, removed)
@@ -524,6 +532,8 @@ internal object GraphDelta {
 internal object MailAddress {
     const val MAX_SUBJECT = 300
     const val MAX_HEADER = 1000
+    /** Slice 6a: the provider's preview as kept (Gmail's snippet and Outlook's bodyPreview are ~200 characters already). */
+    const val MAX_PREVIEW = 300
 
     fun parse(raw: String?): Pair<String?, String?> {
         val s = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null to null

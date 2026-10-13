@@ -351,6 +351,7 @@ internal fun NeedsYouColumn(
     val digest = digestNow.view
     val archived by core.archivedForYou.collectAsState()
     val unopened by core.mailUnopened.collectAsState()
+    val mailNeeds by core.mailNeeds.collectAsState()
     val gists by core.groupGists.collectAsState()
     // A busy chat's one-line summary (slice 3c), made on this phone and synced; asked for when the chats change.
     val summaries by core.chatSummaries.collectAsState()
@@ -398,6 +399,13 @@ internal fun NeedsYouColumn(
         digest?.takeIf { it.due }?.let { d ->
             item(key = "group-digest") {
                 GroupDigestSection(d, captures, core, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        // Inbox autopilot, slice 6a: the emails that need Meka, newest first, each with Done and Snooze.
+        mailNeeds?.let { n ->
+            item(key = "mail-needs") {
+                MailNeedsSection(n, core, moves.undoLine,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
             }
         }

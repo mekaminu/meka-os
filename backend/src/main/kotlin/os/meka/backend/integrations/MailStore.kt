@@ -62,6 +62,9 @@ interface MailStore {
      * many of them are read (Gmail's UNREAD label / Outlook's isRead).
      */
     fun openStats(accountId: String, sinceMs: Long): Map<String, SenderOpens>
+
+    /** Slice 6a: the kept previews of these emails (id → preview; those without one left out). */
+    fun previews(accountId: String, ids: Collection<String>): Map<String, String>
 }
 
 /** Slice 5c: a sender's emails in the window, and how many of them were opened. */
@@ -163,6 +166,8 @@ class InMemoryMailStore : MailStore {
         val m = senders[accountId] ?: return
         m[address]?.let { m[address] = it.copy(listUnsubscribe = listUnsubscribe, oneClick = oneClick, headersChecked = true) }
     }
+    @Synchronized override fun previews(accountId: String, ids: Collection<String>): Map<String, String> =
+        ids.mapNotNull { id -> of(accountId)[id]?.preview?.let { id to it } }.toMap()
     @Synchronized override fun openStats(accountId: String, sinceMs: Long): Map<String, SenderOpens> =
         of(accountId).values.filterNotNull().filter { it.receivedAtMs >= sinceMs && it.fromAddress != null }
             .groupBy { it.fromAddress!!.lowercase() }
@@ -213,19 +218,21 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
     private fun upsert(c: Connection, householdId: String, accountId: String, h: MailHeader) {
         c.prepareStatement(
             """INSERT INTO mail_message(account_id, message_id, household_id, thread_id, from_address, from_name, subject,
-                 received_at_ms, unread, in_inbox, labels, list_unsubscribe, one_click_unsubscribe, list_id, headers_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, now())
+                 received_at_ms, unread, in_inbox, labels, list_unsubscribe, one_click_unsubscribe, list_id, preview, headers_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, now())
                ON CONFLICT (account_id, message_id) DO UPDATE SET thread_id = EXCLUDED.thread_id,
                  from_address = EXCLUDED.from_address, from_name = EXCLUDED.from_name, subject = EXCLUDED.subject,
                  received_at_ms = EXCLUDED.received_at_ms, unread = EXCLUDED.unread, in_inbox = EXCLUDED.in_inbox,
                  labels = EXCLUDED.labels, list_unsubscribe = EXCLUDED.list_unsubscribe,
-                 one_click_unsubscribe = EXCLUDED.one_click_unsubscribe, list_id = EXCLUDED.list_id, headers_at = now(),
+                 one_click_unsubscribe = EXCLUDED.one_click_unsubscribe, list_id = EXCLUDED.list_id,
+                 preview = COALESCE(EXCLUDED.preview, mail_message.preview), headers_at = now(),
                  sort = NULL, sort_reason = NULL, sort_sure = NULL""",
         ).use { st ->
             st.setString(1, accountId); st.setString(2, h.id); st.setString(3, householdId); st.setString(4, h.threadId)
             st.setString(5, h.fromAddress); st.setString(6, h.fromName); st.setString(7, h.subject); st.setLong(8, h.receivedAtMs)
             st.setBoolean(9, h.unread); st.setBoolean(10, h.inInbox); st.setString(11, h.labels.joinToString(","))
             st.setString(12, h.listUnsubscribe); st.setBoolean(13, h.oneClickUnsubscribe); st.setString(14, h.listId)
+            st.setString(15, h.preview)
             st.executeUpdate()
         }
     }
@@ -442,6 +449,16 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
             st.executeUpdate()
         }
         Unit
+    }
+
+    override fun previews(accountId: String, ids: Collection<String>): Map<String, String> {
+        if (ids.isEmpty()) return emptyMap()
+        return c { c ->
+            c.prepareStatement("SELECT message_id, preview FROM mail_message WHERE account_id = ? AND message_id = ANY(?) AND preview IS NOT NULL").use { st ->
+                st.setString(1, accountId); st.setArray(2, c.createArrayOf("text", ids.toTypedArray()))
+                st.executeQuery().use { rs -> buildMap { while (rs.next()) put(rs.getString(1), rs.getString(2)) } }
+            }
+        }
     }
 
     override fun openStats(accountId: String, sinceMs: Long): Map<String, SenderOpens> = c { c ->

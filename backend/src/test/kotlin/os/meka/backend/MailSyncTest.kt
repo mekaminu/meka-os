@@ -41,6 +41,8 @@ import os.meka.backend.integrations.HttpOneClickUnsubscriber
 import os.meka.backend.integrations.OneClickUnsubscriber
 import os.meka.backend.integrations.UnsubscribeMessage
 import os.meka.core.domain.MailSenderFields
+import os.meka.core.domain.MailItemFields
+import os.meka.core.domain.MailNeedsRules
 import os.meka.core.domain.MailProviders
 import os.meka.core.domain.MailUnsubscribeRules
 import os.meka.core.domain.UnsubscribeMailto
@@ -573,6 +575,65 @@ class MailSyncTest {
 
     // ---- Slice 5a: Unsubscribe for him ----
 
+    // ---- Slice 6a: "From your mail" cards ----
+
+    private fun items(ops: InMemoryServerOpStore) = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_ITEM)
+
+    @Test
+    fun needsYouEmailsBecomeCardsWithDoneAndUndo() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["p"] = msg("p", 0).copy(fromName = "Sam Taylor", subject = "Football on Saturday", preview = "Hi Alex, can you take&nbsp;the boys?")
+        gmail.mailbox["q"] = msg("q", 1, "alex.reed@example.org").copy(threadId = "t-p") // same thread as p
+        gmail.mailbox["n"] = msg("n", 0, "editor@weekly.example").copy(listId = "<weekly.example>") // a newsletter: no card
+        gmail.mailbox["old"] = msg("old", 20) // outside the 14 days: no card
+        val id = connect(i)
+        i.syncAccount(id)
+        val p = MailNeedsRules.itemId(id, "p")
+        val q = MailNeedsRules.itemId(id, "q")
+        assertEquals(setOf(p, q), items(ops).keys)
+        val card = MailNeedsRules.read(p, items(ops).getValue(p))!!
+        assertEquals("Sam Taylor", card.from)
+        assertEquals("Personal", card.account)
+        assertEquals("Football on Saturday", card.subject)
+        assertEquals("Hi Alex, can you take the boys?", card.preview)
+        assertEquals(2, card.threadCount)
+        assertFalse(items(ops).values.flatMap { it.values }.any { it == FieldValue.Text("sam@example.com") })
+
+        // Done on the Fold: archived at the next check, the card marked gone.
+        now += 60_000
+        device(ops, EntityTypes.MAIL_ITEM, p, MailItemFields.DONE_ASKED_AT, FieldValue.Int64(now))
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(mapOf("p" to MailTidy.ARCHIVE), gmail.tidyCalls.single())
+        assertFalse(gmail.mailbox.getValue("p").inInbox)
+        val done = MailNeedsRules.read(p, items(ops).getValue(p))!!
+        assertTrue(done.doneAtMs != null && done.goneAtMs != null)
+        // Not archived twice.
+        i.syncAccount(id)
+        assertEquals(1, gmail.tidyCalls.size)
+
+        // Undo: back in the inbox, and the card shows again in the same check.
+        now += 60_000
+        device(ops, EntityTypes.MAIL_ITEM, p, MailItemFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        i.syncAccount(id)
+        assertTrue(gmail.mailbox.getValue("p").inInbox)
+        val back = MailNeedsRules.read(p, items(ops).getValue(p))!!
+        assertTrue(back.undoneAtMs != null)
+        assertNull(back.goneAtMs)
+        assertFalse(MailNeedsRules.putBackDue(back))
+        assertTrue(MailNeedsRules.showing(back, now))
+
+        // Archived in Gmail by hand: the card goes. Disconnect: every card of the account goes.
+        gmail.mailbox["q"] = gmail.mailbox.getValue("q").copy(inInbox = false)
+        gmail.nextRound = { MailChanges(fetch = listOf("q"), cursor = "h3") }
+        i.syncAccount(id)
+        assertTrue(MailNeedsRules.read(q, items(ops).getValue(q))!!.goneAtMs != null)
+        assertTrue(i.disconnectMail("home", "gmail", "alex@example.com"))
+        assertTrue(MailNeedsRules.read(p, items(ops).getValue(p))!!.goneAtMs != null)
+    }
+
     private fun senders(ops: InMemoryServerOpStore) = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_SENDER)
     private fun newsletter(id: String, from: String, name: String?, unsub: String?, oneClick: Boolean = false, ageDays: Long = 0) =
         msg(id, ageDays, from).copy(fromName = name, listId = "<$from>", listUnsubscribe = unsub, oneClickUnsubscribe = oneClick)
@@ -826,6 +887,11 @@ class MailSyncTest {
             assertEquals(listOf("o1"), ms.pending(acc, 10))
             ms.put("hh-m", acc, full.copy(unread = false))
             assertFalse(ms.messages(acc).single().unread)
+            // Slice 6a: the provider's preview, kept when a later read has none.
+            ms.put("hh-m", acc, full.copy(unread = false, preview = "Hi Alex, about Saturday"))
+            ms.put("hh-m", acc, full.copy(unread = false))
+            assertEquals(mapOf("o1" to "Hi Alex, about Saturday"), ms.previews(acc, listOf("o1", "zz")))
+            assertEquals(emptyMap(), ms.previews(acc, emptyList()))
             // Slice 2a: sorting, counted only while in the inbox, cleared when the header is read again.
             assertEquals(listOf("o1"), ms.unsorted(acc, 10).map { it.id })
             ms.setSorts(acc, mapOf("o1" to MailSorted(MailSort.NEWSLETTER, MailSortReason.MAILING_LIST, true), "nope" to MailSorted(MailSort.JUNK, MailSortReason.SPAM, true)))

@@ -14,6 +14,8 @@ import os.meka.core.domain.MailSort
 import os.meka.core.domain.MailSender
 import os.meka.core.domain.MailUnsubscribeRules
 import os.meka.core.domain.MailUnopenedRules
+import os.meka.core.domain.MailNeedsRules
+import os.meka.core.domain.MailItemFields
 import os.meka.core.domain.UnsubscribeMethod
 import os.meka.core.domain.UnsubscribePlan
 import os.meka.core.domain.UnsubscribeState
@@ -275,6 +277,8 @@ class Integrations(
             m.revoke(refresh)
         }
         val done = store.transaction { store.disconnect(householdId, provider, a.email) }
+        // Slice 6a: its "From your mail" cards go from Needs you.
+        if (done) runCatching { goneMailNeeds(a, emptySet()) }
         // Slice 1c: the headers MEKA kept for it go too; signing in again lists the mail afresh.
         if (done) runCatching { mailStore?.forget(a.id) }
         if (done) {
@@ -433,11 +437,90 @@ class Integrations(
             if (h == null) ms.remove(a.id, id) else ms.put(a.householdId, a.id, h)
         }
         ms.prune(a.id, since)
+        // Slice 6a: Done and Undo asked on the "From your mail" cards, before sorting (an email put back is sorted again now).
+        runCatching { mailNeedsAsks(a, m, token, ms) }
         sortHeaders(a, ms)
         // Slice 5a: the newsletter and promo senders (before Autopilot moves their newest email) and any Unsubscribe asked.
         runCatching { mailSenders(a, m, token, ms) }
         // Slice 3b: Autopilot (only once it's on and the dry-run day is over); a failure there never fails the check.
         runCatching { autopilot(a, m, token, ms) }
+        // Slice 6a: the emails that need Meka, as cards in Needs you.
+        runCatching { publishMailNeeds(a, ms) }
+    }
+
+    /**
+     * Inbox autopilot, slice 6a: what Meka asked on the "From your mail" cards. **Done** archives the email (Gmail: out
+     * of the inbox; Outlook: to Archive), recorded like a tidy under the card's id so an Undo can find it (Outlook's move
+     * gives it a new id); **Undo** after that puts it back in the inbox, and Autopilot never tidies it after. Each once.
+     */
+    internal fun mailNeedsAsks(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val hh = a.householdId
+        val mine = store.transaction { store.mirror(hh, a.id) }.keys
+        val asked = reader.entities(hh, EntityTypes.MAIL_ITEM).filterKeys { it in mine }
+            .mapNotNull { (id, f) -> MailNeedsRules.read(id, f) }
+            .filter { MailNeedsRules.archiveDue(it) || MailNeedsRules.putBackDue(it) }
+        if (asked.isEmpty()) return
+        val byItem = ms.messages(a.id).associateBy { MailNeedsRules.itemId(a.id, it.id) }
+        for (item in asked) {
+            if (MailNeedsRules.archiveDue(item)) {
+                val h = byItem[item.id]
+                if (h == null || !h.inInbox) {
+                    // Already out of the inbox (he archived it himself): nothing to move.
+                    writeMail(a, item.id, MailNeedsRules.archivedFields(now()), EntityTypes.MAIL_ITEM)
+                    continue
+                }
+                val moved = m.tidy(token, mapOf(h.id to MailTidy.ARCHIVE))[h.id] ?: continue
+                ms.recordTidy(a.id, item.id, listOf(MailMoved(h.id, moved, MailTidy.ARCHIVE)))
+                ms.put(hh, a.id, h.copy(inInbox = false))
+                writeMail(a, item.id, MailNeedsRules.archivedFields(now()), EntityTypes.MAIL_ITEM)
+            } else {
+                val items = ms.tidied(a.id, item.id)
+                if (items.isNotEmpty()) {
+                    val back = m.untidy(token, items.associate { it.movedId to it.tidy })
+                    ms.neverTidy(a.id, items.map { it.id } + items.map { it.movedId } + back.values)
+                    // Gmail keeps the id: back in the inbox now, sorted again this check (Outlook's new id comes with its feed).
+                    items.forEach { t -> byItem[item.id]?.takeIf { back[t.movedId] == t.id }?.let { h -> ms.put(hh, a.id, h.copy(inInbox = true)) } }
+                }
+                writeMail(a, item.id, MailNeedsRules.putBackFields(now()), EntityTypes.MAIL_ITEM)
+            }
+        }
+    }
+
+    /**
+     * Inbox autopilot, slice 6a: each email sorted as Needs you that is still in the inbox and came in the last
+     * [MailNeedsRules.WINDOW_MS] (at most [MailNeedsRules.MAX_PER_ACCOUNT], newest first) published as a `mail_item`:
+     * the account's label, the sender's name, the subject, the provider's short preview, when, and how many emails of
+     * its thread MEKA holds — never the address or the body. Ones published before that left get [MailItemFields.GONE_AT].
+     */
+    internal fun publishMailNeeds(a: AccountRow, ms: MailStore) {
+        val nowMs = now()
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        val needs = ms.inboxSorted(a.id)
+            .filter { (h, s) -> s.sort == MailSort.NEEDS_YOU && h.inInbox && nowMs - h.receivedAtMs <= MailNeedsRules.WINDOW_MS }
+            .map { it.first }
+            .sortedByDescending { it.receivedAtMs }
+            .take(MailNeedsRules.MAX_PER_ACCOUNT)
+        val threads = if (needs.isEmpty()) emptyMap() else ms.messages(a.id).groupingBy { it.threadId ?: it.id }.eachCount()
+        val previews = ms.previews(a.id, needs.map { it.id })
+        val shown = HashSet<String>()
+        for (h in needs) {
+            val id = MailNeedsRules.itemId(a.id, h.id)
+            shown += id
+            writeMail(a, id, MailNeedsRules.serverFields(
+                account, h.fromName, h.fromAddress, h.subject, previews[h.id] ?: h.preview, h.receivedAtMs, threads[h.threadId ?: h.id] ?: 1,
+            ), EntityTypes.MAIL_ITEM)
+        }
+        goneMailNeeds(a, shown)
+    }
+
+    /** Every card this account published that isn't in [shown] is marked gone (once). */
+    private fun goneMailNeeds(a: AccountRow, shown: Set<String>) {
+        val mine = store.transaction { store.mirror(a.householdId, a.id) }.keys
+        reader.entities(a.householdId, EntityTypes.MAIL_ITEM)
+            .filterKeys { it in mine && it !in shown }
+            .mapNotNull { (id, f) -> MailNeedsRules.read(id, f) }
+            .filter { it.goneAtMs == null }
+            .forEach { writeMail(a, it.id, MailNeedsRules.goneFields(now()), EntityTypes.MAIL_ITEM) }
     }
 
     /**
@@ -577,6 +660,17 @@ class Integrations(
                 store.lockAccount(a.id)
                 val prev = store.mirror(a.householdId, a.id)[id]
                 write(a, id, 0, 0, false, prev, fields, EntityTypes.MAIL_SENDER)
+            }
+        }
+        if (wrote) runCatching { onChanged(a.householdId) }
+    }
+
+    private fun writeMail(a: AccountRow, id: String, fields: Map<String, FieldValue>, type: String) {
+        val wrote = store.transaction {
+            ops.transaction {
+                store.lockAccount(a.id)
+                val prev = store.mirror(a.householdId, a.id)[id]
+                write(a, id, 0, 0, false, prev, fields, type)
             }
         }
         if (wrote) runCatching { onChanged(a.householdId) }

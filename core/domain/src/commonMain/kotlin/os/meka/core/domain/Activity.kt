@@ -559,6 +559,10 @@ class ActivityLog(
     fun mailSenders(): List<MailSender> = replica.entities(EntityTypes.MAIL_SENDER)
         .mapNotNull { s -> MailUnsubscribeRules.read(s.ref.entityId, s.fields) }
 
+    /** Inbox autopilot (slice 6a): the emails the server published as needing Meka, read from the synced `mail_item` entity. */
+    fun mailItems(): List<MailItem> = replica.entities(EntityTypes.MAIL_ITEM)
+        .mapNotNull { i -> MailNeedsRules.read(i.ref.entityId, i.fields) }
+
     /**
      * Unsubscribe on one sender (Mail): asks the server to do it at its next check. The line Mail shows: asked, already
      * done/asked, or unknown.

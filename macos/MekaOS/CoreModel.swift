@@ -176,6 +176,8 @@ final class CoreModel {
     private(set) var archivedForYou: ArchivedForYouCard?
     /// Inbox autopilot, slice 5c: the weekly "Not opened in 30 days · unsubscribe from 11?", from Saturday 09:00.
     private(set) var mailUnopened: MailUnopenedCard?
+    /// Inbox autopilot, slice 6a: "From your mail" — the emails that need Meka, each with Done and Snooze.
+    private(set) var mailNeeds: MailNeedsCard?
     /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
     private(set) var lists: ListsView?
     /// Needs you as a stack of decisions (four tabs, slice 2); see `needsYouCards`.
@@ -406,6 +408,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await u in core.mailUnopened { self?.mailUnopened = u }
+        })
+        observers.append(Task { [weak self] in
+            for await n in core.mailNeeds { self?.mailNeeds = n }
         })
         observers.append(Task { [weak self] in
             for await b in core.blockedCallers { self?.blockedCallers = b }
@@ -2692,6 +2697,7 @@ final class CoreModel {
         case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
         case .archivedSeen: run { try await $0.undoSeenArchivedForYou() }
         case .mailUnopened: run { try await $0.undoUnopened() }
+        case .mailItem: run { try await $0.undoMailItem() }
         case .appointment(let done): run { _ = try await $0.undoAppointment(done: done) }
         case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
@@ -3571,6 +3577,31 @@ final class CoreModel {
         }
     }
 
+    /// Done on an email in "From your mail" (Inbox autopilot, slice 6a): the card goes here and on the Fold, and the
+    /// server archives the email at its next check; Undo on the bar. Only the id (a String) crosses.
+    func doneMailItem(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.doneMailItem(id: id)
+                offerEventUndo(line, .mailItem)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Snooze on an email in "From your mail": back tomorrow 08:00 on both apps, with Undo. Only the id crosses.
+    func snoozeMailItem(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                let line = try await core.snoozeMailItem(id: id)
+                offerEventUndo(line, .mailItem)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Put back on one of "Archived for you"'s tidies: the server returns those emails to the inbox at its next check.
     /// Only the id (a String) crosses; the line comes back for the bar.
     func putBackArchived(_ id: String) {
@@ -3791,6 +3822,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case archivedSeen
         /// Unsubscribe from all, Not now or Keep on "Not opened in 30 days": the last answer is taken back.
         case mailUnopened
+        /// Done or Snooze on an email in "From your mail": the card comes back (and the email, if already archived).
+        case mailItem
         /// Went, Booked… or Not yet on an appointment: its visit, booking and set-aside day go back.
         case appointment(AppointmentDone)
         /// Call to book on an appointment (slice 2b): the task goes and the card asks again as before.

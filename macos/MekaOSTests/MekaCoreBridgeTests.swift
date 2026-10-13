@@ -2771,5 +2771,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(core.mailUnopened.value)
         XCTAssertEqual(MailUnopenedRules.shared.headline(n: 11), "Unsubscribe from 11?")
         XCTAssertEqual(MailUnopenedRules.shared.unsubscribeLabel(n: 11), "Unsubscribe from all 11")
+        // Slice 6a: no email needs him, no card; Done and Snooze on an unknown id say so.
+        XCTAssertNil(core.mailNeeds.value)
+        let unknownDone = try await core.doneMailItem(id: "nothing")
+        XCTAssertEqual(unknownDone, MailNeedsRules.shared.UNKNOWN)
+        let unknownSnooze = try await core.snoozeMailItem(id: "nothing")
+        XCTAssertEqual(unknownSnooze, MailNeedsRules.shared.UNKNOWN)
+        try await core.undoMailItem()
+        XCTAssertNil(core.mailNeeds.value)
+        XCTAssertEqual(MailNeedsRules.shared.headline(n: 3), "3 emails need you")
+        XCTAssertEqual(MailNeedsRules.shared.cleanPreview(raw: "Tom &amp; Jerry"), "Tom & Jerry")
     }
 }
