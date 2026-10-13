@@ -459,6 +459,8 @@ class MorningBrief(
             recentLines = BriefOneLinerRules.recent(said, today.epochDay),
             weekend = weekend,
             workEndMin = if (working) schedule.hoursOn(iso).endMinute else null,
+            leaveMin = commute.firstOrNull { it.toWork }?.startMinute,
+            homeMin = commute.firstOrNull { !it.toWork }?.endMinute,
             events = events,
             focus = focus,
             smallerCount = smaller,

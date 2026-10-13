@@ -81,6 +81,10 @@ data class BriefStory(
     val officeDay: Boolean = false,
     /** When today's work ends (local minute), on a work day. */
     val workEndMin: Int? = null,
+    /** The commute counts everywhere, slice 4: when he leaves for work on an office day (local minute), or null. */
+    val leaveMin: Int? = null,
+    /** … and when he's home (local minute), or null. */
+    val homeMin: Int? = null,
     /** Both places on an office day: "Biggleswade 9° now · Canary Wharf 14°, rain from 15:00 — take a coat". */
     val placesLine: String? = null,
     /** The trains on the route, as TfL says (already spoken): "Thameslink, Elizabeth line, good service". */
@@ -160,6 +164,7 @@ object BriefScriptRules {
 
         // Getting there and the weather.
         if (s.officeDay && !s.weekend) {
+            CommuteRules.briefLine(s.leaveMin, s.homeMin, ::clock)?.let { out += it }
             s.route?.let { out += sentence("On the trains: $it") }
             val weather = s.placesLine ?: v.weatherLine
             weather?.let { out += sentence(if (s.placesLine != null) it else "Today, $it") }

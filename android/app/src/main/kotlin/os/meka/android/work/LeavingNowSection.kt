@@ -24,7 +24,8 @@ import os.meka.core.domain.PeopleLists
 
 /**
  * "Leaving now" (V1), under Work → Leaving now: on or off, who the draft goes to (from the Family and always-notify
- * lists; Jeanette by default) and the usual journey home. Synced, so the Mac shows the same. Motion catalogue
+ * lists) and, since the commute slice 4, the journey home read from
+ * Work mode's commute (no chips of its own). Synced, so the Mac shows the same. Motion catalogue
  * "Leaving now": the chips blend with a tick haptic, the line cross-fades and the choices fold away when off.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -57,14 +58,9 @@ fun LeavingNowSection(view: LeavingView, lists: PeopleLists, modifier: Modifier 
                         }
                     }
                 }
-                Text("Journey home", style = MekaType.caption, color = Meka.colors.textTertiary)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    LeavingRules.JOURNEY_CHOICES.forEach { m ->
-                        val label = LeavingRules.journeyLabel(m)
-                        SettingChip(label, m == view.journeyMin, spoken = "Journey home: $label") {
-                            if (m != view.journeyMin) { haptics.tick(); onSet(true, view.to, m) }
-                        }
-                    }
+                // The commute counts everywhere, slice 4: the journey home is the commute home, set under Commute above.
+                Crossfade(LeavingRules.journeyNote(view.journeyMin), animationSpec = MekaMotion.appear(reduced), label = "leaving-journey") { line ->
+                    Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
                 }
             }
         }

@@ -330,13 +330,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         )
         XCTAssertEqual(core.leavingView.value.to, "Jeanette")
         let line = try await core.setLeavingNow(on: true, to: "Wife", journeyMin: 80)
-        XCTAssertEqual(line, "On · a draft to Wife when work ends on office days · about 80 min home")
+        XCTAssertEqual(line, "On · a draft to Wife when work ends on office days · about 1 h 20 home")
         XCTAssertEqual(core.leavingView.value.journeyMin, 80)
         XCTAssertEqual(NoticeSource.leaving.defaultTier, NoticeTier.headsUp)
         XCTAssertEqual(NotifyRules.shared.actionName(a: NoticeAction.copyMessage), "COPY_MESSAGE") // MacNotifier.copyMessageAction
         XCTAssertTrue(NoticeAction.copyMessage.shownOn(send: false))
         XCTAssertFalse(NoticeAction.sendMessage.shownOn(send: false))
         XCTAssertEqual(LeavingRules.shared.journeyLabel(min: 90), "1 h 30")
+        // The commute counts everywhere, slice 4: the journey home is the commute home.
+        XCTAssertEqual(LeavingRules.shared.journeyNote(journeyMin: 80), "Journey home: 1 h 20 · your commute home, set under Commute")
     }
 
     func testCommuteReachesSwift() async throws {

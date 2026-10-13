@@ -24,6 +24,9 @@ package os.meka.core.domain
  *
  * After a short night ([SleepRules.taskCap], Health Connect slice 3) at most that many minutes of tasks are planned;
  * anything due today or overdue still goes in (and counts), the rest is "Left for a lighter day".
+ *
+ * On an office day the commute ([CommuteRules.bands], the commute counts everywhere slice 4) is kept clear: nothing,
+ * not even a habit, is planned in it, and it doesn't count as free; the note says so ([CommuteRules.plannerNote]).
  */
 object DayPlanner {
     data class Prefs(
@@ -71,6 +74,8 @@ object DayPlanner {
         val restedOut: List<Task> = emptyList(),
         /** The short night's note ([SleepRules.planNote]), or null. */
         val restNote: String? = null,
+        /** The commute kept clear ([CommuteRules.plannerNote]), or null. */
+        val commuteNote: String? = null,
     ) {
         /**
          * "Won't fit today: Send the invoice, Call the bank", then "Left for a lighter day: …" after a short night, or
@@ -82,7 +87,7 @@ object DayPlanner {
         ).takeIf { it.isNotEmpty() }?.joinToString("\n")
 
         /** The note under the plan for a short night, its kept-free blocks and protected time, or null when there are none. */
-        val keptLine: String? get() = listOfNotNull(restNote, mealsLine, protectedNote).takeIf { it.isNotEmpty() }?.joinToString("\n")
+        val keptLine: String? get() = listOfNotNull(restNote, commuteNote, mealsLine, protectedNote).takeIf { it.isNotEmpty() }?.joinToString("\n")
 
         private val mealsLine: String? get() {
             if (meals.isEmpty()) return null
@@ -120,6 +125,8 @@ object DayPlanner {
         waitLabel: String? = null,
         taskCapMin: Int? = null,
         restNote: String? = null,
+        commute: List<Slot> = emptyList(),
+        commuteNote: String? = null,
     ): Plan {
         val g = prefs.granularityMin * MIN
         val windowStart = maxOf(day.startMs + prefs.dayStartMin * MIN, ceilTo(nowMs, day.startMs, g))
@@ -133,7 +140,7 @@ object DayPlanner {
         }
         val todaysMeals = meals.filter { it.endMs > it.startMs && it.endMs > day.startMs && it.startMs < day.endMs }.sortedBy { it.startMs }
         val todaysSessions = sessions.filter { it.endMs > maxOf(nowMs, day.startMs) && it.startMs < day.endMs }.sortedBy { it.startMs }
-        var free = subtract(Slot(windowStart, windowEnd), busy + todaysMeals.map { Slot(it.startMs, it.endMs) } + todaysSessions.map { Slot(it.startMs, it.endMs) })
+        var free = subtract(Slot(windowStart, windowEnd), busy + commute + todaysMeals.map { Slot(it.startMs, it.endMs) } + todaysSessions.map { Slot(it.startMs, it.endMs) })
 
         // Booked sessions are fixed; then habits (behind before due), each in its part of the day if there's room there.
         val habitPlacements = todaysSessions.toMutableList()
@@ -182,6 +189,7 @@ object DayPlanner {
             placements, unplaced, left, timed.sortedBy { it.startAtMs }, habitPlacements, habitsUnplaced, todaysMeals,
             protectedNote = protectedNote, waitLabel = waitLabel ?: WONT_FIT,
             restedOut = restedOut, restNote = restNote.takeIf { taskCapMin != null },
+            commuteNote = commuteNote.takeIf { commute.any { it.endMs > windowStart && it.startMs < windowEnd } },
         )
     }
 

@@ -16,8 +16,8 @@ import os.meka.core.sync.fv
  * click-to-chat link with the words filled in, where Meka taps send. No WhatsApp library; nothing leaves the phone
  * except through WhatsApp itself.
  *
- * The ETA: leaving at the end of work (or now, if later), plus the usual journey home (setting, default 70 minutes:
- * Elizabeth line to Farringdon, Thameslink to Biggleswade, the walk), plus a rough allowance for what TfL says about
+ * The ETA: leaving at the end of work (or now, if later), plus the journey home (since the commute slice 4, Work mode's
+ * door-to-door commute home, [withCommute]), plus a rough allowance for what TfL says about
  * the route; rounded up to 5 minutes and always "about". A line going bad during the journey-home window offers an
  * updated draft once ("Leaving now, home about 19:00 — Thameslink has severe delays, so I'm coming via King's Cross").
  *
@@ -89,10 +89,19 @@ object LeavingRules {
         return LeavingView(set.on, set.to, set.journeyMin, summary(set))
     }
 
-    /** "On · a draft to Jeanette when work ends on office days · about 70 min home" / "Off". */
+    /** "On · a draft to Jeanette when work ends on office days · about 1 h 20 home" / "Off". */
     fun summary(s: LeavingSetting): String =
-        if (s.on) "On · a draft to ${s.to} when work ends on office days · about ${s.journeyMin} min home"
+        if (s.on) "On · a draft to ${s.to} when work ends on office days · about ${CommuteRules.label(s.journeyMin)} home"
         else "Off · no draft when work ends"
+
+    /**
+     * The commute counts everywhere, slice 4: the journey home is Work mode's commute home (door to door, default
+     * 1 h 20), not Leaving now's own old number (its `journeyMin` field stays in the data but is no longer read).
+     */
+    fun withCommute(s: LeavingSetting, commute: CommuteSetting): LeavingSetting = s.copy(journeyMin = commute.homeMin)
+
+    /** Work mode's line under Leaving now where the journey chips were: "Journey home: 1 h 20 · your commute home, set under Commute". */
+    fun journeyNote(journeyMin: Int): String = "Journey home: ${CommuteRules.label(journeyMin)} · your commute home, set under Commute"
 
     fun journeyLabel(min: Int): String = if (min % 60 == 0) "${min / 60} h" else if (min > 60) "${min / 60} h ${min % 60}" else "$min min"
 

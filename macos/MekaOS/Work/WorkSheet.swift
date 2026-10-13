@@ -148,7 +148,7 @@ struct WorkSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: setting.chosen)
     }
 
-    /// "Leaving now" (V1): on or off, who the draft goes to and the journey home, synced with the Fold (where the
+    /// "Leaving now" (V1): on or off and who the draft goes to (the journey home is the commute home), synced with the Fold (where the
     /// Family list lives, so the name is typed here). The line cross-fades; the choices fold away when off.
     private var leavingNow: some View {
         let rules = LeavingRules.shared
@@ -173,12 +173,10 @@ struct WorkSheet: View {
                     TextField("To", text: $leavingTo)
                         .textFieldStyle(.roundedBorder).frame(width: 160)
                         .onSubmit { model.setLeavingNow(on: true, to: leavingTo, journeyMin: journey) }
-                    Picker("Journey home", selection: Binding(get: { journey }, set: { model.setLeavingNow(on: true, to: to, journeyMin: $0) })) {
-                        ForEach(rules.JOURNEY_CHOICES.map { Int($0.int32Value) }, id: \.self) { m in
-                            Text(rules.journeyLabel(min: Int32(m))).tag(m)
-                        }
-                    }
-                    .labelsHidden().frame(width: 110)
+                    // The commute counts everywhere, slice 4: the journey home is the commute home (Commute above).
+                    Text(rules.journeyNote(journeyMin: Int32(journey)))
+                        .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .contentTransition(.opacity)
                 }
                 .transition(.opacity)
             }

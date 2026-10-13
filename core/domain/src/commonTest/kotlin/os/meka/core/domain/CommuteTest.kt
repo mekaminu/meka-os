@@ -276,4 +276,69 @@ class CommuteTest {
         assertEquals("Training · You're home about 18:50 · who's taking?", line.text)
         assertTrue(line.lit)
     }
+
+    // ---- Slice 4: the planner, Leaving now, the brief and Shut down ----
+
+    @Test
+    fun thePlannerNeverBooksIntoTheCommute() {
+        val bands = CommuteRules.bands(work, fri, cal)
+        val slots = bands.map { DayPlanner.Slot(it.startMs, it.endMs) }
+        val task = Task("t", "Call the bank", null, Lifecycle.ACTIVE, null, null, 30, 0, null, null, 0, null, false)
+        // From 17:00 the first free half hour is after work and the commute home (17:30–18:50): 19:00.
+        val prefs = DayPlanner.Prefs(dayStartMin = 6 * 60, dayEndMin = 22 * 60)
+        val work9to5 = listOf(DayPlanner.Slot(ms(fri, 9 * 60), ms(fri, 17 * 60 + 30)))
+        val plan = DayPlanner.plan(
+            listOf(task), emptyList(), ms(fri, 17 * 60), DayWindow(ms(fri, 0), ms(fri + 1, 0)), prefs,
+            commute = slots + work9to5, commuteNote = CommuteRules.plannerNote(bands, ms(fri, 17 * 60)),
+        )
+        assertEquals(ms(fri, 19 * 60), plan.placements.single().startMs)
+        assertEquals("◐ Your commute is kept clear (17:30–18:50). Nothing is planned in it.", plan.keptLine)
+        // Early in the morning both bands are ahead; with none left the note goes.
+        assertEquals("◐ Your commute is kept clear (07:40–09:00 and 17:30–18:50). Nothing is planned in it.",
+            CommuteRules.plannerNote(bands, ms(fri, 6 * 60)))
+        assertNull(CommuteRules.plannerNote(bands, ms(fri, 19 * 60)))
+        assertNull(CommuteRules.plannerNote(CommuteRules.bands(work, sat, cal), ms(sat, 6 * 60)))
+        // From 06:00 a two-hour task doesn't fit before he leaves at 07:40 and never goes inside the commute.
+        val early = DayPlanner.plan(
+            listOf(task.copy(estimateMinutes = 120)), emptyList(), ms(fri, 6 * 60), DayWindow(ms(fri, 0), ms(fri + 1, 0)), prefs,
+            commute = slots + work9to5,
+        )
+        assertEquals(ms(fri, 19 * 60), early.placements.single().startMs, "it waits for the evening")
+    }
+
+    @Test
+    fun leavingNowsJourneyHomeIsTheCommuteHome() {
+        val s = LeavingRules.withCommute(LeavingSetting.DEFAULT, CommuteSetting(80, 90, chosen = true))
+        assertEquals(90, s.journeyMin)
+        assertEquals("On · a draft to ${LeavingRules.DEFAULT_TO} when work ends on office days · about 1 h 30 home", LeavingRules.summary(s))
+        assertEquals("Journey home: 1 h 30 · your commute home, set under Commute", LeavingRules.journeyNote(90))
+        val office = OfficeWindow(ms(fri, 9 * 60), ms(fri, 17 * 60 + 30))
+        val lines = LineStatusSnapshot.EMPTY
+        assertEquals("Leaving now, home about 19:00", LeavingRules.notices(s, office, lines, ms(fri, 17 * 60 + 30), cal).single().text)
+    }
+
+    @Test
+    fun theBriefSaysWhenToLeaveAndWhenHesHome() {
+        assertEquals("Leave about 7:40, home about 6:50.", CommuteRules.briefLine(7 * 60 + 40, 18 * 60 + 50, BriefScriptRules::clock))
+        assertEquals("Leave about 7:40.", CommuteRules.briefLine(7 * 60 + 40, null, BriefScriptRules::clock))
+        assertNull(CommuteRules.briefLine(null, null, BriefScriptRules::clock))
+        val story = BriefStory(epochDay = fri, officeDay = true, workEndMin = 17 * 60 + 30, leaveMin = 7 * 60 + 40, homeMin = 18 * 60 + 50,
+            route = "Thameslink, Elizabeth line, good service")
+        val script = BriefScriptRules.script(MorningBriefView.EMPTY.copy(dateLabel = "Fri 9 Oct", workLine = "Work 09:00–17:30", story = story))
+        assertTrue("an office day, finishing at half past 5. Leave about 7:40, home about 6:50. On the trains:" in script, script)
+        // Working from home: not said.
+        val wfh = BriefScriptRules.script(MorningBriefView.EMPTY.copy(dateLabel = "Fri 9 Oct", workLine = "Work 09:00–17:30",
+            story = story.copy(officeDay = false)))
+        assertFalse("Leave about" in wfh, wfh)
+    }
+
+    @Test
+    fun shutDownsTomorrowLineAddsTheCommute() {
+        assertEquals("Work 09:00–17:30 · leave 07:40 · home about 18:50", CommuteRules.withDayLine("Work 09:00–17:30", work, fri, cal))
+        assertEquals("Work 09:00–15:30 · leave 07:40 · home about 16:50", CommuteRules.withDayLine("Work 09:00–15:30", work, thu, cal))
+        val home = WorkHours(WorkSchedule.DEFAULT, homeDays = setOf(fri))
+        assertEquals("Work 09:00–17:30", CommuteRules.withDayLine("Work 09:00–17:30", home, fri, cal), "from home")
+        assertEquals("Annual leave · no work", CommuteRules.withDayLine("Annual leave · no work", work, fri, cal))
+        assertNull(CommuteRules.withDayLine(null, work, sat, cal))
+    }
 }

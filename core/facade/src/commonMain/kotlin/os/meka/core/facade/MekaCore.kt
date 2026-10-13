@@ -735,6 +735,10 @@ class MekaCore(
         val schedule = work.schedule()
         val holidays = bankHolidays.calendar()
         val slept = os.meka.core.domain.SleepRules.lastNight(sleepSessions, day.startMs)
+        // The commute counts everywhere, slice 4: on an office day nothing is planned in the commute.
+        val commute = os.meka.core.domain.CommuteRules.bands(
+            hoursOf(work.state(localClock(), day.epochDay), day.epochDay), day.epochDay, ZoneCalendar(timeZone),
+        )
         DayPlanner.plan(
             all, visibleEvents(all), now, day, habits = goals.plannerHabits(), meals = kept.sortedBy { it.startMs }, sessions = sessions,
             protected = protectedSlots(day.epochDay),
@@ -743,6 +747,8 @@ class MekaCore(
             // Health Connect slice 3: a short night (read on the Fold only) plans a lighter day.
             taskCapMin = os.meka.core.domain.SleepRules.taskCap(slept),
             restNote = os.meka.core.domain.SleepRules.planNote(slept),
+            commute = commute.map { DayPlanner.Slot(it.startMs, it.endMs) },
+            commuteNote = os.meka.core.domain.CommuteRules.plannerNote(commute, now),
         )
     }
 
@@ -2190,7 +2196,7 @@ class MekaCore(
     suspend fun setLeavingNow(on: Boolean, to: String, journeyMin: Int): String? = onCore {
         if (!leavingNow.set(on, to, journeyMin)) return@onCore null
         refresh()
-        os.meka.core.domain.LeavingRules.summary(leavingNow.setting())
+        os.meka.core.domain.LeavingRules.summary(leavingSetting())
     }
 
     /**
@@ -2200,7 +2206,7 @@ class MekaCore(
      */
     suspend fun leavingTap(key: String, shown: String, edit: Boolean): os.meka.core.domain.LeavingTap? = onCore {
         os.meka.core.domain.LeavingRules.tap(
-            key, shown, leavingNow.setting(), officeToday(), lineStatus.snapshot(), nowMs(), ZoneCalendar(timeZone), edit,
+            key, shown, leavingSetting(), officeToday(), lineStatus.snapshot(), nowMs(), ZoneCalendar(timeZone), edit,
         )
     }
 
@@ -4865,7 +4871,11 @@ class MekaCore(
                 weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal),
                 school = os.meka.core.domain.SchoolRules.tomorrowLine(schoolItems, todayDay, holidays),
                 // Annual leave, slice 2: "Annual leave · no work · back Mon 2 Nov" on the evening before leave.
-                workLine = os.meka.core.domain.LeaveRules.workLine(shutdownRaw.tomorrow.workLine, leaveDays, leaveHours, dayWindow(today.endMs).epochDay),
+                // The commute counts everywhere, slice 4: "Work 09:00–17:30 · leave 07:40 · home about 18:50" before an office day.
+                workLine = os.meka.core.domain.CommuteRules.withDayLine(
+                    os.meka.core.domain.LeaveRules.workLine(shutdownRaw.tomorrow.workLine, leaveDays, leaveHours, dayWindow(today.endMs).epochDay),
+                    hoursOf(workState, todayDay + 1), todayDay + 1, cal,
+                ),
             ),
         )
         // The live tiles under the Day ring: next event, a running fast, habits today, renewals due.
@@ -4898,7 +4908,7 @@ class MekaCore(
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
-        _leaving.value = os.meka.core.domain.LeavingRules.view(leavingNow.setting())
+        _leaving.value = os.meka.core.domain.LeavingRules.view(leavingSetting())
         _weekAheadSetting.value = os.meka.core.domain.WeekAheadRules.settingView(weekAheadSettings.setting())
         _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs())
         _lists.value = listsNow
@@ -5040,7 +5050,7 @@ class MekaCore(
             approvals = os.meka.core.domain.ApprovalRules.pending(approvalStore.all(), nowMs()),
             appointments = appointments.items(),
             goals = _goals.value,
-            leaving = leavingNow.setting(),
+            leaving = leavingSetting(),
             weekAhead = _weekAhead.value,
             weekAheadSetting = weekAheadSettings.setting(),
             bins = bins.items(), holidays = bankHolidays.calendar(),
@@ -5055,6 +5065,10 @@ class MekaCore(
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */
     private fun hoursOf(state: WorkModeState, day: Long): os.meka.core.domain.WorkHours =
         os.meka.core.domain.WorkHours.of(state, bankHolidays.calendar(), day, work.homeDays(day), leave.days())
+
+    /** Leaving now with the journey home = Work mode's commute home (the commute counts everywhere, slice 4). */
+    private fun leavingSetting(): os.meka.core.domain.LeavingSetting =
+        os.meka.core.domain.LeavingRules.withCommute(leavingNow.setting(), work.commute())
 
     /** Today's office window (Places item 2): a work day that isn't a work-from-home day, or null. */
     private fun officeToday(): os.meka.core.domain.OfficeWindow? {

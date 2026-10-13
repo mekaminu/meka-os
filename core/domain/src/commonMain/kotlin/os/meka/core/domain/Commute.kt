@@ -15,7 +15,9 @@ import os.meka.core.sync.FieldValue
  * ([CommuteRules.bands], a thin row before and after the office block, not events) and the Calendar's line under an
  * office day's heading ([CommuteRules.calendarLine]). Slice 3: clashes against arrival home (and after he's left),
  * through [WorkClashRules] with the day's bands, on Today, the Calendar, the brief and the week ahead. Later slices: the
- * planner, Leaving now, the brief's leave-by.
+ * Slice 4: the planner keeps the commute clear ([plannerNote]), Leaving now's journey home is the commute home
+ * ([LeavingRules.withCommute]), the brief says when to leave and when he's home ([briefLine]), and Shut down's tomorrow
+ * line adds them ([withDayLine]). Later: the train-anchored wake (Darwin key), one-off overrides, Ask/Talk.
  */
 object CommuteFields {
     const val TO_WORK = "commuteToWorkMin"
@@ -151,5 +153,36 @@ object CommuteRules {
             bs.firstOrNull { it.toWork }?.let { "Leave ${LocalClock.formatMinute(it.startMinute)}" },
             bs.firstOrNull { !it.toWork }?.let { "home about ${LocalClock.formatMinute(it.endMinute)}" },
         ).joinToString(" · ").replaceFirstChar { it.uppercase() }
+    }
+
+    /**
+     * Slice 4: a work line with the day's commute after it, "Work 09:00–17:30 · leave 07:40 · home about 18:50", on an
+     * office day; [workLine] unchanged on any other day (or when it isn't a "Work …" line, e.g. annual leave).
+     */
+    fun withDayLine(workLine: String?, work: WorkHours, epochDay: Long, calendar: LocalCalendar): String? {
+        if (workLine == null || !workLine.startsWith("Work ")) return workLine
+        val line = calendarLine(work, epochDay, calendar) ?: return workLine
+        return "$workLine · ${line.replaceFirstChar { it.lowercase() }}"
+    }
+
+    /**
+     * Slice 4, the planner's note when the commute is kept clear: "◐ Your commute is kept clear (07:40–09:00 and
+     * 17:30–18:50). Nothing is planned in it."; null when no band is still ahead of [nowMs].
+     */
+    fun plannerNote(bands: List<CommuteBand>, nowMs: Long): String? {
+        val ahead = bands.filter { it.endMs > nowMs }
+        if (ahead.isEmpty()) return null
+        return "◐ Your commute is kept clear (${ahead.joinToString(" and ") { it.label }}). Nothing is planned in it."
+    }
+
+    /**
+     * Slice 4, the brief's getting-there sentence on an office day: "Leave about 7:40, home about 6:50." (either half
+     * alone when the other is cut by midnight); [clock] says a minute the brief's way.
+     */
+    fun briefLine(leaveMin: Int?, homeMin: Int?, clock: (Int) -> String): String? = when {
+        leaveMin != null && homeMin != null -> "Leave about ${clock(leaveMin)}, home about ${clock(homeMin)}."
+        leaveMin != null -> "Leave about ${clock(leaveMin)}."
+        homeMin != null -> "Home about ${clock(homeMin)}."
+        else -> null
     }
 }

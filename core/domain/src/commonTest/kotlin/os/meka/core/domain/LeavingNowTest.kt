@@ -108,7 +108,7 @@ class LeavingNowTest {
         val mac = world.device("mac")
         val a = LeavingNow(fold.replica)
         assertEquals(LeavingSetting.DEFAULT, a.setting())
-        assertEquals("On · a draft to Jeanette when work ends on office days · about 70 min home", LeavingRules.summary(a.setting()))
+        assertEquals("On · a draft to Jeanette when work ends on office days · about 1 h 10 home", LeavingRules.summary(a.setting()))
         assertTrue(a.set(true, " Wife ", 80))
         assertFalse(a.set(true, "Wife", 80), "nothing changed")
         assertFalse(a.set(true, "", 80))
