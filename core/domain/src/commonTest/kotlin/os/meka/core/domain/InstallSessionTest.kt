@@ -45,13 +45,46 @@ class InstallSessionTest {
     }
 
     @Test
-    fun filesInUseIsTriedOnceMoreByItself() {
+    fun filesInUseIsTriedWithFreshSessionsByItself() {
         assertTrue(r.retriesItself(UpdateFailureRules.STATUS_FAILURE, msg, retriesSoFar = 0))
         assertTrue(r.retriesItself(null, "java.lang.IllegalStateException: session files in use", 0))
-        assertFalse(r.retriesItself(UpdateFailureRules.STATUS_FAILURE, msg, retriesSoFar = 1))
+        assertTrue(r.retriesItself(UpdateFailureRules.STATUS_FAILURE, msg, retriesSoFar = r.AUTO_RETRIES - 1))
+        assertFalse(r.retriesItself(UpdateFailureRules.STATUS_FAILURE, msg, retriesSoFar = r.AUTO_RETRIES))
         assertFalse(r.retriesItself(UpdateFailureRules.STATUS_FAILURE_CONFLICT, msg, 0))
         assertFalse(r.retriesItself(UpdateFailureRules.STATUS_FAILURE, "INSTALL_FAILED_INSUFFICIENT_STORAGE", 0))
         assertFalse(r.retriesItself(UpdateFailureRules.STATUS_FAILURE, null, 0))
+    }
+
+    @Test
+    fun eachCommitWaitsLongerForAndroidToLetGoOfTheFile() {
+        // Build 942 (11:12) committed straight after closing the write and Android still saw the file open.
+        assertTrue(r.settleMs(0) >= 1_000)
+        for (i in 1..r.AUTO_RETRIES) assertTrue(r.settleMs(i) > r.settleMs(i - 1))
+        assertEquals(r.settleMs(r.AUTO_RETRIES), r.settleMs(r.AUTO_RETRIES + 5))
+    }
+
+    @Test
+    fun afterTheFreshSessionsAndroidsOwnInstallerTakesOver() {
+        val s = UpdateFailureRules.STATUS_FAILURE
+        assertFalse(r.handsToAndroidsInstaller(s, msg, retriesSoFar = r.AUTO_RETRIES - 1))
+        assertTrue(r.handsToAndroidsInstaller(s, msg, retriesSoFar = r.AUTO_RETRIES))
+        assertTrue(r.handsToAndroidsInstaller(null, msg, retriesSoFar = r.AUTO_RETRIES))
+        // Any other failure is said as it is: Android's installer would refuse a conflict or a full phone the same way.
+        assertFalse(r.handsToAndroidsInstaller(UpdateFailureRules.STATUS_FAILURE_CONFLICT, msg, r.AUTO_RETRIES))
+        assertFalse(r.handsToAndroidsInstaller(s, "INSTALL_FAILED_INSUFFICIENT_STORAGE", r.AUTO_RETRIES))
+        // Exactly one of retry or hand over, never both, for every count.
+        for (n in 0..r.AUTO_RETRIES + 1) assertNotEquals(r.retriesItself(s, msg, n), r.handsToAndroidsInstaller(s, msg, n))
+    }
+
+    @Test
+    fun theReportSaysHowManySessionsWereTried() {
+        assertEquals(msg, r.reportMessage(msg, sessionsTried = 1, handedOver = false))
+        assertEquals("$msg · 4 sessions tried", r.reportMessage(msg, 4, false))
+        assertEquals("$msg · 4 sessions tried · handed to Android's installer", r.reportMessage(msg, 4, true))
+        assertEquals(null, r.reportMessage(null, 4, true))
+        val f = UpdateFailure(UpdateFailureRules.STAGE_INSTALL, UpdateFailureRules.STATUS_FAILURE, r.reportMessage(msg, 4, false), 942, 973, 1)
+        assertTrue(UpdateFailureRules.reportLine(f).contains("Session files in use · 4 sessions tried"))
+        assertTrue(UpdateFailureRules.line(f).startsWith("Android was still holding an earlier install"))
     }
 
     @Test

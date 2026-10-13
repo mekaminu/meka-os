@@ -330,7 +330,14 @@ object UpdateFailureRules {
  * A stale session from an earlier attempt (or two installs at once: Today's Install and Health's Try again, or a retry
  * while the first was committing) held its file. So: one install at a time across the app, every own session but the
  * one with Android's prompt up is abandoned before a new one is made, each session writes under its own name, and a
- * "Session files in use" failure abandons them all and is tried once more with a fresh session, by itself.
+ * "Session files in use" failure abandons them all and is tried again with a fresh session, by itself.
+ *
+ * Slice 3 (the 11:12 report: build 942, which had all of the above, still failed once): Android checks that every file
+ * written into a session has been let go when the session is committed, and the write stream's close reaches it
+ * asynchronously, so committing straight after closing races it. Each commit now waits [settleMs] after the write is
+ * closed (longer each fresh session), up to [AUTO_RETRIES] fresh sessions are tried, and if Android still says the files
+ * are in use the kept download is handed to Android's own installer ([handsToAndroidsInstaller]), which makes its own
+ * session: the same one tap, and nothing Meka has to do. The report says how many sessions were tried.
  */
 object InstallSessionRules {
     /** Android's words for the clash (INSTALL_FAILED_INTERNAL_ERROR: Session files in use). */
@@ -338,7 +345,29 @@ object InstallSessionRules {
     /** A committed session whose outcome hasn't come back is still Android's for this long (its prompt may be up). */
     const val OUTSTANDING_MS = 10 * 60_000L
     /** Fresh sessions tried by themselves after a "files in use" failure. */
-    const val AUTO_RETRIES = 1
+    const val AUTO_RETRIES = 3
+    /** The wait between closing the write and committing, per fresh session (the first tap is index 0). */
+    val SETTLE_MS = listOf(1_000L, 2_500L, 5_000L, 8_000L)
+
+    /** How long to let Android let go of the written file before committing, after [retriesSoFar] fresh sessions. */
+    fun settleMs(retriesSoFar: Int): Long = SETTLE_MS[retriesSoFar.coerceIn(0, SETTLE_MS.lastIndex)]
+
+    /**
+     * After the fresh sessions are used up and Android still says the files are in use: hand the kept download to
+     * Android's own installer instead of failing.
+     */
+    fun handsToAndroidsInstaller(status: Int?, message: String?, retriesSoFar: Int): Boolean =
+        (status == null || status == UpdateFailureRules.STATUS_FAILURE) && isFilesInUse(message) && retriesSoFar >= AUTO_RETRIES
+
+    /** Android's words for the report, with the sessions tried ("… · 4 sessions tried · handed to Android's installer"). */
+    fun reportMessage(message: String?, sessionsTried: Int, handedOver: Boolean): String? {
+        if (message == null) return null
+        val tried = if (sessionsTried > 1) " · $sessionsTried sessions tried" else ""
+        return message + tried + (if (handedOver) " · $HANDED_OVER" else "")
+    }
+
+    /** What the report ends with when Android's own installer took over. */
+    const val HANDED_OVER = "handed to Android's installer"
 
     /** One of MEKA's own sessions as Android lists them (PackageInstaller.mySessions). */
     data class Session(val id: Int, val committed: Boolean)
