@@ -355,6 +355,26 @@ class MailSyncTest {
         assertTrue(ms.unsure(id, 100).all { h -> ai.asked.single().none { it == h.id } })
     }
 
+    // ---- Slice 3a: Autopilot's dry run ----
+
+    @Test
+    fun theDryRunCountsWhatWouldBeTidiedAndMovesNothing() {
+        val ms = InMemoryMailStore()
+        val (gmail, _, i) = world(ms)
+        gmail.mailbox["p"] = msg("p", 1) // a person: kept
+        gmail.mailbox["n"] = msg("n", 1, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.mailbox["r"] = msg("r", 1, "auto-confirm@shop.example").copy(subject = "Your order has shipped")
+        gmail.mailbox["u"] = msg("u", 1, "noreply@x.example")
+        gmail.mailbox["b"] = msg("b", 1, "alerts@barclays.co.uk").copy(listId = "<alerts.barclays.co.uk>") // a bank: kept
+        gmail.mailbox["old"] = msg("old", 3, "noreply@y.example").copy(inInbox = false) // archived already: not counted
+        val id = connect(i)
+        assertNull(i.accounts("home").single().wouldTidy)
+        val before = gmail.mailbox.toMap()
+        i.syncAccount(id)
+        assertEquals(mapOf("KEEP" to 2, "NEWSLETTER" to 1, "RECEIPT" to 1, "ARCHIVE" to 1), i.accounts("home").single().wouldTidy)
+        assertEquals(before, gmail.mailbox.toMap())
+    }
+
     // ---- On real Postgres (MEKA_TEST_DB_URL, CI); skipped when unset ----
 
     @Test
@@ -393,10 +413,13 @@ class MailSyncTest {
             assertTrue(ms.unsorted(acc, 10).isEmpty())
             assertEquals(MailSorted(MailSort.NEWSLETTER, MailSortReason.MAILING_LIST, true), ms.sortOf(acc, "o1"))
             assertEquals(mapOf("NEWSLETTER" to 1), ms.sortCounts(acc))
+            // Slice 3a: the inbox's sorted emails with their sorts.
+            assertEquals(listOf("o1" to MailSort.NEWSLETTER), ms.inboxSorted(acc).map { (h, s) -> h.id to s.sort })
             ms.put("hh-m", acc, full.copy(inInbox = false))
             assertNull(ms.sortOf(acc, "o1"))
             ms.setSorts(acc, mapOf("o1" to MailSorted(MailSort.NEWSLETTER, MailSortReason.MAILING_LIST, true)))
             assertEquals(emptyMap(), ms.sortCounts(acc))
+            assertTrue(ms.inboxSorted(acc).isEmpty())
             // Slice 2b: only unsure Needs you in the inbox waits for the AI.
             ms.put("hh-m", acc, full)
             ms.setSorts(acc, mapOf("o1" to MailSorted(MailSort.NEEDS_YOU, MailSortReason.PERSON, false)))

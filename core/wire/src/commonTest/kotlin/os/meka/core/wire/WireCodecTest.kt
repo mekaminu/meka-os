@@ -77,13 +77,17 @@ class WireCodecTest {
             WireCodec.IntegrationAccount("microsoft", "me@outlook.com", "needs_reconnect", null),
             WireCodec.IntegrationAccount("google", "work@gmail.com", "ok", null, canEdit = true),
             WireCodec.IntegrationAccount("gmail", "shop@example.com", "ok", null, label = "BUSINESS"),
-            WireCodec.IntegrationAccount("gmail", "alex@example.com", "ok", null, label = "PERSONAL", sorted = mapOf("NEEDS_YOU" to 6, "NEWSLETTER" to 30)),
+            WireCodec.IntegrationAccount("gmail", "alex@example.com", "ok", null, label = "PERSONAL", sorted = mapOf("NEEDS_YOU" to 6, "NEWSLETTER" to 30),
+                wouldTidy = mapOf("NEWSLETTER" to 30, "KEEP" to 6)),
             WireCodec.IntegrationAccount("outlook_mail", "alex@example.net", "ok", null, sorted = emptyMap()),
         )
         assertEquals(accounts, WireCodec.decodeAccounts(WireCodec.encodeAccounts(accounts)))
         // Slice 2a: an older server has no "sorted" (not sorted yet); a negative or non-number count is dropped.
         assertEquals(null, WireCodec.decodeAccounts("""{"w":${WireCodec.VERSION},"accounts":[{"provider":"gmail","email":"a@b.c","status":"ok"}]}""").single().sorted)
         assertEquals(mapOf("PROMO" to 2), WireCodec.decodeAccounts("""{"w":${WireCodec.VERSION},"accounts":[{"provider":"gmail","email":"a@b.c","status":"ok","sorted":{"PROMO":2,"JUNK":-1,"FYI":"x"}}]}""").single().sorted)
+        // Slice 3a: no "tidy" = not planned yet; bad counts dropped like "sorted".
+        assertEquals(null, WireCodec.decodeAccounts("""{"w":${WireCodec.VERSION},"accounts":[{"provider":"gmail","email":"a@b.c","status":"ok"}]}""").single().wouldTidy)
+        assertEquals(mapOf("ARCHIVE" to 3), WireCodec.decodeAccounts("""{"w":${WireCodec.VERSION},"accounts":[{"provider":"gmail","email":"a@b.c","status":"ok","tidy":{"ARCHIVE":3,"RECEIPT":-2}}]}""").single().wouldTidy)
         // An older server's list (no "edit") reads as read-only.
         assertEquals(false, WireCodec.decodeAccounts("""{"w":${WireCodec.VERSION},"accounts":[{"provider":"google","email":"a@b.c","status":"ok"}]}""").single().canEdit)
         assertEquals("https://accounts.example/x?y=1", WireCodec.decodeConnectUrl(WireCodec.encodeConnectUrl("https://accounts.example/x?y=1")))

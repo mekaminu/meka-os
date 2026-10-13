@@ -48,6 +48,8 @@ data class MailAccountFacts(
     val label: String?,
     /** Slice 2a: how many emails in its inbox each [MailSort] holds (by name), or null before the server sorted any. */
     val sorted: Map<String, Int>? = null,
+    /** Slice 3a: what Autopilot would do per [MailTidy] name (a dry run), or null before the server planned any. */
+    val wouldTidy: Map<String, Int>? = null,
 )
 
 /** One row in Mail. */
@@ -66,6 +68,8 @@ data class MailAccountRow(
     val ending: Boolean = false,
     /** Slice 2a: "In the inbox · 6 need you · 30 newsletters …" ([MailSortRules.summary]), or null before sorting. */
     val sortedLine: String? = null,
+    /** Slice 3a: "Autopilot, dry run · would tidy 52 · …" ([MailTidyRules.dryRunLine]), or null before planning. */
+    val tidyLine: String? = null,
 )
 
 /** One "Connect …" button. */
@@ -144,6 +148,7 @@ object MailAccountRules {
             labels = listOf(label) + MailLabel.entries.filter { it != label },
             ending = endsAt != null,
             sortedLine = MailSortRules.summary(a.sorted),
+            tidyLine = MailTidyRules.dryRunLine(a.wouldTidy),
         )
     }
 

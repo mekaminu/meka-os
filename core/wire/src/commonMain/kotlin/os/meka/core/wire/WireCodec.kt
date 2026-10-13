@@ -152,6 +152,8 @@ object WireCodec {
         val label: String? = null,
         /** Inbox autopilot, slice 2a: a mail account's inbox counts per `MailSort` name. Additive: absent = not sorted yet. */
         val sorted: Map<String, Int>? = null,
+        /** Inbox autopilot, slice 3a: the dry run's counts per `MailTidy` name. Additive: absent = not planned yet. */
+        val wouldTidy: Map<String, Int>? = null,
     )
 
     /** Naming what a mail account is for (Inbox autopilot, slice 1): Personal · Business · Outlook. */
@@ -204,9 +206,14 @@ object WireCodec {
                 if (a.canEdit) put("edit", true)
                 a.label?.let { put("label", it) }
                 a.sorted?.let { m -> put("sorted", buildJsonObject { m.forEach { (k, v) -> put(k, v) } }) }
+                a.wouldTidy?.let { m -> put("tidy", buildJsonObject { m.forEach { (k, v) -> put(k, v) } }) }
             }
         }))
     }
+
+    /** A `{NAME: n}` map of counts; negatives and non-numbers dropped; null when absent. */
+    private fun counts(e: JsonElement?): Map<String, Int>? =
+        (e as? JsonObject)?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.intOrNull?.takeIf { it >= 0 }?.let { k to it } }?.toMap()
 
     fun decodeAccounts(s: String): List<IntegrationAccount> = parse(s) { o ->
         o.getValue("accounts").jsonArray.map { e ->
@@ -215,7 +222,8 @@ object WireCodec {
                 a.str("provider"), a.str("email"), a.str("status"), a["lastSync"]?.jsonPrimitive?.long,
                 canEdit = a["edit"]?.jsonPrimitive?.booleanOrNull ?: false,
                 label = a["label"]?.jsonPrimitive?.contentOrNull,
-                sorted = (a["sorted"] as? JsonObject)?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.intOrNull?.takeIf { it >= 0 }?.let { k to it } }?.toMap(),
+                sorted = counts(a["sorted"]),
+                wouldTidy = counts(a["tidy"]),
             )
         }
     }

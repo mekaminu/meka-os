@@ -5,6 +5,8 @@ import os.meka.backend.Secrets
 import os.meka.core.domain.BankHoliday
 import os.meka.core.domain.MailSortFacts
 import os.meka.core.domain.MailSortRules
+import os.meka.core.domain.MailTidyFacts
+import os.meka.core.domain.MailTidyRules
 import os.meka.core.domain.BankHolidayFields
 import os.meka.core.domain.BankHolidayStore
 import os.meka.core.domain.BankHolidays
@@ -204,8 +206,21 @@ class Integrations(
 
     fun accounts(householdId: String): List<WireCodec.IntegrationAccount> =
         store.accounts(householdId).filter { it.status != DISCONNECTED }.map {
-            WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs, it.canEdit, it.label, sorted = if (it.provider in mail) sortedCounts(it.id) else null)
+            val sorted = if (it.provider in mail) sortedCounts(it.id) else null
+            WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs, it.canEdit, it.label, sorted = sorted,
+                wouldTidy = if (sorted != null) tidyCounts(it.id) else null)
         }
+
+    /**
+     * Slice 3a: Autopilot's dry run — what [MailTidyRules] would do with each sorted email still in the inbox, counted
+     * per [MailTidy] name (KEEP included). Nothing in the mailbox moves; null if the store can't be read.
+     */
+    private fun tidyCounts(accountId: String): Map<String, Int>? {
+        val ms = mailStore ?: return null
+        return runCatching {
+            ms.inboxSorted(accountId).groupingBy { (h, s) -> MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s)).name }.eachCount()
+        }.getOrNull()
+    }
 
     /**
      * Slice 2a: a mail account's inbox counts per sort, or null while there's nothing sorted yet and its first

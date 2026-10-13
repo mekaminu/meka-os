@@ -199,6 +199,16 @@ private fun MailAccountCard(
                 Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
+        // Slice 3a: Autopilot's dry run, what it would tidy (nothing moves yet); unfolds the same way.
+        AnimatedVisibility(
+            row.tidyLine != null,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            Crossfade(row.tidyLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "mail-tidy") {
+                Text(it, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.xs),

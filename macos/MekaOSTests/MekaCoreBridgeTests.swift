@@ -2696,14 +2696,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         // no server to ask, so Mail says it couldn't reach it (nil).
         let rules = MailAccountRules.shared
         let v = rules.view(accounts: [
-            MailAccountFacts(provider: "gmail", email: "shop@example.com", status: "ok", lastSyncAtMs: nil, label: "BUSINESS", sorted: ["NEEDS_YOU": KotlinInt(int: 2)]),
-            MailAccountFacts(provider: "gmail", email: "alex@example.com", status: "needs_reconnect", lastSyncAtMs: nil, label: nil, sorted: nil),
+            MailAccountFacts(provider: "gmail", email: "shop@example.com", status: "ok", lastSyncAtMs: nil, label: "BUSINESS", sorted: ["NEEDS_YOU": KotlinInt(int: 2)], wouldTidy: ["ARCHIVE": KotlinInt(int: 3)]),
+            MailAccountFacts(provider: "gmail", email: "alex@example.com", status: "needs_reconnect", lastSyncAtMs: nil, label: nil, sorted: nil, wouldTidy: nil),
         ], nowMs: 0)
         XCTAssertEqual(v.rows.map(\.title), ["Personal · Gmail", "Business · Gmail"])
         XCTAssertTrue(v.rows[0].needsReconnect)
         // Slice 2a: a sorted account's inbox counts.
         XCTAssertNil(v.rows[0].sortedLine)
         XCTAssertEqual(v.rows[1].sortedLine, "In the inbox · 2 need you")
+        // Slice 3a: Autopilot's dry run.
+        XCTAssertNil(v.rows[0].tidyLine)
+        XCTAssertEqual(v.rows[1].tidyLine, "Autopilot, dry run · would tidy 3 · 3 notifications and promos archived · nothing moved yet")
         XCTAssertEqual(MailSortRules.shared.sort(f: MailSortFacts(fromAddress: "x@gov.uk", fromName: nil, subject: nil, labels: [], listUnsubscribe: nil, listId: nil)).sort, MailSort.needsYou)
         XCTAssertEqual(v.toConnect, "Still to connect: Outlook")
         XCTAssertEqual(rules.LABELS.map(\.label), ["Personal", "Business", "Outlook"])

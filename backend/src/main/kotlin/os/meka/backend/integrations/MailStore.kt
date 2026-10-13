@@ -36,6 +36,8 @@ interface MailStore {
     fun sortOf(accountId: String, id: String): MailSorted?
     /** Slice 2b: emails still in the inbox the rules put in Needs you unsure (for the AI), newest first. */
     fun unsure(accountId: String, limit: Int): List<MailHeader>
+    /** Slice 3a: every sorted email still in the inbox with its sort (Autopilot's dry run plans these). */
+    fun inboxSorted(accountId: String): List<Pair<MailHeader, MailSorted>>
 }
 
 /** Slice 2b: the AI's answer per email id ("needs_you", "fyi", or null for none); null overall when it couldn't answer. */
@@ -84,6 +86,10 @@ class InMemoryMailStore : MailStore {
     @Synchronized override fun unsure(accountId: String, limit: Int): List<MailHeader> {
         val m = sorts[accountId].orEmpty()
         return messages(accountId).filter { h -> h.inInbox && m[h.id]?.let(MailSortRules::wantsAi) == true }.take(limit)
+    }
+    @Synchronized override fun inboxSorted(accountId: String): List<Pair<MailHeader, MailSorted>> {
+        val m = sorts[accountId].orEmpty()
+        return messages(accountId).filter { it.inInbox }.mapNotNull { h -> m[h.id]?.let { h to it } }
     }
 }
 
@@ -245,6 +251,26 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
         ).use { st ->
             st.setString(1, accountId); st.setInt(2, limit)
             st.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.header()) } }
+        }
+    }
+
+    override fun inboxSorted(accountId: String): List<Pair<MailHeader, MailSorted>> = c { c ->
+        c.prepareStatement(
+            """SELECT message_id, thread_id, from_address, from_name, subject, received_at_ms, unread, in_inbox, labels,
+                 list_unsubscribe, one_click_unsubscribe, list_id, sort, sort_reason, sort_sure
+               FROM mail_message WHERE account_id = ? AND headers_at IS NOT NULL AND in_inbox AND sort IS NOT NULL
+               ORDER BY received_at_ms DESC, message_id""",
+        ).use { st ->
+            st.setString(1, accountId)
+            st.executeQuery().use { rs ->
+                buildList {
+                    while (rs.next()) {
+                        val sort = os.meka.core.domain.MailSort.of(rs.getString(13)) ?: continue
+                        val reason = os.meka.core.domain.MailSortReason.of(rs.getString(14)) ?: continue
+                        add(rs.header() to MailSorted(sort, reason, rs.getBoolean(15)))
+                    }
+                }
+            }
         }
     }
 

@@ -86,6 +86,7 @@ struct MailSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mailNote)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map(\.title) ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map(\.sortedLine) ?? [])
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map(\.tidyLine) ?? [])
         .task { await model.loadMail() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.loadMail() }
@@ -124,6 +125,12 @@ private struct MailAccountRowView: View {
             // Slice 2a: what the rules made of the inbox, once the server has sorted the account.
             if let sorted = row.sortedLine {
                 Text(sorted).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .contentTransition(.opacity)
+                    .transition(.opacity)
+            }
+            // Slice 3a: Autopilot's dry run, what it would tidy (nothing moves yet).
+            if let tidy = row.tidyLine {
+                Text(tidy).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .contentTransition(.opacity)
                     .transition(.opacity)
             }
