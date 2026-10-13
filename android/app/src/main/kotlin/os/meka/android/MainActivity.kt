@@ -26,12 +26,6 @@ import os.meka.android.shell.ShellDestination
 import os.meka.android.today.ConnectHook
 
 class MainActivity : ComponentActivity() {
-    private val askNotifications = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {
-        // Allowed now: the channels exist already; the governor looks again so anything due goes out.
-        val app = application as MekaApplication
-        app.appScope.launch { runCatching { app.governor.run() } }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -40,19 +34,10 @@ class MainActivity : ComponentActivity() {
         // Talk without tapping the mic (slice 2): a fresh open from the launcher with Bluetooth audio or in the car
         // starts listening (not on a rotation or unfold, which bring a saved state).
         if (savedInstanceState == null) listenOnOpen(intent)
-        // Notifications never seen: on Android 13+ a sideloaded install starts with notifications off, and MEKA only
-        // asked deep in Notifications, Setup or Work. Ask once on the first open of each install (a reinstall asks
-        // again); after that, Health and Today's line offer Turn on.
-        val notifyPrefs = getSharedPreferences(PREFS_NOTIFY_ASK, MODE_PRIVATE)
-        val granted = androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) ==
-            android.content.pm.PackageManager.PERMISSION_GRANTED
-        if (os.meka.core.domain.NotifyTrace.askOnFirstOpen(android.os.Build.VERSION.SDK_INT, granted, notifyPrefs.getBoolean(KEY_NOTIFY_ASKED, false))) {
-            notifyPrefs.edit().putBoolean(KEY_NOTIFY_ASKED, true).apply()
-            askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-        }
         // MEKA follows its own Motion setting, not the phone's animator scale (MotionClock.kt).
         setContent(parent = mekaRecomposer()) {
             MekaTheme {
+                AskNotificationsOnFirstOpen(app)
                 // Status-bar icons follow MEKA's own theme, not the phone's.
                 val dark = Meka.theme.isDark
                 LaunchedEffect(dark) {
@@ -158,8 +143,6 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
-        private const val PREFS_NOTIFY_ASK = "meka_notify_ask"
-        private const val KEY_NOTIFY_ASKED = "asked"
         const val EXTRA_OPEN = "os.meka.open"
         const val OPEN_AFTER_WORK = "after_work"
         const val OPEN_BRIEF = "brief"
@@ -176,5 +159,26 @@ class MainActivity : ComponentActivity() {
         const val OPEN_DESTINATION_PREFIX = "dest:"
         /** "news:<story id>" opens News over Today on that story; "news:" opens News. */
         const val OPEN_NEWS_PREFIX = "news:"
+    }
+}
+
+/**
+ * Notifications never seen: on Android 13+ a sideloaded install starts with notifications off, and MEKA only asked deep
+ * in Notifications, Setup or Work. Ask once on the first open of each install (a reinstall asks again); after that,
+ * Health and Today's line offer Turn on. Allowed: the governor looks again so anything due goes out.
+ */
+@androidx.compose.runtime.Composable
+private fun AskNotificationsOnFirstOpen(app: MekaApplication) {
+    val ask = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted -> if (granted) app.appScope.launch { runCatching { app.governor.run() } } }
+    LaunchedEffect(Unit) {
+        val prefs = app.getSharedPreferences("meka_notify_ask", android.content.Context.MODE_PRIVATE)
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(app, android.Manifest.permission.POST_NOTIFICATIONS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (os.meka.core.domain.NotifyTrace.askOnFirstOpen(android.os.Build.VERSION.SDK_INT, granted, prefs.getBoolean("asked", false))) {
+            prefs.edit().putBoolean("asked", true).apply()
+            runCatching { ask.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+        }
     }
 }
