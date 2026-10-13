@@ -249,7 +249,7 @@ class MailSyncTest {
         // Signing in again lists the mail afresh.
         connect(i)
         i.syncAccount(id)
-        assertEquals(listOf(null, null), gmail.cursorsAsked)
+        assertEquals(listOf<String?>(null, null), gmail.cursorsAsked)
         assertEquals(listOf("a"), ms.messages(id).map { it.id })
     }
 
