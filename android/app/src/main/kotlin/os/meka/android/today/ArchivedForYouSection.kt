@@ -54,6 +54,7 @@ internal fun ArchivedForYouSection(
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
     var open by rememberSaveable { mutableStateOf(true) }
+    val reduced = Meka.reducedMotion
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .padding(MekaSpace.m).testTag("archived-for-you"),
@@ -67,7 +68,7 @@ internal fun ArchivedForYouSection(
             Column(Modifier.weight(1f)) {
                 SectionLabel("${card.title} · ${card.slot}")
                 // The headline cross-fades as tidies are put back or new ones come.
-                AnimatedContent(card.headline, transitionSpec = { fadeIn(MekaMotion.appear(Meka.reducedMotion)) togetherWith fadeOut() }, label = "archived-headline") {
+                AnimatedContent(card.headline, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "archived-headline") {
                     Text(it, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.testTag("archived-headline"))
                 }
             }
