@@ -4,7 +4,7 @@ import SwiftUI
 /// Today's watch face (Fold review 2026-10-09 07:26, item 2), the Mac twin of the Fold's `WatchFaceDial`: a 12-hour
 /// face in the header — the brass rim with 12 markers (no numerals; 12, 3, 6 and 9 heavier), the next 12 hours of
 /// events as arcs on the rim (work a faint band, the gym, Barça and training wider, the one on now glowing), gold
-/// tapered hour and minute hands and the fine sweeping second hand with its comet tail. The opening draws it in like
+/// tapered hour and minute hands and a thin glowing sweeping second hand (`WatchFaceLook`). The opening draws it in like
 /// the Day ring did (the rim round from 12, the markers behind it, the arcs one after another, the hands sweeping from
 /// 12 to the time); then it lives (the rim breathes, the hour's shimmer runs, the second hand sweeps). A click opens
 /// the full 24-hour Day ring as a sheet. VoiceOver reads one line.
@@ -37,7 +37,7 @@ struct WatchFaceView: View {
         TimelineView(.animation(minimumInterval: 1.0 / 60, paused: play == .still)) { context in
             let elapsed = play == .still ? total : context.date.timeIntervalSince(began)
             let landed = play == .still || elapsed >= total
-            dial(elapsed: elapsed)
+            dial(elapsed: elapsed, landed: landed)
                 .overlay(dotsLayer(mark: MotionMath.dayRingMark(elapsed: elapsed, play: play, expressive: expressive)))
                 .overlay(WatchFaceLiveLayer(face: face, landed: landed,
                                             needle: MotionMath.dayRingNeedle(elapsed: elapsed, play: play, expressive: expressive),
@@ -91,7 +91,7 @@ struct WatchFaceView: View {
         .allowsHitTesting(false)
     }
 
-    private func dial(elapsed: Double) -> some View {
+    private func dial(elapsed: Double, landed: Bool) -> some View {
         let mark = MotionMath.dayRingMark(elapsed: elapsed, play: play, expressive: expressive)
         let rules = WatchFaceRules.shared
         let sizeDp = Int32(size)
@@ -102,7 +102,11 @@ struct WatchFaceView: View {
         let arcs = face.arcs.map { (Double($0.startDegrees), Double($0.sweepDegrees), $0.highlighted, $0.kind == .task) }
         let grows = arcs.indices.map { MotionMath.dayRingArc(elapsed: elapsed, index: $0, play: play, expressive: expressive) }
         let shows = markers.indices.map { MotionMath.dayRingHour(mark: mark, hour: $0 * 2, play: play) }
-        let look = DayRingLook.shared
+        let look = WatchFaceLook.shared
+        let hairRadius = CGFloat(look.hairlineRadiusDp(sizeDp: sizeDp))
+        let hairWidth = CGFloat(look.hairlineDp(sizeDp: sizeDp))
+        let bezelRadius = CGFloat(look.bezelRadiusDp(sizeDp: sizeDp))
+        let bezelWidth = CGFloat(look.bezelDp(sizeDp: sizeDp))
         let goalRules = GoalWeekRules.shared
         let goalRadius = CGFloat(goalRules.ringRadiusDp(sizeDp: sizeDp))
         // (start, track sweep shown, fill shown, fill alpha) for each of the week's goals.
@@ -117,15 +121,23 @@ struct WatchFaceView: View {
                 let a = (degrees - 90) * .pi / 180
                 return CGPoint(x: c.x + cos(a) * r, y: c.y + sin(a) * r)
             }
-            func arcPath(from: Double, sweep: Double) -> Path {
+            func arcPath(from: Double, sweep: Double, r: CGFloat? = nil) -> Path {
                 var p = Path()
-                p.addArc(center: c, radius: radius, startAngle: .degrees(from - 90), endAngle: .degrees(from - 90 + sweep), clockwise: false)
+                p.addArc(center: c, radius: r ?? radius, startAngle: .degrees(from - 90), endAngle: .degrees(from - 90 + sweep), clockwise: false)
                 return p
             }
-            // The rim's track: brass, 3 pt at 55 %, drawing itself round from 12.
+            // Watch face item (2026-10-12 18:04): the arcs keep a faint track of their own inside the bezel, and a fine
+            // darker hairline sits just inside the bezel for depth; both draw themselves round from 12, as does the thin
+            // bezel on the opening (once landed the live layer breathes it).
             if mark > 0 {
-                ctx.stroke(arcPath(from: 0, sweep: 360 * mark), with: .color(palette.accent.opacity(Double(look.TRACK_ALPHA))),
-                           lineWidth: CGFloat(look.TRACK_STROKE_DP))
+                ctx.stroke(arcPath(from: 0, sweep: 360 * mark), with: .color(palette.accent.opacity(Double(look.ARC_TRACK_ALPHA))),
+                           lineWidth: CGFloat(look.ARC_TRACK_DP))
+                ctx.stroke(arcPath(from: 0, sweep: 360 * mark, r: hairRadius), with: .color(palette.accent.opacity(Double(look.HAIRLINE_ALPHA))),
+                           lineWidth: hairWidth)
+                if !landed {
+                    ctx.stroke(arcPath(from: 0, sweep: 360 * mark, r: bezelRadius),
+                               with: .color(palette.accent.opacity(Double(look.BEZEL_DRAW_ALPHA))), lineWidth: bezelWidth)
+                }
             }
             // The 12 markers just inside the rim, fading in behind the drawing rim.
             for (i, m) in markers.enumerated() where shows[i] > 0 {
@@ -137,7 +149,7 @@ struct WatchFaceView: View {
                 ctx.stroke(tick, with: .color(palette.accent.opacity(Double(rules.MARKER_ALPHA) * shows[i])),
                            style: StrokeStyle(lineWidth: CGFloat(m.1 ? rules.MAJOR_MARKER_DP : rules.MINOR_MARKER_DP), lineCap: .round))
             }
-            // Work in the next 12 hours: a brass band at 70 % as wide as the rim (clear of the 3 pt track), coming up
+            // Work in the next 12 hours: a brass band at 70 % as wide as the rim (clear of the arcs' track), coming up
             // with it (Meka's 10:48 screenshots: the old grey band vanished under the track).
             for band in work {
                 ctx.stroke(arcPath(from: band.0, sweep: band.1), with: .color(palette.accent.opacity(Double(rules.WORK_BAND_ALPHA) * mark)),
@@ -169,8 +181,8 @@ struct WatchFaceView: View {
 
 /// The watch face's living layer, the Mac twin of the Fold's `WatchFaceLiveLayer`: the hour and minute hands (always —
 /// a watch shows the time even with Motion → Off), and once the opening has landed the breathing rim with its soft
-/// blur, the hour's shimmer, the glow on what's on now and the sweeping second hand with its comet tail (the Day ring's
-/// numbers, `DayRingLive` and `DayRingLook`). 60 fps only while sweeping; Low Power Mode and Motion → Off redraw once a
+/// glow, the hour's shimmer, the glow on what's on now and the thin glowing second hand (the bezel and hand from
+/// `WatchFaceLook`, the breath and shimmer from `DayRingLive`). 60 fps only while sweeping; Low Power Mode and Motion → Off redraw once a
 /// minute with no second hand or breath.
 struct WatchFaceLiveLayer: View {
     let face: WatchFace
@@ -203,7 +215,7 @@ struct WatchFaceLiveLayer: View {
 
     private func layer(now: Date) -> some View {
         let live = DayRingLive.shared
-        let look = DayRingLook.shared
+        let look = WatchFaceLook.shared
         let rules = WatchFaceRules.shared
         let ms = Int64((now.timeIntervalSince1970 * 1000).rounded(.down))
         let offsetMs = Int64(TimeZone.current.secondsFromGMT(for: now)) * 1000
@@ -224,8 +236,19 @@ struct WatchFaceLiveLayer: View {
         let rim = CGFloat(rules.rimStrokeDp(sizeDp: sizeDp))
         let radius = CGFloat(rules.rimRadiusDp(sizeDp: sizeDp))
         let scale = min(max(size / 150, 0.7), 2)
-        // The canvas reaches past the face by the rim's blur (negative padding below) so the soft glow isn't clipped.
-        let bleed = CGFloat(look.EDGE_BLUR_DP) + 2
+        let bezelRadius = CGFloat(look.bezelRadiusDp(sizeDp: sizeDp))
+        let bezelWidth = CGFloat(look.bezelDp(sizeDp: sizeDp))
+        let blurOffsets = (0..<Int(look.BLUR_LAYERS)).map { CGFloat(look.blurOffsetDp(i: Int32($0), sizeDp: sizeDp)) }
+        let blurAlphas = (0..<Int(look.BLUR_LAYERS)).map { Double(look.blurAlpha(i: Int32($0), glow: Float(glow))) }
+        let blurWidth = CGFloat(look.blurStrokeDp(sizeDp: sizeDp))
+        let needleWidth = CGFloat(look.needleDp(sizeDp: sizeDp))
+        let needleReach = CGFloat(look.needleReachDp(sizeDp: sizeDp))
+        let needleTail = CGFloat(look.needleTailDp(sizeDp: sizeDp))
+        let halo = look.halo(sizeDp: sizeDp).map { (CGFloat($0.widthDp), Double($0.alpha)) }
+        let cap = CGFloat(look.capDp(sizeDp: sizeDp))
+        let bezelAlpha = Double(look.bezelAlpha(glow: Float(glow), shown: Float(sweeping ? fadeIn : 1)))
+        // The canvas reaches past the face by the bezel's glow (negative padding below) so it isn't clipped.
+        let bleed = CGFloat(look.BLUR_DP) * scale + 2
         return Canvas { ctx, canvasSize in
             let c = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
             func point(_ degrees: Double, _ r: CGFloat) -> CGPoint {
@@ -259,15 +282,15 @@ struct WatchFaceLiveLayer: View {
             }
             if landed {
                 let shown = sweeping ? fadeIn : 1
-                let edge = radius + rim / 2 + 1
-                // The brass rim's edge, breathing 60 % → 100 %, with a soft blur reaching 8 pt out.
-                for i in 0..<Int(look.EDGE_BLUR_LAYERS) {
-                    ctx.stroke(arc(edge + CGFloat(look.blurOffsetDp(i: Int32(i))), from: 0, sweep: 360),
-                               with: .color(accent.opacity(Double(look.blurAlpha(i: Int32(i), glow: Float(glow))) * shown)),
-                               lineWidth: CGFloat(look.blurStrokeDp()))
+                let edge = bezelRadius
+                // The thin brass bezel (watch face item: ~58 % of the old track, scaled with the face), breathing
+                // 60 % → 100 %, with half the Day ring's soft glow reaching 4 pt out; it never fades out (the opening drew
+                // it in), its breath blends in as the second hand fades in.
+                for i in blurOffsets.indices {
+                    ctx.stroke(arc(edge + blurOffsets[i], from: 0, sweep: 360), with: .color(accent.opacity(blurAlphas[i] * shown)),
+                               lineWidth: blurWidth)
                 }
-                ctx.stroke(arc(edge, from: 0, sweep: 360), with: .color(accent.opacity(Double(look.edgeAlpha(glow: Float(glow))) * shown)),
-                           lineWidth: CGFloat(look.EDGE_STROKE_DP))
+                ctx.stroke(arc(edge, from: 0, sweep: 360), with: .color(accent.opacity(bezelAlpha)), lineWidth: bezelWidth)
                 // What's on now glows with the rim's breath.
                 for (from, sweep) in onNow {
                     ctx.stroke(arc(radius, from: from, sweep: sweep), with: .color(accent.opacity(0.30 * glow * shown)),
@@ -282,7 +305,7 @@ struct WatchFaceLiveLayer: View {
                     for j in 0..<parts {
                         let f = 1 - Double(j) / Double(parts)
                         ctx.stroke(arc(edge, from: head - step * Double(j + 1), sweep: step),
-                                   with: .color(accent.opacity(f * f * 0.8 * fade)), lineWidth: 2.5)
+                                   with: .color(accent.opacity(f * f * 0.8 * fade)), lineWidth: bezelWidth * 1.4)
                     }
                 }
             }
@@ -293,30 +316,23 @@ struct WatchFaceLiveLayer: View {
             ctx.fill(hand(hour, length: radius * CGFloat(rules.HOUR_HAND_LENGTH),
                           base: CGFloat(rules.HOUR_HAND_BASE_DP) * scale, tip: CGFloat(rules.HOUR_HAND_TIP_DP) * scale),
                      with: .color(accent))
+            if sweeping {
+                // The second hand (Meka, 2026-10-13 07:01): a very thin needle from a short counterweight through the
+                // centre to the markers, sweeping smoothly, with a soft glow under it — no comet tail.
+                var line = Path()
+                line.move(to: point(second, -needleTail))
+                line.addLine(to: point(second, needleReach))
+                for (width, alpha) in halo {
+                    ctx.stroke(line, with: .color(accent.opacity(alpha * fadeIn)), style: StrokeStyle(lineWidth: width, lineCap: .round))
+                }
+                ctx.stroke(line, with: .color(accent.opacity(fadeIn)), style: StrokeStyle(lineWidth: needleWidth, lineCap: .round))
+            }
+            // The small cap over all three hands.
             if needle > 0 {
-                let hub = CGFloat(rules.HUB_DP) * scale
-                ctx.fill(Path(ellipseIn: CGRect(x: c.x - hub, y: c.y - hub, width: hub * 2, height: hub * 2)), with: .color(accent))
-                let pin = hub * 0.4
+                ctx.fill(Path(ellipseIn: CGRect(x: c.x - cap, y: c.y - cap, width: cap * 2, height: cap * 2)), with: .color(accent))
+                let pin = cap * 0.4
                 ctx.fill(Path(ellipseIn: CGRect(x: c.x - pin, y: c.y - pin, width: pin * 2, height: pin * 2)), with: .color(background))
             }
-            guard sweeping else { return }
-            // The second hand: a comet tail along the rim, a fine brass hand across it and a bead where they meet.
-            let segments = Int(live.TAIL_SEGMENTS)
-            let step = Double(live.TAIL_DEGREES) / Double(segments)
-            for i in 0..<segments {
-                ctx.stroke(arc(radius, from: second - step * Double(i + 1), sweep: step + 0.4),
-                           with: .color(accent.opacity(Double(live.tailAlpha(i: Int32(i))) * fadeIn)), lineWidth: CGFloat(look.TAIL_STROKE_DP))
-            }
-            var line = Path()
-            line.move(to: point(second, radius - rim * 1.6))
-            line.addLine(to: point(second, radius + rim * 0.9))
-            ctx.stroke(line, with: .color(accent.opacity(fadeIn)), style: StrokeStyle(lineWidth: CGFloat(look.HAND_STROKE_DP) * 0.8, lineCap: .round))
-            let bead = point(second, radius)
-            let halo = CGFloat(look.HAND_TIP_HALO_DP)
-            ctx.fill(Path(ellipseIn: CGRect(x: bead.x - halo, y: bead.y - halo, width: halo * 2, height: halo * 2)),
-                     with: .color(accent.opacity(Double(look.HAND_TIP_HALO_ALPHA) * fadeIn)))
-            let tipR = CGFloat(look.HAND_TIP_DP)
-            ctx.fill(Path(ellipseIn: CGRect(x: bead.x - tipR, y: bead.y - tipR, width: tipR * 2, height: tipR * 2)), with: .color(accent.opacity(fadeIn)))
         }
         .padding(-bleed)
     }

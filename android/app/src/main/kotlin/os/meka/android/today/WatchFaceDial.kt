@@ -68,7 +68,6 @@ import os.meka.core.domain.DayArc
 import os.meka.core.domain.DayRing
 import os.meka.core.domain.DayRingLive
 import os.meka.core.domain.DayRingLiveMode
-import os.meka.core.domain.DayRingLook
 import os.meka.core.domain.DayRingPlay
 import os.meka.core.domain.DayTile
 import os.meka.core.domain.GoalWeekRules
@@ -76,6 +75,7 @@ import os.meka.core.domain.HabitDot
 import os.meka.core.domain.WeekGoals
 import os.meka.core.domain.HabitDotRules
 import os.meka.core.domain.WatchFace
+import os.meka.core.domain.WatchFaceLook
 import os.meka.core.domain.WatchFaceRules
 import java.util.TimeZone
 import kotlin.math.PI
@@ -89,7 +89,7 @@ const val WATCH_FACE_TAG = "watch-face"
  * Today's watch face (Fold review 2026-10-09 07:26, item 2; catalogue "Opening moment" and "Living Today"): a 12-hour
  * face in the header — the brass rim with 12 markers (no numerals; 12, 3, 6 and 9 heavier), the next 12 hours of
  * events as arcs on the rim (work a faint band, the gym, Barça and training wider, the one on now glowing), gold
- * tapered hour and minute hands, and the fine sweeping second hand with its comet tail. The opening draws it in like
+ * tapered hour and minute hands, and a thin glowing sweeping second hand ([WatchFaceLook]). The opening draws it in like
  * the Day ring did: the rim draws itself round from 12, the markers fade in behind it, the arcs grow clockwise one
  * after another and the hands sweep round from 12 to the time. Then it lives: the rim breathes, the hour's shimmer
  * runs, the second hand sweeps. Tapping it opens the full 24-hour Day ring ([onOpen]). Screen readers hear one line.
@@ -138,6 +138,7 @@ fun WatchFaceDial(
     }
     val colors = Meka.colors
     val mark = MotionMath.dayRingMark(elapsed, play, expressive)
+    val landed = play == DayRingPlay.STILL || elapsed >= total
     val needle = MotionMath.dayRingNeedle(elapsed, play, expressive)
     val haptics = rememberMekaHaptics()
     val open by rememberUpdatedState(onOpen)
@@ -192,9 +193,19 @@ fun WatchFaceDial(
             val radius = WatchFaceRules.rimRadiusDp(sizeDp).dp.toPx()
             val topLeft = Offset(center.x - radius, center.y - radius)
             val arcSize = Size(radius * 2, radius * 2)
-            // The rim's track: brass, 3 dp at 55 %, drawing itself round from 12.
-            drawArc(colors.accent.copy(alpha = colors.accent.alpha * DayRingLook.TRACK_ALPHA), -90f, 360f * mark, false, topLeft,
-                arcSize, style = Stroke(DayRingLook.TRACK_STROKE_DP.dp.toPx()))
+            // Watch face item (2026-10-12 18:04): the arcs keep a faint track of their own inside the bezel, and a fine
+            // darker hairline sits just inside the bezel for depth; both draw themselves round from 12.
+            drawArc(colors.accent.copy(alpha = colors.accent.alpha * WatchFaceLook.ARC_TRACK_ALPHA), -90f, 360f * mark, false, topLeft,
+                arcSize, style = Stroke(WatchFaceLook.ARC_TRACK_DP.dp.toPx()))
+            val hair = WatchFaceLook.hairlineRadiusDp(sizeDp).dp.toPx()
+            drawArc(colors.accent.copy(alpha = colors.accent.alpha * WatchFaceLook.HAIRLINE_ALPHA), -90f, 360f * mark, false,
+                Offset(center.x - hair, center.y - hair), Size(hair * 2, hair * 2), style = Stroke(WatchFaceLook.hairlineDp(sizeDp).dp.toPx()))
+            // The thin brass bezel draws itself round from 12 on the opening; once landed the live layer breathes it.
+            if (!landed) {
+                val bz = WatchFaceLook.bezelRadiusDp(sizeDp).dp.toPx()
+                drawArc(colors.accent.copy(alpha = colors.accent.alpha * WatchFaceLook.BEZEL_DRAW_ALPHA), -90f, 360f * mark, false,
+                    Offset(center.x - bz, center.y - bz), Size(bz * 2, bz * 2), style = Stroke(WatchFaceLook.bezelDp(sizeDp).dp.toPx()))
+            }
             // The 12 markers just inside the rim, fading in behind the drawing rim.
             WatchFaceRules.markers().forEachIndexed { i, m ->
                 val show = MotionMath.dayRingHour(mark, i * 2, play)
@@ -257,7 +268,7 @@ fun WatchFaceDial(
             }
         }
         // The hands, the breathing rim, the shimmer and the second hand on a layer of their own.
-        WatchFaceLiveLayer(face, landed = play == DayRingPlay.STILL || elapsed >= total, needle = needle, size = size,
+        WatchFaceLiveLayer(face, landed = landed, needle = needle, size = size,
             bedside = bedside, quiet = quiet, night = night)
     }
 }
@@ -265,7 +276,7 @@ fun WatchFaceDial(
 /**
  * The watch face's living layer: the hour and minute hands (always — a watch shows the time even with Motion → Off),
  * and once the opening has landed the breathing rim with its soft blur, the hour's shimmer, the glow on what's on now
- * and the sweeping second hand with its comet tail (all from [DayRingLive] and [DayRingLook], the Day ring's numbers).
+ * and the thin glowing second hand (the bezel and hand from [WatchFaceLook], the breath and shimmer from [DayRingLive]).
  * Only this layer reads the clock. Frames run while sweeping and MEKA is in front; power saving and Motion → Off
  * redraw once a minute, with no second hand or breath.
  */
@@ -304,16 +315,18 @@ private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, 
         val glow = if (sweeping) WatchFaceRules.breath(now, bedside) else 0.8f
         fun box(r: Float) = Pair(Offset(center.x - r, center.y - r), Size(r * 2, r * 2))
         if (landed) {
-            // The brass rim's edge, breathing 60 % → 100 %, with a soft blur reaching 8 dp out.
-            val edge = radius + rim / 2 + 1.dp.toPx()
-            val blurStroke = DayRingLook.blurStrokeDp().dp.toPx()
-            val shown = if (sweeping) fadeIn else 1f
-            for (i in 0 until DayRingLook.EDGE_BLUR_LAYERS) {
-                drawCircle(colors.accent.copy(alpha = DayRingLook.blurAlpha(i, glow)), edge + DayRingLook.blurOffsetDp(i).dp.toPx(), center,
-                    style = Stroke(blurStroke), alpha = shown)
+            // The thin brass bezel (watch face item: ~58 % of the old track, scaled with the face), breathing 60 % → 100 %,
+            // with half the Day ring's soft glow reaching 4 dp out.
+            val edge = WatchFaceLook.bezelRadiusDp(sizeDp).dp.toPx()
+            val blurStroke = WatchFaceLook.blurStrokeDp(sizeDp).dp.toPx()
+            for (i in 0 until WatchFaceLook.BLUR_LAYERS) {
+                drawCircle(colors.accent.copy(alpha = WatchFaceLook.blurAlpha(i, glow) * (if (sweeping) fadeIn else 1f)),
+                    edge + WatchFaceLook.blurOffsetDp(i, sizeDp).dp.toPx(), center, style = Stroke(blurStroke))
             }
-            drawCircle(colors.accent.copy(alpha = DayRingLook.edgeAlpha(glow)), edge, center,
-                style = Stroke(DayRingLook.EDGE_STROKE_DP.dp.toPx()), alpha = shown)
+            // The bezel never fades out (the opening drew it in); its breath blends in as the second hand fades in.
+            val shown = if (sweeping) fadeIn else 1f
+            drawCircle(colors.accent.copy(alpha = colors.accent.alpha * WatchFaceLook.bezelAlpha(glow, shown)), edge, center,
+                style = Stroke(WatchFaceLook.bezelDp(sizeDp).dp.toPx()))
             // What's on now glows with the rim's breath.
             face.arcs.filter { it.current }.forEach { arc ->
                 val (tl, sz) = box(radius)
@@ -330,7 +343,8 @@ private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, 
                     val step = DayRingLive.SHIMMER_BAND_DEGREES / parts
                     for (j in 0 until parts) {
                         val a = (1f - j.toFloat() / parts).let { it * it } * 0.8f * fade
-                        drawArc(colors.accent.copy(alpha = a), head - step * (j + 1) - 90f, step, false, tl, sz, style = Stroke(2.5.dp.toPx()))
+                        drawArc(colors.accent.copy(alpha = a), head - step * (j + 1) - 90f, step, false, tl, sz,
+                            style = Stroke(WatchFaceLook.bezelDp(sizeDp).dp.toPx() * 1.4f))
                     }
                 }
             }
@@ -342,25 +356,26 @@ private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, 
             WatchFaceRules.MINUTE_HAND_BASE_DP.dp.toPx() * scale, WatchFaceRules.MINUTE_HAND_TIP_DP.dp.toPx() * scale, radius)
         drawHand(colors.accent, hands.hourDegrees * needle, radius * WatchFaceRules.HOUR_HAND_LENGTH,
             WatchFaceRules.HOUR_HAND_BASE_DP.dp.toPx() * scale, WatchFaceRules.HOUR_HAND_TIP_DP.dp.toPx() * scale, radius)
+        if (sweeping) {
+            // The second hand (Meka, 2026-10-13 07:01): a very thin needle from a short counterweight through the centre
+            // to the markers, sweeping smoothly, with a soft glow under it — no comet tail.
+            val a = Math.toRadians(hands.secondDegrees - 90.0)
+            fun at(r: Float) = Offset(center.x + (cos(a) * r).toFloat(), center.y + (sin(a) * r).toFloat())
+            val from = at(-WatchFaceLook.needleTailDp(sizeDp).dp.toPx())
+            val to = at(WatchFaceLook.needleReachDp(sizeDp).dp.toPx())
+            WatchFaceLook.halo(sizeDp).forEach { layer ->
+                drawLine(colors.accent.copy(alpha = colors.accent.alpha * layer.alpha * fadeIn), from, to,
+                    strokeWidth = layer.widthDp.dp.toPx(), cap = StrokeCap.Round)
+            }
+            drawLine(colors.accent.copy(alpha = colors.accent.alpha * fadeIn), from, to,
+                strokeWidth = WatchFaceLook.needleDp(sizeDp).dp.toPx(), cap = StrokeCap.Round)
+        }
+        // The small cap over all three hands.
         if (needle > 0f) {
-            drawCircle(colors.accent, WatchFaceRules.HUB_DP.dp.toPx() * scale, center)
-            drawCircle(colors.background, WatchFaceRules.HUB_DP.dp.toPx() * scale * 0.4f, center)
+            val cap = WatchFaceLook.capDp(sizeDp).dp.toPx()
+            drawCircle(colors.accent, cap, center)
+            drawCircle(colors.background, cap * 0.4f, center)
         }
-        if (!sweeping) return@Canvas
-        // The second hand: a comet tail along the rim, a fine brass hand across it and a bead where they meet.
-        val hand = hands.secondDegrees
-        val (tl, sz) = box(radius)
-        val step = DayRingLive.TAIL_DEGREES / DayRingLive.TAIL_SEGMENTS
-        for (i in 0 until DayRingLive.TAIL_SEGMENTS) {
-            drawArc(colors.accent.copy(alpha = DayRingLive.tailAlpha(i) * fadeIn), hand - step * (i + 1) - 90f, step + 0.4f,
-                false, tl, sz, style = Stroke(DayRingLook.TAIL_STROKE_DP.dp.toPx()))
-        }
-        val a = Math.toRadians(hand - 90.0)
-        fun at(r: Float) = Offset(center.x + (cos(a) * r).toFloat(), center.y + (sin(a) * r).toFloat())
-        drawLine(colors.accent.copy(alpha = fadeIn), at(radius - rim * 1.6f), at(radius + rim * 0.9f),
-            strokeWidth = DayRingLook.HAND_STROKE_DP.dp.toPx() * 0.8f, cap = StrokeCap.Round)
-        drawCircle(colors.accent.copy(alpha = DayRingLook.HAND_TIP_HALO_ALPHA * fadeIn), DayRingLook.HAND_TIP_HALO_DP.dp.toPx(), at(radius))
-        drawCircle(colors.accent.copy(alpha = fadeIn), DayRingLook.HAND_TIP_DP.dp.toPx(), at(radius))
     }
 }
 

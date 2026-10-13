@@ -632,8 +632,8 @@ data class TodayActions(
 
 /**
  * Today's header row (Fold review 2026-10-09, item 1): the greeting, date, weather and links on the left ([left]), the
- * watch face on the right (Fold review 2026-10-09 07:26, item 2) — [DayRingHeader.WIDE_DP] on the open Fold, a compact
- * [DayRingHeader.COMPACT_DP] face on the closed Fold ([compact]). Tapping it opens the full 24-hour Day ring
+ * watch face on the right (Fold review 2026-10-09 07:26, item 2) — [DayRingHeader.WIDE_DP] on the open Fold, a smaller
+ * [WatchFaceRules.COVER_DP] face on the closed Fold ([compact]; watch face item 2026-10-12). Tapping it opens the full 24-hour Day ring
  * ([onOpenFace]). No [face] (no day yet): the left side takes the whole row.
  */
 @Composable
@@ -662,7 +662,7 @@ internal fun TodayHeaderRow(
         Column(Modifier.weight(1f)) { left() }
         if (face != null) {
             WatchFaceDial(face, play, played, Modifier.padding(start = MekaSpace.m).graphicsLayer { alpha = faceAlpha },
-                size = DayRingHeader.sizeDp(compact).dp, onOpen = onOpenFace, dots = dots, onTick = onTick, night = night,
+                size = WatchFaceRules.headerDp(cover = compact).dp, onOpen = onOpenFace, dots = dots, onTick = onTick, night = night,
                 week = week)
         }
     }
@@ -759,7 +759,7 @@ private fun TodayPane(
                 Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play))) {
                     // The watch face sits in the header, beside the greeting (Fold reviews 2026-10-09, 00:10 item 1
                     // and 07:26 item 2): greeting, date and links on the left, the 12-hour face on the right — 150 dp
-                    // on the open Fold, a compact 96 dp on the closed one. The first-open moment draws it in place.
+                    // on the open Fold, a smaller 78 dp on the closed one. The first-open moment draws it in place.
                     TodayHeaderRow(
                         face = today.watchFace.takeIf { today.timeline.dateLabel.isNotEmpty() }, compact = now != null,
                         play = ringPlay, played = ringPlayed,

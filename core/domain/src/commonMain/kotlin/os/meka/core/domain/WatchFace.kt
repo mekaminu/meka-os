@@ -31,7 +31,7 @@ data class WatchMarker(val hour: Int, val degrees: Float, val major: Boolean)
 /**
  * Today's watch face (Fold review 2026-10-09 07:26, item 2: "the ring becomes a real watch face"): the 24-hour dial
  * confused (at 07:21 the now dot sat near "4 o'clock"), so Today's header shows a 12-hour face — gold hour and minute
- * hands, the fine sweeping second hand with its comet tail, 12 markers with no numerals, the breathing brass rim and
+ * hands, a thin glowing sweeping second hand (WatchFaceLook), 12 markers with no numerals, the breathing brass rim and
  * the hourly shimmer — with the next 12 hours of events as arcs on its rim. Tapping it opens the full 24-hour Day
  * ring as a sheet. Non-AI, pure; both apps only draw what this says.
  */
@@ -177,6 +177,14 @@ object WatchFaceRules {
     fun rimRadiusDp(sizeDp: Int): Float = sizeDp / 2f - rimStrokeDp(sizeDp) / 2f - RIM_INSET_DP
     const val RIM_INSET_DP = 4f
 
+    /**
+     * The face's size in Today's header (watch face item, 2026-10-12 18:04): on the closed Fold's cover screen
+     * ([cover]) about a fifth smaller than before ([COVER_DP], was [DayRingHeader.COMPACT_DP]) so the greeting, weather
+     * and train lines wrap less and Up next sits higher; the open Fold and the Mac keep [DayRingHeader.WIDE_DP].
+     */
+    fun headerDp(cover: Boolean): Int = if (cover) COVER_DP else DayRingHeader.WIDE_DP
+    const val COVER_DP = 78
+
     /** "Training", "Training - 3G", "U12 training": something to stand out on the rim. */
     fun isTraining(title: String): Boolean = Regex("\\btraining\\b", RegexOption.IGNORE_CASE).containsMatchIn(title)
 
@@ -236,5 +244,117 @@ object WatchFaceRules {
         }
         val next = face.next?.let { " Next: $it." }.orEmpty()
         return "Watch face. Next 12 hours: $things.$next Tap for your whole day."
+    }
+}
+
+/** One layer of the watch face second hand's glow ([WatchFaceLook.halo]), drawn under it widest first. */
+data class WatchHaloLayer(val widthDp: Float, val alpha: Float)
+
+/**
+ * How the watch face's bezel and second hand are drawn (watch face item, Meka 2026-10-12 18:04 "the circle's outline is
+ * too thick" and 2026-10-13 07:01 "make the moving seconds a very thin glowing proper arm"). Only the watch face reads
+ * these — Today's header, the bedside clock and the bedside screen saver on the Fold, Today's header on the Mac; the
+ * 24-hour Day ring keeps [DayRingLook]. Everything scales with the face's size ([scale]: 1 at the 150 dp face), so the
+ * cover screen's smaller face and a compact clock aren't heavier for their size, and the bedside's large one isn't
+ * spindly. Non-AI, pure; both apps only draw what this says.
+ *
+ * - **Bezel:** one brass line where the old breathing edge sat, [BEZEL_DP] at the 150 dp face — 58 % of the 3 dp track
+ *   that, with the 1.5 dp edge beside it, read as a thick outline — breathing 60 % → 100 % with the face once it has
+ *   landed (drawing itself round from 12 at [BEZEL_DRAW_ALPHA] on the opening). A fine darker hairline just inside it
+ *   gives the depth the weight used to. Its soft outer glow is half the Day ring's: [BLUR_DP] out, [BLUR_PEAK_ALPHA].
+ * - **Arcs and habit dots** keep their own track inside the bezel, never on it: a faint [ARC_TRACK_DP] line at the
+ *   arcs' radius ([WatchFaceRules.rimRadiusDp]); markers and the hour and minute hands are unchanged.
+ * - **Second hand:** a proper sweeping hand instead of the comet tail along the rim — a [NEEDLE_DP] needle from a short
+ *   counterweight ([NEEDLE_TAIL] of the radius) through the centre to the markers' outer ends, the full brass, with a
+ *   soft glow under it ([halo]: layers up to [HALO_WIDTH] × the needle at [HALO_ALPHA]); a small cap ([CAP_DP]) sits
+ *   over all three hands. Smooth, never ticking ([DayRingLive.handDegrees]); quiet hours, Done for the day, power
+ *   saving and reduced motion still stop it ([WatchFaceRules.liveMode]).
+ */
+object WatchFaceLook {
+    /** The face size the dp numbers below are for. */
+    const val REFERENCE_DP = 150
+
+    const val BEZEL_DP = 1.75f
+    const val BEZEL_MIN_DP = 0.6f
+    /** The bezel's alpha while it draws itself round on the opening (it breathes once landed). */
+    const val BEZEL_DRAW_ALPHA = 0.8f
+
+    const val HAIRLINE_DP = 0.5f
+    const val HAIRLINE_MIN_DP = 0.35f
+    const val HAIRLINE_ALPHA = 0.35f
+
+    const val ARC_TRACK_DP = 1f
+    const val ARC_TRACK_ALPHA = 0.2f
+
+    /** The bezel's glow: half the Day ring's ([DayRingLook.EDGE_BLUR_DP], [DayRingLook.EDGE_BLUR_PEAK_ALPHA]). */
+    const val BLUR_DP = 4f
+    const val BLUR_PEAK_ALPHA = 0.11f
+    const val BLUR_LAYERS = 4
+
+    const val NEEDLE_DP = 1f
+    const val NEEDLE_MIN_DP = 0.6f
+    const val NEEDLE_TAIL = 0.18f
+    const val HALO_WIDTH = 3.5f
+    const val HALO_ALPHA = 0.35f
+    const val CAP_DP = 2.6f
+
+    /** How much bigger or smaller than the 150 dp face a face of [sizeDp] is. */
+    fun scale(sizeDp: Int): Float = sizeDp.toFloat() / REFERENCE_DP
+
+    fun bezelDp(sizeDp: Int): Float = maxOf(BEZEL_DP * scale(sizeDp), BEZEL_MIN_DP)
+
+    /**
+     * The bezel's centre line: its inner edge a quarter-dp outside the arcs' outer edge, so the arcs never sit on it,
+     * and its outer edge clear of the week's goal ring hugging the face's edge ([GoalWeekRules.ringRadiusDp]).
+     */
+    fun bezelRadiusDp(sizeDp: Int): Float =
+        WatchFaceRules.rimRadiusDp(sizeDp) + WatchFaceRules.rimStrokeDp(sizeDp) / 2f + BEZEL_GAP_DP + bezelDp(sizeDp) / 2f
+    const val BEZEL_GAP_DP = 0.25f
+
+    fun hairlineDp(sizeDp: Int): Float = maxOf(HAIRLINE_DP * scale(sizeDp), HAIRLINE_MIN_DP)
+
+    /** The hairline's centre line: just inside the bezel, a quarter-dp gap at the 150 dp face. */
+    fun hairlineRadiusDp(sizeDp: Int): Float =
+        bezelRadiusDp(sizeDp) - bezelDp(sizeDp) / 2f - 0.25f * scale(sizeDp) - hairlineDp(sizeDp) / 2f
+
+    /**
+     * The bezel's alpha once landed: [BEZEL_DRAW_ALPHA] (what the opening drew it at) blending into the breath [glow]
+     * (0.6 → 1.0) as [shown] goes 0 → 1, so it never blinks when the live layer takes over.
+     */
+    fun bezelAlpha(glow: Float, shown: Float): Float =
+        (BEZEL_DRAW_ALPHA + (glow - BEZEL_DRAW_ALPHA) * shown.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+
+    /** How far outside the bezel glow layer [i] sits (dp, scaled), evenly across [BLUR_DP]. */
+    fun blurOffsetDp(i: Int, sizeDp: Int): Float = BLUR_DP * scale(sizeDp) * (i + 1) / BLUR_LAYERS
+
+    /** Glow layer [i]'s alpha for a breath of [glow]: brightest next to the bezel, nothing past [BLUR_DP]. */
+    fun blurAlpha(i: Int, glow: Float): Float {
+        if (i < 0 || i >= BLUR_LAYERS) return 0f
+        val f = 1f - i.toFloat() / BLUR_LAYERS
+        return (f * f * BLUR_PEAK_ALPHA * glow).coerceIn(0f, 1f)
+    }
+
+    /** Each glow layer's stroke: wide enough that neighbours overlap into one soft glow. */
+    fun blurStrokeDp(sizeDp: Int): Float = BLUR_DP * scale(sizeDp) / BLUR_LAYERS * 1.6f
+
+    fun needleDp(sizeDp: Int): Float = maxOf(NEEDLE_DP * scale(sizeDp), NEEDLE_MIN_DP)
+
+    /** The needle's tip: the markers' outer ends, just inside the arcs. */
+    fun needleReachDp(sizeDp: Int): Float = WatchFaceRules.rimRadiusDp(sizeDp) - WatchFaceRules.rimStrokeDp(sizeDp) / 2f - 2f
+
+    /** The counterweight behind the centre. */
+    fun needleTailDp(sizeDp: Int): Float = WatchFaceRules.rimRadiusDp(sizeDp) * NEEDLE_TAIL
+
+    /** The cap over all three hands' centre. */
+    fun capDp(sizeDp: Int): Float = CAP_DP * scale(sizeDp).coerceIn(0.7f, 2f)
+
+    /** The needle's soft glow: three layers widening to [HALO_WIDTH] × the needle, fainter as they widen. */
+    fun halo(sizeDp: Int): List<WatchHaloLayer> {
+        val n = needleDp(sizeDp)
+        return listOf(
+            WatchHaloLayer(n * HALO_WIDTH, HALO_ALPHA * 0.35f),
+            WatchHaloLayer(n * 2.4f, HALO_ALPHA * 0.6f),
+            WatchHaloLayer(n * 1.6f, HALO_ALPHA),
+        )
     }
 }

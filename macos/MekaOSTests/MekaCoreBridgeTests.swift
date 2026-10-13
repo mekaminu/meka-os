@@ -1027,6 +1027,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(WatchFace.companion.EMPTY.arcs.isEmpty)
     }
 
+    /// Watch face item (2026-10-12/13): the thinner bezel, its hairline and glow, and the thin glowing second hand reach Swift.
+    func testWatchFaceLookReachesSwift() {
+        let look = WatchFaceLook.shared
+        let wide = DayRingHeader.shared.WIDE_DP
+        XCTAssertEqual(look.bezelDp(sizeDp: wide), 1.75, accuracy: 0.001)
+        XCTAssertLessThan(look.hairlineRadiusDp(sizeDp: wide), look.bezelRadiusDp(sizeDp: wide))
+        XCTAssertEqual(look.bezelAlpha(glow: 0.6, shown: 0), look.BEZEL_DRAW_ALPHA, accuracy: 0.001)
+        XCTAssertGreaterThan(look.blurAlpha(i: 0, glow: 1), look.blurAlpha(i: 2, glow: 1))
+        XCTAssertEqual(look.needleDp(sizeDp: wide), 1, accuracy: 0.001)
+        XCTAssertGreaterThan(look.needleReachDp(sizeDp: wide), look.needleTailDp(sizeDp: wide))
+        let halo = look.halo(sizeDp: wide)
+        XCTAssertEqual(halo.count, 3)
+        XCTAssertEqual(halo.first?.widthDp ?? 0, 3.5, accuracy: 0.001)
+        XCTAssertEqual(WatchFaceRules.shared.headerDp(cover: false), wide)
+        XCTAssertLessThan(WatchFaceRules.shared.headerDp(cover: true), DayRingHeader.shared.COMPACT_DP)
+    }
+
     /// Under "Nothing needs you" (Fold reviews 2026-10-09): the core's habits / Waiting on / renewals reach Swift.
     func testNeedsYouMeanwhileReachesSwift() {
         let m = NeedsYouMeanwhileRules.shared.build(goals: nil, lists: nil, comingUp: [])

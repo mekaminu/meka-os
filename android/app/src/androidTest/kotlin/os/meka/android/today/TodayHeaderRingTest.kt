@@ -21,6 +21,7 @@ import os.meka.core.domain.DayArcKind
 import os.meka.core.domain.WatchFace
 import os.meka.core.domain.WatchArc
 import os.meka.core.domain.DayRingHeader
+import os.meka.core.domain.WatchFaceRules
 import os.meka.core.domain.DayRingPlay
 
 /**
@@ -60,7 +61,7 @@ class TodayHeaderRingTest {
     fun todayOnA412DpWideScreenShowsTheDayRing() {
         header(412, compact = true)
         val dial = compose.onNodeWithTag(WATCH_FACE_TAG, useUnmergedTree = true)
-        dial.assertIsDisplayed().assertWidthIsEqualTo(DayRingHeader.COMPACT_DP.dp)
+        dial.assertIsDisplayed().assertWidthIsEqualTo(WatchFaceRules.COVER_DP.dp)
         val greeting = compose.onNodeWithText("Good morning, Meka").assertIsDisplayed().getUnclippedBoundsInRoot()
         assertTrue("the ring sits to the right of the greeting", dial.getUnclippedBoundsInRoot().left >= greeting.right)
     }
