@@ -15,7 +15,7 @@ import os.meka.core.sync.fv
  * else sent), an email to the list's `mailto:` address sent from that same account, or, when only a web page is
  * offered, the page handed back for him to open. Nothing is sent without his tap. Slice 5b: once the unsubscribe has
  * gone through, their later newsletters and promos go to Trash with Autopilot ([trashes], [MailTidy.TRASH]); 5c the
- * weekly "not opened in 30 days" offer.
+ * weekly "not opened in 30 days" offer ([MailUnopenedRules]).
  */
 enum class UnsubscribeMethod {
     /** RFC 8058: `List-Unsubscribe-Post: List-Unsubscribe=One-Click` with an https link. */
@@ -173,6 +173,9 @@ object MailUnsubscribeRules {
             note = text(MailSenderFields.NOTE),
             link = safeUrl(text(MailSenderFields.LINK)),
             trashed = (f[MailSenderFields.TRASHED] as? FieldValue.Int64)?.value?.toInt()?.coerceAtLeast(0) ?: 0,
+            unopened = (f[MailSenderFields.UNOPENED] as? FieldValue.Int64)?.value?.toInt()?.coerceAtLeast(0) ?: 0,
+            unopenedAtMs = ms(MailSenderFields.UNOPENED_AT),
+            keptAtMs = ms(MailSenderFields.KEPT_AT),
         )
     }
 
@@ -245,6 +248,14 @@ object MailSenderFields {
     /** Slice 5b: how many of its later emails went to Trash since the unsubscribe (Int64), and when the last did. */
     const val TRASHED = "trashedCount"
     const val TRASHED_AT = "trashedAtMs"
+    /**
+     * Slice 5c (server): of its emails in the last 30 days, how many came while none was opened (Int64: the count when
+     * none of them was opened, else 0), and when the server last worked it out.
+     */
+    const val UNOPENED = "unopened30"
+    const val UNOPENED_AT = "unopenedAtMs"
+    /** Slice 5c (an app): Keep on the weekly offer: never offered again (0 clears it, for Undo). */
+    const val KEPT_AT = "keptAtMs"
 }
 
 data class MailSender(
@@ -262,6 +273,11 @@ data class MailSender(
     val link: String?,
     /** Slice 5b: later emails sent to Trash since the unsubscribe. */
     val trashed: Int = 0,
+    /** Slice 5c: emails in the last 30 days, none opened (0 when one was, or not worked out yet). */
+    val unopened: Int = 0,
+    val unopenedAtMs: Long? = null,
+    /** Slice 5c: Keep on the weekly offer. */
+    val keptAtMs: Long? = null,
 )
 
 /** One sender under its account in Mail. */
@@ -317,6 +333,7 @@ object MailSenderPanelRules {
                     s.domain?.takeIf { !it.equals(s.name, ignoreCase = true) },
                     s.count.takeIf { it > 0 }?.let { "$it ${if (it == 1) "email" else "emails"}" },
                     last,
+                    MailUnopenedRules.rowNote(s, nowMs),
                 )
                 val due = MailUnsubscribeRules.due(s)
                 val done = !due && s.state?.finished == true

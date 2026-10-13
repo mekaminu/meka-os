@@ -57,7 +57,15 @@ interface MailStore {
     fun senders(accountId: String, limit: Int): List<MailSenderRecord>
     /** Slice 5a: Outlook: the list headers read from the sender's latest email (on demand). */
     fun setSenderHeaders(accountId: String, address: String, listUnsubscribe: String?, oneClick: Boolean)
+    /**
+     * Slice 5c: per sender address (lower case), its emails received since [sinceMs] whose headers were read, and how
+     * many of them are read (Gmail's UNREAD label / Outlook's isRead).
+     */
+    fun openStats(accountId: String, sinceMs: Long): Map<String, SenderOpens>
 }
+
+/** Slice 5c: a sender's emails in the window, and how many of them were opened. */
+data class SenderOpens(val total: Int, val opened: Int)
 
 /** A noted sender as the server keeps it (slice 5a). [lastMessageId] is the id of its newest email (Outlook's headers are read from it). */
 data class MailSenderRecord(
@@ -155,6 +163,10 @@ class InMemoryMailStore : MailStore {
         val m = senders[accountId] ?: return
         m[address]?.let { m[address] = it.copy(listUnsubscribe = listUnsubscribe, oneClick = oneClick, headersChecked = true) }
     }
+    @Synchronized override fun openStats(accountId: String, sinceMs: Long): Map<String, SenderOpens> =
+        of(accountId).values.filterNotNull().filter { it.receivedAtMs >= sinceMs && it.fromAddress != null }
+            .groupBy { it.fromAddress!!.lowercase() }
+            .mapValues { (_, hs) -> SenderOpens(hs.size, hs.count { !it.unread }) }
 }
 
 class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
@@ -430,6 +442,17 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
             st.executeUpdate()
         }
         Unit
+    }
+
+    override fun openStats(accountId: String, sinceMs: Long): Map<String, SenderOpens> = c { c ->
+        c.prepareStatement(
+            """SELECT lower(from_address), count(*), count(*) FILTER (WHERE NOT unread) FROM mail_message
+               WHERE account_id = ? AND headers_at IS NOT NULL AND from_address IS NOT NULL AND received_at_ms >= ?
+               GROUP BY lower(from_address)""",
+        ).use { st ->
+            st.setString(1, accountId); st.setLong(2, sinceMs)
+            st.executeQuery().use { rs -> buildMap { while (rs.next()) put(rs.getString(1), SenderOpens(rs.getInt(2), rs.getInt(3))) } }
+        }
     }
 
     private fun ResultSet.header() = MailHeader(

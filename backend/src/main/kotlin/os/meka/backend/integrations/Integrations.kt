@@ -13,6 +13,7 @@ import os.meka.core.domain.MailTidyBatchFields
 import os.meka.core.domain.MailSort
 import os.meka.core.domain.MailSender
 import os.meka.core.domain.MailUnsubscribeRules
+import os.meka.core.domain.MailUnopenedRules
 import os.meka.core.domain.UnsubscribeMethod
 import os.meka.core.domain.UnsubscribePlan
 import os.meka.core.domain.UnsubscribeState
@@ -525,16 +526,22 @@ class Integrations(
             ms.setSenderHeaders(a.id, r.address, got.first, got.second)
             r.copy(listUnsubscribe = got.first, oneClick = got.second, headersChecked = true)
         }
+        // Slice 5c: each sender's emails in the last 30 days and how many were opened (the weekly "not opened" offer).
+        val nowMs = now()
+        val opens = runCatching { ms.openStats(a.id, nowMs - MailUnopenedRules.WINDOW_MS) }.getOrDefault(emptyMap())
         records.forEachIndexed { i, r ->
             val id = MailUnsubscribeRules.senderId(a.id, r.address)
             val plan = MailUnsubscribeRules.plan(r.listUnsubscribe, r.oneClick, check = outlook && !r.headersChecked)
             val existing = published[id]
+            val s = existing?.let { MailUnsubscribeRules.read(id, it) }
             if (i < SENDERS_SHOWN && (plan.method != UnsubscribeMethod.NONE || existing != null)) {
+                val o = opens[r.address.lowercase()]
+                val unopened = MailUnopenedRules.serverFields(s, o?.total ?: 0, o?.opened ?: 0, nowMs).orEmpty()
                 writeSender(a, id, MailUnsubscribeRules.senderFields(
                     account, MailUnsubscribeRules.displayName(r.name, r.address), MailSortRules.domain(r.address), plan.method, r.lastAtMs, r.seen,
-                ))
+                ) + unopened)
             }
-            val s = existing?.let { MailUnsubscribeRules.read(id, it) } ?: return@forEachIndexed
+            s ?: return@forEachIndexed
             if (MailUnsubscribeRules.due(s)) unsubscribe(a, m, token, id, plan)
         }
     }

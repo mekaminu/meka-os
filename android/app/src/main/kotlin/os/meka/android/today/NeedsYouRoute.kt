@@ -350,6 +350,7 @@ internal fun NeedsYouColumn(
     val digestNow = rememberGroupDigest(captures, core, chatGroups)
     val digest = digestNow.view
     val archived by core.archivedForYou.collectAsState()
+    val unopened by core.mailUnopened.collectAsState()
     val gists by core.groupGists.collectAsState()
     // A busy chat's one-line summary (slice 3c), made on this phone and synced; asked for when the chats change.
     val summaries by core.chatSummaries.collectAsState()
@@ -404,6 +405,13 @@ internal fun NeedsYouColumn(
         archived?.let { a ->
             item(key = "archived-for-you") {
                 ArchivedForYouSection(a, core, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        // Inbox autopilot, slice 5c: the weekly "Not opened in 30 days", from Saturday 09:00 until answered.
+        unopened?.let { u ->
+            item(key = "mail-unopened") {
+                UnopenedOfferSection(u, core, moves.undoLine,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
             }
         }

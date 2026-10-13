@@ -713,6 +713,16 @@ class MekaCore(
     private var archivedSeenBefore: Long? = null
     private var archivedSeenUndoable = false
 
+    private val _mailUnopened = MutableStateFlow<os.meka.core.domain.MailUnopenedCard?>(null)
+    /**
+     * Inbox autopilot, slice 5c: Needs you's weekly "Not opened in 30 days · unsubscribe from 11?", from Saturday 09:00
+     * until answered that week (on either app); null otherwise. Follows sync and the minute tick.
+     */
+    val mailUnopened: StateFlow<os.meka.core.domain.MailUnopenedCard?> = _mailUnopened.asStateFlow()
+
+    /** Puts back the offer's last answer on this device (Unsubscribe from all, Not now or Keep); null after an Undo. */
+    private var unopenedUndo: (() -> Unit)? = null
+
     init {
         replica.addListener { refresh(); requestSync() }
         refresh()
@@ -3424,6 +3434,75 @@ class MekaCore(
         archivedChanged()
     }
 
+    private fun unopenedSeen(): Long? = os.meka.core.domain.MailUnopenedRules.readSeen(
+        replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailUnopenedRules.ENTITY_ID)?.fields,
+    )
+
+    private fun unopenedChanged() {
+        _mailUnopened.value = os.meka.core.domain.MailUnopenedRules.card(activity.mailSenders(), unopenedSeen(), nowMs(), ZoneCalendar(timeZone))
+    }
+
+    private fun writeUnopenedSeen(atMs: Long) = replica.commitLocal(
+        os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailUnopenedRules.ENTITY_ID,
+        os.meka.core.domain.MailUnopenedRules.seenFields(atMs),
+    )
+
+    /**
+     * Inbox autopilot, slice 5c: **Unsubscribe from all** on the weekly offer: asks the server to unsubscribe from each
+     * offered sender at its next check (as Mail's own Unsubscribe does) and folds the offer away on both apps until next
+     * Saturday. Undo (before the server's check) takes the asks back, so nothing is sent. Returns the line to show.
+     */
+    suspend fun unsubscribeUnopened(): String = onCore {
+        val now = nowMs()
+        val card = os.meka.core.domain.MailUnopenedRules.card(activity.mailSenders(), unopenedSeen(), now, ZoneCalendar(timeZone))
+            ?: return@onCore os.meka.core.domain.MailUnopenedRules.NONE_LEFT
+        val senders = activity.mailSenders().associateBy { it.id }
+        val before = unopenedSeen()
+        val asked = card.ids.filter { id ->
+            val ask = os.meka.core.domain.MailSenderPanelRules.ask(senders[id], now) ?: return@filter false
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_SENDER, id, ask)
+            true
+        }
+        writeUnopenedSeen(now)
+        unopenedUndo = {
+            val nowSenders = activity.mailSenders().associateBy { it.id }
+            asked.forEach { id ->
+                os.meka.core.domain.MailUnopenedRules.undoAsk(nowSenders[id])?.let { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_SENDER, id, it) }
+            }
+            writeUnopenedSeen(before ?: 1L)
+        }
+        activityChanged()
+        unopenedChanged()
+        os.meka.core.domain.MailUnopenedRules.askedLine(asked.size)
+    }
+
+    /** Not now on the weekly offer: folded away on both apps until next Saturday (with Undo). */
+    suspend fun notNowUnopened(): String = onCore {
+        val before = unopenedSeen()
+        writeUnopenedSeen(nowMs())
+        unopenedUndo = { writeUnopenedSeen(before ?: 1L) }
+        unopenedChanged()
+        os.meka.core.domain.MailUnopenedRules.NOT_NOW_LINE
+    }
+
+    /** Keep on one sender of the weekly offer: never offered again (synced, with Undo); Mail still lists it. */
+    suspend fun keepMailSender(id: String): String = onCore {
+        val s = activity.mailSenders().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailSenderPanelRules.UNKNOWN
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_SENDER, id, os.meka.core.domain.MailUnopenedRules.keepFields(nowMs()))
+        unopenedUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_SENDER, id, os.meka.core.domain.MailUnopenedRules.keepFields(0L)) }
+        unopenedChanged()
+        os.meka.core.domain.MailUnopenedRules.keptLine(s.name)
+    }
+
+    /** Undo on the offer's last answer on this device. */
+    suspend fun undoUnopened() = onCore {
+        val undo = unopenedUndo ?: return@onCore
+        unopenedUndo = null
+        undo()
+        activityChanged()
+        unopenedChanged()
+    }
+
     /**
      * The Mail pane: the connected mail accounts with their labels and what's left to connect. Null when the server
      * couldn't be reached or this device isn't connected (the pane says so; nothing changed).
@@ -5061,6 +5140,8 @@ class MekaCore(
     private fun refresh() {
         // Inbox autopilot, slice 4: "Archived for you" follows the synced tidies, Got it and the digest times.
         archivedChanged()
+        // Slice 5c: the weekly "Not opened in 30 days" follows the synced senders, its answers and Saturday 09:00.
+        unopenedChanged()
         val all = tasks.all()
         val marks = eventActions.marks(all)
         _eventMarks.value = marks

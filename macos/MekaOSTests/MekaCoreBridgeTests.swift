@@ -2759,5 +2759,17 @@ final class MekaCoreBridgeTests: XCTestCase {
                                     kinds: [MailTidy.trash: KotlinInt(int: 2)])
         XCTAssertEqual(ArchivedForYouRules.shared.headline(batches: [trashed]), "Tidied 2 · 2 from unsubscribed senders")
         XCTAssertEqual(MailTidy.trash.destination, "→ Trash")
+        // Slice 5c: no not-opened senders, no offer; its answers still say something offline.
+        XCTAssertNil(core.mailUnopened.value)
+        let none = try await core.unsubscribeUnopened()
+        XCTAssertEqual(none, MailUnopenedRules.shared.NONE_LEFT)
+        let kept = try await core.keepMailSender(id: "nothing")
+        XCTAssertEqual(kept, MailSenderPanelRules.shared.UNKNOWN)
+        let notNow = try await core.notNowUnopened()
+        XCTAssertEqual(notNow, MailUnopenedRules.shared.NOT_NOW_LINE)
+        try await core.undoUnopened()
+        XCTAssertNil(core.mailUnopened.value)
+        XCTAssertEqual(MailUnopenedRules.shared.headline(n: 11), "Unsubscribe from 11?")
+        XCTAssertEqual(MailUnopenedRules.shared.unsubscribeLabel(n: 11), "Unsubscribe from all 11")
     }
 }

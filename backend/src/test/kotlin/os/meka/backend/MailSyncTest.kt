@@ -631,6 +631,42 @@ class MailSyncTest {
         assertEquals(1, gmail.sent.size)
     }
 
+    // ---- Slice 5c: not opened in 30 days ----
+
+    @Test
+    fun eachSendersNotOpenedCountIsPublishedAndRefreshedOnlyWhenItChanges() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        // Three unread from the digest (one in capitals), two from the club with one read.
+        gmail.mailbox["a1"] = newsletter("a1", "news@digest.example", "Weekly Digest", "<https://digest.example/u>", oneClick = true, ageDays = 3)
+        gmail.mailbox["a2"] = newsletter("a2", "news@digest.example", "Weekly Digest", "<https://digest.example/u>", oneClick = true, ageDays = 2)
+        gmail.mailbox["a3"] = newsletter("a3", "News@Digest.example", "Weekly Digest", "<https://digest.example/u>", oneClick = true, ageDays = 1)
+        gmail.mailbox["b1"] = newsletter("b1", "hello@club.example", null, "<mailto:off@club.example>", ageDays = 2)
+        gmail.mailbox["b2"] = newsletter("b2", "hello@club.example", null, "<mailto:off@club.example>", ageDays = 1).copy(unread = false)
+        val id = connect(i)
+        i.syncAccount(id)
+        val digestId = MailUnsubscribeRules.senderId(id, "news@digest.example")
+        val clubId = MailUnsubscribeRules.senderId(id, "hello@club.example")
+        val pub = senders(ops)
+        assertEquals(FieldValue.Int64(3), pub.getValue(digestId)[MailSenderFields.UNOPENED])
+        assertEquals(FieldValue.Int64(now), pub.getValue(digestId)[MailSenderFields.UNOPENED_AT])
+        assertEquals(FieldValue.Int64(0), pub.getValue(clubId)[MailSenderFields.UNOPENED])
+        // A check an hour later with nothing new leaves the count (and its time) alone.
+        val first = now
+        now += 3_600_000
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(FieldValue.Int64(first), senders(ops).getValue(digestId)[MailSenderFields.UNOPENED_AT])
+        // He opens one of the digest's: the next check publishes 0.
+        now += 60_000
+        gmail.mailbox["a3"] = gmail.mailbox.getValue("a3").copy(unread = false)
+        gmail.nextRound = { MailChanges(fetch = listOf("a3"), cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(FieldValue.Int64(0), senders(ops).getValue(digestId)[MailSenderFields.UNOPENED])
+        assertEquals(FieldValue.Int64(now), senders(ops).getValue(digestId)[MailSenderFields.UNOPENED_AT])
+    }
+
     @Test
     fun anUnsubscribedSendersLaterNewslettersGoToTrashWithUndo() {
         val ms = InMemoryMailStore()
