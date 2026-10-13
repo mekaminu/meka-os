@@ -1028,6 +1028,17 @@ final class MekaCoreBridgeTests: XCTestCase {
     }
 
     /// Watch face item (2026-10-12/13): the thinner bezel, its hairline and glow, and the thin glowing second hand reach Swift.
+    func testHeaderCollapseReachesSwift() {
+        let rules = HeaderCollapseRules.shared
+        let wide = DayRingHeader.shared.WIDE_DP
+        XCTAssertTrue(rules.collapses(cover: false, mac: true))
+        XCTAssertEqual(rules.faceScale(shown: 0, fullDp: wide), 1, accuracy: 0.001)
+        XCTAssertEqual(rules.faceDp(shown: 1, fullDp: wide), Float(rules.COMPACT_DP), accuracy: 0.001)
+        XCTAssertEqual(rules.shown(progress: rules.progress(firstIndex: 0, offsetPx: 60, rangePx: 120), reduced: true), 1, accuracy: 0.001)
+        XCTAssertFalse(rules.barShown(shown: 0))
+        XCTAssertEqual(rules.compactLine(dateLabel: "Tue 13 Oct", weatherLine: "14° · light rain"), "Tue 13 Oct · 14°")
+    }
+
     func testWatchFaceLookReachesSwift() {
         let look = WatchFaceLook.shared
         let wide = DayRingHeader.shared.WIDE_DP

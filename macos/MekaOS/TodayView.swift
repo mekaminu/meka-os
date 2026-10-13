@@ -31,6 +31,17 @@ struct TodayView: View {
     @Namespace private var selection
     /// The content width, for the command centre's columns.
     @State private var width: CGFloat = 0
+    /// Watch face item, part 2: how far Today has scrolled, and the header's height (the glide's range).
+    @State private var scrollY: CGFloat = 0
+    @State private var headerHeight: CGFloat = 0
+    @State private var scrollPosition = ScrollPosition(edge: .top)
+    /// How far the header has collapsed (Reduce Motion: one state or the other).
+    private var collapse: Float {
+        let rules = HeaderCollapseRules.shared
+        return rules.shown(progress: rules.progress(firstIndex: 0, offsetPx: Float(scrollY),
+                                                    rangePx: rules.rangePx(headerPx: Float(headerHeight), barPx: Float(CollapsingHeaderView.barHeight))),
+                           reduced: reduceMotion)
+    }
 
     var body: some View {
         @Bindable var model = model
@@ -251,24 +262,15 @@ struct TodayView: View {
                     }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    // The watch face (Fold review 2026-10-09 07:26, item 2), drawn in place in the header by the
-                    // opening; a click opens the full 24-hour Day ring as a sheet.
+                    // The watch face (Fold review 2026-10-09 07:26, item 2) is drawn by CollapsingHeaderView over this
+                    // slot (watch face item, part 2): pinned, it shrinks into a small clock as Today scrolls.
                     if let today = model.today, !today.timeline.dateLabel.isEmpty {
-                        WatchFaceView(face: today.watchFace, play: ringPlay ?? .still, played: { ringPlay = .still }, palette: palette,
-                                      size: CGFloat(DayRingHeader.shared.WIDE_DP), onOpen: { showDayRing = true },
-                                      // Today's habits as dots on the face (Calm Today, slice 2); a click on one ticks it.
-                                      dots: HabitDotRules.shared.dots(chips: HabitChipRules.shared.build(goals: model.goals)),
-                                      onTick: { model.tickHabitDot($0) },
-                                      night: model.shutdown?.night ?? false,
-                                      // This week's goals on the outer ring (Goals, properly, slice 7).
-                                      week: model.goals?.week)
-                            // Done for the day: once shut down the face dims to night over `nightFall` as the sheet
-                            // goes (Reduce Motion: the short cross-fade).
-                            .opacity(Double(WatchFaceRules.shared.nightAlpha(night: model.shutdown?.night ?? false)))
-                            .animation(reduceMotion ? MekaMotion.appear(reduced: true) : .easeInOut(duration: MekaChoreography.nightFall),
-                                       value: model.shutdown?.night ?? false)
+                        Color.clear
+                            .frame(width: CGFloat(DayRingHeader.shared.WIDE_DP), height: CGFloat(DayRingHeader.shared.WIDE_DP))
+                            .accessibilityHidden(true)
                     }
                     }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
                     // Today's habits as chips to tick (Fold review 2026-10-09 07:26, item 3), only when the watch face
                     // can't carry them as dots (Calm Today, slice 2: no day yet, or more than fit); none, no row.
                     let habitChips = HabitChipRules.shared.build(goals: model.goals)
@@ -458,9 +460,33 @@ struct TodayView: View {
                 .animation(MekaMotion.complete(reduced: reduceMotion), value: allDayOpen)
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: model.today?.timeline.allDayItems.map(\.event.id))
             }
+            // Watch face item, part 2: how far Today has scrolled drives the header's collapse.
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in
+                scrollY = y
+            }
+            .scrollPosition($scrollPosition)
             // The foot fades into the ticker and capture field rather than cutting a row in half (Fold review item
             // 4); the xl bottom padding is more than the fade, so the last row still scrolls fully clear.
             .footFade()
+            .overlay(alignment: .top) {
+                if let today = model.today, !today.timeline.dateLabel.isEmpty {
+                    CollapsingHeaderView(
+                        shown: collapse, face: today.watchFace, greeting: greeting,
+                        line: HeaderCollapseRules.shared.compactLine(dateLabel: today.timeline.dateLabel, weatherLine: model.weather?.nowLine),
+                        palette: palette, play: ringPlay ?? .still, played: { ringPlay = .still },
+                        onOpen: { showDayRing = true },
+                        // Today's habits as dots on the face (Calm Today, slice 2); a click on one ticks it.
+                        dots: HabitDotRules.shared.dots(chips: HabitChipRules.shared.build(goals: model.goals)),
+                        onTick: { model.tickHabitDot($0) },
+                        night: model.shutdown?.night ?? false,
+                        // This week's goals on the outer ring (Goals, properly, slice 7).
+                        week: model.goals?.week,
+                        onTop: {
+                            if reduceMotion { scrollPosition.scrollTo(edge: .top) }
+                            else { withAnimation(MekaMotion.expand(reduced: false)) { scrollPosition.scrollTo(edge: .top) } }
+                        })
+                }
+            }
             .id(openings)
             .onAppear {
                 if ringPlay == nil { ringPlay = DayRingOpen.claim(reduced: reduceMotion) }

@@ -61,6 +61,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import os.meka.core.domain.HeaderCollapseRules
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import os.meka.core.domain.DayHead
@@ -650,6 +655,11 @@ internal fun TodayHeaderRow(
     night: Boolean = false,
     /** This week's goals as arcs on the face's outer ring (Goals, properly, slice 7). */
     week: WeekGoals = WeekGoals.EMPTY,
+    /**
+     * Watch face item, part 2: on the cover screen the face is drawn by [CollapsingHeader], pinned over this row, so
+     * the row keeps only an empty slot its size (the lines wrap exactly as before).
+     */
+    slotOnly: Boolean = false,
     left: @Composable () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -660,7 +670,10 @@ internal fun TodayHeaderRow(
     )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) { left() }
-        if (face != null) {
+        if (face != null && slotOnly) {
+            androidx.compose.foundation.layout.Spacer(Modifier.padding(start = MekaSpace.m)
+                .size(WatchFaceRules.headerDp(cover = compact).dp))
+        } else if (face != null) {
             WatchFaceDial(face, play, played, Modifier.padding(start = MekaSpace.m).graphicsLayer { alpha = faceAlpha },
                 size = WatchFaceRules.headerDp(cover = compact).dp, onOpen = onOpenFace, dots = dots, onTick = onTick, night = night,
                 week = week)
@@ -748,32 +761,53 @@ private fun TodayPane(
     Column(modifier.imePadding()) {
         // Pull to sync (motion pass 2, slice 3): pulling Today down past its top fills a brass ring; letting go syncs.
         PullToSyncBox(pull, Modifier.weight(1f).fillMaxWidth()) {
+        // Watch face item, part 2: on the cover screen the header collapses as Today scrolls ([HeaderCollapseRules]).
+        val headerFace = today.watchFace.takeIf { today.timeline.dateLabel.isNotEmpty() }
+        val collapses = HeaderCollapseRules.collapses(cover = now != null) && headerFace != null
+        val listState = rememberLazyListState()
+        val collapseScope = rememberCoroutineScope()
+        val density = LocalDensity.current
+        var headerPx by remember { mutableIntStateOf(0) }
+        val barPx = with(density) { COMPACT_BAR_HEIGHT.toPx() }
+        val reducedCollapse = Meka.reducedMotion
+        val collapse by remember(collapses, barPx, reducedCollapse) {
+            derivedStateOf {
+                if (!collapses) 0f else HeaderCollapseRules.shown(
+                    HeaderCollapseRules.progress(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset.toFloat(),
+                        HeaderCollapseRules.rangePx(headerPx.toFloat(), barPx)),
+                    reducedCollapse,
+                )
+            }
+        }
+        val habitTick: (HabitDot) -> Unit = { dot ->
+            chipHaptics.light()
+            val was = dot.done
+            chipScope.launch { runCatching { core?.setHabitDone(dot.id, !was) } }
+            undo?.show(HabitDotRules.tickedLine(dot, !was)) { core?.setHabitDone(dot.id, was) }
+        }
         // The foot fades into the capture bar rather than cutting a row in half (Fold review item 4); the bottom
         // padding (xl) is more than the fade, so the last row still scrolls fully clear.
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize().footFade(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             item(key = "greeting") {
-                Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0, play))) {
+                Column(Modifier.padding(bottom = MekaSpace.l).onSizeChanged { headerPx = it.height }
+                    .appear(rememberAppearance(0, play))) {
                     // The watch face sits in the header, beside the greeting (Fold reviews 2026-10-09, 00:10 item 1
                     // and 07:26 item 2): greeting, date and links on the left, the 12-hour face on the right — 150 dp
                     // on the open Fold, a smaller 78 dp on the closed one. The first-open moment draws it in place.
                     TodayHeaderRow(
-                        face = today.watchFace.takeIf { today.timeline.dateLabel.isNotEmpty() }, compact = now != null,
+                        face = headerFace, compact = now != null, slotOnly = collapses,
                         play = ringPlay, played = ringPlayed,
                         // Tap the face: the full 24-hour Day ring as a sheet, its arcs opening their events and tasks.
                         onOpenFace = openDayRing,
                         night = shutdown.night,
                         week = goalsNow.week,
                         dots = if (core != null) habitDots else emptyList(),
-                        onTick = { dot ->
-                            chipHaptics.light()
-                            val was = dot.done
-                            chipScope.launch { runCatching { core?.setHabitDone(dot.id, !was) } }
-                            undo?.show(HabitDotRules.tickedLine(dot, !was)) { core?.setHabitDone(dot.id, was) }
-                        },
+                        onTick = habitTick,
                     ) {
                     // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
                     GreetingText(greeting(), if (now == null) ringPlay else DayRingPlay.STILL)
@@ -1164,6 +1198,17 @@ private fun TodayPane(
             }
             }
             }
+        }
+        if (collapses && headerFace != null) {
+            CollapsingHeader(
+                shown = collapse, face = headerFace, fullDp = WatchFaceRules.headerDp(cover = true),
+                greeting = greeting(),
+                line = HeaderCollapseRules.compactLine(today.timeline.dateLabel, weather.nowLine),
+                play = ringPlay, played = ringPlayed, onOpenFace = openDayRing,
+                night = shutdown.night, week = goalsNow.week,
+                dots = if (core != null) habitDots else emptyList(), onTick = habitTick,
+                onTop = { collapseScope.launch { if (reducedCollapse) listState.scrollToItem(0) else listState.animateScrollToItem(0) } },
+            )
         }
         }
         QuickCapture(actions.add, onTalk)
