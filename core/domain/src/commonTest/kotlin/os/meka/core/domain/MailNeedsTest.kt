@@ -111,4 +111,41 @@ class MailNeedsTest {
         // Cleared (Undo): back.
         assertNotNull(MailNeedsRules.card(listOf(item("a", hour, extra = MailNeedsRules.snoozeFields(until) + MailNeedsRules.snoozeFields(0))), now, cal))
     }
+
+    // ---- Slice 6b-1: Task and Waiting for ----
+
+    private fun subject(s: String) = MailNeedsRules.read("mi9", MailNeedsRules.serverFields("Personal", "Sam Taylor", null, s, null, now, 1))!!
+
+    @Test
+    fun aTasksTitleIsTheSubjectWithoutItsReplyPrefixes() {
+        assertEquals("Football on Saturday", MailNeedsRules.taskTitle(subject("Re: RE: Fwd: Football on Saturday")))
+        assertEquals("Kit list", MailNeedsRules.taskTitle(subject("FW:Kit list")))
+        assertEquals("Email from Sam Taylor", MailNeedsRules.taskTitle(subject("Re:")))
+        assertEquals("Email from Sam Taylor", MailNeedsRules.taskTitle(subject("")))
+        // Words that only look like a prefix stay.
+        assertEquals("Reminder: pay the club", MailNeedsRules.taskTitle(subject("Reminder: pay the club")))
+        assertEquals("Q3: numbers", MailNeedsRules.taskTitle(subject("Q3: numbers")))
+        assertEquals("Email from Sam Taylor · Personal · Sat 17 Oct", MailNeedsRules.taskNotes(subject("x"), cal))
+        assertTrue(MailNeedsRules.taskId("mi1") != MailNeedsRules.waitingId("mi1"))
+        assertEquals(MailNeedsRules.taskId("mi1"), MailNeedsRules.taskId("mi1"))
+    }
+
+    @Test
+    fun taskAndWaitingForAreADoneThatRemembersWhatTheyMade() {
+        val made = item("m1", hour, extra = MailNeedsRules.taskFields("t1", now))
+        assertTrue(MailNeedsRules.done(made))
+        assertTrue(MailNeedsRules.archiveDue(made))
+        assertEquals("t1", made.taskId)
+        assertNull(made.waitingId)
+        assertNull(MailNeedsRules.card(listOf(made), now, cal))
+        val waiting = item("m2", hour, extra = MailNeedsRules.waitingFields("w1", now))
+        assertEquals("w1", waiting.waitingId)
+        assertTrue(MailNeedsRules.done(waiting))
+        // Undo: back on the card, nothing recorded as made.
+        val undone = item("m1", hour, extra = MailNeedsRules.taskFields("t1", now) + MailNeedsRules.undoMadeFields(now + 1))
+        assertFalse(MailNeedsRules.done(undone))
+        assertNull(undone.taskId)
+        assertNull(undone.waitingId)
+        assertEquals(1, MailNeedsRules.card(listOf(undone), now + 1, cal)?.rows?.size)
+    }
 }

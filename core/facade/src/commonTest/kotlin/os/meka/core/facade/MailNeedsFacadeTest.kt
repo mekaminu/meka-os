@@ -90,4 +90,67 @@ class MailNeedsFacadeTest {
         assertEquals(MailNeedsRules.UNKNOWN, mac.doneMailItem("nothing"))
         assertEquals(MailNeedsRules.UNKNOWN, mac.snoozeMailItem("nothing"))
     }
+
+    // ---- Slice 6b-1 ----
+
+    private fun task(id: String) = serverOps.after("hh", 0, 100_000).map { it.op }
+        .filter { it.entityType == EntityTypes.TASK && it.entityId == id }.associate { it.field to it.value }
+
+    @Test
+    fun taskMakesOneTaskOnBothDevicesArchivesTheEmailAndUndoTakesItBack() = runTest {
+        val a = email("m1", "Sam Taylor", "Re: Kit list for Saturday", hour)
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(MailNeedsRules.TASK_LINE, fold.taskFromMailItem(a))
+        assertEquals(MailNeedsRules.TASK_LINE, mac.taskFromMailItem(a))
+        assertNull(fold.mailNeeds.value)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
+        val t = task(MailNeedsRules.taskId(a))
+        assertEquals(FieldValue.Text("Kit list for Saturday"), t[os.meka.core.domain.ActionableFields.TITLE])
+        assertEquals(FieldValue.Text("Email from Sam Taylor · Personal · Sat 17 Oct"), t[os.meka.core.domain.ActionableFields.NOTES])
+        // Only the one task, whichever device made it.
+        assertEquals(1, serverOps.after("hh", 0, 100_000).map { it.op }.filter { it.entityType == EntityTypes.TASK }.map { it.entityId }.distinct().size)
+        // The server sees a Done, so it archives the email.
+        assertTrue(serverOps.after("hh", 0, 100_000).map { it.op }.any { it.entityId == a && it.field == MailItemFields.DONE_ASKED_AT })
+
+        now += 1_000
+        mac.undoMailItem()
+        assertEquals(listOf(a), mac.mailNeeds.value?.rows?.map { it.id })
+        assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
+        assertEquals(listOf(a), fold.mailNeeds.value?.rows?.map { it.id })
+        assertEquals(FieldValue.Bool(true), task(MailNeedsRules.taskId(a))[os.meka.core.domain.ActionableFields.DELETED])
+        // Task again brings the same task back.
+        now += 1_000
+        fold.taskFromMailItem(a)
+        assertTrue(fold.syncNow())
+        assertEquals(FieldValue.Bool(false), task(MailNeedsRules.taskId(a))[os.meka.core.domain.ActionableFields.DELETED])
+        assertEquals(MailNeedsRules.UNKNOWN, fold.taskFromMailItem("nothing"))
+    }
+
+    @Test
+    fun waitingForPutsItInWaitingForFromTheSenderAndUndoRemovesIt() = runTest {
+        val a = email("m1", "Alex Reed", "Fwd: Quote for the fence", hour)
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow())
+        assertEquals(MailNeedsRules.WAITING_LINE, fold.waitingFromMailItem(a))
+        assertNull(fold.mailNeeds.value)
+        val w = fold.listsView.value.waiting.single()
+        assertEquals("Quote for the fence", w.title)
+        assertEquals("Alex Reed", w.who)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(listOf("Quote for the fence"), mac.listsView.value.waiting.map { it.title })
+        assertNull(mac.mailNeeds.value)
+
+        now += 1_000
+        fold.undoMailItem()
+        assertTrue(fold.listsView.value.waiting.isEmpty())
+        assertEquals(listOf(a), fold.mailNeeds.value?.rows?.map { it.id })
+        // Made again after the Undo: the same item comes back, once.
+        now += 1_000
+        fold.waitingFromMailItem(a)
+        assertEquals(1, fold.listsView.value.waiting.size)
+        assertEquals(MailNeedsRules.UNKNOWN, fold.waitingFromMailItem("nothing"))
+    }
 }

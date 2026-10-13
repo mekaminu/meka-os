@@ -16,8 +16,12 @@ import os.meka.core.sync.fv
  * On the card: **Done** (an app writes [MailItemFields.DONE_ASKED_AT]; the server archives it at its next check and
  * writes [MailItemFields.DONE_AT]); Undo writes [MailItemFields.UNDO_ASKED_AT] (before the server acted nothing
  * happens; after, the server puts it back in the inbox and writes [MailItemFields.UNDONE_AT]); **Snooze** hides the
- * card until tomorrow 08:00 ([MailItemFields.SNOOZED_UNTIL], synced, 0 clears it). Reply, Task and Waiting for come in
- * later slices. Nothing is ever sent from here.
+ * card until tomorrow 08:00 ([MailItemFields.SNOOZED_UNTIL], synced, 0 clears it). Slice 6b-1: **Task** makes a task
+ * from the email ([taskTitle], [taskNotes], id [taskId] so two devices converge on one) and **Waiting for** puts it in
+ * Waiting for (who = the sender, chase in [ListRules.DEFAULT_CHASE_DAYS] days); either one is a Done as well (the email
+ * is archived at the server's next check) and records what it made ([MailItemFields.TASK_ID] /
+ * [MailItemFields.WAITING_ID]); Undo removes what it made and brings the card back. Reply comes in a later slice.
+ * Nothing is ever sent from here.
  */
 object MailItemFields {
     // The server's.
@@ -37,6 +41,10 @@ object MailItemFields {
     const val DONE_ASKED_AT = "doneAskedAtMs"
     const val UNDO_ASKED_AT = "undoAskedAtMs"
     const val SNOOZED_UNTIL = "snoozedUntilMs"
+    /** Slice 6b-1: the task made from it ("" once undone). */
+    const val TASK_ID = "taskId"
+    /** Slice 6b-1: the Waiting for item made from it ("" once undone). */
+    const val WAITING_ID = "waitingId"
 }
 
 data class MailItem(
@@ -54,6 +62,10 @@ data class MailItem(
     val doneAskedAtMs: Long?,
     val undoAskedAtMs: Long?,
     val snoozedUntilMs: Long?,
+    /** Slice 6b-1: the task made from it, or null. */
+    val taskId: String? = null,
+    /** Slice 6b-1: the Waiting for item made from it, or null. */
+    val waitingId: String? = null,
 )
 
 /** One email on the card. */
@@ -89,6 +101,10 @@ object MailNeedsRules {
     const val TITLE = "From your mail"
     const val DONE = "Done"
     const val SNOOZE = "Snooze"
+    const val TASK = "Task"
+    const val WAITING = "Waiting for"
+    const val TASK_LINE = "Task added · email archived at Navilife's next check"
+    const val WAITING_LINE = "In Waiting for · chase in 3 days · email archived at Navilife's next check"
     const val BUSINESS_CHIP = "Business"
     const val DONE_LINE = "Done · archived at Navilife's next check"
     const val SNOOZED_LINE = "Snoozed till tomorrow 08:00"
@@ -195,6 +211,8 @@ object MailNeedsRules {
             doneAskedAtMs = ms(MailItemFields.DONE_ASKED_AT),
             undoAskedAtMs = ms(MailItemFields.UNDO_ASKED_AT),
             snoozedUntilMs = ms(MailItemFields.SNOOZED_UNTIL),
+            taskId = text(MailItemFields.TASK_ID),
+            waitingId = text(MailItemFields.WAITING_ID),
         )
     }
 
@@ -276,4 +294,40 @@ object MailNeedsRules {
     /** What the server writes after archiving it (a Done) or putting it back (an Undo). */
     fun archivedFields(nowMs: Long): Map<String, FieldValue> = mapOf(MailItemFields.DONE_AT to nowMs.fv())
     fun putBackFields(nowMs: Long): Map<String, FieldValue> = mapOf(MailItemFields.UNDONE_AT to nowMs.fv(), MailItemFields.GONE_AT to 0L.fv())
+
+    // ---- Slice 6b-1: Task and Waiting for ----
+
+    /** The task made from an email: one per email, so Task tapped on both apps offline converges on one task. */
+    fun taskId(itemId: String): String = "tm$itemId"
+
+    /** The Waiting for item made from an email: one per email, like [taskId]. */
+    fun waitingId(itemId: String): String = "wm$itemId"
+
+    /** The subject without its "Re:", "Fwd:" and "Fw:" (any number, any case); "Email from Sam Taylor" when none is left. */
+    fun taskTitle(i: MailItem): String {
+        var t = i.subject.trim()
+        while (true) {
+            val colon = t.indexOf(':')
+            if (colon !in 2..3) break
+            val head = t.substring(0, colon).lowercase()
+            if (head != "re" && head != "fw" && head != "fwd" && head != "aw" && head != "sv") break
+            t = t.substring(colon + 1).trim()
+        }
+        if (t.isEmpty() || t == "(no subject)") return "Email from ${i.from}"
+        return t.take(MAX_SUBJECT)
+    }
+
+    /** "Email from Sam Taylor · Personal · Sat 17 Oct" — the task's notes, so he knows where to find it. */
+    fun taskNotes(i: MailItem, cal: LocalCalendar): String =
+        "Email from ${i.from} · ${i.account} · ${CivilDate.shortLabel(cal.epochDayOf(i.receivedAtMs))}"
+
+    /** Task: a Done that also records the task made. */
+    fun taskFields(taskId: String, nowMs: Long): Map<String, FieldValue> = doneFields(nowMs) + (MailItemFields.TASK_ID to taskId.fv())
+
+    /** Waiting for: a Done that also records the Waiting for item made. */
+    fun waitingFields(waitingId: String, nowMs: Long): Map<String, FieldValue> = doneFields(nowMs) + (MailItemFields.WAITING_ID to waitingId.fv())
+
+    /** Undo on Task or Waiting for: back on the card and nothing recorded as made. */
+    fun undoMadeFields(nowMs: Long): Map<String, FieldValue> =
+        undoDoneFields(nowMs) + (MailItemFields.TASK_ID to "".fv()) + (MailItemFields.WAITING_ID to "".fv())
 }

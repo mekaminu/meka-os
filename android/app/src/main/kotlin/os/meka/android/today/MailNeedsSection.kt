@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -46,8 +48,8 @@ import os.meka.core.facade.MekaCore
 /**
  * Inbox autopilot, slice 6a: "From your mail" in Needs you — the emails the server sorted as needing Meka, still in
  * the inbox, newest first: who, which account (the business one wears a Business chip), when, the subject and the
- * first words, each with **Done** (archived at the server's next check) and **Snooze** (back tomorrow 08:00). Both
- * have Undo on the bar. Tapping the header folds the emails in and out (expand spring; reduced motion: cross-fade).
+ * first words, each with **Done** (archived at the server's next check), **Task** and **Waiting for** (slice 6b-1: made
+ * from the email, which is archived too) and **Snooze** (back tomorrow 08:00). Each has Undo on the bar. Tapping the header folds the emails in and out (expand spring; reduced motion: cross-fade).
  */
 @Composable
 internal fun MailNeedsSection(
@@ -89,6 +91,8 @@ internal fun MailNeedsSection(
                         MailNeedsRowView(
                             row,
                             onDone = { haptics.medium(); answer { core.doneMailItem(row.id) } },
+                            onTask = { haptics.medium(); answer { core.taskFromMailItem(row.id) } },
+                            onWaiting = { haptics.medium(); answer { core.waitingFromMailItem(row.id) } },
                             onSnooze = { haptics.light(); answer { core.snoozeMailItem(row.id) } },
                         )
                     }
@@ -100,8 +104,9 @@ internal fun MailNeedsSection(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MailNeedsRowView(row: MailNeedsRow, onDone: () -> Unit, onSnooze: () -> Unit) {
+private fun MailNeedsRowView(row: MailNeedsRow, onDone: () -> Unit, onTask: () -> Unit, onWaiting: () -> Unit, onSnooze: () -> Unit) {
     Column(Modifier.fillMaxWidth().testTag("mail-item-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -119,8 +124,14 @@ private fun MailNeedsRowView(row: MailNeedsRow, onDone: () -> Unit, onSnooze: ()
             row.preview?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
         }
-        Row(Modifier.padding(top = MekaSpace.xxs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        // Four answers wrap onto a second line on the narrow cover screen rather than squeezing.
+        FlowRow(
+            Modifier.padding(top = MekaSpace.xxs),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
             MailNeedsPill(MailNeedsRules.DONE, spoken = "${MailNeedsRules.DONE}: archive ${row.subject}", onClick = onDone)
+            MailNeedsPill(MailNeedsRules.TASK, spoken = "Make a task from ${row.subject} and archive the email", onClick = onTask)
+            MailNeedsPill(MailNeedsRules.WAITING, quiet = true, spoken = "Waiting for ${row.from} on ${row.subject}, chase in 3 days", onClick = onWaiting)
             MailNeedsPill(MailNeedsRules.SNOOZE, quiet = true, spoken = "${MailNeedsRules.SNOOZE} ${row.subject} till tomorrow 8 o'clock", onClick = onSnooze)
         }
     }

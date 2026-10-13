@@ -212,10 +212,11 @@ class Lists(
 
     // ---- Waiting for ----
 
-    fun addWaiting(title: String, who: String? = null, chaseInDays: Int? = ListRules.DEFAULT_CHASE_DAYS): String {
+    /** [withId]: a chosen id (Inbox autopilot's Waiting for, so two devices converge on one item), else a new one. */
+    fun addWaiting(title: String, who: String? = null, chaseInDays: Int? = ListRules.DEFAULT_CHASE_DAYS, withId: String? = null): String {
         val t = cleanTitle(title, "Say what you're waiting for")
         checkDays(chaseInDays)
-        val id = ids()
+        val id = withId ?: ids()
         val fields = linkedMapOf<String, FieldValue>(
             ActionableFields.TITLE to t.fv(),
             CommitmentFields.DIRECTION to CommitmentDirection.OWED_TO_ME.name.fv(),
@@ -227,6 +228,11 @@ class Lists(
         )
         who?.trim()?.takeIf { it.isNotEmpty() }?.let { fields[CommitmentFields.COUNTERPARTY_LABEL] = it.take(MAX_TITLE).fv() }
         if (chaseInDays != null) fields[CommitmentFields.FOLLOW_UP_AT] = daysFromToday(chaseInDays)
+        // Coming back under a chosen id (made, undone, made again): undo the deletion and what it finished with.
+        if (withId != null) replica.entity(EntityTypes.COMMITMENT, id)?.let { old ->
+            if (old.deleted) fields[ActionableFields.DELETED] = false.fv()
+            if (old[ActionableFields.COMPLETED_AT].longOrNull != null) fields[ActionableFields.COMPLETED_AT] = FieldValue.Null
+        }
         replica.commitLocal(EntityTypes.COMMITMENT, id, fields)
         return id
     }

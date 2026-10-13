@@ -3533,6 +3533,41 @@ class MekaCore(
         os.meka.core.domain.MailNeedsRules.SNOOZED_LINE
     }
 
+    /**
+     * Inbox autopilot, slice 6b-1: **Task** on an email in "From your mail": a task titled from the subject (notes say
+     * whose email and which account) and the email is Done (archived at the server's next check). One task per email,
+     * so a tap on both apps makes one. Undo deletes the task and brings the card back. Returns the line to show.
+     */
+    suspend fun taskFromMailItem(id: String): String = onCore {
+        val R = os.meka.core.domain.MailNeedsRules
+        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
+        val taskId = tasks.createWithId(R.taskId(id), os.meka.core.domain.NewTask(R.taskTitle(item), notes = R.taskNotes(item, ZoneCalendar(timeZone))))
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.taskFields(taskId, nowMs()))
+        mailNeedsUndo = {
+            runCatching { tasks.delete(taskId) }
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.undoMadeFields(nowMs()))
+        }
+        mailNeedsChanged()
+        R.TASK_LINE
+    }
+
+    /**
+     * Inbox autopilot, slice 6b-1: **Waiting for** on an email in "From your mail": a Waiting for item (the subject,
+     * from the sender, chase in 3 days) and the email is Done. One per email. Undo removes it and brings the card back.
+     */
+    suspend fun waitingFromMailItem(id: String): String = onCore {
+        val R = os.meka.core.domain.MailNeedsRules
+        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
+        val waitingId = lists.addWaiting(R.taskTitle(item), item.from, os.meka.core.domain.ListRules.DEFAULT_CHASE_DAYS, withId = R.waitingId(id))
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.waitingFields(waitingId, nowMs()))
+        mailNeedsUndo = {
+            runCatching { lists.deleteWaiting(waitingId) }
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.undoMadeFields(nowMs()))
+        }
+        mailNeedsChanged()
+        R.WAITING_LINE
+    }
+
     /** Undo on the last Done or Snooze in "From your mail" on this device. */
     suspend fun undoMailItem() = onCore {
         val undo = mailNeedsUndo ?: return@onCore

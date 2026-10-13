@@ -3,8 +3,8 @@ import SwiftUI
 
 /// "From your mail" on the Mac (Inbox autopilot, slice 6a), in Needs you above "Archived for you": the emails the server
 /// sorted as needing Meka, still in the inbox, newest first — who, which account (the business one wears a Business
-/// chip), when, the subject and the first words — each with Done (archived at the server's next check) and Snooze (back
-/// tomorrow 08:00), both with Undo on the bar. It staggers in after the cards above; clicking the header folds the
+/// chip), when, the subject and the first words — each with Done (archived at the server's next check), Task and Waiting
+/// for (slice 6b-1: made from the email, which is archived too) and Snooze (back tomorrow 08:00), each with Undo on the bar. It staggers in after the cards above; clicking the header folds the
 /// emails in and out on the expand spring; the headline cross-fades. Reduced motion: cross-fades.
 struct MailNeedsView: View {
     @Environment(CoreModel.self) private var model
@@ -35,6 +35,8 @@ struct MailNeedsView: View {
                             ForEach(card.rows, id: \.id) { row in
                                 MailNeedsRowView(row: row, palette: palette,
                                                  done: { model.doneMailItem(row.id) },
+                                                 task: { model.taskFromMailItem(row.id) },
+                                                 waiting: { model.waitingFromMailItem(row.id) },
                                                  snooze: { model.snoozeMailItem(row.id) })
                             }
                             if let more = card.moreLine {
@@ -66,6 +68,8 @@ private struct MailNeedsRowView: View {
     let row: MailNeedsRow
     let palette: MekaPalette
     let done: () -> Void
+    let task: () -> Void
+    let waiting: () -> Void
     let snooze: () -> Void
 
     var body: some View {
@@ -91,6 +95,10 @@ private struct MailNeedsRowView: View {
             HStack(spacing: MekaSpace.xs) {
                 MailNeedsPill(label: MailNeedsRules.shared.DONE, palette: palette,
                               spoken: "Done: archive \(row.subject)", action: done)
+                MailNeedsPill(label: MailNeedsRules.shared.TASK, palette: palette,
+                              spoken: "Make a task from \(row.subject) and archive the email", action: task)
+                MailNeedsPill(label: MailNeedsRules.shared.WAITING, palette: palette, quiet: true,
+                              spoken: "Waiting for \(row.from) on \(row.subject), chase in 3 days", action: waiting)
                 MailNeedsPill(label: MailNeedsRules.shared.SNOOZE, palette: palette, quiet: true,
                               spoken: "Snooze \(row.subject) till tomorrow 8 o'clock", action: snooze)
             }

@@ -2777,6 +2777,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(unknownDone, MailNeedsRules.shared.UNKNOWN)
         let unknownSnooze = try await core.snoozeMailItem(id: "nothing")
         XCTAssertEqual(unknownSnooze, MailNeedsRules.shared.UNKNOWN)
+        // Slice 6b-1: Task and Waiting for on an unknown id say so too.
+        let unknownTask = try await core.taskFromMailItem(id: "nothing")
+        XCTAssertEqual(unknownTask, MailNeedsRules.shared.UNKNOWN)
+        let unknownWaiting = try await core.waitingFromMailItem(id: "nothing")
+        XCTAssertEqual(unknownWaiting, MailNeedsRules.shared.UNKNOWN)
         try await core.undoMailItem()
         XCTAssertNil(core.mailNeeds.value)
         XCTAssertEqual(MailNeedsRules.shared.headline(n: 3), "3 emails need you")
