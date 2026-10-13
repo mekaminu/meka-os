@@ -4656,11 +4656,10 @@ class MekaCore(
     suspend fun reportNotifyTrace(model: String?, health: os.meka.core.domain.NotificationHealth, phone: String): Boolean {
         val api = notifyDiagnosticsApi ?: return false
         if (health.trace.isEmpty()) return false
-        val codec = os.meka.core.wire.NotifyDiagnosticsCodec
-        val report = codec.Report(
+        val report = os.meka.core.wire.NotifyDiagnosticsCodec.Report(
             model, nowMs(), health.allowed, phone,
-            health.channels.map { codec.Channel(it.id, it.name, it.on) },
-            health.trace.take(codec.TRACE_MAX).map { codec.Entry(it.atMs, it.kind.name, it.detail) },
+            health.channels.map { os.meka.core.wire.NotifyDiagnosticsCodec.Channel(it.id, it.name, it.on) },
+            health.trace.take(os.meka.core.wire.NotifyDiagnosticsCodec.TRACE_MAX).map { os.meka.core.wire.NotifyDiagnosticsCodec.Entry(it.atMs, it.kind.name, it.detail) },
         )
         return try { api.reportNotifyTrace(report) } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
     }
