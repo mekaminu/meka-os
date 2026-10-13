@@ -702,6 +702,17 @@ class MekaCore(
     /** One sync round at a time: the confined dispatcher alone would interleave rounds at suspension points. */
     private val syncMutex = Mutex()
 
+    private val _archivedForYou = MutableStateFlow<os.meka.core.domain.ArchivedForYouCard?>(null)
+    /**
+     * Inbox autopilot, slice 4: Needs you's "Archived for you" card, due at the 12:30 and 18:30 digests while Autopilot
+     * tidied something Meka hasn't seen (Got it on either app); null otherwise. Follows sync and the minute tick.
+     */
+    val archivedForYou: StateFlow<os.meka.core.domain.ArchivedForYouCard?> = _archivedForYou.asStateFlow()
+
+    /** What Got it replaced, for its Undo (this device only; null after an Undo). */
+    private var archivedSeenBefore: Long? = null
+    private var archivedSeenUndoable = false
+
     init {
         replica.addListener { refresh(); requestSync() }
         refresh()
@@ -3380,6 +3391,39 @@ class MekaCore(
 
     // ---- Mail (Inbox autopilot, slice 1) ----
 
+    private fun archivedSeen(): Long? = os.meka.core.domain.ArchivedForYouRules.readSeen(
+        replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.ArchivedForYouRules.ENTITY_ID)?.fields,
+    )
+
+    private fun archivedChanged() {
+        _archivedForYou.value = os.meka.core.domain.ArchivedForYouRules.card(
+            activity.mailTidyBatches(), archivedSeen(), nowMs(), ZoneCalendar(timeZone),
+        )
+    }
+
+    /** Got it on "Archived for you": folds it away on both apps (synced) until the next digest finds new tidies. */
+    suspend fun seenArchivedForYou(): String = onCore {
+        archivedSeenBefore = archivedSeen()
+        archivedSeenUndoable = true
+        replica.commitLocal(
+            os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.ArchivedForYouRules.ENTITY_ID,
+            os.meka.core.domain.ArchivedForYouRules.seenFields(nowMs()),
+        )
+        archivedChanged()
+        os.meka.core.domain.ArchivedForYouRules.GOT_IT_LINE
+    }
+
+    /** Undo on Got it: the card comes back as it was. */
+    suspend fun undoSeenArchivedForYou() = onCore {
+        if (!archivedSeenUndoable) return@onCore
+        archivedSeenUndoable = false
+        replica.commitLocal(
+            os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.ArchivedForYouRules.ENTITY_ID,
+            os.meka.core.domain.ArchivedForYouRules.seenFields(archivedSeenBefore ?: 1L),
+        )
+        archivedChanged()
+    }
+
     /**
      * The Mail pane: the connected mail accounts with their labels and what's left to connect. Null when the server
      * couldn't be reached or this device isn't connected (the pane says so; nothing changed).
@@ -3435,7 +3479,7 @@ class MekaCore(
      * next check (they are never tidied again). Returns what was said and the pane as it is now.
      */
     suspend fun undoMailTidy(id: String): MailSwitched {
-        val line = onCore { activity.undo(id).line.also { activityChanged() } }
+        val line = onCore { activity.undo(id).line.also { activityChanged(); archivedChanged() } }
         return MailSwitched(line, lastMailFacts?.let { mailView(it) })
     }
 
@@ -5004,6 +5048,8 @@ class MekaCore(
     private suspend fun <T> onCore(block: () -> T): T = withContext(confined) { block() }
 
     private fun refresh() {
+        // Inbox autopilot, slice 4: "Archived for you" follows the synced tidies, Got it and the digest times.
+        archivedChanged()
         val all = tasks.all()
         val marks = eventActions.marks(all)
         _eventMarks.value = marks

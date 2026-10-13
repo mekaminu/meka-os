@@ -2738,5 +2738,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(switched.view)
         let undo = try await core.undoMailTidy(id: "nothing")
         XCTAssertEqual(undo.line, "This can't be undone")
+        // Slice 4: "Archived for you" — nothing tidied, no card; Got it and its Undo answer offline.
+        XCTAssertNil(core.archivedForYou.value)
+        let seen = try await core.seenArchivedForYou()
+        XCTAssertEqual(seen, ArchivedForYouRules.shared.GOT_IT_LINE)
+        try await core.undoSeenArchivedForYou()
+        XCTAssertNil(core.archivedForYou.value)
+        let batch = MailTidyBatch(id: "t1", atMs: 1_000, account: "Personal", summary: "Tidied 5 emails · Personal",
+                                  detail: "3 newsletters → Navilife/Newsletters · 2 receipts and orders → Navilife/Receipts", count: 5,
+                                  undoAskedAtMs: nil, undoneAtMs: nil, undoNote: nil,
+                                  kinds: [MailTidy.newsletter: KotlinInt(int: 3), MailTidy.receipt: KotlinInt(int: 2)])
+        XCTAssertEqual(ArchivedForYouRules.shared.headline(batches: [batch]), "Tidied 5 · 3 newsletters · 2 receipts and orders")
     }
 }

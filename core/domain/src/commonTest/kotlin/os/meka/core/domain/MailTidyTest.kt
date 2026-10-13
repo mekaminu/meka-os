@@ -108,6 +108,10 @@ class MailTidyTest {
         assertTrue(id != MailAutopilotRules.batchId("acc2", 42L))
         val b = MailAutopilotRules.readBatch(id, MailAutopilotRules.batchFields(42L, "Personal", counts))!!
         assertEquals(6, b.count)
+        // Slice 4: each kind's count rides along for "Archived for you" (KEEP never).
+        assertEquals(mapOf(MailTidy.NEWSLETTER to 3, MailTidy.RECEIPT to 2, MailTidy.ARCHIVE to 1), b.kinds)
+        assertEquals(emptyMap(), MailAutopilotRules.readBatch(id, MailAutopilotRules.batchFields(42L, "Personal", counts)
+            .filterKeys { it !in setOf(MailTidyBatchFields.NEWSLETTERS, MailTidyBatchFields.RECEIPTS, MailTidyBatchFields.ARCHIVED) })!!.kinds)
         assertEquals(summary, b.summary)
         assertTrue(b.canUndo)
         assertTrue(!MailAutopilotRules.undoDue(b, 50L))

@@ -64,6 +64,7 @@ struct CommandNeedsYouView: View {
                 SchoolCoversView(palette: palette, firstIndex: 1 + model.triage.count)
                 RequestCardsView(palette: palette, firstIndex: 1 + model.triage.count + model.needsYouAsks)
                 GroupGistsView(palette: palette, firstIndex: 1 + model.triage.count + model.needsYouAsks + model.requests.count)
+                ArchivedForYouView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                 if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triage.isEmpty && model.needsYouAsks == 0 {
                     // The breathing check ring and the line, then what's coming instead of a blank column (Fold
                     // review 2026-10-09 00:10, item 6).

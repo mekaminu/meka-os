@@ -123,6 +123,18 @@ object MailTidyBatchFields {
     const val UNDO_ASKED_AT = "undoAskedAtMs"
     const val UNDONE_AT = "undoneAtMs"
     const val UNDO_NOTE = "undoNote"
+    /** Slice 4: how many of each kind the batch tidied (Int64), for "Archived for you"; absent on older batches. */
+    const val NEWSLETTERS = "newsletters"
+    const val RECEIPTS = "receipts"
+    const val ARCHIVED = "archived"
+
+    /** The count field of each tidy kind. */
+    fun kindField(t: MailTidy): String? = when (t) {
+        MailTidy.NEWSLETTER -> NEWSLETTERS
+        MailTidy.RECEIPT -> RECEIPTS
+        MailTidy.ARCHIVE -> ARCHIVED
+        MailTidy.KEEP -> null
+    }
 }
 
 /** A tidy batch as the apps read it. */
@@ -136,6 +148,8 @@ data class MailTidyBatch(
     val undoAskedAtMs: Long?,
     val undoneAtMs: Long?,
     val undoNote: String?,
+    /** Slice 4: how many of each kind (empty on a batch written before slice 4). */
+    val kinds: Map<MailTidy, Int> = emptyMap(),
 ) {
     val canUndo: Boolean get() = undoneAtMs == null && undoAskedAtMs == null
 }
@@ -203,7 +217,7 @@ object MailAutopilotRules {
             MailTidyBatchFields.SUMMARY to summary.fv(),
             MailTidyBatchFields.DETAIL to detail.fv(),
             MailTidyBatchFields.COUNT to counts.filterKeys { it != MailTidy.KEEP }.values.sum().toLong().fv(),
-        )
+        ) + counts.mapNotNull { (t, n) -> MailTidyBatchFields.kindField(t)?.takeIf { n > 0 }?.let { it to n.toLong().fv() } }
     }
 
     fun readBatch(id: String, f: Map<String, FieldValue>): MailTidyBatch? {
@@ -219,6 +233,10 @@ object MailAutopilotRules {
             undoAskedAtMs = ms(MailTidyBatchFields.UNDO_ASKED_AT),
             undoneAtMs = ms(MailTidyBatchFields.UNDONE_AT),
             undoNote = text(MailTidyBatchFields.UNDO_NOTE),
+            kinds = MailTidy.entries.mapNotNull { t ->
+                val k = MailTidyBatchFields.kindField(t) ?: return@mapNotNull null
+                (f[k] as? FieldValue.Int64)?.value?.toInt()?.takeIf { it > 0 }?.let { t to it }
+            }.toMap(),
         )
     }
 

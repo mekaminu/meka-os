@@ -349,6 +349,7 @@ internal fun NeedsYouColumn(
     val chatGroups = remember(grouped) { TriageChatRules.groupKeys(grouped) }
     val digestNow = rememberGroupDigest(captures, core, chatGroups)
     val digest = digestNow.view
+    val archived by core.archivedForYou.collectAsState()
     val gists by core.groupGists.collectAsState()
     // A busy chat's one-line summary (slice 3c), made on this phone and synced; asked for when the chats change.
     val summaries by core.chatSummaries.collectAsState()
@@ -396,6 +397,13 @@ internal fun NeedsYouColumn(
         digest?.takeIf { it.due }?.let { d ->
             item(key = "group-digest") {
                 GroupDigestSection(d, captures, core, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        // Inbox autopilot, slice 4: what Autopilot archived, with the digests (12:30, 18:30) until Got it.
+        archived?.let { a ->
+            item(key = "archived-for-you") {
+                ArchivedForYouSection(a, core, moves.undoLine,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
             }
         }

@@ -172,6 +172,8 @@ final class CoreModel {
     /// The group digest (V1, messages slice 4b): one card per busy group at the latest digest time, made on the Fold
     /// (its name, how many messages, who wrote, MEKA's gist; never the messages). Caught up here clears it there too.
     private(set) var groupGists: [GroupGist] = []
+    /// Inbox autopilot, slice 4: what Autopilot archived, shown with the 12:30 and 18:30 digests until Got it.
+    private(set) var archivedForYou: ArchivedForYouCard?
     /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
     private(set) var lists: ListsView?
     /// Needs you as a stack of decisions (four tabs, slice 2); see `needsYouCards`.
@@ -396,6 +398,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await s in core.afterWork { self?.afterWork = s }
+        })
+        observers.append(Task { [weak self] in
+            for await a in core.archivedForYou { self?.archivedForYou = a }
         })
         observers.append(Task { [weak self] in
             for await b in core.blockedCallers { self?.blockedCallers = b }
@@ -2670,6 +2675,7 @@ final class CoreModel {
         case .dateNightBooked(let day): run { _ = try await $0.bookDateNight(day: day, booked: false) }
         case .dateNightSkipped(let day): run { _ = try await $0.skipDateNight(day: day, skip: false) }
         case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
+        case .archivedSeen: run { try await $0.undoSeenArchivedForYou() }
         case .appointment(let done): run { _ = try await $0.undoAppointment(done: done) }
         case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
@@ -3499,6 +3505,32 @@ final class CoreModel {
         }
     }
 
+    /// Got it on "Archived for you" (Inbox autopilot, slice 4): the card folds away here and on the Fold (synced), with
+    /// Undo on the bar. Nothing crosses to the core but the call.
+    func seenArchivedForYou() {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                let line = try await core.seenArchivedForYou()
+                offerEventUndo(line, .archivedSeen)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Put back on one of "Archived for you"'s tidies: the server returns those emails to the inbox at its next check.
+    /// Only the id (a String) crosses; the line comes back for the bar.
+    func putBackArchived(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                let r = try await core.undoMailTidy(id: id)
+                offerEventUndo(r.line, nil)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Caught up on the group digest (one group's card, or all of them): the cards leave Needs you here and on the Fold,
     /// with Undo on the bar. Only the groups' keys (Strings) cross to the core.
     func catchUpGroupDigest(_ gists: [GroupGist]) {
@@ -3702,6 +3734,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case dateNightSkipped(Int64)
         /// Caught up on the group digest: its cards come back on both devices.
         case groupDigest(GroupDigestUndo)
+        /// Got it on "Archived for you": the card comes back on both devices.
+        case archivedSeen
         /// Went, Booked… or Not yet on an appointment: its visit, booking and set-aside day go back.
         case appointment(AppointmentDone)
         /// Call to book on an appointment (slice 2b): the task goes and the card asks again as before.
