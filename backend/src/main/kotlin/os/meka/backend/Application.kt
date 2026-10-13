@@ -1147,6 +1147,7 @@ object Migrations {
         14 to "/db/V14__ai_usage_day.sql", 15 to "/db/V15__app_update_failure.sql", 16 to "/db/V16__recovery_key.sql",
         17 to "/db/V17__fold_posture.sql", 18 to "/db/V18__notify_report.sql", 19 to "/db/V19__mail_account_label.sql",
         20 to "/db/V20__mail_message.sql",
+        21 to "/db/V21__mail_sort.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

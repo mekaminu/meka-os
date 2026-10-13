@@ -3,6 +3,8 @@ package os.meka.backend.integrations
 import os.meka.backend.OwnKeyReminders
 import os.meka.backend.Secrets
 import os.meka.core.domain.BankHoliday
+import os.meka.core.domain.MailSortFacts
+import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.BankHolidayFields
 import os.meka.core.domain.BankHolidayStore
 import os.meka.core.domain.BankHolidays
@@ -199,7 +201,21 @@ class Integrations(
     }
 
     fun accounts(householdId: String): List<WireCodec.IntegrationAccount> =
-        store.accounts(householdId).filter { it.status != DISCONNECTED }.map { WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs, it.canEdit, it.label) }
+        store.accounts(householdId).filter { it.status != DISCONNECTED }.map {
+            WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs, it.canEdit, it.label, sorted = if (it.provider in mail) sortedCounts(it.id) else null)
+        }
+
+    /**
+     * Slice 2a: a mail account's inbox counts per sort, or null while there's nothing sorted yet and its first
+     * listing is still being read (so Mail doesn't say "Inbox clear" before MEKA has looked).
+     */
+    private fun sortedCounts(accountId: String): Map<String, Int>? {
+        val ms = mailStore ?: return null
+        return runCatching {
+            val counts = ms.sortCounts(accountId)
+            if (counts.isEmpty() && (ms.cursor(accountId) == null || ms.pendingCount(accountId) > 0)) null else counts
+        }.getOrNull()
+    }
 
     /** Names what a mail account is for (Personal · Business · Outlook). False for an unknown account, provider or label. */
     fun setMailLabel(householdId: String, provider: String, email: String, label: String): Boolean =
@@ -378,6 +394,22 @@ class Integrations(
             if (h == null) ms.remove(a.id, id) else ms.put(a.householdId, a.id, h)
         }
         ms.prune(a.id, since)
+        sortHeaders(a, ms)
+    }
+
+    /**
+     * Slice 2a: every header not sorted yet gets its bucket from [MailSortRules] (headers only, nothing sent anywhere,
+     * nothing in the mailbox changes). Unsure ones (a person seems to have written) wait for the AI in slice 2b.
+     */
+    private fun sortHeaders(a: AccountRow, ms: MailStore) {
+        repeat(SORT_ROUNDS) {
+            val batch = ms.unsorted(a.id, SORT_BATCH)
+            if (batch.isEmpty()) return
+            ms.setSorts(a.id, batch.associate { h ->
+                h.id to MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId))
+            })
+            if (batch.size < SORT_BATCH) return
+        }
     }
 
     /**
@@ -920,6 +952,9 @@ class Integrations(
         const val WINDOW_BACK_MS = 24 * 3_600_000L
         /** Inbox autopilot, slice 1c: the mail MEKA keeps headers for (Meka: the last 60 days). */
         const val MAIL_WINDOW_MS = 60 * 24 * 3_600_000L
+        /** Slice 2a: headers sorted per round (rules only, cheap; a big first listing takes a few rounds of one check). */
+        const val SORT_BATCH = 500
+        const val SORT_ROUNDS = 20
         /** Gmail headers read per 5-minute check (one call each; Gmail allows far more): a big first listing fills in over a few checks. */
         const val HEADERS_PER_CHECK = 300
         const val WINDOW_AHEAD_MS = 30 * 24 * 3_600_000L

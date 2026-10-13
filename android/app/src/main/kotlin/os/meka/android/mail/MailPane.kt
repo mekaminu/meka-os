@@ -189,6 +189,16 @@ private fun MailAccountCard(
                 else -> Meka.colors.textTertiary
             })
         }
+        // Slice 2a: what the rules made of the inbox; it fades in once the server has sorted the account.
+        AnimatedVisibility(
+            row.sortedLine != null,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            Crossfade(row.sortedLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "mail-sorted") {
+                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.xs),

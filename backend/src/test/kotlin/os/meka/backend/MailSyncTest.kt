@@ -22,6 +22,9 @@ import os.meka.backend.integrations.PostgresIntegrationStore
 import os.meka.backend.integrations.PostgresMailStore
 import os.meka.backend.integrations.TokenCipher
 import os.meka.backend.integrations.TokenSet
+import os.meka.core.domain.MailSort
+import os.meka.core.domain.MailSortReason
+import os.meka.core.domain.MailSorted
 import os.meka.core.sync.InMemoryServerOpStore
 import java.net.URI
 import kotlin.test.Test
@@ -31,7 +34,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Inbox autopilot, slice 1c: each mail account's headers kept current from the provider's change feed. */
+/** Inbox autopilot, slice 1c: each mail account's headers kept current from the provider's change feed; slice 2a: sorted. */
 class MailSyncTest {
     private var now = 1_790_985_600_000L
     private val day = 86_400_000L
@@ -253,6 +256,49 @@ class MailSyncTest {
         assertEquals(listOf("a"), ms.messages(id).map { it.id })
     }
 
+    // ---- Slice 2a: sorting ----
+
+    @Test
+    fun everyHeaderIsSortedAndTheAccountListCountsTheInbox() {
+        val ms = InMemoryMailStore()
+        val (gmail, _, i) = world(ms)
+        gmail.mailbox["p"] = msg("p", 1) // a person
+        gmail.mailbox["n"] = msg("n", 1, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.mailbox["r"] = msg("r", 1, "auto-confirm@shop.example").copy(subject = "Your order has shipped")
+        gmail.mailbox["s"] = msg("s", 2, "tax@service.gov.uk").copy(labels = listOf("INBOX", "CATEGORY_UPDATES"))
+        gmail.mailbox["old"] = msg("old", 3, "noreply@x.example").copy(inInbox = false) // archived: not counted
+        val id = connect(i)
+        // Nothing listed yet: not "Inbox clear".
+        assertNull(i.accounts("home").single().sorted)
+        i.syncAccount(id)
+        assertEquals(MailSort.NEEDS_YOU, ms.sortOf(id, "p")!!.sort)
+        assertFalse(ms.sortOf(id, "p")!!.sure)
+        assertEquals(MailSortReason.PUBLIC_BODY, ms.sortOf(id, "s")!!.reason)
+        assertEquals(MailSort.NOTIFICATION, ms.sortOf(id, "old")!!.sort)
+        assertEquals(mapOf("NEEDS_YOU" to 2, "NEWSLETTER" to 1, "RECEIPT" to 1), i.accounts("home").single().sorted)
+        // A header read again is sorted again (it moved to Promotions).
+        gmail.mailbox["n"] = gmail.mailbox.getValue("n").copy(labels = listOf("INBOX", "CATEGORY_PROMOTIONS"), listId = null)
+        gmail.nextRound = { MailChanges(fetch = listOf("n"), cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(MailSort.PROMO, ms.sortOf(id, "n")!!.sort)
+        assertEquals(mapOf("NEEDS_YOU" to 2, "PROMO" to 1, "RECEIPT" to 1), i.accounts("home").single().sorted)
+    }
+
+    @Test
+    fun aBigFirstListingIsSortedInBatchesAndAnEmptyInboxIsClear() {
+        val ms = InMemoryMailStore()
+        val (gmail, _, i) = world(ms)
+        gmail.nextRound = { MailChanges(headers = (0 until Integrations.SORT_BATCH + 7).map { n -> msg("m$n", 1) }, cursor = "h1") }
+        val id = connect(i)
+        i.syncAccount(id)
+        assertEquals(mapOf("NEEDS_YOU" to Integrations.SORT_BATCH + 7), i.accounts("home").single().sorted)
+        assertTrue(ms.unsorted(id, 10).isEmpty())
+        // Everything left the inbox: listed and sorted, nothing waiting.
+        gmail.nextRound = { MailChanges(removed = (0 until Integrations.SORT_BATCH + 7).map { n -> "m$n" }, cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(emptyMap(), i.accounts("home").single().sorted)
+    }
+
     // ---- On real Postgres (MEKA_TEST_DB_URL, CI); skipped when unset ----
 
     @Test
@@ -285,6 +331,16 @@ class MailSyncTest {
             assertEquals(listOf("o1"), ms.pending(acc, 10))
             ms.put("hh-m", acc, full.copy(unread = false))
             assertFalse(ms.messages(acc).single().unread)
+            // Slice 2a: sorting, counted only while in the inbox, cleared when the header is read again.
+            assertEquals(listOf("o1"), ms.unsorted(acc, 10).map { it.id })
+            ms.setSorts(acc, mapOf("o1" to MailSorted(MailSort.NEWSLETTER, MailSortReason.MAILING_LIST, true), "nope" to MailSorted(MailSort.JUNK, MailSortReason.SPAM, true)))
+            assertTrue(ms.unsorted(acc, 10).isEmpty())
+            assertEquals(MailSorted(MailSort.NEWSLETTER, MailSortReason.MAILING_LIST, true), ms.sortOf(acc, "o1"))
+            assertEquals(mapOf("NEWSLETTER" to 1), ms.sortCounts(acc))
+            ms.put("hh-m", acc, full.copy(inInbox = false))
+            assertNull(ms.sortOf(acc, "o1"))
+            ms.setSorts(acc, mapOf("o1" to MailSorted(MailSort.NEWSLETTER, MailSortReason.MAILING_LIST, true)))
+            assertEquals(emptyMap(), ms.sortCounts(acc))
             ms.prune(acc, now)
             assertTrue(ms.messages(acc).isEmpty())
             ms.apply("hh-m", acc, MailChanges(fetch = listOf("x"), cursor = "h3"))

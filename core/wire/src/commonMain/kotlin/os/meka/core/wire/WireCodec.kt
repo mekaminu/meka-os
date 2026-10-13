@@ -10,6 +10,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -149,6 +150,8 @@ object WireCodec {
         val canEdit: Boolean = false,
         /** A mail account's label (Inbox autopilot, slice 1: a `MailLabel` name). Additive: absent = none set. */
         val label: String? = null,
+        /** Inbox autopilot, slice 2a: a mail account's inbox counts per `MailSort` name. Additive: absent = not sorted yet. */
+        val sorted: Map<String, Int>? = null,
     )
 
     /** Naming what a mail account is for (Inbox autopilot, slice 1): Personal · Business · Outlook. */
@@ -200,6 +203,7 @@ object WireCodec {
                 a.lastSyncAtMs?.let { put("lastSync", it) }
                 if (a.canEdit) put("edit", true)
                 a.label?.let { put("label", it) }
+                a.sorted?.let { m -> put("sorted", buildJsonObject { m.forEach { (k, v) -> put(k, v) } }) }
             }
         }))
     }
@@ -211,6 +215,7 @@ object WireCodec {
                 a.str("provider"), a.str("email"), a.str("status"), a["lastSync"]?.jsonPrimitive?.long,
                 canEdit = a["edit"]?.jsonPrimitive?.booleanOrNull ?: false,
                 label = a["label"]?.jsonPrimitive?.contentOrNull,
+                sorted = (a["sorted"] as? JsonObject)?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.intOrNull?.takeIf { it >= 0 }?.let { k to it } }?.toMap(),
             )
         }
     }

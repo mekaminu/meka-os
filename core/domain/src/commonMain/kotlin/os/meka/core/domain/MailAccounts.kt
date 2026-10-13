@@ -46,6 +46,8 @@ data class MailAccountFacts(
     val lastSyncAtMs: Long?,
     /** The stored [MailLabel.name], or null before one was set. */
     val label: String?,
+    /** Slice 2a: how many emails in its inbox each [MailSort] holds (by name), or null before the server sorted any. */
+    val sorted: Map<String, Int>? = null,
 )
 
 /** One row in Mail. */
@@ -62,6 +64,8 @@ data class MailAccountRow(
     val labels: List<MailLabel>,
     /** Slice 1b: the Google sign-in ends within the day (Reconnect shows, the line says when). */
     val ending: Boolean = false,
+    /** Slice 2a: "In the inbox · 6 need you · 30 newsletters …" ([MailSortRules.summary]), or null before sorting. */
+    val sortedLine: String? = null,
 )
 
 /** One "Connect …" button. */
@@ -115,10 +119,14 @@ object MailAccountRules {
         }
     }
 
-    fun line(status: String, lastSyncAtMs: Long?, nowMs: Long): String = when {
+    fun line(status: String, lastSyncAtMs: Long?, nowMs: Long): String = line(status, lastSyncAtMs, nowMs, sorting = false)
+
+    /** [sorting]: the server already sorts this account (slice 2a), so the line no longer promises it. */
+    fun line(status: String, lastSyncAtMs: Long?, nowMs: Long, sorting: Boolean): String = when {
         status == "needs_reconnect" -> "Sign-in ended · Reconnect to keep MEKA reading it"
         status == "error" -> "Couldn't reach it last time · MEKA tries again every few minutes"
         lastSyncAtMs == null -> "Connected · checking the sign-in…"
+        sorting -> "Connected · checked ${ago(lastSyncAtMs, nowMs)} · sorted, nothing moved yet"
         else -> "Connected · checked ${ago(lastSyncAtMs, nowMs)} · sorting comes in the next update"
     }
 
@@ -131,10 +139,11 @@ object MailAccountRules {
         return MailAccountRow(
             provider = a.provider, email = a.email, label = label,
             title = "${label.label} · ${MailProviders.name(a.provider)}",
-            line = endsAt?.let { endingLine(it, nowMs) } ?: line(a.status, a.lastSyncAtMs, nowMs),
+            line = endsAt?.let { endingLine(it, nowMs) } ?: line(a.status, a.lastSyncAtMs, nowMs, sorting = a.sorted != null),
             needsReconnect = a.status == "needs_reconnect" || endsAt != null,
             labels = listOf(label) + MailLabel.entries.filter { it != label },
             ending = endsAt != null,
+            sortedLine = MailSortRules.summary(a.sorted),
         )
     }
 

@@ -1,6 +1,7 @@
 package os.meka.backend.integrations
 
 import os.meka.backend.PostgresOpStore
+import os.meka.core.domain.MailSorted
 import java.sql.Connection
 import java.sql.ResultSet
 
@@ -25,29 +26,53 @@ interface MailStore {
     /** The account's headers, newest first (the sorting slice reads these; tests too). */
     fun messages(accountId: String): List<MailHeader>
     fun pendingCount(accountId: String): Int
+    /** Slice 2a: headers not sorted yet (a header read again is unsorted again), newest first. */
+    fun unsorted(accountId: String, limit: Int): List<MailHeader>
+    fun setSorts(accountId: String, sorts: Map<String, MailSorted>)
+    /** Slice 2a: emails still in the inbox per sort name (sorted ones only). */
+    fun sortCounts(accountId: String): Map<String, Int>
+    /** Slice 2a: one email's sort, or null before it's sorted (tests; later the cards). */
+    fun sortOf(accountId: String, id: String): MailSorted?
 }
 
 class InMemoryMailStore : MailStore {
     private val cursors = mutableMapOf<String, String>()
     private val rows = mutableMapOf<String, LinkedHashMap<String, MailHeader?>>()
+    private val sorts = mutableMapOf<String, MutableMap<String, MailSorted>>()
 
     private fun of(accountId: String) = rows.getOrPut(accountId) { LinkedHashMap() }
 
     @Synchronized override fun cursor(accountId: String) = cursors[accountId]
     @Synchronized override fun apply(householdId: String, accountId: String, changes: MailChanges) {
         val r = of(accountId)
-        changes.headers.forEach { r[it.id] = it }
-        changes.fetch.forEach { r[it] = null }
-        changes.removed.forEach { r.remove(it) }
+        changes.headers.forEach { r[it.id] = it; sorts[accountId]?.remove(it.id) }
+        changes.fetch.forEach { r[it] = null; sorts[accountId]?.remove(it) }
+        changes.removed.forEach { r.remove(it); sorts[accountId]?.remove(it) }
         cursors[accountId] = changes.cursor
     }
     @Synchronized override fun pending(accountId: String, limit: Int) = of(accountId).filterValues { it == null }.keys.take(limit)
-    @Synchronized override fun put(householdId: String, accountId: String, header: MailHeader) { of(accountId)[header.id] = header }
-    @Synchronized override fun remove(accountId: String, id: String) { of(accountId).remove(id) }
-    @Synchronized override fun prune(accountId: String, beforeMs: Long) { of(accountId).values.removeIf { it != null && it.receivedAtMs < beforeMs } }
-    @Synchronized override fun forget(accountId: String) { rows.remove(accountId); cursors.remove(accountId) }
+    @Synchronized override fun put(householdId: String, accountId: String, header: MailHeader) { of(accountId)[header.id] = header; sorts[accountId]?.remove(header.id) }
+    @Synchronized override fun remove(accountId: String, id: String) { of(accountId).remove(id); sorts[accountId]?.remove(id) }
+    @Synchronized override fun prune(accountId: String, beforeMs: Long) {
+        of(accountId).entries.removeIf { (id, h) -> (h != null && h.receivedAtMs < beforeMs).also { if (it) sorts[accountId]?.remove(id) } }
+    }
+    @Synchronized override fun forget(accountId: String) { rows.remove(accountId); cursors.remove(accountId); sorts.remove(accountId) }
     @Synchronized override fun messages(accountId: String) = of(accountId).values.filterNotNull().sortedByDescending { it.receivedAtMs }
     @Synchronized override fun pendingCount(accountId: String) = of(accountId).values.count { it == null }
+    @Synchronized override fun unsorted(accountId: String, limit: Int): List<MailHeader> {
+        val done = sorts[accountId].orEmpty()
+        return messages(accountId).filter { it.id !in done }.take(limit)
+    }
+    @Synchronized override fun setSorts(accountId: String, sorts: Map<String, MailSorted>) {
+        val r = of(accountId)
+        val m = this.sorts.getOrPut(accountId) { mutableMapOf() }
+        sorts.forEach { (id, s) -> if (r[id] != null) m[id] = s }
+    }
+    @Synchronized override fun sortCounts(accountId: String): Map<String, Int> {
+        val m = sorts[accountId].orEmpty()
+        return of(accountId).values.filterNotNull().filter { it.inInbox }.mapNotNull { m[it.id]?.sort?.name }.groupingBy { it }.eachCount()
+    }
+    @Synchronized override fun sortOf(accountId: String, id: String) = sorts[accountId]?.get(id)
 }
 
 class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
@@ -65,7 +90,7 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
             changes.headers.forEach { upsert(c, householdId, accountId, it) }
             if (changes.fetch.isNotEmpty()) c.prepareStatement(
                 """INSERT INTO mail_message(account_id, message_id, household_id) VALUES (?,?,?)
-                   ON CONFLICT (account_id, message_id) DO UPDATE SET headers_at = NULL""",
+                   ON CONFLICT (account_id, message_id) DO UPDATE SET headers_at = NULL, sort = NULL, sort_reason = NULL, sort_sure = NULL""",
             ).use { st ->
                 changes.fetch.forEach { id -> st.setString(1, accountId); st.setString(2, id); st.setString(3, householdId); st.addBatch() }
                 st.executeBatch()
@@ -100,7 +125,8 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
                  from_address = EXCLUDED.from_address, from_name = EXCLUDED.from_name, subject = EXCLUDED.subject,
                  received_at_ms = EXCLUDED.received_at_ms, unread = EXCLUDED.unread, in_inbox = EXCLUDED.in_inbox,
                  labels = EXCLUDED.labels, list_unsubscribe = EXCLUDED.list_unsubscribe,
-                 one_click_unsubscribe = EXCLUDED.one_click_unsubscribe, list_id = EXCLUDED.list_id, headers_at = now()""",
+                 one_click_unsubscribe = EXCLUDED.one_click_unsubscribe, list_id = EXCLUDED.list_id, headers_at = now(),
+                 sort = NULL, sort_reason = NULL, sort_sure = NULL""",
         ).use { st ->
             st.setString(1, accountId); st.setString(2, h.id); st.setString(3, householdId); st.setString(4, h.threadId)
             st.setString(5, h.fromAddress); st.setString(6, h.fromName); st.setString(7, h.subject); st.setLong(8, h.receivedAtMs)
@@ -147,6 +173,53 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
         c.prepareStatement("SELECT count(*) FROM mail_message WHERE account_id = ? AND headers_at IS NULL").use { st ->
             st.setString(1, accountId)
             st.executeQuery().use { rs -> rs.next(); rs.getInt(1) }
+        }
+    }
+
+    override fun unsorted(accountId: String, limit: Int): List<MailHeader> = c { c ->
+        c.prepareStatement(
+            """SELECT message_id, thread_id, from_address, from_name, subject, received_at_ms, unread, in_inbox, labels,
+                 list_unsubscribe, one_click_unsubscribe, list_id
+               FROM mail_message WHERE account_id = ? AND headers_at IS NOT NULL AND sort IS NULL
+               ORDER BY received_at_ms DESC, message_id LIMIT ?""",
+        ).use { st ->
+            st.setString(1, accountId); st.setInt(2, limit)
+            st.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.header()) } }
+        }
+    }
+
+    override fun setSorts(accountId: String, sorts: Map<String, MailSorted>) {
+        if (sorts.isEmpty()) return
+        c { c ->
+            c.prepareStatement(
+                "UPDATE mail_message SET sort = ?, sort_reason = ?, sort_sure = ? WHERE account_id = ? AND message_id = ? AND headers_at IS NOT NULL",
+            ).use { st ->
+                sorts.forEach { (id, s) ->
+                    st.setString(1, s.sort.name); st.setString(2, s.reason.name); st.setBoolean(3, s.sure)
+                    st.setString(4, accountId); st.setString(5, id); st.addBatch()
+                }
+                st.executeBatch()
+            }
+            Unit
+        }
+    }
+
+    override fun sortCounts(accountId: String): Map<String, Int> = c { c ->
+        c.prepareStatement("SELECT sort, count(*) FROM mail_message WHERE account_id = ? AND in_inbox AND sort IS NOT NULL GROUP BY sort").use { st ->
+            st.setString(1, accountId)
+            st.executeQuery().use { rs -> buildMap { while (rs.next()) put(rs.getString(1), rs.getInt(2)) } }
+        }
+    }
+
+    override fun sortOf(accountId: String, id: String): MailSorted? = c { c ->
+        c.prepareStatement("SELECT sort, sort_reason, sort_sure FROM mail_message WHERE account_id = ? AND message_id = ?").use { st ->
+            st.setString(1, accountId); st.setString(2, id)
+            st.executeQuery().use { rs ->
+                if (!rs.next()) return@use null
+                val sort = os.meka.core.domain.MailSort.of(rs.getString(1)) ?: return@use null
+                val reason = os.meka.core.domain.MailSortReason.of(rs.getString(2)) ?: return@use null
+                MailSorted(sort, reason, rs.getBoolean(3))
+            }
         }
     }
 

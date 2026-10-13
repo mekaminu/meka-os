@@ -85,6 +85,7 @@ struct MailSheet: View {
         .background(palette.surface)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mailNote)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map(\.title) ?? [])
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map(\.sortedLine) ?? [])
         .task { await model.loadMail() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.loadMail() }
@@ -120,6 +121,12 @@ private struct MailAccountRowView: View {
             Text(row.line).font(MekaType.caption)
                 .foregroundStyle(row.ending ? palette.accent : row.needsReconnect ? palette.critical : palette.textTertiary)
                 .contentTransition(.opacity)
+            // Slice 2a: what the rules made of the inbox, once the server has sorted the account.
+            if let sorted = row.sortedLine {
+                Text(sorted).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .contentTransition(.opacity)
+                    .transition(.opacity)
+            }
             HStack(spacing: MekaSpace.xs) {
                 ForEach(MailAccountRules.shared.LABELS, id: \.name) { label in
                     let on = label == row.label
