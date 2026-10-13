@@ -23,6 +23,11 @@ object AboutYouFields {
     const val SHOWN_NAME = "shownName"
     const val PARTNER_NAME = "partnerName"
     const val PARTNER_PHONE = "partnerPhone"
+    /**
+     * The partner's email address (Inbox autopilot, slice 3b-2b, 2026-10-13): mail from it is never tidied away
+     * ([AboutYouRules.keepAddresses] → [MailTidyFacts.keepAddresses], read by the server's autopilot).
+     */
+    const val PARTNER_EMAIL = "partnerEmail"
     /** Bool: MEKA reads her messages for requests (absent = on once a partner is named). */
     const val PARTNER_WATCH = "partnerWatch"
     /** One child per line, "name|ageGroup|school" (age group a number or empty, school possibly empty). */
@@ -59,6 +64,7 @@ data class AboutYou(
     val partnerName: String? = null,
     val partnerPhone: String? = null,
     val partnerWatch: Boolean = true,
+    val partnerEmail: String? = null,
     val children: List<AboutChild> = emptyList(),
     val home: String? = null,
     val work: String? = null,
@@ -68,7 +74,7 @@ data class AboutYou(
 ) {
     /** Nothing at all filled in (Setup's step and the pane's welcome line). */
     val isEmpty: Boolean
-        get() = listOf(shownName, partnerName, partnerPhone, home, work, assistantNumber, voicemailNumber).all { it == null } &&
+        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, assistantNumber, voicemailNumber).all { it == null } &&
             children.isEmpty()
 
     companion object {
@@ -81,6 +87,7 @@ enum class AboutField(val key: String, val label: String, val hint: String, val 
     SHOWN_NAME(AboutYouFields.SHOWN_NAME, "Your name", "What Navilife calls you", "Navilife says “you” until you add it"),
     PARTNER_NAME(AboutYouFields.PARTNER_NAME, "Partner", "Their first name", "Add your partner to get their requests flagged"),
     PARTNER_PHONE(AboutYouFields.PARTNER_PHONE, "Partner's number", "Their mobile number", "Add their number so their calls always ring"),
+    PARTNER_EMAIL(AboutYouFields.PARTNER_EMAIL, "Partner's email", "Their email address", "Add it so Inbox autopilot never tidies their emails away"),
     HOME(AboutYouFields.HOME, "Home", "Your town", "Add home for its weather and the commute"),
     WORK(AboutYouFields.WORK, "Work", "Where the office is", "Add work for office-day weather"),
     ASSISTANT_NUMBER(AboutYouFields.ASSISTANT_NUMBER, "Call assistant's number", "The number callers reach", "Add it once the call assistant has a number"),
@@ -135,6 +142,8 @@ object AboutYouRules {
     const val NOT_NAME = "A name is letters, spaces, hyphens and apostrophes, up to 30."
     const val NOT_NUMBER = "That doesn't look like a phone number."
     const val NOT_PLACE = "Type a town or area, up to 60 letters."
+    const val NOT_EMAIL = "That doesn't look like an email address."
+    const val MAX_EMAIL = 254
     const val NOT_CHILD = "Type a name first: “Alex”, “Alex, U7” or “Alex, U7, Oakfield School”."
     const val TOO_MANY = "That's the most children About you holds."
     const val WATCH_ON = "On · Navilife flags what they ask you for in messages"
@@ -199,6 +208,7 @@ object AboutYouRules {
             partnerName = text(AboutYouFields.PARTNER_NAME),
             partnerPhone = text(AboutYouFields.PARTNER_PHONE),
             partnerWatch = fields[AboutYouFields.PARTNER_WATCH]?.boolOrNull ?: true,
+            partnerEmail = text(AboutYouFields.PARTNER_EMAIL),
             children = decodeChildren(fields[AboutYouFields.CHILDREN]?.textOrNull),
             home = text(AboutYouFields.HOME),
             work = text(AboutYouFields.WORK),
@@ -212,6 +222,7 @@ object AboutYouRules {
         AboutField.SHOWN_NAME -> a.shownName
         AboutField.PARTNER_NAME -> a.partnerName
         AboutField.PARTNER_PHONE -> a.partnerPhone
+        AboutField.PARTNER_EMAIL -> a.partnerEmail
         AboutField.HOME -> a.home
         AboutField.WORK -> a.work
         AboutField.ASSISTANT_NUMBER -> a.assistantNumber
@@ -228,6 +239,7 @@ object AboutYouRules {
         return when (f) {
             AboutField.SHOWN_NAME, AboutField.PARTNER_NAME -> name(t)
             AboutField.PARTNER_PHONE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> phone(t)
+            AboutField.PARTNER_EMAIL -> email(t)
             AboutField.HOME, AboutField.WORK -> place(t)
         }
     }
@@ -235,6 +247,7 @@ object AboutYouRules {
     fun refusal(f: AboutField): String = when (f) {
         AboutField.SHOWN_NAME, AboutField.PARTNER_NAME -> NOT_NAME
         AboutField.PARTNER_PHONE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> NOT_NUMBER
+        AboutField.PARTNER_EMAIL -> NOT_EMAIL
         AboutField.HOME, AboutField.WORK -> NOT_PLACE
     }
 
@@ -261,6 +274,33 @@ object AboutYouRules {
         if (digits < 6 || digits > 15 || t.any { !it.isDigit() && it !in "+-() ." }) return null
         return BlockedCallerRules.display(t)
     }
+
+    /**
+     * An email address, lower-cased: one @, something before it, a dotted domain after it (no spaces, no "..", no
+     * leading or trailing dot), up to [MAX_EMAIL]; a pasted "<a@b.com>" or "mailto:a@b.com" is unwrapped. No regex.
+     */
+    internal fun email(t: String): String? {
+        val s = t.trim().removePrefix("mailto:").trim().trimStart('<').trimEnd('>').trim().lowercase()
+        if (s.isEmpty() || s.length > MAX_EMAIL || s.any { it.isWhitespace() || it in "<>(),;:\\\"[]" }) return null
+        val at = s.indexOf('@')
+        if (at <= 0 || at != s.lastIndexOf('@')) return null
+        val local = s.substring(0, at)
+        val domain = s.substring(at + 1)
+        if (local.startsWith('.') || local.endsWith('.') || ".." in local) return null
+        val labels = domain.split('.')
+        if (labels.size < 2 || labels.any { it.isEmpty() || it.startsWith('-') || it.endsWith('-') }) return null
+        if (!labels.all { l -> l.all { it.isLetterOrDigit() || it == '-' } } || labels.last().length < 2) return null
+        return s
+    }
+
+    /**
+     * The addresses Inbox autopilot never tidies away (slice 3b-2b): the partner's email from About you, lower case;
+     * later his contacts too. Empty when none is set.
+     */
+    fun keepAddresses(a: AboutYou): Set<String> = setOfNotNull(a.partnerEmail?.let(::email))
+
+    /** [keepAddresses] straight from the stored profile (the server's autopilot). */
+    fun keepAddresses(fields: Map<String, FieldValue>?): Set<String> = keepAddresses(read(fields))
 
     /** A town or area: a letter at least, letters, digits, spaces and . , - ' only, up to [MAX_PLACE]. */
     internal fun place(t: String): String? =

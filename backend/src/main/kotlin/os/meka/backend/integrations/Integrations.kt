@@ -10,6 +10,7 @@ import os.meka.core.domain.MailTidyRules
 import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailTidyBatchFields
+import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.AutonomyRules
 import os.meka.core.domain.BankHolidayFields
 import os.meka.core.domain.BankHolidayStore
@@ -212,19 +213,27 @@ class Integrations(
         store.accounts(householdId).filter { it.status != DISCONNECTED }.map {
             val sorted = if (it.provider in mail) sortedCounts(it.id) else null
             WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs, it.canEdit, it.label, sorted = sorted,
-                wouldTidy = if (sorted != null) tidyCounts(it.id) else null)
+                wouldTidy = if (sorted != null) tidyCounts(it.id, keepAddresses(householdId)) else null)
         }
 
     /**
      * Slice 3a: Autopilot's dry run — what [MailTidyRules] would do with each sorted email still in the inbox, counted
      * per [MailTidy] name (KEEP included). Nothing in the mailbox moves; null if the store can't be read.
      */
-    private fun tidyCounts(accountId: String): Map<String, Int>? {
+    private fun tidyCounts(accountId: String, keep: Set<String>): Map<String, Int>? {
         val ms = mailStore ?: return null
         return runCatching {
-            ms.inboxSorted(accountId).groupingBy { (h, s) -> MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s)).name }.eachCount()
+            ms.inboxSorted(accountId).groupingBy { (h, s) -> MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, keep)).name }.eachCount()
         }.getOrNull()
     }
+
+    /**
+     * Slice 3b-2b: the addresses Autopilot never tidies, from the household's About you (the partner's email); empty
+     * when there's none or the profile can't be read. Never logged.
+     */
+    internal fun keepAddresses(householdId: String): Set<String> =
+        runCatching { AboutYouRules.keepAddresses(reader.entity(householdId, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)) }
+            .getOrDefault(emptySet())
 
     /**
      * Slice 2a: a mail account's inbox counts per sort, or null while there's nothing sorted yet and its first
@@ -438,8 +447,9 @@ class Integrations(
         if (candidates.isEmpty()) return
         // Can't tell which threads he wrote in: nothing is tidied this check.
         val replied = m.repliedThreads(token, since - MAIL_WINDOW_MS)
+        val keep = keepAddresses(hh)
         val plan = candidates.mapNotNull { (h, s) ->
-            val t = MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, replied = h.threadId?.let { it in replied } == true))
+            val t = MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, keep, replied = h.threadId?.let { it in replied } == true))
             if (t == MailTidy.KEEP) null else h to t
         }.take(MailAutopilotRules.MAX_PER_CHECK)
         if (plan.isEmpty()) return

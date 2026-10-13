@@ -121,4 +121,35 @@ class AboutYouTest {
         assertEquals(listOf(AboutYouRules.TITLE, "Calendars"), v.sections.map { it.title })
         assertEquals(1, v.toDo)
     }
+
+    @Test
+    fun thePartnersEmailIsCleanedAndKeptFromAutopilot() {
+        assertEquals("sam@family.example", AboutYouRules.clean(AboutField.PARTNER_EMAIL, "  Sam@Family.Example "))
+        assertEquals("sam.lee+club@mail.family.example", AboutYouRules.clean(AboutField.PARTNER_EMAIL, "<sam.lee+club@mail.family.example>"))
+        assertEquals("sam@family.example", AboutYouRules.clean(AboutField.PARTNER_EMAIL, "mailto:sam@family.example"))
+        for (bad in listOf("sam", "sam@", "@family.example", "sam@family", "sam@@family.example", "sam@family.e", "sam @family.example",
+            "sam..lee@family.example", ".sam@family.example", "sam@-family.example", "sam@family..example", "Sam <sam@family.example>")) {
+            assertNull(AboutYouRules.clean(AboutField.PARTNER_EMAIL, bad), bad)
+        }
+        assertEquals(AboutYouRules.NOT_EMAIL, AboutYouRules.refusal(AboutField.PARTNER_EMAIL))
+
+        val s = store()
+        assertTrue(AboutYouRules.keepAddresses(s.profile()).isEmpty())
+        assertEquals(AboutYouRules.NOT_EMAIL, s.set(AboutField.PARTNER_EMAIL, "not an email").line)
+        assertEquals(AboutYouRules.SAVED, s.set(AboutField.PARTNER_EMAIL, "Sam@Family.Example").line)
+        assertEquals("sam@family.example", s.profile().partnerEmail)
+        assertFalse(s.profile().isEmpty)
+        val row = s.view(LocalCalendar.UTC).rows.first { it.field == AboutField.PARTNER_EMAIL }
+        assertEquals("sam@family.example", row.value)
+        val keep = AboutYouRules.keepAddresses(mapOf(AboutYouFields.PARTNER_EMAIL to FieldValue.Text("Sam@Family.Example")))
+        assertEquals(setOf("sam@family.example"), keep)
+        // Autopilot keeps her mail whatever it was sorted as; anyone else's newsletter is still tidied.
+        val newsletter = MailSorted(MailSort.NEWSLETTER, MailSortReason.MAILING_LIST, sure = true)
+        assertEquals(MailTidy.KEEP, MailTidyRules.plan(MailTidyFacts("<SAM@family.example>", true, newsletter, keep)))
+        assertEquals(MailTidy.NEWSLETTER, MailTidyRules.plan(MailTidyFacts("editor@weekly.example", true, newsletter, keep)))
+        // Cleared: Undo puts it back, and nothing is kept any more.
+        val cleared = s.set(AboutField.PARTNER_EMAIL, " ")
+        assertEquals("sam@family.example", cleared.undo)
+        assertTrue(AboutYouRules.keepAddresses(s.profile()).isEmpty())
+    }
 }

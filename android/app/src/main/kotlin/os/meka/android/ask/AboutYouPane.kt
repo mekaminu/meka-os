@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
@@ -107,7 +108,7 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
                 AboutLine(row, said[row.field.key],
                     onSave = { typed -> scope.launch { runCatching { core.setAboutYou(row.field, typed) }.getOrNull()?.let { react(row.field.key, it) } } },
                     onUndo = { back -> scope.launch { runCatching { core.setAboutYou(row.field, back) }.getOrNull()?.let { react(row.field.key, it) } } })
-                if (row.field == AboutField.PARTNER_PHONE) v.watchLine?.let { line ->
+                if (row.field == AboutField.PARTNER_EMAIL) v.watchLine?.let { line ->
                     WatchRow(v.partnerWatch, line) {
                         haptics.tick()
                         scope.launch { runCatching { core.setAboutYouPartnerWatch(!v.partnerWatch) } }
@@ -171,7 +172,11 @@ private fun AboutLine(row: AboutRow, said: AboutSaved?, onSave: (String) -> Unit
             singleLine = true,
             textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
             cursorBrush = SolidColor(Meka.colors.accent),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = when (row.field) {
+                AboutField.PARTNER_EMAIL -> KeyboardType.Email
+                AboutField.PARTNER_PHONE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> KeyboardType.Phone
+                else -> KeyboardType.Text
+            }),
             keyboardActions = KeyboardActions(onDone = { onSave(text) }),
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = row.label },
         )

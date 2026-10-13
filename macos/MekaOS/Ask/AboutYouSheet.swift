@@ -31,7 +31,7 @@ struct AboutYouSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     ForEach(Array(v.rows.enumerated()), id: \.element.field.key) { i, row in
-                        line(row, watch: row.field.key == AboutYouFields.shared.PARTNER_PHONE ? v.watchLine : nil, watching: v.partnerWatch)
+                        line(row, watch: row.field.key == AboutYouFields.shared.PARTNER_EMAIL ? v.watchLine : nil, watching: v.partnerWatch)
                             .staggeredAppear(2 + i)
                     }
                     children(v).staggeredAppear(2 + v.rows.count)

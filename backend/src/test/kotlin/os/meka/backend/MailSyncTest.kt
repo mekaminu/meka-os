@@ -27,6 +27,8 @@ import os.meka.core.domain.MailSort
 import os.meka.core.domain.MailSortReason
 import os.meka.core.domain.MailSorted
 import os.meka.core.domain.AutonomyFields
+import os.meka.core.domain.AboutYouFields
+import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.AutonomyRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MailAutopilotFields
@@ -524,6 +526,28 @@ class MailSyncTest {
         arrive("d") // turned off again
         assertTrue(gmail.tidyCalls.isEmpty())
         assertTrue(tidies(ops).isEmpty())
+    }
+
+    @Test
+    fun mailFromThePartnersEmailInAboutYouIsNeverTidied() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        // Typed on a device as "Sam@Family.Example": the profile holds it, the autopilot reads it in any case.
+        device(ops, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, AboutYouFields.PARTNER_EMAIL, FieldValue.Text("Sam@Family.Example"))
+        gmail.mailbox["s0"] = msg("s0", 1, "sam@family.example").copy(listId = "<club.example>") // in the dry run: kept
+        val id = connect(i)
+        i.syncAccount(id)
+        assertEquals(mapOf("KEEP" to 1), i.accounts("home").single().wouldTidy)
+        now += day + 1
+        autopilotOn(ops)
+        now += 1
+        gmail.mailbox["s"] = msg("s", 0, "sam@family.example").copy(listId = "<club.example>") // a list she posts to
+        gmail.mailbox["n"] = msg("n", 0, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.nextRound = { MailChanges(fetch = listOf("s", "n"), cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(mapOf("n" to MailTidy.NEWSLETTER), gmail.tidyCalls.single())
+        assertTrue(gmail.mailbox.getValue("s").inInbox)
     }
 
     // ---- On real Postgres (MEKA_TEST_DB_URL, CI); skipped when unset ----
