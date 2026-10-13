@@ -108,7 +108,7 @@ struct AskScreen: View {
                         .rotationEffect(.degrees(setUpOpen ? 90 : 0))
                         .accessibilityHidden(true)
                 }
-                .padding(.top, MekaSpace.s)
+                .padding(.top, MekaSpace.xs)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -258,7 +258,7 @@ private struct LifeTileView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
             .padding(.horizontal, MekaSpace.m)
-            .padding(.vertical, MekaSpace.s)
+            .padding(.vertical, MekaSpace.xs)
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
             .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
         }

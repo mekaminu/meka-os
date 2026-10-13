@@ -405,7 +405,7 @@ private fun LifeTileCard(item: MoreItem, line: os.meka.core.domain.LifeTileLine,
             .semantics { contentDescription = "${item.label}, ${line.text}" }
             // Ask polish, slice 1: compact — the icon beside the name, about 30% shorter than before (104 dp).
             .heightIn(min = 72.dp)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         val d = item.destination
@@ -632,7 +632,7 @@ private fun SetUpLabel(text: String, open: Boolean, modifier: Modifier, toggle: 
     Row(
         modifier
             .fillMaxWidth()
-            .padding(top = MekaSpace.s)
+            .padding(top = MekaSpace.xs)
             .clip(RoundedCornerShape(MekaRadius.s))
             .clickable(role = Role.Button) { haptics.tick(); toggle() }
             .semantics(mergeDescendants = true) { stateDescription = if (open) "Open" else "Closed" }
