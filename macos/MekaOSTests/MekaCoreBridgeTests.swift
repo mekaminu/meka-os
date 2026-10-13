@@ -1317,10 +1317,13 @@ final class MekaCoreBridgeTests: XCTestCase {
     }
 
     func testMotionCheckReachesSwift() {
-        let off = MotionCheckRules.shared.mac(stored: nil, reduceMotion: true, lowPower: false)
+        // Only MEKA's own Off stills it (Reduce Motion no longer does; core MotionCheckTest.macCheck).
+        let off = MotionCheckRules.shared.mac(stored: .off, reduceMotion: true, lowPower: false)
         XCTAssertEqual(off.rows.map(\.label), ["MEKA Motion", "Reduce Motion", "Low Power Mode"])
-        XCTAssertEqual(off.result, "Animations off because the Mac's Reduce Motion is on — click to use MEKA's own setting")
+        XCTAssertEqual(off.result, "Animations off because MEKA's Motion is Off — click to turn them on")
         XCTAssertEqual(off.fix?.id, "expressive")
+        XCTAssertEqual(MotionCheckRules.shared.mac(stored: nil, reduceMotion: true, lowPower: false).result,
+                       "Animations on · Expressive · playing even with Reduce Motion on")
         let on = MotionCheckRules.shared.mac(stored: .expressive, reduceMotion: false, lowPower: false)
         XCTAssertEqual(on.result, "Animations on · Expressive")
         XCTAssertNil(on.fix)

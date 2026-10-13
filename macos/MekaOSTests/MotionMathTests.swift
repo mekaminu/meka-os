@@ -30,7 +30,9 @@ final class MotionMathTests: XCTestCase {
     @MainActor
     func testTheMotionSettingFollowsMekasChoiceThenReduceMotion() {
         XCTAssertEqual(MotionSetting.effective("", systemReduce: false), .expressive)
-        XCTAssertEqual(MotionSetting.effective("", systemReduce: true), .off)
+        // Only MEKA's own Off stills it; the Mac's Reduce Motion no longer does (core MotionRules.effective).
+        XCTAssertEqual(MotionSetting.effective("", systemReduce: true), .expressive)
+        XCTAssertEqual(MotionSetting.effective("off", systemReduce: false), .off)
         XCTAssertEqual(MotionSetting.effective("subtle", systemReduce: true), .subtle)
         XCTAssertEqual(MotionSetting.effective("expressive", systemReduce: true), .expressive)
         XCTAssertNil(MotionSetting.stored(""))
