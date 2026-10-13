@@ -247,37 +247,46 @@ object WatchFaceRules {
     }
 }
 
-/** One layer of the watch face second hand's glow ([WatchFaceLook.halo]), drawn under it widest first. */
-data class WatchHaloLayer(val widthDp: Float, val alpha: Float)
+/**
+ * One layer of the watch face second hand's glow ([WatchFaceLook.halo]), drawn under it widest first: a stroke
+ * [widthDp] wide at [alpha] of the needle's colour, softened by a [blurDp] blur (Android's BlurMaskFilter, the Mac's
+ * blur filter).
+ */
+data class WatchHaloLayer(val widthDp: Float, val alpha: Float, val blurDp: Float = 0f)
 
 /**
- * How the watch face's bezel and second hand are drawn (watch face item, Meka 2026-10-12 18:04 "the circle's outline is
- * too thick" and 2026-10-13 07:01 "make the moving seconds a very thin glowing proper arm"). Only the watch face reads
+ * How the watch face's bezel, arcs and second hand are drawn (watch face item, Meka 2026-10-12 18:04 "the circle's
+ * outline is too thick", 2026-10-13 07:01 "make the moving seconds a very thin glowing proper arm" and 12:13 "clock
+ * doesn't look right, it doesn't glow, and the thin line doesn't go across the circle"). Only the watch face reads
  * these — Today's header, the bedside clock and the bedside screen saver on the Fold, Today's header on the Mac; the
- * 24-hour Day ring keeps [DayRingLook]. Everything scales with the face's size ([scale]: 1 at the 150 dp face), so the
- * cover screen's smaller face and a compact clock aren't heavier for their size, and the bedside's large one isn't
- * spindly. Non-AI, pure; both apps only draw what this says.
+ * 24-hour Day ring keeps [DayRingLook]. Non-AI, pure; both apps only draw what this says.
  *
- * - **Bezel:** one brass line where the old breathing edge sat, [BEZEL_DP] at the 150 dp face — 58 % of the 3 dp track
- *   that, with the 1.5 dp edge beside it, read as a thick outline — breathing 60 % → 100 % with the face once it has
- *   landed (drawing itself round from 12 at [BEZEL_DRAW_ALPHA] on the opening). A fine darker hairline just inside it
- *   gives the depth the weight used to. Its soft outer glow is half the Day ring's: [BLUR_DP] out, [BLUR_PEAK_ALPHA].
- * - **Arcs and habit dots** keep their own track inside the bezel, never on it: a faint [ARC_TRACK_DP] line at the
- *   arcs' radius ([WatchFaceRules.rimRadiusDp]); markers and the hour and minute hands are unchanged.
- * - **Second hand:** a proper sweeping hand instead of the comet tail along the rim — a [NEEDLE_DP] needle from a short
- *   counterweight ([NEEDLE_TAIL] of the radius) through the centre to the markers' outer ends, the full brass, with a
- *   soft glow under it ([halo]: layers up to [HALO_WIDTH] × the needle at [HALO_ALPHA]); a small cap ([CAP_DP]) sits
- *   over all three hands. Smooth, never ticking ([DayRingLive.handDegrees]); quiet hours, Done for the day, power
- *   saving and reduced motion still stop it ([WatchFaceRules.liveMode]).
+ * The 12:13 fix: at the header's small sizes (78–96 dp) the old numbers, all scaled with the face, bottomed out — a
+ * 0.6 dp needle whose halo was ≈ 2 dp at 35 %, a 0.9 dp bezel with an 11 % glow — so on the phone there was no
+ * visible second hand or glow. Now everything that must read has a floor in dp, and the glows are fixed sizes that
+ * only grow on bigger faces ([glowScale]), never shrink.
+ *
+ * - **Bezel:** a crisp brass line all the way round, [BEZEL_DP] at the 150 dp face and never under [BEZEL_MIN_DP], at
+ *   [BEZEL_ALPHA] (the breath moves its glow, not the line). A fine darker hairline just inside it gives depth. Its
+ *   soft outer glow reaches [BLUR_DP] out with a peak of [BLUR_PEAK_ALPHA].
+ * - **Arcs, work and habit dots** sit on their own track inside the bezel, never on it, and no heavier than the bezel
+ *   ([arcStrokeDp], at most [ARC_MAX_DP]), so the rim reads as one thin even circle; what's on now glows faintly.
+ * - **Second hand:** a [NEEDLE_DP] (at least [NEEDLE_MIN_DP]) needle in the bright brass [NEEDLE_DARK_ARGB] (the theme's
+ *   accent in Light) from a counterweight ([NEEDLE_TAIL] of the radius) right through the centre to just inside the
+ *   hairline ([needleReachDp]), with a visible glow under it ([halo]: blurred layers out to [HALO_DP] wide, 50 % → 15 %);
+ *   a small cap ([CAP_DP]) sits over all three hands. Smooth, never ticking ([DayRingLive.handDegrees]); quiet hours,
+ *   Done for the day, power saving and reduced motion still stop it ([WatchFaceRules.liveMode]).
  */
 object WatchFaceLook {
     /** The face size the dp numbers below are for. */
     const val REFERENCE_DP = 150
 
-    const val BEZEL_DP = 1.75f
-    const val BEZEL_MIN_DP = 0.6f
-    /** The bezel's alpha while it draws itself round on the opening (it breathes once landed). */
-    const val BEZEL_DRAW_ALPHA = 0.8f
+    const val BEZEL_DP = 1.5f
+    const val BEZEL_MIN_DP = 1.2f
+    /** The bezel's alpha, on the opening and once landed. */
+    const val BEZEL_ALPHA = 0.9f
+    /** The bezel's alpha while it draws itself round on the opening (the same as landed, so nothing blinks). */
+    const val BEZEL_DRAW_ALPHA = BEZEL_ALPHA
 
     const val HAIRLINE_DP = 0.5f
     const val HAIRLINE_MIN_DP = 0.35f
@@ -286,20 +295,35 @@ object WatchFaceLook {
     const val ARC_TRACK_DP = 1f
     const val ARC_TRACK_ALPHA = 0.2f
 
-    /** The bezel's glow: half the Day ring's ([DayRingLook.EDGE_BLUR_DP], [DayRingLook.EDGE_BLUR_PEAK_ALPHA]). */
-    const val BLUR_DP = 4f
-    const val BLUR_PEAK_ALPHA = 0.11f
+    /** The arcs and work band: no heavier than the bezel, so the rim reads as one thin circle. */
+    const val ARC_DP = 1.5f
+    const val ARC_MIN_DP = 1.2f
+    const val ARC_MAX_DP = 1.5f
+    /** Work hours under the arcs: the same weight, fainter, so events on top still stand out. */
+    const val WORK_ALPHA = 0.45f
+    /** What's on now: a faint glow this much wider than its arc, at this alpha of the breath. */
+    const val NOW_GLOW_EXTRA_DP = 2.5f
+    const val NOW_GLOW_ALPHA = 0.22f
+
+    /** The bezel's glow: a soft band reaching this far out (dp), brightest next to the bezel. */
+    const val BLUR_DP = 6f
+    const val BLUR_PEAK_ALPHA = 0.25f
     const val BLUR_LAYERS = 4
 
-    const val NEEDLE_DP = 1f
-    const val NEEDLE_MIN_DP = 0.6f
-    const val NEEDLE_TAIL = 0.18f
-    const val HALO_WIDTH = 3.5f
-    const val HALO_ALPHA = 0.35f
+    const val NEEDLE_DP = 1.2f
+    const val NEEDLE_MIN_DP = 1.2f
+    const val NEEDLE_TAIL = 0.25f
+    /** The needle's colour in Dark: the bright brass, at full alpha. In Light the theme's accent (it reads on paper). */
+    const val NEEDLE_DARK_ARGB = 0xFFECD79EL
+    /** The needle's glow: its widest layer this wide (dp) on faces up to 150 dp. */
+    const val HALO_DP = 5f
     const val CAP_DP = 2.6f
 
     /** How much bigger or smaller than the 150 dp face a face of [sizeDp] is. */
     fun scale(sizeDp: Int): Float = sizeDp.toFloat() / REFERENCE_DP
+
+    /** Glows and floors only grow with the face, never shrink: 1 up to the 150 dp face. */
+    fun glowScale(sizeDp: Int): Float = maxOf(scale(sizeDp), 1f)
 
     fun bezelDp(sizeDp: Int): Float = maxOf(BEZEL_DP * scale(sizeDp), BEZEL_MIN_DP)
 
@@ -318,16 +342,19 @@ object WatchFaceLook {
         bezelRadiusDp(sizeDp) - bezelDp(sizeDp) / 2f - 0.25f * scale(sizeDp) - hairlineDp(sizeDp) / 2f
 
     /**
-     * The bezel's alpha once landed: [BEZEL_DRAW_ALPHA] (what the opening drew it at) blending into the breath [glow]
-     * (0.6 → 1.0) as [shown] goes 0 → 1, so it never blinks when the live layer takes over.
+     * The bezel's alpha: [BEZEL_ALPHA] always — a crisp line that never fades (Meka 12:13). [glow] and [shown] are
+     * kept for the apps' call sites; the breath shows in the glow ([blurAlpha]).
      */
-    fun bezelAlpha(glow: Float, shown: Float): Float =
-        (BEZEL_DRAW_ALPHA + (glow - BEZEL_DRAW_ALPHA) * shown.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+    @Suppress("UNUSED_PARAMETER")
+    fun bezelAlpha(glow: Float, shown: Float): Float = BEZEL_ALPHA
 
-    /** How far outside the bezel glow layer [i] sits (dp, scaled), evenly across [BLUR_DP]. */
-    fun blurOffsetDp(i: Int, sizeDp: Int): Float = BLUR_DP * scale(sizeDp) * (i + 1) / BLUR_LAYERS
+    /** How far outside the bezel glow layer [i] sits (dp), evenly across [BLUR_DP]. */
+    fun blurOffsetDp(i: Int, sizeDp: Int): Float = BLUR_DP * glowScale(sizeDp) * (i + 1) / BLUR_LAYERS
 
-    /** Glow layer [i]'s alpha for a breath of [glow]: brightest next to the bezel, nothing past [BLUR_DP]. */
+    /**
+     * Glow layer [i]'s alpha for a breath of [glow] (0.6 → 1.0 on Today): brightest next to the bezel, nothing past
+     * [BLUR_DP]; at the peak of the breath the inner layer is [BLUR_PEAK_ALPHA].
+     */
     fun blurAlpha(i: Int, glow: Float): Float {
         if (i < 0 || i >= BLUR_LAYERS) return 0f
         val f = 1f - i.toFloat() / BLUR_LAYERS
@@ -335,12 +362,18 @@ object WatchFaceLook {
     }
 
     /** Each glow layer's stroke: wide enough that neighbours overlap into one soft glow. */
-    fun blurStrokeDp(sizeDp: Int): Float = BLUR_DP * scale(sizeDp) / BLUR_LAYERS * 1.6f
+    fun blurStrokeDp(sizeDp: Int): Float = BLUR_DP * glowScale(sizeDp) / BLUR_LAYERS * 1.6f
+
+    /** How far the face's drawing reaches outside its size on each side (the glow), so a canvas can bleed by it. */
+    fun bleedDp(sizeDp: Int): Float = blurOffsetDp(BLUR_LAYERS - 1, sizeDp) + blurStrokeDp(sizeDp) / 2f
+
+    /** The arcs' and work band's stroke: the bezel's weight, between [ARC_MIN_DP] and [ARC_MAX_DP]. */
+    fun arcStrokeDp(sizeDp: Int): Float = (ARC_DP * scale(sizeDp)).coerceIn(ARC_MIN_DP, ARC_MAX_DP)
 
     fun needleDp(sizeDp: Int): Float = maxOf(NEEDLE_DP * scale(sizeDp), NEEDLE_MIN_DP)
 
-    /** The needle's tip: the markers' outer ends, just inside the arcs. */
-    fun needleReachDp(sizeDp: Int): Float = WatchFaceRules.rimRadiusDp(sizeDp) - WatchFaceRules.rimStrokeDp(sizeDp) / 2f - 2f
+    /** The needle's tip: right across the dial, just inside the hairline (past the markers and the arcs). */
+    fun needleReachDp(sizeDp: Int): Float = hairlineRadiusDp(sizeDp) - hairlineDp(sizeDp) / 2f - 0.5f
 
     /** The counterweight behind the centre. */
     fun needleTailDp(sizeDp: Int): Float = WatchFaceRules.rimRadiusDp(sizeDp) * NEEDLE_TAIL
@@ -348,13 +381,18 @@ object WatchFaceLook {
     /** The cap over all three hands' centre. */
     fun capDp(sizeDp: Int): Float = CAP_DP * scale(sizeDp).coerceIn(0.7f, 2f)
 
-    /** The needle's soft glow: three layers widening to [HALO_WIDTH] × the needle, fainter as they widen. */
+    /**
+     * The needle's glow: three blurred layers, widest first, out to [HALO_DP] (more on bigger faces), 15 % → 50 %
+     * towards the needle; always at least a dp wider than the needle each side so it shows on the cover face.
+     */
     fun halo(sizeDp: Int): List<WatchHaloLayer> {
+        val g = glowScale(sizeDp)
         val n = needleDp(sizeDp)
+        val widest = maxOf(HALO_DP * g, n + 2f)
         return listOf(
-            WatchHaloLayer(n * HALO_WIDTH, HALO_ALPHA * 0.35f),
-            WatchHaloLayer(n * 2.4f, HALO_ALPHA * 0.6f),
-            WatchHaloLayer(n * 1.6f, HALO_ALPHA),
+            WatchHaloLayer(widest, 0.15f, 1.5f * g),
+            WatchHaloLayer(n + (widest - n) * 0.55f, 0.3f, 1f * g),
+            WatchHaloLayer(n + (widest - n) * 0.25f, 0.5f, 0.5f * g),
         )
     }
 }

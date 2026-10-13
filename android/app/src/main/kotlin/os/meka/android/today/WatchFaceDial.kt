@@ -37,6 +37,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -219,19 +222,20 @@ fun WatchFaceDial(
                     strokeWidth = (if (m.major) WatchFaceRules.MAJOR_MARKER_DP else WatchFaceRules.MINOR_MARKER_DP).dp.toPx(),
                     cap = StrokeCap.Round)
             }
-            // Work in the next 12 hours: a brass band at 70 % as wide as the rim (clear of the 3 dp track), coming up
-            // with it (Meka's 10:48 screenshots: the old grey band vanished under the track).
+            // Work in the next 12 hours and the arcs on their own track, no heavier than the bezel (Meka 12:13: the thick
+            // sweep made the rim read as the old one): work fainter underneath, events and tasks over it.
+            val arcStroke = WatchFaceLook.arcStrokeDp(sizeDp).dp.toPx()
             face.work.forEach { band ->
-                drawArc(colors.accent.copy(alpha = colors.accent.alpha * WatchFaceRules.WORK_BAND_ALPHA * mark), band.startDegrees - 90f,
-                    band.sweepDegrees, false, topLeft, arcSize, style = Stroke(rim * WatchFaceRules.WORK_BAND_WIDTH, cap = StrokeCap.Butt))
+                drawArc(colors.accent.copy(alpha = colors.accent.alpha * WatchFaceLook.WORK_ALPHA * mark), band.startDegrees - 90f,
+                    band.sweepDegrees, false, topLeft, arcSize, style = Stroke(arcStroke, cap = StrokeCap.Butt))
             }
-            // The next 12 hours' arcs, growing clockwise one after another; the gym, Barça and training wider.
+            // The next 12 hours' arcs, growing clockwise one after another.
             face.arcs.forEachIndexed { i, arc ->
                 val grow = MotionMath.dayRingArc(elapsed, i, play, expressive)
                 if (grow <= 0f) return@forEachIndexed
                 val alpha = WatchFaceRules.arcAlpha(arc.kind)
                 drawArc(colors.accent.copy(alpha = colors.accent.alpha * alpha), arc.startDegrees - 90f, arc.sweepDegrees * grow,
-                    false, topLeft, arcSize, style = Stroke(if (arc.highlighted) rim * WatchFaceRules.HIGHLIGHT_WIDTH else rim, cap = StrokeCap.Butt))
+                    false, topLeft, arcSize, style = Stroke(arcStroke, cap = StrokeCap.Butt))
             }
             // This week's goals: arcs on the outermost ring, a faint track each, filled by progress as the rim passes.
             if (week.arcs.isNotEmpty()) {
@@ -305,18 +309,18 @@ private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, 
         }
     }
     val colors = Meka.colors
+    val dark = Meka.theme.isDark
     val sizeDp = size.value.toInt()
     Canvas(Modifier.size(size)) {
         val now = clock.longValue // read only here: a new frame redraws this layer, nothing recomposes
-        val rim = WatchFaceRules.rimStrokeDp(sizeDp).dp.toPx()
         val radius = WatchFaceRules.rimRadiusDp(sizeDp).dp.toPx()
         val sweeping = landed && mode == DayRingLiveMode.SWEEP
         val fadeIn = if (sweeping) DayRingLive.handFade(now - landedAt) else 1f
         val glow = if (sweeping) WatchFaceRules.breath(now, bedside) else 0.8f
         fun box(r: Float) = Pair(Offset(center.x - r, center.y - r), Size(r * 2, r * 2))
         if (landed) {
-            // The thin brass bezel (watch face item: ~58 % of the old track, scaled with the face), breathing 60 % → 100 %,
-            // with half the Day ring's soft glow reaching 4 dp out.
+            // The thin brass bezel (Meka 12:13: a crisp 1.2–1.5 dp line all the way round at 0.9), with a soft glow
+            // reaching 6 dp out that breathes with the face.
             val edge = WatchFaceLook.bezelRadiusDp(sizeDp).dp.toPx()
             val blurStroke = WatchFaceLook.blurStrokeDp(sizeDp).dp.toPx()
             for (i in 0 until WatchFaceLook.BLUR_LAYERS) {
@@ -327,11 +331,12 @@ private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, 
             val shown = if (sweeping) fadeIn else 1f
             drawCircle(colors.accent.copy(alpha = colors.accent.alpha * WatchFaceLook.bezelAlpha(glow, shown)), edge, center,
                 style = Stroke(WatchFaceLook.bezelDp(sizeDp).dp.toPx()))
-            // What's on now glows with the rim's breath.
+            // What's on now glows faintly with the rim's breath.
             face.arcs.filter { it.current }.forEach { arc ->
                 val (tl, sz) = box(radius)
-                drawArc(colors.accent.copy(alpha = 0.30f * glow * shown), arc.startDegrees - 90f, arc.sweepDegrees, false, tl, sz,
-                    style = Stroke(rim + 6.dp.toPx(), cap = StrokeCap.Round))
+                drawArc(colors.accent.copy(alpha = WatchFaceLook.NOW_GLOW_ALPHA * glow * shown), arc.startDegrees - 90f, arc.sweepDegrees,
+                    false, tl, sz, style = Stroke((WatchFaceLook.arcStrokeDp(sizeDp) + WatchFaceLook.NOW_GLOW_EXTRA_DP).dp.toPx(),
+                        cap = StrokeCap.Round))
             }
             if (sweeping) {
                 // The hour's shimmer: a band of light running once round the rim.
@@ -357,17 +362,17 @@ private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, 
         drawHand(colors.accent, hands.hourDegrees * needle, radius * WatchFaceRules.HOUR_HAND_LENGTH,
             WatchFaceRules.HOUR_HAND_BASE_DP.dp.toPx() * scale, WatchFaceRules.HOUR_HAND_TIP_DP.dp.toPx() * scale, radius)
         if (sweeping) {
-            // The second hand (Meka, 2026-10-13 07:01): a very thin needle from a short counterweight through the centre
-            // to the markers, sweeping smoothly, with a soft glow under it — no comet tail.
+            // The second hand (Meka 07:01 and 12:13): a thin needle in the bright brass from a counterweight right
+            // through the centre to just inside the bezel, sweeping smoothly, with a visible blurred glow under it.
             val a = Math.toRadians(hands.secondDegrees - 90.0)
             fun at(r: Float) = Offset(center.x + (cos(a) * r).toFloat(), center.y + (sin(a) * r).toFloat())
             val from = at(-WatchFaceLook.needleTailDp(sizeDp).dp.toPx())
             val to = at(WatchFaceLook.needleReachDp(sizeDp).dp.toPx())
+            val needleColor = if (dark) Color(WatchFaceLook.NEEDLE_DARK_ARGB) else colors.accent
             WatchFaceLook.halo(sizeDp).forEach { layer ->
-                drawLine(colors.accent.copy(alpha = colors.accent.alpha * layer.alpha * fadeIn), from, to,
-                    strokeWidth = layer.widthDp.dp.toPx(), cap = StrokeCap.Round)
+                drawGlowLine(needleColor.copy(alpha = layer.alpha * fadeIn), from, to, layer.widthDp.dp.toPx(), layer.blurDp.dp.toPx())
             }
-            drawLine(colors.accent.copy(alpha = colors.accent.alpha * fadeIn), from, to,
+            drawLine(needleColor.copy(alpha = fadeIn), from, to,
                 strokeWidth = WatchFaceLook.needleDp(sizeDp).dp.toPx(), cap = StrokeCap.Round)
         }
         // The small cap over all three hands.
@@ -376,6 +381,21 @@ private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, 
             drawCircle(colors.accent, cap, center)
             drawCircle(colors.background, cap * 0.4f, center)
         }
+    }
+}
+
+/** A soft line in [tint]: a round-capped stroke blurred by [blur] px (BlurMaskFilter), the second hand's glow. */
+private fun DrawScope.drawGlowLine(tint: Color, from: Offset, to: Offset, width: Float, blur: Float) {
+    val argb = tint.toArgb()
+    drawIntoCanvas { canvas ->
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = argb
+            strokeWidth = width
+            strokeCap = android.graphics.Paint.Cap.ROUND
+            style = android.graphics.Paint.Style.STROKE
+            if (blur > 0f) maskFilter = android.graphics.BlurMaskFilter(blur, android.graphics.BlurMaskFilter.Blur.NORMAL)
+        }
+        canvas.nativeCanvas.drawLine(from.x, from.y, to.x, to.y, paint)
     }
 }
 

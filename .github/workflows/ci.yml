@@ -42,6 +42,16 @@ jobs:
         run: tools/ci-run.sh ./gradlew checkKernelPurity
       - name: Core + data + facade + backend tests
         run: tools/ci-run.sh ./gradlew :core:sync:jvmTest :core:domain:jvmTest :core:policy:jvmTest :core:wire:jvmTest :core:data:jvmTest :core:facade:jvmTest :backend:test
+      # Watch face golden preview (Meka 2026-10-13 12:13): the face at the cover's 78 dp and 150 dp from WatchFaceLook,
+      # as PNGs to look at by eye (the run's artifacts). An aid, so it never turns the run red.
+      - name: Watch face preview
+        continue-on-error: true
+        run: |
+          tools/render-watch-face.sh build/watch-face 78 150
+          echo "Watch face preview: download the watch-face artifact (78 dp and 150 dp, plus 3× enlargements)." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with: { name: watch-face, path: build/watch-face, retention-days: 14, if-no-files-found: ignore }
 
   android:
     runs-on: ubuntu-latest

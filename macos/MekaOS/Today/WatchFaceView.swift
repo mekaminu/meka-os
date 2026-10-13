@@ -107,6 +107,7 @@ struct WatchFaceView: View {
         let hairWidth = CGFloat(look.hairlineDp(sizeDp: sizeDp))
         let bezelRadius = CGFloat(look.bezelRadiusDp(sizeDp: sizeDp))
         let bezelWidth = CGFloat(look.bezelDp(sizeDp: sizeDp))
+        let arcStroke = CGFloat(look.arcStrokeDp(sizeDp: sizeDp))
         let goalRules = GoalWeekRules.shared
         let goalRadius = CGFloat(goalRules.ringRadiusDp(sizeDp: sizeDp))
         // (start, track sweep shown, fill shown, fill alpha) for each of the week's goals.
@@ -149,17 +150,17 @@ struct WatchFaceView: View {
                 ctx.stroke(tick, with: .color(palette.accent.opacity(Double(rules.MARKER_ALPHA) * shows[i])),
                            style: StrokeStyle(lineWidth: CGFloat(m.1 ? rules.MAJOR_MARKER_DP : rules.MINOR_MARKER_DP), lineCap: .round))
             }
-            // Work in the next 12 hours: a brass band at 70 % as wide as the rim (clear of the arcs' track), coming up
-            // with it (Meka's 10:48 screenshots: the old grey band vanished under the track).
+            // Work in the next 12 hours and the arcs on their own track, no heavier than the bezel (Meka 12:13: the thick
+            // sweep made the rim read as the old one): work fainter underneath, events and tasks over it.
             for band in work {
-                ctx.stroke(arcPath(from: band.0, sweep: band.1), with: .color(palette.accent.opacity(Double(rules.WORK_BAND_ALPHA) * mark)),
-                           style: StrokeStyle(lineWidth: rim * CGFloat(rules.WORK_BAND_WIDTH), lineCap: .butt))
+                ctx.stroke(arcPath(from: band.0, sweep: band.1), with: .color(palette.accent.opacity(Double(look.WORK_ALPHA) * mark)),
+                           style: StrokeStyle(lineWidth: arcStroke, lineCap: .butt))
             }
-            // The next 12 hours' arcs, growing clockwise one after another; the gym, Barça and training wider.
+            // The next 12 hours' arcs, growing clockwise one after another.
             for (i, arc) in arcs.enumerated() where grows[i] > 0 {
                 let alpha = Double(arc.3 ? rules.TASK_ARC_ALPHA : rules.EVENT_ARC_ALPHA)
                 ctx.stroke(arcPath(from: arc.0, sweep: arc.1 * grows[i]), with: .color(palette.accent.opacity(alpha)),
-                           style: StrokeStyle(lineWidth: arc.2 ? rim * CGFloat(rules.HIGHLIGHT_WIDTH) : rim, lineCap: .butt))
+                           style: StrokeStyle(lineWidth: arcStroke, lineCap: .butt))
             }
             // This week's goals: arcs on the outermost ring, a faint track each, filled by progress as the rim passes.
             let goalStroke = StrokeStyle(lineWidth: CGFloat(goalRules.RING_DP), lineCap: .round)
@@ -192,6 +193,7 @@ struct WatchFaceLiveLayer: View {
     let size: CGFloat
     var night: Bool = false
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     @State private var landedAt: Date? = nil
 
     private var sweeping: Bool {
@@ -233,9 +235,10 @@ struct WatchFaceLiveLayer: View {
         let accent = palette.accent
         let background = palette.background
         let sizeDp = Int32(size)
-        let rim = CGFloat(rules.rimStrokeDp(sizeDp: sizeDp))
         let radius = CGFloat(rules.rimRadiusDp(sizeDp: sizeDp))
         let scale = min(max(size / 150, 0.7), 2)
+        let nowGlowWidth = CGFloat(look.arcStrokeDp(sizeDp: sizeDp) + look.NOW_GLOW_EXTRA_DP)
+        let nowGlowAlpha = Double(look.NOW_GLOW_ALPHA)
         let bezelRadius = CGFloat(look.bezelRadiusDp(sizeDp: sizeDp))
         let bezelWidth = CGFloat(look.bezelDp(sizeDp: sizeDp))
         let blurOffsets = (0..<Int(look.BLUR_LAYERS)).map { CGFloat(look.blurOffsetDp(i: Int32($0), sizeDp: sizeDp)) }
@@ -244,11 +247,16 @@ struct WatchFaceLiveLayer: View {
         let needleWidth = CGFloat(look.needleDp(sizeDp: sizeDp))
         let needleReach = CGFloat(look.needleReachDp(sizeDp: sizeDp))
         let needleTail = CGFloat(look.needleTailDp(sizeDp: sizeDp))
-        let halo = look.halo(sizeDp: sizeDp).map { (CGFloat($0.widthDp), Double($0.alpha)) }
+        let halo = look.halo(sizeDp: sizeDp).map { (CGFloat($0.widthDp), Double($0.alpha), CGFloat($0.blurDp)) }
+        // The needle in the bright brass in Dark (Meka 12:13), the theme's accent in Light.
+        let argb = look.NEEDLE_DARK_ARGB
+        let bright = Color(red: Double((argb >> 16) & 0xFF) / 255, green: Double((argb >> 8) & 0xFF) / 255,
+                           blue: Double(argb & 0xFF) / 255)
+        let needleColor = scheme == .dark ? bright : accent
         let cap = CGFloat(look.capDp(sizeDp: sizeDp))
         let bezelAlpha = Double(look.bezelAlpha(glow: Float(glow), shown: Float(sweeping ? fadeIn : 1)))
         // The canvas reaches past the face by the bezel's glow (negative padding below) so it isn't clipped.
-        let bleed = CGFloat(look.BLUR_DP) * scale + 2
+        let bleed = CGFloat(look.bleedDp(sizeDp: sizeDp)) + 2
         return Canvas { ctx, canvasSize in
             let c = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
             func point(_ degrees: Double, _ r: CGFloat) -> CGPoint {
@@ -283,18 +291,17 @@ struct WatchFaceLiveLayer: View {
             if landed {
                 let shown = sweeping ? fadeIn : 1
                 let edge = bezelRadius
-                // The thin brass bezel (watch face item: ~58 % of the old track, scaled with the face), breathing
-                // 60 % → 100 %, with half the Day ring's soft glow reaching 4 pt out; it never fades out (the opening drew
-                // it in), its breath blends in as the second hand fades in.
+                // The thin brass bezel (Meka 12:13: a crisp 1.2–1.5 pt line all the way round at 0.9), with a soft glow
+                // reaching 6 pt out that breathes with the face; the glow blends in as the second hand fades in.
                 for i in blurOffsets.indices {
                     ctx.stroke(arc(edge + blurOffsets[i], from: 0, sweep: 360), with: .color(accent.opacity(blurAlphas[i] * shown)),
                                lineWidth: blurWidth)
                 }
                 ctx.stroke(arc(edge, from: 0, sweep: 360), with: .color(accent.opacity(bezelAlpha)), lineWidth: bezelWidth)
-                // What's on now glows with the rim's breath.
+                // What's on now glows faintly with the rim's breath.
                 for (from, sweep) in onNow {
-                    ctx.stroke(arc(radius, from: from, sweep: sweep), with: .color(accent.opacity(0.30 * glow * shown)),
-                               style: StrokeStyle(lineWidth: rim + 6, lineCap: .round))
+                    ctx.stroke(arc(radius, from: from, sweep: sweep), with: .color(accent.opacity(nowGlowAlpha * glow * shown)),
+                               style: StrokeStyle(lineWidth: nowGlowWidth, lineCap: .round))
                 }
                 // The hour's shimmer: a band of light running once round the rim.
                 if let s = shimmer {
@@ -317,15 +324,19 @@ struct WatchFaceLiveLayer: View {
                           base: CGFloat(rules.HOUR_HAND_BASE_DP) * scale, tip: CGFloat(rules.HOUR_HAND_TIP_DP) * scale),
                      with: .color(accent))
             if sweeping {
-                // The second hand (Meka, 2026-10-13 07:01): a very thin needle from a short counterweight through the
-                // centre to the markers, sweeping smoothly, with a soft glow under it — no comet tail.
+                // The second hand (Meka 07:01 and 12:13): a thin needle in the bright brass from a counterweight right
+                // through the centre to just inside the bezel, sweeping smoothly, with a visible blurred glow under it.
                 var line = Path()
                 line.move(to: point(second, -needleTail))
                 line.addLine(to: point(second, needleReach))
-                for (width, alpha) in halo {
-                    ctx.stroke(line, with: .color(accent.opacity(alpha * fadeIn)), style: StrokeStyle(lineWidth: width, lineCap: .round))
+                for (width, alpha, blur) in halo {
+                    ctx.drawLayer { glowCtx in
+                        glowCtx.addFilter(.blur(radius: blur))
+                        glowCtx.stroke(line, with: .color(needleColor.opacity(alpha * fadeIn)),
+                                       style: StrokeStyle(lineWidth: width, lineCap: .round))
+                    }
                 }
-                ctx.stroke(line, with: .color(accent.opacity(fadeIn)), style: StrokeStyle(lineWidth: needleWidth, lineCap: .round))
+                ctx.stroke(line, with: .color(needleColor.opacity(fadeIn)), style: StrokeStyle(lineWidth: needleWidth, lineCap: .round))
             }
             // The small cap over all three hands.
             if needle > 0 {

@@ -1042,15 +1042,20 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testWatchFaceLookReachesSwift() {
         let look = WatchFaceLook.shared
         let wide = DayRingHeader.shared.WIDE_DP
-        XCTAssertEqual(look.bezelDp(sizeDp: wide), 1.75, accuracy: 0.001)
+        XCTAssertEqual(look.bezelDp(sizeDp: wide), 1.5, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(look.bezelDp(sizeDp: WatchFaceRules.shared.COVER_DP), 1.2)
+        XCTAssertLessThanOrEqual(look.arcStrokeDp(sizeDp: wide), 1.5)
+        XCTAssertGreaterThanOrEqual(look.bleedDp(sizeDp: WatchFaceRules.shared.COVER_DP), 6)
+        XCTAssertEqual(look.NEEDLE_DARK_ARGB, 0xFFECD79E)
         XCTAssertLessThan(look.hairlineRadiusDp(sizeDp: wide), look.bezelRadiusDp(sizeDp: wide))
         XCTAssertEqual(look.bezelAlpha(glow: 0.6, shown: 0), look.BEZEL_DRAW_ALPHA, accuracy: 0.001)
         XCTAssertGreaterThan(look.blurAlpha(i: 0, glow: 1), look.blurAlpha(i: 2, glow: 1))
-        XCTAssertEqual(look.needleDp(sizeDp: wide), 1, accuracy: 0.001)
+        XCTAssertEqual(look.needleDp(sizeDp: wide), 1.2, accuracy: 0.001)
         XCTAssertGreaterThan(look.needleReachDp(sizeDp: wide), look.needleTailDp(sizeDp: wide))
         let halo = look.halo(sizeDp: wide)
         XCTAssertEqual(halo.count, 3)
-        XCTAssertEqual(halo.first?.widthDp ?? 0, 3.5, accuracy: 0.001)
+        XCTAssertEqual(halo.first?.widthDp ?? 0, 5, accuracy: 0.001)
+        XCTAssertGreaterThan(halo.first?.blurDp ?? 0, 0)
         XCTAssertEqual(WatchFaceRules.shared.headerDp(cover: false), wide)
         XCTAssertLessThan(WatchFaceRules.shared.headerDp(cover: true), DayRingHeader.shared.COMPACT_DP)
     }
