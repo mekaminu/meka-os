@@ -2585,4 +2585,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(SetupRules.shared.cardShown(view: view, hiddenOnDay: nil, today: 1))
         XCTAssertFalse(SetupRules.shared.cardShown(view: view, hiddenOnDay: KotlinLong(longLong: 1), today: 1))
     }
+
+    func testMacNotificationsReachSwift() {
+        // Notifications never seen, the Mac's half: Health's row, the sheet's off line and Send a test.
+        let off = MacNotifyRules.shared.health(allowed: false, macOff: false, lastPostMs: 0)
+        XCTAssertTrue(off.mac)
+        XCTAssertFalse(off.allowed)
+        XCTAssertTrue(MacNotifyRules.shared.health(allowed: true, macOff: true, lastPostMs: 1).phoneOff)
+        XCTAssertNotNil(MacNotifyRules.shared.offLine(allowed: false, macOff: false))
+        XCTAssertNil(MacNotifyRules.shared.offLine(allowed: true, macOff: false))
+        XCTAssertFalse(MacNotifyRules.shared.testSending().done)
+        let shown = MacNotifyRules.shared.testView(shown: true)
+        XCTAssertEqual(shown.localLine, "On this Mac · arrived ✓")
+        XCTAssertEqual(shown.localOk?.boolValue, true)
+        XCTAssertEqual(MacNotifyRules.shared.TEST_TITLE, "MEKA test · from this Mac")
+    }
 }

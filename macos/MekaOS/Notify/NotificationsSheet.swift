@@ -42,12 +42,40 @@ struct NotificationsSheet: View {
                     .staggeredAppear(0)
             }
 
+            // Notifications never seen, the Mac's half: say plainly when nothing can reach this Mac.
+            if let off = MacNotifyRules.shared.offLine(allowed: model.notificationsAllowed, macOff: model.macAlerts == .off) {
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+                    Text(off).font(MekaType.itemMeta).foregroundStyle(palette.critical)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    if !model.notificationsAllowed {
+                        Button("Turn on") { model.turnOnNotifications() }
+                    }
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+
             section("THIS MAC", 1)
             Picker("This Mac", selection: Binding(get: { model.macAlerts }, set: { model.setMacAlerts($0) })) {
                 ForEach(Self.devices, id: \.self) { d in Text(NotifyRules.shared.deviceLabel(d: d)).tag(d) }
             }
             .pickerStyle(.segmented).labelsHidden()
             .staggeredAppear(1)
+            HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+                Button("Send a test") { model.sendTestNotification() }
+                    .disabled(model.notifyTest.map { !$0.done } ?? false)
+                if let test = model.notifyTest {
+                    Text(test.localLine).font(MekaType.itemMeta)
+                        .foregroundStyle(test.localOk?.boolValue == false ? palette.critical : palette.textSecondary)
+                        .contentTransition(.opacity)
+                }
+            }
+            .staggeredAppear(1)
+            if let hint = model.notifyTest?.hint {
+                Text(hint).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
 
             section("QUIET HOURS", 2)
             Toggle("Quiet hours", isOn: Binding(get: { quietOn }, set: { model.setQuietHours(enabled: $0, start: quietStart, end: quietEnd) }))
@@ -106,6 +134,9 @@ struct NotificationsSheet: View {
         .frame(width: 480)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: quietOn)
         .animation(MekaMotion.replan(reduced: reduceMotion), value: model.notifyPreview?.digestLine)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.notifyTest?.localLine)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.notificationsAllowed)
+        .task { await model.refreshNotificationsAllowed() }
     }
 
     private func section(_ title: String, _ index: Int) -> some View {

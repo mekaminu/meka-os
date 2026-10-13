@@ -22,6 +22,36 @@ enum MacNotifier {
         return status == .authorized || status == .provisional
     }
 
+    /// macOS hasn't been asked yet (so Turn on asks, rather than opening System Settings).
+    static func notAsked() async -> Bool {
+        await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .notDetermined
+    }
+
+    /// When MEKA last posted on this Mac (ms; 0 = never), for Health's Notifications row.
+    static let lastPostKey = "meka.notify.lastPostMs"
+    static var lastPostMs: Int64 { Int64(UserDefaults.standard.double(forKey: lastPostKey)) }
+    private static func notePosted() {
+        UserDefaults.standard.set(Date().timeIntervalSince1970 * 1000, forKey: lastPostKey)
+    }
+
+    /// System Settings → Notifications (macOS opens MEKA's page from the list).
+    static let settingsURL = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!
+
+    /// Send a test (notifications never seen, the Mac's half): posts one notification now and says whether macOS took
+    /// it. Not posted while macOS won't let MEKA notify.
+    static func postTest() async -> Bool {
+        guard await allowed() else { return false }
+        let content = UNMutableNotificationContent()
+        content.title = MacNotifyRules.shared.TEST_TITLE
+        content.body = MacNotifyRules.shared.TEST_TEXT
+        content.threadIdentifier = "meka"
+        content.interruptionLevel = .active
+        content.userInfo = ["target": "TODAY"]
+        let ok = (try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "meka.test", content: content, trigger: nil))) != nil
+        if ok { notePosted() }
+        return ok
+    }
+
     @discardableResult
     static func post(_ result: GovernorResult) async -> [String] {
         let center = UNUserNotificationCenter.current()
@@ -67,6 +97,7 @@ enum MacNotifier {
                 posted.append(digestKey)
             }
         }
+        if !posted.isEmpty { notePosted() }
         return posted
     }
 

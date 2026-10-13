@@ -1017,6 +1017,42 @@ final class CoreModel {
         try? await core.notificationsPostedKeys(result: result, keys: postedKeys)
     }
 
+    /// Whether macOS lets MEKA notify, as last checked (Health, the Notifications sheet); true until checked.
+    private(set) var notificationsAllowed = true
+    /// Send a test on this Mac: nil until run, then sending… / arrived ✓ / didn't show (MacNotifyRules).
+    private(set) var notifyTest: NotifyTestView?
+
+    /// Reads macOS's answer again (the Notifications sheet opening, after Turn on).
+    func refreshNotificationsAllowed() async {
+        notificationsAllowed = await MacNotifier.allowed()
+    }
+
+    /// Health's / the sheet's Turn on: asks macOS the first time, otherwise opens System Settings → Notifications.
+    func turnOnNotifications() {
+        MekaHaptics.tick()
+        Task {
+            if await MacNotifier.notAsked() {
+                _ = await MacNotifier.requestPermission()
+            } else {
+                NSWorkspace.shared.open(MacNotifier.settingsURL)
+            }
+            await refreshNotificationsAllowed()
+            await refreshHealth()
+        }
+    }
+
+    /// Send a test: one notification now; the line says whether it arrived or what to check.
+    func sendTestNotification() {
+        MekaHaptics.tick()
+        notifyTest = MacNotifyRules.shared.testSending()
+        Task {
+            let shown = await MacNotifier.postTest()
+            notifyTest = MacNotifyRules.shared.testView(shown: shown)
+            await refreshNotificationsAllowed()
+            await refreshHealth()
+        }
+    }
+
     /// Everything, digests only, or off on this Mac. Turning it on asks macOS for permission once.
     func setMacAlerts(_ d: DeviceAlerts) {
         MekaHaptics.tick()
@@ -1406,10 +1442,14 @@ final class CoreModel {
         checkingHealth = true
         defer { checkingHealth = false }
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        // Notifications never seen, the Mac's half: whether macOS lets MEKA notify, "This Mac" and the last post.
+        let allowed = await MacNotifier.allowed()
+        notificationsAllowed = allowed
+        let notifications = MacNotifyRules.shared.health(allowed: allowed, macOff: macAlerts == .off, lastPostMs: MacNotifier.lastPostMs)
         let device = DeviceHealth(mac: true, batteryExempt: nil, batteryStopped: false, notificationAccess: nil,
                                   lastNotificationMs: nil, callRoleHeld: nil, version: version, updateReady: false,
                                   installedCode: nil, updateFailure: nil, sizeBytes: nil, previousSizeBytes: nil,
-                                  notifications: nil)
+                                  notifications: notifications)
         _ = try? await core.refreshHealth(device: device, force: force)
     }
 

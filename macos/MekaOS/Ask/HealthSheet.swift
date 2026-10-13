@@ -72,7 +72,9 @@ struct HealthSheet: View {
             Task { await model.connectCalendar(provider, editing: editing) }
         case .calendars: dismiss(); model.showCalendars = true
         case .work: dismiss(); model.showWork = true
-        case .battery, .notificationAccess, .callRole, .installUpdate, .notificationsOn: break
+        // Notifications never seen, the Mac's half: asks macOS the first time, else opens System Settings.
+        case .notificationsOn: model.turnOnNotifications()
+        case .battery, .notificationAccess, .callRole, .installUpdate: break
         }
     }
 
@@ -80,8 +82,8 @@ struct HealthSheet: View {
     static func fixHere(_ row: HealthRow) -> Bool {
         guard let f = row.fix else { return false }
         switch f {
-        case .syncNow, .reconnect, .calendars, .work: return true
-        case .battery, .notificationAccess, .callRole, .installUpdate, .notificationsOn: return false
+        case .syncNow, .reconnect, .calendars, .work, .notificationsOn: return true
+        case .battery, .notificationAccess, .callRole, .installUpdate: return false
         }
     }
 }

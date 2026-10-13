@@ -70,7 +70,7 @@ object NotifyChannelPosts {
         }
 }
 
-/** What the Fold tells Health about notifications ([NotifyTrace]); null on the Mac until it has the same. */
+/** What a device tells Health about MEKA's own notifications ([NotifyTrace]); the Mac's comes from [MacNotifyRules.health]. */
 data class NotificationHealth(
     /** POST_NOTIFICATIONS granted and the app's switch on. */
     val allowed: Boolean,
@@ -79,6 +79,8 @@ data class NotificationHealth(
     val trace: List<NotifyTraceEntry>,
     /** MEKA's own "This phone" setting is Off (Notifications → This phone), so the governor posts nothing here. */
     val phoneOff: Boolean = false,
+    /** From the Mac: macOS has no channels or governor trace, so the wording names System Settings and "this Mac". */
+    val mac: Boolean = false,
 )
 
 object NotifyTrace {
@@ -169,6 +171,7 @@ object NotifyTrace {
     fun healthRow(n: NotificationHealth?, nowMs: Long, cal: LocalCalendar): HealthRow? {
         n ?: return null
         val title = "Notifications"
+        if (n.mac) return MacNotifyRules.healthRow(n, nowMs, cal)
         if (!n.allowed) {
             return HealthRow("notifications", title, "Off for MEKA · nothing can reach you", HealthState.BAD, HealthFix.NOTIFICATIONS_ON, "Turn on")
         }
@@ -194,4 +197,59 @@ object NotifyTrace {
         }
         return HealthRow("notifications", title, "On · $posted · last looked ${HealthRules.at(lastLook.atMs, nowMs, cal)}", HealthState.OK)
     }
+}
+
+/**
+ * Notifications never seen, the Mac's half (non-AI, pure): Health's Notifications row and Today's off-state line on the
+ * Mac, and Send a test there. macOS has no notification channels and the Mac's governor keeps no trace, so the Mac
+ * reports only whether macOS lets MEKA notify, MEKA's own "This Mac" setting and when it last posted. The Mac has no
+ * push (it syncs on its own timer), so its test is the local half only.
+ */
+object MacNotifyRules {
+    /** What the Mac hands Health: built here so Swift never calls [NotificationHealth]'s constructor. */
+    fun health(allowed: Boolean, macOff: Boolean, lastPostMs: Long): NotificationHealth = NotificationHealth(
+        allowed = allowed,
+        channels = emptyList(),
+        trace = if (lastPostMs > 0) listOf(NotifyTraceEntry(lastPostMs, NotifyTraceKind.POSTED, "posted on this Mac")) else emptyList(),
+        phoneOff = macOff,
+        mac = true,
+    )
+
+    /** Health's row (and through it Today's line): red with Turn on when macOS won't let MEKA notify. */
+    fun healthRow(n: NotificationHealth, nowMs: Long, cal: LocalCalendar): HealthRow {
+        val title = "Notifications"
+        if (!n.allowed) {
+            return HealthRow("notifications", title, "Off for MEKA in System Settings · nothing can reach this Mac", HealthState.BAD, HealthFix.NOTIFICATIONS_ON, "Turn on")
+        }
+        if (n.phoneOff) {
+            return HealthRow("notifications", title, "This Mac is set to Off in MEKA's Notifications · nothing posts here", HealthState.BAD)
+        }
+        val last = n.trace.firstOrNull { it.kind == NotifyTraceKind.POSTED }?.atMs
+        val posted = last?.let { "last sent ${HealthRules.at(it, nowMs, cal)}" } ?: "none sent yet"
+        return HealthRow("notifications", title, "On · $posted", HealthState.OK)
+    }
+
+    /** The red line at the top of the Mac's Notifications sheet when nothing can reach this Mac; null when it can. */
+    fun offLine(allowed: Boolean, macOff: Boolean): String? = when {
+        !allowed -> "Notifications are off for MEKA in System Settings, so nothing can reach this Mac."
+        macOff -> "This Mac is set to Off below, so MEKA posts nothing here."
+        else -> null
+    }
+
+    const val TEST_TITLE = "MEKA test · from this Mac"
+    const val TEST_TEXT = "If you can see this, MEKA can reach you on this Mac."
+
+    /** Send a test on the Mac while macOS is being asked. */
+    fun testSending(): NotifyTestView = NotifyTestView("On this Mac · sending…", null, "", null, null, false)
+
+    /** Send a test on the Mac once macOS answered: arrived, or what to check. */
+    fun testView(shown: Boolean): NotifyTestView = NotifyTestView(
+        localLine = if (shown) "On this Mac · arrived ✓" else "On this Mac · didn't show",
+        localOk = shown,
+        pushLine = "",
+        pushOk = null,
+        hint = if (shown) null else
+            "Turn on notifications for MEKA in System Settings → Notifications → MEKA (Banners or Alerts), and check a Focus isn't on.",
+        done = true,
+    )
 }
