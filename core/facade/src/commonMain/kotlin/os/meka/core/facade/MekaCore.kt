@@ -3627,11 +3627,26 @@ class MekaCore(
     suspend fun talk(question: String, history: List<os.meka.core.domain.TalkTurn>): os.meka.core.domain.AskOutcome =
         ask(question, history.takeLast(os.meka.core.domain.TalkRules.MAX_HISTORY), voice = true)
 
+    /**
+     * Notifications never seen (slice 4): how this device's notifications stand (the Fold's NotifyTraceStore),
+     * read when Meka asks about notifications. Null (the Mac) means the device keeps no trace.
+     */
+    var notificationHealthSource: (() -> os.meka.core.domain.NotificationHealth?)? = null
+
     private suspend fun ask(question: String, history: List<os.meka.core.domain.TalkTurn>, voice: Boolean): os.meka.core.domain.AskOutcome {
         val q = os.meka.core.domain.AskRules.question(question)
             ?: return os.meka.core.domain.AskOutcome.Unavailable("Ask something first")
-        val api = aiApi ?: return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
         val cal = ZoneCalendar(timeZone)
+        // A question about notifications carries the phone's trace; without the AI the device answers from it itself.
+        val notifyAsked = os.meka.core.domain.NotifyAskRules.isAbout(q)
+        val notifyHealth = if (!notifyAsked) null else try { notificationHealthSource?.invoke() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        val notifySettings = _notifySettings.value
+        fun unavailable(line: String): os.meka.core.domain.AskOutcome {
+            val local = if (notifyAsked) os.meka.core.domain.NotifyAskRules.localAnswer(notifyHealth, notifySettings, nowMs(), cal) else null
+            return if (local != null) os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(local, emptyList()))
+            else os.meka.core.domain.AskOutcome.Unavailable(line)
+        }
+        val api = aiApi ?: return unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
         val context = onCore {
             // Work's lines (Places item 2) are kept: home's hourly lines make room for them.
             val workLines = os.meka.core.domain.PlacesRules.workAskLines(workWeather.forecast(), nowMs(), cal)
@@ -3682,13 +3697,15 @@ class MekaCore(
                 // People, slice 3: promises both ways, birthdays and last contact, so "what did I promise Jeanette?" has an answer.
                 people = os.meka.core.domain.PeopleAskRules.askLines(_people.value),
                 // Travel mode, slice 2a: each trip on now or coming with its bookings, so "when do we fly?" has an answer.
-                trips = os.meka.core.domain.TripAskRules.askLines(trips.items(), cal.epochDayOf(nowMs())))
+                trips = os.meka.core.domain.TripAskRules.askLines(trips.items(), cal.epochDayOf(nowMs())),
+                // Notifications never seen, slice 4: only for a question about notifications, so "why didn't I get a notification?" has an answer.
+                notifications = if (notifyAsked) os.meka.core.domain.NotifyAskRules.askLines(notifyHealth, notifySettings, nowMs(), cal) else emptyList())
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
-            return os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
+            return unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
         }
         return when (reply) {
-            is AskReply.Unavailable -> os.meka.core.domain.AskOutcome.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
+            is AskReply.Unavailable -> unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
             is AskReply.Answered -> onCore {
                 val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
                 val answer = os.meka.core.domain.AskRules.answer(reply.text, reply.actions, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),

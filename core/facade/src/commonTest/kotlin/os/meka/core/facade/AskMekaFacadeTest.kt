@@ -1021,4 +1021,41 @@ class AskMekaFacadeTest {
         assertEquals("Car tax · not on the radar", car[3])
         assertFalse(ctx.untrusted)
     }
+
+    @Test
+    fun aNotificationsQuestionCarriesThePhonesTraceAndIsAnsweredWithoutTheAi() = runTest {
+        val c = core()
+        val posted = os.meka.core.domain.NotifyTraceEntry(now - 3_600_000, os.meka.core.domain.NotifyTraceKind.POSTED, "1 notice on Heads-ups · next look 18:00")
+        var health = os.meka.core.domain.NotificationHealth(
+            allowed = true,
+            channels = listOf(os.meka.core.domain.NotifyChannelState("meka.heads_up", "Heads-ups", true, now - 3_600_000)),
+            trace = listOf(posted),
+        )
+        c.notificationHealthSource = { health }
+        // Another question carries none of it.
+        c.askMeka("What's on today?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.NOTIFICATIONS })
+        c.askMeka("Why didn't I get a notification?")
+        val ctx = server.asked.last().second
+        val lines = ctx.items.filter { it.kind == AskItemKind.NOTIFICATIONS }.map { it.line }
+        assertEquals("Notifications on this phone · on for MEKA", lines.first())
+        assertEquals("Last notification · sent today at 16:15 on Heads-ups", lines[1])
+        assertTrue(lines.any { it.startsWith("Digests · Most things wait for") })
+        assertTrue(lines.last().startsWith("Trace · ") && "Posted 1 notice on Heads-ups" in lines.last())
+        assertFalse(ctx.untrusted)
+        // AI off: the phone answers from its own trace.
+        server.reply = AskReply.Unavailable("off", null)
+        health = health.copy(allowed = false)
+        val off = assertIs<AskOutcome.Answered>(c.askMeka("why no notifications?"))
+        assertTrue(off.answer.text.startsWith("Notifications are off for MEKA on this phone"))
+        assertTrue(off.answer.cards.isEmpty())
+        server.down = true
+        health = health.copy(allowed = true)
+        val quiet = assertIs<AskOutcome.Answered>(c.askMeka("Why didn't I get a notification?"))
+        assertTrue(quiet.answer.text.startsWith("The last one went today at 16:15, on Heads-ups."))
+        // Not about notifications, or a device with no trace (the Mac): the usual line.
+        assertEquals(AskOutcome.Unavailable(AskRules.OFFLINE_LINE), c.askMeka("hi"))
+        c.notificationHealthSource = null
+        assertEquals(AskOutcome.Unavailable(AskRules.OFFLINE_LINE), c.askMeka("why no notifications?"))
+    }
 }
