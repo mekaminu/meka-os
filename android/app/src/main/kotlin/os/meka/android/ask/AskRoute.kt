@@ -275,6 +275,7 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.TRIPS) { TripsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.FACTS) { FactsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.LEAVE) { LeavePane(core, onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.ABOUT_YOU) { AboutYouPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.WORK) { WorkPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.PROTECTED) { ProtectedTimePane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.NOTIFICATIONS) { NotificationsPane(core, onClose = { pane = null }) }
@@ -303,6 +304,7 @@ fun AskRoute(
                     os.meka.core.domain.SetupFix.WORK -> MoreItem.WORK
                     os.meka.core.domain.SetupFix.VOICE -> MoreItem.VOICE
                     os.meka.core.domain.SetupFix.RECOVERY -> MoreItem.RECOVERY
+                    os.meka.core.domain.SetupFix.ABOUT_YOU -> MoreItem.ABOUT_YOU
                     else -> pane
                 }
             })

@@ -14,6 +14,8 @@ final class SetupSheetTests: XCTestCase {
         XCTAssertTrue(SetupSheet.fixHere(step(.notifications)))
         // Recovery key, slice 3: the Mac makes one in its own sheet.
         XCTAssertTrue(SetupSheet.fixHere(step(.recovery)))
+        // About you (rule 13, slice 1): its sheet is on the Mac too.
+        XCTAssertTrue(SetupSheet.fixHere(step(.aboutYou)))
         XCTAssertFalse(SetupSheet.fixHere(step(.callRole)))
         XCTAssertFalse(SetupSheet.fixHere(step(.battery)))
         XCTAssertFalse(SetupSheet.fixHere(step(.notificationAccess)))

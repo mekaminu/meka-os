@@ -13,7 +13,7 @@ package os.meka.core.domain
 enum class SetupState { DONE, TODO, ELSEWHERE, LATER, UNKNOWN }
 
 /** Where a step's button goes; the apps map each to their own screen or the system's. */
-enum class SetupFix { CALENDARS, WORK, VOICE, NOTIFICATION_ACCESS, CALL_ROLE, BATTERY, NOTIFICATIONS, RECOVERY, SCREEN_SAVER }
+enum class SetupFix { CALENDARS, WORK, VOICE, NOTIFICATION_ACCESS, CALL_ROLE, BATTERY, NOTIFICATIONS, RECOVERY, SCREEN_SAVER, ABOUT_YOU }
 
 data class SetupStep(
     /** Stable: "calendar.google", "calls.role", "mac"… */
@@ -122,6 +122,10 @@ object SetupRules {
         )
         return summarise(sections, f.nowMs)
     }
+
+    /** [v] with [section] first (About you's step, [AboutYouRules.withSetupStep]); counts and lines worked out again. */
+    fun withSection(v: SetupView, section: SetupSection): SetupView =
+        summarise(listOf(section) + v.sections.filter { it.title != section.title }, v.checkedAtMs)
 
     /** [v] with [step] in place of the step with its key (counts and lines worked out again). */
     fun replaceStep(v: SetupView, step: SetupStep): SetupView =

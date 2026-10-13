@@ -63,7 +63,7 @@ enum MoreGroup: Int, CaseIterable, Identifiable {
 /// which shows its choices in the row itself (`ShellNav.unfoldsInPlace`), or MEKA's AI, which only says how it is
 /// (`ShellNav.opens`). Life tiles carry their `tile` (the core's live line) and an SF Symbol.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, people, dinners, bins, dateNight, school, appointments, leave, gifts, trips, errands, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, lifeAdmin, review, work, protectedTime, notifications, appearance, voice, talk, calendars, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
+    case lists, goals, people, dinners, bins, dateNight, school, appointments, leave, gifts, trips, errands, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, lifeAdmin, review, aboutYou, work, protectedTime, notifications, appearance, voice, talk, calendars, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
     var id: Int { rawValue }
 
     var label: String {
@@ -89,6 +89,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .trainQueue: "Train queue"
         case .lifeAdmin: "Life admin hour"
         case .review: "Review"
+        case .aboutYou: AboutYouRules.shared.TITLE
         case .work: "Work mode"
         case .protectedTime: "Protected time"
         case .notifications: "Notifications"
@@ -133,6 +134,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .trainQueue: "Links and podcasts saved for the commute"
         case .lifeAdmin: "One hour a week for forms, calls and renewals"
         case .review: "Your week, looked back on"
+        case .aboutYou: AboutYouRules.shared.ROW_LINE
         case .work: "Work hours and the Work switch"
         case .protectedTime: "Evenings and weekends, kept free of tasks"
         case .notifications: "Quiet hours, digests and what reaches you"
@@ -158,7 +160,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         switch self {
         case .lists, .goals, .people, .dinners, .bins, .dateNight, .school, .appointments, .leave, .gifts, .trips, .errands, .emergency, .facts: .life
         case .brief, .weekAhead, .news, .shutdown, .trainQueue, .lifeAdmin, .review: .daily
-        case .work, .protectedTime, .notifications, .appearance, .voice, .talk, .calendars, .family, .watch, .recovery, .autonomy, .ai, .activity, .setup, .health, .vault, .yourData, .settings: .settings
+        case .aboutYou, .work, .protectedTime, .notifications, .appearance, .voice, .talk, .calendars, .family, .watch, .recovery, .autonomy, .ai, .activity, .setup, .health, .vault, .yourData, .settings: .settings
         }
     }
 

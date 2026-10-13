@@ -126,6 +126,8 @@ class MekaApplication : Application() {
             transport = transport,
             secureRandom = SecureRandom().asKotlinRandom(),
         )
+        // About you (rule 13), release 1: the Fold copies what MEKA had into the profile once, after a clean sync.
+        core.seedsAboutYou = true
         if (transport != null) { SyncWorker.schedulePeriodic(this); ensurePush() }
         // Notifications never seen (slice 1): every channel exists from the first start, and the trace says so.
         os.meka.android.notify.MekaChannels.ensureAll(this)

@@ -103,6 +103,8 @@ object EntityTypes {
     const val APPROVAL_KEY = "approval_key"
     /** Fold review 17:56, slice 3 (2026-10-12): whose club session a repeating series is, id from the series (see [ClubChildRules]). */
     const val CLUB_SERIES = "club_series"
+    /** About you (rule 13), slice 1 (2026-10-13): the household profile, one entity, id "me" (see [AboutYouStore]). */
+    const val HOUSEHOLD_PROFILE = "household_profile"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -111,7 +113,7 @@ object EntityTypes {
         TRIAGE_CARD, GROUP_GIST, BLOCKED_CALLER, SHOPPING_ITEM, VENUE, TRAVEL_TIME, SCHOOL_ITEM, MEAL, MEAL_DAY,
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
         CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA, TRIP, TRIP_BOOKING, CHAT_SUMMARY,
-        APPROVAL_KEY, VAULT_DOC, CLUB_SERIES,
+        APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE,
     )
 }
 
@@ -389,6 +391,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.VENUE -> MergePolicy.Lww
         // Club series: whose session it is, set on any device; the latest wins.
         entityType == EntityTypes.CLUB_SERIES -> MergePolicy.Lww
+        // About you: each detail typed on either app (or the Fold's one-off copy); the latest edit wins.
+        entityType == EntityTypes.HOUSEHOLD_PROFILE -> MergePolicy.Lww
         // Drive times: only the server writes them; its latest answer wins.
         entityType == EntityTypes.TRAVEL_TIME -> MergePolicy.Lww
         // School: a line removed on any device is gone for good; the cover answer and its Undo, the latest wins.

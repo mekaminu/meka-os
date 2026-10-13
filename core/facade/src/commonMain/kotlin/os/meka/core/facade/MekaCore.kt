@@ -161,6 +161,8 @@ class MekaCore(
     private var sleepSessions: List<os.meka.core.domain.SleepSession> = emptyList()
     private val protectedTime = os.meka.core.domain.ProtectedTime(replica)
     private val leavingNow = os.meka.core.domain.LeavingNow(replica)
+    // About you (rule 13, slice 1): the household profile, synced.
+    private val aboutYou = os.meka.core.domain.AboutYouStore(replica, nowMs)
     private val weekAheadSettings = os.meka.core.domain.WeekAheadSettings(replica)
     private val autonomy = os.meka.core.domain.Autonomy(replica, nowMs)
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -476,6 +478,67 @@ class MekaCore(
      * six days after) and what "Add to shopping" would put on the shared list (Ask → More → Dinners). Synced.
      */
     val mealsView: StateFlow<os.meka.core.domain.MealPlanView> = _meals.asStateFlow()
+
+    private val _aboutYou = MutableStateFlow(os.meka.core.domain.AboutYouView.EMPTY)
+    /**
+     * About you (rule 13, slice 1; Ask → Settings → About you on both apps): the household profile — his name, partner,
+     * children, home and work, the call assistant's and voicemail numbers. Synced; kept in his data, never in code.
+     */
+    val aboutYouView: StateFlow<os.meka.core.domain.AboutYouView> = _aboutYou.asStateFlow()
+
+    /**
+     * Set by the Fold only (About you, release 1): after a successful sync finds no profile on either device, copy the
+     * values MEKA had so far into it, once. The Mac never copies (a reinstall pulls first, so nothing is written over).
+     */
+    var seedsAboutYou: Boolean = false
+
+    /** Saves one About you line ([field]); blank clears it, with Undo ([os.meka.core.domain.AboutSaved.undo]). */
+    suspend fun setAboutYou(field: os.meka.core.domain.AboutField, text: String): os.meka.core.domain.AboutSaved =
+        onCore { aboutYou.set(field, text).also { refreshAboutYouStep() } }
+
+    /** [setAboutYou] by the field's key ("partnerName"), so only Strings cross from Swift; null for an unknown key. */
+    suspend fun setAboutYouField(key: String, text: String): os.meka.core.domain.AboutSaved? {
+        val f = os.meka.core.domain.AboutField.entries.firstOrNull { it.key == key } ?: return null
+        return setAboutYou(f, text)
+    }
+
+    /** Whether MEKA watches the partner's messages for requests. */
+    suspend fun setAboutYouPartnerWatch(on: Boolean): Boolean = onCore { aboutYou.setPartnerWatch(on) }
+
+    /** Adds a child typed as "Alex, U7, Oakfield School". */
+    suspend fun addAboutYouChild(text: String): os.meka.core.domain.AboutSaved =
+        onCore { aboutYou.addChild(text).also { refreshAboutYouStep() } }
+
+    /** Replaces the child at [index] with what's typed. */
+    suspend fun editAboutYouChild(index: Int, text: String): os.meka.core.domain.AboutSaved =
+        onCore { aboutYou.editChild(index, text) }
+
+    /** Takes the child at [index] off; Undo is [addAboutYouChild] with the result's undo text. */
+    suspend fun removeAboutYouChild(index: Int): os.meka.core.domain.AboutSaved =
+        onCore { aboutYou.removeChild(index).also { refreshAboutYouStep() } }
+
+    /** Setup's About you step follows the profile at once (Today's Setup card drops it). Caller is on the core. */
+    private fun refreshAboutYouStep() {
+        _setup.value?.let { v ->
+            val step = os.meka.core.domain.AboutYouRules.setupStep(aboutYou.profile())
+            if (v.steps.any { it.key == step.key }) _setup.value = os.meka.core.domain.SetupRules.replaceStep(v, step)
+        }
+    }
+
+    /**
+     * About you, release 1: what MEKA held before the profile existed — the Family/Leaving now name, the children by
+     * club age group, the weather's home and work places and the call assistant's number. Read from his synced
+     * settings where he set them, else from the values the code still holds until release 2 removes them.
+     */
+    private fun aboutYouBefore(): os.meka.core.domain.AboutYou = os.meka.core.domain.AboutYou(
+        partnerName = leavingNow.setting().to,
+        partnerWatch = true,
+        children = os.meka.core.domain.FootballRules.CHILDREN.entries.sortedBy { it.key }
+            .map { os.meka.core.domain.AboutChild(it.value, it.key) },
+        home = weatherPlace.wanted() ?: os.meka.core.domain.WeatherPlaceRules.HOME,
+        work = workPlace.wanted() ?: os.meka.core.domain.PlacesRules.WORK,
+        assistantNumber = os.meka.core.domain.CallScreeningRules.ASSISTANT_NUMBER,
+    )
 
     private val _emergency = MutableStateFlow(os.meka.core.domain.EmergencyView.EMPTY)
     /**
@@ -3434,6 +3497,8 @@ class MekaCore(
         )
         // The commute in onboarding (the commute counts everywhere, slice 8): MEKA's guess until either app sets it.
         val view = os.meka.core.domain.SetupRules.view(facts, recovery, screenSaver, onCore { work.commute() })
+            // About you (rule 13, slice 1): its own step first, to do while nothing is filled in.
+            .let { v -> os.meka.core.domain.AboutYouRules.withSetupStep(v, onCore { aboutYou.profile() }) }
         _setup.value = view
         return view
     }
@@ -4797,6 +4862,8 @@ class MekaCore(
             val report = client.syncOnce()
             failures = 0
             lastSyncedMs = nowMs()
+            // About you, release 1: the Fold copies what MEKA held into the profile once, after a clean round.
+            if (seedsAboutYou && report.rejected.isEmpty()) aboutYou.seedOnce(aboutYouBefore())
             _sync.value = if (report.rejected.isEmpty()) SyncStatus.Synced(nowMs())
             else SyncStatus.Failing("${report.rejected.size} change(s) were refused by the server", replica.pendingPushCount())
             refresh()
@@ -4960,6 +5027,7 @@ class MekaCore(
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _emergency.value = emergency.view()
+        _aboutYou.value = aboutYou.view(cal)
         _facts.value = lifeFacts.view()
         _queue.value = trainQueue.view()
         _errands.value = errands.view()

@@ -2467,6 +2467,31 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(core.documentsView.value.rows.isEmpty)
     }
 
+    func testAboutYouReachesSwift() async throws {
+        // About you (rule 13, slice 1): a line saved by its key and a child added (only Strings and an Int cross),
+        // the view, Undo's text and Setup's fix reach the Mac. Invented names only.
+        XCTAssertEqual(AboutYouView.companion.EMPTY.summary, AboutYouRules.shared.WELCOME)
+        XCTAssertEqual(SetupFix.aboutYou.name, "ABOUT_YOU")
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "about-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let saved = try await core.setAboutYouField(key: AboutYouFields.shared.PARTNER_NAME, text: "Sam")
+        XCTAssertEqual(saved?.line, "Saved")
+        let refused = try await core.setAboutYouField(key: AboutYouFields.shared.HOME, text: "<home>")
+        XCTAssertEqual(refused?.refused, true)
+        let added = try await core.addAboutYouChild(text: "Alex, U7, Oakfield School")
+        XCTAssertEqual(added.line, "Added Alex · Under 7s · Oakfield School")
+        let v = core.aboutYouView.value
+        XCTAssertFalse(v.isEmpty)
+        XCTAssertEqual(v.rows.first { $0.field == .partnerName }?.value, "Sam")
+        XCTAssertEqual(v.children.map(\.name), ["Alex"])
+        let gone = try await core.removeAboutYouChild(index: 0)
+        XCTAssertEqual(gone.undo, "Alex, U7, Oakfield School")
+        XCTAssertTrue(core.aboutYouView.value.children.isEmpty)
+    }
+
     func testBinsReachSwift() async throws {
         // Bin days, slice 1: a typed bin is read by the core's rules, added through the facade (only a String crosses)
         // and the sheet's rows, Today's line and the heads-up's source reach the Mac.

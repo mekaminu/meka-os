@@ -278,5 +278,9 @@ private struct ShellSheetsD: ViewModifier {
             .sheet(isPresented: Binding(get: { model.showNotifications }, set: { model.showNotifications = $0 })) {
                 NotificationsSheet(palette: palette)
             }
+            // About you (rule 13, slice 1): who's who, home and work, kept in his data.
+            .sheet(isPresented: Binding(get: { model.showAboutYou }, set: { model.showAboutYou = $0 })) {
+                AboutYouSheet(palette: palette)
+            }
     }
 }

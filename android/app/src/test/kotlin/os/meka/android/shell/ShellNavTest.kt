@@ -78,7 +78,7 @@ class ShellNavTest {
             ShellNav.daily().map { it.label },
         )
         assertEquals(
-            listOf("Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Recovery key", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"),
+            listOf("About you", "Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Recovery key", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"),
             ShellNav.settings(connected = true).map { it.label },
         )
         assertFalse(MoreItem.WATCH in ShellNav.settings(connected = false))

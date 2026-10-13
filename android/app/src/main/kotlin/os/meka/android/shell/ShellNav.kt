@@ -76,6 +76,7 @@ enum class MoreItem(
     LIFE_ADMIN("Life admin hour", "One hour a week for forms, calls and renewals", null, MoreGroup.DAILY),
     BEDSIDE(os.meka.core.domain.BedsideEntryRules.ROW_LABEL, os.meka.core.domain.BedsideEntryRules.ROW_LINE, null, MoreGroup.DAILY),
     REVIEW("Review", "Your week, looked back on", ShellDestination.REVIEW, MoreGroup.DAILY),
+    ABOUT_YOU(os.meka.core.domain.AboutYouRules.TITLE, os.meka.core.domain.AboutYouRules.ROW_LINE, null, MoreGroup.SETTINGS),
     WORK("Work mode", "Work hours and the Work switch", null, MoreGroup.SETTINGS),
     PROTECTED("Protected time", "Evenings and weekends, kept free of tasks", null, MoreGroup.SETTINGS),
     NOTIFICATIONS("Notifications", "Quiet hours, digests and what reaches you", null, MoreGroup.SETTINGS),

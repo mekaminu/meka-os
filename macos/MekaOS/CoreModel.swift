@@ -74,6 +74,10 @@ final class CoreModel {
     private(set) var emergency: EmergencyView?
     /// Ask → More → Emergency card.
     var showEmergency = false
+    /// About you (rule 13, slice 1): the household profile, synced with the Fold; kept in his data, not in code.
+    private(set) var aboutYou: AboutYouView?
+    /// Ask → Settings → About you.
+    var showAboutYou = false
     /// What MEKA knows (facts page, slice 1): the facts Ask and Talk answer from, in groups (Ask → More → What MEKA
     /// knows). Synced with the Fold.
     private(set) var facts: FactsView?
@@ -441,6 +445,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await e in core.emergencyView { self?.emergency = e }
+        })
+        observers.append(Task { [weak self] in
+            for await a in core.aboutYouView { self?.aboutYou = a }
         })
         observers.append(Task { [weak self] in
             for await f in core.factsView { self?.facts = f }
@@ -2593,6 +2600,58 @@ final class CoreModel {
     }
 
     func dismissEventUndo() { eventUndo = nil }
+
+    // MARK: About you (rule 13, slice 1)
+
+    /// What saving an About you line said: the line, whether it was turned away, and what Undo writes back.
+    struct AboutSaid: Equatable {
+        let line: String
+        let refused: Bool
+        let undo: String?
+    }
+
+    private func aboutSaid(_ r: AboutSaved) -> AboutSaid {
+        if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+        return AboutSaid(line: r.line, refused: r.refused, undo: r.undo)
+    }
+
+    /// Saves one line by its field's key (blank clears it); only Strings cross to the core.
+    func setAboutYou(key: String, text: String) async -> AboutSaid? {
+        guard let core else { return nil }
+        do {
+            guard let r = try await core.setAboutYouField(key: key, text: text) else { return nil }
+            return aboutSaid(r)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Adds a child typed as "Alex, U7, Oakfield School" (also Undo after a removal); only a String crosses.
+    func addAboutYouChild(_ text: String) async -> AboutSaid? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        do {
+            return aboutSaid(try await core.addAboutYouChild(text: t))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Takes a child off by position; only an Int crosses.
+    func removeAboutYouChild(_ index: Int32) async -> AboutSaid? {
+        guard let core else { return nil }
+        do {
+            return aboutSaid(try await core.removeAboutYouChild(index: index))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// MEKA watches the partner's messages for requests, or not (only a Bool crosses).
+    func setAboutYouPartnerWatch(_ on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setAboutYouPartnerWatch(on: on) } }
 
     // MARK: Emergency card (slice 1)
 

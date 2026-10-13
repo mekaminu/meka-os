@@ -127,7 +127,7 @@ fun rememberSetupFixer(openPane: (SetupFix) -> Unit, after: () -> Unit): (SetupS
         { step: SetupStep ->
             haptics.light()
             when (val f = step.fix) {
-                SetupFix.CALENDARS, SetupFix.WORK, SetupFix.VOICE, SetupFix.RECOVERY -> f?.let(openPane)
+                SetupFix.CALENDARS, SetupFix.WORK, SetupFix.VOICE, SetupFix.RECOVERY, SetupFix.ABOUT_YOU -> f?.let(openPane)
                 SetupFix.NOTIFICATION_ACCESS -> openListenerSettings(context)
                 SetupFix.SCREEN_SAVER -> os.meka.android.fold.BedsideDreamService.openSettings(context)
                 SetupFix.CALL_ROLE -> MekaCallScreeningService.roleRequest(context)?.let { runCatching { askRole.launch(it) } }
