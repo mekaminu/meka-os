@@ -13,6 +13,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import os.meka.core.domain.ActivityFields
 import os.meka.core.domain.ActivityKind
+import os.meka.core.domain.BlockedCallerFields
 import os.meka.core.domain.CallAssistantRules
 import os.meka.core.domain.CallAssistantScript
 import os.meka.core.domain.CaptureKind
@@ -267,6 +268,35 @@ class CallAssistantTest {
         // A second household: the server can't tell whose call it is.
         devices.enrol("hh2", "fold")
         assertTrue("<Reject" in hook(VoiceStep.INCOMING, "CallSid" to "CA5").bodyAsText())
+    }
+
+    @Test
+    fun aCallerWhoHangsUpWithoutAMessageIsNotedForTheFoldToDecide() = testApplication {
+        application { mekaSync(ops, devices, voice = voice) }
+        switch(true)
+        val call = arrayOf("CallSid" to "CA70", "From" to "+441632960770", "RecordingDuration" to "0")
+        assertTrue("I didn&apos;t hear a message" in hook(VoiceStep.RECORDED, *call).bodyAsText())
+        // A retry writes nothing more.
+        hook(VoiceStep.RECORDED, *call)
+        val noted = ops.after("hh", 0, 1_000).map { it.op }.filter { it.entityType == EntityTypes.BLOCKED_CALLER }
+        assertEquals(setOf(BlockedCallerFields.NUMBER, BlockedCallerFields.HUNG_UP_AT), noted.map { it.field }.toSet())
+        assertEquals(2, noted.size)
+        assertEquals(listOf(os.meka.core.domain.BlockedCallerRules.keyOf("+441632960770")), noted.map { it.entityId }.distinct())
+        assertEquals(FieldValue.Int64(nowMs), noted.single { it.field == BlockedCallerFields.HUNG_UP_AT }.value)
+        // Never a block, and nothing held: the Fold decides.
+        assertTrue(noted.none { it.field == BlockedCallerFields.BLOCKED })
+        assertTrue(heldOps().isEmpty())
+        assertEquals(listOf("hh"), woken)
+        // An emergency number, or one already blocked, isn't noted.
+        hook(VoiceStep.RECORDED, "CallSid" to "CA71", "From" to "999", "RecordingDuration" to "0")
+        ops.append(
+            Op(
+                "b${seq++}", "hh", EntityTypes.BLOCKED_CALLER, os.meka.core.domain.BlockedCallerRules.keyOf("+441632960772")!!, BlockedCallerFields.BLOCKED, FieldValue.Bool(true),
+                Hlc(nowMs + seq, 0, "fold"), emptyList(), "fold",
+            ),
+        )
+        hook(VoiceStep.RECORDED, "CallSid" to "CA72", "From" to "+441632960772", "RecordingDuration" to "0")
+        assertEquals(2, ops.after("hh", 0, 1_000).count { it.op.field == BlockedCallerFields.HUNG_UP_AT || (it.op.entityType == EntityTypes.BLOCKED_CALLER && it.op.field == BlockedCallerFields.NUMBER) })
     }
 
     @Test

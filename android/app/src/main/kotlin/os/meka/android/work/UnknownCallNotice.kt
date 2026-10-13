@@ -196,6 +196,10 @@ object UnknownCallNotice {
     fun postAutoBlocked(context: Context, number: String, activityId: String, calls: Int) =
         postAutoBlockedLine(context, number, activityId, os.meka.core.domain.AutoBlockRules.detail(os.meka.core.domain.AutoBlockTrigger.REPEAT_CALLER, calls))
 
+    /** The same line for a caller who hung up on the call assistant without a message (spam calls still ring, slice 3). */
+    fun postAutoBlockedHangup(context: Context, number: String, activityId: String) =
+        postAutoBlockedLine(context, number, activityId, os.meka.core.domain.AutoBlockRules.detail(os.meka.core.domain.AutoBlockTrigger.ASSISTANT_HANGUP))
+
     /** The same line for a number blocked before it rang because the network couldn't verify it. */
     fun postAutoBlockedNetwork(context: Context, number: String, activityId: String) =
         postAutoBlockedLine(context, number, activityId, os.meka.core.domain.AutoBlockRules.detail(os.meka.core.domain.AutoBlockTrigger.NETWORK_CHECK))

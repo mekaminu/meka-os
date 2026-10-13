@@ -29,6 +29,13 @@ object BlockedCallerFields {
     /** The AI's reason in a few words ("Claims to be the police and asks for payment"), display only (untrusted). */
     const val SUSPECTED_WHY = "suspectedWhy"
     const val SUSPECTED_AT = "suspectedAtMs"
+    /**
+     * Spam calls still ring, slice 3: when this number last reached the call assistant and hung up without leaving a
+     * message (written by the server; [AssistantHangupRules]). Added 2026-10-13.
+     */
+    const val HUNG_UP_AT = "hungUpAtMs"
+    /** The [HUNG_UP_AT] the Fold has looked at (blocked or let be), so each hang-up is decided once. Added 2026-10-13. */
+    const val HUNG_UP_HANDLED = "hungUpHandledAtMs"
 }
 
 /** One row of Spam protection's Suspected spam: a number MEKA's AI flagged, waiting for Meka's Block or Not spam. */
@@ -192,6 +199,28 @@ class BlockedCallers(
             },
         )
         return true
+    }
+
+    /**
+     * Spam calls still ring, slice 3: numbers that reached the call assistant and hung up without a message in the last
+     * [AssistantHangupRules.WINDOW_DAYS] days, that the Fold hasn't looked at yet and aren't blocked; oldest first.
+     */
+    fun hangups(): List<AssistantHangup> {
+        val since = nowMs() - AssistantHangupRules.WINDOW_DAYS * 86_400_000L
+        return replica.entities(EntityTypes.BLOCKED_CALLER).mapNotNull { s ->
+            val at = s[BlockedCallerFields.HUNG_UP_AT].longOrNull ?: return@mapNotNull null
+            val handled = s[BlockedCallerFields.HUNG_UP_HANDLED].longOrNull ?: 0L
+            if (at <= handled || at < since || s[BlockedCallerFields.BLOCKED].boolOrNull == true) return@mapNotNull null
+            val number = s[BlockedCallerFields.NUMBER].textOrNull ?: s.ref.entityId.removePrefix("tel:")
+            AssistantHangup(s.ref.entityId, number, at)
+        }.sortedWith(compareBy<AssistantHangup> { it.atMs }.thenBy { it.key })
+    }
+
+    /** Marks the hang-up at [atMs] from [key] as looked at (synced, so no device decides it again). */
+    fun markHangupHandled(key: String, atMs: Long) {
+        val s = replica.entity(EntityTypes.BLOCKED_CALLER, key) ?: return
+        if ((s[BlockedCallerFields.HUNG_UP_HANDLED].longOrNull ?: 0L) >= atMs) return
+        replica.commitLocal(EntityTypes.BLOCKED_CALLER, key, mapOf(BlockedCallerFields.HUNG_UP_HANDLED to atMs.fv()))
     }
 
     /** Takes [key] off the list (calls from it ring again); false when it wasn't blocked. */

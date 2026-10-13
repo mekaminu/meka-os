@@ -76,6 +76,13 @@ object CallScreenLogRules {
         return ScreenedCallEntry(atMs, decision?.verdict?.name ?: TIMEOUT, parts.joinToString(" · ").take(DETAIL_MAX))
     }
 
+    /**
+     * Whether a call from the caller tagged [tag] since [sinceMs] rang because its network name claimed an official body
+     * (police, bank, NHS, school): such a caller is never auto-blocked (spam calls still ring, slice 3).
+     */
+    fun claimedOfficial(log: List<ScreenedCallEntry>, tag: String, sinceMs: Long): Boolean =
+        log.any { it.atMs >= sinceMs && it.detail.startsWith("$tag · ") && CallReason.OFFICIAL_CLAIM.label in it.detail }
+
     fun add(log: List<ScreenedCallEntry>, e: ScreenedCallEntry): List<ScreenedCallEntry> =
         (listOf(e) + log).sortedByDescending { it.atMs }.take(MAX)
 

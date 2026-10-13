@@ -29,6 +29,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         runCatching { app.nudger.evaluate(app.core.currentWorkMode()) }
         // An urgent voice message the call assistant just took (the server woke us at high priority): ring through.
         runCatching { app.nudger.alertVoiceMessages() }
+        // Spam calls still ring, slice 3: a stranger who hung up on the call assistant without a message is blocked.
+        runCatching { os.meka.android.work.AssistantHangups.handle(app) }
         // A build published from the Mac is ready on the card the next time MEKA opens.
         runCatching { app.updater.check() }
         // Train-time queue, slice 2: articles waiting for the train get their words saved once the phone is on Wi-Fi.

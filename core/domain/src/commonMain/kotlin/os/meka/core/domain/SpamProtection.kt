@@ -1,5 +1,7 @@
 package os.meka.core.domain
 
+import os.meka.core.sync.FieldValue
+
 /**
  * Spam calls still ring (build plan "Fix first", Meka 2026-10-13: "filtering of spam calls should be on all the time,
  * and when it identifies one it should be added to blocked so such calls don't even ring"), slice 1. Non-AI and pure.
@@ -20,7 +22,7 @@ object SpamProtectionRules {
     /** Work mode → Spam protection's explanation (both apps). */
     const val HINT = "Spam protection is always on. Blocked numbers never ring, any time of day. A number your network " +
         "can't verify (often spoofed) is blocked before it rings, and an unknown number that calls twice in a week " +
-        "without leaving a message is blocked after the call; each one shows in Activity with Undo. Family, your " +
+        "without leaving a message, or hangs up on your call assistant, is blocked after the call; each one shows in Activity with Undo. Family, your " +
         "always-notify list, contacts, anyone you called in the last 90 days and the numbers in About you always get " +
         "through, and so do callers claiming to be the police, a bank, the NHS or a school (with a heads-up on how to check)."
     /** Rule (5): why the phone's own Blocked numbers list doesn't show them. */
@@ -96,6 +98,7 @@ object OfficialCallerRules {
 enum class AutoBlockTrigger(val why: String) {
     NETWORK_CHECK("Auto-blocked · failed the network's caller check"),
     REPEAT_CALLER("Auto-blocked · called again within a week without leaving a message"),
+    ASSISTANT_HANGUP("Auto-blocked · hung up on your call assistant without a message"),
 }
 
 object AutoBlockRules {
@@ -123,5 +126,39 @@ object AutoBlockRules {
     fun detail(trigger: AutoBlockTrigger, callsInWindow: Int = 0): String = when (trigger) {
         AutoBlockTrigger.NETWORK_CHECK -> "Your network couldn't verify the caller's number (often a spoofed one); it didn't ring"
         AutoBlockTrigger.REPEAT_CALLER -> "Called $callsInWindow times in $REPEAT_DAYS days and never left a message"
+        AutoBlockTrigger.ASSISTANT_HANGUP -> "Reached your call assistant and hung up without saying who they were or why"
     }
+}
+
+/** A number that reached the call assistant and hung up without leaving a message ([BlockedCallers.hangups]). */
+data class AssistantHangup(val key: String, val number: String, val atMs: Long)
+
+/**
+ * Spam calls still ring, slice 3 (build plan (3): "the call assistant screened it and the caller hung up or gave no
+ * name/reason"). When a caller reaches the call assistant and hangs up without leaving a message, the server writes
+ * [BlockedCallerFields.HUNG_UP_AT] on the number's `blocked_caller` entity (never a block: the server can't tell a
+ * contact from a stranger). The Fold, after its next sync, looks at each one with what only the phone knows (contacts,
+ * anyone he called in 90 days, the family and always-notify lists, a network name claiming an official body) and,
+ * with spam protection on, blocks the stranger as an automatic action with Undo in Activity. Non-AI and pure.
+ */
+object AssistantHangupRules {
+    /** Hang-ups older than this aren't acted on (a phone that was off for a week doesn't block on its return). */
+    const val WINDOW_DAYS = 7
+
+    /** Whether the server records a hang-up from [from]: a real number (never withheld) that isn't an emergency service. */
+    fun shouldRecord(from: String?): Boolean = BlockedCallerRules.keyOf(from) != null && !OfficialCallerRules.isEmergency(from)
+
+    /** The fields the server writes on the number's `blocked_caller` entity. */
+    fun fields(number: String, atMs: Long): Map<String, FieldValue> = linkedMapOf(
+        BlockedCallerFields.NUMBER to FieldValue.Text(number.trim().take(40)),
+        BlockedCallerFields.HUNG_UP_AT to FieldValue.Int64(atMs),
+    )
+
+    /**
+     * Whether the Fold blocks a hang-up: spam protection on, the phone could check who the caller is ([lookups]: contacts
+     * and call log readable; without them nobody is blocked), the caller isn't [known] (contact, called in 90 days,
+     * listed, this phone's own number, claimed an official body), not household, and left no voice message lately.
+     */
+    fun shouldBlock(protection: Boolean, lookups: Boolean, known: Boolean, household: Boolean, leftVoiceMessage: Boolean): Boolean =
+        protection && lookups && !known && !household && !leftVoiceMessage
 }

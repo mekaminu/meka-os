@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import os.meka.backend.integrations.Integrations
+import os.meka.core.domain.AssistantHangupRules
 import os.meka.core.domain.BankHolidayFields
 import os.meka.core.domain.BlockedCallerFields
 import os.meka.core.domain.BlockedCallerRules
@@ -209,7 +210,10 @@ class CallAssistant(
         return when (event) {
             is VoiceEvent.Incoming -> if (switchedOn(hh)) VoiceReply.TakeMessage(atWork(hh)) else VoiceReply.Busy
             is VoiceEvent.Recorded -> {
-                if (event.seconds < 1) return VoiceReply.Goodbye(CallAssistantScript.NO_MESSAGE)
+                if (event.seconds < 1) {
+                    noteHangup(hh, id, event.from)
+                    return VoiceReply.Goodbye(CallAssistantScript.NO_MESSAGE)
+                }
                 // A retry finds the message written: it keeps the at-work reading it was taken with.
                 val atWork = if (exists(hh, id)) !away(hh, id) else atWork(hh)
                 if (write(hh, id, CallAssistantRules.messageFields(event.from, now(), atWork))) runCatching { onWritten(hh) }
@@ -296,6 +300,21 @@ class CallAssistant(
             runCatching { onWritten(hh) }
         }
         return flagged
+    }
+
+    /**
+     * Spam calls still ring, slice 3: the caller hung up (or said nothing) without leaving a message. For a real number
+     * that isn't an emergency service ([AssistantHangupRules.shouldRecord]), the time goes on the number's
+     * `blocked_caller` entity ([BlockedCallerFields.HUNG_UP_AT]) and the devices are woken; the Fold decides whether to
+     * block (only it knows contacts and recent calls). Once per call (op ids from the call); a blocked number isn't noted.
+     */
+    private fun noteHangup(hh: String, id: String, from: String?) {
+        if (!AssistantHangupRules.shouldRecord(from)) return
+        val key = BlockedCallerRules.keyOf(from) ?: return
+        if (fields.latest(hh, EntityTypes.BLOCKED_CALLER, key, BlockedCallerFields.BLOCKED) == FieldValue.Bool(true)) return
+        if (write(hh, key, AssistantHangupRules.fields(from!!, now()), EntityTypes.BLOCKED_CALLER, opBase = id + "hangup")) {
+            runCatching { onWritten(hh) }
+        }
     }
 
     /**

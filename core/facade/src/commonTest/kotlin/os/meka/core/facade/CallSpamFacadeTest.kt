@@ -187,4 +187,76 @@ class CallSpamFacadeTest {
         assertEquals(null, c.autoBlockRepeatCaller("01632 960400", 4, now))
         assertTrue(c.screenIncomingCall("01632 960400", lists, emptyList(), CallSignals(verificationFailed = true)).rings)
     }
+
+    /** What the server writes when a caller hangs up on the call assistant without a message (slice 3). */
+    private var serverSeq = 0
+    private fun serverHangup(number: String, atMs: Long) {
+        val key = os.meka.core.domain.BlockedCallerRules.keyOf(number)!!
+        for ((field, value) in os.meka.core.domain.AssistantHangupRules.fields(number, atMs)) {
+            ops.append(
+                os.meka.core.sync.Op(
+                    "srvhang${serverSeq++}", "hh", os.meka.core.domain.EntityTypes.BLOCKED_CALLER, key, field, value,
+                    os.meka.core.sync.Hlc(atMs, serverSeq, "server"), emptyList(), "server",
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun aStrangerWhoHungUpOnTheAssistantIsBlockedOnceWithUndo() = runTest {
+        val c = core()
+        serverHangup("+441632960500", now - 60_000L)
+        c.syncNow()
+        val pending = c.assistantHangups()
+        assertEquals(listOf("+441632960500"), pending.map { it.number })
+        val id = c.autoBlockAssistantHangup(pending.single(), known = false, lookups = true)!!
+        assertEquals("Blocked today · Auto-blocked · hung up on your call assistant without a message · Sat 10 Oct",
+            c.blockedCallers.value.rows.single().line)
+        val entry = c.activityView.value.days.flatMap { it.rows }.single { it.id == id }
+        assertEquals("Blocked 01632 960500 · it won't ring again", entry.summary)
+        assertTrue(entry.canUndo)
+        // Looked at: not offered again.
+        assertEquals(emptyList(), c.assistantHangups())
+        // Undo takes it off the list, and the same hang-up doesn't block it again.
+        c.undoActivity(id)
+        assertEquals(0, c.blockedCallers.value.rows.size)
+        assertEquals(emptyList(), c.assistantHangups())
+    }
+
+    @Test
+    fun aKnownCallerOrAnUncheckablePhoneOrProtectionOffBlocksNobody() = runTest {
+        val c = core()
+        serverHangup("01632 960601", now - 60_000L)
+        serverHangup("01632 960602", now - 50_000L)
+        serverHangup("01632 960603", now - 40_000L)
+        serverHangup("01632 960604", now - 30_000L)
+        c.setAboutYou(os.meka.core.domain.AboutField.PARTNER_PHONE, "01632 960604")
+        c.syncNow()
+        val (contact, noLookups, protectionOff, partner) = c.assistantHangups()
+        // A contact (or anyone the phone knows): looked at, not blocked.
+        assertEquals(null, c.autoBlockAssistantHangup(contact, known = true, lookups = true))
+        // The phone couldn't read contacts and the call log: nobody is blocked.
+        assertEquals(null, c.autoBlockAssistantHangup(noLookups, known = false, lookups = false))
+        // About you's numbers never are.
+        assertEquals(null, c.autoBlockAssistantHangup(partner, known = false, lookups = true))
+        // Spam protection off in Advanced: nothing.
+        c.setSpamProtection(false)
+        assertEquals(null, c.autoBlockAssistantHangup(protectionOff, known = false, lookups = true))
+        assertEquals(0, c.blockedCallers.value.rows.size)
+        assertEquals(emptyList(), c.assistantHangups())
+
+        // A caller who left a voice message this week isn't blocked for hanging up another time.
+        c.setSpamProtection(true)
+        val left = os.meka.core.domain.CapturedItem("v8", os.meka.core.domain.CaptureApp.PHONE, os.meka.core.domain.CaptureKind.VOICE_MESSAGE,
+            "+441632960700", "Hi, it's the garage about your car", null, now - 3_600_000L)
+        c.holdCaptured(listOf(left), lists)
+        serverHangup("01632 960700", now - 20_000L)
+        c.syncNow()
+        assertEquals(null, c.autoBlockAssistantHangup(c.assistantHangups().single(), known = false, lookups = true))
+
+        // A hang-up older than a week is left alone.
+        serverHangup("01632 960800", now - 8 * 86_400_000L)
+        c.syncNow()
+        assertEquals(emptyList(), c.assistantHangups())
+    }
 }

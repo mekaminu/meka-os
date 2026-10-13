@@ -3109,14 +3109,46 @@ class MekaCore(
         val key = os.meka.core.domain.BlockedCallerRules.keyOf(number) ?: return@onCore null
         if (!work.spamProtection() || key in blockList.view().keys) return@onCore null
         if (key in os.meka.core.domain.SpamProtectionRules.householdKeys(aboutYou.profile())) return@onCore null
+        val leftMessage = leftVoiceMessageLately(key)
+        if (!os.meka.core.domain.AutoBlockRules.repeatCaller(callsInWindow, leftMessage)) return@onCore null
+        autoBlock(number, os.meka.core.domain.AutoBlockTrigger.REPEAT_CALLER, atMs, callsInWindow)
+    }
+
+    /** Whether the number keyed [key] left a voice message with the call assistant in the last week. */
+    private fun leftVoiceMessageLately(key: String): Boolean {
         val since = nowMs() - os.meka.core.domain.AutoBlockRules.REPEAT_DAYS * 86_400_000L
-        val leftMessage = replica.entities(os.meka.core.domain.EntityTypes.HELD_MESSAGE).any { e ->
+        return replica.entities(os.meka.core.domain.EntityTypes.HELD_MESSAGE).any { e ->
             e[os.meka.core.domain.HeldMessageFields.KIND].textOrNull == os.meka.core.domain.CaptureKind.VOICE_MESSAGE.name &&
                 (e[os.meka.core.domain.HeldMessageFields.AT].longOrNull ?: 0L) >= since &&
                 e[os.meka.core.domain.HeldMessageFields.PERSON].textOrNull?.let { os.meka.core.domain.BlockedCallerRules.keyOf(it) } == key
         }
-        if (!os.meka.core.domain.AutoBlockRules.repeatCaller(callsInWindow, leftMessage)) return@onCore null
-        autoBlock(number, os.meka.core.domain.AutoBlockTrigger.REPEAT_CALLER, atMs, callsInWindow)
+    }
+
+    /**
+     * Spam calls still ring, slice 3: callers who reached the call assistant and hung up without a message (the server
+     * records them), not yet looked at by the Fold. The Fold checks each against what only it knows and calls
+     * [autoBlockAssistantHangup].
+     */
+    suspend fun assistantHangups(): List<os.meka.core.domain.AssistantHangup> = onCore { blockList.hangups() }
+
+    /**
+     * The Fold's decision on one [assistantHangups] entry: [known] when the phone recognises the caller (a contact,
+     * called in 90 days, family/always-notify, its own number, a claimed official body), [lookups] whether it could check
+     * at all. Marks the hang-up looked at either way; with spam protection on, a stranger who left no voice message
+     * lately and isn't household goes on the block list as an automatic action with Undo. Returns that Activity entry's
+     * id, or null when nothing was blocked.
+     */
+    suspend fun autoBlockAssistantHangup(hangup: os.meka.core.domain.AssistantHangup, known: Boolean, lookups: Boolean): String? = onCore {
+        blockList.markHangupHandled(hangup.key, hangup.atMs)
+        val household = hangup.key in os.meka.core.domain.SpamProtectionRules.householdKeys(aboutYou.profile())
+        val block = os.meka.core.domain.AssistantHangupRules.shouldBlock(
+            work.spamProtection(), lookups, known, household, leftVoiceMessageLately(hangup.key),
+        ) && hangup.key !in blockList.view().keys
+        if (!block) {
+            refresh()
+            return@onCore null
+        }
+        autoBlock(hangup.number, os.meka.core.domain.AutoBlockTrigger.ASSISTANT_HANGUP, hangup.atMs)
     }
 
     /** Blocks [number] as an automatic action (Activity, with Undo); the entry's id, or null when nothing changed. */

@@ -74,4 +74,33 @@ class SpamProtectionTest {
             SpamProtectionRules.householdKeys(a),
         )
     }
+
+    @Test
+    fun hangupsOnTheAssistantAreRecordedForRealNumbersAndBlockOnlyStrangers() {
+        assertTrue(AssistantHangupRules.shouldRecord("+441632960123"))
+        assertFalse(AssistantHangupRules.shouldRecord(null))
+        assertFalse(AssistantHangupRules.shouldRecord("anonymous"))
+        assertFalse(AssistantHangupRules.shouldRecord("999"))
+        val f = AssistantHangupRules.fields(" 01632 960123 ", 42L)
+        assertEquals(os.meka.core.sync.FieldValue.Text("01632 960123"), f[BlockedCallerFields.NUMBER])
+        assertEquals(os.meka.core.sync.FieldValue.Int64(42L), f[BlockedCallerFields.HUNG_UP_AT])
+
+        assertTrue(AssistantHangupRules.shouldBlock(protection = true, lookups = true, known = false, household = false, leftVoiceMessage = false))
+        assertFalse(AssistantHangupRules.shouldBlock(protection = false, lookups = true, known = false, household = false, leftVoiceMessage = false))
+        assertFalse(AssistantHangupRules.shouldBlock(protection = true, lookups = false, known = false, household = false, leftVoiceMessage = false))
+        assertFalse(AssistantHangupRules.shouldBlock(protection = true, lookups = true, known = true, household = false, leftVoiceMessage = false))
+        assertFalse(AssistantHangupRules.shouldBlock(protection = true, lookups = true, known = false, household = true, leftVoiceMessage = false))
+        assertFalse(AssistantHangupRules.shouldBlock(protection = true, lookups = true, known = false, household = false, leftVoiceMessage = true))
+        assertEquals("Reached your call assistant and hung up without saying who they were or why", AutoBlockRules.detail(AutoBlockTrigger.ASSISTANT_HANGUP))
+    }
+
+    @Test
+    fun aCallerThatClaimedAnOfficialBodyIsSpottedInTheScreenLog() {
+        val tag = CallScreenLogRules.tag("01632 960123", "salt")
+        val claim = CallDecision(CallVerdict.RING, CallReason.OFFICIAL_CLAIM, "tel:441632960123")
+        val log = listOf(CallScreenLogRules.entry(1_000L, tag, claim, null, null, true))
+        assertTrue(CallScreenLogRules.claimedOfficial(log, tag, 0L))
+        assertFalse(CallScreenLogRules.claimedOfficial(log, tag, 2_000L))
+        assertFalse(CallScreenLogRules.claimedOfficial(log, CallScreenLogRules.tag("01632 960999", "salt"), 0L))
+    }
 }

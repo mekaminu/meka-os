@@ -43,6 +43,12 @@ object CallScreenLog {
         p.edit().putString(KEY_LOG, CallScreenLogRules.encode(CallScreenLogRules.add(log(app), e))).apply()
     }
 
+    /** Whether a call from [number] since [sinceMs] rang because its network name claimed an official body. */
+    fun claimedOfficial(context: Context, number: String, sinceMs: Long): Boolean {
+        val app = context.applicationContext
+        return CallScreenLogRules.claimedOfficial(log(app), CallScreenLogRules.tag(number, salt(app)), sinceMs)
+    }
+
     /** What the report carries: the role, the switch, whether contacts and the call log can be read, the last calls. */
     fun report(app: MekaApplication): CallScreenReport = CallScreenReport(
         roleHeld = MekaCallScreeningService.roleHeld(app),
