@@ -3616,6 +3616,19 @@ final class CoreModel {
         }
     }
 
+    /// Draft it in the reply editor on an email in "From your mail" (slice 6b-2b): Navilife's AI drafts a reply in his
+    /// tone for the editor; nothing is written or sent (Send does that, on his tap). Only the id (a String) crosses to the
+    /// core; the draft's two Strings come back.
+    func draftMailReply(_ id: String) async -> (text: String?, line: String) {
+        guard let core else { return (nil, AskRules.shared.NOT_CONNECTED_LINE) }
+        do {
+            let draft = try await core.draftMailReply(id: id)
+            return (draft.text, draft.line)
+        } catch {
+            return (nil, AskRules.shared.OFFLINE_LINE)
+        }
+    }
+
     /// Send on a reply written on an email in "From your mail" (slice 6b-2a): nothing is sent here; the server sends it
     /// from the account the email came to at its next check (Undo on the bar stops it) and archives the email. A problem
     /// with the words (empty, too long) leaves the editor open. Only the id and the text (Strings) cross.

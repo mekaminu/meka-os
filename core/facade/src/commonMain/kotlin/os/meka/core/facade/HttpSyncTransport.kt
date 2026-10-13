@@ -158,6 +158,14 @@ interface AiApi {
      */
     suspend fun chatSummary(request: os.meka.core.wire.ChatSummaryCodec.Request): os.meka.core.wire.ChatSummaryCodec.Response =
         os.meka.core.wire.ChatSummaryCodec.Response(AskCodec.Response.OFF)
+
+    /**
+     * A reply drafted by MEKA's AI (`POST /v1/ai/mail-draft`, Inbox autopilot slice 6b-2b): one email as its card shows
+     * it and a few of Meka's own earlier replies; the draft comes back unchecked ([os.meka.core.domain.MailDraftRules.check]
+     * reads it) and only ever goes into his editor. A server without the route answers "off".
+     */
+    suspend fun mailDraft(request: os.meka.core.wire.MailDraftCodec.Request): os.meka.core.wire.MailDraftCodec.Response =
+        os.meka.core.wire.MailDraftCodec.Response(AskCodec.Response.OFF)
 }
 
 /** What [MekaCore.gistGroupDigest] did. */
@@ -686,6 +694,21 @@ class HttpSyncTransport(
             resp.status.value == 404 -> return os.meka.core.wire.ChatSummaryCodec.Response(AskCodec.Response.OFF)
             resp.status.value == 403 -> return os.meka.core.wire.ChatSummaryCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/chat-summary")
+        }
+        return codec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun mailDraft(request: os.meka.core.wire.MailDraftCodec.Request): os.meka.core.wire.MailDraftCodec.Response {
+        val codec = os.meka.core.wire.MailDraftCodec
+        val body = codec.encodeRequest(request)
+        prepare() // the AI routes require the device's signing key on the server
+        val resp = send("/v1/ai/mail-draft", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/mail-draft")
+            // A server without the route (older, or no AI key): he writes the reply himself.
+            resp.status.value == 404 -> return os.meka.core.wire.MailDraftCodec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.MailDraftCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/mail-draft")
         }
         return codec.decodeResponse(resp.bodyAsText())
     }

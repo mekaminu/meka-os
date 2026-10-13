@@ -40,7 +40,8 @@ struct MailNeedsView: View {
                                                  task: { model.taskFromMailItem(row.id) },
                                                  waiting: { model.waitingFromMailItem(row.id) },
                                                  snooze: { model.snoozeMailItem(row.id) },
-                                                 send: { text, sent in model.replyToMailItem(row.id, text, sent: sent) })
+                                                 send: { text, sent in model.replyToMailItem(row.id, text, sent: sent) },
+                                                 draft: { await model.draftMailReply(row.id) })
                             }
                             if let more = card.moreLine {
                                 Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
@@ -75,9 +76,14 @@ private struct MailNeedsRowView: View {
     let waiting: () -> Void
     let snooze: () -> Void
     let send: (String, @escaping @MainActor () -> Void) -> Void
+    /// Slice 6b-2b: Navilife's draft for the editor and the line to show; nothing is sent.
+    let draft: @MainActor () async -> (text: String?, line: String)
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var replying = false
     @State private var text = ""
+    @State private var lastDraft: String?
+    @State private var draftLine: String?
+    @State private var drafting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -104,7 +110,9 @@ private struct MailNeedsRowView: View {
             .accessibilityLabel(row.spoken)
             if replying {
                 MailReplyEditor(row: row, palette: palette, text: $text,
-                                send: { send(text) { replying = false; text = "" } },
+                                lastDraft: lastDraft, draftLine: draftLine, drafting: drafting,
+                                send: { send(text) { replying = false; text = ""; lastDraft = nil; draftLine = nil } },
+                                askDraft: { askDraft() },
                                 cancel: { replying = false })
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
@@ -135,13 +143,34 @@ private struct MailNeedsRowView: View {
     }
 }
 
-/// The reply editor under an email (slice 6b-2a): his words, who it goes to and from which account, Send and Cancel.
+extension MailNeedsRowView {
+    /// Draft it: ask once, put the draft in the editor (never over his own words) and say what happened.
+    fileprivate func askDraft() {
+        MekaHaptics.light()
+        drafting = true
+        Task { @MainActor in
+            let result = await draft()
+            drafting = false
+            if let t = result.text { text = t; lastDraft = t }
+            draftLine = result.line
+        }
+    }
+}
+
+/// The reply editor under an email (slice 6b-2a): his words, who it goes to and from which account, Send and Cancel;
+/// slice 6b-2b: Draft it (only while the editor is empty or still holds the last draft unchanged) and the draft's line,
+/// which cross-fades in.
 private struct MailReplyEditor: View {
     let row: MailNeedsRow
     let palette: MekaPalette
     @Binding var text: String
+    let lastDraft: String?
+    let draftLine: String?
+    let drafting: Bool
     let send: () -> Void
+    let askDraft: () -> Void
     let cancel: () -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
 
     var body: some View {
         let problem = MailNeedsRules.shared.replyProblem(text: text)
@@ -154,6 +183,10 @@ private struct MailReplyEditor: View {
                 .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
                 .accessibilityLabel("Reply to \(row.from)")
             Text(row.replyLine).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+            if let draftLine {
+                Text(draftLine).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    .transition(.opacity)
+            }
             if problem == MailNeedsRules.shared.REPLY_TOO_LONG {
                 Text(MailNeedsRules.shared.REPLY_TOO_LONG).font(MekaType.itemMeta).foregroundStyle(palette.critical)
             }
@@ -162,11 +195,19 @@ private struct MailReplyEditor: View {
                               spoken: "Send this reply to \(row.from) now", action: send)
                     .disabled(problem != nil)
                     .keyboardShortcut(.return, modifiers: .command)
+                if MailDraftRules.shared.canDraft(editor: text, lastDraft: lastDraft) {
+                    MailNeedsPill(label: drafting ? MailDraftRules.shared.DRAFTING : MailDraftRules.shared.label(editor: text),
+                                  palette: palette, quiet: true,
+                                  spoken: "Let Navilife draft a reply to \(row.from) for you to check; nothing is sent",
+                                  action: askDraft)
+                        .disabled(drafting)
+                }
                 MailNeedsPill(label: MailNeedsRules.shared.CANCEL, palette: palette, quiet: true,
                               spoken: "Close the reply without sending", action: cancel)
             }
         }
         .padding(.top, MekaSpace.xs)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: draftLine)
     }
 }
 

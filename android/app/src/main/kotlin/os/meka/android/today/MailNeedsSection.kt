@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -46,6 +47,8 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
+import os.meka.core.domain.MailDraft
+import os.meka.core.domain.MailDraftRules
 import os.meka.core.domain.MailNeedsCard
 import os.meka.core.domain.MailNeedsRow
 import os.meka.core.domain.MailNeedsRules
@@ -55,7 +58,8 @@ import os.meka.core.facade.MekaCore
  * Inbox autopilot, slice 6a: "From your mail" in Needs you — the emails the server sorted as needing Meka, still in
  * the inbox, newest first: who, which account (the business one wears a Business chip), when, the subject and the
  * first words, each with **Reply** (slice 6b-2a: he writes it on the card; it goes from that account only when he taps
- * Send, at the server's next check, Undo on the bar stops it), **Done** (archived at the server's next check), **Task** and **Waiting for** (slice 6b-1: made
+ * Send, at the server's next check, Undo on the bar stops it; slice 6b-2b: **Draft it** fills the editor with Navilife's
+ * draft in his tone, never over his own words, still sent only on Send), **Done** (archived at the server's next check), **Task** and **Waiting for** (slice 6b-1: made
  * from the email, which is archived too) and **Snooze** (back tomorrow 08:00). Each has Undo on the bar. Tapping the header folds the emails in and out (expand spring; reduced motion: cross-fade).
  */
 @Composable
@@ -101,6 +105,7 @@ internal fun MailNeedsSection(
                             onTask = { haptics.medium(); answer { core.taskFromMailItem(row.id) } },
                             onWaiting = { haptics.medium(); answer { core.waitingFromMailItem(row.id) } },
                             onSnooze = { haptics.light(); answer { core.snoozeMailItem(row.id) } },
+                            onDraft = { core.draftMailReply(row.id) },
                             onSend = { text, sent ->
                                 haptics.medium()
                                 scope.launch {
@@ -125,12 +130,19 @@ internal fun MailNeedsSection(
 @Composable
 private fun MailNeedsRowView(
     row: MailNeedsRow, onDone: () -> Unit, onTask: () -> Unit, onWaiting: () -> Unit, onSnooze: () -> Unit,
+    onDraft: suspend () -> MailDraft,
     onSend: (String, () -> Unit) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    val scope = rememberCoroutineScope()
     // Slice 6b-2a: a reply that didn't send opens again with his words.
     var replying by rememberSaveable(row.id, row.replyDraft) { mutableStateOf(row.replyDraft != null) }
     var text by rememberSaveable(row.id, row.replyDraft) { mutableStateOf(row.replyDraft ?: "") }
+    // Slice 6b-2b: Navilife's last draft (Draft it never writes over his own words) and the line under the editor.
+    var lastDraft by rememberSaveable(row.id) { mutableStateOf<String?>(null) }
+    var draftLine by rememberSaveable(row.id) { mutableStateOf<String?>(null) }
+    var drafting by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().testTag("mail-item-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -170,12 +182,33 @@ private fun MailNeedsRowView(
                     )
                 }
                 Text(row.replyLine, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                // The draft's line cross-fades in under the editor (reduced motion: the plain fade).
+                AnimatedContent(draftLine, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-draft-line") { line ->
+                    if (line != null) Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.testTag("mail-draft-line"))
+                }
                 if (problem == MailNeedsRules.REPLY_TOO_LONG) Text(problem, style = MekaType.itemMeta, color = Meka.colors.critical)
-                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                // Send · Draft it · Cancel wrap on the narrow cover screen rather than squeezing.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     MailNeedsPill(
                         MailNeedsRules.SEND, enabled = problem == null,
-                        spoken = "Send this reply to ${row.from} now", onClick = { onSend(text) { replying = false; text = "" } },
+                        spoken = "Send this reply to ${row.from} now", onClick = { onSend(text) { replying = false; text = ""; lastDraft = null; draftLine = null } },
                     )
+                    if (MailDraftRules.canDraft(text, lastDraft)) {
+                        MailNeedsPill(
+                            if (drafting) MailDraftRules.DRAFTING else MailDraftRules.label(text), quiet = true, enabled = !drafting,
+                            spoken = "Let Navilife draft a reply to ${row.from} for you to check; nothing is sent",
+                            onClick = {
+                                haptics.light()
+                                drafting = true
+                                scope.launch {
+                                    val d = runCatching { onDraft() }.getOrNull()
+                                    drafting = false
+                                    d?.text?.let { text = it; lastDraft = it }
+                                    draftLine = d?.line ?: MailDraftRules.UNUSABLE_LINE
+                                }
+                            },
+                        )
+                    }
                     MailNeedsPill(MailNeedsRules.CANCEL, quiet = true, spoken = "Close the reply without sending", onClick = { replying = false })
                 }
             }

@@ -63,6 +63,7 @@ import os.meka.core.wire.HandleThisCodec
 import os.meka.core.wire.MessageRequestCodec
 import os.meka.core.wire.BriefScriptCodec
 import os.meka.core.wire.ChatSummaryCodec
+import os.meka.core.wire.MailDraftCodec
 import os.meka.core.wire.GroupDigestCodec
 import os.meka.core.wire.HealthCodec
 import os.meka.core.wire.HereCodec
@@ -634,6 +635,16 @@ fun Application.mekaSync(
                 val request = ChatSummaryCodec.decodeRequest(body)
                 val answer = withContext(Dispatchers.IO) { chatSummaryService.summarise(request) }
                 call.respondText(ChatSummaryCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+            // A reply drafted by the AI (Inbox autopilot, slice 6b-2b): one email as its card shows it and a few of his own
+            // earlier replies out, the draft back for his editor (sent only on his tap). Nothing is kept or logged.
+            val mailDraftService = MailDraftService(ai.provider)
+            post("/v1/ai/mail-draft") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = MailDraftCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { mailDraftService.draft(request) }
+                call.respondText(MailDraftCodec.encodeResponse(answer), ContentType.Application.Json)
             }
         }
 

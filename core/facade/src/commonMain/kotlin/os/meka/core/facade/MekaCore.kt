@@ -3585,6 +3585,46 @@ class MekaCore(
         R.replySendingLine(item.account)
     }
 
+    /**
+     * Inbox autopilot, slice 6b-2b: **Draft it** in the reply editor on an email in "From your mail". One call to MEKA's
+     * AI (`POST /v1/ai/mail-draft`, metered `mail.draft`) with what the card shows — the account's label, the sender's
+     * name, the subject and the preview — and up to three of his own earlier sent replies for his tone
+     * ([os.meka.core.domain.MailDraftRules.examples]). Nothing is written or sent: the checked draft is handed back for
+     * the editor, and it goes only when he taps Send ([replyToMailItem]). AI off, over budget, offline or an unusable
+     * draft: no text and a line saying so.
+     */
+    suspend fun draftMailReply(id: String): os.meka.core.domain.MailDraft {
+        val R = os.meka.core.domain.MailDraftRules
+        val codec = os.meka.core.wire.MailDraftCodec
+        val cal = ZoneCalendar(timeZone)
+        val request = onCore {
+            val items = activity.mailItems()
+            val item = items.firstOrNull { it.id == id } ?: return@onCore null
+            val now = nowMs()
+            val today = cal.epochDayOf(now)
+            os.meka.core.wire.MailDraftCodec.Request(
+                date = os.meka.core.domain.AskRules.isoDate(today),
+                now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(now))}"
+                    .take(os.meka.core.wire.MessageRequestCodec.MAX_NOW),
+                account = item.account.take(codec.MAX_ACCOUNT),
+                business = item.account == os.meka.core.domain.MailLabel.BUSINESS.label,
+                from = item.from.take(codec.MAX_FROM),
+                subject = item.subject.take(codec.MAX_SUBJECT),
+                preview = item.preview?.take(codec.MAX_PREVIEW),
+                examples = R.examples(items).map { it.take(codec.MAX_EXAMPLE) }.take(codec.MAX_EXAMPLES),
+            )
+        } ?: return os.meka.core.domain.MailDraft(null, os.meka.core.domain.MailNeedsRules.UNKNOWN)
+        val api = aiApi ?: return os.meka.core.domain.MailDraft(null, os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
+        val reply = try { api.mailDraft(request) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            return os.meka.core.domain.MailDraft(null, os.meka.core.domain.AskRules.OFFLINE_LINE)
+        }
+        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) {
+            return os.meka.core.domain.MailDraft(null, os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
+        }
+        val text = R.check(reply.draft) ?: return os.meka.core.domain.MailDraft(null, R.UNUSABLE_LINE)
+        return os.meka.core.domain.MailDraft(text, R.DRAFTED_LINE)
+    }
+
     /** Undo on the last Done or Snooze in "From your mail" on this device. */
     suspend fun undoMailItem() = onCore {
         val undo = mailNeedsUndo ?: return@onCore
