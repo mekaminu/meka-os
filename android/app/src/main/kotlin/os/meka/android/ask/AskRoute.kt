@@ -12,6 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -180,7 +182,11 @@ fun AskRoute(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Meka.colors.background)) {
+    val context = LocalContext.current.applicationContext
+    // "To set up" open or closed, remembered on this device (null until he taps it: open on the first run only).
+    var setUpChoice by remember { mutableStateOf(AskPrefs.setUpOpen(context)) }
+    BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
+        val columns = os.meka.core.domain.LifeTileRules.columns(maxWidth.value)
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
@@ -213,22 +219,30 @@ fun AskRoute(
             }
             // LIFE: the home-and-family places as 2-column tiles, each with its live line; they arrive a row at a time.
             item(key = "label-life") { SectionLabel(MoreGroup.LIFE.label, first = true, step = ShellNav.moreLabelStep(0)) }
-            // Today's tiles float to the top (Fold review 17:56, item 2); a row keyed by its pair glides to its new place.
-            ShellNav.lifeTiles(lifeLines).chunked(2).forEachIndexed { r, pair ->
-                item(key = "tiles-" + pair.joinToString("-") { it.name }) {
-                    Row(
-                        Modifier.fillMaxWidth().animateItem().height(IntrinsicSize.Min),
-                        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            // Today's tiles float to the top (Fold review 17:56, item 2); a row keyed by its tiles glides to its new
+            // place. Ask polish, slice 1: 3 columns on the open Fold; tiles still to set up sink under "To set up".
+            val live = ShellNav.lifeLive(lifeLines)
+            val toSetUp = ShellNav.lifeToSetUp(lifeLines)
+            val welcome = os.meka.core.domain.LifeTileRules.welcome(lifeLines)
+            if (welcome != null) {
+                item(key = "life-welcome") {
+                    Text(welcome, style = MekaType.caption, color = Meka.colors.textSecondary,
+                        modifier = Modifier.padding(bottom = MekaSpace.xxs).animateItem().appear(rememberAppearance(ShellNav.tileStep(0))))
+                }
+            }
+            tileRows(live, columns, "tiles", lifeLines, pane, step = { ShellNav.tileStep(it, columns) }) { open(it) }
+            if (toSetUp.isNotEmpty()) {
+                val setUpOpen = os.meka.core.domain.LifeTileRules.setUpOpen(setUpChoice, lifeLines)
+                item(key = "label-setup") {
+                    SetUpLabel(
+                        os.meka.core.domain.LifeTileRules.setUpLabel(toSetUp.size), setUpOpen,
+                        Modifier.animateItem().appear(rememberAppearance(ShellNav.tileStep(live.size, columns) + 1)),
                     ) {
-                        pair.forEachIndexed { c, tile ->
-                            LifeTileCard(
-                                tile, ShellNav.tileLine(tile, tile.tile?.let { lifeLines.of(it) }), pane == tile,
-                                Modifier.weight(1f).fillMaxHeight().appear(rememberAppearance(ShellNav.tileStep(r * 2 + c))),
-                            ) { open(tile) }
-                        }
-                        if (pair.size == 1) Box(Modifier.weight(1f))
+                        setUpChoice = !setUpOpen
+                        AskPrefs.saveSetUpOpen(context, !setUpOpen)
                     }
                 }
+                if (setUpOpen) tileRows(toSetUp, columns, "setup", lifeLines, pane, step = { ShellNav.tileStep(it, columns) }) { open(it) }
             }
             // DAILY: the things you run through a day or a week.
             item(key = "label-daily") { SectionLabel(MoreGroup.DAILY.label, first = false, step = ShellNav.moreLabelStep(1)) }
@@ -389,15 +403,19 @@ private fun LifeTileCard(item: MoreItem, line: os.meka.core.domain.LifeTileLine,
             .background(Meka.colors.surface)
             .clickable(role = Role.Button) { haptics.tick(); onClick() }
             .semantics { contentDescription = "${item.label}, ${line.text}" }
-            .heightIn(min = 104.dp)
-            .padding(MekaSpace.m),
+            // Ask polish, slice 1: compact — the icon beside the name, about 30% shorter than before (104 dp).
+            .heightIn(min = 72.dp)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
-        item.tile?.let { LifeIcon(it, Meka.colors.accent) }
         val d = item.destination
         val move = if (d != null) Modifier.sharedPlace(SharedMotion.placeKey(d, PlaceVia.MORE))
         else Modifier.sharedTitle(SharedMotion.paneKey(item), visible = !paneOpen)
-        Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1, modifier = Modifier.padding(top = MekaSpace.xxs).then(move))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            item.tile?.let { LifeIcon(it, Meka.colors.accent, size = 18.dp) }
+            Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = move)
+        }
         AnimatedContent(
             targetState = line.text,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
@@ -577,4 +595,68 @@ private fun Chip(label: String, chosen: Boolean, choose: () -> Unit) {
             .semantics { selected = chosen }
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
+}
+
+/** Life tiles in rows of [columns]; each row is keyed by its tiles so it glides when the order changes. */
+private fun LazyListScope.tileRows(
+    tiles: List<MoreItem>, columns: Int, prefix: String, lines: os.meka.core.domain.LifeLines, pane: MoreItem?,
+    step: (Int) -> Int, open: (MoreItem) -> Unit,
+) {
+    tiles.chunked(columns).forEachIndexed { r, row ->
+        item(key = "$prefix-" + row.joinToString("-") { it.name }) {
+            Row(
+                Modifier.fillMaxWidth().animateItem().height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                row.forEachIndexed { c, tile ->
+                    LifeTileCard(
+                        tile, ShellNav.tileLine(tile, tile.tile?.let { lines.of(it) }), pane == tile,
+                        Modifier.weight(1f).fillMaxHeight().appear(rememberAppearance(step(r * columns + c))),
+                    ) { open(tile) }
+                }
+                repeat(columns - row.size) { Box(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+/**
+ * "To set up · 9" (Ask polish, slice 1): a small label that opens and closes the tiles still waiting to be set up; its
+ * chevron turns on the expand spring (reduced motion: at once). TalkBack reads it as a button with its state.
+ */
+@Composable
+private fun SetUpLabel(text: String, open: Boolean, modifier: Modifier, toggle: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    val turn by animateFloatAsState(if (open) 90f else 0f, MekaMotion.expand(reduced), label = "setup-chevron")
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(top = MekaSpace.s)
+            .clip(RoundedCornerShape(MekaRadius.s))
+            .clickable(role = Role.Button) { haptics.tick(); toggle() }
+            .semantics(mergeDescendants = true) { stateDescription = if (open) "Open" else "Closed" }
+            .minTouch()
+            .padding(vertical = MekaSpace.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text(text.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.semantics { heading() })
+        Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.rotate(if (reduced) (if (open) 90f else 0f) else turn))
+    }
+}
+
+/** Ask's per-device choices (Ask polish, slice 1): whether "To set up" is open; null until he first taps it. */
+internal object AskPrefs {
+    private const val PREFS = "meka.ask"
+    private const val SET_UP_OPEN = "setUpOpen"
+
+    fun setUpOpen(context: android.content.Context): Boolean? {
+        val p = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+        return if (p.contains(SET_UP_OPEN)) p.getBoolean(SET_UP_OPEN, false) else null
+    }
+
+    fun saveSetUpOpen(context: android.content.Context, open: Boolean) {
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putBoolean(SET_UP_OPEN, open).apply()
+    }
 }

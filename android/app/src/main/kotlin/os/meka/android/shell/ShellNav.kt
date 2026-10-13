@@ -136,6 +136,14 @@ object ShellNav {
     fun lifeTiles(lines: os.meka.core.domain.LifeLines): List<MoreItem> =
         os.meka.core.domain.LifeTileRules.ordered(lines).map { t -> MoreItem.entries.first { it.tile == t } }
 
+    /** Life's grid without the tiles still to set up (Ask polish, slice 1); today's first. */
+    fun lifeLive(lines: os.meka.core.domain.LifeLines): List<MoreItem> =
+        os.meka.core.domain.LifeTileRules.live(lines).map { t -> MoreItem.entries.first { it.tile == t } }
+
+    /** The tiles under "To set up", in the usual order. */
+    fun lifeToSetUp(lines: os.meka.core.domain.LifeLines): List<MoreItem> =
+        os.meka.core.domain.LifeTileRules.toSetUp(lines).map { t -> MoreItem.entries.first { it.tile == t } }
+
     /** Daily's rows on Ask. */
     fun daily(): List<MoreItem> = MoreItem.entries.filter { it.group == MoreGroup.DAILY }
 
@@ -165,6 +173,9 @@ object ShellNav {
     fun moreRowStep(section: Int, row: Int): Int = moreLabelStep(section) + 1 + row
 
     fun tileStep(index: Int): Int = os.meka.core.domain.LifeTileRules.step(moreRowStep(0, 0), index)
+
+    /** Tiles arrive a row at a time in a grid of [columns]. */
+    fun tileStep(index: Int, columns: Int): Int = os.meka.core.domain.LifeTileRules.step(moreRowStep(0, 0), index, columns)
 
     val SETTINGS_STEP: Int get() = moreLabelStep(2)
 

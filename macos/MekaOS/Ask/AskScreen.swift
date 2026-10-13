@@ -14,6 +14,8 @@ struct AskScreen: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var settingsOpen = false
+    /// "To set up" open or closed on this Mac (Ask polish, slice 1); empty until he first clicks it.
+    @AppStorage(AskSetUp.key) private var setUpChoice = ""
 
     private var connected: Bool { model.isConnected && !model.signedOut }
 
@@ -36,16 +38,15 @@ struct AskScreen: View {
                         .staggeredAppear(ShellNav.statusStep)
                 }
                 sectionLabel(MoreGroup.life.label, first: true).staggeredAppear(ShellNav.moreLabelStep(0))
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: MekaSpace.xs), GridItem(.flexible(), spacing: MekaSpace.xs)],
-                          spacing: MekaSpace.xs) {
-                    // Today's tiles float to the top (Fold review 17:56, item 2) and glide to their places.
-                    ForEach(Array(ShellNav.lifeTiles(model.lifeLines).enumerated()), id: \.element) { i, item in
-                        let line = ShellNav.tileLine(item, live: item.tile.flatMap { model.lifeLines?.of(tile: $0) })
-                        LifeTileView(item: item, text: line.text, lit: line.lit, palette: palette) { open(item) }
-                            .staggeredAppear(ShellNav.tileStep(i))
-                    }
+                // Ask polish, slice 1: on the first run one welcome line; tiles still to set up sink under "To set up".
+                if let lines = model.lifeLines, let welcome = LifeTileRules.shared.welcome(lines: lines) {
+                    Text(welcome).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .padding(.bottom, MekaSpace.xxs)
+                        .staggeredAppear(ShellNav.tileStep(0))
                 }
-                .animation(MekaMotion.expand(reduced: reduceMotion), value: ShellNav.lifeTiles(model.lifeLines))
+                tileGrid(ShellNav.lifeLive(model.lifeLines), first: 0)
+                    .animation(MekaMotion.expand(reduced: reduceMotion), value: ShellNav.lifeLive(model.lifeLines))
+                setUpSection()
                 sectionLabel(MoreGroup.daily.label, first: false).staggeredAppear(ShellNav.moreLabelStep(1))
                 ForEach(Array(ShellNav.daily().enumerated()), id: \.element) { i, item in
                     MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue), lit: false, palette: palette) { open(item) }
@@ -85,6 +86,51 @@ struct AskScreen: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(palette.background)
+    }
+
+    /// "To set up · N" (Ask polish, slice 1): the tiles still waiting to be set up, under a label that opens and closes
+    /// them (remembered on this Mac); a tile leaves as soon as it has something live. The group unfolds on the expand
+    /// spring and the chevron turns with it; reduced motion: it fades.
+    @ViewBuilder
+    private func setUpSection() -> some View {
+        let toSetUp = ShellNav.lifeToSetUp(model.lifeLines)
+        if !toSetUp.isEmpty, let lines = model.lifeLines {
+            let setUpOpen = LifeTileRules.shared.setUpOpen(stored: AskSetUp.stored(setUpChoice), lines: lines)
+            Button {
+                MekaHaptics.tick()
+                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { setUpChoice = setUpOpen ? AskSetUp.closed : AskSetUp.open }
+            } label: {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(LifeTileRules.shared.setUpLabel(count: Int32(toSetUp.count)).uppercased())
+                        .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                        .foregroundStyle(palette.textTertiary)
+                    Image(systemName: "chevron.right").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .rotationEffect(.degrees(setUpOpen ? 90 : 0))
+                        .accessibilityHidden(true)
+                }
+                .padding(.top, MekaSpace.s)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(setUpOpen ? "Open" : "Closed")
+            .staggeredAppear(ShellNav.tileStep(ShellNav.lifeLive(model.lifeLines).count) + 1)
+            if setUpOpen {
+                tileGrid(toSetUp, first: 0)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    /// Life tiles, two to a row; each line cross-fades and today's ones are lit.
+    private func tileGrid(_ items: [MoreItem], first: Int) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: MekaSpace.xs), GridItem(.flexible(), spacing: MekaSpace.xs)],
+                  spacing: MekaSpace.xs) {
+            ForEach(Array(items.enumerated()), id: \.element) { i, item in
+                let line = ShellNav.tileLine(item, live: item.tile.flatMap { model.lifeLines?.of(tile: $0) })
+                LifeTileView(item: item, text: line.text, lit: line.lit, palette: palette) { open(item) }
+                    .staggeredAppear(ShellNav.tileStep(first + i))
+            }
+        }
     }
 
     private func sectionLabel(_ label: String, first: Bool) -> some View {
@@ -192,12 +238,14 @@ private struct LifeTileView: View {
     var body: some View {
         Button(action: { MekaHaptics.tick(); action() }) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                if let symbol = item.symbol {
-                    Image(systemName: symbol).font(MekaType.itemMeta).foregroundStyle(palette.accent)
-                        .accessibilityHidden(true)
+                // Ask polish, slice 1: compact — the symbol beside the name, about 30% shorter.
+                HStack(spacing: MekaSpace.xs) {
+                    if let symbol = item.symbol {
+                        Image(systemName: symbol).font(MekaType.caption).foregroundStyle(palette.accent)
+                            .accessibilityHidden(true)
+                    }
+                    Text(item.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).lineLimit(1)
                 }
-                Text(item.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).lineLimit(1)
-                    .padding(.top, MekaSpace.xxs)
                 Text(text)
                     .font(MekaType.caption)
                     .foregroundStyle(lit ? palette.accent : palette.textSecondary)
@@ -208,8 +256,9 @@ private struct LifeTileView: View {
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
                 Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
-            .padding(MekaSpace.m)
+            .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+            .padding(.horizontal, MekaSpace.m)
+            .padding(.vertical, MekaSpace.s)
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
             .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
         }
@@ -370,6 +419,21 @@ private struct MotionCheckView: View {
             }
             .contentTransition(.opacity)
             .animation(MekaMotion.appear(reduced: reduceMotion), value: check.result)
+        }
+    }
+}
+
+/// "To set up" on this Mac (Ask polish, slice 1): "" until he first clicks it (the core opens it on the first run only).
+enum AskSetUp {
+    static let key = "meka.ask.setUpOpen"
+    static let open = "open"
+    static let closed = "closed"
+
+    static func stored(_ raw: String) -> KotlinBoolean? {
+        switch raw {
+        case open: return KotlinBoolean(bool: true)
+        case closed: return KotlinBoolean(bool: false)
+        default: return nil
         }
     }
 }

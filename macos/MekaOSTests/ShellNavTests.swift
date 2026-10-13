@@ -79,6 +79,15 @@ final class ShellNavTests: XCTestCase {
         XCTAssertTrue(live.lit)
         // Before the core's first lines, the usual order.
         XCTAssertEqual(ShellNav.lifeTiles(nil), ShellNav.lifeTiles())
+        // Ask polish, slice 1: set-up tiles sink under "To set up"; none before the core's first lines.
+        XCTAssertEqual(ShellNav.lifeLive(nil), ShellNav.lifeTiles())
+        XCTAssertEqual(ShellNav.lifeToSetUp(nil), [])
+        let lines = LifeLines(lines: [:], toSetUp: [LifeTile.bins, LifeTile.school])
+        XCTAssertTrue(ShellNav.lifeToSetUp(lines).contains(.bins))
+        XCTAssertFalse(ShellNav.lifeLive(lines).contains(.bins))
+        XCTAssertEqual(Set(ShellNav.lifeLive(lines) + ShellNav.lifeToSetUp(lines)), Set(ShellNav.lifeTiles()))
+        XCTAssertNil(AskSetUp.stored(""))
+        XCTAssertEqual(AskSetUp.stored(AskSetUp.open)?.boolValue, true)
     }
 
     @MainActor

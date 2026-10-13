@@ -257,6 +257,18 @@ enum ShellNav {
         return LifeTileRules.shared.ordered(lines: lines).compactMap { t in MoreItem.allCases.first { $0.tile == t } }
     }
 
+    /// Life's grid without the tiles still to set up (Ask polish, slice 1); today's first.
+    static func lifeLive(_ lines: LifeLines?) -> [MoreItem] {
+        guard let lines else { return lifeTiles() }
+        return LifeTileRules.shared.live(lines: lines).compactMap { t in MoreItem.allCases.first { $0.tile == t } }
+    }
+
+    /// The tiles under "To set up", in the usual order (none before the core's first lines arrive).
+    static func lifeToSetUp(_ lines: LifeLines?) -> [MoreItem] {
+        guard let lines else { return [] }
+        return LifeTileRules.shared.toSetUp(lines: lines).compactMap { t in MoreItem.allCases.first { $0.tile == t } }
+    }
+
     /// Daily's rows on Ask.
     static func daily() -> [MoreItem] { MoreItem.allCases.filter { $0.group == .daily } }
 

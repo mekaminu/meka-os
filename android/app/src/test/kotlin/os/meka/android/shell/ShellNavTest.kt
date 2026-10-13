@@ -102,6 +102,12 @@ class ShellNavTest {
         val lines = os.meka.core.domain.LifeTileRules.lines(os.meka.core.domain.LifeTileInputs(binsTonight = "Black bin out tonight"))
         assertEquals(MoreItem.BINS, ShellNav.lifeTiles(lines).first())
         assertEquals(ShellNav.lifeTiles().toSet(), ShellNav.lifeTiles(lines).toSet())
+        // Ask polish, slice 1: set-up tiles sink under "To set up"; together they're still every tile, once.
+        assertEquals(MoreItem.BINS, ShellNav.lifeLive(lines).first())
+        assertTrue(MoreItem.DATE_NIGHT in ShellNav.lifeToSetUp(lines))
+        assertFalse(MoreItem.DATE_NIGHT in ShellNav.lifeLive(lines))
+        assertEquals(ShellNav.lifeTiles().toSet(), (ShellNav.lifeLive(lines) + ShellNav.lifeToSetUp(lines)).toSet())
+        assertEquals(listOf(4, 4, 4, 5), (0..3).map { ShellNav.tileStep(it, 3) })
     }
 
     @Test
