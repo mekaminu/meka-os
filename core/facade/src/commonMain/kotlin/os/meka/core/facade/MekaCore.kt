@@ -3083,6 +3083,12 @@ class MekaCore(
     suspend fun unblockCaller(key: String): Boolean = onCore { blockList.unblock(key).also { refresh() } }
 
     /**
+     * Block again on an unblocked row of Activity → Blocked calls ([blockedCallers]' `stopped`; spam calls still ring,
+     * slice 4): back on the list with the reason it had. False when it is already blocked or unknown.
+     */
+    suspend fun reblockCaller(key: String): Boolean = onCore { blockList.reblock(key).also { refresh() } }
+
+    /**
      * Block on a Suspected spam row ([blockedCallers]' `suspects`; call assistant polish 8b c): the number goes on the
      * block list with the AI's reason. False when [key] isn't a suspect any more.
      */
@@ -3214,6 +3220,11 @@ class MekaCore(
         os.meka.core.domain.CallScreeningRules.activityLine(decision, number)?.let { (summary, why) ->
             activity.recordScreened(decision.callerKey, now, summary, why)
             activityChanged()
+        }
+        // Spam calls still ring, slice 4: each call the list stopped counts in Activity → Blocked calls.
+        if (decision.verdict == os.meka.core.domain.CallVerdict.BLOCK) {
+            blockList.recordStopped(decision.callerKey, now)
+            refresh()
         }
         decision
     }

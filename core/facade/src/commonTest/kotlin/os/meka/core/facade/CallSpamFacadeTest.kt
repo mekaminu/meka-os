@@ -259,4 +259,49 @@ class CallSpamFacadeTest {
         c.syncNow()
         assertEquals(emptyList(), c.assistantHangups())
     }
+
+    @Test
+    fun activityBlockedCallsCountsStoppedCallsWithUnblockAndBlockAgain() = runTest {
+        val c = core()
+        assertTrue(c.blockCaller("01632 960691", "Scam call claiming to be the police"))
+        assertTrue(c.blockedCallers.value.stopped.isEmpty())
+        assertEquals(null, c.blockedCallers.value.stoppedLine)
+
+        c.screenIncomingCall("+441632960691", lists, emptyList(), CallSignals.NONE)
+        now += 60_000
+        c.screenIncomingCall("01632 960691", lists, emptyList(), CallSignals.NONE)
+        // A network-check auto-block counts its own call too.
+        c.screenIncomingCall("01632 960000", lists, emptyList(), CallSignals(verificationFailed = true))
+        // A call that rang isn't counted.
+        c.screenIncomingCall("07700 900777", lists, emptyList(), CallSignals.NONE)
+
+        val view = c.blockedCallers.value
+        assertEquals(listOf("01632 960000", "01632 960691"), view.stopped.map { it.number })
+        val police = view.stopped.single { it.number == "01632 960691" }
+        assertEquals("2 calls stopped · last today 10:01", police.line)
+        assertEquals("Blocked today · Scam call claiming to be the police", police.why)
+        assertTrue(police.blocked)
+        assertEquals("2 numbers · 3 calls stopped in the last 30 days", view.stoppedLine)
+
+        // Unblock from Activity: the row stays, saying so, with Block again.
+        assertTrue(c.unblockCaller(police.key))
+        val after = c.blockedCallers.value.stopped.single { it.key == police.key }
+        assertFalse(after.blocked)
+        assertEquals(os.meka.core.domain.StoppedCallRules.UNBLOCKED_LINE, after.why)
+        // Unblocked, a call rings and isn't counted.
+        assertTrue(c.screenIncomingCall("01632 960691", lists, emptyList(), CallSignals.NONE).rings)
+        assertEquals(2L, c.blockedCallers.value.stopped.single { it.key == police.key }.count)
+
+        assertTrue(c.reblockCaller(police.key))
+        assertFalse(c.reblockCaller(police.key))
+        val back = c.blockedCallers.value.stopped.single { it.key == police.key }
+        assertTrue(back.blocked)
+        assertEquals("Blocked today · Scam call claiming to be the police", back.why)
+        assertEquals(CallVerdict.BLOCK, c.screenIncomingCall("01632 960691", lists, emptyList(), CallSignals.NONE).verdict)
+
+        // After 30 days without a call the row goes.
+        now += 31 * 86_400_000L
+        c.blockCaller("07700 900888", null)
+        assertTrue(c.blockedCallers.value.stopped.isEmpty())
+    }
 }

@@ -36,7 +36,29 @@ object BlockedCallerFields {
     const val HUNG_UP_AT = "hungUpAtMs"
     /** The [HUNG_UP_AT] the Fold has looked at (blocked or let be), so each hang-up is decided once. Added 2026-10-13. */
     const val HUNG_UP_HANDLED = "hungUpHandledAtMs"
+    /**
+     * Spam calls still ring, slice 4: how many calls from this number the Fold's screening has stopped (rejected without
+     * ringing) while it was on the list, and when the last one was. Written by the Fold only. Added 2026-10-13.
+     */
+    const val STOPPED = "stoppedCalls"
+    const val STOPPED_AT = "lastStoppedAtMs"
 }
+
+/**
+ * One row of Activity → Blocked calls (spam calls still ring, slice 4): a number whose calls were stopped in the last
+ * [StoppedCallRules.WINDOW_DAYS] days, blocked now ([blocked], Unblock) or unblocked since (Block again).
+ */
+data class StoppedCallerRow(
+    val key: String,
+    val number: String,
+    /** "3 calls stopped · last today 14:02" */
+    val line: String,
+    /** "Blocked Fri 9 Oct · Failed the network's caller check" or [StoppedCallRules.UNBLOCKED_LINE]. */
+    val why: String,
+    val blocked: Boolean,
+    val lastAtMs: Long,
+    val count: Long,
+)
 
 /** One row of Spam protection's Suspected spam: a number MEKA's AI flagged, waiting for Meka's Block or Not spam. */
 data class SuspectedCallerRow(val key: String, val number: String, val line: String)
@@ -49,7 +71,12 @@ data class BlockedCallersView(
     val line: String,
     /** Numbers MEKA's AI flagged and Meka hasn't answered yet (never a blocked one), newest first. */
     val suspects: List<SuspectedCallerRow> = emptyList(),
+    /** Activity → Blocked calls: numbers whose calls were stopped lately, newest call first. */
+    val stopped: List<StoppedCallerRow> = emptyList(),
 ) {
+    /** "2 numbers · 5 calls stopped in the last 30 days"; null when there are none. */
+    val stoppedLine: String? get() = StoppedCallRules.summary(stopped)
+
     val keys: Set<String> get() = rows.map { it.key }.toSet()
     val suspectedKeys: Set<String> get() = suspects.map { it.key }.toSet()
 
@@ -161,7 +188,48 @@ class BlockedCallers(
                 val number = s[BlockedCallerFields.NUMBER].textOrNull ?: key.removePrefix("tel:")
                 SuspectedCallerRow(key, BlockedCallerRules.display(number), SuspectedSpamRules.line(at, s[BlockedCallerFields.SUSPECTED_WHY].textOrNull, now, calendar))
             }
-        return BlockedCallersView(rows, BlockedCallerRules.summary(rows.size), suspects)
+        val since = now - StoppedCallRules.WINDOW_DAYS * 86_400_000L
+        val stopped = replica.entities(EntityTypes.BLOCKED_CALLER)
+            .mapNotNull { s ->
+                val at = s[BlockedCallerFields.STOPPED_AT].longOrNull?.takeIf { it >= since } ?: return@mapNotNull null
+                val count = (s[BlockedCallerFields.STOPPED].longOrNull ?: 1L).coerceAtLeast(1L)
+                val blocked = s[BlockedCallerFields.BLOCKED].boolOrNull == true
+                val number = s[BlockedCallerFields.NUMBER].textOrNull ?: s.ref.entityId.removePrefix("tel:")
+                StoppedCallerRow(
+                    s.ref.entityId, BlockedCallerRules.display(number), StoppedCallRules.line(count, at, now, calendar),
+                    if (blocked) BlockedCallerRules.line(s[BlockedCallerFields.AT].longOrNull ?: at, s[BlockedCallerFields.WHY].textOrNull, now, calendar)
+                    else StoppedCallRules.UNBLOCKED_LINE,
+                    blocked, at, count,
+                )
+            }
+            .sortedWith(compareByDescending<StoppedCallerRow> { it.lastAtMs }.thenBy { it.key })
+        return BlockedCallersView(rows, BlockedCallerRules.summary(rows.size), suspects, stopped)
+    }
+
+    /**
+     * Spam calls still ring, slice 4: the Fold's screening just stopped a call from [key] (on the list): counts it for
+     * Activity → Blocked calls. Nothing happens for a number that isn't blocked.
+     */
+    fun recordStopped(key: String, atMs: Long) {
+        val s = replica.entity(EntityTypes.BLOCKED_CALLER, key) ?: return
+        if (s[BlockedCallerFields.BLOCKED].boolOrNull != true) return
+        if ((s[BlockedCallerFields.STOPPED_AT].longOrNull ?: 0L) >= atMs) return
+        val count = (s[BlockedCallerFields.STOPPED].longOrNull ?: 0L) + 1
+        replica.commitLocal(
+            EntityTypes.BLOCKED_CALLER, key,
+            mapOf(BlockedCallerFields.STOPPED to count.fv(), BlockedCallerFields.STOPPED_AT to atMs.fv()),
+        )
+    }
+
+    /**
+     * Block again on an unblocked row of Activity → Blocked calls: back on the list with the reason it had; false when
+     * [key] is unknown or already blocked.
+     */
+    fun reblock(key: String): Boolean {
+        val s = replica.entity(EntityTypes.BLOCKED_CALLER, key) ?: return false
+        if (s[BlockedCallerFields.BLOCKED].boolOrNull == true) return false
+        replica.commitLocal(EntityTypes.BLOCKED_CALLER, key, mapOf(BlockedCallerFields.BLOCKED to true.fv(), BlockedCallerFields.AT to nowMs().fv()))
+        return true
     }
 
     /**
@@ -229,6 +297,37 @@ class BlockedCallers(
         if (s[BlockedCallerFields.BLOCKED].boolOrNull != true) return false
         replica.commitLocal(EntityTypes.BLOCKED_CALLER, key, mapOf(BlockedCallerFields.BLOCKED to false.fv()))
         return true
+    }
+}
+
+/**
+ * Activity → Blocked calls (spam calls still ring, slice 4, Meka 2026-10-13: "blocked calls never ring or notify; they
+ * stay in the call log and in Activity → Blocked calls, with Unblock"). Pure.
+ */
+object StoppedCallRules {
+    const val WINDOW_DAYS = 30
+    const val TITLE = "Blocked calls"
+    const val HINT = "Calls from numbers on your block list don't ring or notify; they still show in the phone's call log."
+    const val UNBLOCK_LABEL = "Unblock"
+    const val BLOCK_AGAIN_LABEL = "Block again"
+    const val UNBLOCKED_LINE = "Unblocked · their calls ring again"
+
+    /** "1 call stopped · today 14:02", "3 calls stopped · last Fri 9 Oct 14:02". */
+    fun line(count: Long, lastAtMs: Long, nowMs: Long, cal: LocalCalendar): String {
+        val label = SearchRules.dayLabel(cal.epochDayOf(lastAtMs), cal.epochDayOf(nowMs))
+        val day = if (label == "Today" || label == "Yesterday") label.lowercase() else label
+        val m = cal.minuteOfDay(lastAtMs)
+        val time = "${(m / 60).toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}"
+        return if (count <= 1) "1 call stopped · $day $time" else "$count calls stopped · last $day $time"
+    }
+
+    /** "1 number · 3 calls stopped in the last 30 days"; null when nothing was stopped. */
+    fun summary(rows: List<StoppedCallerRow>): String? {
+        if (rows.isEmpty()) return null
+        val calls = rows.sumOf { it.count }
+        val numbers = if (rows.size == 1) "1 number" else "${rows.size} numbers"
+        val stopped = if (calls == 1L) "1 call stopped" else "$calls calls stopped"
+        return "$numbers · $stopped in the last $WINDOW_DAYS days"
     }
 }
 

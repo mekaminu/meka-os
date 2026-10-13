@@ -103,4 +103,18 @@ class SpamProtectionTest {
         assertFalse(CallScreenLogRules.claimedOfficial(log, tag, 2_000L))
         assertFalse(CallScreenLogRules.claimedOfficial(log, CallScreenLogRules.tag("01632 960999", "salt"), 0L))
     }
+
+    @Test
+    fun blockedCallsLinesCountTheStoppedCalls() {
+        val t = 1_791_622_800_000L // Sat 10 Oct 2026, 09:00 UTC
+        assertEquals("1 call stopped · today 09:00", StoppedCallRules.line(1, t, t + 60_000, LocalCalendar.UTC))
+        assertEquals("3 calls stopped · last yesterday 09:00", StoppedCallRules.line(3, t, t + 86_400_000L, LocalCalendar.UTC))
+        assertNull(StoppedCallRules.summary(emptyList()))
+        val row = StoppedCallerRow("tel:+441632960691", "01632 960691", "", "", true, t, 1)
+        assertEquals("1 number · 1 call stopped in the last 30 days", StoppedCallRules.summary(listOf(row)))
+        assertEquals(
+            "2 numbers · 4 calls stopped in the last 30 days",
+            StoppedCallRules.summary(listOf(row, row.copy(key = "tel:+447700900555", count = 3))),
+        )
+    }
 }

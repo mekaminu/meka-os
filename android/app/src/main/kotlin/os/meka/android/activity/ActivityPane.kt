@@ -45,7 +45,10 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.ActivityRow
+import os.meka.core.domain.ActivityFilter
 import os.meka.core.domain.ActivityRules
+import os.meka.core.domain.StoppedCallRules
+import os.meka.core.domain.StoppedCallerRow
 import os.meka.android.lists.Chip
 import os.meka.core.facade.MekaCore
 import os.meka.android.shell.SharedMotion
@@ -59,7 +62,9 @@ import os.meka.android.designsystem.sharedTitleInPane
  *
  * Motion: the pane springs up (MekaPane); day sections stagger in 40 ms apart; Undo gives a light haptic and the
  * row's line cross-fades to "Undone at 09:12"; the filter chips (All · Reminders · Done for you · Calendar · Calls ·
- * Other, only the kinds there are) blend their colour with a tick haptic and the days cross-fade; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this phone lately, the
+ * Other, only the kinds there are) blend their colour with a tick haptic and the days cross-fade; Blocked calls (spam
+ * calls still ring, slice 4: numbers whose calls the block list stopped, with Unblock / Block again) fades in under the
+ * filter for All and Calls, and a row's line cross-fades between "Blocked …" and "Unblocked …" with a light haptic; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this phone lately, the
  * month's characters) fade in once known. Reduced motion: cross-fades.
  */
 @Composable
@@ -133,6 +138,7 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
                 }
             }
         }
+        val blocked by core.blockedCallers.collectAsState()
         AnimatedContent(
             targetState = filter,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
@@ -140,6 +146,27 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
         ) { f ->
             val shown = ActivityRules.filtered(view, f)
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                // Blocked calls (spam calls still ring, slice 4): with All or Calls, the numbers the list stopped lately.
+                val stopped = blocked.stopped
+                if (stopped.isNotEmpty() && (f == ActivityFilter.ALL || f == ActivityFilter.CALLS)) {
+                    Column(Modifier.fillMaxWidth().appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        Spacer(Modifier.height(MekaSpace.m))
+                        Text(StoppedCallRules.TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+                        Text(
+                            listOfNotNull(blocked.stoppedLine, StoppedCallRules.HINT).joinToString(". "),
+                            style = MekaType.caption, color = Meka.colors.textTertiary,
+                        )
+                        stopped.forEach { row ->
+                            StoppedCallRowView(row) {
+                                haptics.light()
+                                scope.launch {
+                                    runCatching { if (row.blocked) core.unblockCaller(row.key) else core.reblockCaller(row.key) }
+                                        .onFailure { note = "Couldn't change that. Try again." }
+                                }
+                            }
+                        }
+                    }
+                }
                 shown.days.forEachIndexed { i, day ->
                     Column(Modifier.fillMaxWidth().appear(rememberAppearance(i + 2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Spacer(Modifier.height(MekaSpace.m))
@@ -188,6 +215,37 @@ private fun ActivityRowView(row: ActivityRow, undo: () -> Unit) {
                             .padding(vertical = MekaSpace.xxs),
                     )
                     else -> Spacer(Modifier.height(0.dp))
+                }
+            }
+        }
+    }
+}
+
+/** One row of Blocked calls: the number, how many calls were stopped, why it's blocked, and Unblock / Block again. */
+@Composable
+private fun StoppedCallRowView(row: StoppedCallerRow, toggle: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            Text(row.number, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+            AnimatedContent(
+                targetState = row.why to row.blocked,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "activity-blocked-call",
+            ) { (why, isBlocked) ->
+                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Text(why, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    Text(
+                        if (isBlocked) StoppedCallRules.UNBLOCK_LABEL else StoppedCallRules.BLOCK_AGAIN_LABEL,
+                        style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { toggle() }
+                            .padding(vertical = MekaSpace.xxs),
+                    )
                 }
             }
         }

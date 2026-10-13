@@ -1676,6 +1676,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(SuspectedSpamRules.shared.cleanWhy(why: "see https://x.example"))
     }
 
+    func testBlockedCallsReachSwift() {
+        // Spam calls still ring, slice 4: Activity → Blocked calls with Unblock / Block again.
+        XCTAssertEqual(BlockedCallersView.companion.EMPTY.stopped.count, 0)
+        XCTAssertNil(BlockedCallersView.companion.EMPTY.stoppedLine)
+        XCTAssertEqual(StoppedCallRules.shared.TITLE, "Blocked calls")
+        XCTAssertEqual(StoppedCallRules.shared.UNBLOCK_LABEL, "Unblock")
+        XCTAssertEqual(StoppedCallRules.shared.BLOCK_AGAIN_LABEL, "Block again")
+    }
+
     func testVoiceRecordingReachesSwift() {
         // Call assistant polish 8c: the player's line and bar, and only a held id is ever asked for.
         let rules = VoiceRecordingRules.shared

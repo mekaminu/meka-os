@@ -6,7 +6,8 @@ import SwiftUI
 /// is still as MEKA left it). Synced with the Fold. Opened from Today's header or File → Activity… (⇧⌘A).
 /// Motion: the sheet scale-fades; day sections stagger in; Undo gives a light haptic and the row's line cross-fades
 /// to "Undone at 09:12"; the filter (All · Reminders · Done for you · Calendar · Calls · Other, only the kinds there are)
-/// is a segmented control (tick haptic) and the days cross-fade; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this Mac lately, the month's characters) fade in once known. Reduce Motion:
+/// is a segmented control (tick haptic) and the days cross-fade; Blocked calls (spam calls still ring, slice 4: numbers
+/// the block list stopped lately, with Unblock / Block again) shows under it for All and Calls, its rows cross-fading; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this Mac lately, the month's characters) fade in once known. Reduce Motion:
 /// cross-fades.
 struct ActivitySheet: View {
     @Environment(CoreModel.self) private var model
@@ -62,6 +63,10 @@ struct ActivitySheet: View {
                 let shown = ActivityRules.shared.filtered(view: view, filter: filter)
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
+                        if let blocked = model.blockedCallers, !blocked.stopped.isEmpty,
+                           filter.name == "ALL" || filter.name == "CALLS" {
+                            blockedCalls(blocked).staggeredAppear(2)
+                        }
                         ForEach(Array(shown.days.enumerated()), id: \.element.day) { i, day in
                             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                                 Text(day.label.uppercased())
@@ -96,6 +101,39 @@ struct ActivitySheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.voiceTimingLine)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.aiTodayLine)
         .task { await model.refreshVoiceUsage() }
+    }
+
+    /// Blocked calls: the numbers whose calls the block list stopped in the last 30 days, with Unblock / Block again.
+    private func blockedCalls(_ view: BlockedCallersView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(StoppedCallRules.shared.TITLE.uppercased())
+                .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textTertiary)
+            Text([view.stoppedLine, StoppedCallRules.shared.HINT].compactMap { $0 }.joined(separator: ". "))
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(view.stopped, id: \.key) { row in
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(row.number).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Text(row.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    Text(row.why).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .id(row.why).transition(.opacity)
+                    let key = row.key
+                    if row.blocked {
+                        Button(StoppedCallRules.shared.UNBLOCK_LABEL) { model.unblockCaller(key) }
+                            .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                    } else {
+                        Button(StoppedCallRules.shared.BLOCK_AGAIN_LABEL) { model.reblockCaller(key) }
+                            .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, MekaSpace.m)
+                .padding(.vertical, MekaSpace.xs)
+                .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: row.blocked)
+            }
+        }
     }
 
     private func rowView(_ row: ActivityRow) -> some View {
