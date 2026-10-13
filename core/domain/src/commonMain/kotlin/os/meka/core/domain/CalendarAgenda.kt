@@ -208,8 +208,9 @@ object CalendarAgenda {
             val allDay = dayEvents.filter { it.allDay }.sortedWith(compareBy({ it.startAtMs }, { it.title }))
 
             data class Item(val row: TimelineRow, val start: Long, val end: Long, val isEvent: Boolean)
-            // An event during that day's work is marked (Fold review 2026-10-12, bug 4).
-            val clashes = work?.let { WorkClashRules.clashes(dayEvents, it.blocks(d, calendar), calendar, children) }.orEmpty().associateBy { it.eventId }
+            // An event during that day's work is marked (Fold review 2026-10-12, bug 4), and on an office day one before
+            // he's home or after he's left (the commute counts everywhere, slice 3).
+            val clashes = work?.let { WorkClashRules.clashes(dayEvents, it.blocks(d, calendar), calendar, children, CommuteRules.bands(it, d, calendar)) }.orEmpty().associateBy { it.eventId }
             val items = buildList {
                 dayEvents.filter { !it.allDay }.forEach { e ->
                     val startsBefore = e.startAtMs < w.startMs

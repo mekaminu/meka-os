@@ -64,8 +64,9 @@ class WeekAheadTest {
         )
         // Monday: the dentist, then lunch, in time order.
         assertEquals(listOf("09:30 Dentist", "12:00 Team lunch"), v.days[0].lines.map { "${it.time} ${it.text}" })
-        // Tuesday: PE (no time) before the evening.
-        assertEquals(listOf("Rex: PE", "Parents' evening"), v.days[1].lines.map { it.text })
+        // Tuesday: PE (no time) before the evening, which starts before he's home from the office (commute slice 3).
+        assertEquals(listOf("Rex: PE", "Parents' evening · Before you're home · about 18:50"), v.days[1].lines.map { it.text })
+        assertTrue(v.days[1].lines[1].lit)
         // Wednesday: Netflix due with its price.
         assertEquals("Netflix due · £10.99", v.days[2].lines.single().text)
         // Thursday: half term (all day, until Friday) first, then the INSET day lit (an office day), Gym's cancel-by lit.

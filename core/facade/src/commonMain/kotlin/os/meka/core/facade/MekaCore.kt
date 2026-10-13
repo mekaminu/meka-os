@@ -4840,7 +4840,8 @@ class MekaCore(
             os.meka.core.domain.WeekAheadInputs(
                 // Appointment nudges, slice 2c: a booked visit is said once, as its Google event when it has one.
                 events = dayEvents.filterNot { os.meka.core.domain.AppointmentCalendarRules.isAppointment(it) },
-                work = os.meka.core.domain.WorkHours(workState.schedule, holidays, homeDays = work.homeDays(todayDay), leaveDays = leaveDays),
+                work = os.meka.core.domain.WorkHours(workState.schedule, holidays, homeDays = work.homeDays(todayDay), leaveDays = leaveDays,
+                    commute = workState.commute),
                 holidays = holidays,
                 school = schoolItems,
                 dateNight = dateNightNow,
@@ -4851,6 +4852,7 @@ class MekaCore(
                 bins = binItems,
                 occasions = occasionItems,
                 trips = tripItems,
+                children = marks.clubChildren,
             ),
             nowMs(), cal, ::dayWindowOf,
         )
@@ -4921,7 +4923,7 @@ class MekaCore(
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
             news.all(), news.choices(), workHolidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolToday,
-            upNextId = _today.value.upNext?.id).let {
+            upNextId = _today.value.upNext?.id, work = hoursOf(workState, todayEpochDay()), children = marks.clubChildren).let {
                 // Annual leave, slice 2: "… · last day before leave · back Mon 2 Nov" and "Annual leave · no work · back …".
                 val workLine = os.meka.core.domain.LeaveRules.workLine(it.workLine, leaveDays, leaveHours, today.epochDay)
                 val t = _today.value

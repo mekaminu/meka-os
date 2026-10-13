@@ -111,7 +111,8 @@ data class DayTimeline(
     /** The group's label, shown once above its rows: "All day", or "All day · Timestripe" when they share a calendar. */
     val allDayLabel: String = AllDayRules.LABEL,
     /**
-     * Today's events during work still to come or on ([WorkClashRules], Fold review 2026-10-12, bug 4), first first;
+     * Today's events during work, or on an office day during the commute (before he's home, after he's left; commute
+     * slice 3), still to come or on ([WorkClashRules], Fold review 2026-10-12, bug 4), first first;
      * Today's header says the first one's [WorkClash.line] in the accent.
      */
     val clashes: List<WorkClash> = emptyList(),
@@ -214,7 +215,7 @@ object TimelineRules {
             val isWork: Boolean get() = row.kind == TimelineKind.WORK || row.kind == TimelineKind.COMMUTE
             val isCommute: Boolean get() = row.kind == TimelineKind.COMMUTE
         }
-        val clashes = WorkClashRules.clashes(dayEvents, work, calendar, children).associateBy { it.eventId }
+        val clashes = WorkClashRules.clashes(dayEvents, work, calendar, children, commute).associateBy { it.eventId }
         val items = buildList {
             dayEvents.filter { !it.allDay }.forEach { e ->
                 val start = maxOf(e.startAtMs, today.startMs)

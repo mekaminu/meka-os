@@ -206,4 +206,74 @@ class CommuteTest {
         // Only the commute home when the morning's is cut off by midnight.
         assertEquals("Home about 09:20", CommuteRules.calendarLine(WorkHours(WorkSchedule(setOf(5), 0, 8 * 60)), fri, cal))
     }
+
+    // ---- Slice 3: clashes against arrival home ----
+
+    private fun timed(id: String, title: String, d: Long, from: Int, to: Int) =
+        CalendarEvent(id, title, ms(d, from), ms(d, to), false, null, "google", null, null)
+
+    @Test
+    fun anEventBeforeHesHomeClashesWithTheCommute() {
+        val training = timed("t", "Training", fri, 18 * 60, 19 * 60)
+        val bands = CommuteRules.bands(work, fri, cal)
+        val c = WorkClashRules.clash(training, work.blocks(fri, cal), cal, commute = bands)!!
+        assertEquals(ClashWith.HOME, c.against)
+        assertEquals("You're home about 18:50 · who's taking?", c.mark)
+        assertEquals("Training at 18:00 — you're home about 18:50 · who's taking?", c.line)
+        assertEquals(
+            "Heads up: Training at 6 o'clock, before you're home at about 6:50. Who's taking?",
+            c.spoken("Training") { BriefScriptRules.clock(it) },
+        )
+        // Something else just says when he's home.
+        val dinner = WorkClashRules.clash(timed("d", "Dinner with Sam", fri, 18 * 60 + 30, 20 * 60), emptyList(), cal, commute = bands)!!
+        assertEquals("Before you're home · about 18:50", dinner.mark)
+        assertEquals("Dinner with Sam at 18:30 — you're home about 18:50", dinner.line)
+        // After he's home, nothing; during work, work wins.
+        assertNull(WorkClashRules.clash(timed("l", "Late", fri, 18 * 60 + 50, 20 * 60), emptyList(), cal, commute = bands))
+        assertEquals(ClashWith.WORK, WorkClashRules.clash(timed("o", "Overlap", fri, 17 * 60, 18 * 60), work.blocks(fri, cal), cal, commute = bands)!!.against)
+        // Thursday's short day: home about 16:50.
+        val thuClash = WorkClashRules.clash(timed("s", "Swimming", thu, 16 * 60, 17 * 60), work.blocks(thu, cal), cal, commute = CommuteRules.bands(work, thu, cal))!!
+        assertEquals("Swimming at 16:00 — you're home about 16:50", thuClash.line)
+    }
+
+    @Test
+    fun anEventAfterHesLeftClashesWithTheMorningCommute() {
+        val c = WorkClashRules.clash(timed("r", "School run", fri, 8 * 60 + 15, 8 * 60 + 45), work.blocks(fri, cal), cal, commute = CommuteRules.bands(work, fri, cal))!!
+        assertEquals(ClashWith.LEAVING, c.against)
+        assertEquals("After you leave · about 07:40", c.mark)
+        assertEquals("School run at 08:15 — you leave about 07:40", c.line)
+        assertEquals(
+            "Heads up: School run at quarter past 8, after you've left for work at about 7:40.",
+            c.spoken("School run") { BriefScriptRules.clock(it) },
+        )
+    }
+
+    @Test
+    fun noCommuteClashOnWorkFromHomeLeaveOrTheWeekend() {
+        val wfh = WorkHours(WorkSchedule.DEFAULT, homeDays = setOf(fri))
+        val training = timed("t", "Training", fri, 18 * 60, 19 * 60)
+        assertNull(WorkClashRules.clash(training, wfh.blocks(fri, cal), cal, commute = CommuteRules.bands(wfh, fri, cal)))
+        val leave = WorkHours(WorkSchedule.DEFAULT, leaveDays = setOf(fri))
+        assertTrue(WorkClashRules.clashes(listOf(training), leave.blocks(fri, cal), cal, commute = CommuteRules.bands(leave, fri, cal)).isEmpty())
+        val satTraining = timed("s", "Training", sat, 18 * 60, 19 * 60)
+        assertTrue(WorkClashRules.clashes(listOf(satTraining), work.blocks(sat, cal), cal, commute = CommuteRules.bands(work, sat, cal)).isEmpty())
+    }
+
+    @Test
+    fun todayTheCalendarAndTheWeekAheadFlagIt() {
+        val training = timed("t", "Training", fri, 18 * 60, 19 * 60)
+        val tl = timeline(ms(fri, 7 * 60), fri, work, listOf(training))
+        assertEquals("Training at 18:00 — you're home about 18:50 · who's taking?", tl.clashLine)
+        assertEquals("You're home about 18:50 · who's taking?", tl.rows.first { it.id == "e-t" }.clash)
+        // Working from home that day: no clash.
+        assertNull(timeline(ms(fri, 7 * 60), fri, WorkHours(WorkSchedule.DEFAULT, homeDays = setOf(fri)), listOf(training)).clashLine)
+
+        val v = CalendarAgenda.build(emptyList(), listOf(training), ms(thu, 6 * 60), cal, days = 3, work = work)
+        assertEquals("You're home about 18:50 · who's taking?", v.sections.first { it.firstDay == fri }.rows.first { it.id == "e-t" }.clash)
+
+        val inputs = WeekAheadInputs(listOf(training), work, HolidayCalendar.NONE)
+        val line = WeekAheadRules.lines(inputs, fri, CalendarAgenda.window(fri, cal), listOf(thu, fri, sat), cal).single()
+        assertEquals("Training · You're home about 18:50 · who's taking?", line.text)
+        assertTrue(line.lit)
+    }
 }

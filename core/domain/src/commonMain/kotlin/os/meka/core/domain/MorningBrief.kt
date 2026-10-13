@@ -323,6 +323,13 @@ class MorningBrief(
         school: SchoolLine? = null,
         /** Today's Up next, named in the spoken brief's focus when nothing more pressing is ([BriefScriptRules.focus]). */
         upNextId: String? = null,
+        /**
+         * Today's full work hours (work from home, leave and the commute laid over the schedule); with it, the brief's
+         * clashes count the commute too ("… before you're home at about ten to 7"). Null: the schedule alone.
+         */
+        work: WorkHours? = null,
+        /** Whose club training or fixture a series is ([ClubChildRules]), for "Who's taking …?". */
+        children: Map<String, String> = emptyMap(),
     ): MorningBriefView {
         val now = nowMs()
         val minute = calendar.minuteOfDay(now)
@@ -414,7 +421,7 @@ class MorningBrief(
             headlines = NewsRules.forBrief(headlines, newsTopics.filter { it.chosen }.map { it.id }, now),
             newsTopics = newsTopics,
             readElsewhereLine = if (readElsewhere) BriefRules.readElsewhereLine(mark?.get(BriefFields.SEEN_ON)?.textOrNull) else null,
-            story = story(dayEvents, dayTasks, schedule, holidays, goals, today, now, workLine, upNextId),
+            story = story(dayEvents, dayTasks, schedule, holidays, goals, today, now, workLine, upNextId, work, children),
         )
     }
 
@@ -422,6 +429,7 @@ class MorningBrief(
     private fun story(
         dayEvents: List<CalendarEvent>, dayTasks: List<Task>, schedule: WorkSchedule, holidays: HolidayCalendar,
         goals: GoalsView, today: DayWindow, now: Long, workLine: String?, upNextId: String? = null,
+        work: WorkHours? = null, children: Map<String, String> = emptyMap(),
     ): BriefStory {
         val events = dayEvents.filter { !it.allDay && it.startAtMs >= today.startMs }.sortedBy { it.startAtMs }.map { e ->
             val start = calendar.minuteOfDay(e.startAtMs)
@@ -432,8 +440,11 @@ class MorningBrief(
         val iso = CivilDate.isoDayOfWeek(today.epochDay)
         val working = workLine?.startsWith("Work ") == true
         // Fold review 2026-10-12, bug 4: what falls during work today, said with the child's name where it's theirs.
-        val workBlocks = if (working) WorkHours(schedule, holidays).blocks(today.epochDay, calendar) else emptyList()
-        val workClashes = WorkClashRules.clashes(dayEvents.filter { it.endAtMs > now }, workBlocks, calendar).map { c ->
+        val hours = work ?: WorkHours(schedule, holidays)
+        val workBlocks = if (working) hours.blocks(today.epochDay, calendar) else emptyList()
+        // The commute counts everywhere, slice 3: on an office day, also what starts before he's home or after he's left.
+        val commute = if (working) CommuteRules.bands(hours, today.epochDay, calendar) else emptyList()
+        val workClashes = WorkClashRules.clashes(dayEvents.filter { it.endAtMs > now }, workBlocks, calendar, children, commute).map { c ->
             c.spoken(FootballRules.spokenFixture(c.title) ?: c.title) { BriefScriptRules.clock(it) }
         }
         val weekend = iso >= 6 && !working

@@ -126,6 +126,8 @@ data class WeekAheadInputs(
     val occasions: List<Occasion> = emptyList(),
     /** Travel mode: each trip on its first day in the week, and its bookings on their days. */
     val trips: List<TripItem> = emptyList(),
+    /** Whose club training or fixture a series is ([ClubChildRules]), for "who's taking …?" on a clash. */
+    val children: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -216,6 +218,13 @@ object WeekAheadRules {
     fun lines(inputs: WeekAheadInputs, day: Long, window: DayWindow, weekDays: List<Long>, cal: LocalCalendar): List<WeekAheadLine> {
         val out = mutableListOf<Keyed>()
         val first = weekDays.first()
+        // On an office day, an event before he's home or after he's left (the commute counts everywhere, slice 3), and a
+        // child's training or match during work, is lit with its mark: "18:00 · Training · You're home about 18:50 ·
+        // who's taking?". A plain event during work (a team lunch) stays quiet here; Today and the Calendar mark it.
+        val clashes = WorkClashRules.clashes(
+            inputs.events.filter { it.overlaps(window) }, inputs.work.blocks(day, cal), cal, inputs.children,
+            CommuteRules.bands(inputs.work, day, cal),
+        ).filter { it.against != ClashWith.WORK || it.needsCover }.associateBy { it.eventId }
         for (e in inputs.events) {
             if (!e.overlaps(window)) continue
             val fixture = e.isFixture || FootballRules.isClubFixture(e)
@@ -234,7 +243,9 @@ object WeekAheadRules {
                 val time = hhmm(e.startAtMs, cal)
                 val text = listOfNotNull(e.title.trim(), e.location?.trim()?.takeIf { it.isNotEmpty() }?.let { WeatherRules.shortPlace(it) ?: it.take(32) })
                     .joinToString(" · ")
-                out += Keyed(e.startAtMs, WeekAheadLine("e-${e.id}", kind, time, text, false, "$time, $text"))
+                val clash = clashes[e.id]
+                val shown = listOfNotNull(text, clash?.mark).joinToString(" · ")
+                out += Keyed(e.startAtMs, WeekAheadLine("e-${e.id}", kind, time, shown, clash != null, "$time, $shown"))
             }
         }
         val office = isOfficeDay(inputs.work, day)

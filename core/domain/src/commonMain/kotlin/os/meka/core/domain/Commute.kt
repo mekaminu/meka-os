@@ -13,8 +13,9 @@ import os.meka.core.sync.FieldValue
  *
  * Slice 1 uses it for the wake alarm (work start − morning commute − time to get ready). Slice 2: Today's commute bands
  * ([CommuteRules.bands], a thin row before and after the office block, not events) and the Calendar's line under an
- * office day's heading ([CommuteRules.calendarLine]). Later slices: clashes against arrival home, the planner, Leaving
- * now, the brief's leave-by.
+ * office day's heading ([CommuteRules.calendarLine]). Slice 3: clashes against arrival home (and after he's left),
+ * through [WorkClashRules] with the day's bands, on Today, the Calendar, the brief and the week ahead. Later slices: the
+ * planner, Leaving now, the brief's leave-by.
  */
 object CommuteFields {
     const val TO_WORK = "commuteToWorkMin"
