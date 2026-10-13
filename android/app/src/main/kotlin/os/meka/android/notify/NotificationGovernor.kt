@@ -31,6 +31,7 @@ import os.meka.core.domain.NoticePrecision
 import os.meka.core.domain.NoticeTarget
 import os.meka.core.domain.NoticeTier
 import os.meka.core.domain.NotifyRules
+import os.meka.core.domain.NotifyTrace
 import os.meka.core.domain.SessionCard
 import os.meka.core.domain.SessionRules
 
@@ -59,9 +60,12 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
         val r = app.core.governNotifications(prefs.getString(KEY_STATE, null), _device.value)
         // What no longer applies comes down (an approval answered on either device, or run out).
         r.withdraw.forEach { NotificationManagerCompat.from(context).cancel(NotifyRouting.notificationId(it)) }
-        if (WorkAlerts.canPost(context)) {
-            val posted = r.post.filter { post(it) }
-            val digest = r.digest?.takeIf { postDigest(it) }
+        val allowed = WorkAlerts.canPost(context)
+        var posted: List<Notice> = emptyList()
+        var digest: Digest? = null
+        if (allowed) {
+            posted = r.post.filter { post(it) }
+            digest = r.digest?.takeIf { postDigest(it) }
             // Counts only, for the weekly review's Interruptions (ADR-013): what actually reached a live channel.
             // The same notices (and the digest) go in the activity log, "What MEKA did and why".
             app.core.notificationsPosted(posted)
@@ -69,6 +73,11 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
         } // else: what would have posted still shows in the app; nothing piles up for later (and nothing counts)
         prefs.edit().putString(KEY_STATE, r.stateEncoded).commit()
         schedule(r.nextWakeMs, r.nextWakePrecision)
+        // Notifications never seen (slice 1): what this look came to, for Health and a build run.
+        val channels = posted.map { channelName(it.tier) } + listOfNotNull(digest?.let { channelName(NoticeTier.DIGEST) })
+        NotifyTraceStore.record(context, NotifyTrace.look(
+            System.currentTimeMillis(), allowed, posted.size, digest != null, channels, r.nextWakeMs, NotifyTraceStore.calendar(),
+        ))
     }
 
     /**
@@ -260,17 +269,24 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    /** One channel per tier, so each can be tuned (or let through Do Not Disturb) in the phone's settings. */
+    private fun channelName(tier: NoticeTier): String = channelSpec(tier).first
+
+    private fun channelSpec(tier: NoticeTier): Triple<String, Int, String> = when (tier) {
+        NoticeTier.CRITICAL -> Triple("Critical", NotificationManager.IMPORTANCE_HIGH, "Rare: things that can't wait, even in quiet hours.")
+        NoticeTier.ACTION -> Triple("Needs a decision", NotificationManager.IMPORTANCE_HIGH, "Approvals and choices only you can make; held during quiet hours.")
+        NoticeTier.HEADS_UP -> Triple("Heads-ups", NotificationManager.IMPORTANCE_DEFAULT, "Event reminders, cancel-by dates, your fasting goal, the morning brief, the evening shutdown and requests from people you chose to hear from straight away.")
+        else -> Triple("Digests", NotificationManager.IMPORTANCE_LOW, "The midday and evening round-up of what's due.")
+    }
+
+    /**
+     * One channel per tier, so each can be tuned (or let through Do Not Disturb) in the phone's settings. Made at app
+     * start for every tier ([MekaChannels]); the ids never change, so his per-channel settings survive updates.
+     */
     fun ensureChannel(tier: NoticeTier): String {
         val id = NotifyRouting.channelId(tier)
         val nm = context.getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(id) == null) {
-            val (name, importance, about) = when (tier) {
-                NoticeTier.CRITICAL -> Triple("Critical", NotificationManager.IMPORTANCE_HIGH, "Rare: things that can't wait, even in quiet hours.")
-                NoticeTier.ACTION -> Triple("Needs a decision", NotificationManager.IMPORTANCE_HIGH, "Approvals and choices only you can make; held during quiet hours.")
-                NoticeTier.HEADS_UP -> Triple("Heads-ups", NotificationManager.IMPORTANCE_DEFAULT, "Event reminders, cancel-by dates, your fasting goal, the morning brief, the evening shutdown and requests from people you chose to hear from straight away.")
-                else -> Triple("Digests", NotificationManager.IMPORTANCE_LOW, "The midday and evening round-up of what's due.")
-            }
+            val (name, importance, about) = channelSpec(tier)
             nm.createNotificationChannel(NotificationChannel(id, name, importance).apply { description = about })
         }
         return id
@@ -376,7 +392,13 @@ class GovernorAlarmReceiver : BroadcastReceiver() {
         val app = context.applicationContext as MekaApplication
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-            try { app.core.tick(); app.governor.run() } finally { pending.finish() }
+            try {
+                app.core.tick(); app.governor.run()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                NotifyTraceStore.failed(context, "governor alarm", e)
+            } finally { pending.finish() }
         }
     }
 }

@@ -88,9 +88,8 @@ class AfterWorkNudger(private val context: Context, private val app: MekaApplica
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    @SuppressLint("MissingPermission") // checked by WorkAlerts.canPost(), and a late revoke is caught below
-    private fun post(title: String, text: String, publicText: String) {
-        if (!WorkAlerts.canPost(context)) return
+    /** Made at app start with every other channel (notifications never seen, slice 1), and before each post. */
+    fun ensureChannel() {
         val nm = context.getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(
@@ -99,6 +98,12 @@ class AfterWorkNudger(private val context: Context, private val app: MekaApplica
                 },
             )
         }
+    }
+
+    @SuppressLint("MissingPermission") // checked by WorkAlerts.canPost(), and a late revoke is caught below
+    private fun post(title: String, text: String, publicText: String) {
+        if (!WorkAlerts.canPost(context)) return
+        ensureChannel()
         val open = PendingIntent.getActivity(
             context, 1,
             Intent(context, MainActivity::class.java)

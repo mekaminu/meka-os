@@ -109,6 +109,7 @@ object HealthDevice {
             updateFailure = updater?.lastFailure?.value,
             sizeBytes = updater?.let { runCatching { it.installedSizeBytes }.getOrNull() },
             previousSizeBytes = updater?.previousSizeBytes,
+            notifications = os.meka.android.notify.NotifyTraceStore.health(context),
         )
     }
 }
@@ -121,6 +122,11 @@ fun rememberHealthFixer(core: MekaCore, openPane: ((HealthFix) -> Unit)? = null,
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val askRole = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { after() }
+    // Notifications never seen: Turn on asks for the permission once; after a "don't ask again" it opens MEKA's page.
+    val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) openMekaNotificationSettings(context)
+        after()
+    }
     return remember(core, openPane) {
         { row: HealthRow ->
             haptics.light()
@@ -148,10 +154,28 @@ fun rememberHealthFixer(core: MekaCore, openPane: ((HealthFix) -> Unit)? = null,
                     }
                     if (app != null && release != null) app.updater.start(release)
                 }
+                HealthFix.NOTIFICATIONS_ON -> {
+                    val needsPermission = android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(
+                        context, android.Manifest.permission.POST_NOTIFICATIONS,
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (needsPermission) runCatching { askNotify.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+                    else openMekaNotificationSettings(context)
+                }
                 HealthFix.CALENDARS, HealthFix.WORK -> f?.let { openPane?.invoke(it) }
                 null -> Unit
             }
         }
+    }
+}
+
+/** Android's notification page for MEKA (its switch and every category). */
+fun openMekaNotificationSettings(context: Context) {
+    runCatching {
+        context.startActivity(
+            android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
     }
 }
 
@@ -213,9 +237,34 @@ fun HealthPane(core: MekaCore, onClose: () -> Unit, openPane: (HealthFix) -> Uni
         } else {
             SkeletonRows(6, Modifier.padding(top = MekaSpace.xs))
         }
+        // Notifications never seen (slice 1): each category as Android has it, then what MEKA's notification paths did.
+        Text("Notifications", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
+        NotificationTraceLines(v?.checkedAtMs)
         // Bedside clock slice 1: what the hinge reports right now and its last 20 changes.
         Text("Fold", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
         os.meka.android.fold.FoldPostureLines(withLog = true)
+    }
+}
+
+/** The categories (on/off) and the last [shown] trace lines, newest first; read again on each check. */
+@Composable
+private fun NotificationTraceLines(checkedAtMs: Long?, shown: Int = 12) {
+    val context = LocalContext.current
+    val facts = remember(checkedAtMs) { os.meka.android.notify.NotifyTraceStore.health(context) }
+    val cal = remember(checkedAtMs) { os.meka.android.notify.NotifyTraceStore.calendar() }
+    val categories = facts.channels.sortedBy { it.name }.joinToString(" · ") { "${it.name} ${if (it.on) "on" else "off"}" }
+    Text(
+        (if (facts.allowed) "Allowed" else "Off for MEKA") + if (categories.isEmpty()) " · no categories yet" else " · $categories",
+        style = MekaType.caption, color = Meka.colors.textSecondary,
+    )
+    if (facts.trace.isEmpty()) {
+        Text("Nothing recorded yet", style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+    facts.trace.take(shown).forEach { e ->
+        Text(
+            os.meka.core.domain.NotifyTrace.line(e, cal), style = MekaType.caption,
+            color = if (e.kind == os.meka.core.domain.NotifyTraceKind.FAILED || e.kind == os.meka.core.domain.NotifyTraceKind.BLOCKED) Meka.colors.critical else Meka.colors.textTertiary,
+        )
     }
 }
 

@@ -160,7 +160,7 @@ class OngoingNotifier(private val context: Context, private val app: MekaApplica
         prefs.edit().putStringSet(KEY_DISMISSED, set).putStringSet(KEY_SHOWN, shown).apply()
     }
 
-    private fun ensureChannel(): String {
+    fun ensureChannel(): String {
         val nm = context.getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(OngoingRouting.CHANNEL) == null) {
             nm.createNotificationChannel(

@@ -179,7 +179,7 @@ object ErrandProximity {
         }
     }
 
-    private fun ensureChannel(context: Context) {
+    fun ensureChannel(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
         if (nm.getNotificationChannel(CHANNEL) != null) return
         nm.createNotificationChannel(

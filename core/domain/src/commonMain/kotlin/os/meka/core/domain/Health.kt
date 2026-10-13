@@ -11,10 +11,14 @@ package os.meka.core.domain
 enum class HealthState { OK, WARN, BAD, UNKNOWN }
 
 /** What a row's button does; the apps map each to their own screen or call. */
-enum class HealthFix { SYNC_NOW, RECONNECT, CALENDARS, BATTERY, NOTIFICATION_ACCESS, CALL_ROLE, WORK, INSTALL_UPDATE }
+enum class HealthFix {
+    SYNC_NOW, RECONNECT, CALENDARS, BATTERY, NOTIFICATION_ACCESS, CALL_ROLE, WORK, INSTALL_UPDATE,
+    /** MEKA's own notifications are off (the permission, the app switch or a category): ask, else open the app's page. */
+    NOTIFICATIONS_ON,
+}
 
 data class HealthRow(
-    /** Stable: "server", "push", "calendar:<provider>:<account>", "feeds", "messages", "calls", "ai", "voice", "battery", "update". */
+    /** Stable: "server", "push", "notifications", "calendar:<provider>:<account>", "feeds", "messages", "calls", "ai", "voice", "battery", "update". */
     val key: String,
     val title: String,
     val line: String,
@@ -81,6 +85,8 @@ data class DeviceHealth(
     /** The installed app's size and the build before's (smaller phone updates); null leaves them out. */
     val sizeBytes: Long? = null,
     val previousSizeBytes: Long? = null,
+    /** MEKA's own notifications: allowed, each channel, and the trace ([NotifyTrace]); null leaves the row out. */
+    val notifications: NotificationHealth? = null,
 )
 
 data class HealthFacts(
@@ -144,6 +150,7 @@ object HealthRules {
         val rows = buildList {
             add(server(f, cal))
             if (!f.device.mac) add(push(f))
+            NotifyTrace.healthRow(f.device.notifications, f.nowMs, cal)?.let(::add)
             addAll(calendars(f, cal))
             feeds(f, cal)?.let(::add)
             messages(f, cal)?.let(::add)

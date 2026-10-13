@@ -93,7 +93,7 @@ object UnknownCallNotice {
     fun permissionToRead(context: Context) =
         context.checkSelfPermission(Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
 
-    private fun ensureChannel(context: Context) {
+    fun ensureChannel(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) != null) return
         nm.createNotificationChannel(

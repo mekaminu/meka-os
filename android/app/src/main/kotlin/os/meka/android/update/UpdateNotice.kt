@@ -37,9 +37,8 @@ object UpdateNotice {
         NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
     }
 
-    @SuppressLint("MissingPermission") // checked by WorkAlerts.canPost(), and a late revoke is caught below
-    private fun post(context: Context, build: AppUpdateRules.Build) {
-        if (!WorkAlerts.canPost(context)) return
+    /** Made at app start with every other channel (notifications never seen, slice 1), and before each post. */
+    fun ensureChannel(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(
@@ -48,6 +47,12 @@ object UpdateNotice {
                 },
             )
         }
+    }
+
+    @SuppressLint("MissingPermission") // checked by WorkAlerts.canPost(), and a late revoke is caught below
+    private fun post(context: Context, build: AppUpdateRules.Build) {
+        if (!WorkAlerts.canPost(context)) return
+        ensureChannel(context)
         val open = PendingIntent.getActivity(
             context, 2,
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),

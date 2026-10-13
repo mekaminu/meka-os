@@ -127,6 +127,9 @@ class MekaApplication : Application() {
             secureRandom = SecureRandom().asKotlinRandom(),
         )
         if (transport != null) { SyncWorker.schedulePeriodic(this); ensurePush() }
+        // Notifications never seen (slice 1): every channel exists from the first start, and the trace says so.
+        os.meka.android.notify.MekaChannels.ensureAll(this)
+        os.meka.android.notify.NotifyTraceStore.started(this, os.meka.android.notify.MekaChannels.states(this).size)
         // Battery care (Reliability first, slice 1): every process start is a heartbeat.
         os.meka.android.today.BatteryCare.beat(this)
         // Every work-mode change on this phone (clock tick, sync, listener) goes past the nudger. Also runs once at
@@ -176,7 +179,13 @@ class MekaApplication : Application() {
                 core.requests.map { it.map { c -> c.id } }.distinctUntilChanged().map { },
                 // An approval asked or answered (on either device): its notice posts, or comes down.
                 core.approvals.map { it.map { c -> c.id } }.distinctUntilChanged().map { },
-            ).debounce(GOVERNOR_SETTLE_MS).collect { runCatching { governor.run() } }
+            ).debounce(GOVERNOR_SETTLE_MS).collect {
+                // A failure used to vanish here; now it's in the trace Health shows.
+                runCatching { governor.run() }.onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    os.meka.android.notify.NotifyTraceStore.failed(this@MekaApplication, "governor", e)
+                }
+            }
         }
         // Ongoing notifications follow Today and the fast, but only re-post when what they show changes (Today moves
         // every minute; the system ticks their clocks). Also once at process start, which re-arms their alarm.

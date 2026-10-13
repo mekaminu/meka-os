@@ -20,6 +20,11 @@ class MekaMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        // Notifications never seen (slice 1): each arrival goes in the trace, so Health shows the push path works.
+        os.meka.android.notify.NotifyTraceStore.record(
+            applicationContext,
+            os.meka.core.domain.NotifyTraceEntry(System.currentTimeMillis(), os.meka.core.domain.NotifyTraceKind.PUSH, message.data["t"].orEmpty().take(20)),
+        )
         if (PushMessages.isSyncWake(message.data)) SyncWorker.syncSoon(applicationContext)
     }
 }
