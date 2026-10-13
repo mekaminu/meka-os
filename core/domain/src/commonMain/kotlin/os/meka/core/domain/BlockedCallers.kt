@@ -53,9 +53,6 @@ data class BlockedCallersView(
 }
 
 object BlockedCallerRules {
-    /** The spoofed "police station" scam call Meka had on 2026-10-09; seeded once on the Fold. */
-    const val SEED_NUMBER = "01904 618691"
-    const val SEED_WHY = "Scam call claiming to be the police (9 Oct)"
     const val EMPTY_LINE = "No blocked numbers"
     const val MAX_WHY = 120
 
@@ -70,7 +67,7 @@ object BlockedCallerRules {
     }
 
     /**
-     * A UK number as people write it: "01904 618691", "07700 900123", "020 7946 0000"; +44 numbers shown the national
+     * A UK number as people write it: "01632 960691", "07700 900123", "020 7946 0000"; +44 numbers shown the national
      * way. Anything else is returned tidied, as it came.
      */
     fun display(number: String): String {
@@ -104,7 +101,7 @@ object BlockedCallerRules {
 
     /**
      * The text a scam call is reported with: 7726 takes "Call" and the number that called, written the UK way with
-     * no spaces ("Call 01904618691"); null for something that isn't a number.
+     * no spaces ("Call 01632960691"); null for something that isn't a number.
      */
     fun reportText(number: String?): String? {
         keyOf(number) ?: return null
@@ -204,16 +201,6 @@ class BlockedCallers(
         replica.commitLocal(EntityTypes.BLOCKED_CALLER, key, mapOf(BlockedCallerFields.BLOCKED to false.fv()))
         return true
     }
-
-    /**
-     * Puts the 9 Oct scam number on the list the first time the Fold screens calls. Only when it has never been on
-     * this replica's list, so once Meka unblocks it (on either device, synced) it is never added back.
-     */
-    fun seed(): Boolean {
-        val key = BlockedCallerRules.keyOf(BlockedCallerRules.SEED_NUMBER) ?: return false
-        if (replica.entity(EntityTypes.BLOCKED_CALLER, key) != null) return false
-        return block(BlockedCallerRules.SEED_NUMBER, BlockedCallerRules.SEED_WHY)
-    }
 }
 
 /**
@@ -266,7 +253,7 @@ object SuspectedSpamRules {
         cleanWhy(why)?.let { put(BlockedCallerFields.SUSPECTED_WHY, FieldValue.Text(it)) }
     }
 
-    /** The Activity entry for a flag: "Added 01904 618691 to Suspected spam" · the reason. */
+    /** The Activity entry for a flag: "Added 01632 960691 to Suspected spam" · the reason. */
     fun activity(number: String, why: String?, atMs: Long): Map<String, FieldValue> = linkedMapOf(
         ActivityFields.AT to FieldValue.Int64(atMs),
         ActivityFields.KIND to FieldValue.Text(ActivityKind.CALL.name),

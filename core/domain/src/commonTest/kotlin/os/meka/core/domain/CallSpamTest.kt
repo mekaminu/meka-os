@@ -13,23 +13,23 @@ class CallSpamTest {
     private val lists = PeopleLists(family = setOf("Jeanette"), alwaysNotify = setOf("Ada"))
         .withNumber("Jeanette", "+447700900111")
         .withNumber("Ada", "07700 900222")
-    private val scam = "01904 618691"
+    private val scam = "01632 960691"
     private val blocked = setOf(BlockedCallerRules.keyOf(scam)!!)
 
     private fun decide(
         number: String?, on: Boolean = true, atWork: Boolean = false, signals: CallSignals = CallSignals.NONE,
-        recent: List<ScreenedCall> = emptyList(), block: Set<String> = blocked,
-    ) = CallScreeningRules.decide(on, atWork, number, lists, recent, t, block, signals)
+        recent: List<ScreenedCall> = emptyList(), block: Set<String> = blocked, protection: Boolean = true,
+    ) = CallScreeningRules.decide(on, atWork, number, lists, recent, t, block, signals, spamProtection = protection)
 
     @Test
     fun aBlockedNumberIsRejectedAnyTimeEvenWithTheAssistantOff() {
         for (on in listOf(true, false)) for (atWork in listOf(true, false)) {
-            val d = decide("+441904618691", on = on, atWork = atWork)
+            val d = decide("+441632960691", on = on, atWork = atWork)
             assertEquals(CallVerdict.BLOCK, d.verdict, "on=$on atWork=$atWork")
             assertEquals(CallReason.BLOCKED, d.reason)
         }
         // Written any way, it is the same number.
-        assertEquals(CallVerdict.BLOCK, decide("01904618691").verdict)
+        assertEquals(CallVerdict.BLOCK, decide("01632960691").verdict)
     }
 
     @Test
@@ -45,16 +45,40 @@ class CallSpamTest {
     }
 
     @Test
-    fun aNumberThatFailedTheCallerCheckGoesToTheAssistantAnyTimeWhileItIsOn() {
-        val off = decide("01632 960000", atWork = false, signals = CallSignals(verificationFailed = true))
+    fun aNumberThatFailedTheCallerCheckIsBlockedWithSpamProtectionOnWhateverTheAssistantSwitchSays() {
+        for (on in listOf(true, false)) for (atWork in listOf(true, false)) {
+            val d = decide("01632 960000", on = on, atWork = atWork, signals = CallSignals(verificationFailed = true))
+            assertEquals(CallVerdict.BLOCK, d.verdict, "on=$on atWork=$atWork")
+            assertEquals(CallReason.AUTO_BLOCKED, d.reason)
+        }
+        // Spam protection off (Advanced): as before — to the assistant while it's on, else it rings.
+        val off = decide("01632 960000", signals = CallSignals(verificationFailed = true), protection = false)
         assertEquals(CallVerdict.DECLINE, off.verdict)
         assertEquals(CallReason.LIKELY_SPAM, off.reason)
         assertTrue(CallScreeningRules.remembers(off))
-        // A second call doesn't get through on the repeat rule: a spoofer redials.
-        val again = decide("01632 960000", signals = CallSignals(verificationFailed = true), recent = listOf(ScreenedCall(off.callerKey, t - 60_000)))
+        val again = decide("01632 960000", signals = CallSignals(verificationFailed = true), recent = listOf(ScreenedCall(off.callerKey, t - 60_000)), protection = false)
         assertEquals(CallReason.LIKELY_SPAM, again.reason)
-        // Assistant off: it rings as usual.
-        assertTrue(decide("01632 960000", on = false, signals = CallSignals(verificationFailed = true)).rings)
+        assertTrue(decide("01632 960000", on = false, signals = CallSignals(verificationFailed = true), protection = false).rings)
+        // Withheld: never auto-blocked (nothing to block).
+        assertTrue(decide(null, on = false, signals = CallSignals(verificationFailed = true)).rings)
+    }
+
+    @Test
+    fun householdOfficialClaimsAndEmergencyNumbersAreNeverAutoBlocked() {
+        val failed = CallSignals(verificationFailed = true)
+        // The household profile's numbers (partner, the assistant, voicemail) ring.
+        assertEquals(CallReason.SWITCHED_OFF, decide("01632 960000", on = false, signals = failed.copy(household = true)).reason)
+        // A caller whose network name claims the police rings, even when the check failed; a heads-up follows.
+        val police = decide("01632 960000", atWork = true, signals = failed.copy(networkName = "Bedfordshire Police"))
+        assertEquals(CallVerdict.RING, police.verdict)
+        assertEquals(CallReason.OFFICIAL_CLAIM, police.reason)
+        assertTrue(UnknownCallRules.watch(police, "01632 960000", failed))
+        // …but one already on the block list stays blocked.
+        assertEquals(CallReason.BLOCKED, decide(scam, signals = failed.copy(networkName = "NatWest Fraud Team")).reason)
+        // 999, 112, 101, 111: never screened, even on the list.
+        for (n in listOf("999", "112", "101", "111")) {
+            assertEquals(CallReason.EMERGENCY, decide(n, atWork = true, signals = failed, block = setOf(CallScreeningRules.callerKey(n))).reason, n)
+        }
     }
 
     @Test
@@ -79,8 +103,8 @@ class CallSpamTest {
 
     @Test
     fun activityLinesSayWhatHappenedAndWhy() {
-        val (summary, why) = CallScreeningRules.activityLine(decide("+441904618691"), "+441904618691")!!
-        assertEquals("Blocked a call from 01904 618691", summary)
+        val (summary, why) = CallScreeningRules.activityLine(decide("+441632960691"), "+441632960691")!!
+        assertEquals("Blocked a call from 01632 960691", summary)
         assertEquals("It is on your block list", why)
         assertEquals("Sent a withheld call to the assistant", CallScreeningRules.activityLine(decide(null, signals = CallSignals(quietHours = true)), null)!!.first)
         assertNull(CallScreeningRules.activityLine(decide("07700 900999", atWork = true), "07700 900999"))
@@ -88,7 +112,7 @@ class CallSpamTest {
 
     @Test
     fun numbersShowTheWayTheyAreWritten() {
-        assertEquals("01904 618691", BlockedCallerRules.display("+441904618691"))
+        assertEquals("01632 960691", BlockedCallerRules.display("+441632960691"))
         assertEquals("07700 900123", BlockedCallerRules.display("07700900123"))
         assertEquals("020 7946 0000", BlockedCallerRules.display("+44 20 7946 0000"))
         assertEquals("0113 496 0000", BlockedCallerRules.display("01134960000"))
@@ -96,29 +120,26 @@ class CallSpamTest {
     }
 
     @Test
-    fun theBlockListSyncsAndAnUnblockedSeedIsNeverAddedBack() {
+    fun theBlockListSyncsAndUnblockingIsAField() {
         val world = SyncWorld()
         val fold = world.device("android")
         val mac = world.device("mac")
         val onFold = BlockedCallers(fold.replica, { world.clock.nowMs })
         val onMac = BlockedCallers(mac.replica, { world.clock.nowMs })
 
-        assertTrue(onFold.seed())
-        assertFalse(onFold.seed())
+        assertTrue(onFold.block(scam, "Scam call claiming to be the police"))
         assertEquals("1 blocked number · rejected silently, any time", onFold.view().line)
-        assertEquals("01904 618691", onFold.view().rows.single().number)
-        assertTrue(onFold.view().rows.single().line.endsWith(BlockedCallerRules.SEED_WHY))
+        assertEquals("01632 960691", onFold.view().rows.single().number)
+        assertTrue(onFold.view().rows.single().line.endsWith("Scam call claiming to be the police"))
         assertFalse(onFold.block("not a number", null))
         assertTrue(onFold.block("+44 7700 900555", "Kept ringing"))
         fold.sync(); mac.sync()
         assertEquals(2, onMac.view().rows.size)
         assertEquals(onFold.view().keys, onMac.view().keys)
 
-        assertTrue(onMac.unblock(BlockedCallerRules.keyOf(BlockedCallerRules.SEED_NUMBER)!!))
+        assertTrue(onMac.unblock(BlockedCallerRules.keyOf(scam)!!))
         assertFalse(onMac.unblock("tel:0000000000"))
         mac.sync(); fold.sync()
-        assertEquals(listOf("07700 900555"), onFold.view().rows.map { it.number })
-        assertFalse(onFold.seed())
         assertEquals(listOf("07700 900555"), onFold.view().rows.map { it.number })
     }
 
@@ -145,38 +166,38 @@ class CallSpamTest {
     fun onlyACallerNobodyKnowsGetsBlockAndReport() {
         val names = CallerNames({ n -> if (People.key(n) == People.key("07700900333")) "Tunde" else null }, ownNumbers = setOf("07700 900999"))
         val s = AfterWorkSummaries.build(
-            listOf(voice("+441904618691"), voice("+447700900111"), voice("+447700900222"), voice("+447700900333"), voice("07700900999"),
+            listOf(voice("+441632960691"), voice("+447700900111"), voice("+447700900222"), voice("+447700900333"), voice("07700900999"),
                 CapturedItem("m1", CaptureApp.WHATSAPP, CaptureKind.MESSAGE, "Bola", "hi", null, t)),
             lists, names,
         )
         val by = s.people.associate { it.personName to it.blockNumber }
-        assertEquals("+441904618691", by["01904 618691"])
+        assertEquals("+441632960691", by["01632 960691"])
         assertNull(by["Jeanette"]); assertNull(by["Ada"]); assertNull(by["Tunde"]); assertNull(by[CallerNames.TEST_CALL]); assertNull(by["Bola"])
         // The Mac (no lists, no contacts) still knows the number, and a family flag from the Fold keeps Block off.
-        val mac = AfterWorkSummaries.build(listOf(voice("+441904618691"), voice("+447700900111", family = true)), PeopleLists())
-        assertEquals("+441904618691", mac.people.single { !it.isFamily }.blockNumber)
+        val mac = AfterWorkSummaries.build(listOf(voice("+441632960691"), voice("+447700900111", family = true)), PeopleLists())
+        assertEquals("+441632960691", mac.people.single { !it.isFamily }.blockNumber)
         assertNull(mac.people.single { it.isFamily }.blockNumber)
         // Re-applying the Fold's lists to a synced summary keeps the caller's number.
-        assertEquals("+441904618691", mac.withLists(lists, names).people.first { it.personName == "01904 618691" }.blockNumber)
+        assertEquals("+441632960691", mac.withLists(lists, names).people.first { it.personName == "01632 960691" }.blockNumber)
         // A withheld caller can't be blocked.
         assertNull(AfterWorkSummaries.build(listOf(voice("Unknown")), PeopleLists()).people.single().blockNumber)
     }
 
     @Test
     fun reportingToSevenSevenTwoSixAndWhyItWasBlocked() {
-        assertEquals("Call 01904618691", BlockedCallerRules.reportText("+44 1904 618691"))
+        assertEquals("Call 01632960691", BlockedCallerRules.reportText("+44 1632 960691"))
         assertEquals("Call 07700900123", BlockedCallerRules.reportText("07700 900123"))
         assertNull(BlockedCallerRules.reportText("Unknown"))
-        assertEquals("To report it, text \u201cCall 01904618691\u201d to 7726 from your phone.", BlockedCallerRules.macReportHint("01904618691"))
+        assertEquals("To report it, text \u201cCall 01632960691\u201d to 7726 from your phone.", BlockedCallerRules.macReportHint("01632960691"))
         val cal = LocalCalendar.UTC
         assertEquals("Left a message · today", BlockedCallerRules.whyFromHeld(CaptureKind.VOICE_MESSAGE, t, t + 60_000, cal))
         assertEquals("Missed call · yesterday", BlockedCallerRules.whyFromHeld(CaptureKind.MISSED_CALL, t - 86_400_000, t, cal))
         val world = SyncWorld()
         val d = world.device("fold")
         val list = BlockedCallers(d.replica, { world.clock.nowMs })
-        assertFalse(list.view().has("01904 618691"))
-        assertTrue(list.block("+441904618691", "Left a message · today"))
-        assertTrue(list.view().has("01904 618691"))
+        assertFalse(list.view().has("01632 960691"))
+        assertTrue(list.block("+441632960691", "Left a message · today"))
+        assertTrue(list.view().has("01632 960691"))
         assertFalse(list.view().has(null))
         assertEquals(3, CallScreeningRules.ONE_SCREENER_LINES.size)
         assertTrue(CallScreeningRules.ONE_SCREENER_LINES.last().contains("Caller ID & spam app"))

@@ -99,7 +99,7 @@ class CallAssistantTest {
     fun theFoldNamesCallersFromItsContactsAndItsOwnNumber() {
         leave("CA1", "+447700900123", t0 + 10 * hour, "Can you call me about the boiler")
         leave("CA2", "+447700900999", t0 + 10 * hour + 60_000, "Testing")
-        leave("CA3", "+441904618691", t0 + 10 * hour + 120_000)
+        leave("CA3", "+441632960691", t0 + 10 * hour + 120_000)
         leave("CA4", "+447700900555", t0 + 10 * hour + 180_000)
         syncAll()
         val looked = mutableListOf<String>()
@@ -108,7 +108,7 @@ class CallAssistantTest {
         val lists = PeopleLists(family = setOf("Mum")).withNumber("Mum", "07700 900555")
         val fold = HeldMessages(a.replica) { world.clock.nowMs }.summary().withLists(lists, names)
         val shown = fold.people.map { it.personName }.toSet()
-        assertEquals(setOf("Dave Plumber", "You · test call", "01904 618691", "Mum"), shown)
+        assertEquals(setOf("Dave Plumber", "You · test call", "01632 960691", "Mum"), shown)
         // Lists win over contacts (Mum is family, found by her listed number); own numbers aren't looked up.
         assertTrue(fold.people.first { it.personName == "Mum" }.isFamily)
         assertFalse(looked.any { People.key(it) == "tel:7700900999" || People.key(it) == "tel:7700900555" })

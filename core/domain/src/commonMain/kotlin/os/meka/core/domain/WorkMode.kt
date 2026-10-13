@@ -20,6 +20,12 @@ object WorkFields {
     /** The call assistant's one switch (Bool, last writer wins; absent = off). Added 2026-10-07. */
     const val CALL_ASSISTANT = "callAssistant"
     /**
+     * Spam protection's switch (spam calls still ring, slice 1, Meka 2026-10-13: "should be on all the time"): Bool,
+     * last writer wins; **absent = on**. Only Work mode → Spam protection → Advanced turns it off, with a warning.
+     * Added 2026-10-13.
+     */
+    const val SPAM_PROTECTION = "spamProtection"
+    /**
      * Work-from-home days (V1, requests slice 4: Add on a "Work from home · Thu 15 Oct" card): local epoch days,
      * comma-separated, ascending, past days dropped on each write. Text, last writer wins. Added 2026-10-09.
      */
@@ -273,6 +279,8 @@ data class WorkModeState(
     val holiday: String? = null,
     /** The call assistant's switch ([CallScreeningRules]): screen calls during work. Off until Meka turns it on. */
     val callAssistant: Boolean = false,
+    /** Spam protection ([SpamProtectionRules]): on unless turned off in Advanced; independent of the call assistant. */
+    val spamProtection: Boolean = true,
     /** How long callers' recordings are kept ([VoiceRecordingRules.keepDays]): 7, 30 or 0 (don't keep). */
     val recordingDays: Int = VoiceRecordingRules.DEFAULT_KEEP_DAYS,
     /** The assistant is paused for want of credit ([CallCreditRules]): calls ring as usual, the Work screen says why. */
@@ -506,7 +514,7 @@ class WorkMode(
     /** [epochDay] is today's local date; with it, bank holidays are days off. */
     fun state(clock: LocalClock, epochDay: Long? = null): WorkModeState {
         val base = WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, workHolidays())
-            .copy(callAssistant = callAssistant(), recordingDays = recordingDays(), commute = commute())
+            .copy(callAssistant = callAssistant(), spamProtection = spamProtection(), recordingDays = recordingDays(), commute = commute())
         if (epochDay == null) return base
         val hours = WorkHours.of(base, holidays(), epochDay, homeDays(epochDay), leaveDays())
         return base.copy(commuteDays = CommuteRules.dayRows(hours, epochDay))
@@ -541,6 +549,16 @@ class WorkMode(
     fun setCallAssistant(on: Boolean) {
         if (callAssistant() == on && replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.CALL_ASSISTANT) != null) return
         replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.CALL_ASSISTANT to on.fv()))
+    }
+
+    /** Spam protection's switch (synced); absent reads as on. */
+    fun spamProtection(): Boolean = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SPAM_PROTECTION)?.boolOrNull != false
+
+    /** Turns spam protection on or off (Advanced only), synced; false when nothing changed. */
+    fun setSpamProtection(on: Boolean): Boolean {
+        if (spamProtection() == on) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.SPAM_PROTECTION to on.fv()))
+        return true
     }
 
     /** How long callers' recordings are kept, in days (synced; [VoiceRecordingRules.keepDays]). */

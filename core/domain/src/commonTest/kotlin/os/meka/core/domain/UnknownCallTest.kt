@@ -15,7 +15,7 @@ class UnknownCallTest {
     private val lists = PeopleLists(family = setOf("Jeanette"), alwaysNotify = setOf("Ada"))
         .withNumber("Jeanette", "+447700900111")
         .withNumber("Ada", "07700 900222")
-    private val stranger = "+441904618691"
+    private val stranger = "+441632960691"
 
     private fun decide(number: String?, on: Boolean = true, atWork: Boolean = false, signals: CallSignals = CallSignals.NONE, blocked: Set<String> = emptySet()) =
         CallScreeningRules.decide(on, atWork, number, lists, emptyList(), t, blocked, signals)
@@ -28,7 +28,8 @@ class UnknownCallTest {
         // A stranger who rang (assistant on or off, off work) or was sent to the assistant as likely spam.
         assertTrue(watch(stranger))
         assertTrue(watch(stranger, on = false))
-        assertTrue(watch(stranger, signals = CallSignals(verificationFailed = true)))
+        // Spam calls still ring, slice 1: one that failed the network's check is blocked now, so nothing to offer.
+        assertFalse(watch(stranger, signals = CallSignals(verificationFailed = true)))
         // Family, always-notify, a contact, someone Meka called, this phone: never.
         assertFalse(watch("07700 900111"))
         assertFalse(watch("+447700900222"))
@@ -61,11 +62,11 @@ class UnknownCallTest {
     fun theNotificationSaysWhoAndHowAndOffersBlockAndReport() {
         val at = t + 6 * 3_600_000L + 5 * 60_000L // 14:05
         val o = assertNotNull(UnknownCallRules.offer(stranger, CallOutcome.MISSED, 0, at, at + 60_000, emptySet(), emptyList(), cal))
-        assertEquals("Unknown caller · 01904 618691", o.title)
+        assertEquals("Unknown caller · 01632 960691", o.title)
         assertEquals("Missed call at 14:05 · Block it?", o.line)
         assertEquals("Missed call · Wed 7 Oct", o.why)
-        assertEquals("Call 01904618691", o.reportText)
-        assertEquals(BlockedCallerRules.keyOf("01904 618691"), o.key)
+        assertEquals("Call 01632960691", o.reportText)
+        assertEquals(BlockedCallerRules.keyOf("01632 960691"), o.key)
 
         fun line(outcome: CallOutcome, s: Long = 0) = UnknownCallRules.offer(stranger, outcome, s, at, at + 60_000, emptySet(), emptyList(), cal)!!.line
         assertEquals("Declined at 14:05 · Block it?", line(CallOutcome.DECLINED))
@@ -86,7 +87,7 @@ class UnknownCallTest {
         assertNull(UnknownCallRules.offer(null, CallOutcome.MISSED, 0, t, t, emptySet(), emptyList(), cal))
         var offered = UnknownCallRules.remember(emptyList(), key, t)
         // Rang four more times that afternoon (written another way, too): one notification.
-        assertNull(UnknownCallRules.offer("01904 618691", CallOutcome.MISSED, 0, t, t + 3_600_000, emptySet(), offered, cal))
+        assertNull(UnknownCallRules.offer("01632 960691", CallOutcome.MISSED, 0, t, t + 3_600_000, emptySet(), offered, cal))
         // The next day: asked again.
         assertNotNull(UnknownCallRules.offer(stranger, CallOutcome.MISSED, 0, t, t + UnknownCallRules.ONCE_PER_MS, emptySet(), offered, cal))
         // Another stranger meanwhile is asked about.

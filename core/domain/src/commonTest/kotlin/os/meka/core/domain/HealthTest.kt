@@ -45,7 +45,7 @@ class HealthTest {
     fun everythingWorkingIsAllTicksAndNothingOnToday() {
         val v = HealthRules.view(facts(), cal)
         assertEquals(
-            listOf("server", "push", "calendar:google:meka@gmail.com", "feeds", "messages", "calls", "ai", "voice", "battery", "update"),
+            listOf("server", "push", "calendar:google:meka@gmail.com", "feeds", "messages", "calls", "spam", "ai", "voice", "battery", "update"),
             v.rows.map { it.key },
         )
         assertTrue(v.rows.all { it.state == HealthState.OK }, v.rows.filter { it.state != HealthState.OK }.toString())
@@ -161,8 +161,14 @@ class HealthTest {
         assertEquals(HealthState.OK to HealthFix.WORK, off.state to off.fix)
         val noService = HealthRules.view(facts(server = server.copy(calls = false)), cal).row("calls")
         assertEquals(HealthState.BAD, noService.state)
-        val noRole = HealthRules.view(facts(device = fold.copy(callRoleHeld = false)), cal).row("calls")
-        assertEquals(HealthFix.CALL_ROLE to HealthState.BAD, noRole.fix to noRole.state)
+        // Spam calls still ring, slice 1: the lost role's Fix (and Today's red line) is on the Spam calls row.
+        val noRoleView = HealthRules.view(facts(device = fold.copy(callRoleHeld = false)), cal)
+        assertEquals(HealthState.WARN, noRoleView.row("calls").state)
+        assertEquals(HealthFix.CALL_ROLE to HealthState.BAD, noRoleView.row("spam").fix to noRoleView.row("spam").state)
+        // With the assistant off too, a lost role still shows: spam protection is always on.
+        val offNoRole = HealthRules.view(facts(callAssistantOn = false, device = fold.copy(callRoleHeld = false)), cal)
+        assertEquals("Spam calls · can ring · Navilife isn't your Caller ID & spam app", offNoRole.todayLine)
+        assertTrue(offNoRole.critical)
     }
 
     @Test

@@ -108,6 +108,8 @@ data class HealthFacts(
     /** Null: couldn't ask. */
     val ai: AiStatusView?,
     val callAssistantOn: Boolean,
+    /** Spam protection's switch ([WorkModeState.spamProtection]); on unless turned off in Advanced. */
+    val spamProtectionOn: Boolean = true,
     val lastVoiceMessageMs: Long? = null,
     val nowMs: Long,
     /** The call assistant's credit as the server last wrote it ([CallCreditRules]); null when not known yet. */
@@ -161,6 +163,7 @@ object HealthRules {
             feeds(f, cal)?.let(::add)
             messages(f, cal)?.let(::add)
             add(calls(f, cal))
+            SpamProtectionRules.healthRow(f.device.callRoleHeld, f.spamProtectionOn, f.device.mac)?.let(::add)
             add(ai(f))
             add(voice(f))
             battery(f)?.let(::add)
@@ -276,7 +279,8 @@ object HealthRules {
             !f.callAssistantOn -> HealthRow("calls", title, "Off · switch it on in Work mode", HealthState.OK, HealthFix.WORK, "Work mode")
             f.server == null -> HealthRow("calls", title, "On · couldn't check the phone service", HealthState.UNKNOWN)
             !f.server.calls -> HealthRow("calls", title, "On, but the phone service isn't set up on the server", HealthState.BAD)
-            f.device.callRoleHeld == false -> HealthRow("calls", title, "Navilife isn't screening calls on this phone", HealthState.BAD, HealthFix.CALL_ROLE, "Allow")
+            // The Spam calls row below carries the Fix (and Today's red line), so this one only says why.
+            f.device.callRoleHeld == false -> HealthRow("calls", title, "Navilife isn't screening calls on this phone · see Spam calls", HealthState.WARN)
             else -> CallCreditRules.healthLine(f.callCredit)?.let { (line, state) -> HealthRow("calls", title, line, state) }
                 ?: HealthRow("calls", title, "On · $last", HealthState.OK)
         }

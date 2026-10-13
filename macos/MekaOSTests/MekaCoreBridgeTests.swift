@@ -1635,7 +1635,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testBlockListReachesSwift() {
         XCTAssertEqual(BlockedCallersView.companion.EMPTY.rows.count, 0)
         XCTAssertEqual(BlockedCallersView.companion.EMPTY.line, BlockedCallerRules.shared.EMPTY_LINE)
-        XCTAssertEqual(BlockedCallerRules.shared.display(number: "+441904618691"), "01904 618691")
+        XCTAssertEqual(BlockedCallerRules.shared.display(number: "+441632960691"), "01632 960691")
         XCTAssertNil(BlockedCallerRules.shared.keyOf(number: "abc"))
         XCTAssertEqual(CallScreeningRules.shared.ASSISTANT_NUMBER, "01767 667246")
     }
@@ -1653,10 +1653,18 @@ final class MekaCoreBridgeTests: XCTestCase {
 
     func testBlockFromAHeldMessageReachesSwift() {
         // Call assistant polish 8b b, e and 8: Block on a stranger's message, the 7726 text, the one-screener note.
-        XCTAssertEqual(BlockedCallerRules.shared.reportText(number: "+441904618691"), "Call 01904618691")
-        XCTAssertTrue(BlockedCallerRules.shared.macReportHint(number: "01904618691").contains("7726"))
-        XCTAssertFalse(BlockedCallersView.companion.EMPTY.has(number: "01904 618691"))
+        XCTAssertEqual(BlockedCallerRules.shared.reportText(number: "+441632960691"), "Call 01632960691")
+        XCTAssertTrue(BlockedCallerRules.shared.macReportHint(number: "01632960691").contains("7726"))
+        XCTAssertFalse(BlockedCallersView.companion.EMPTY.has(number: "01632 960691"))
         XCTAssertEqual(CallScreeningRules.shared.ONE_SCREENER_LINES.count, 3)
+    }
+
+    func testSpamProtectionIsAlwaysOnAndReachesSwift() {
+        // Spam calls still ring, slice 1: the shared copy, and an official claim's heads-up.
+        XCTAssertTrue(SpamProtectionRules.shared.HINT.hasPrefix("Spam protection is always on."))
+        XCTAssertEqual(OfficialCallerRules.shared.claim(networkName: "Bedfordshire Police"), OfficialClaim.police)
+        XCTAssertTrue(OfficialCallerRules.shared.isEmergency(number: "999"))
+        XCTAssertEqual(AutoBlockRules.shared.blockedLine(number: "+441632960123"), "Blocked 01632 960123 · it won't ring again")
     }
 
     func testSuspectedSpamReachesSwift() {

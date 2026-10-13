@@ -25,13 +25,13 @@ data class UnknownCallOffer(
     val key: String,
     /** The number as it called, for Block and the 7726 text. */
     val number: String,
-    /** "Unknown caller · 01904 618691" */
+    /** "Unknown caller · 01632 960691" */
     val title: String,
     /** "Missed call at 14:05 · Block it?" */
     val line: String,
     /** Saved with the number on the block list: "Missed call · Fri 9 Oct". */
     val why: String,
-    /** "Call 01904618691", for Report to 7726. */
+    /** "Call 01632960691", for Report to 7726. */
     val reportText: String,
 )
 
@@ -94,6 +94,11 @@ object UnknownCallRules {
         blocked: Set<String>,
         offered: List<ScreenedCall>,
         cal: LocalCalendar,
+        /**
+         * Spam calls still ring, slice 1: the caller's network name claimed an official body, so it rang instead of
+         * being blocked; the line says how to check instead of "Block it?" (Block stays on the notification).
+         */
+        claim: OfficialClaim? = null,
     ): UnknownCallOffer? {
         val key = BlockedCallerRules.keyOf(number) ?: return null
         if (key in blocked) return null
@@ -107,7 +112,7 @@ object UnknownCallRules {
             CallOutcome.ANSWERED -> "Call ${day}at $at · ${length(durationS)}"
             CallOutcome.TO_ASSISTANT -> "Sent to your assistant ${day}at $at · the network couldn't verify the number"
             CallOutcome.UNKNOWN -> "Called ${day}at $at"
-        } + " · Block it?"
+        } + (claim?.let { " · " + OfficialCallerRules.headsUp(it) } ?: " · Block it?")
         val what = when (outcome) {
             CallOutcome.MISSED -> "Missed call"
             CallOutcome.DECLINED -> "Declined call"

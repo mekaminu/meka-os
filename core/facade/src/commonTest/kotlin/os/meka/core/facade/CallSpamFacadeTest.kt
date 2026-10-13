@@ -31,23 +31,22 @@ class CallSpamFacadeTest {
     private val lists = PeopleLists(family = setOf("Jeanette")).withNumber("Jeanette", "+447700900111")
 
     @Test
-    fun theSeededScamNumberIsBlockedAndLoggedOnce() = runTest {
+    fun aBlockedNumberIsRejectedAndLoggedOnce() = runTest {
         val c = core()
-        assertTrue(c.seedBlockList())
-        assertFalse(c.seedBlockList())
-        assertEquals(listOf("01904 618691"), c.blockedCallers.value.rows.map { it.number })
+        assertTrue(c.blockCaller("01632 960691", "Scam call claiming to be the police"))
+        assertEquals(listOf("01632 960691"), c.blockedCallers.value.rows.map { it.number })
 
-        val d = c.screenIncomingCall("+441904618691", lists, emptyList(), CallSignals.NONE)
+        val d = c.screenIncomingCall("+441632960691", lists, emptyList(), CallSignals.NONE)
         assertEquals(CallVerdict.BLOCK, d.verdict)
-        c.screenIncomingCall("+441904618691", lists, emptyList(), CallSignals.NONE)
+        c.screenIncomingCall("+441632960691", lists, emptyList(), CallSignals.NONE)
         val rows = c.activityView.value.days.flatMap { it.rows }.filter { it.kind == ActivityKind.SCREENED }
-        assertEquals(listOf("Blocked a call from 01904 618691"), rows.map { it.summary })
+        assertEquals(listOf("Blocked a call from 01632 960691"), rows.map { it.summary })
         assertEquals("Why: It is on your block list", rows.single().why)
         assertFalse(rows.single().canUndo)
 
         // Unblocked, it rings like anyone else (the assistant is off).
         assertTrue(c.unblockCaller(c.blockedCallers.value.rows.single().key))
-        assertEquals(CallReason.SWITCHED_OFF, c.screenIncomingCall("01904 618691", lists, emptyList(), CallSignals.NONE).reason)
+        assertEquals(CallReason.SWITCHED_OFF, c.screenIncomingCall("01632 960691", lists, emptyList(), CallSignals.NONE).reason)
         assertEquals(0, c.blockedCallers.value.rows.size)
     }
 
@@ -57,7 +56,7 @@ class CallSpamFacadeTest {
         c.setCallAssistant(true)
         assertTrue(c.blockCaller("07700 900555", "Kept ringing"))
         assertFalse(c.blockCaller("abc", null))
-        assertEquals(CallReason.LIKELY_SPAM, c.screenIncomingCall("01632 960000", lists, emptyList(), CallSignals(verificationFailed = true)).reason)
+        assertEquals(CallReason.AUTO_BLOCKED, c.screenIncomingCall("01632 960000", lists, emptyList(), CallSignals(verificationFailed = true)).reason)
         // Jeanette is family: never treated as spam.
         assertTrue(c.screenIncomingCall("07700900111", lists, emptyList(), CallSignals(verificationFailed = true)).rings)
         // A withheld number rings by day (a Saturday, off work)…
@@ -66,22 +65,23 @@ class CallSpamFacadeTest {
         now += 13 * 3_600_000L
         assertEquals(CallReason.WITHHELD_QUIET, c.screenIncomingCall(null, lists, emptyList(), CallSignals.NONE).reason)
         assertEquals(CallVerdict.BLOCK, c.screenIncomingCall("+447700900555", lists, emptyList(), CallSignals.NONE).verdict)
-        assertTrue(c.activityView.value.weekLine.contains("3 calls stopped"), c.activityView.value.weekLine)
+        // The auto-block is a change (with Undo), the other two are calls stopped.
+        assertTrue(c.activityView.value.weekLine.contains("2 calls stopped"), c.activityView.value.weekLine)
     }
 
     @Test
     fun blockOnAHeldMessageFromAStrangerPutsItsNumberOnTheList() = runTest {
         val c = core()
         val stranger = os.meka.core.domain.CapturedItem("v1", os.meka.core.domain.CaptureApp.PHONE, os.meka.core.domain.CaptureKind.VOICE_MESSAGE,
-            "+441904618691", "This is the police", null, now - 60_000)
+            "+441632960691", "This is the police", null, now - 60_000)
         val jeanette = stranger.copy(id = "v2", personName = "+447700900111")
         val summary = os.meka.core.domain.AfterWorkSummaries.build(listOf(stranger, jeanette), lists)
         val known = summary.people.single { it.personName == "Jeanette" }
         assertFalse(c.blockHeldCaller(known))
-        val p = summary.people.single { it.personName == "01904 618691" }
+        val p = summary.people.single { it.personName == "01632 960691" }
         assertTrue(c.blockHeldCaller(p))
         val row = c.blockedCallers.value.rows.single()
-        assertEquals("01904 618691", row.number)
+        assertEquals("01632 960691", row.number)
         assertEquals("Blocked today · Left a message · today", row.line)
         assertTrue(c.blockedCallers.value.has(p.blockNumber))
     }
@@ -111,22 +111,80 @@ class CallSpamFacadeTest {
                 ops.append(os.meka.core.sync.Op("s${seq++}", "hh", os.meka.core.domain.EntityTypes.BLOCKED_CALLER, key, f, v, os.meka.core.sync.Hlc(now, seq, "server"), emptyList(), "server"))
             }
         }
-        flag("+441904618691")
+        flag("+441632960691")
         flag("+447700900555")
         c.syncNow()
         val suspects = c.blockedCallers.value.suspects
-        assertEquals(listOf("01904 618691", "07700 900555"), suspects.map { it.number }.sorted())
+        assertEquals(listOf("01632 960691", "07700 900555"), suspects.map { it.number }.sorted())
 
-        val d = c.screenIncomingCall("01904 618691", lists, emptyList(), CallSignals.NONE)
+        val d = c.screenIncomingCall("01632 960691", lists, emptyList(), CallSignals.NONE)
         assertEquals(CallReason.SUSPECTED_SPAM, d.reason)
         assertEquals(CallVerdict.DECLINE, d.verdict)
         assertTrue(c.screenIncomingCall("07700 900555", lists, emptyList(), CallSignals(knownContact = true)).rings)
 
-        assertTrue(c.confirmSuspectedCaller(suspects.first { it.number == "01904 618691" }.key))
-        assertEquals(listOf("01904 618691"), c.blockedCallers.value.rows.map { it.number })
-        assertEquals(CallVerdict.BLOCK, c.screenIncomingCall("01904 618691", lists, emptyList(), CallSignals.NONE).verdict)
+        assertTrue(c.confirmSuspectedCaller(suspects.first { it.number == "01632 960691" }.key))
+        assertEquals(listOf("01632 960691"), c.blockedCallers.value.rows.map { it.number })
+        assertEquals(CallVerdict.BLOCK, c.screenIncomingCall("01632 960691", lists, emptyList(), CallSignals.NONE).verdict)
         assertTrue(c.dismissSuspectedCaller(suspects.first { it.number == "07700 900555" }.key))
         assertTrue(c.blockedCallers.value.suspects.isEmpty())
         assertFalse(c.screenIncomingCall("07700 900555", lists, emptyList(), CallSignals.NONE).verdict == CallVerdict.BLOCK)
+    }
+
+    @Test
+    fun aNumberThatFailedTheNetworkCheckIsAutoBlockedWithUndoEvenWithTheAssistantOff() = runTest {
+        val c = core()
+        val d = c.screenIncomingCall("01632 960123", lists, emptyList(), CallSignals(verificationFailed = true))
+        assertEquals(CallVerdict.BLOCK, d.verdict)
+        assertEquals(CallReason.AUTO_BLOCKED, d.reason)
+        val row = c.blockedCallers.value.rows.single()
+        assertEquals("01632 960123", row.number)
+        assertEquals("Blocked today · Auto-blocked · failed the network's caller check · Sat 10 Oct", row.line)
+        val entry = c.activityView.value.days.flatMap { it.rows }.single { it.kind == ActivityKind.CHANGED }
+        assertEquals("Blocked 01632 960123 · it won't ring again", entry.summary)
+        assertEquals(entry.id, d.autoBlockId)
+        assertTrue(entry.canUndo)
+        // Its next call is blocked as on the list; Undo takes it off and it rings again.
+        assertEquals(CallReason.BLOCKED, c.screenIncomingCall("01632 960123", lists, emptyList(), CallSignals.NONE).reason)
+        c.undoActivity(entry.id)
+        assertEquals(0, c.blockedCallers.value.rows.size)
+        assertEquals(CallReason.SWITCHED_OFF, c.screenIncomingCall("01632 960123", lists, emptyList(), CallSignals.NONE).reason)
+    }
+
+    @Test
+    fun spamProtectionOffInAdvancedLetsAFailedCheckRingAndBlocksNothingByItself() = runTest {
+        val c = core()
+        assertTrue(c.workMode.value.spamProtection)
+        assertTrue(c.setSpamProtection(false))
+        assertFalse(c.setSpamProtection(false))
+        assertFalse(c.workMode.value.spamProtection)
+        assertTrue(c.screenIncomingCall("01632 960123", lists, emptyList(), CallSignals(verificationFailed = true)).rings)
+        assertEquals(null, c.autoBlockRepeatCaller("01632 960124", 3, now))
+        assertEquals(0, c.blockedCallers.value.rows.size)
+    }
+
+    @Test
+    fun anUnknownNumberCallingTwiceInAWeekWithoutAMessageIsBlockedAfterTheCall() = runTest {
+        val c = core()
+        // Once: not yet.
+        assertEquals(null, c.autoBlockRepeatCaller("01632 960200", 1, now))
+        // Twice in 7 days with no message: blocked, with Undo.
+        val id = c.autoBlockRepeatCaller("01632 960200", 2, now)!!
+        assertEquals("Blocked today · Auto-blocked · called again within a week without leaving a message · Sat 10 Oct",
+            c.blockedCallers.value.rows.single().line)
+        val entry = c.activityView.value.days.flatMap { it.rows }.single { it.id == id }
+        assertEquals("Called 2 times in 7 days and never left a message", entry.detail)
+        // Already blocked: nothing more.
+        assertEquals(null, c.autoBlockRepeatCaller("01632 960200", 3, now))
+
+        // A number that left a voice message this week isn't blocked for calling again.
+        val left = os.meka.core.domain.CapturedItem("v9", os.meka.core.domain.CaptureApp.PHONE, os.meka.core.domain.CaptureKind.VOICE_MESSAGE,
+            "+441632960300", "Hi, it's the garage about your car", null, now - 3_600_000L)
+        c.holdCaptured(listOf(left), lists)
+        assertEquals(null, c.autoBlockRepeatCaller("01632 960300", 2, now))
+
+        // The household profile's numbers never are.
+        c.setAboutYou(os.meka.core.domain.AboutField.PARTNER_PHONE, "01632 960400")
+        assertEquals(null, c.autoBlockRepeatCaller("01632 960400", 4, now))
+        assertTrue(c.screenIncomingCall("01632 960400", lists, emptyList(), CallSignals(verificationFailed = true)).rings)
     }
 }

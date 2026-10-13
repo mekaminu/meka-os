@@ -12,29 +12,29 @@ import kotlin.test.assertTrue
 class SuspectedSpamTest {
     private val t = 1_791_360_000_000L
     private val lists = PeopleLists(family = setOf("Jeanette")).withNumber("Jeanette", "+447700900111")
-    private val scamKey = BlockedCallerRules.keyOf("+441904618691")!!
+    private val scamKey = BlockedCallerRules.keyOf("+441632960691")!!
 
     private fun decide(number: String?, on: Boolean = true, atWork: Boolean = false, signals: CallSignals = CallSignals.NONE, recent: List<ScreenedCall> = emptyList()) =
         CallScreeningRules.decide(on, atWork, number, lists, recent, t, emptySet(), signals, suspected = setOf(scamKey, CallScreeningRules.callerKey("07700900111"), CallScreeningRules.callerKey("07700900333")))
 
     @Test
     fun aSuspectGoesToTheAssistantAnyTimeWhileItIsOnButNeverFamilyContactsOrPeopleMekaCalled() {
-        val d = decide("01904 618691")
+        val d = decide("01632 960691")
         assertEquals(CallVerdict.DECLINE, d.verdict)
         assertEquals(CallReason.SUSPECTED_SPAM, d.reason)
-        assertEquals(CallReason.SUSPECTED_SPAM, decide("01904618691", atWork = true).reason)
+        assertEquals(CallReason.SUSPECTED_SPAM, decide("01632960691", atWork = true).reason)
         // A redial within 3 minutes still goes to the assistant.
-        assertEquals(CallReason.SUSPECTED_SPAM, decide("01904 618691", recent = CallScreeningRules.remember(emptyList(), d, t - 60_000)).reason)
+        assertEquals(CallReason.SUSPECTED_SPAM, decide("01632 960691", recent = CallScreeningRules.remember(emptyList(), d, t - 60_000)).reason)
         // Assistant off: it rings (the AI never blocks anything).
-        assertTrue(decide("01904 618691", on = false).rings)
+        assertTrue(decide("01632 960691", on = false).rings)
         assertEquals(CallReason.OFF_WORK, decide("07700 900111").reason)
         assertTrue(decide("07700900333", signals = CallSignals(knownContact = true)).rings)
         assertTrue(decide("07700900333", signals = CallSignals(calledRecently = true)).rings)
         // Its Activity line, and the phone still offers "Unknown caller · Block?" afterwards.
-        val (summary, why) = CallScreeningRules.activityLine(d, "+441904618691")!!
-        assertEquals("Sent a call from 01904 618691 to the assistant", summary)
+        val (summary, why) = CallScreeningRules.activityLine(d, "+441632960691")!!
+        assertEquals("Sent a call from 01632 960691 to the assistant", summary)
         assertTrue(why.startsWith("It is on Suspected spam"))
-        assertTrue(UnknownCallRules.watch(d, "+441904618691", CallSignals.NONE))
+        assertTrue(UnknownCallRules.watch(d, "+441632960691", CallSignals.NONE))
     }
 
     @Test
@@ -59,8 +59,8 @@ class SuspectedSpamTest {
         assertEquals(SuspectedSpamRules.MAX_WHY, SuspectedSpamRules.cleanWhy("x".repeat(200))!!.length)
         assertEquals("Suspected scam · Claims to be HMRC", SuspectedSpamRules.blockWhy("Claims to be HMRC"))
         assertEquals("Suspected scam", SuspectedSpamRules.blockWhy(null))
-        val a = SuspectedSpamRules.activity("+441904618691", "Claims to be the police", t)
-        assertEquals(FieldValue.Text("Added 01904 618691 to Suspected spam"), a[ActivityFields.SUMMARY])
+        val a = SuspectedSpamRules.activity("+441632960691", "Claims to be the police", t)
+        assertEquals(FieldValue.Text("Added 01632 960691 to Suspected spam"), a[ActivityFields.SUMMARY])
         assertEquals(FieldValue.Text("Claims to be the police"), a[ActivityFields.DETAIL])
         assertEquals(FieldValue.Text(ActivityKind.CALL.name), a[ActivityFields.KIND])
         assertEquals(SuspectedSpamRules.activityId("h1"), SuspectedSpamRules.activityId("h1"))
@@ -77,7 +77,7 @@ class SuspectedSpamTest {
         val onMac = BlockedCallers(mac.replica, { world.clock.nowMs })
 
         // The server flags two numbers (as CallAssistant writes them).
-        server.replica.commitLocal(EntityTypes.BLOCKED_CALLER, scamKey, SuspectedSpamRules.flagFields("+441904618691", "Claims to be the police", world.clock.nowMs))
+        server.replica.commitLocal(EntityTypes.BLOCKED_CALLER, scamKey, SuspectedSpamRules.flagFields("+441632960691", "Claims to be the police", world.clock.nowMs))
         val other = BlockedCallerRules.keyOf("+447700900555")!!
         server.replica.commitLocal(EntityTypes.BLOCKED_CALLER, other, SuspectedSpamRules.flagFields("+447700900555", null, world.clock.nowMs))
         server.sync(); fold.sync(); mac.sync()
@@ -93,7 +93,7 @@ class SuspectedSpamTest {
         assertTrue(onFold.confirmSuspect(scamKey))
         assertFalse(onFold.confirmSuspect(scamKey))
         fold.sync(); mac.sync()
-        assertEquals(listOf("01904 618691"), onMac.view().rows.map { it.number })
+        assertEquals(listOf("01632 960691"), onMac.view().rows.map { it.number })
         assertTrue(onMac.view().rows.single().line.endsWith("Suspected scam · Claims to be the police"))
         assertEquals(setOf(other), onMac.view().suspectedKeys)
 

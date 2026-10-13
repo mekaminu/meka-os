@@ -1226,6 +1226,8 @@ final class CoreModel {
     func workBackToSchedule() { run { try await $0.workBackToSchedule() } }
     /// The call assistant's one switch (synced; the Fold does the screening during work).
     func setCallAssistant(_ on: Bool) { MekaHaptics.tick(); run { try await $0.setCallAssistant(on: on) } }
+    /// Spam protection's switch (spam calls still ring, slice 1): always on unless turned off in Advanced. Synced.
+    func setSpamProtection(_ on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setSpamProtection(on: on) } }
     /// "Keep callers' recordings" (call assistant polish 8c): 7 or 30 days, or 0 for don't keep. Synced; the server
     /// deletes older recordings at once. Only an Int32 crosses to the core.
     func setRecordingDays(_ days: Int) {

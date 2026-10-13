@@ -19,6 +19,8 @@ struct WorkSheet: View {
     @State private var commuteDay: Int64?
     @State private var blockNumber = ""
     @State private var blockRefused = false
+    @State private var spamAdvancedOpen = false
+    @State private var spamConfirming = false
     @State private var leavingTo = ""
 
     private static let dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -272,7 +274,10 @@ struct WorkSheet: View {
             Text(view?.line ?? BlockedCallerRules.shared.EMPTY_LINE)
                 .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 .contentTransition(.opacity)
-            Text("Blocked numbers never ring on the Fold, any time of day. With the call assistant on, numbers the network can't verify and withheld numbers in quiet hours go to the assistant. Family, always-notify, contacts and anyone you called in the last 90 days always get through.")
+            Text(SpamProtectionRules.shared.HINT)
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(SpamProtectionRules.shared.SYSTEM_LIST_LINE)
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             // Suspected spam (8b c): numbers MEKA's AI flagged from their message, waiting for Block or Not spam.
@@ -330,10 +335,50 @@ struct WorkSheet: View {
                 Text("That isn't a phone number").font(MekaType.caption).foregroundStyle(palette.critical)
                     .transition(.opacity)
             }
+            spamAdvanced
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.rows.map(\.key) ?? [])
         .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.suspects.map(\.key) ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: blockRefused)
+    }
+
+    /// Spam calls still ring, slice 1: Advanced holds the only switch for spam protection, behind a question.
+    /// Unfolds on the expand spring; the line cross-fades between on and the red warning.
+    private var spamAdvanced: some View {
+        let on = model.work?.spamProtection ?? true
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Button(SpamProtectionRules.shared.ADVANCED + (spamAdvancedOpen ? " ▴" : " ▾")) {
+                MekaHaptics.tick(); spamAdvancedOpen.toggle(); spamConfirming = false
+            }
+            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            if spamAdvancedOpen || !on {
+                Text(SpamProtectionRules.shared.SWITCH_LABEL + " · " + (on ? SpamProtectionRules.shared.ON_LINE : SpamProtectionRules.shared.OFF_WARNING))
+                    .font(MekaType.caption).foregroundStyle(on ? palette.textSecondary : palette.critical)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                if !on {
+                    Button("Turn spam protection on") { model.setSpamProtection(true) }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                } else if spamConfirming {
+                    Text(SpamProtectionRules.shared.OFF_CONFIRM)
+                        .font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: MekaSpace.m) {
+                        Button("Keep it on") { spamConfirming = false }
+                            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                        Button("Turn off") { spamConfirming = false; model.setSpamProtection(false) }
+                            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.critical)
+                    }
+                } else {
+                    Button("Turn spam protection off…") { spamConfirming = true }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+            }
+        }
+        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: spamAdvancedOpen)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: spamConfirming)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
     }
 
     private func block() {

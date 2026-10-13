@@ -644,7 +644,7 @@ private fun BlockAndReport(number: String, isBlocked: Boolean, haptics: MekaHapt
     }
 }
 
-/** Opens Messages with "Call 01904618691" to 7726; Meka presses send. Nothing is sent by MEKA. */
+/** Opens Messages with "Call 01632960691" to 7726; Meka presses send. Nothing is sent by MEKA. */
 internal fun reportScamCall(context: Context, number: String) {
     val text = BlockedCallerRules.reportText(number) ?: return
     val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + BlockedCallerRules.REPORT_TO))

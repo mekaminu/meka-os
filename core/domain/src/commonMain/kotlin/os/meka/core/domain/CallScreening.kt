@@ -32,6 +32,18 @@ enum class CallReason(val label: String) {
     SUSPECTED_SPAM("On Suspected spam"),
     /** The assistant would have taken it, but its credit ran out ([CallCreditRules]): it rings instead. */
     PAUSED("Call assistant paused · Twilio credit"),
+    /**
+     * Spam calls still ring, slice 1: the network couldn't verify the number, so spam protection rejected it before it
+     * rang and put it on the block list (with Undo in Activity). Added 2026-10-13.
+     */
+    AUTO_BLOCKED("Failed the network's caller check · blocked"),
+    /**
+     * The caller's network name claims an official body (police, bank, NHS, school, HMRC): never auto-blocked, it
+     * rings, and a heads-up afterwards says how to check ([OfficialCallerRules]). Added 2026-10-13.
+     */
+    OFFICIAL_CLAIM("Claims to be an official body"),
+    /** An emergency or NHS number (999, 112, 101, 111…): never screened. Added 2026-10-13. */
+    EMERGENCY("Emergency service"),
 }
 
 /**
@@ -47,11 +59,25 @@ data class CallSignals(
     val calledRecently: Boolean = false,
     /** Notification quiet hours are on now. */
     val quietHours: Boolean = false,
+    /**
+     * The name the network sent with the call (Android's `callerDisplayName`, CNAP), read on the phone only; null when
+     * none. Used only to spot a caller claiming to be the police, a bank, the NHS or a school ([OfficialCallerRules]).
+     */
+    val networkName: String? = null,
+    /** The number is in the household profile (About you: partner, the assistant, voicemail): never screened as spam. */
+    val household: Boolean = false,
 ) {
     companion object { val NONE = CallSignals() }
 }
 
-data class CallDecision(val verdict: CallVerdict, val reason: CallReason, val callerKey: String, val listedName: String? = null) {
+data class CallDecision(
+    val verdict: CallVerdict,
+    val reason: CallReason,
+    val callerKey: String,
+    val listedName: String? = null,
+    /** Set by the facade when this call put the number on the block list ([CallReason.AUTO_BLOCKED]): Activity's entry, for Undo. */
+    val autoBlockId: String? = null,
+) {
     val rings: Boolean get() = verdict == CallVerdict.RING
 }
 
@@ -117,8 +143,14 @@ object CallScreeningRules {
          * still rejects silently.
          */
         paused: Boolean = false,
+        /**
+         * Spam protection ([WorkModeState.spamProtection]; on unless turned off in Advanced): a number that failed the
+         * network's caller check is blocked before it rings, whatever the call assistant's switch says. Off: as before
+         * slice 1 (to the assistant with the switch on, else it rings).
+         */
+        spamProtection: Boolean = true,
     ): CallDecision {
-        val d = decideUnpaused(switchedOn, atWork, number, lists, recent, nowMs, blocked, signals, suspected)
+        val d = decideUnpaused(switchedOn, atWork, number, lists, recent, nowMs, blocked, signals, suspected, spamProtection)
         return if (paused && d.verdict == CallVerdict.DECLINE) CallDecision(CallVerdict.RING, CallReason.PAUSED, d.callerKey, d.listedName) else d
     }
 
@@ -132,13 +164,19 @@ object CallScreeningRules {
         blocked: Set<String>,
         signals: CallSignals,
         suspected: Set<String>,
+        spamProtection: Boolean,
     ): CallDecision {
         val key = callerKey(number)
         val listed = number?.let { lists.nameForNumber(it) }
-        val trusted = listed != null || signals.knownContact || signals.calledRecently
+        val trusted = listed != null || signals.knownContact || signals.calledRecently || signals.household
         val repeat = recent.any { it.callerKey == key && nowMs - it.atMs in 0..REPEAT_WINDOW_MS }
+        val official = OfficialCallerRules.claim(signals.networkName) != null
         return when {
+            OfficialCallerRules.isEmergency(number) -> CallDecision(CallVerdict.RING, CallReason.EMERGENCY, key, listed)
             !trusted && key != WITHHELD && key in blocked -> CallDecision(CallVerdict.BLOCK, CallReason.BLOCKED, key)
+            !trusted && key != WITHHELD && official -> CallDecision(CallVerdict.RING, CallReason.OFFICIAL_CLAIM, key)
+            spamProtection && !trusted && key != WITHHELD && signals.verificationFailed ->
+                CallDecision(CallVerdict.BLOCK, CallReason.AUTO_BLOCKED, key)
             !switchedOn -> CallDecision(CallVerdict.RING, CallReason.SWITCHED_OFF, key, listed)
             !trusted && key != WITHHELD && signals.verificationFailed -> CallDecision(CallVerdict.DECLINE, CallReason.LIKELY_SPAM, key)
             !trusted && key != WITHHELD && key in suspected -> CallDecision(CallVerdict.DECLINE, CallReason.SUSPECTED_SPAM, key)
@@ -188,6 +226,8 @@ object CallScreeningRules {
         val who = if (decision.callerKey == WITHHELD) "Withheld number" else BlockedCallerRules.display(number.orEmpty())
         return when (decision.reason) {
             CallReason.BLOCKED -> "Blocked a call from $who" to "It is on your block list"
+            // Auto-blocked calls are logged by the facade as an action with Undo ([AutoBlockRules.activity]).
+            CallReason.AUTO_BLOCKED -> null
             CallReason.LIKELY_SPAM -> "Sent a likely spam call from $who to the assistant" to "The network couldn't verify the caller's number"
             CallReason.SUSPECTED_SPAM -> "Sent a call from $who to the assistant" to "It is on Suspected spam: Navilife's AI thought their last message sounded like a scam"
             CallReason.WITHHELD_QUIET -> "Sent a withheld call to the assistant" to "Withheld numbers don't ring in quiet hours (a second call within 3 minutes does)"

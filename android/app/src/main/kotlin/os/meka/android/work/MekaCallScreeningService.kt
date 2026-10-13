@@ -34,9 +34,11 @@ import os.meka.core.domain.UnknownCallRules
  * log and as a missed call, so it lands in the after-work summary. Anything unexpected (MEKA not ready, slow, an
  * outgoing call) lets the call ring: screening must never lose a call.
  *
- * Spam protection (call assistant polish 8b) runs on every call, any time: a number on the synced block list is
- * rejected silently, and with the switch on a number that failed the network's caller check, or a withheld number in
- * quiet hours, goes to the assistant. Contacts and anyone Meka called in the last 90 days are never stopped; the phone
+ * Spam protection (call assistant polish 8b; always on since "spam calls still ring", slice 1) runs on every call, any
+ * time, whatever the assistant's switch says: a number on the synced block list is rejected silently, a number that
+ * failed the network's caller check is blocked and put on the list (Undo in Activity), and with the switch on a
+ * withheld number in quiet hours goes to the assistant. Emergency numbers, the household's and callers whose network
+ * name claims an official body ring. Contacts and anyone Meka called in the last 90 days are never stopped; the phone
  * reads both itself (only with the contacts and call-log permissions Meka granted in Work mode) and sends neither.
  * After a call from a number nobody knows (rung, or sent to the assistant as likely spam), [UnknownCallNotice] posts a
  * quiet "Unknown caller · Block?" once the call is over (8b b).
@@ -53,12 +55,14 @@ class MekaCallScreeningService : CallScreeningService() {
                     val ctx = this@MekaCallScreeningService
                     val number = details.handle?.schemeSpecificPart
                     val now = System.currentTimeMillis()
-                    BlockSeed.once(ctx) { meka.core.seedBlockList() }
                     val recent = RecentDeclines.load(ctx)
                     val signals = CallSignals(
                         verificationFailed = details.callerNumberVerificationStatus == android.telecom.Connection.VERIFICATION_STATUS_FAILED,
                         knownContact = CallerLookup.isContact(ctx, number),
                         calledRecently = CallerLookup.calledRecently(ctx, number, now),
+                        // The name the network sent (CNAP), read here only: a claimed police/bank/NHS/school rings
+                        // and gets a heads-up afterwards instead of being auto-blocked (spam calls still ring, slice 1).
+                        networkName = runCatching { details.callerDisplayName }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() },
                     )
                     val d = meka.core.screenIncomingCall(number, meka.captures.lists.value, recent, signals)
                     RecentDeclines.save(ctx, CallScreeningRules.remember(recent, d, now))
@@ -70,8 +74,13 @@ class MekaCallScreeningService : CallScreeningService() {
                 CallVerdict.BLOCK -> block(details)
                 else -> allow(details)
             }
-            // Android has its answer; now, unhurried: a caller nobody knows gets "Unknown caller · Block?" afterwards.
-            decision?.let { s -> runCatching { watchUnknown(s) } }
+            // Android has its answer; now, unhurried: a caller nobody knows gets "Unknown caller · Block?" afterwards,
+            // and an auto-blocked one the quiet "Blocked … · it won't ring again" with Undo (spam calls still ring, slice 1).
+            decision?.let { s ->
+                val autoId = s.decision.autoBlockId
+                if (autoId != null && s.number != null) runCatching { UnknownCallNotice.postAutoBlockedNetwork(this@MekaCallScreeningService, s.number, autoId) }
+                else runCatching { watchUnknown(s) }
+            }
         }
     }
 
@@ -82,7 +91,9 @@ class MekaCallScreeningService : CallScreeningService() {
         val key = People.key(number)
         val own = CallerLookup.ownNumbers(this).any { People.key(it) == key }
         if (!UnknownCallRules.watch(s.decision, number, s.signals, own)) return
-        UnknownCallNotice.schedule(this, number, s.atMs, toAssistant = s.decision.verdict == CallVerdict.DECLINE)
+        UnknownCallNotice.schedule(
+            this, number, s.atMs, toAssistant = s.decision.verdict == CallVerdict.DECLINE, networkName = s.signals.networkName,
+        )
     }
 
     override fun onDestroy() {
@@ -141,19 +152,6 @@ private object RecentDeclines {
 
     fun save(context: Context, recent: List<os.meka.core.domain.ScreenedCall>) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, CallScreeningRules.encode(recent)).apply()
-    }
-}
-
-/** The 9 Oct scam number goes on the block list once per install (never again once Meka unblocks it anywhere). */
-private object BlockSeed {
-    private const val PREFS = "call_screening"
-    private const val KEY = "blockSeeded"
-
-    suspend fun once(context: Context, seed: suspend () -> Unit) {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (prefs.getBoolean(KEY, false)) return
-        seed()
-        prefs.edit().putBoolean(KEY, true).apply()
     }
 }
 

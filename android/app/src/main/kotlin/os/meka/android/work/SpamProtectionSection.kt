@@ -58,6 +58,7 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.BlockedCallerRules
 import os.meka.core.domain.CallScreeningRules
+import os.meka.core.domain.SpamProtectionRules
 import os.meka.core.domain.SuspectedSpamRules
 import os.meka.core.facade.MekaCore
 
@@ -75,6 +76,7 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
     val reduced = Meka.reducedMotion
     val scope = rememberCoroutineScope()
     val blocked by core.blockedCallers.collectAsState()
+    val work by core.workMode.collectAsState()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var recognising by remember { mutableStateOf(CallerLookup.allowed(context)) }
     LaunchedEffect(Unit) {
@@ -100,12 +102,8 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
         Crossfade(blocked.line, animationSpec = MekaMotion.appear(reduced), label = "blocked-line") { line ->
             Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
-        Text(
-            "Blocked numbers never ring, any time of day. With the call assistant on, numbers your network can't verify " +
-                "(often spoofed) and withheld numbers in quiet hours go to the assistant instead. Family, your " +
-                "always-notify list, contacts and anyone you called in the last 90 days always get through.",
-            style = MekaType.caption, color = Meka.colors.textTertiary,
-        )
+        Text(SpamProtectionRules.HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(SpamProtectionRules.SYSTEM_LIST_LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
         // Suspected spam (8b c): numbers MEKA's AI flagged from their message, waiting for Block or Not spam.
         AnimatedVisibility(blocked.suspects.isNotEmpty(), enter = enter, exit = exit) {
             Text(SuspectedSpamRules.TITLE, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs))
@@ -187,6 +185,43 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
                 haptics.tick()
                 runCatching { context.startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             }.padding(vertical = MekaSpace.xxs))
+        // Spam calls still ring, slice 1: spam protection is always on; only Advanced turns it off, after a question.
+        var advanced by rememberSaveable { mutableStateOf(!work.spamProtection) }
+        var confirming by remember { mutableStateOf(false) }
+        Text(SpamProtectionRules.ADVANCED + if (advanced) " ▴" else " ▾", style = MekaType.caption, color = Meka.colors.textSecondary,
+            modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); advanced = !advanced; confirming = false }.padding(vertical = MekaSpace.xxs))
+        AnimatedVisibility(advanced, enter = enter, exit = exit) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Crossfade(work.spamProtection, animationSpec = MekaMotion.appear(reduced), label = "spam-protection") { on ->
+                    Text(
+                        SpamProtectionRules.SWITCH_LABEL + " · " + if (on) SpamProtectionRules.ON_LINE else SpamProtectionRules.OFF_WARNING,
+                        style = MekaType.caption, color = if (on) Meka.colors.textSecondary else Meka.colors.critical,
+                    )
+                }
+                Crossfade(confirming to work.spamProtection, animationSpec = MekaMotion.appear(reduced), label = "spam-confirm") { (asking, on) ->
+                    when {
+                        !on -> Text("Turn spam protection on", style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.clickable(role = Role.Button) {
+                                haptics.light(); scope.launch { core.setSpamProtection(true) }
+                            }.padding(vertical = MekaSpace.xxs))
+                        asking -> Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                            Text(SpamProtectionRules.OFF_CONFIRM, style = MekaType.caption, color = Meka.colors.textSecondary)
+                            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+                                Text("Keep it on", style = MekaType.caption, color = Meka.colors.accent,
+                                    modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); confirming = false }.padding(vertical = MekaSpace.xxs))
+                                Text("Turn off", style = MekaType.caption, color = Meka.colors.critical,
+                                    modifier = Modifier.clickable(role = Role.Button) {
+                                        haptics.tick(); confirming = false
+                                        scope.launch { core.setSpamProtection(false) }
+                                    }.padding(vertical = MekaSpace.xxs))
+                            }
+                        }
+                        else -> Text("Turn spam protection off…", style = MekaType.caption, color = Meka.colors.textTertiary,
+                            modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); confirming = true }.padding(vertical = MekaSpace.xxs))
+                    }
+                }
+            }
+        }
         AnimatedVisibility(!recognising, enter = enter, exit = exit) {
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Text("Recognise callers · let Navilife check your contacts and recent calls, name who left a message, and say how an unknown call ended", style = MekaType.itemMeta, color = Meka.colors.accent,

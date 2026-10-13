@@ -3091,8 +3091,45 @@ class MekaCore(
     /** Not spam on a Suspected spam row: its calls are screened as before and MEKA never flags the number again. */
     suspend fun dismissSuspectedCaller(key: String): Boolean = onCore { blockList.dismissSuspect(key).also { refresh() } }
 
-    /** The Fold, the first time it screens calls: puts the 9 Oct scam number on the list unless it was ever there. */
-    suspend fun seedBlockList(): Boolean = onCore { blockList.seed().also { if (it) refresh() } }
+    /**
+     * Spam protection's switch (spam calls still ring, slice 1): on unless Meka turns it off in Work mode → Spam
+     * protection → Advanced. Synced. Returns false when nothing changed.
+     */
+    suspend fun setSpamProtection(on: Boolean): Boolean = onCore { work.setSpamProtection(on).also { refresh() } }
+
+    /**
+     * Spam calls still ring, slice 1: the Fold, after a call from an unknown number it watched (not a contact, not
+     * called lately, not household, not claiming to be an official body), says how many incoming calls the number made
+     * in the last [os.meka.core.domain.AutoBlockRules.REPEAT_DAYS] days ([callsInWindow], this one included, from the
+     * phone's own call log). With spam protection on and no voice message left by the number in that time, it goes on
+     * the block list as an automatic action with Undo in Activity. Returns that entry's id, or null when nothing was
+     * blocked.
+     */
+    suspend fun autoBlockRepeatCaller(number: String, callsInWindow: Int, atMs: Long): String? = onCore {
+        val key = os.meka.core.domain.BlockedCallerRules.keyOf(number) ?: return@onCore null
+        if (!work.spamProtection() || key in blockList.view().keys) return@onCore null
+        if (key in os.meka.core.domain.SpamProtectionRules.householdKeys(aboutYou.profile())) return@onCore null
+        val since = nowMs() - os.meka.core.domain.AutoBlockRules.REPEAT_DAYS * 86_400_000L
+        val leftMessage = replica.entities(os.meka.core.domain.EntityTypes.HELD_MESSAGE).any { e ->
+            e[os.meka.core.domain.HeldMessageFields.KIND].textOrNull == os.meka.core.domain.CaptureKind.VOICE_MESSAGE.name &&
+                (e[os.meka.core.domain.HeldMessageFields.AT].longOrNull ?: 0L) >= since &&
+                e[os.meka.core.domain.HeldMessageFields.PERSON].textOrNull?.let { os.meka.core.domain.BlockedCallerRules.keyOf(it) } == key
+        }
+        if (!os.meka.core.domain.AutoBlockRules.repeatCaller(callsInWindow, leftMessage)) return@onCore null
+        autoBlock(number, os.meka.core.domain.AutoBlockTrigger.REPEAT_CALLER, atMs, callsInWindow)
+    }
+
+    /** Blocks [number] as an automatic action (Activity, with Undo); the entry's id, or null when nothing changed. */
+    private fun autoBlock(number: String, trigger: os.meka.core.domain.AutoBlockTrigger, atMs: Long, calls: Int = 0): String? {
+        val why = os.meka.core.domain.AutoBlockRules.why(trigger, atMs, ZoneCalendar(timeZone))
+        val (_, id) = activity.actRecorded(
+            os.meka.core.domain.AutoBlockRules.blockedLine(number), os.meka.core.domain.AutoBlockRules.ACTIVITY_WHY,
+            os.meka.core.domain.AutoBlockRules.SOURCE, level = null, detail = os.meka.core.domain.AutoBlockRules.detail(trigger, calls),
+        ) { blockList.block(number, why) }
+        refresh()
+        activityChanged()
+        return id
+    }
 
     /**
      * "Unknown caller · Block?" (call assistant polish 8b b): the Fold, a minute after a call its screening marked with
@@ -3106,9 +3143,12 @@ class MekaCore(
         durationS: Long,
         atMs: Long,
         offered: List<os.meka.core.domain.ScreenedCall>,
+        /** The name the network sent with the call (read on the phone); a claimed police/bank/NHS/school gets the heads-up. */
+        networkName: String? = null,
     ): os.meka.core.domain.UnknownCallOffer? = onCore {
         os.meka.core.domain.UnknownCallRules.offer(
             number, outcome, durationS, atMs, nowMs(), blockList.view().keys, offered, ZoneCalendar(timeZone),
+            claim = os.meka.core.domain.OfficialCallerRules.claim(networkName),
         )
     }
 
@@ -3127,10 +3167,18 @@ class MekaCore(
         val now = nowMs()
         val quiet = notifyPrefs.settings().quiet.isQuietAt(now, ZoneCalendar(timeZone))
         val list = blockList.view()
-        val decision = os.meka.core.domain.CallScreeningRules.decide(
-            state.callAssistant, state.atWork, number, lists, recent, now, list.keys, signals.copy(quietHours = quiet), list.suspectedKeys,
+        val household = os.meka.core.domain.CallScreeningRules.callerKey(number) in
+            os.meka.core.domain.SpamProtectionRules.householdKeys(aboutYou.profile())
+        val decided = os.meka.core.domain.CallScreeningRules.decide(
+            state.callAssistant, state.atWork, number, lists, recent, now, list.keys,
+            signals.copy(quietHours = quiet, household = signals.household || household), list.suspectedKeys,
             paused = callCredit.current()?.paused == true,
+            spamProtection = state.spamProtection,
         )
+        // Spam calls still ring, slice 1: a number the network couldn't verify goes on the block list (Undo in Activity).
+        val decision = if (decided.reason == os.meka.core.domain.CallReason.AUTO_BLOCKED && number != null) {
+            decided.copy(autoBlockId = autoBlock(number, os.meka.core.domain.AutoBlockTrigger.NETWORK_CHECK, now))
+        } else decided
         os.meka.core.domain.CallScreeningRules.activityLine(decision, number)?.let { (summary, why) ->
             activity.recordScreened(decision.callerKey, now, summary, why)
             activityChanged()
@@ -4084,7 +4132,7 @@ class MekaCore(
             },
             syncFailing = sync is SyncStatus.Failing,
             server = server, accounts = accounts, signIns = signIns.all(), ai = ai,
-            callAssistantOn = _workMode.value.callAssistant, lastVoiceMessageMs = lastVoice, nowMs = nowMs(),
+            callAssistantOn = _workMode.value.callAssistant, spamProtectionOn = _workMode.value.spamProtection, lastVoiceMessageMs = lastVoice, nowMs = nowMs(),
             callCredit = callCredit.current(),
             aboutYou = aboutYou.held(),
         )
