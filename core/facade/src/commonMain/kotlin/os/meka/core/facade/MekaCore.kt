@@ -3006,6 +3006,17 @@ class MekaCore(
      */
     suspend fun setCommute(toWorkMin: Int, homeMin: Int): Boolean = onCore { work.setCommute(toWorkMin, homeMin).also { if (it) refresh() } }
 
+    /**
+     * The commute, slice 6 ("Just one day"): [epochDay]'s own door-to-door times; the usual times put it back. Synced,
+     * so the other app, the wake alarm, Today and the brief follow. Returns whether anything changed.
+     */
+    suspend fun setCommuteDay(epochDay: Long, toWorkMin: Int, homeMin: Int): Boolean =
+        onCore { work.setCommuteDay(epochDay, toWorkMin, homeMin, todayEpochDay()).also { if (it) refresh() } }
+
+    /** [epochDay] back to the usual commute times. */
+    suspend fun clearCommuteDay(epochDay: Long): Boolean =
+        onCore { work.setCommuteDay(epochDay, null, null, todayEpochDay()).also { if (it) refresh() } }
+
     /** [isoDay]'s own hours (Thursday's short day); the usual hours clear them. */
     suspend fun setWorkDayHours(isoDay: Int, startMinute: Int, endMinute: Int) =
         onCore { work.setSchedule(work.schedule().withDayHours(isoDay, os.meka.core.domain.DayHours(startMinute, endMinute))) }
@@ -5079,7 +5090,7 @@ class MekaCore(
 
     /** Leaving now with the journey home = Work mode's commute home (the commute counts everywhere, slice 4). */
     private fun leavingSetting(): os.meka.core.domain.LeavingSetting =
-        os.meka.core.domain.LeavingRules.withCommute(leavingNow.setting(), work.commute())
+        os.meka.core.domain.LeavingRules.withCommute(leavingNow.setting(), work.commute().forDay(todayEpochDay()))
 
     /** Today's office window (Places item 2): a work day that isn't a work-from-home day, or null. */
     private fun officeToday(): os.meka.core.domain.OfficeWindow? {

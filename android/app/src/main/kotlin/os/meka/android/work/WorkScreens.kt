@@ -192,7 +192,11 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
 
         Spacer(Modifier.height(MekaSpace.m))
         Label(CommuteRules.TITLE, 3)
-        CommuteSection(work.commute, Modifier.appear(rememberAppearance(3))) { to, home ->
+        CommuteSection(
+            work.commute, work.commuteDays, Modifier.appear(rememberAppearance(3)),
+            onSetDay = { d, to, home -> scope.launch { core.setCommuteDay(d, to, home) } },
+            onClearDay = { d -> scope.launch { core.clearCommuteDay(d) } },
+        ) { to, home ->
             scope.launch { core.setCommute(to, home) }
         }
 

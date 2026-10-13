@@ -16,6 +16,7 @@ struct WorkSheet: View {
     @State private var enabled = true
     @State private var showMessageDetails = false
     @State private var openDay: Int?
+    @State private var commuteDay: Int64?
     @State private var blockNumber = ""
     @State private var blockRefused = false
     @State private var leavingTo = ""
@@ -144,8 +145,60 @@ struct WorkSheet: View {
             Text(rules.NOTE)
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
+            oneDay
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: setting.chosen)
+    }
+
+    /// The commute, slice 6, "Just one day": pick an office day in the coming week and give it its own times; "Use the
+    /// usual" puts it back. Synced with the Fold; the wake alarm, Today and the brief follow. The day's pickers unfold
+    /// with the standard appear (reduced motion: instant) and the line cross-fades.
+    @ViewBuilder private var oneDay: some View {
+        let rules = CommuteRules.shared
+        let rows = model.work?.commuteDays ?? []
+        if !rows.isEmpty {
+            let row = rows.first { $0.epochDay == commuteDay }
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                Picker(rules.ONE_DAY_TITLE, selection: $commuteDay) {
+                    Text("Choose a day").tag(Int64?.none)
+                    ForEach(rows, id: \.epochDay) { r in
+                        Text(r.changed ? "\(r.label) •" : r.label).tag(Int64?.some(r.epochDay))
+                    }
+                }
+                .frame(width: 280)
+                if let row {
+                    let day = row.epochDay
+                    let toWork = Int(row.toWorkMin), home = Int(row.homeMin)
+                    Text(row.line)
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(row.changed ? palette.accent : palette.textSecondary)
+                        .contentTransition(.opacity)
+                    HStack(spacing: MekaSpace.xs) {
+                        Picker("To work", selection: Binding(get: { toWork }, set: { model.setCommuteDay(epochDay: day, toWorkMin: $0, homeMin: home) })) {
+                            ForEach(rules.choices(current: Int32(toWork)).map { Int($0.int32Value) }, id: \.self) { m in
+                                Text(rules.label(min: Int32(m))).tag(m)
+                            }
+                        }
+                        .frame(width: 180)
+                        Picker("Home", selection: Binding(get: { home }, set: { model.setCommuteDay(epochDay: day, toWorkMin: toWork, homeMin: $0) })) {
+                            ForEach(rules.choices(current: Int32(home)).map { Int($0.int32Value) }, id: \.self) { m in
+                                Text(rules.label(min: Int32(m))).tag(m)
+                            }
+                        }
+                        .frame(width: 160)
+                    }
+                    if row.changed {
+                        Button("Use the usual") { model.clearCommuteDay(epochDay: day) }
+                    }
+                }
+                Text(rules.ONE_DAY_NOTE)
+                    .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, MekaSpace.xs)
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: commuteDay)
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: row?.line)
+        }
     }
 
     /// "Leaving now" (V1): on or off and who the draft goes to (the journey home is the commute home), synced with the Fold (where the

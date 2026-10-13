@@ -17,19 +17,60 @@ import os.meka.core.sync.FieldValue
  * through [WorkClashRules] with the day's bands, on Today, the Calendar, the brief and the week ahead. Later slices: the
  * Slice 4: the planner keeps the commute clear ([plannerNote]), Leaving now's journey home is the commute home
  * ([LeavingRules.withCommute]), the brief says when to leave and when he's home ([briefLine]), and Shut down's tomorrow
- * line adds them ([withDayLine]). Later: the train-anchored wake (Darwin key), one-off overrides, Ask/Talk.
+ * line adds them ([withDayLine]). Slice 5: Ask/Talk ([CommuteAskRules]). Slice 6: **one-off times for a single day**
+ * ([CommuteDay], "engineering works on Tuesday, 1 h 45 there"): every use of the commute reads [CommuteSetting.forDay],
+ * so the wake alarm, Today's bands, clashes, the planner, the brief, Shut down, Leaving now and Ask all follow it.
+ * Later: the train-anchored wake (Darwin key), the disruption heads-up, onboarding.
  */
 object CommuteFields {
     const val TO_WORK = "commuteToWorkMin"
     const val HOME = "commuteHomeMin"
+    /**
+     * Slice 6 (ADR-008 addendum 2026-10-13, additive): one-off times, "epochDay:toWorkMin:homeMin" comma-separated,
+     * ascending, past days dropped on each write. Text, last writer wins (like `workHomeDays`).
+     */
+    const val DAYS = "commuteDays"
 }
 
-/** The two door-to-door times; [chosen] is false while both are the never-touched default. */
-data class CommuteSetting(val toWorkMin: Int, val homeMin: Int, val chosen: Boolean = false) {
+/** One day's own door-to-door times (slice 6), instead of the usual ones. */
+data class CommuteDay(val epochDay: Long, val toWorkMin: Int, val homeMin: Int)
+
+/**
+ * The two door-to-door times; [chosen] is false while both are the never-touched default. [days] are one-off times for
+ * single days (slice 6); [forDay] is what a given day uses.
+ */
+data class CommuteSetting(
+    val toWorkMin: Int,
+    val homeMin: Int,
+    val chosen: Boolean = false,
+    val days: List<CommuteDay> = emptyList(),
+) {
+    /** [epochDay]'s one-off times, or null when it uses the usual ones. */
+    fun dayOn(epochDay: Long): CommuteDay? = days.firstOrNull { it.epochDay == epochDay }
+
+    /** The times [epochDay] uses: its one-off ones, else the usual ones (the one-offs dropped either way). */
+    fun forDay(epochDay: Long): CommuteSetting {
+        val d = dayOn(epochDay) ?: return copy(days = emptyList())
+        return CommuteSetting(d.toWorkMin, d.homeMin, chosen = true)
+    }
+
     companion object {
         val DEFAULT = CommuteSetting(CommuteRules.DEFAULT_MIN, CommuteRules.DEFAULT_MIN, chosen = false)
     }
 }
+
+/**
+ * Work mode's "Just one day" row (slice 6): an office day in the coming week, its times and whether they're one-off.
+ * [line] is "Tue 14 Oct · 1 h 20 each way" or "Tue 14 Oct · 1 h 45 there · 1 h 20 home · just this day".
+ */
+data class CommuteDayRow(
+    val epochDay: Long,
+    val label: String,
+    val toWorkMin: Int,
+    val homeMin: Int,
+    val changed: Boolean,
+    val line: String,
+)
 
 /**
  * One commute on a day, clipped to that day: to work ([toWork]) ends when the shift starts, home starts when it ends.
@@ -65,8 +106,57 @@ object CommuteRules {
     fun read(fields: Map<String, FieldValue>?): CommuteSetting {
         val to = fields?.get(CommuteFields.TO_WORK)?.longOrNull?.toInt()?.takeIf(::valid)
         val home = fields?.get(CommuteFields.HOME)?.longOrNull?.toInt()?.takeIf(::valid)
-        return CommuteSetting(to ?: DEFAULT_MIN, home ?: DEFAULT_MIN, chosen = to != null || home != null)
+        val days = decodeDays(fields?.get(CommuteFields.DAYS)?.textOrNull)
+        return CommuteSetting(to ?: DEFAULT_MIN, home ?: DEFAULT_MIN, chosen = to != null || home != null, days = days)
     }
+
+    /** [CommuteFields.DAYS] read: unreadable or out-of-range entries skipped, one per day (the last wins), ascending. */
+    fun decodeDays(s: String?): List<CommuteDay> {
+        if (s.isNullOrBlank()) return emptyList()
+        return s.split(',').mapNotNull { e ->
+            val p = e.trim().split(':')
+            if (p.size != 3) return@mapNotNull null
+            val day = p[0].toLongOrNull() ?: return@mapNotNull null
+            val to = p[1].toIntOrNull()?.takeIf(::valid) ?: return@mapNotNull null
+            val home = p[2].toIntOrNull()?.takeIf(::valid) ?: return@mapNotNull null
+            CommuteDay(day, to, home)
+        }.associateBy { it.epochDay }.values.sortedBy { it.epochDay }
+    }
+
+    fun encodeDays(days: List<CommuteDay>): String =
+        days.sortedBy { it.epochDay }.joinToString(",") { "${it.epochDay}:${it.toWorkMin}:${it.homeMin}" }
+
+    /**
+     * Slice 6: [days] with [epochDay] set to its own times (or back to the usual ones when [to]/[home] are null or equal
+     * to [usual]'s), days before [today] dropped. One entry per day.
+     */
+    fun withDay(days: List<CommuteDay>, usual: CommuteSetting, epochDay: Long, to: Int?, home: Int?, today: Long): List<CommuteDay> {
+        val kept = days.filter { it.epochDay >= today && it.epochDay != epochDay }
+        val same = to == null || home == null || (to == usual.toWorkMin && home == usual.homeMin)
+        return (if (same) kept else kept + CommuteDay(epochDay, to!!, home!!)).sortedBy { it.epochDay }
+    }
+
+    /** How far ahead "Just one day" offers office days (today and the next six). */
+    const val DAY_ROWS_AHEAD = 7
+    const val ONE_DAY_TITLE = "Just one day"
+    const val ONE_DAY_NOTE = "Engineering works or a different route? Change one day's times; the next day goes back to the usual."
+    const val JUST_THIS_DAY = "just this day"
+
+    /** "1 h 20 each way" · "1 h 45 there · 1 h 20 home" (no "about", no default wording). */
+    fun timesLine(toWorkMin: Int, homeMin: Int): String =
+        if (toWorkMin == homeMin) "${label(toWorkMin)} each way" else "${label(toWorkMin)} there · ${label(homeMin)} home"
+
+    /** The office days from [today] for [DAY_ROWS_AHEAD] days, each with the times it uses (slice 6). */
+    fun dayRows(work: WorkHours, today: Long): List<CommuteDayRow> =
+        (today until today + DAY_ROWS_AHEAD).filter { officeDay(work, it) }.map { day ->
+            val own = work.commute.dayOn(day)
+            val c = work.commute.forDay(day)
+            val label = CivilDate.shortLabel(day)
+            CommuteDayRow(
+                day, label, c.toWorkMin, c.homeMin, changed = own != null,
+                line = listOfNotNull(label, timesLine(c.toWorkMin, c.homeMin), JUST_THIS_DAY.takeIf { own != null }).joinToString(" · "),
+            )
+        }
 
     /** "45 min" · "1 h" · "1 h 20". */
     fun label(min: Int): String = AlarmRules.duration(min)
@@ -88,10 +178,10 @@ object CommuteRules {
     fun officeDay(work: WorkHours, epochDay: Long): Boolean = work.isWorkDay(epochDay) && epochDay !in work.homeDays
 
     /** The morning commute on [epochDay] in minutes, or null when it isn't an office day. */
-    fun toWorkOn(work: WorkHours, epochDay: Long): Int? = if (officeDay(work, epochDay)) work.commute.toWorkMin else null
+    fun toWorkOn(work: WorkHours, epochDay: Long): Int? = if (officeDay(work, epochDay)) work.commute.forDay(epochDay).toWorkMin else null
 
     /** The commute home on [epochDay] in minutes, or null when it isn't an office day. */
-    fun homeOn(work: WorkHours, epochDay: Long): Int? = if (officeDay(work, epochDay)) work.commute.homeMin else null
+    fun homeOn(work: WorkHours, epochDay: Long): Int? = if (officeDay(work, epochDay)) work.commute.forDay(epochDay).homeMin else null
 
     /** Today's row titles for the two bands. */
     const val TO_WORK_TITLE = "Commute"
@@ -111,8 +201,8 @@ object CommuteRules {
         val dayStart = calendar.toEpochMs(epochDay, 0)
         val dayEnd = calendar.toEpochMs(epochDay + 1, 0)
         val shiftStart = calendar.toEpochMs(epochDay, h.startMinute)
-        val to = work.commute.toWorkMin
-        val home = work.commute.homeMin
+        val to = work.commute.forDay(epochDay).toWorkMin
+        val home = work.commute.forDay(epochDay).homeMin
         return buildList {
             val toStart = maxOf(dayStart, shiftStart - to * MIN_MS)
             if (shiftStart > toStart) {
@@ -144,7 +234,7 @@ object CommuteRules {
 
     /**
      * The Calendar's quiet line under an office day's heading: "Leave 07:40 · home about 18:50" (just one half when
-     * the other is cut off by midnight); null on any other day.
+     * the other is cut off by midnight), "… · just this day" when the day has one-off times; null on any other day.
      */
     fun calendarLine(work: WorkHours, epochDay: Long, calendar: LocalCalendar): String? {
         val bs = bands(work, epochDay, calendar)
@@ -152,6 +242,7 @@ object CommuteRules {
         return listOfNotNull(
             bs.firstOrNull { it.toWork }?.let { "Leave ${LocalClock.formatMinute(it.startMinute)}" },
             bs.firstOrNull { !it.toWork }?.let { "home about ${LocalClock.formatMinute(it.endMinute)}" },
+            JUST_THIS_DAY.takeIf { work.commute.dayOn(epochDay) != null },
         ).joinToString(" · ").replaceFirstChar { it.uppercase() }
     }
 

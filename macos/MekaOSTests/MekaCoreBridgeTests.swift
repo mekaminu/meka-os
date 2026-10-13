@@ -361,6 +361,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TimelineKind.commute.name, "COMMUTE")
         XCTAssertEqual(rules.homeLine(minute: 18 * 60 + 50), "Home about 18:50")
         XCTAssertEqual(rules.HOME_TITLE, "Commute home")
+        // Slice 6: one day's own times ("Just one day") on the work state's rows.
+        let rows = core.workMode.value.commuteDays
+        XCTAssertFalse(rows.isEmpty)
+        let day = rows[0].epochDay
+        let set = try await core.setCommuteDay(epochDay: day, toWorkMin: 105, homeMin: 70)
+        XCTAssertTrue(set.boolValue)
+        let row = core.workMode.value.commuteDays.first { $0.epochDay == day }
+        XCTAssertEqual(row?.changed, true)
+        XCTAssertEqual(row?.toWorkMin, 105)
+        XCTAssertTrue(row?.line.hasSuffix(rules.JUST_THIS_DAY) ?? false)
+        let cleared = try await core.clearCommuteDay(epochDay: day)
+        XCTAssertTrue(cleared.boolValue)
+        XCTAssertEqual(core.workMode.value.commuteDays.first { $0.epochDay == day }?.changed, false)
     }
 
     func testWeekAheadReachesSwift() async throws {

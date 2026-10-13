@@ -49,6 +49,9 @@ object CommuteAskRules {
                 bs.firstOrNull { it.toWork }?.let { "leave ${clock(it.startMinute)}" },
                 "work ${work.hoursOn(epochDay).label}",
                 bs.firstOrNull { !it.toWork }?.let { "home about ${clock(it.endMinute)}" },
+                work.commute.dayOn(epochDay)?.let {
+                    "one-off commute ${CommuteRules.timesLine(it.toWorkMin, it.homeMin)}, ${CommuteRules.JUST_THIS_DAY}"
+                },
             ).joinToString(" · ")
         }
         val why = when {

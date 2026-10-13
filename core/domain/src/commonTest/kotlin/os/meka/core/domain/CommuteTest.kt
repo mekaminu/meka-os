@@ -341,4 +341,70 @@ class CommuteTest {
         assertEquals("Annual leave · no work", CommuteRules.withDayLine("Annual leave · no work", work, fri, cal))
         assertNull(CommuteRules.withDayLine(null, work, sat, cal))
     }
+
+    // ---- Slice 6: one-off times for a single day ----
+
+    @Test
+    fun oneDaysOwnTimesSyncAndOnlyThatDayUsesThem() {
+        val world = SyncWorld()
+        val fold = world.device("android")
+        val mac = world.device("mac")
+        world.clock.nowMs = ms(thu, 12 * 60)
+        val foldWork = WorkMode(fold.replica, nowMs = { world.clock.nowMs })
+        val macWork = WorkMode(mac.replica, nowMs = { world.clock.nowMs })
+        assertFalse(foldWork.setCommuteDay(fri, 83, 80, thu), "not in fives")
+        assertFalse(foldWork.setCommuteDay(thu - 1, 105, 80, thu), "a day gone by")
+        assertFalse(foldWork.setCommuteDay(fri, 80, 80, thu), "the usual times: nothing to change")
+        assertTrue(foldWork.setCommuteDay(fri, 105, 80, thu))
+        assertFalse(foldWork.setCommuteDay(fri, 105, 80, thu), "no change")
+        fold.sync(); mac.sync()
+        val clock = LocalClock(4, 12 * 60)
+        val hours = macWork.hours(clock, thu)
+        // Friday leaves 25 minutes earlier; Thursday and next Monday keep the usual times.
+        assertEquals(105, CommuteRules.toWorkOn(hours, fri))
+        assertEquals(listOf("07:15–09:00", "17:30–18:50"), CommuteRules.bands(hours, fri, cal).map { it.label })
+        assertEquals(80, CommuteRules.toWorkOn(hours, thu))
+        assertEquals(80, CommuteRules.toWorkOn(hours, fri + 3))
+        assertEquals("Leave 07:15 · home about 18:50 · just this day", CommuteRules.calendarLine(hours, fri, cal))
+        assertEquals("Leave 07:40 · home about 16:50", CommuteRules.calendarLine(hours, thu, cal))
+        // The usual setting isn't touched by a one-off.
+        assertFalse(macWork.commute().chosen)
+        // The wake alarm on Friday counts it: 09:00 − 1 h 45 − 1 h = 06:15.
+        assertEquals(6 * 60 + 15, wake(fri, hours)?.minute)
+        // Work mode's rows: the coming week's office days (no weekend), Friday marked.
+        val rows = macWork.state(clock, thu).commuteDays
+        assertEquals(listOf(thu, fri, fri + 3, fri + 4, fri + 5), rows.map { it.epochDay })
+        assertEquals("Fri 9 Oct · 1 h 45 there · 1 h 20 home · just this day", rows[1].line)
+        assertEquals("Thu 8 Oct · 1 h 20 each way", rows[0].line)
+        assertTrue(rows[1].changed)
+        // Back to the usual from the Mac; the Fold follows.
+        assertTrue(macWork.setCommuteDay(fri, null, null, thu))
+        mac.sync(); fold.sync()
+        assertEquals(80, CommuteRules.toWorkOn(foldWork.hours(clock, thu), fri))
+    }
+
+    @Test
+    fun oneOffTimesAreKeptTidy() {
+        val usual = CommuteSetting(80, 80, chosen = true)
+        // Past days drop as it writes; one entry per day; the usual times clear it.
+        val days = listOf(CommuteDay(thu - 2, 100, 80), CommuteDay(fri, 90, 90))
+        assertEquals(listOf(CommuteDay(fri, 120, 80)), CommuteRules.withDay(days, usual, fri, 120, 80, thu))
+        assertEquals(emptyList(), CommuteRules.withDay(days, usual, fri, 80, 80, thu))
+        // Read: garbage and out-of-range entries are skipped, the last entry for a day wins, ascending.
+        val read = CommuteRules.decodeDays("20736:90:90, x, 20735:95:300, 20735:100:80, 20734:105:85")
+        assertEquals(listOf(CommuteDay(20734, 105, 85), CommuteDay(20735, 100, 80), CommuteDay(20736, 90, 90)), read)
+        assertEquals("20734:105:85,20735:100:80,20736:90:90", CommuteRules.encodeDays(read))
+        val withDays = CommuteRules.read(mapOf(CommuteFields.DAYS to FieldValue.Text("20735:100:80")))
+        assertFalse(withDays.chosen)
+        assertEquals(CommuteSetting(100, 80, chosen = true), withDays.forDay(20735))
+        assertEquals(CommuteSetting.DEFAULT, withDays.forDay(20736))
+        // Leaving now's journey home on the day follows it.
+        assertEquals(100, LeavingRules.withCommute(LeavingSetting.DEFAULT, CommuteSetting(80, 80, days = listOf(CommuteDay(thu, 80, 100))).forDay(thu)).journeyMin)
+        // Ask's day line says so.
+        val hours = WorkHours(WorkSchedule.DEFAULT, commute = CommuteSetting(80, 80, days = listOf(CommuteDay(fri, 105, 80))))
+        assertEquals(
+            "office day · leave 07:15 · work 09:00–17:30 · home about 18:50 · one-off commute 1 h 45 there · 1 h 20 home, just this day",
+            CommuteAskRules.dayLine(hours, fri, cal),
+        )
+    }
 }

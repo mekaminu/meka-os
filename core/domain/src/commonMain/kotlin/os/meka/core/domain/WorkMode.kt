@@ -279,6 +279,8 @@ data class WorkModeState(
     val callAssistantPaused: Boolean = false,
     /** The door-to-door commute each way ([CommuteRules]): counted on office days only. */
     val commute: CommuteSetting = CommuteSetting.DEFAULT,
+    /** Work mode's "Just one day" rows ([CommuteRules.dayRows]): the coming week's office days and their times. */
+    val commuteDays: List<CommuteDayRow> = emptyList(),
 ) {
     /** The switch overrides the schedule: offer "Back to schedule". */
     val switchedManually: Boolean get() = source == WorkSource.MANUAL
@@ -502,8 +504,13 @@ class WorkMode(
     fun currentSwitch(): WorkSwitch? = WorkSwitch.decode(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SWITCH)?.textOrNull)
 
     /** [epochDay] is today's local date; with it, bank holidays are days off. */
-    fun state(clock: LocalClock, epochDay: Long? = null): WorkModeState =
-        WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, workHolidays()).copy(callAssistant = callAssistant(), recordingDays = recordingDays(), commute = commute())
+    fun state(clock: LocalClock, epochDay: Long? = null): WorkModeState {
+        val base = WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, workHolidays())
+            .copy(callAssistant = callAssistant(), recordingDays = recordingDays(), commute = commute())
+        if (epochDay == null) return base
+        val hours = WorkHours.of(base, holidays(), epochDay, homeDays(epochDay), leaveDays())
+        return base.copy(commuteDays = CommuteRules.dayRows(hours, epochDay))
+    }
 
     /** Work hours for Today and the Calendar tab, with today's manual "Work off" (a sick day) taken into account. */
     fun hours(clock: LocalClock, epochDay: Long): WorkHours =
@@ -562,6 +569,23 @@ class WorkMode(
             mapOf(CommuteFields.TO_WORK to toWorkMin.toLong().fv(), CommuteFields.HOME to homeMin.toLong().fv()),
         )
         return true
+    }
+
+    /**
+     * Slice 6: [epochDay]'s own commute times ("Just one day"); null (or the usual times) puts the day back to the
+     * usual ones. Days before [today] are dropped as it writes. False for a time outside 10 min–4 h in fives, a day
+     * before [today], or no change.
+     */
+    fun setCommuteDay(epochDay: Long, toWorkMin: Int?, homeMin: Int?, today: Long): Boolean {
+        if (epochDay < today) return false
+        if (toWorkMin != null && !CommuteRules.valid(toWorkMin)) return false
+        if (homeMin != null && !CommuteRules.valid(homeMin)) return false
+        val now = commute()
+        val next = CommuteRules.withDay(now.days, now, epochDay, toWorkMin, homeMin, today)
+        val changed = now.dayOn(epochDay) != next.firstOrNull { it.epochDay == epochDay }
+        if (next == now.days) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(CommuteFields.DAYS to CommuteRules.encodeDays(next).fv()))
+        return changed
     }
 
     fun setSchedule(s: WorkSchedule) {

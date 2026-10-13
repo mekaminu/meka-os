@@ -1094,6 +1094,18 @@ final class CoreModel {
         run { _ = try await $0.setCommute(toWorkMin: t, homeMin: h) }
     }
 
+    /// The commute, slice 6: one day's own door-to-door times (the usual times put it back).
+    func setCommuteDay(epochDay: Int64, toWorkMin: Int, homeMin: Int) {
+        MekaHaptics.tick()
+        let t = Int32(toWorkMin), h = Int32(homeMin)
+        run { _ = try await $0.setCommuteDay(epochDay: epochDay, toWorkMin: t, homeMin: h) }
+    }
+
+    func clearCommuteDay(epochDay: Int64) {
+        MekaHaptics.tick()
+        run { _ = try await $0.clearCommuteDay(epochDay: epochDay) }
+    }
+
     func setLeavingNow(on: Bool, to: String, journeyMin: Int) {
         MekaHaptics.tick()
         let j = Int32(journeyMin)

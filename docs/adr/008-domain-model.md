@@ -137,6 +137,8 @@ No new entity type. `held_message` gains the kind `VOICE_MESSAGE` and one field 
 
 *Addendum 2026-10-13 (the commute counts everywhere, slice 1):* the `context_mode/work` entity gains two fields (additive, LWW, either app writes them): `commuteToWorkMin` and `commuteHomeMin` (Int64 minutes, 10–240 in fives; absent or out of range = 80, about 1 h 20 door to door). They count on office days only (a work day that isn't a work-from-home day, booked leave or a bank holiday). The wake alarm's suggestion is work start − morning commute − the get-ready buffer.
 
+*Addendum 2026-10-13 (the commute, slice 6):* `context_mode/work` gains `commuteDays` (additive, Text, LWW, either app writes): one-off door-to-door times for single days, `epochDay:toWorkMin:homeMin` comma-separated, ascending, past days dropped on each write, unreadable or out-of-range entries skipped on read. A day with an entry uses those times everywhere the commute counts; the usual `commuteToWorkMin`/`commuteHomeMin` are untouched.
+
 *Addendum 2026-10-10 (call assistant polish 8c, "Keep callers' recordings"):* the `context_mode/work` entity gains one field (additive, LWW, either app writes it): `callRecordingDays` (Int64: 7, 30 or 0 for don't keep; absent or anything else = 30). The apps offer ▶ Play only for a recording younger than the choice; MEKA's server stops serving older ones, deletes them from its bucket hourly and at once when a push carries a new choice, and with 0 holds a recording only while Amazon Transcribe hears it (deleted straight after, `audio` never written). The bucket's 30-day lifecycle rule stays the backstop.
 
 ## Addendum, 2026-10-08: news sources and the News place
