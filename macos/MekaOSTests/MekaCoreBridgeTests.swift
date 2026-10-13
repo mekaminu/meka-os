@@ -2811,5 +2811,24 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MailChaseRules.shared.headline(n: 2), "2 to chase by email")
         XCTAssertEqual(MailChaseRules.shared.draft(from: "Sam Taylor", shownName: nil),
                        "Hi Sam,\n\nJust checking in on this — is there any news?\n\nThanks")
+        // Slice 7: the ten-minute inbox — no email, no card; a session over nothing ends "Inbox clear"; the time's key.
+        XCTAssertNil(core.mailMoment.value)
+        try await core.startMailMoment()
+        XCTAssertEqual(core.mailMomentSession.value?.line, MailMomentRules.shared.CLEAR_LINE)
+        XCTAssertNil(core.mailMomentSession.value?.row)
+        try await core.skipMailMoment(id: "nothing")
+        try await core.endMailMoment()
+        XCTAssertNil(core.mailMomentSession.value)
+        let morning = try await core.mailMomentTimeKey()
+        XCTAssertEqual(morning, "morning")
+        let evening = try await core.setMailMomentTimeKey(key: "evening")
+        XCTAssertEqual(evening, "Ten-minute inbox · evenings from 20:00")
+        let notToday = try await core.notTodayMailMoment()
+        XCTAssertEqual(notToday, MailMomentRules.shared.PUT_OFF_LINE)
+        try await core.undoMailMoment()
+        XCTAssertEqual(MailMomentRules.shared.headline(n: 6), "6 need you · 2 min each")
+        XCTAssertEqual(MailMomentTime.companion.of(key: "off"), MailMomentTime.off)
+        XCTAssertEqual(MailMomentRules.shared.settingLine(time: MailMomentTime.morning),
+                       "Mornings from 08:00 · Needs you offers a few minutes to clear what needs you")
     }
 }

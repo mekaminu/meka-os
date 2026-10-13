@@ -41,6 +41,13 @@ struct MailSheet: View {
                         Task { await model.setMailAutopilot(on) }
                     }
                     .staggeredAppear(2)
+                    // Slice 7: when the ten-minute inbox comes (synced with the Fold).
+                    if let key = model.mailMomentKey {
+                        MomentPanelView(key: key, palette: palette) { picked in
+                            Task { await model.setMailMomentKey(picked) }
+                        }
+                        .staggeredAppear(2)
+                    }
                 }
                 ForEach(Array(view.rows.enumerated()), id: \.element.email) { i, row in
                     MailAccountRowView(row: row, palette: palette, onReconnect: {
@@ -105,10 +112,52 @@ struct MailSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.tidies.map { $0.state ?? "" } } ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.autopilot?.line)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.senders.map { $0.state ?? "" } } ?? [])
-        .task { await model.loadMail() }
+        .task { await model.loadMail(); await model.loadMailMomentKey() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.loadMail() }
         }
+    }
+}
+
+/// Slice 7: the ten-minute inbox's time — Morning · Evening · Off (the lit one fills with the accent on the appear
+/// curve, tick haptic); the line cross-fades. Only the key (a String) goes back to the model.
+private struct MomentPanelView: View {
+    let key: String
+    let palette: MekaPalette
+    let onPick: (String) -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    private let times: [MailMomentTime] = [.morning, .evening, .off]
+
+    var body: some View {
+        let current = MailMomentTime.companion.of(key: key) ?? MailMomentTime.morning
+        let line = MailMomentRules.shared.settingLine(time: current)
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(MailMomentRules.shared.TITLE).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+            }
+            .accessibilityElement(children: .combine)
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(times, id: \.key) { t in
+                    let lit = t.key == key
+                    Button(t.label) { if !lit { onPick(t.key) } }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
+                        .padding(.horizontal, MekaSpace.m)
+                        .padding(.vertical, MekaSpace.xxs)
+                        .background(Capsule().fill(lit ? palette.accent : palette.hairline))
+                        .accessibilityLabel("Ten-minute inbox: \(t.label)")
+                        .accessibilityAddTraits(lit ? .isSelected : [])
+                }
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: key)
     }
 }
 

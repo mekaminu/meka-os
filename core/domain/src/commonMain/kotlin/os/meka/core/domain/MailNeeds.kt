@@ -391,7 +391,28 @@ object MailNeedsRules {
         val all = showingSorted(items, nowMs)
         if (all.isEmpty()) return null
         val groups = MailLinkRules.groups(all)
-        val rows = groups.take(SHOWN).map { group ->
+        val rows = rowsOf(groups.take(SHOWN), nowMs, cal)
+        val more = groups.drop(SHOWN).sumOf { it.size }
+        val snoozedCount = items.count { snoozed(it, nowMs) }
+        return MailNeedsCard(
+            title = TITLE,
+            headline = headline(all.size),
+            rows = rows,
+            moreLine = if (more > 0) "+ $more more · newest shown first" else null,
+            snoozedLine = when (snoozedCount) {
+                0 -> null
+                1 -> "1 snoozed"
+                else -> "$snoozedCount snoozed"
+            },
+        )
+    }
+
+    /** Slice 7: every row that needs him (linked emails sharing one), newest first — the ten-minute inbox goes through them all. */
+    fun allRows(items: List<MailItem>, nowMs: Long, cal: LocalCalendar): List<MailNeedsRow> =
+        rowsOf(MailLinkRules.groups(showingSorted(items, nowMs)), nowMs, cal)
+
+    private fun rowsOf(groups: List<List<MailItem>>, nowMs: Long, cal: LocalCalendar): List<MailNeedsRow> =
+        groups.map { group ->
             val i = group.first()
             val thread = if (i.threadCount > 1) "${i.threadCount} in this thread" else null
             val replied = if (replySent(i)) "replied ${whenLabel(i.replySentAtMs!!, nowMs, cal)}" else null
@@ -412,20 +433,6 @@ object MailNeedsRules {
                 linkedLine = linkedLine,
             )
         }
-        val more = groups.drop(SHOWN).sumOf { it.size }
-        val snoozedCount = items.count { snoozed(it, nowMs) }
-        return MailNeedsCard(
-            title = TITLE,
-            headline = headline(all.size),
-            rows = rows,
-            moreLine = if (more > 0) "+ $more more · newest shown first" else null,
-            snoozedLine = when (snoozedCount) {
-                0 -> null
-                1 -> "1 snoozed"
-                else -> "$snoozedCount snoozed"
-            },
-        )
-    }
 
     /** Done: the card goes on both apps and the server archives the email at its next check. */
     fun doneFields(nowMs: Long): Map<String, FieldValue> = mapOf(MailItemFields.DONE_ASKED_AT to nowMs.fv())

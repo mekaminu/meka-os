@@ -64,6 +64,7 @@ struct CommandNeedsYouView: View {
                 SchoolCoversView(palette: palette, firstIndex: 1 + model.triage.count)
                 RequestCardsView(palette: palette, firstIndex: 1 + model.triage.count + model.needsYouAsks)
                 GroupGistsView(palette: palette, firstIndex: 1 + model.triage.count + model.needsYouAsks + model.requests.count)
+                MailMomentView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                 MailNeedsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                 MailChaseView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                 ArchivedForYouView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)

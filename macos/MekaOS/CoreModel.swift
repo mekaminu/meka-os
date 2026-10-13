@@ -180,6 +180,12 @@ final class CoreModel {
     private(set) var mailNeeds: MailNeedsCard?
     /// Inbox autopilot, slice 6b-3: "Time to chase" — Waiting for items from email whose chase is due, each drafted.
     private(set) var mailChases: MailChaseCard?
+    /// Inbox autopilot, slice 7: the ten-minute inbox's card in Needs you (from the moment while emails need him).
+    private(set) var mailMoment: MailMomentCard?
+    /// Slice 7: the ten-minute inbox under way on this Mac (one email at a time), or nil.
+    private(set) var mailMomentSession: MailMomentSession?
+    /// Slice 7: when the ten-minute inbox comes, as its key ("morning", "evening", "off"); nil until read.
+    private(set) var mailMomentKey: String?
     /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
     private(set) var lists: ListsView?
     /// Needs you as a stack of decisions (four tabs, slice 2); see `needsYouCards`.
@@ -416,6 +422,12 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await c in core.mailChases { self?.mailChases = c }
+        })
+        observers.append(Task { [weak self] in
+            for await m in core.mailMoment { self?.mailMoment = m }
+        })
+        observers.append(Task { [weak self] in
+            for await m in core.mailMomentSession { self?.mailMomentSession = m }
         })
         observers.append(Task { [weak self] in
             for await b in core.blockedCallers { self?.blockedCallers = b }
@@ -2704,6 +2716,7 @@ final class CoreModel {
         case .mailUnopened: run { try await $0.undoUnopened() }
         case .mailItem: run { try await $0.undoMailItem() }
         case .mailChase: run { try await $0.undoMailChase() }
+        case .mailMoment: run { try await $0.undoMailMoment() }
         case .appointment(let done): run { _ = try await $0.undoAppointment(done: done) }
         case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
@@ -3691,6 +3704,61 @@ final class CoreModel {
         }
     }
 
+    /// Start on the ten-minute inbox (Inbox autopilot, slice 7): the emails that need him, one at a time. Nothing crosses.
+    func startMailMoment() {
+        guard let core else { return }
+        MekaHaptics.medium()
+        Task {
+            do { try await core.startMailMoment() } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Skip in the ten-minute inbox: this email goes to the back (nothing written). Only the id (a String) crosses.
+    func skipMailMoment(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do { try await core.skipMailMoment(id: id) } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Finish or Close on the ten-minute inbox: the session ends here; what's left stays in "From your mail".
+    func endMailMoment() {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do { try await core.endMailMoment() } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Not today on the ten-minute inbox's card: gone on both apps until tomorrow's moment, with Undo on the bar.
+    func notTodayMailMoment() {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do {
+                let line = try await core.notTodayMailMoment()
+                offerEventUndo(line, .mailMoment)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// The Mail sheet reads when the ten-minute inbox comes (a String key comes back).
+    func loadMailMomentKey() async {
+        guard let core else { return }
+        mailMomentKey = try? await core.mailMomentTimeKey()
+    }
+
+    /// Morning · Evening · Off in the Mail sheet (synced). Only the key (a String) crosses; the line comes back.
+    func setMailMomentKey(_ key: String) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        mailMessage = nil
+        guard let line = try? await core.setMailMomentTimeKey(key: key) else { return }
+        mailMomentKey = key
+        mailNote = line
+    }
+
     /// Snooze on an email in "From your mail": back tomorrow 08:00 on both apps, with Undo. Only the id crosses.
     func snoozeMailItem(_ id: String) {
         guard let core else { return }
@@ -3927,6 +3995,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case mailItem
         /// Send, Got it or Not yet on "Time to chase": the chase is stopped (if not sent yet) and the date put back.
         case mailChase
+        /// Not today on the ten-minute inbox: its card comes back on both apps.
+        case mailMoment
         /// Went, Booked… or Not yet on an appointment: its visit, booking and set-aside day go back.
         case appointment(AppointmentDone)
         /// Call to book on an appointment (slice 2b): the task goes and the card asks again as before.

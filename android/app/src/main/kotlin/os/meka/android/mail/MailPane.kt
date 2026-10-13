@@ -69,6 +69,8 @@ import os.meka.core.domain.MailTidyRow
 import os.meka.core.domain.MailSenderPanelRules
 import os.meka.core.domain.MailSenderRow
 import os.meka.core.domain.MailLabel
+import os.meka.core.domain.MailMomentRules
+import os.meka.core.domain.MailMomentTime
 import os.meka.core.facade.ConnectStart
 import os.meka.core.facade.MekaCore
 
@@ -98,6 +100,9 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
     val uri = LocalUriHandler.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val haptics = rememberMekaHaptics()
+    // Slice 7: when the ten-minute inbox comes (synced).
+    var momentTime by remember { mutableStateOf<MailMomentTime?>(null) }
+    LaunchedEffect(Unit) { momentTime = runCatching { core.mailMomentTime() }.getOrNull() }
 
     LaunchedEffect(reload) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -141,6 +146,13 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
         if (now != null) view = Result.success(now) else reload++
     }
 
+    fun setMoment(time: MailMomentTime) = scope.launch {
+        haptics.tick()
+        message = null
+        note = core.setMailMomentTime(time)
+        momentTime = time
+    }
+
     fun unsubscribe(id: String) = scope.launch {
         haptics.medium()
         message = null
@@ -178,6 +190,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                 val v = current.getOrThrow()
                 v.emptyLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
                 v.autopilot?.let { AutopilotCard(it, Modifier.appear(rememberAppearance(0))) { switchAutopilot(!it.on) } }
+                if (v.autopilot != null) momentTime?.let { t -> MomentCard(t, Modifier.appear(rememberAppearance(0))) { setMoment(it) } }
                 v.rows.forEachIndexed { i, row ->
                     MailAccountCard(
                         row, Modifier.appear(rememberAppearance(i + 1)),
@@ -291,6 +304,40 @@ private fun MailAccountCard(
                     Text(MailAccountRules.KEEP, style = MekaType.itemMeta, color = Meka.colors.accent,
                         modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); asking = false }.minTouch())
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Slice 7: the ten-minute inbox's time — Morning · Evening · Off chips (the lit one blends to the accent with a tick
+ * haptic; the line cross-fades). Synced with the Mac.
+ */
+@Composable
+private fun MomentCard(time: MailMomentTime, modifier: Modifier, onPick: (MailMomentTime) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = MailMomentRules.TITLE + ". " + MailMomentRules.settingLine(time) }) {
+            Text(MailMomentRules.TITLE, style = MekaType.body, color = Meka.colors.textPrimary)
+            Crossfade(MailMomentRules.settingLine(time), animationSpec = MekaMotion.appear(reduced), label = "moment-line") {
+                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            MailMomentTime.entries.forEach { t ->
+                val lit = t == time
+                val fill by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "moment-chip")
+                val ink by animateColorAsState(if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "moment-ink")
+                Text(
+                    t.label, style = MekaType.itemMeta, color = ink,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+                        .clickable(role = Role.Button) { if (!lit) onPick(t) }
+                        .semantics { selected = lit; contentDescription = "Ten-minute inbox: ${t.label}" }
+                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                )
             }
         }
     }

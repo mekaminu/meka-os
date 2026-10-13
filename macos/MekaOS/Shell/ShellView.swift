@@ -141,9 +141,12 @@ struct NeedsYouView: View {
                     // The group digest the Fold made at 12:30 / 18:30 (V1, messages slice 4b): gists, never the messages.
                     GroupGistsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                         .padding(.bottom, model.digestGists.isEmpty ? 0 : MekaSpace.m)
+                    // The ten-minute inbox (Inbox autopilot, slice 7): from the moment, one email at a time.
+                    MailMomentView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
+                        .padding(.bottom, model.mailMoment == nil && model.mailMomentSession == nil ? 0 : MekaSpace.m)
                     // The emails that need Meka (Inbox autopilot, slice 6a), each with Done and Snooze.
                     MailNeedsView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
-                        .padding(.bottom, model.mailNeeds == nil ? 0 : MekaSpace.m)
+                        .padding(.bottom, model.mailNeeds == nil || model.mailMomentSession != nil ? 0 : MekaSpace.m)
                     // Waiting for items from email whose chase is due (Inbox autopilot, slice 6b-3), each drafted.
                     MailChaseView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
                         .padding(.bottom, model.mailChases == nil ? 0 : MekaSpace.m)

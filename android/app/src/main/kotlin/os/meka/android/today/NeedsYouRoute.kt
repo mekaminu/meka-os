@@ -353,6 +353,8 @@ internal fun NeedsYouColumn(
     val unopened by core.mailUnopened.collectAsState()
     val mailNeeds by core.mailNeeds.collectAsState()
     val mailChases by core.mailChases.collectAsState()
+    val mailMoment by core.mailMoment.collectAsState()
+    val mailMomentSession by core.mailMomentSession.collectAsState()
     val gists by core.groupGists.collectAsState()
     // A busy chat's one-line summary (slice 3c), made on this phone and synced; asked for when the chats change.
     val summaries by core.chatSummaries.collectAsState()
@@ -403,8 +405,16 @@ internal fun NeedsYouColumn(
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
             }
         }
+        // Inbox autopilot, slice 7: the ten-minute inbox — from the moment, Start goes through the emails one by one.
+        if (mailMoment != null || mailMomentSession != null) {
+            item(key = "mail-moment") {
+                MailMomentSection(mailMoment, mailMomentSession, core, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
         // Inbox autopilot, slice 6a: the emails that need Meka, newest first, each with Done and Snooze.
-        mailNeeds?.let { n ->
+        // While the ten-minute inbox runs, it shows them one at a time instead.
+        mailNeeds?.takeIf { mailMomentSession == null }?.let { n ->
             item(key = "mail-needs") {
                 MailNeedsSection(n, core, moves.undoLine,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))

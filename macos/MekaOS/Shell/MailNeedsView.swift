@@ -18,7 +18,8 @@ struct MailNeedsView: View {
 
     var body: some View {
         Group {
-            if let card = model.mailNeeds {
+            // While the ten-minute inbox runs (slice 7) it shows these one at a time instead.
+            if let card = model.mailNeeds, model.mailMomentSession == nil {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Button { MekaHaptics.tick(); open.toggle() } label: {
                         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -69,7 +70,7 @@ struct MailNeedsView: View {
     }
 }
 
-private struct MailNeedsRowView: View {
+struct MailNeedsRowView: View {
     let row: MailNeedsRow
     let palette: MekaPalette
     let done: () -> Void
@@ -241,7 +242,7 @@ private struct MailReplyEditor: View {
     }
 }
 
-private struct MailNeedsPill: View {
+struct MailNeedsPill: View {
     let label: String
     let palette: MekaPalette
     var quiet: Bool = false

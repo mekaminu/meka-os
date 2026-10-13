@@ -132,7 +132,7 @@ internal fun MailNeedsSection(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MailNeedsRowView(
+internal fun MailNeedsRowView(
     row: MailNeedsRow, onDone: () -> Unit, onTask: () -> Unit, onWaiting: () -> Unit, onSnooze: () -> Unit,
     onDraft: suspend () -> MailDraft,
     onSend: (String, () -> Unit) -> Unit,
@@ -257,7 +257,7 @@ private fun MailNeedsRowView(
 }
 
 @Composable
-private fun MailNeedsPill(label: String, spoken: String, quiet: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun MailNeedsPill(label: String, spoken: String, quiet: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     Text(
         label, style = MekaType.itemMeta,
         color = when { !enabled -> Meka.colors.textTertiary; quiet -> Meka.colors.textSecondary; else -> Meka.colors.accent },

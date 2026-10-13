@@ -744,6 +744,28 @@ class MekaCore(
     /** Takes back the last Send, Got it or Not yet on "Time to chase" on this device; null after an Undo. */
     private var mailChaseUndo: (() -> Unit)? = null
 
+    private val _mailMoment = MutableStateFlow<os.meka.core.domain.MailMomentCard?>(null)
+    /**
+     * Inbox autopilot, slice 7: Needs you's "Ten-minute inbox" card — from the moment's time (morning or evening, his
+     * choice, synced) while emails need him, until Not today; null otherwise. Start runs [mailMomentSession].
+     */
+    val mailMoment: StateFlow<os.meka.core.domain.MailMomentCard?> = _mailMoment.asStateFlow()
+
+    private val _mailMomentSession = MutableStateFlow<os.meka.core.domain.MailMomentSession?>(null)
+    /**
+     * Slice 7: the ten-minute inbox under way on this device — one email at a time with the card's own answers and Skip;
+     * its end says "Inbox clear" with the streak. Null when it isn't running. Not synced (each device runs its own).
+     */
+    val mailMomentSession: StateFlow<os.meka.core.domain.MailMomentSession?> = _mailMomentSession.asStateFlow()
+
+    /** The session's state on this device: running, how many emails there were at Start, what was skipped (oldest first). */
+    private var mailMomentRunning = false
+    private var mailMomentStarted = 0
+    private val mailMomentSkipped = mutableListOf<String>()
+
+    /** Takes back the last Not today on this device; null after an Undo. */
+    private var mailMomentUndo: (() -> Unit)? = null
+
     init {
         replica.addListener { refresh(); requestSync() }
         refresh()
@@ -3182,7 +3204,11 @@ class MekaCore(
     }
 
     /** Re-evaluates everything that depends on the clock (work mode, Today). Cheap; call it about once a minute. */
-    suspend fun tick() = onCore { refresh() }
+    suspend fun tick() = onCore {
+        refresh()
+        // Inbox autopilot, slice 7: a clear inbox at or after the moment counts towards the streak.
+        noteInboxClear()
+    }
 
     /**
      * The bedside clock for the half-folded Fold (Fold modes): the time, the phone's next alarm ([nextAlarmMs], from the
@@ -3518,6 +3544,7 @@ class MekaCore(
     private fun mailNeedsChanged() {
         val items = activity.mailItems()
         _mailNeeds.value = os.meka.core.domain.MailNeedsRules.card(items, nowMs(), ZoneCalendar(timeZone))
+        mailMomentChanged(items)
         _mailChases.value = os.meka.core.domain.MailChaseRules.card(
             items, lists.waitingItems(), aboutYou.profile().shownName, nowMs(), ZoneCalendar(timeZone),
         )
@@ -3735,6 +3762,105 @@ class MekaCore(
         }
         val text = R.check(reply.draft) ?: return os.meka.core.domain.MailDraft(null, R.UNUSABLE_LINE)
         return os.meka.core.domain.MailDraft(text, R.DRAFTED_LINE)
+    }
+
+    // ---- Inbox autopilot, slice 7: the ten-minute inbox ----
+
+    private fun mailMomentSetting(): os.meka.core.domain.MailMomentSetting = os.meka.core.domain.MailMomentRules.read(
+        replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailMomentRules.ENTITY_ID)?.fields,
+    )
+
+    private fun mailMomentChanged(items: List<os.meka.core.domain.MailItem> = activity.mailItems()) {
+        val cal = ZoneCalendar(timeZone)
+        val setting = mailMomentSetting()
+        val rows = os.meka.core.domain.MailNeedsRules.allRows(items, nowMs(), cal)
+        _mailMoment.value = if (mailMomentRunning) null else os.meka.core.domain.MailMomentRules.card(setting, rows.size, nowMs(), cal)
+        _mailMomentSession.value = if (!mailMomentRunning) null else
+            os.meka.core.domain.MailMomentRules.session(rows, mailMomentSkipped, mailMomentStarted, setting, cal.epochDayOf(nowMs()))
+    }
+
+    /**
+     * Notes today as an "Inbox clear" day once the moment has come and nothing in "From your mail" waits (synced, so the
+     * streak is the same on both apps). Runs with the minute tick; writes at most once a day.
+     */
+    private fun noteInboxClear() {
+        val cal = ZoneCalendar(timeZone)
+        val items = activity.mailItems()
+        val setting = mailMomentSetting()
+        val waiting = os.meka.core.domain.MailNeedsRules.showingSorted(items, nowMs()).size
+        if (!os.meka.core.domain.MailMomentRules.shouldNoteClear(setting, items.isNotEmpty(), waiting, nowMs(), cal)) return
+        replica.commitLocal(
+            os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailMomentRules.ENTITY_ID,
+            os.meka.core.domain.MailMomentRules.clearFields(setting, cal.epochDayOf(nowMs())),
+        )
+    }
+
+    /** Slice 7: **Start** on the ten-minute inbox: the emails that need him, one at a time, newest first. */
+    suspend fun startMailMoment() = onCore {
+        mailMomentRunning = true
+        mailMomentSkipped.clear()
+        mailMomentStarted = os.meka.core.domain.MailNeedsRules.allRows(activity.mailItems(), nowMs(), ZoneCalendar(timeZone)).size
+        mailMomentChanged()
+    }
+
+    /** **Skip** in the ten-minute inbox: this email goes to the back of the queue (nothing written). */
+    suspend fun skipMailMoment(id: String) = onCore {
+        if (!mailMomentRunning) return@onCore
+        mailMomentSkipped.remove(id)
+        mailMomentSkipped.add(id)
+        mailMomentChanged()
+    }
+
+    /** **Finish** or Close: the session ends on this device; anything left stays on "From your mail". */
+    suspend fun endMailMoment() = onCore {
+        mailMomentRunning = false
+        mailMomentSkipped.clear()
+        mailMomentStarted = 0
+        noteInboxClear()
+        mailMomentChanged()
+    }
+
+    /** **Not today** on the ten-minute inbox's card: it goes on both apps until tomorrow's moment (with Undo). */
+    suspend fun notTodayMailMoment(): String = onCore {
+        val before = mailMomentSetting().putOffDay ?: 0L
+        val today = ZoneCalendar(timeZone).epochDayOf(nowMs())
+        replica.commitLocal(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailMomentRules.ENTITY_ID, os.meka.core.domain.MailMomentRules.putOffFields(today))
+        mailMomentUndo = {
+            replica.commitLocal(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailMomentRules.ENTITY_ID, os.meka.core.domain.MailMomentRules.putOffFields(before))
+        }
+        mailMomentChanged()
+        os.meka.core.domain.MailMomentRules.PUT_OFF_LINE
+    }
+
+    /** Undo on the last Not today on this device. */
+    suspend fun undoMailMoment() = onCore {
+        val undo = mailMomentUndo ?: return@onCore
+        mailMomentUndo = null
+        undo()
+        mailMomentChanged()
+    }
+
+    /** When the ten-minute inbox comes (Mail pane). */
+    suspend fun mailMomentTime(): os.meka.core.domain.MailMomentTime = onCore { mailMomentSetting().time }
+
+    /** Mail pane: morning, evening or off (synced). Returns what the pane says. */
+    suspend fun setMailMomentTime(time: os.meka.core.domain.MailMomentTime): String = onCore {
+        if (mailMomentSetting().time != time ||
+            replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailMomentRules.ENTITY_ID)?.get(os.meka.core.domain.MailMomentFields.WHEN) == null
+        ) {
+            replica.commitLocal(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailMomentRules.ENTITY_ID, os.meka.core.domain.MailMomentRules.timeFields(time, nowMs()))
+        }
+        mailMomentChanged()
+        os.meka.core.domain.MailMomentRules.switchedLine(time)
+    }
+
+    /** The Mac's way in (only Strings cross): the time's key ("morning", "evening", "off"). */
+    suspend fun mailMomentTimeKey(): String = mailMomentTime().key
+
+    /** The Mac's way in: [key] is a [os.meka.core.domain.MailMomentTime] key; an unknown one changes nothing. */
+    suspend fun setMailMomentTimeKey(key: String): String {
+        val time = os.meka.core.domain.MailMomentTime.of(key) ?: return os.meka.core.domain.MailMomentRules.switchedLine(mailMomentTime())
+        return setMailMomentTime(time)
     }
 
     /** Undo on the last Done or Snooze in "From your mail" on this device. */
