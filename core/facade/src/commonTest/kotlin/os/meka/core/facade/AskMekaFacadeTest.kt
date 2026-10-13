@@ -1023,6 +1023,30 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun theCommuteAndTheWakeAlarmGoWithEveryQuestionAndAreAnsweredWithoutTheAi() = runTest {
+        // The commute counts everywhere, slice 5: Thu 8 Oct 17:15, tomorrow an office day.
+        val c = core()
+        assertTrue(c.setCommute(75, 90))
+        c.askMeka("When do I need to leave tomorrow?")
+        val ctx = server.asked.last().second
+        val lines = ctx.items.filter { it.kind == AskItemKind.COMMUTE }.map { it.line }
+        assertEquals("Commute · 1 h 15 to work · 1 h 30 home · door to door, office days only", lines.first())
+        assertTrue(lines[1].startsWith("Today · Thu 8 Oct · office day"), lines[1])
+        assertEquals("Tomorrow · Fri 9 Oct · office day · leave 07:45 · work 09:00–17:30 · home about 19:00", lines[2])
+        assertEquals("Wake alarm · Tomorrow · Fri 9 Oct · not set · suggested 06:45 (Work at 09:00 · 1 h 15 commute · 1 h to get ready)", lines.last())
+        assertFalse(ctx.untrusted)
+        // No AI (on the train, say): the device answers from the same numbers.
+        server.reply = AskReply.Unavailable("off", null)
+        val wake = assertIs<AskOutcome.Answered>(c.askMeka("What time should I get up?"))
+        assertEquals("Get up at about 06:45 tomorrow: Work at 09:00 · 1 h 15 commute · 1 h to get ready.", wake.answer.text)
+        server.down = true
+        now += 15 * 3_600_000L // Fri 08:15: on the way in
+        val home = assertIs<AskOutcome.Answered>(c.askMeka("when will I be home?"))
+        assertEquals("Work ends at 17:30, so you're home about 19:00.", home.answer.text)
+        assertEquals(AskOutcome.Unavailable(AskRules.OFFLINE_LINE), c.askMeka("hi"))
+    }
+
+    @Test
     fun aNotificationsQuestionCarriesThePhonesTraceAndIsAnsweredWithoutTheAi() = runTest {
         val c = core()
         val posted = os.meka.core.domain.NotifyTraceEntry(now - 3_600_000, os.meka.core.domain.NotifyTraceKind.POSTED, "1 notice on Heads-ups · next look 18:00")

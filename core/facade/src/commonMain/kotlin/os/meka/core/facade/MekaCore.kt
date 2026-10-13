@@ -3654,8 +3654,14 @@ class MekaCore(
         val notifyAsked = os.meka.core.domain.NotifyAskRules.isAbout(q)
         val notifyHealth = if (!notifyAsked) null else try { notificationHealthSource?.invoke() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
         val notifySettings = _notifySettings.value
+        // The commute counts everywhere, slice 5: "when do I need to leave?" / "what time should I get up?" answered on
+        // the device from the same numbers when the AI can't be reached (on the train, say).
+        val commuteLocal = if (!os.meka.core.domain.CommuteAskRules.isAbout(q)) null else onCore {
+            os.meka.core.domain.CommuteAskRules.localAnswer(q, hoursOf(_workMode.value, cal.epochDayOf(nowMs())), cal, nowMs(), currentWake())
+        }
         fun unavailable(line: String): os.meka.core.domain.AskOutcome {
-            val local = if (notifyAsked) os.meka.core.domain.NotifyAskRules.localAnswer(notifyHealth, notifySettings, nowMs(), cal) else null
+            val local = (if (notifyAsked) os.meka.core.domain.NotifyAskRules.localAnswer(notifyHealth, notifySettings, nowMs(), cal) else null)
+                ?: commuteLocal
             return if (local != null) os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(local, emptyList()))
             else os.meka.core.domain.AskOutcome.Unavailable(line)
         }
@@ -3712,7 +3718,9 @@ class MekaCore(
                 // Travel mode, slice 2a: each trip on now or coming with its bookings, so "when do we fly?" has an answer.
                 trips = os.meka.core.domain.TripAskRules.askLines(trips.items(), cal.epochDayOf(nowMs())),
                 // Notifications never seen, slice 4: only for a question about notifications, so "why didn't I get a notification?" has an answer.
-                notifications = if (notifyAsked) os.meka.core.domain.NotifyAskRules.askLines(notifyHealth, notifySettings, nowMs(), cal) else emptyList())
+                notifications = if (notifyAsked) os.meka.core.domain.NotifyAskRules.askLines(notifyHealth, notifySettings, nowMs(), cal) else emptyList(),
+                // The commute counts everywhere, slice 5: the commute, today, tomorrow and the wake alarm, so "when do I need to leave?" has an answer.
+                commute = os.meka.core.domain.CommuteAskRules.askLines(hoursOf(_workMode.value, cal.epochDayOf(nowMs())), cal, nowMs(), currentWake()))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -5065,6 +5073,9 @@ class MekaCore(
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */
     private fun hoursOf(state: WorkModeState, day: Long): os.meka.core.domain.WorkHours =
         os.meka.core.domain.WorkHours.of(state, bankHolidays.calendar(), day, work.homeDays(day), leave.days())
+
+    /** The wake view as the shutdown shows it, or null before the first refresh worked it out. */
+    private fun currentWake(): os.meka.core.domain.WakeView? = _wake.value.takeIf { it != os.meka.core.domain.WakeView.EMPTY }
 
     /** Leaving now with the journey home = Work mode's commute home (the commute counts everywhere, slice 4). */
     private fun leavingSetting(): os.meka.core.domain.LeavingSetting =

@@ -74,6 +74,9 @@ class AskCodecTest {
         // Car on autopilot (slice 3): a kind of its own.
         val car = req.copy(items = listOf(AskCodec.Item("", "car", "DVLA · Ford · MOT due Mon 2 Nov · taxed until Tue 1 Dec")))
         assertEquals(car, AskCodec.decodeRequest(AskCodec.encodeRequest(car)))
+        // The commute counts everywhere (slice 5): a kind of its own.
+        val commute = req.copy(items = listOf(AskCodec.Item("", "commute", "Tomorrow · Fri 9 Oct · office day · leave 07:40 · work 09:00–17:30 · home about 18:50")))
+        assertEquals(commute, AskCodec.decodeRequest(AskCodec.encodeRequest(commute)))
         fun bad(r: AskCodec.Request) = assertFailsWith<WireFormatException> { AskCodec.decodeRequest(AskCodec.encodeRequest(r)) }
         bad(req.copy(question = "  "))
         bad(req.copy(question = "q".repeat(501)))

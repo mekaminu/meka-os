@@ -92,6 +92,7 @@ class AiAskTest {
         assertTrue("add_errand" in AskService.KINDS && "add_errand" in AskService.SYSTEM && "errands lines" in AskService.SYSTEM)
         assertTrue("appointments lines" in AskService.SYSTEM)
         assertTrue("bins lines" in AskService.SYSTEM && "which bin is it this week?" in AskService.SYSTEM)
+        assertTrue("commute lines" in AskService.SYSTEM && "what time should I get up?" in AskService.SYSTEM)
         assertTrue("car lines" in AskService.SYSTEM && "is the car taxed?" in AskService.SYSTEM)
         assertTrue("notifications lines" in AskService.SYSTEM && "why didn't I get a notification?" in AskService.SYSTEM)
         // A chatty answer that isn't the JSON is words only, with nothing to act on.
