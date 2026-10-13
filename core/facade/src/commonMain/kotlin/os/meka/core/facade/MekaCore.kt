@@ -5840,7 +5840,22 @@ class MekaCore(
             documents = documents.items(),
             sessionAskGraceMin = if (workoutsInBackground) os.meka.core.domain.WorkoutRules.ASK_GRACE_MIN else 0,
             wake = currentWake(),
+            mailMoment = mailMomentSetting(),
+            mailWaiting = os.meka.core.domain.MailNeedsRules.allRows(activity.mailItems(), nowMs(), ZoneCalendar(timeZone)).size,
+            protectedFromMin = protectedFromToday(),
         )
+
+    /**
+     * When today's protected time starts (local minutes; 0 for a wholly protected day), or null: the ten-minute inbox's
+     * heads-up doesn't call him into it (Inbox autopilot, slice 7b).
+     */
+    private fun protectedFromToday(): Int? {
+        val cal = ZoneCalendar(timeZone)
+        val day = todayEpochDay()
+        val slot = os.meka.core.domain.ProtectedRules.slots(protectedTime.setting(), day, work.schedule(), bankHolidays.calendar(), cal).firstOrNull()
+            ?: return null
+        return if (slot.startMs <= cal.toEpochMs(day, 0)) 0 else cal.minuteOfDay(slot.startMs)
+    }
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */
     private fun hoursOf(state: WorkModeState, day: Long): os.meka.core.domain.WorkHours =

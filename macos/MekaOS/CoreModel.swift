@@ -808,6 +808,13 @@ final class CoreModel {
         showPlan = true
     }
 
+    /// "Clear my inbox" said to Talk (Inbox autopilot, slice 7b): Needs you comes forward and the ten-minute inbox starts,
+    /// as its Start does (nothing is archived or sent but by his own clicks there).
+    func openInboxFromTalk() {
+        go(to: .needsYou, reduced: MotionSetting.reduced)
+        startMailMoment()
+    }
+
     /// Runs a command-bar row by doing what the same button elsewhere on the Mac does (appearance is the view's).
     func perform(_ row: CommandBarRow, reduced: Bool) {
         if let d = CommandBarNav.destination(row.action) {

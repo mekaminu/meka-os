@@ -239,7 +239,8 @@ final class TalkController {
         } else if let open = effect as? TalkEffectOpen {
             // "Plan my day" (morning brief, slice 5): the conversation has ended (End came first); Today opens with
             // the planner up, as its button does. Only a Kotlin enum is compared here, on the main actor.
-            if open.place == TalkPlace.plan { model?.openPlanFromTalk() }
+            // "Clear my inbox" (Inbox autopilot, slice 7b): Needs you comes forward with the ten-minute inbox started.
+            if open.place == TalkPlace.plan { model?.openPlanFromTalk() } else if open.place == TalkPlace.inbox { model?.openInboxFromTalk() }
         } else if effect is TalkEffectStopSpeaking {
             stopSaying()
         } else if effect is TalkEffectEnd {

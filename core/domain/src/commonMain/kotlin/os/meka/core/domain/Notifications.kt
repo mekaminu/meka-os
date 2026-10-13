@@ -163,6 +163,12 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * a month and a week before it runs out and on the day, at 09:00 — "Rex passport expires Thu 20 May 2027".
      */
     DOCUMENTS("Vault: documents running out", NoticeTier.HEADS_UP),
+    /**
+     * Inbox autopilot, slice 7b ([MailMomentRules.notices]): at the ten-minute inbox's time while emails need him —
+     * "Ten-minute inbox · 6 need you" · "About 12 min · Inbox clear 4 days running". None on a Not today, a clear inbox,
+     * or when the moment falls in protected time (the card still waits in Needs you).
+     */
+    MAIL_MOMENT("Ten-minute inbox", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jeanette · due today"). */
@@ -594,6 +600,7 @@ object Governor {
         NoticeSource.LIFE_ADMIN -> "your life admin hour"
         NoticeSource.TRIPS -> if (n == 1) "a trip tomorrow" else "$n trips tomorrow"
         NoticeSource.DOCUMENTS -> plural(n, "document") + " to renew"
+        NoticeSource.MAIL_MOMENT -> "your ten-minute inbox"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.PROMISE -> if (n == 1) "a promise due" else "$n promises due"
@@ -677,6 +684,13 @@ object NoticeSources {
         sessionAskGraceMin: Int = 0,
         /** The next morning's wake alarm, for the trains' "wake 10 min earlier?" ([CommuteDisruptionRules.notices]). */
         wake: WakeView? = null,
+        /**
+         * The ten-minute inbox ([MailMomentRules.notices]): its setting, how many emails need him, and when today's
+         * protected time starts (local minutes; 0 for a wholly protected day, null for none).
+         */
+        mailMoment: MailMomentSetting? = null,
+        mailWaiting: Int = 0,
+        protectedFromMin: Int? = null,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -807,6 +821,7 @@ object NoticeSources {
         out += TripRules.notices(trips, nowMs, cal)
         out += DocumentRules.notices(documents, nowMs, cal)
         if (lifeAdmin != null) out += LifeAdminRules.notices(lifeAdmin, nowMs)
+        if (mailMoment != null) out += MailMomentRules.notices(mailMoment, mailWaiting, protectedFromMin, nowMs, cal)
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)

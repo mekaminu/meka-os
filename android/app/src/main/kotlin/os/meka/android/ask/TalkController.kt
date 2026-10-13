@@ -253,6 +253,11 @@ class TalkController(
                 os.meka.core.domain.TalkPlace.PLAN -> { (context.applicationContext as? os.meka.android.MekaApplication)?.openPlan?.value = true }
                 // Bedside clock slice 1: "bedside clock" said to Talk opens it; ‹ Back leaves it.
                 os.meka.core.domain.TalkPlace.BEDSIDE -> { (context.applicationContext as? os.meka.android.MekaApplication)?.openBedside?.value = true }
+                // Inbox autopilot, slice 7b: "clear my inbox" starts the ten-minute inbox and Needs you comes forward.
+                os.meka.core.domain.TalkPlace.INBOX -> {
+                    scope.launch { core.startMailMoment() }
+                    (context.applicationContext as? os.meka.android.MekaApplication)?.openDestination?.value = os.meka.android.shell.ShellDestination.NEEDS_YOU
+                }
             }
             TalkEffect.StopSpeaking -> stopSaying()
             TalkEffect.End -> {

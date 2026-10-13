@@ -1178,6 +1178,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(done.session.openAfter)
     }
 
+    /// Inbox autopilot, slice 7b: "clear my inbox" said to Talk ends the conversation, then starts the ten-minute inbox.
+    func testClearMyInboxFromTalkReachesSwift() {
+        let reply = TalkRules.shared.reply(utterance: "clear my inbox", pendingCards: 0)
+        XCTAssertEqual((reply as? TalkReplyOpen)?.place, TalkPlace.inbox)
+        let said = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "go through my emails")
+        XCTAssertEqual((said.effects.first as? TalkEffectSpeak)?.text, TalkOpenRules.shared.OPENING_INBOX)
+        let done = TalkFlow.shared.spoke(s: said.session)
+        XCTAssertEqual((done.effects.last as? TalkEffectOpen)?.place, TalkPlace.inbox)
+        XCTAssertEqual(NoticeSource.mailMoment.label, "Ten-minute inbox")
+    }
+
     /// Morning brief, slice 7: the brief's Listen hands over to Talk (8 s) only after a finished read that ends asking.
     func testBriefFollowOnReachesSwift() {
         let script = "Good morning, Meka. " + BriefScriptRules.shared.CLOSE

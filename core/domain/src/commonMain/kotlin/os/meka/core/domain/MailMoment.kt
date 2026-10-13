@@ -163,6 +163,32 @@ object MailMomentRules {
         return MailMomentSession(row, position, line, done, left, null, "$position. $line. ${row.spoken}")
     }
 
+    /** A heads-up older than this (after the moment's time) is stale: the card still waits in Needs you. */
+    const val NOTICE_STALE_MS = 4 * 60 * 60_000L
+
+    /**
+     * Slice 7b: the heads-up at the moment's time (source [NoticeSource.MAIL_MOMENT], through the governor, so quiet
+     * hours hold it like any heads-up): "Ten-minute inbox · 6 need you" · "About 12 min · Inbox clear 4 days running",
+     * opening Needs you. None when the moment is off, he said Not today, today is already clear, nothing needs him, or
+     * the moment falls in protected time ([protectedFromMin]: when today's starts, 0 for a wholly protected day): the
+     * card still waits in Needs you, it just doesn't call him. Stale [NOTICE_STALE_MS] after the moment.
+     */
+    fun notices(s: MailMomentSetting, waiting: Int, protectedFromMin: Int?, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        val minute = s.time.minute ?: return emptyList()
+        val today = cal.epochDayOf(nowMs)
+        if (waiting <= 0 || s.putOffDay == today || today in s.clearDays) return emptyList()
+        if (protectedFromMin != null && minute >= protectedFromMin) return emptyList()
+        val at = cal.toEpochMs(today, minute)
+        val about = if (waiting == 1) "About $MIN_EACH min" else "About ${waiting * MIN_EACH} min"
+        val text = listOfNotNull(about, streakLine(s.clearDays, today)).joinToString(" · ")
+        val need = if (waiting == 1) "1 needs you" else "$waiting need you"
+        return listOf(Notice(
+            key = "mail-moment:$today", source = NoticeSource.MAIL_MOMENT, tier = NoticeTier.HEADS_UP,
+            title = "$TITLE · $need", text = text, atMs = at, target = NoticeTarget.NEEDS_YOU,
+            expiresAtMs = at + NOTICE_STALE_MS,
+        ))
+    }
+
     /** The Mail pane's line for the setting. */
     fun settingLine(time: MailMomentTime): String = when (time) {
         MailMomentTime.OFF -> "Off · From your mail still lists what needs you"

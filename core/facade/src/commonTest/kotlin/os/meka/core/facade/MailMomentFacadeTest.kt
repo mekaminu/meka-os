@@ -130,4 +130,24 @@ class MailMomentFacadeTest {
         assertTrue(fold.syncNow())
         assertTrue(serverOps.after("hh", 0, 1_000).none { it.op.entityType == EntityTypes.CONTEXT_MODE && it.op.entityId == MailMomentRules.ENTITY_ID })
     }
+
+    @Test
+    fun theHeadsUpComesAtTheMomentButNotIntoProtectedTime() = runTest {
+        email("m1", "Sam Taylor", "Football on Saturday", hour)
+        email("m2", "Alex Reed", "Invoice question", 2 * hour)
+        val fold = core("android")
+        assertTrue(fold.syncNow())
+        val n = fold.noticesNow().single { it.source == os.meka.core.domain.NoticeSource.MAIL_MOMENT }
+        assertEquals("Ten-minute inbox · 2 need you", n.title)
+        assertEquals(os.meka.core.domain.NoticeTarget.NEEDS_YOU, n.target)
+        // Saturday with weekends protected: the card still waits, the heads-up doesn't call him.
+        assertNotNull(fold.setProtectedTime(false, 19 * 60, true))
+        assertTrue(fold.noticesNow().none { it.source == os.meka.core.domain.NoticeSource.MAIL_MOMENT })
+        assertNotNull(fold.mailMoment.value)
+        // Not today drops it too.
+        fold.setProtectedTime(false, 19 * 60, false)
+        assertEquals(1, fold.noticesNow().count { it.source == os.meka.core.domain.NoticeSource.MAIL_MOMENT })
+        fold.notTodayMailMoment()
+        assertTrue(fold.noticesNow().none { it.source == os.meka.core.domain.NoticeSource.MAIL_MOMENT })
+    }
 }

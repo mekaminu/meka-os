@@ -135,4 +135,66 @@ class MailMomentTest {
         assertEquals("Ten-minute inbox · evenings from 20:00", MailMomentRules.switchedLine(MailMomentTime.EVENING))
         assertEquals("Ten-minute inbox off", MailMomentRules.switchedLine(MailMomentTime.OFF))
     }
+
+    // ---- slice 7b: the heads-up and "clear my inbox" ----
+
+    @Test
+    fun theHeadsUpComesAtTheMomentWhileEmailsNeedHim() {
+        val n = MailMomentRules.notices(setting(clear = setOf(today - 1, today - 2)), 6, null, now, cal).single()
+        assertEquals(NoticeSource.MAIL_MOMENT, n.source)
+        assertEquals(NoticeTier.HEADS_UP, n.tier)
+        assertEquals("mail-moment:$today", n.key)
+        assertEquals("Ten-minute inbox · 6 need you", n.title)
+        assertEquals("About 12 min · Inbox clear 2 days running", n.text)
+        assertEquals(cal.toEpochMs(today, 8 * 60), n.atMs)
+        assertEquals(n.atMs + MailMomentRules.NOTICE_STALE_MS, n.expiresAtMs)
+        assertEquals(NoticeTarget.NEEDS_YOU, n.target)
+        assertEquals("Ten-minute inbox · 1 needs you", MailMomentRules.notices(setting(), 1, null, now, cal).single().title)
+        assertEquals("About 2 min", MailMomentRules.notices(setting(), 1, null, now, cal).single().text)
+        // Evening: due at 20:00.
+        assertEquals(cal.toEpochMs(today, 20 * 60), MailMomentRules.notices(setting(MailMomentTime.EVENING), 3, null, now, cal).single().atMs)
+    }
+
+    @Test
+    fun noHeadsUpWhenOffPutOffClearEmptyOrInProtectedTime() {
+        assertTrue(MailMomentRules.notices(setting(MailMomentTime.OFF), 6, null, now, cal).isEmpty())
+        assertTrue(MailMomentRules.notices(setting(putOff = today), 6, null, now, cal).isEmpty())
+        assertTrue(MailMomentRules.notices(setting(clear = setOf(today)), 6, null, now, cal).isEmpty())
+        assertTrue(MailMomentRules.notices(setting(), 0, null, now, cal).isEmpty())
+        // Yesterday's Not today doesn't hold today's.
+        assertEquals(1, MailMomentRules.notices(setting(putOff = today - 1), 6, null, now, cal).size)
+        // Protected evenings from 19:00: the evening moment at 20:00 doesn't call him; the morning one does.
+        assertTrue(MailMomentRules.notices(setting(MailMomentTime.EVENING), 6, 19 * 60, now, cal).isEmpty())
+        assertEquals(1, MailMomentRules.notices(setting(), 6, 19 * 60, now, cal).size)
+        // A wholly protected day (a weekend): none at all.
+        assertTrue(MailMomentRules.notices(setting(), 6, 0, now, cal).isEmpty())
+    }
+
+    @Test
+    fun theHeadsUpGoesThroughTheCollector() {
+        val all = NoticeSources.collect(
+            ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, TodayProjection.project(emptyList(), now, CalendarAgenda.window(today, cal), emptyList(), cal), now, cal,
+            mailMoment = setting(), mailWaiting = 4, protectedFromMin = null,
+        )
+        assertEquals("Ten-minute inbox · 4 need you", all.single { it.source == NoticeSource.MAIL_MOMENT }.title)
+        val none = NoticeSources.collect(ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, TodayProjection.project(emptyList(), now, CalendarAgenda.window(today, cal), emptyList(), cal), now, cal)
+        assertTrue(none.none { it.source == NoticeSource.MAIL_MOMENT })
+    }
+
+    @Test
+    fun clearMyInboxSaidToTalkStartsTheMoment() {
+        listOf(
+            "clear my inbox", "ok Navilife, clear my inbox please", "can you help me clear the inbox", "go through my emails",
+            "let's go through my inbox", "sort out my inbox", "do my email", "inbox zero", "ten-minute inbox",
+            "start my ten minute inbox", "start the 10 minute inbox", "tidy my inbox",
+        ).forEach { assertEquals(TalkPlace.INBOX, TalkOpenRules.request(it), it) }
+        assertEquals(TalkPlace.INBOX, TalkOpenRules.request("clear my inbox", TalkOpenRules.FOLD))
+        listOf("anything important in my email", "what did the school say in my inbox", "clear my calendar", "email Sam")
+            .forEach { assertNull(TalkOpenRules.request(it), it) }
+        val heard = TalkFlow.heard(TalkFlow.start().session, "clear my inbox")
+        assertEquals(TalkEffect.Speak(TalkOpenRules.OPENING_INBOX), heard.effects.single())
+        assertEquals(TalkOpenRules.OPENED_INBOX, heard.session.conversation.turns.last().answer)
+        val done = TalkFlow.spoke(heard.session)
+        assertEquals(listOf(TalkEffect.End, TalkEffect.Open(TalkPlace.INBOX)), done.effects)
+    }
 }

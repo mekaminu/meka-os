@@ -15,7 +15,7 @@ package os.meka.core.domain
  * doesn't appear on the Fold 8") only on a device that has one: the Fold asks with [TalkOpenRules.FOLD]; the Mac keeps
  * [TalkOpenRules.DEFAULT], so "bedside clock" there is a question like any other.
  */
-enum class TalkPlace { PLAN, BEDSIDE }
+enum class TalkPlace { PLAN, BEDSIDE, INBOX }
 
 object TalkOpenRules {
     /** What MEKA says before the planner opens. */
@@ -24,11 +24,33 @@ object TalkOpenRules {
     /** What the conversation remembers MEKA did. */
     const val OPENED_PLAN = "Opened Plan my day."
 
-    /** What a device without a bedside clock (the Mac) can open. */
-    val DEFAULT: Set<TalkPlace> = setOf(TalkPlace.PLAN)
+    /**
+     * Inbox autopilot, slice 7b: "clear my inbox" starts the ten-minute inbox in Needs you, as its Start does (nothing
+     * is archived or sent but by his own taps there).
+     */
+    const val OPENING_INBOX = "Here's your inbox, one email at a time."
+    const val OPENED_INBOX = "Started the ten-minute inbox."
 
-    /** The Fold: the planner and the bedside clock. */
-    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE)
+    /** What a device without a bedside clock (the Mac) can open. */
+    val DEFAULT: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX)
+
+    /** The Fold: the planner, the bedside clock and the ten-minute inbox. */
+    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX)
+
+    /**
+     * "Clear my inbox", "go through my emails", "sort out the inbox", "do my email", "inbox zero", "ten-minute inbox",
+     * "start my ten minute inbox" (what's left once [DROP] is gone).
+     */
+    private val INBOX: Set<List<String>> = buildSet {
+        val things = listOf("inbox", "email", "emails", "mail", "mails")
+        for (verb in listOf("clear", "empty", "sort", "do", "through", "tidy")) for (det in listOf(null, "my", "the")) for (t in things) {
+            add(listOfNotNull(verb, det, t))
+        }
+        for (verb in listOf(null, "start", "open", "do")) for (det in listOf(null, "my", "the")) for (n in listOf("ten", "10")) {
+            add(listOfNotNull(verb, det, n, "minute", "inbox"))
+        }
+        add(listOf("inbox", "zero")); add(listOf("start", "inbox", "zero")); add(listOf("start", "my", "inbox"))
+    }
 
     /** "Bedside clock", "open the bedside clock", "show me the bedside clock", "night clock", "bedside mode". */
     private val BEDSIDE = setOf(
@@ -70,6 +92,7 @@ object TalkOpenRules {
         return when {
             ws in PLAN && TalkPlace.PLAN in places -> TalkPlace.PLAN
             ws in BEDSIDE && TalkPlace.BEDSIDE in places -> TalkPlace.BEDSIDE
+            ws in INBOX && TalkPlace.INBOX in places -> TalkPlace.INBOX
             else -> null
         }
     }
@@ -78,12 +101,14 @@ object TalkOpenRules {
     fun opening(place: TalkPlace): String = when (place) {
         TalkPlace.PLAN -> OPENING_PLAN
         TalkPlace.BEDSIDE -> BedsideEntryRules.OPENING
+        TalkPlace.INBOX -> OPENING_INBOX
     }
 
     /** What the conversation remembers about opening [place]. */
     fun remembered(place: TalkPlace): String = when (place) {
         TalkPlace.PLAN -> OPENED_PLAN
         TalkPlace.BEDSIDE -> BedsideEntryRules.OPENED
+        TalkPlace.INBOX -> OPENED_INBOX
     }
 }
 
