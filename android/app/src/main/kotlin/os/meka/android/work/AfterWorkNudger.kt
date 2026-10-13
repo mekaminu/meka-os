@@ -112,11 +112,11 @@ class AfterWorkNudger(private val context: Context, private val app: MekaApplica
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val public = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setSmallIcon(os.meka.android.R.drawable.ic_stat_meka)
             .setContentTitle(publicText)
             .build()
         val n = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setSmallIcon(os.meka.android.R.drawable.ic_stat_meka)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))

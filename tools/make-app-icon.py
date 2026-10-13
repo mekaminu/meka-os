@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""MEKA's app icon: option A, "Bezel M" (Fold review 2026-10-12, polish 8; Meka picked it on 2026-10-12 18:01).
+"""MEKA's app icon: option B, "Hands M" (Meka, 2026-10-12 20:36: option A, the Bezel M, "looks weird").
 
-The old icon (the full watch face) read as a clock app on the home screen. This one keeps the watch's brass rim and
-its four markers and puts an M inside whose middle point is the hands' pivot (a small brass pin with a hole), so it
-reads as MEKA and still belongs to the watch face Today draws. The geometry is option A's in
-tools/make-icon-options.py (docs/design/icons/option-a.svg), drawn from one outline so every output matches:
+No rim: the watch's two hands at ten past ten are the M's middle V, meeting at the pivot (a brass pin with a hole),
+and two stems drop from the hands' tips to finish the letter. It reads as MEKA and still belongs to the watch face
+Today draws. The geometry is option B's in tools/make-icon-options.py (docs/design/icons/option-b.svg), refined for
+small sizes: the stems and hands are heavier so the M holds at 48 px and in the themed (monochrome) icon, and each
+hand has a short tail under the pin so the pivot's hole is cut cleanly through both. Drawn from one outline so
+every output matches:
   * the Fold's adaptive icon (vector drawables: foreground, monochrome, background) in android/app/src/main/res,
-    and the same for the Galaxy Watch in wear/app/src/main/res
+    and the same for the Galaxy Watch in wear/app/src/main/res (its tile and complication use these too)
+  * the status-bar glyph ic_stat_meka (a heavier single-colour M without the hole) in android/app/src/main/res
   * the Mac's AppIcon.appiconset (PNGs at every size macOS asks for) in macos/MekaOS/Assets.xcassets
   * docs/design/icons/app-icon-512.png, a 512 px square for anywhere a flat icon is wanted
-Colours are the design tokens' dark theme: accent #C9B37E on true black. Today's living watch face is unchanged.
+Colours are the design tokens' dark theme: accent #C9B37E on true black with a faint brass glow. Today's living
+watch face is unchanged.
 
 Run from the repo root: python3 tools/make-app-icon.py   (needs Pillow; the outputs are committed)
 """
@@ -20,47 +24,55 @@ import os
 BRASS = "#C9B37E"
 BRASS_RGB = (0xC9, 0xB3, 0x7E)
 
-# Icon units: the 108-unit adaptive-icon viewport, centre (54, 54), y down, angles clockwise from 12 o'clock.
+# Icon units: the 108-unit adaptive-icon viewport, y down, angles clockwise from 12 o'clock.
 C = 54.0
-RIM_R = 26.0
-RIM_W = 3.0
-TICK_FROM, TICK_TO, TICK_W = 18.6, 22.0, 2.2
-M_POINTS = [(42.2, 65.0), (42.2, 41.2), (C, C), (65.8, 41.2), (65.8, 65.0)]  # the M's centre line
-M_W = 3.6
-PIN_R, PIN_HOLE = 3.3, 1.05
+PIVOT = (54.0, 63.0)       # where the hands meet: the M's middle point
+SPREAD, LENGTH = 38.0, 26.0  # ten past ten: each hand 38° either side of 12
+BASE_Y = 71.0              # where the stems stop
 
 
-def at(deg, r):
+class Weight:
+    def __init__(self, stem, hand_base, hand_tip, hand_tail, pin, hole):
+        self.stem, self.hand_base, self.hand_tip, self.hand_tail, self.pin, self.hole = (
+            stem, hand_base, hand_tip, hand_tail, pin, hole)
+
+
+ICON = Weight(stem=2.6, hand_base=5.2, hand_tip=2.4, hand_tail=1.2, pin=3.2, hole=1.05)
+# The status bar shows the glyph at 24 dp: heavier still, and no hole (it would be under a pixel).
+GLYPH = Weight(stem=3.6, hand_base=6.6, hand_tip=3.4, hand_tail=1.0, pin=3.8, hole=0.0)
+
+
+def at(p, deg, r):
     a = math.radians(deg)
-    return (C + r * math.sin(a), C - r * math.cos(a))
+    return (p[0] + r * math.sin(a), p[1] - r * math.cos(a))
 
 
-def ticks():
-    return [(at(d, TICK_FROM), at(d, TICK_TO)) for d in (0, 90, 180, 270)]
+def tips():
+    return at(PIVOT, -SPREAD, LENGTH), at(PIVOT, SPREAD, LENGTH)
 
 
-def m_outline():
-    """The M's stroke as one polygon: butt ends, mitred corners (all within SVG's miter limit 4, so this is
-    exactly what option-a.svg's polyline draws)."""
-    def side(sign):
-        lines = []
-        for a, b in zip(M_POINTS, M_POINTS[1:]):
-            dx, dy = b[0] - a[0], b[1] - a[1]
-            length = math.hypot(dx, dy)
-            nx, ny = -dy / length * M_W / 2 * sign, dx / length * M_W / 2 * sign
-            lines.append(((a[0] + nx, a[1] + ny), (b[0] + nx, b[1] + ny)))
-        out = [lines[0][0]]
-        for (a1, b1), (a2, b2) in zip(lines, lines[1:]):
-            d1 = (b1[0] - a1[0], b1[1] - a1[1])
-            d2 = (b2[0] - a2[0], b2[1] - a2[1])
-            t = ((a2[0] - a1[0]) * d2[1] - (a2[1] - a1[1]) * d2[0]) / (d1[0] * d2[1] - d1[1] * d2[0])
-            out.append((a1[0] + d1[0] * t, a1[1] + d1[1] * t))
-        out.append(lines[-1][1])
-        return out
-    return side(1) + side(-1)[::-1]
+def stems():
+    return [(t, (t[0], BASE_Y)) for t in tips()]
 
 
-# ---- Android: 108 dp adaptive icon, face centred (the 66 dp safe zone holds the rim: 2 × 27.5 = 55 dp).
+def hand(deg, w):
+    """A tapered hand from a short tail behind the pivot to its tip (four corners)."""
+    a = math.radians(deg)
+    d = (math.sin(a), -math.cos(a))
+    n = (math.cos(a), math.sin(a))
+
+    def p(along, half):
+        return (PIVOT[0] + d[0] * along + n[0] * half, PIVOT[1] + d[1] * along + n[1] * half)
+
+    return [p(-w.hand_tail, w.hand_base / 2), p(LENGTH, w.hand_tip / 2), p(LENGTH, -w.hand_tip / 2),
+            p(-w.hand_tail, -w.hand_base / 2)]
+
+
+def hands(w):
+    return [hand(-SPREAD, w), hand(SPREAD, w)]
+
+
+# ---- Android: 108 dp adaptive icon (the art sits well inside the 66 dp safe zone).
 
 def f(v):
     return f"{v:.2f}".rstrip("0").rstrip(".")
@@ -71,27 +83,56 @@ def circle_path(cx, cy, r):
             f"a{f(r)},{f(r)} 0,1 1,{f(-2 * r)},0Z")
 
 
+def poly_path(points):
+    return "M" + "L".join(f"{f(x)},{f(y)}" for x, y in points) + "Z"
+
+
+def art_paths(colour, w):
+    stem_d = "".join(f"M{f(a[0])},{f(a[1])}L{f(b[0])},{f(b[1])}" for a, b in stems())
+    paths = [f'<path android:strokeColor="{colour}" android:strokeWidth="{f(w.stem)}" '
+             f'android:strokeLineCap="round" android:pathData="{stem_d}" />']
+    if w.hole > 0:
+        # The hands and the pin, each with the pivot's hole cut through (even-odd: the hole sits inside all three).
+        hole = circle_path(PIVOT[0], PIVOT[1], w.hole)
+        for h in hands(w):
+            paths.append(f'<path android:fillColor="{colour}" android:fillType="evenOdd" '
+                         f'android:pathData="{poly_path(h)}{hole}" />')
+        paths.append(f'<path android:fillColor="{colour}" android:fillType="evenOdd" '
+                     f'android:pathData="{circle_path(PIVOT[0], PIVOT[1], w.pin)}{hole}" />')
+    else:
+        # One path per shape: the two hands wind opposite ways, so in one path their overlap would cancel out.
+        for d in [poly_path(h) for h in hands(w)] + [circle_path(PIVOT[0], PIVOT[1], w.pin)]:
+            paths.append(f'<path android:fillColor="{colour}" android:pathData="{d}" />')
+    return paths
+
+
 def android_foreground(colour):
-    paths = [f'    <path android:strokeColor="{colour}" android:strokeWidth="{f(RIM_W)}" '
-             f'android:pathData="{circle_path(C, C, RIM_R)}" />']
-    tick_d = "".join(f"M{f(a[0])},{f(a[1])}L{f(b[0])},{f(b[1])}" for a, b in ticks())
-    paths.append(f'    <path android:strokeColor="{colour}" android:strokeWidth="{f(TICK_W)}" '
-                 f'android:strokeLineCap="round" android:pathData="{tick_d}" />')
-    # The M and the pin, each with the pivot's hole cut through (even-odd: the hole sits inside both).
-    hole = circle_path(C, C, PIN_HOLE)
-    m_d = "M" + "L".join(f"{f(x)},{f(y)}" for x, y in m_outline()) + "Z" + hole
-    paths.append(f'    <path android:fillColor="{colour}" android:fillType="evenOdd" android:pathData="{m_d}" />')
-    paths.append(f'    <path android:fillColor="{colour}" android:fillType="evenOdd" '
-                 f'android:pathData="{circle_path(C, C, PIN_R)}{hole}" />')
     return ("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-            "<!-- Generated by tools/make-app-icon.py: MEKA's Bezel M. Edit the script, not this file. -->\n"
+            "<!-- Generated by tools/make-app-icon.py: MEKA's Hands M. Edit the script, not this file. -->\n"
             "<vector xmlns:android=\"http://schemas.android.com/apk/res/android\"\n"
             "    android:width=\"108dp\" android:height=\"108dp\" android:viewportWidth=\"108\" "
-            "android:viewportHeight=\"108\">\n" + "\n".join(paths) + "\n</vector>\n")
+            "android:viewportHeight=\"108\">\n" + "\n".join("    " + p for p in art_paths(colour, ICON)) + "\n</vector>\n")
+
+
+def android_glyph():
+    """The status-bar icon: 24 dp, white (Android tints it), the art centred in a 36-unit window."""
+    xs = [p[0] for h in hands(GLYPH) for p in h] + [t[0] for t in tips()]
+    left, right = min(xs) - GLYPH.stem / 2, max(xs) + GLYPH.stem / 2
+    top = min(t[1] for t in tips()) - GLYPH.stem / 2
+    bottom = BASE_Y + GLYPH.stem / 2
+    span = 36.0
+    tx, ty = span / 2 - (left + right) / 2, span / 2 - (top + bottom) / 2
+    body = "\n".join("        " + p for p in art_paths("#FFFFFFFF", GLYPH))
+    return ("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+            "<!-- Generated by tools/make-app-icon.py: MEKA's Hands M as the status-bar glyph. Edit the script. -->\n"
+            "<vector xmlns:android=\"http://schemas.android.com/apk/res/android\"\n"
+            f"    android:width=\"24dp\" android:height=\"24dp\" android:viewportWidth=\"{f(span)}\" "
+            f"android:viewportHeight=\"{f(span)}\">\n"
+            f"    <group android:translateX=\"{f(tx)}\" android:translateY=\"{f(ty)}\">\n{body}\n    </group>\n</vector>\n")
 
 
 ANDROID_BACKGROUND = """<?xml version="1.0" encoding="utf-8"?>
-<!-- Generated by tools/make-app-icon.py: black with a faint warm glow behind the M. -->
+<!-- Generated by tools/make-app-icon.py: black with a faint brass glow behind the M. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
@@ -114,7 +155,7 @@ ANDROID_ADAPTIVE = """<?xml version="1.0" encoding="utf-8"?>
 """
 
 
-# ---- Mac: a 1024 px squircle (Apple's template: an 824 px body inset 100 px), face radius 300 px.
+# ---- Mac: a 1024 px squircle (Apple's template: an 824 px body inset 100 px).
 
 def mac_icon(size_px=1024, ss=4):
     from PIL import Image, ImageDraw
@@ -122,7 +163,7 @@ def mac_icon(size_px=1024, ss=4):
     img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     k = S / 1024
     body = (100 * k, 100 * k, 924 * k, 924 * k)
-    # Body: black with a faint warm centre (a radial blend drawn as rings).
+    # Body: black with a faint brass centre (a radial blend drawn as rings).
     mask = Image.new("L", (S, S), 0)
     ImageDraw.Draw(mask).rounded_rectangle(body, radius=185.4 * k, fill=255)
     bg = Image.new("RGBA", (S, S), (0, 0, 0, 255))
@@ -146,16 +187,15 @@ def mac_icon(size_px=1024, ss=4):
     def disc(p, r, fill=255):
         d.ellipse((p[0] - r, p[1] - r, p[0] + r, p[1] + r), fill=fill)
 
-    centre = t((C, C))
-    disc(centre, (RIM_R + RIM_W / 2) * u)
-    disc(centre, (RIM_R - RIM_W / 2) * u, 0)
-    for a, b in ticks():
-        d.line([t(a), t(b)], fill=255, width=int(round(TICK_W * u)))
-        disc(t(a), TICK_W * u / 2)
-        disc(t(b), TICK_W * u / 2)
-    d.polygon([t(p) for p in m_outline()], fill=255)
-    disc(centre, PIN_R * u)
-    disc(centre, PIN_HOLE * u, 0)
+    for a, b in stems():
+        d.line([t(a), t(b)], fill=255, width=int(round(ICON.stem * u)))
+        disc(t(a), ICON.stem * u / 2)
+        disc(t(b), ICON.stem * u / 2)
+    for h in hands(ICON):
+        d.polygon([t(p) for p in h], fill=255)
+    pivot = t(PIVOT)
+    disc(pivot, ICON.pin * u)
+    disc(pivot, ICON.hole * u, 0)
     img.paste(Image.new("RGBA", (S, S), BRASS_RGB + (255,)), (0, 0), ink)
     return img.resize((size_px, size_px), Image.LANCZOS)
 
@@ -164,6 +204,7 @@ MAC_SIZES = [(16, 1), (16, 2), (32, 1), (32, 2), (128, 1), (128, 2), (256, 1), (
 
 
 def main():
+    from PIL import Image
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     files = {
         "drawable/ic_launcher_foreground.xml": android_foreground(BRASS),
@@ -181,6 +222,8 @@ def main():
         for rel, text in files.items():
             with open(os.path.join(res, rel), "w") as fh:
                 fh.write(text)
+    with open(os.path.join(root, "android/app/src/main/res/drawable/ic_stat_meka.xml"), "w") as fh:
+        fh.write(android_glyph())
 
     iconset = os.path.join(root, "macos/MekaOS/Assets.xcassets/AppIcon.appiconset")
     os.makedirs(iconset, exist_ok=True)
@@ -188,14 +231,12 @@ def main():
         json.dump({"info": {"author": "xcode", "version": 1}}, fh, indent=2)
         fh.write("\n")
     master = mac_icon(1024)
-    from PIL import Image
     master.crop((100, 100, 924, 924)).resize((512, 512), Image.LANCZOS).save(
         os.path.join(root, "docs/design/icons/app-icon-512.png"), optimize=True)
     images = []
     for pt, scale in MAC_SIZES:
         px = pt * scale
         name = f"icon_{pt}x{pt}{'@2x' if scale == 2 else ''}.png"
-        from PIL import Image
         (master if px == 1024 else master.resize((px, px), Image.LANCZOS)).save(
             os.path.join(iconset, name), optimize=True)
         images.append({"filename": name, "idiom": "mac", "scale": f"{scale}x", "size": f"{pt}x{pt}"})

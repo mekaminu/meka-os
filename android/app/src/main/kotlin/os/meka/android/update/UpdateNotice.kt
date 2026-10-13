@@ -59,7 +59,7 @@ object UpdateNotice {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val n = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setSmallIcon(os.meka.android.R.drawable.ic_stat_meka)
             .setContentTitle(AppUpdateRules.TITLE)
             .setContentText(AppUpdateRules.notificationLine(build))
             .setPriority(NotificationCompat.PRIORITY_LOW)

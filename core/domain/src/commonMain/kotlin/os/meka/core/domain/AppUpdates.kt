@@ -89,6 +89,24 @@ object AppUpdateRules {
     /** True when [versionCode] hasn't been written to Activity yet ([recordedCode] is the last one that was). */
     fun shouldRecordInstall(versionCode: Long, recordedCode: Long?): Boolean = recordedCode == null || versionCode > recordedCode
 
+    /**
+     * The app icon MEKA currently ships (app icon → option B, Meka 2026-10-12 20:36). When it changes, the first run of
+     * an updated build says so once in Activity, since launchers often keep the old icon until they restart.
+     */
+    const val ICON = "hands-m"
+
+    /**
+     * True when Activity should say the icon changed: an update (the phone had recorded an earlier build, so not a
+     * fresh install) and [notedIcon] — the icon last announced — isn't [ICON].
+     */
+    fun shouldNoteIcon(notedIcon: String?, hadEarlierBuild: Boolean): Boolean = hadEarlierBuild && notedIcon != ICON
+
+    fun iconActivityId(icon: String = ICON): String = "u" + ActivityRules.fnv64("app-icon:$icon")
+
+    const val ICON_SUMMARY = "MEKA has a new icon: the Hands M"
+    const val ICON_WHY = "The watch's two hands at ten past ten make the M. If the home screen still shows the old " +
+        "icon, restart the phone (or the launcher) and it will catch up."
+
     /** One Activity entry per build. */
     fun installedActivityId(versionCode: Long): String = "u" + ActivityRules.fnv64("update-installed:$versionCode")
 

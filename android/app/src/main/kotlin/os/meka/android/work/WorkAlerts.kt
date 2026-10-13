@@ -69,7 +69,7 @@ object WorkAlerts {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val b = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setSmallIcon(os.meka.android.R.drawable.ic_stat_meka)
             .setContentTitle(title)
             .setContentText(line)
             .setSubText(why.label)

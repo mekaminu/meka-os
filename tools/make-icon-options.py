@@ -11,15 +11,22 @@ the icon becomes one of these, all in the design tokens' brass (#C9B37E) on the 
 Writes docs/design/icons/option-{a,b,c}.svg (108-unit adaptive-icon viewport: the art stays inside the 66-unit
 safe circle), option-{a,b,c}.png (1024 px, the Mac's rounded square) and options-sheet.png (each option at
 home-screen sizes, in a circle and a rounded square, on a dark and a light wallpaper, and as Android's themed
-monochrome). Once Meka picks one, tools/make-app-icon.py takes that geometry and regenerates both apps' icons.
+monochrome). Meka chose B (2026-10-12 20:36); its art here is tools/make-app-icon.py's, which ships it on both apps.
 
 Run from the repo root: python3 tools/make-icon-options.py   (needs Python Playwright and its Chromium)
 """
+import importlib.util
 import math
 import os
 
 from playwright.sync_api import sync_playwright
 
+_spec = importlib.util.spec_from_file_location("make_app_icon", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                                          "make-app-icon.py"))
+APP = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(APP)
+
+CHOSEN = "b"  # Meka, 2026-10-12 20:36 (option A, shipped first, "looks weird")
 BRASS = "#C9B37E"
 OUT = "docs/design/icons"
 C = 54.0  # centre of the 108-unit viewport
@@ -60,20 +67,15 @@ def option_a(ink):
 
 
 def option_b(ink):
-    """Hands M: the hands at ten past ten are the V; fine stems drop from their tips."""
-    px, py, spread, length = C, 63.0, 38.0, 26.0
-    left_tip = at(px, py, -spread, length)
-    right_tip = at(px, py, spread, length)
-    base_y = 71.0
-    hour = taper(px, py, -spread, length, 4.6, 1.8)
-    minute = taper(px, py, spread, length, 4.6, 1.8)
-    stems = (f'<line x1="{left_tip[0]:.2f}" y1="{left_tip[1]:.2f}" x2="{left_tip[0]:.2f}" y2="{base_y}" />'
-             f'<line x1="{right_tip[0]:.2f}" y1="{right_tip[1]:.2f}" x2="{right_tip[0]:.2f}" y2="{base_y}" />')
-    return (f'<g stroke="{ink}" stroke-width="1.8" stroke-linecap="round">{stems}</g>'
-            f'<polygon points="{pts(hour)}" fill="{ink}" stroke="{ink}" stroke-width="0.4" stroke-linejoin="round" />'
-            f'<polygon points="{pts(minute)}" fill="{ink}" stroke="{ink}" stroke-width="0.4" stroke-linejoin="round" />'
-            f'<circle cx="{px}" cy="{py}" r="3.0" fill="{ink}" />'
-            f'<circle cx="{px}" cy="{py}" r="1.0" fill="var(--hole)" />')
+    """Hands M: the hands at ten past ten are the V; stems drop from their tips. Meka chose it (2026-10-12 20:36), so
+    this draws the shipped geometry from tools/make-app-icon.py (heavier strokes for small sizes)."""
+    w = APP.ICON
+    px, py = APP.PIVOT
+    stems = "".join(f'<line x1="{a[0]:.2f}" y1="{a[1]:.2f}" x2="{b[0]:.2f}" y2="{b[1]:.2f}" />' for a, b in APP.stems())
+    hands = "".join(f'<polygon points="{pts(h)}" fill="{ink}" />' for h in APP.hands(w))
+    return (f'<g stroke="{ink}" stroke-width="{w.stem}" stroke-linecap="round">{stems}</g>{hands}'
+            f'<circle cx="{px}" cy="{py}" r="{w.pin}" fill="{ink}" />'
+            f'<circle cx="{px}" cy="{py}" r="{w.hole}" fill="var(--hole)" />')
 
 
 def option_c(ink):
@@ -129,6 +131,8 @@ def icon(key, size, shape, themed=False):
 def sheet():
     rows = []
     for key, (name, _) in OPTIONS.items():
+        chosen = ('<div style="font:500 13px/1.6 system-ui;color:#0b0b0d;background:#C9B37E;border-radius:10px;'
+                  'padding:0 8px;margin-top:6px;display:inline-block">✓ Chosen</div>') if key == CHOSEN else ""
         cells = []
         for wall, fg in (("#101014", "#ddd"), ("#e8e6e1", "#222")):
             group = "".join(
@@ -140,7 +144,7 @@ def sheet():
         themed = (f'<div style="background:#2b2d33;padding:22px 26px;border-radius:14px;display:flex;'
                   f'gap:26px;align-items:flex-end">{icon(key, 64, "circle", themed=True)}</div>')
         rows.append(f'<div style="display:flex;gap:18px;align-items:center"><div style="width:150px;color:#C9B37E;'
-                    f'font:600 22px/1.2 system-ui">{key.upper()} · {name}</div>{"".join(cells)}{themed}</div>')
+                    f'font:600 22px/1.2 system-ui">{key.upper()} · {name}{chosen}</div>{"".join(cells)}{themed}</div>')
     return ('<html><body style="margin:0;background:#000;padding:30px;display:flex;flex-direction:column;gap:22px;'
             'font-family:system-ui">' + "".join(rows) + '</body></html>')
 

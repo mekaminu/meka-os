@@ -76,4 +76,18 @@ class AppUpdatesTest {
         assertEquals("10.3 MB", AppUpdateRules.healthSize(10_300_000, 10_310_000))
         assertEquals(null, AppUpdateRules.healthSize(null, 55_100_000))
     }
+
+    @Test
+    fun theNewIconIsNotedOnceAndOnlyAfterAnUpdate() {
+        // An update from a build with the old icon: say so.
+        kotlin.test.assertTrue(AppUpdateRules.shouldNoteIcon(notedIcon = null, hadEarlierBuild = true))
+        // Already said, or a fresh install (the icon was never different): stay quiet.
+        kotlin.test.assertFalse(AppUpdateRules.shouldNoteIcon(notedIcon = AppUpdateRules.ICON, hadEarlierBuild = true))
+        kotlin.test.assertFalse(AppUpdateRules.shouldNoteIcon(notedIcon = null, hadEarlierBuild = false))
+        // A later icon change would be noted again under its own entry.
+        kotlin.test.assertTrue(AppUpdateRules.shouldNoteIcon(notedIcon = "bezel-m", hadEarlierBuild = true))
+        kotlin.test.assertTrue(AppUpdateRules.iconActivityId() != AppUpdateRules.iconActivityId("bezel-m"))
+        kotlin.test.assertTrue("Hands M" in AppUpdateRules.ICON_SUMMARY)
+        kotlin.test.assertTrue("restart" in AppUpdateRules.ICON_WHY)
+    }
 }

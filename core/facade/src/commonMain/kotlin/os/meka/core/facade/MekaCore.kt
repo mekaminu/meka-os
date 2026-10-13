@@ -4641,6 +4641,15 @@ class MekaCore(
         }
     }
 
+    /** The app icon changed with this update (app icon → option B): Activity says so once, with what to do. */
+    suspend fun recordIconChanged(atMs: Long = nowMs()) {
+        val rules = os.meka.core.domain.AppUpdateRules
+        onCore {
+            activity.recordDevice(rules.iconActivityId(), atMs, rules.ICON_SUMMARY, rules.ICON_WHY)
+            refresh()
+        }
+    }
+
     /** Sends [f] to the server only (a report that couldn't go earlier). */
     suspend fun reportUpdateFailure(f: os.meka.core.domain.UpdateFailure): Boolean {
         val api = updateFailureApi ?: return false

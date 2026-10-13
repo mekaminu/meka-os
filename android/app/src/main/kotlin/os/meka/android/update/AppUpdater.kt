@@ -345,12 +345,23 @@ class AppUpdater(private val app: MekaApplication) {
      */
     private suspend fun recordInstalledOnce() {
         val recorded = prefs.getLong(KEY_SIZED_CODE, -1).takeIf { it > 0 }
+        noteIconOnce(hadEarlierBuild = recorded != null && recorded < installedCode)
         if (!AppUpdateRules.shouldRecordInstall(installedCode, recorded)) return
         val size = runCatching { File(app.applicationInfo.sourceDir).length() }.getOrDefault(0L).takeIf { it > 0 } ?: return
         val previousSize = prefs.getLong(KEY_SIZED_BYTES, -1).takeIf { it > 0 }
         runCatching { app.core.recordInstalledBuild(installedCode, size, recorded, previousSize) }
         prefs.edit().putLong(KEY_SIZED_CODE, installedCode).putLong(KEY_SIZED_BYTES, size)
             .putLong(KEY_PREVIOUS_BYTES, previousSize ?: -1).apply()
+    }
+
+    /** App icon → option B: the first run of an update that changed the icon says so once in Activity. */
+    private suspend fun noteIconOnce(hadEarlierBuild: Boolean) {
+        val noted = prefs.getString(KEY_ICON, null)
+        if (noted == AppUpdateRules.ICON) return
+        if (AppUpdateRules.shouldNoteIcon(noted, hadEarlierBuild)) {
+            if (runCatching { app.core.recordIconChanged() }.isFailure) return
+        }
+        prefs.edit().putString(KEY_ICON, AppUpdateRules.ICON).apply()
     }
 
     /** Health's Updates row: this build's size on the phone ("10.3 MB"), null if Android won't say. */
@@ -377,6 +388,7 @@ class AppUpdater(private val app: MekaApplication) {
     companion object {
         private const val KEY_LATER = "later"
         private const val KEY_SIZED_CODE = "sized_code"
+        private const val KEY_ICON = "icon_noted"
         private const val KEY_SIZED_BYTES = "sized_bytes"
         private const val KEY_PREVIOUS_BYTES = "previous_bytes"
         const val CHECK_EVERY_MS = 10 * 60_000L
