@@ -189,4 +189,20 @@ class ShellNavTest {
         assertEquals(listOf(TabGlyph.DAY, TabGlyph.NEEDS, TabGlyph.CALENDAR, TabGlyph.ASK), glyphs)
         ShellDestination.entries.filter { it !in ShellNav.TABS }.forEach { assertNull(ShellNav.glyph(it)) }
     }
+
+    @Test
+    fun dailyRowsTakeTheCoresLiveLinesElseTheirWords() {
+        val lines = os.meka.core.domain.DailyLines(mapOf(
+            os.meka.core.domain.DailyRow.SHUTDOWN to os.meka.core.domain.DailyLine("2 left", true),
+            os.meka.core.domain.DailyRow.TRAIN_QUEUE to os.meka.core.domain.DailyLine("2 saved", false),
+        ))
+        assertEquals(os.meka.core.domain.DailyLine("2 left", true), ShellNav.dailyLine(MoreItem.SHUTDOWN, lines))
+        assertEquals("2 saved", ShellNav.dailyLine(MoreItem.TRAIN_QUEUE, lines).text)
+        assertEquals(MoreItem.NEWS.line, ShellNav.dailyLine(MoreItem.NEWS, lines).text)
+        assertEquals(MoreItem.REVIEW.line, ShellNav.dailyLine(MoreItem.REVIEW, lines).text)
+        assertEquals("Screen saver on", ShellNav.dailyLine(MoreItem.BEDSIDE, lines, screenSaver = true).text)
+        assertEquals(MoreItem.BEDSIDE.line, ShellNav.dailyLine(MoreItem.BEDSIDE, lines, screenSaver = null).text)
+        // Every Daily row but Review has a core row.
+        assertEquals(listOf(MoreItem.REVIEW), ShellNav.daily().filter { ShellNav.dailyRow(it) == null })
+    }
 }

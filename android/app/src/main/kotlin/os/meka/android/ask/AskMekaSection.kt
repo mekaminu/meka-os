@@ -356,10 +356,17 @@ fun AskMekaSection(
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             when (val s = shown) {
-                AskShown.Idle -> if (!searching) Text(
-                    AskFieldRules.idleLine(canAsk, mac = false, used = usedAsk),
-                    style = MekaType.caption, color = Meka.colors.textTertiary,
-                )
+                AskShown.Idle -> if (!searching) {
+                    Text(
+                        AskFieldRules.idleLine(canAsk, mac = false, used = usedAsk),
+                        style = MekaType.caption, color = Meka.colors.textTertiary,
+                    )
+                    // Ask polish, item 5: two things to ask beside the one-line hint; a tap asks it.
+                    val examples = AskFieldRules.examples(canAsk, usedAsk)
+                    if (examples.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        examples.forEach { q -> ExampleChip(q) { text = q; ask() } }
+                    }
+                }
                 is AskShown.Thinking -> {
                     QuestionLine(s.question)
                     SkeletonRows(count = 2, rowHeight = 18.dp)
@@ -566,4 +573,15 @@ internal object AskUse {
     fun mark(context: android.content.Context) {
         context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putBoolean(KEY, true).apply()
     }
+}
+
+/** An example question under Ask's hint: a raised pill, a 48 dp target; tapping asks it. */
+@Composable
+private fun ExampleChip(label: String, onClick: () -> Unit) {
+    Text(
+        label, style = MekaType.caption, color = Meka.colors.textPrimary, maxLines = 1,
+        modifier = Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+            .clickable(role = Role.Button, onClickLabel = "Ask") { onClick() }
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    )
 }

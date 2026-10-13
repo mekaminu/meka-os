@@ -147,6 +147,28 @@ object ShellNav {
     /** Daily's rows on Ask. */
     fun daily(): List<MoreItem> = MoreItem.entries.filter { it.group == MoreGroup.DAILY }
 
+    /** The core's row for a Daily item (Review has none: it keeps its words). */
+    fun dailyRow(item: MoreItem): os.meka.core.domain.DailyRow? = when (item) {
+        MoreItem.BRIEF -> os.meka.core.domain.DailyRow.BRIEF
+        MoreItem.WEEK_AHEAD -> os.meka.core.domain.DailyRow.WEEK_AHEAD
+        MoreItem.NEWS -> os.meka.core.domain.DailyRow.NEWS
+        MoreItem.SHUTDOWN -> os.meka.core.domain.DailyRow.SHUTDOWN
+        MoreItem.TRAIN_QUEUE -> os.meka.core.domain.DailyRow.TRAIN_QUEUE
+        MoreItem.LIFE_ADMIN -> os.meka.core.domain.DailyRow.LIFE_ADMIN
+        MoreItem.BEDSIDE -> os.meka.core.domain.DailyRow.BEDSIDE
+        else -> null
+    }
+
+    /**
+     * A Daily row's line (Ask polish, item 3): the core's live one, the Bedside clock's from this phone's screen saver
+     * ([screenSaver], null when it couldn't be read), else the row's fixed words.
+     */
+    fun dailyLine(item: MoreItem, lines: os.meka.core.domain.DailyLines, screenSaver: Boolean? = null): os.meka.core.domain.DailyLine {
+        val live = if (item == MoreItem.BEDSIDE) os.meka.core.domain.DailyRules.bedside(screenSaver)
+        else dailyRow(item)?.let { lines.of(it) }
+        return live ?: os.meka.core.domain.DailyLine(item.line, false)
+    }
+
     /** What the Settings pane lists, in order. */
     fun settings(connected: Boolean): List<MoreItem> =
         more(connected).filter { it.group == MoreGroup.SETTINGS && it != MoreItem.SETTINGS }

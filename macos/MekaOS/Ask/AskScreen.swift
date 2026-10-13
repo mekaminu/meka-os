@@ -49,7 +49,9 @@ struct AskScreen: View {
                 setUpSection()
                 sectionLabel(MoreGroup.daily.label, first: false).staggeredAppear(ShellNav.moreLabelStep(1))
                 ForEach(Array(ShellNav.daily().enumerated()), id: \.element) { i, item in
-                    MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue), lit: false, palette: palette) { open(item) }
+                    // Ask polish, item 3: each row says what it holds now; lit when it's ready or wants a look.
+                    let line = ShellNav.dailyLine(item, lines: model.dailyLines)
+                    MoreRow(item: item, line: line.text, lit: line.lit, palette: palette) { open(item) }
                         .staggeredAppear(ShellNav.moreRowStep(1, i))
                 }
                 MoreRow(item: .settings, line: MoreItem.settings.line, lit: false, palette: palette, unfolded: settingsOpen) {

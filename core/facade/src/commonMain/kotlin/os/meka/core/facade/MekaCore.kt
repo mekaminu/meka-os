@@ -586,6 +586,10 @@ class MekaCore(
     /** Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line ("Chilli tonight", "Next Fri 23 Oct"). */
     val lifeLines: StateFlow<os.meka.core.domain.LifeLines> = _lifeLines.asStateFlow()
 
+    private val _dailyLines = MutableStateFlow(os.meka.core.domain.DailyLines.EMPTY)
+    /** Ask's Daily rows (Ask polish, item 3): each row's live line ("Tomorrow 06:40 · 5 things", "2 saved"). */
+    val dailyLines: StateFlow<os.meka.core.domain.DailyLines> = _dailyLines.asStateFlow()
+
     private val _dateNight = MutableStateFlow(os.meka.core.domain.DateNightView.EMPTY)
     /**
      * Date night (V1, slice 1): the fortnightly evening the planner and Gym bookings keep clear, its next few nights
@@ -5124,6 +5128,34 @@ class MekaCore(
             todayDay, _today.value, _lists.value, _goals.value, _meals.value, _bins.value, _dateNight.value, _school.value,
             _appointments.value, _leave.value, _gifts.value, _trips.value, _errands.value, _emergency.value, _facts.value,
             _people.value,
+        ))
+        // Ask polish, item 3: Daily's rows say what they hold now ("Tomorrow 06:40 · 5 things", "2 left", "2 saved").
+        val fixtureNow = os.meka.core.domain.DailyRules.fixture(dayEvents, nowMs(), cal)
+        val briefNow = _brief.value
+        val dailyShutdown = _shutdown.value
+        val weekSetting = _weekAheadSetting.value
+        val dailyAdmin = _lifeAdmin.value.next
+        _dailyLines.value = os.meka.core.domain.DailyRules.lines(os.meka.core.domain.DailyInputs(
+            nowMinute = cal.minuteOfDay(nowMs()),
+            briefOffered = briefNow.offered,
+            briefStartMinute = briefNow.startMinute,
+            todayThings = briefNow.eventCount + briefNow.taskCount,
+            tomorrowThings = dailyShutdown.tomorrow.eventCount + dailyShutdown.tomorrow.taskCount,
+            weekAheadReady = _today.value.weekAhead != null,
+            weekAheadOn = weekSetting.on,
+            weekAheadTime = weekSetting.timeLabel,
+            fixture = fixtureNow?.first,
+            fixtureToday = fixtureNow?.second == true,
+            stories = _newsPlace.value.items.size,
+            shutdownDoneLine = dailyShutdown.doneLine,
+            shutdownOffered = dailyShutdown.offered,
+            shutdownLeft = dailyShutdown.left.size,
+            queueWaiting = _queue.value.waiting.size,
+            lifeAdminOn = _lifeAdmin.value.on,
+            lifeAdminDay = dailyAdmin?.day,
+            lifeAdminMinute = dailyAdmin?.let { cal.minuteOfDay(it.startMs) },
+            lifeAdminJobs = _lifeAdmin.value.jobCount,
+            todayDay = todayDay,
         ))
         _triage.value = triageCards.open()
         _groupGists.value = gistStore.open()

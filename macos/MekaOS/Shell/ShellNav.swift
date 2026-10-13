@@ -272,6 +272,26 @@ enum ShellNav {
     /// Daily's rows on Ask.
     static func daily() -> [MoreItem] { MoreItem.allCases.filter { $0.group == .daily } }
 
+    /// The core's row for a Daily item (Review has none: it keeps its words).
+    static func dailyRow(_ item: MoreItem) -> DailyRow? {
+        switch item {
+        case .brief: .brief
+        case .weekAhead: .weekAhead
+        case .news: .news
+        case .shutdown: .shutdown
+        case .trainQueue: .trainQueue
+        case .lifeAdmin: .lifeAdmin
+        default: nil
+        }
+    }
+
+    /// A Daily row's line (Ask polish, item 3): the core's live one ("Tomorrow 06:40 · 5 things", "2 saved"), lit when
+    /// it's ready or wants a look; else the row's fixed words.
+    static func dailyLine(_ item: MoreItem, lines: DailyLines?) -> (text: String, lit: Bool) {
+        if let row = dailyRow(item), let live = lines?.of(row: row) { return (live.text, live.lit) }
+        return (item.line, false)
+    }
+
     /// What Settings lists, in order.
     static func settings(connected: Bool) -> [MoreItem] {
         more(connected: connected).filter { $0.group == .settings && $0 != .settings }

@@ -164,4 +164,14 @@ final class ShellNavTests: XCTestCase {
         // Outline symbols; the lit row shows the filled variant (sun on the horizon, "!", a calendar, a bubble).
         XCTAssertEqual(ShellNav.tabs.map(\.symbol), ["sun.horizon", "exclamationmark.circle", "calendar", "bubble.left"])
     }
+
+    @MainActor
+    func testDailyRowsTakeTheCoresLiveLinesElseTheirWords() {
+        let lines = DailyLines(lines: [DailyRow.shutdown: DailyLine(text: "2 left", lit: true)])
+        XCTAssertEqual(ShellNav.dailyLine(.shutdown, lines: lines).text, "2 left")
+        XCTAssertTrue(ShellNav.dailyLine(.shutdown, lines: lines).lit)
+        XCTAssertEqual(ShellNav.dailyLine(.news, lines: lines).text, MoreItem.news.line)
+        XCTAssertEqual(ShellNav.dailyLine(.brief, lines: nil).text, MoreItem.brief.line)
+        XCTAssertNil(ShellNav.dailyRow(.review))
+    }
 }

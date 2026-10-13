@@ -58,6 +58,12 @@ object AskFieldRules {
 
     const val HINT_ASK = "Type to search · Return asks MEKA"
 
+    /** Two things to ask, as chips under the one-line hint (Ask polish, item 5); a tap asks it. */
+    val EXAMPLES: List<String> = listOf("What's tomorrow?", "Add milk to shopping")
+
+    /** The example chips: only with the one-line hint (asked before, and asking works), never while searching. */
+    fun examples(canAsk: Boolean, used: Boolean): List<String> = if (canAsk && used) EXAMPLES else emptyList()
+
     /** The first-use line under the field before anything is typed. */
     fun idleLine(canAsk: Boolean, mac: Boolean = false): String =
         if (canAsk) "Type to find tasks, events and lists; Return asks MEKA about your day, or to add, move or tick off a task, add to shopping, start a fast or set a timer. Nothing happens until you ${if (mac) "click" else "tap"}."

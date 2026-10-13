@@ -118,6 +118,8 @@ final class CoreModel {
     var showBins = false
     /// Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line ("Chilli tonight", "Next Fri 23 Oct").
     private(set) var lifeLines: LifeLines?
+    /// Ask's Daily rows (Ask polish, item 3): each row's live line ("Tomorrow 06:40 · 5 things", "2 saved").
+    private(set) var dailyLines: DailyLines?
     /// Gift planner (V1, slice 1): birthdays and anniversaries, their ideas and order-by days (Ask → More → Gifts).
     private(set) var gifts: GiftsView?
     /// Ask → More → Gifts.
@@ -403,6 +405,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await l in core.lifeLines { self?.lifeLines = l }
+        })
+        observers.append(Task { [weak self] in
+            for await d in core.dailyLines { self?.dailyLines = d }
         })
         observers.append(Task { [weak self] in
             for await g in core.giftsView { self?.gifts = g }

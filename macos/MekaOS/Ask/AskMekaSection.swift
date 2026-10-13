@@ -198,6 +198,22 @@ struct AskMekaSection: View {
                 Text(AskFieldRules.shared.idleLine(canAsk: canAsk, mac: true, used: usedAsk))
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.leading, MekaSpace.xxs)
+                // Ask polish, item 5: two things to ask beside the one-line hint; a click asks it.
+                let examples = AskFieldRules.shared.examples(canAsk: canAsk, used: usedAsk)
+                if !examples.isEmpty {
+                    HStack(spacing: MekaSpace.xs) {
+                        ForEach(examples, id: \.self) { q in
+                            Button { text = q; ask() } label: {
+                                Text(q).font(MekaType.caption).lineLimit(1)
+                                    .foregroundStyle(palette.textPrimary)
+                                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                                    .background(Capsule().fill(palette.surfaceRaised))
+                            }
+                            .buttonStyle(MekaPressStyle())
+                            .accessibilityHint("Asks MEKA")
+                        }
+                    }
+                }
             }
         }
     }

@@ -123,6 +123,18 @@ fun AskRoute(
     var searchEpoch by rememberSaveable { mutableStateOf(0) }
     val closeSearch = { showSearch = false; searchEpoch += 1 }
     val lifeLines by core.lifeLines.collectAsState()
+    val dailyLines by core.dailyLines.collectAsState()
+    // The Bedside clock row's "Screen saver on/off": read again each time Ask comes back (he may have just set it).
+    val screenSaverContext = LocalContext.current
+    var screenSaver by remember { mutableStateOf<Boolean?>(null) }
+    val askLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(askLifecycle) {
+        askLifecycle.currentStateFlow.collect { st ->
+            if (st == androidx.lifecycle.Lifecycle.State.RESUMED) {
+                screenSaver = runCatching { os.meka.android.fold.BedsideDreamService.isMeka(screenSaverContext) }.getOrNull()
+            }
+        }
+    }
     // The Settings pane (Fold review 2026-10-12, item 7): every setting behind one row on Ask.
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     val bedsideApp = LocalContext.current.applicationContext as? os.meka.android.MekaApplication
@@ -247,7 +259,9 @@ fun AskRoute(
             // DAILY: the things you run through a day or a week.
             item(key = "label-daily") { SectionLabel(MoreGroup.DAILY.label, first = false, step = ShellNav.moreLabelStep(1)) }
             itemsIndexed(ShellNav.daily(), key = { _, it -> it.name }) { i, item ->
-                MoreRow(item, ShellNav.moreLine(item, lists.dueCount), false, pane == item,
+                // Ask polish, item 3: each row says what it holds now; lit when it's ready or wants a look.
+                val line = ShellNav.dailyLine(item, dailyLines, screenSaver)
+                MoreRow(item, line.text, line.lit, pane == item,
                     modifier = Modifier.appear(rememberAppearance(ShellNav.moreRowStep(1, i)))) { open(item) }
             }
             // Every setting behind one row.
