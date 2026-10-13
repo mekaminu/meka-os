@@ -158,7 +158,7 @@ private fun MailNeedsRowView(
             ) {
                 androidx.compose.foundation.layout.Box(
                     Modifier.fillMaxWidth().heightIn(min = 96.dp).clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
-                        .padding(MekaSpace.s),
+                        .padding(MekaSpace.xs),
                 ) {
                     if (text.isEmpty()) Text(MailNeedsRules.REPLY_HINT, style = MekaType.body, color = Meka.colors.textTertiary)
                     BasicTextField(

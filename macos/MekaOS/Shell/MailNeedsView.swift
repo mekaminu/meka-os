@@ -150,7 +150,7 @@ private struct MailReplyEditor: View {
                 .textFieldStyle(.plain)
                 .font(MekaType.body)
                 .lineLimit(4...12)
-                .padding(MekaSpace.s)
+                .padding(MekaSpace.xs)
                 .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
                 .accessibilityLabel("Reply to \(row.from)")
             Text(row.replyLine).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
