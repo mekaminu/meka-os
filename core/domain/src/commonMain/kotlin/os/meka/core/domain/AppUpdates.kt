@@ -253,7 +253,9 @@ object UpdateFailureRules {
             STATUS_FAILURE_BLOCKED -> "Android blocked the install."
             STATUS_FAILURE_INVALID -> "Android said the downloaded file isn't a valid app. Try again."
             STATUS_FAILURE_TIMEOUT -> "Android timed out installing it. Try again."
-            else -> "Android couldn't install it. Try again."
+            else -> if (InstallSessionRules.isFilesInUse(f.message))
+                "Android was still holding an earlier install. Try again (restarting the phone clears it if it keeps happening)."
+                else "Android couldn't install it. Try again."
         }
     }
 
@@ -313,4 +315,55 @@ object UpdateFailureRules {
         val what = if (f.stage == STAGE_DOWNLOAD) "didn't download" else "didn't install"
         return listOfNotNull("Build ${f.toCode} $what $at", detail(f) ?: line(f)).joinToString(" · ")
     }
+}
+
+/**
+ * Android's install sessions (build plan: phone updates fail with "Session files in use", Meka's Fold, 2026-10-13).
+ * A stale session from an earlier attempt (or two installs at once: Today's Install and Health's Try again, or a retry
+ * while the first was committing) held its file. So: one install at a time across the app, every own session but the
+ * one with Android's prompt up is abandoned before a new one is made, each session writes under its own name, and a
+ * "Session files in use" failure abandons them all and is tried once more with a fresh session, by itself.
+ */
+object InstallSessionRules {
+    /** Android's words for the clash (INSTALL_FAILED_INTERNAL_ERROR: Session files in use). */
+    const val FILES_IN_USE = "Session files in use"
+    /** A committed session whose outcome hasn't come back is still Android's for this long (its prompt may be up). */
+    const val OUTSTANDING_MS = 10 * 60_000L
+    /** Fresh sessions tried by themselves after a "files in use" failure. */
+    const val AUTO_RETRIES = 1
+
+    /** One of MEKA's own sessions as Android lists them (PackageInstaller.mySessions). */
+    data class Session(val id: Int, val committed: Boolean)
+
+    /** The install MEKA handed to Android and hasn't heard back about. */
+    data class Outstanding(val sessionId: Int, val committedAtMs: Long, val hasPrompt: Boolean)
+
+    enum class OnTap { START, SHOW_PROMPT, WAIT }
+
+    fun isFilesInUse(message: String?): Boolean = message?.contains(FILES_IN_USE, ignoreCase = true) == true
+
+    /** The name a session writes under: never the same twice ("meka-512-1760331000000.apk"). */
+    fun apkName(versionCode: Long, nowMs: Long): String = "meka-$versionCode-$nowMs.apk"
+
+    /** Whether [outstanding] still counts: committed under [OUTSTANDING_MS] ago and Android still lists its session. */
+    fun isLive(outstanding: Outstanding?, sessions: List<Session>, nowMs: Long): Boolean =
+        outstanding != null && nowMs - outstanding.committedAtMs in 0 until OUTSTANDING_MS &&
+            sessions.any { it.id == outstanding.sessionId }
+
+    /** Install tapped: show Android's prompt again (or wait for it) while an install is with Android, else start one. */
+    fun onTap(outstanding: Outstanding?, sessions: List<Session>, nowMs: Long): OnTap = when {
+        !isLive(outstanding, sessions, nowMs) -> OnTap.START
+        outstanding!!.hasPrompt -> OnTap.SHOW_PROMPT
+        else -> OnTap.WAIT
+    }
+
+    /** Sessions to abandon before making a new one: every own session except a live outstanding one. */
+    fun toAbandon(sessions: List<Session>, outstanding: Outstanding?, nowMs: Long): List<Int> {
+        val keep = if (isLive(outstanding, sessions, nowMs)) outstanding!!.sessionId else null
+        return sessions.map { it.id }.filter { it != keep }
+    }
+
+    /** A failure tried again by itself: only "files in use", and only [AUTO_RETRIES] times per tap. */
+    fun retriesItself(status: Int?, message: String?, retriesSoFar: Int): Boolean =
+        (status == null || status == UpdateFailureRules.STATUS_FAILURE) && isFilesInUse(message) && retriesSoFar < AUTO_RETRIES
 }

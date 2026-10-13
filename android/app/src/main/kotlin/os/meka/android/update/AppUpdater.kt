@@ -23,6 +23,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import os.meka.android.MekaApplication
 import os.meka.core.domain.AppUpdateRules
+import os.meka.core.domain.InstallSessionRules
 import os.meka.core.domain.UpdateFailure
 import os.meka.core.domain.UpdateFailureRules
 import os.meka.core.facade.AppRelease
@@ -60,7 +61,7 @@ class AppUpdater(private val app: MekaApplication) {
     private val _state = MutableStateFlow<UpdateState>(UpdateState.None)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
     private val prefs = app.getSharedPreferences("meka.update", Context.MODE_PRIVATE)
-    private val installing = Mutex()
+    private val installing get() = INSTALLING
     @Volatile private var lastCheckMs = 0L
     /** Android's Install prompt, kept until MEKA is on screen and the phone unlocked (a receiver can't open it from behind). */
     @Volatile private var pendingPrompt: Intent? = null
@@ -68,6 +69,11 @@ class AppUpdater(private val app: MekaApplication) {
     @Volatile private var committed: AppRelease? = null
     /** Download attempts the committed build took (for a failure report). */
     @Volatile private var committedAttempts = 1
+    /** The session handed to Android and when (one install at a time: a second tap shows its prompt instead). */
+    @Volatile private var committedSession: Int? = null
+    @Volatile private var committedAtMs = 0L
+    /** Fresh sessions tried by themselves since the last tap ("Session files in use"). */
+    @Volatile private var autoRetries = 0
 
     val installedCode: Long by lazy { app.packageManager.getPackageInfo(app.packageName, 0).longVersionCode }
     val installedName: String by lazy { app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "0.1.$installedCode" }
@@ -84,7 +90,9 @@ class AppUpdater(private val app: MekaApplication) {
     suspend fun check(force: Boolean = false) {
         val now = System.currentTimeMillis()
         if (!force && now - lastCheckMs < CHECK_EVERY_MS) return
-        if (_state.value is UpdateState.Downloading || _state.value is UpdateState.Confirming) return
+        if (_state.value is UpdateState.Downloading) return
+        // Confirming waits for Android, unless its session has gone quiet or vanished (then the card offers Install again).
+        if (_state.value is UpdateState.Confirming && (pendingPrompt != null || InstallSessionRules.isLive(outstanding(), mySessions(), now))) return
         lastCheckMs = now
         recordInstalledOnce()
         forgetInstalledFailure()
@@ -121,6 +129,7 @@ class AppUpdater(private val app: MekaApplication) {
      * used to cancel it and put the card back to Install.
      */
     fun start(release: AppRelease) {
+        autoRetries = 0
         app.appScope.launch { install(release) }
     }
 
@@ -131,6 +140,13 @@ class AppUpdater(private val app: MekaApplication) {
         }
         if (!installing.tryLock()) return
         try {
+            // One install at a time: while Android has the last one (its prompt up or on its way), a tap brings the
+            // prompt back instead of making a second session beside it.
+            when (InstallSessionRules.onTap(outstanding(), mySessions(), System.currentTimeMillis())) {
+                InstallSessionRules.OnTap.SHOW_PROMPT -> { _state.value = UpdateState.Confirming(release); showPrompt(null); return }
+                InstallSessionRules.OnTap.WAIT -> { _state.value = UpdateState.Confirming(release); return }
+                InstallSessionRules.OnTap.START -> Unit
+            }
             _state.value = UpdateState.Downloading(release, 0)
             val file = downloadFile(release)
             var attempts = 0
@@ -174,10 +190,36 @@ class AppUpdater(private val app: MekaApplication) {
             throw e
         } catch (e: Exception) {
             // Writing into Android's install session failed (space, a session Android closed): say so with its words.
-            fail(release, UpdateFailureRules.STAGE_INSTALL, null, e.javaClass.simpleName + (e.message?.let { ": $it" } ?: ""), 1)
+            val words = e.javaClass.simpleName + (e.message?.let { ": $it" } ?: "")
+            if (InstallSessionRules.retriesItself(null, words, autoRetries)) {
+                autoRetries++
+                abandonOwnSessions()
+                app.appScope.launch { delay(RETRY_PAUSE_MS); install(release) }
+                return
+            }
+            fail(release, UpdateFailureRules.STAGE_INSTALL, null, words, 1)
         } finally {
             installing.unlock()
         }
+    }
+
+    // ---- Android's install sessions ("Session files in use", 2026-10-13) ----
+
+    private fun mySessions(): List<InstallSessionRules.Session> = runCatching {
+        app.packageManager.packageInstaller.mySessions.map { InstallSessionRules.Session(it.sessionId, it.isCommitted) }
+    }.getOrDefault(emptyList())
+
+    private fun outstanding(): InstallSessionRules.Outstanding? {
+        val id = committedSession ?: return null
+        return InstallSessionRules.Outstanding(id, committedAtMs, hasPrompt = pendingPrompt != null)
+    }
+
+    /** Abandons MEKA's own sessions left from earlier attempts (all of them unless one still has Android's prompt). */
+    private fun abandonOwnSessions(keepOutstanding: Boolean = false) {
+        val installer = app.packageManager.packageInstaller
+        val ids = InstallSessionRules.toAbandon(mySessions(), if (keepOutstanding) outstanding() else null, System.currentTimeMillis())
+        ids.forEach { id -> runCatching { installer.abandonSession(id) } }
+        if (committedSession?.let { it in ids } == true) { committedSession = null; pendingPrompt = null }
     }
 
     private suspend fun download(release: AppRelease, file: File) {
@@ -200,6 +242,8 @@ class AppUpdater(private val app: MekaApplication) {
 
     private suspend fun commit(release: AppRelease, file: File, attempts: Int) {
         val installer = app.packageManager.packageInstaller
+        // Nothing of an earlier attempt may still hold a file: every own session goes before a new one is made.
+        abandonOwnSessions(keepOutstanding = false)
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(app.packageName)
             setSize(release.sizeBytes)
@@ -208,13 +252,16 @@ class AppUpdater(private val app: MekaApplication) {
         val session = installer.openSession(id)
         try {
             withContext(Dispatchers.IO) {
-                session.openWrite("meka.apk", 0, release.sizeBytes).use { out ->
+                // Its own name per session; the stream is closed (use) before commit, and a committed session is never reopened.
+                session.openWrite(InstallSessionRules.apkName(release.versionCode, System.currentTimeMillis()), 0, release.sizeBytes).use { out ->
                     file.inputStream().use { it.copyTo(out, 256 * 1024) }
                     session.fsync(out)
                 }
             }
             committed = release
             committedAttempts = attempts
+            committedSession = id
+            committedAtMs = System.currentTimeMillis()
             _state.value = UpdateState.Confirming(release)
             val callback = PendingIntent.getBroadcast(
                 app, id, Intent(app, UpdateStatusReceiver::class.java).setPackage(app.packageName),
@@ -238,14 +285,23 @@ class AppUpdater(private val app: MekaApplication) {
                 if (app.isOnScreen && !locked()) showPrompt(null)
             }
             PackageInstaller.STATUS_SUCCESS -> {
-                pendingPrompt = null; committed = null
+                pendingPrompt = null; committed = null; committedSession = null
                 _state.value = UpdateState.None
             }
             else -> {
-                pendingPrompt = null; committed = null
+                pendingPrompt = null; committed = null; committedSession = null
                 if (release == null) return
                 // (4) Dismissed or closed prompt: back to Install, no error.
                 if (!UpdateFailureRules.isFailure(status)) { _state.value = UpdateState.Ready(release); return }
+                // "Session files in use": every own session goes and a fresh one is tried once, by itself (the kept
+                // download is reused, so nothing is fetched again).
+                if (InstallSessionRules.retriesItself(status, message, autoRetries)) {
+                    autoRetries++
+                    abandonOwnSessions()
+                    _state.value = UpdateState.Downloading(release, 0)
+                    app.appScope.launch { delay(RETRY_PAUSE_MS); install(release) }
+                    return
+                }
                 fail(release, UpdateFailureRules.STAGE_INSTALL, status, message, committedAttempts)
             }
         }
@@ -392,6 +448,10 @@ class AppUpdater(private val app: MekaApplication) {
         private const val KEY_SIZED_BYTES = "sized_bytes"
         private const val KEY_PREVIOUS_BYTES = "previous_bytes"
         const val CHECK_EVERY_MS = 10 * 60_000L
+        /** A breath before a fresh session after "files in use", so Android finishes abandoning the old ones. */
+        private const val RETRY_PAUSE_MS = 1_500L
+        /** One install at a time across the whole app (Today's Install, Health's Try again, a retry). */
+        private val INSTALLING = Mutex()
         private const val NO_STATUS = Int.MIN_VALUE
         private const val F_STAGE = "failure.stage"
         private const val F_STATUS = "failure.status"
