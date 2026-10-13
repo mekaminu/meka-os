@@ -70,6 +70,36 @@ final class DatabaseEncryptionTests: XCTestCase {
         core.close()
     }
 
+    /// Both sides key a file the same way: one the core sealed reads with the app's `PRAGMA key`, and the reverse is
+    /// covered by the encryption test above (the app's copy opens through the core). Nightly ci run 483 found them apart.
+    func testAFileTheCoreSealedOpensWithTheAppsKey() async throws {
+        let core = try MacCoreFactory.shared.openCore(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: key, encrypted: true, databaseDirectory: dir.path, databaseName: dbName, deviceKey: nil
+        )
+        _ = try await core.addTask(title: "Sealed by the core")
+        core.close()
+        XCTAssertEqual(DatabaseEncryption.fileState(url), .sealed)
+        XCTAssertGreaterThan(DatabaseEncryption.tableCounts(url, keyHex: key)?.values.reduce(0, +) ?? 0, 0)
+        XCTAssertNil(DatabaseEncryption.tableCounts(url, keyHex: nil))
+    }
+
+    /// A file the core can't open comes back as an error, not a crash, and is set aside rather than deleted.
+    func testAnUnopenableFileThrowsAndIsSetAside() throws {
+        try Data(repeating: 0x5a, count: 4096).write(to: url)
+        XCTAssertThrowsError(try MacCoreFactory.shared.openCore(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: key, encrypted: true, databaseDirectory: dir.path, databaseName: dbName, deviceKey: nil
+        ))
+        XCTAssertNotNil(DatabaseEncryption.setAsideUnopenable(directory: dir, name: dbName))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        let core = try MacCoreFactory.shared.openCore(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: key, encrypted: true, databaseDirectory: dir.path, databaseName: dbName, deviceKey: nil
+        )
+        core.close()
+    }
+
     func testWithoutAKeyOrSQLCipherNothingChanges() async throws {
         try await makePlainDatabase()
         let noKey = prepare(key: nil)

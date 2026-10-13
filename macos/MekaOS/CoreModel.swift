@@ -332,17 +332,35 @@ final class CoreModel {
         let database = Self.prepareDatabase()
         databaseLine = DatabaseProtectionRules.shared.macLine(protection: database.protection)
         if let note = database.note { lastError = note }
-        let core = MacCoreFactory.shared.create(
-            householdId: identity.householdID,
-            deviceId: identity.deviceID,
-            syncUrl: syncURL,
-            deviceSecret: identity.deviceSecret,
-            databaseKeyHex: database.keyHex,   // slice 2b: SQLCipher with a sealed key (ADR-002)
-            encrypted: database.encrypted,
-            databaseDirectory: Self.databaseDirectory(),
-            databaseName: "meka.db",
-            deviceKey: syncURL == nil ? nil : deviceKey
-        )
+        let open = { () throws -> MekaCore in
+            try MacCoreFactory.shared.openCore(
+                householdId: identity.householdID,
+                deviceId: identity.deviceID,
+                syncUrl: syncURL,
+                deviceSecret: identity.deviceSecret,
+                databaseKeyHex: database.keyHex,   // slice 2b: SQLCipher with a sealed key (ADR-002)
+                encrypted: database.encrypted,
+                databaseDirectory: Self.databaseDirectory(),
+                databaseName: "meka.db",
+                deviceKey: syncURL == nil ? nil : deviceKey
+            )
+        }
+        let core: MekaCore
+        do {
+            core = try open()
+        } catch {
+            // The file won't open (a wrong key, damage): keep it aside, never delete it, start afresh and re-sync.
+            let aside = DatabaseEncryption.setAsideUnopenable(
+                directory: URL(fileURLWithPath: Self.databaseDirectory(), isDirectory: true), name: "meka.db"
+            )
+            do {
+                core = try open()
+                lastError = aside ?? "MEKA's database wouldn't open, so MEKA started afresh."
+            } catch {
+                lastError = "MEKA's database won't open: \(error.localizedDescription)"
+                return
+            }
+        }
         self.core = core
         // Trading approvals, slice 2: this Mac's Touch ID-only approval key is known (synced) before the first yes, so
         // Kestrel can pin it. Nothing without Touch ID and a Secure Enclave.

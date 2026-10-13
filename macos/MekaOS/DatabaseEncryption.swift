@@ -99,6 +99,14 @@ nonisolated enum DatabaseEncryption {
         removeDatabase(directory.appendingPathComponent(name + copySuffix))
     }
 
+    /// The core couldn't open the database at all (it threw): rename it aside, never delete it, so a fresh one can be
+    /// made. Returns the one-time line, or nil when there was nothing to move.
+    static func setAsideUnopenable(directory: URL, name: String, now: Date = Date()) -> String? {
+        let url = directory.appendingPathComponent(name)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return setAside(url, directory: directory, name: name, now: now)
+    }
+
     private static func setAside(_ url: URL, directory: URL, name: String, now: Date) -> String? {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")

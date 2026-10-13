@@ -8,7 +8,7 @@ import co.touchlab.sqliter.DatabaseConfiguration
 /**
  * Opens the replica database on macOS. [keyHex] is the 64-hex-char key from the Mac's sealed key files.
  *
- * ADR-002 (spike S6 passed, slice 2b): the key is applied with `PRAGMA key` when [encrypted]. The app checks that
+ * ADR-002 (spike S6 passed, slice 2b): the key is applied with `PRAGMA key` ([keyStatement]) when [encrypted]. The app checks that
  * SQLCipher is linked (the S6 probe) before passing a key, and encrypts an older plain database first. Never pass a
  * key to a non-SQLCipher build: it would be silently ignored.
  */
@@ -16,20 +16,43 @@ object MacDatabase {
     /** [directory] must be app-specific (Application Support/os.meka.mac); tests pass a temporary directory. */
     fun open(keyHex: String?, encrypted: Boolean, directory: String, name: String = "meka.db"): SqlDriver {
         val schema = MekaDatabase.Schema
+        val key = if (encrypted && keyHex != null) keyStatement(keyHex) else null
         return NativeSqliteDriver(
             schema = schema,
             name = name,
             onConfiguration = { config ->
+                val lifecycle = config.lifecycleConfig
                 config.copy(
                     extendedConfig = config.extendedConfig.copy(foreignKeyConstraints = true, basePath = directory),
-                    encryptionConfig = if (encrypted && keyHex != null) {
-                        DatabaseConfiguration.Encryption(key = "x'$keyHex'")
+                    // The key goes on every connection as its very first statement, written exactly as the Mac app
+                    // writes it (DatabaseEncryption.swift), not through SQLiter's Encryption config: SQLiter's own
+                    // keying sealed files the app's `PRAGMA key` couldn't read (nightly ci run 483: "hmac check
+                    // failed for pgno=1"), so one statement, one key derivation, on both sides.
+                    lifecycleConfig = if (key == null) {
+                        lifecycle
                     } else {
-                        config.encryptionConfig
+                        DatabaseConfiguration.Lifecycle(
+                            onCreateConnection = { conn ->
+                                conn.rawExecSql(key)
+                                lifecycle.onCreateConnection(conn)
+                            },
+                            onCloseConnection = lifecycle.onCloseConnection,
+                        )
                     },
                 )
             },
         )
+    }
+
+    /**
+     * The one keying statement both sides use: SQLCipher's raw key (`x'…'`, 64 hex chars = 32 bytes, no passphrase
+     * derivation). The Swift side's `PRAGMA key` and `ATTACH … KEY` use the same literal.
+     */
+    fun keyStatement(keyHex: String): String {
+        require(keyHex.length == 64 && keyHex.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
+            "database key must be 64 hex characters"
+        }
+        return "PRAGMA key = \"x'$keyHex'\";"
     }
 
     /**

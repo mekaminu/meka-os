@@ -56,6 +56,24 @@ object MacCoreFactory {
         return MekaCore(householdId, deviceId, store, transport, AppleSecureRandom)
     }
 
+    /**
+     * The app's way in: [create], but a database that won't open (a wrong key, a damaged file) comes back to Swift as
+     * an error instead of an uncaught Kotlin exception that kills the app (nightly ci run 483: `PRAGMA journal_mode`
+     * "file is not a database" in `MekaCore.<init>`). The app then sets the file aside and starts afresh.
+     */
+    @Throws(Throwable::class)
+    fun openCore(
+        householdId: String,
+        deviceId: String,
+        syncUrl: String?,
+        deviceSecret: String?,
+        databaseKeyHex: String?,
+        encrypted: Boolean,
+        databaseDirectory: String,
+        databaseName: String,
+        deviceKey: DeviceKey?,
+    ): MekaCore = create(householdId, deviceId, syncUrl, deviceSecret, databaseKeyHex, encrypted, databaseDirectory, databaseName, deviceKey)
+
     private val http by lazy { HttpClient(Darwin) }
 
     /** One-time enrolment from the Mac's Connect sheet. */
