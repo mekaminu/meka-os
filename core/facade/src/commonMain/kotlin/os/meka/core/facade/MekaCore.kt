@@ -492,6 +492,13 @@ class MekaCore(
      */
     var seedsAboutYou: Boolean = false
 
+    /**
+     * Which app this is (About you, slice 2): after a clean sync with a filled-in profile, it writes once that it holds
+     * it, so Health and the publish job can say whether the Fold and the Mac both have it (release 2's gate). The Fold
+     * sets FOLD; [MacCoreFactory] sets MAC; null (tests, the server) writes nothing.
+     */
+    var aboutYouDevice: os.meka.core.domain.AboutYouDevice? = null
+
     /** Saves one About you line ([field]); blank clears it, with Undo ([os.meka.core.domain.AboutSaved.undo]). */
     suspend fun setAboutYou(field: os.meka.core.domain.AboutField, text: String): os.meka.core.domain.AboutSaved =
         onCore { aboutYou.set(field, text).also { refreshAboutYouStep() } }
@@ -3450,6 +3457,7 @@ class MekaCore(
             server = server, accounts = accounts, signIns = signIns.all(), ai = ai,
             callAssistantOn = _workMode.value.callAssistant, lastVoiceMessageMs = lastVoice, nowMs = nowMs(),
             callCredit = callCredit.current(),
+            aboutYou = aboutYou.held(),
         )
     }
 
@@ -4864,6 +4872,8 @@ class MekaCore(
             lastSyncedMs = nowMs()
             // About you, release 1: the Fold copies what MEKA held into the profile once, after a clean round.
             if (seedsAboutYou && report.rejected.isEmpty()) aboutYou.seedOnce(aboutYouBefore())
+            // Slice 2 (release 2's gate): this app says, once, that it holds the filled-in profile.
+            if (report.rejected.isEmpty()) aboutYouDevice?.let { aboutYou.markHeld(it) }
             _sync.value = if (report.rejected.isEmpty()) SyncStatus.Synced(nowMs())
             else SyncStatus.Failing("${report.rejected.size} change(s) were refused by the server", replica.pendingPushCount())
             refresh()

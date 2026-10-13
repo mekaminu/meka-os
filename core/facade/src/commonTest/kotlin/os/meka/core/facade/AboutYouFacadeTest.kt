@@ -3,7 +3,10 @@ package os.meka.core.facade
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.AboutField
+import os.meka.core.domain.AboutYouDevice
 import os.meka.core.domain.AboutYouRules
+import os.meka.core.domain.DeviceHealth
+import os.meka.core.domain.HealthState
 import os.meka.core.domain.FootballRules
 import os.meka.core.domain.SetupDevice
 import os.meka.core.domain.SetupState
@@ -80,5 +83,25 @@ class AboutYouFacadeTest {
         assertEquals(SetupState.TODO, assertNotNull(mac.setupView.value).steps.first { it.key == AboutYouRules.SETUP_KEY }.state)
         mac.addAboutYouChild(assertNotNull(gone.undo))
         assertEquals(listOf("Alex"), mac.aboutYouView.value.children.map { it.name })
+    }
+
+    @Test
+    fun healthSaysWhenBothAppsHoldTheProfile() = runTest {
+        val fold = core("android").apply { seedsAboutYou = true; aboutYouDevice = AboutYouDevice.FOLD }
+        val mac = core("mac").apply { aboutYouDevice = AboutYouDevice.MAC }
+        // No profile yet: no row (Setup asks), and an empty profile is never created by the Mac's mark.
+        mac.syncNow()
+        assertNull(mac.refreshHealth(DeviceHealth(mac = true)).rows.firstOrNull { it.key == AboutYouRules.HEALTH_KEY })
+        fold.setLeavingNow(true, "Alex", 80)
+        fold.syncNow()
+        val one = assertNotNull(fold.refreshHealth(DeviceHealth(mac = false)).rows.firstOrNull { it.key == AboutYouRules.HEALTH_KEY })
+        assertEquals(HealthState.WARN, one.state)
+        assertEquals("On the Fold · not on the Mac yet · open MEKA on the Mac", one.line)
+        fold.syncNow(); mac.syncNow(); mac.syncNow(); fold.syncNow()
+        val both = assertNotNull(fold.refreshHealth(DeviceHealth(mac = false)).rows.firstOrNull { it.key == AboutYouRules.HEALTH_KEY })
+        assertEquals(HealthState.OK, both.state)
+        assertEquals("On the Fold and the Mac · kept in your data", both.line)
+        // Health keeps it to itself: Today's line isn't about it.
+        assertNull(assertNotNull(fold.healthView.value).todayLine?.takeIf { it.startsWith(AboutYouRules.TITLE) })
     }
 }

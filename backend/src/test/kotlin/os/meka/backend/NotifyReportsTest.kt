@@ -7,6 +7,8 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import os.meka.core.domain.AboutYouFields
+import os.meka.core.sync.FieldValue
 import os.meka.core.sync.InMemoryServerOpStore
 import os.meka.core.wire.NotifyDiagnosticsCodec
 import os.meka.core.wire.WireCodec
@@ -101,6 +103,26 @@ class NotifyReportsTest {
         )
         // A phone from before slice 3 sends no times: no channel line.
         assertTrue(ReleasePublisherCli.notificationLines(NotifyDiagnosticsCodec.Latest(report)).none { "Notification channels" in it })
+    }
+
+    @Test
+    fun thePublisherSaysWhetherBothAppsHoldAboutYouWithoutItsValues() = testApplication {
+        var profile: Map<String, FieldValue>? = null
+        application {
+            mekaSync(
+                InMemoryServerOpStore(), devices, releases = Releases(InMemoryReleaseStore()), publisher = PublisherKeySource { keys.second },
+                notifyReports = NotifyReports(InMemoryNotifyReportStore(), null, profile = { hh -> if (hh == "hh") profile else null }),
+            )
+        }
+        assertEquals("::notice title=About you::no profile yet (release 1's copy hasn't run)", ReleasePublisherCli.aboutYouLine(publisherClient().notifications()))
+        profile = mapOf(AboutYouFields.HOME to FieldValue.Text("Hilltown"), AboutYouFields.HELD_FOLD to FieldValue.Int64(at))
+        val one = publisherClient().notifications()
+        assertEquals(true, one.aboutFilled)
+        assertEquals("::notice title=About you::on the Fold since 2026-10-13 20:41 UTC · NOT on the Mac yet · release 2 waits", ReleasePublisherCli.aboutYouLine(one))
+        profile = profile!! + (AboutYouFields.HELD_MAC to FieldValue.Int64(at + 60_000))
+        val line = ReleasePublisherCli.aboutYouLine(publisherClient().notifications())
+        assertEquals("::notice title=About you::on the Fold since 2026-10-13 20:41 UTC · on the Mac since 2026-10-13 20:42 UTC · release 2 can start", line)
+        assertTrue("Hilltown" !in line)
     }
 
     @Test

@@ -33,6 +33,21 @@ object AboutYouFields {
     const val VOICEMAIL_NUMBER = "voicemailNumber"
     /** Int64: when the Fold copied MEKA's earlier values in (release 1); absent when he typed it all. */
     const val SEEDED_AT = "seededAtMs"
+    /** Int64: when the Fold first held a filled-in profile after a clean sync (slice 2, release 2's gate). */
+    const val HELD_FOLD = "heldFoldAtMs"
+    /** Int64: the same for the Mac. */
+    const val HELD_MAC = "heldMacAtMs"
+}
+
+/** Which app this core runs in, for [AboutYouStore.markHeld]. */
+enum class AboutYouDevice { FOLD, MAC }
+
+/**
+ * Whether each app has the profile (slice 2): [filled] when anything is in it, and when the Fold and the Mac each
+ * first held it after a clean sync. Release 2 (deleting the old values from the code) waits until both have it.
+ */
+data class AboutYouHeld(val filled: Boolean, val foldAtMs: Long?, val macAtMs: Long?) {
+    val onBoth: Boolean get() = filled && foldAtMs != null && macAtMs != null
 }
 
 /** A child as About you holds them: "Alex" · under 7s · "Oakfield School". */
@@ -124,6 +139,55 @@ object AboutYouRules {
     const val TOO_MANY = "That's the most children About you holds."
     const val WATCH_ON = "On · MEKA flags what they ask you for in messages"
     const val WATCH_OFF = "Off · their messages are treated like anyone's"
+
+    // ---- Slice 2: whether each app has it (release 2's gate) ----
+
+    /** What [fields] say about who holds the profile; null when there is no profile at all. */
+    fun held(fields: Map<String, FieldValue>?): AboutYouHeld? {
+        if (fields == null) return null
+        return AboutYouHeld(
+            filled = !read(fields).isEmpty,
+            foldAtMs = fields[AboutYouFields.HELD_FOLD]?.longOrNull,
+            macAtMs = fields[AboutYouFields.HELD_MAC]?.longOrNull,
+        )
+    }
+
+    /** The field [device] writes once it holds a filled-in profile. */
+    fun heldField(device: AboutYouDevice): String = if (device == AboutYouDevice.MAC) AboutYouFields.HELD_MAC else AboutYouFields.HELD_FOLD
+
+    /**
+     * Health's About you row: OK once both apps have it; amber while one hasn't (saying which, and to open MEKA there)
+     * or while it's empty; "checking" until a clean sync has confirmed it on this device. Null before any profile
+     * exists (Setup's step asks for it then).
+     */
+    fun healthRow(h: AboutYouHeld?, nowMs: Long, cal: LocalCalendar): HealthRow? {
+        h ?: return null
+        val fold = h.foldAtMs
+        val mac = h.macAtMs
+        fun since(ms: Long) = HealthRules.at(ms, nowMs, cal).let { if (it == "just now") "" else " since $it" }
+        return when {
+            !h.filled -> HealthRow(HEALTH_KEY, TITLE, "Nothing in it yet · fill it in under Ask → Settings → About you", HealthState.WARN)
+            fold != null && mac != null -> HealthRow(HEALTH_KEY, TITLE, "On the Fold and the Mac · kept in your data", HealthState.OK)
+            fold != null -> HealthRow(HEALTH_KEY, TITLE,
+                "On the Fold${since(fold)} · not on the Mac yet · open MEKA on the Mac", HealthState.WARN)
+            mac != null -> HealthRow(HEALTH_KEY, TITLE,
+                "On the Mac${since(mac)} · not on the Fold yet · open MEKA on the Fold", HealthState.WARN)
+            else -> HealthRow(HEALTH_KEY, TITLE, "Filled in · waiting for a sync to confirm it", HealthState.UNKNOWN)
+        }
+    }
+
+    /** The publish job's line for a build run (no values, only who has it and since when, UTC). */
+    fun gateLine(h: AboutYouHeld?, utc: (Long) -> String): String = when {
+        h == null -> "no profile yet (release 1's copy hasn't run)"
+        !h.filled -> "the profile is empty"
+        else -> listOf(
+            h.foldAtMs?.let { "on the Fold since ${utc(it)}" } ?: "NOT on the Fold yet",
+            h.macAtMs?.let { "on the Mac since ${utc(it)}" } ?: "NOT on the Mac yet",
+            if (h.onBoth) "release 2 can start" else "release 2 waits",
+        ).joinToString(" · ")
+    }
+
+    const val HEALTH_KEY = "about"
 
     // ---- Reading and writing ----
 
@@ -406,6 +470,22 @@ class AboutYouStore(private val replica: Replica, private val nowMs: () -> Long)
         replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(
             AboutYouFields.CHILDREN to (if (list.isEmpty()) FieldValue.Null else FieldValue.Text(AboutYouRules.encodeChildren(list))),
         ))
+    }
+
+    /** Who holds the profile (slice 2). */
+    fun held(): AboutYouHeld? = AboutYouRules.held(fields())
+
+    /**
+     * Slice 2: once this app holds a filled-in profile (after a clean sync), it writes when, once. Nothing for an
+     * empty or missing profile, so this never creates one (release 1's copy checks for none). True when it wrote.
+     */
+    fun markHeld(device: AboutYouDevice): Boolean {
+        val h = held() ?: return false
+        if (!h.filled) return false
+        if ((if (device == AboutYouDevice.MAC) h.macAtMs else h.foldAtMs) != null) return false
+        replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID,
+            mapOf(AboutYouRules.heldField(device) to FieldValue.Int64(nowMs())))
+        return true
     }
 
     /**

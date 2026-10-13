@@ -59,7 +59,15 @@ object NotifyDiagnosticsCodec {
     )
 
     /** The newest report and what the server knows of its last push to the device that sent it. */
-    data class Latest(val report: Report?, val lastPushAtMs: Long? = null, val lastPushResult: String? = null, val hasAddress: Boolean? = null)
+    /**
+     * [aboutFilled] / [aboutFoldAtMs] / [aboutMacAtMs] (About you, slice 2, release 2's gate): whether the household
+     * profile has anything in it and when the Fold and the Mac each first held it; [aboutFilled] null = no profile (or
+     * a server before slice 2). Never a value from the profile.
+     */
+    data class Latest(
+        val report: Report?, val lastPushAtMs: Long? = null, val lastPushResult: String? = null, val hasAddress: Boolean? = null,
+        val aboutFilled: Boolean? = null, val aboutFoldAtMs: Long? = null, val aboutMacAtMs: Long? = null,
+    )
 
     fun encodeReport(r: Report): String = obj(r).toString()
 
@@ -83,6 +91,11 @@ object NotifyDiagnosticsCodec {
             put("lastPushAt", l.lastPushAtMs); put("lastPush", l.lastPushResult)
         }
         l.hasAddress?.let { put("address", it) }
+        l.aboutFilled?.let { f ->
+            put("aboutFilled", f)
+            l.aboutFoldAtMs?.let { put("aboutFold", it) }
+            l.aboutMacAtMs?.let { put("aboutMac", it) }
+        }
     }.toString()
 
     fun decodeLatest(body: String): Latest = wrap("notification answer") {
@@ -95,6 +108,9 @@ object NotifyDiagnosticsCodec {
             lastPushAtMs = result?.let { at },
             lastPushResult = at?.let { result },
             hasAddress = (o["address"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull,
+            aboutFilled = (o["aboutFilled"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull,
+            aboutFoldAtMs = o.long("aboutFold")?.takeIf { it > 0 },
+            aboutMacAtMs = o.long("aboutMac")?.takeIf { it > 0 },
         )
     }
 

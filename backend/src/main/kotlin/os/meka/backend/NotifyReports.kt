@@ -1,5 +1,7 @@
 package os.meka.backend
 
+import os.meka.core.domain.AboutYouRules
+import os.meka.core.sync.FieldValue
 import os.meka.core.wire.NotifyDiagnosticsCodec
 import javax.sql.DataSource
 
@@ -15,7 +17,14 @@ interface NotifyReportStore {
     fun latest(householdId: String): Pair<String, NotifyDiagnosticsCodec.Report>?
 }
 
-class NotifyReports(private val store: NotifyReportStore, private val push: Push?) {
+/**
+ * [profile] (About you, slice 2) reads the household profile's fields, so the publish job can say whether the Fold
+ * and the Mac both hold it (release 2's gate); only presence and the held-at times leave, never a value.
+ */
+class NotifyReports(
+    private val store: NotifyReportStore, private val push: Push?,
+    private val profile: ((householdId: String) -> Map<String, FieldValue>?)? = null,
+) {
     fun report(who: DeviceIdentity, report: NotifyDiagnosticsCodec.Report) {
         // The publisher reads; it never reports.
         if (who.deviceId == ReleasePublisher.ID) throw Forbidden()
@@ -23,11 +32,15 @@ class NotifyReports(private val store: NotifyReportStore, private val push: Push
     }
 
     fun latest(who: DeviceIdentity): NotifyDiagnosticsCodec.Latest {
-        val (deviceId, report) = store.latest(who.householdId) ?: return NotifyDiagnosticsCodec.Latest(null)
+        val held = profile?.let { read -> AboutYouRules.held(runCatching { read(who.householdId) }.getOrNull()) }
+        val about = NotifyDiagnosticsCodec.Latest(
+            null, aboutFilled = held?.filled, aboutFoldAtMs = held?.foldAtMs, aboutMacAtMs = held?.macAtMs,
+        )
+        val (deviceId, report) = store.latest(who.householdId) ?: return about
         val sender = DeviceIdentity(who.householdId, deviceId)
         val last = push?.lastResult(sender)
-        return NotifyDiagnosticsCodec.Latest(
-            report,
+        return about.copy(
+            report = report,
             lastPushAtMs = last?.first,
             lastPushResult = last?.second?.let { word(it) },
             hasAddress = push?.hasAddress(sender),

@@ -128,6 +128,8 @@ class MekaApplication : Application() {
         )
         // About you (rule 13), release 1: the Fold copies what MEKA had into the profile once, after a clean sync.
         core.seedsAboutYou = true
+        // Slice 2: the Fold says once that it holds the profile (release 2's gate, Health's About you row).
+        core.aboutYouDevice = os.meka.core.domain.AboutYouDevice.FOLD
         if (transport != null) { SyncWorker.schedulePeriodic(this); ensurePush() }
         // Notifications never seen (slice 1): every channel exists from the first start, and the trace says so.
         os.meka.android.notify.MekaChannels.ensureAll(this)

@@ -112,6 +112,8 @@ data class HealthFacts(
     val nowMs: Long,
     /** The call assistant's credit as the server last wrote it ([CallCreditRules]); null when not known yet. */
     val callCredit: CallCredit? = null,
+    /** About you, slice 2: whether the Fold and the Mac each hold the profile; null leaves the row out. */
+    val aboutYou: AboutYouHeld? = null,
 )
 
 object HealthRules {
@@ -139,8 +141,8 @@ object HealthRules {
 
     private fun isCalendar(provider: String) = provider == "google" || provider == "microsoft"
 
-    /** Keys whose trouble Today already shows on its own line (battery, sign-ins). */
-    private fun ownLine(key: String) = key == "battery" || key.startsWith("calendar:")
+    /** Keys whose trouble Today already shows on its own line (battery, sign-ins), or Health keeps to itself (About you: Setup's card asks). */
+    private fun ownLine(key: String) = key == "battery" || key == AboutYouRules.HEALTH_KEY || key.startsWith("calendar:")
 
     /** "just now" · "14:05" (today) · "Thu 8 Oct 14:05". */
     fun at(ms: Long, nowMs: Long, cal: LocalCalendar): String {
@@ -163,6 +165,7 @@ object HealthRules {
             add(voice(f))
             battery(f)?.let(::add)
             update(f, cal)?.let(::add)
+            AboutYouRules.healthRow(f.aboutYou, f.nowMs, cal)?.let(::add)
         }
         val attention = rows.count { it.needsLook }
         val critical = rows.any { it.state == HealthState.BAD }

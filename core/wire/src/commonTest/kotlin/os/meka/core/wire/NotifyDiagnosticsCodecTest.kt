@@ -39,6 +39,17 @@ class NotifyDiagnosticsCodecTest {
     }
 
     @Test
+    fun aboutYouHeldTimesTravelWithoutAProfileOrAReport() {
+        val l = NotifyDiagnosticsCodec.Latest(null, aboutFilled = true, aboutFoldAtMs = 5, aboutMacAtMs = null)
+        assertEquals(l, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(l)))
+        // No profile: nothing sent, and the times are dropped with it.
+        val none = NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null, aboutFoldAtMs = 5)))
+        assertNull(none.aboutFilled)
+        assertNull(none.aboutFoldAtMs)
+        assertNull(NotifyDiagnosticsCodec.decodeLatest("""{"w":1,"report":null,"aboutFilled":"yes"}""").aboutFilled)
+    }
+
+    @Test
     fun aChannelsLastPostTravelsAndOlderReportsHaveNone() {
         val r = report.copy(channels = listOf(NotifyDiagnosticsCodec.Channel("meka_heads_up", "Heads-ups", true, 1_760_000_000_000L)))
         assertEquals(r, NotifyDiagnosticsCodec.decodeReport(NotifyDiagnosticsCodec.encodeReport(r)))

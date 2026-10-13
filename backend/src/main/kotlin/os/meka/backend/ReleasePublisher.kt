@@ -5,6 +5,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import os.meka.backend.integrations.Integrations
+import os.meka.core.domain.AboutYouHeld
+import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.ActivityRules
 import os.meka.core.domain.AppUpdateRules
 import os.meka.core.domain.EntityTypes
@@ -283,6 +285,7 @@ object ReleasePublisherCli {
                     val l = runCatching { client.notifications() }
                         .getOrElse { println("::notice title=Notifications::couldn't read them (${it.message?.take(120)})"); return@runBlocking 0 }
                     notificationLines(l).forEach(::println)
+                    println(aboutYouLine(l))
                     0
                 }
                 else -> {
@@ -348,6 +351,12 @@ object ReleasePublisherCli {
         )
         return (listOf(head) + channelLine + r.trace.map { e -> "::notice title=Notification trace::${utc(e.atMs)} · ${e.kind} · ${e.detail}" })
             .map { it.replace("%", "%25") }
+    }
+
+    /** About you, slice 2: whether the Fold and the Mac both hold the profile (release 2's gate), for a build run. */
+    fun aboutYouLine(l: NotifyDiagnosticsCodec.Latest): String {
+        val held = l.aboutFilled?.let { AboutYouHeld(it, l.aboutFoldAtMs, l.aboutMacAtMs) }
+        return "::notice title=About you::${AboutYouRules.gateLine(held, ::utc)}".replace("%", "%25")
     }
 
     private fun utc(ms: Long) = java.time.Instant.ofEpochMilli(ms).toString().take(16).replace('T', ' ') + " UTC"

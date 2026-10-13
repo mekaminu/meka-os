@@ -44,6 +44,7 @@ import os.meka.backend.integrations.PostgresIntegrationStore
 import os.meka.backend.integrations.SecretsManagerOAuthClients
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
+import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.CallCreditRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeldMessageFields
@@ -974,7 +975,9 @@ fun main(args: Array<String>) {
                     voice = voice, newsImages = newsImages, calendarWriter = calendarWriter, ai = ai, speech = speech,
                     verifier = verifier, family = family, updateFailures = UpdateFailures(PostgresUpdateFailureStore(ds)),
                     foldPostures = FoldPostures(PostgresFoldPostureStore(ds)),
-                    notifyReports = NotifyReports(PostgresNotifyReportStore(ds), push),
+                    notifyReports = NotifyReports(PostgresNotifyReportStore(ds), push, profile = { hh ->
+                        opStore.latestFields(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)[AboutYouRules.ENTITY_ID]
+                    }),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
                 )

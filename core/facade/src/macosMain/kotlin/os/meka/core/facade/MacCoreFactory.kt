@@ -53,7 +53,9 @@ object MacCoreFactory {
         } else {
             null
         }
+        // About you, slice 2: the Mac says once that it holds the profile (release 2's gate).
         return MekaCore(householdId, deviceId, store, transport, AppleSecureRandom)
+            .also { it.aboutYouDevice = os.meka.core.domain.AboutYouDevice.MAC }
     }
 
     /**
