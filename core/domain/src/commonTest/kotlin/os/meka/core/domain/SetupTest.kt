@@ -179,4 +179,27 @@ class SetupTest {
         assertNull(SetupRules.view(facts()).steps.firstOrNull { it.key == BedsideDreamRules.SETUP_KEY })
         assertNull(SetupRules.view(facts(device = mac), null, SetupScreenSaver(false)).steps.firstOrNull { it.key == BedsideDreamRules.SETUP_KEY })
     }
+
+    @Test
+    fun theCommuteStepShowsMekasGuessUntilHeSetsHisOwn() {
+        val guess = SetupRules.view(facts(), null, null, CommuteSetting.DEFAULT)
+        val travel = guess.sections.first { it.title == "Weather and travel" }.steps
+        assertEquals(SetupRules.COMMUTE_KEY, travel.first().key)
+        val step = guess.step(SetupRules.COMMUTE_KEY)
+        assertEquals(SetupState.TODO, step.state)
+        assertEquals(SetupFix.WORK, step.fix)
+        assertEquals("Set", step.fixLabel)
+        assertTrue(step.line.startsWith("About 1 h 20 each way, MEKA's guess"))
+        assertEquals("1 step left · Commute", guess.todayLine)
+        // Set on either app (the default's own 1 h 20 tapped counts): ticked with his times.
+        val same = SetupRules.view(facts(), null, null, CommuteSetting(80, 80, chosen = true)).step(SetupRules.COMMUTE_KEY)
+        assertEquals(SetupState.DONE, same.state)
+        assertEquals("1 h 20 each way · the wake alarm counts it", same.line)
+        val own = SetupRules.view(facts(), null, null, CommuteSetting(90, 70, chosen = true))
+        assertEquals("1 h 30 there · 1 h 10 home · the wake alarm counts it", own.step(SetupRules.COMMUTE_KEY).line)
+        assertEquals(guess.done + 1, own.done)
+        assertNull(own.todayLine)
+        // No commute passed: no step (the older callers).
+        assertNull(SetupRules.view(facts()).steps.firstOrNull { it.key == SetupRules.COMMUTE_KEY })
+    }
 }

@@ -20,7 +20,8 @@ import os.meka.core.sync.FieldValue
  * line adds them ([withDayLine]). Slice 5: Ask/Talk ([CommuteAskRules]). Slice 6: **one-off times for a single day**
  * ([CommuteDay], "engineering works on Tuesday, 1 h 45 there"): every use of the commute reads [CommuteSetting.forDay],
  * so the wake alarm, Today's bands, clashes, the planner, the brief, Shut down, Leaving now and Ask all follow it.
- * Later: the train-anchored wake (Darwin key), the disruption heads-up, onboarding.
+ * Slice 7: the disruption heads-up. Slice 8: **the commute in onboarding**, a Setup step ([SetupRules.commuteStep]) on
+ * both apps that shows MEKA's guess until he sets his own. Later: the train-anchored wake (Darwin key).
  */
 object CommuteFields {
     const val TO_WORK = "commuteToWorkMin"

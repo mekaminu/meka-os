@@ -3020,7 +3020,17 @@ class MekaCore(
      * (the wake alarm: work start − commute − time to get ready). Returns false for a time outside 10 min–4 h in
      * fives or no change.
      */
-    suspend fun setCommute(toWorkMin: Int, homeMin: Int): Boolean = onCore { work.setCommute(toWorkMin, homeMin).also { if (it) refresh() } }
+    suspend fun setCommute(toWorkMin: Int, homeMin: Int): Boolean = onCore {
+        work.setCommute(toWorkMin, homeMin).also {
+            if (!it) return@also
+            refresh()
+            // Slice 8: Setup's Commute step ticks at once (Today's Setup card drops it).
+            _setup.value?.let { v ->
+                val step = os.meka.core.domain.SetupRules.commuteStep(work.commute())
+                if (v.steps.any { s -> s.key == step.key }) _setup.value = os.meka.core.domain.SetupRules.replaceStep(v, step)
+            }
+        }
+    }
 
     /**
      * The commute, slice 6 ("Just one day"): [epochDay]'s own door-to-door times; the usual times put it back. Synced,
@@ -3422,7 +3432,8 @@ class MekaCore(
             if (!force && onCore { recoveryReadAtMs }?.let { nowMs() - it < os.meka.core.domain.HealthRules.TODAY_REFRESH_MS } == true) onCore { recoveryStatus }
             else readRecoveryStatus(),
         )
-        val view = os.meka.core.domain.SetupRules.view(facts, recovery, screenSaver)
+        // The commute in onboarding (the commute counts everywhere, slice 8): MEKA's guess until either app sets it.
+        val view = os.meka.core.domain.SetupRules.view(facts, recovery, screenSaver, onCore { work.commute() })
         _setup.value = view
         return view
     }

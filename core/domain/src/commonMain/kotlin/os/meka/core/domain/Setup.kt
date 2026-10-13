@@ -102,13 +102,20 @@ object SetupRules {
     fun view(f: SetupFacts, recovery: SetupRecovery?): SetupView = view(f, recovery, null)
 
     /** With the phone's screen saver (bedside clock, slice 3): a null [screenSaver] leaves the step out. */
-    fun view(f: SetupFacts, recovery: SetupRecovery?, screenSaver: SetupScreenSaver?): SetupView {
+    fun view(f: SetupFacts, recovery: SetupRecovery?, screenSaver: SetupScreenSaver?): SetupView = view(f, recovery, screenSaver, null)
+
+    /**
+     * With the commute (the commute counts everywhere, slice 8: the commute in onboarding): a null [commute] leaves the
+     * step out. Never set, it is a step to do that shows MEKA's guess ("About 1 h 20 each way · …"); set on either app
+     * (1 h 20 tapped counts too), it is ticked with his times.
+     */
+    fun view(f: SetupFacts, recovery: SetupRecovery?, screenSaver: SetupScreenSaver?, commute: CommuteSetting?): SetupView {
         val sections = listOf(
             SetupSection("Calendars", calendars(f)),
             SetupSection("Call assistant", calls(f)),
             SetupSection("Messages", messages(f)),
             SetupSection("MEKA's voice", voice(f)),
-            SetupSection("Weather and travel", places(f)),
+            SetupSection("Weather and travel", listOfNotNull(commute?.let(::commuteStep)) + places(f)),
             SetupSection("Mail", listOf(SetupStep("mail", "Mail", "Comes with email triage: you'll reconnect Google and Outlook with mail access then", SetupState.LATER))),
             SetupSection(if (f.device.mac) "This Mac" else "This phone", device(f) + listOfNotNull(screenSaver?.takeIf { !f.device.mac }?.let { BedsideDreamRules.setupStep(it.isMeka) })),
             SetupSection("Your devices", listOfNotNull(mac(f), recovery?.let { recoveryStep(f.connected, it.status) })),
@@ -243,6 +250,17 @@ object SetupRules {
         }
         return listOf(natural, picked)
     }
+
+    const val COMMUTE_KEY = "commute"
+
+    /** Work mode's door-to-door commute ([CommuteRules]): MEKA's guess until he sets his own, then his times. */
+    fun commuteStep(c: CommuteSetting): SetupStep =
+        if (c.chosen) SetupStep(COMMUTE_KEY, CommuteRules.TITLE, CommuteRules.timesLine(c.toWorkMin, c.homeMin) + " · the wake alarm counts it", SetupState.DONE)
+        else SetupStep(
+            COMMUTE_KEY, CommuteRules.TITLE,
+            "About ${CommuteRules.label(c.toWorkMin)} each way, MEKA's guess · door to door on office days · tap yours in Work mode → Commute",
+            SetupState.TODO, SetupFix.WORK, "Set",
+        )
 
     private fun places(f: SetupFacts): List<SetupStep> {
         val accounts = f.accounts

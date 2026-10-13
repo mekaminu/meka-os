@@ -109,4 +109,25 @@ class SetupFacadeTest {
         assertEquals(bedside.dim, dream.dim)
         assertEquals(os.meka.core.domain.BedsideDreamRules.shift(now), dream.shiftXDp to dream.shiftYDp)
     }
+
+    @Test
+    fun theCommuteIsAStepUntilEitherAppSetsItAndSettingItTicksAtOnce() = runTest {
+        val c = core()
+        c.syncNow()
+        val v = c.refreshSetup(fold)
+        val step = v.steps.first { it.key == os.meka.core.domain.SetupRules.COMMUTE_KEY }
+        assertEquals(SetupState.TODO, step.state)
+        assertEquals(os.meka.core.domain.SetupFix.WORK, step.fix)
+        // Tapping 1 h 30 under To work in Work mode: the step ticks without asking the server again.
+        val asked = server.healthAsked
+        c.setCommute(90, 80)
+        val ticked = c.setupView.value!!.steps.first { it.key == os.meka.core.domain.SetupRules.COMMUTE_KEY }
+        assertEquals(SetupState.DONE, ticked.state)
+        assertEquals("1 h 30 there · 1 h 20 home · the wake alarm counts it", ticked.line)
+        assertEquals(v.done + 1, c.setupView.value!!.done)
+        assertEquals(asked, server.healthAsked)
+        // The Mac's Setup has it too.
+        val mac = c.refreshSetup(SetupDevice(mac = true, notificationsAllowed = true))
+        assertEquals(SetupState.DONE, mac.steps.first { it.key == os.meka.core.domain.SetupRules.COMMUTE_KEY }.state)
+    }
 }
